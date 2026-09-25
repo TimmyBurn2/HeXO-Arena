@@ -21,7 +21,7 @@ components:
       type: apiKey
 info:
   title: hexarena
-  version: 0.5.0
+  version: 0.8.0
 openapi: 3.0.3
 paths:
   /api/auth/discord/callback:
@@ -110,6 +110,97 @@ paths:
       tags:
         - Auth
   /api/bot/account:
+    get:
+      description: The bot's name, its Glicko-2 rating in whole points, provisional while the deviation is
+        above 75, and the declaration as stored.
+      operationId: getAccount
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                properties:
+                  about:
+                    maxLength: 280
+                    type: string
+                  accepts:
+                    properties:
+                      match:
+                        type: boolean
+                      turnMs:
+                        items:
+                          type: integer
+                        maxItems: 2
+                        minItems: 2
+                        nullable: true
+                        type: array
+                      unlimited:
+                        type: boolean
+                    required:
+                      - turnMs
+                      - match
+                      - unlimited
+                    type: object
+                  name:
+                    type: string
+                  provisional:
+                    type: boolean
+                  rating:
+                    type: integer
+                  repoUrl:
+                    anyOf:
+                      - format: uri
+                        maxLength: 2048
+                        type: string
+                      - enum:
+                          - ""
+                        type: string
+                  version:
+                    maxLength: 64
+                    type: string
+                required:
+                  - name
+                  - rating
+                  - provisional
+                type: object
+          description: The account as it stands now.
+        "401":
+          content:
+            application/json:
+              schema:
+                properties:
+                  code:
+                    enum:
+                      - unauthorized
+                    type: string
+                  error:
+                    type: string
+                required:
+                  - error
+                  - code
+                type: object
+          description: Missing, unknown, or rotated token.
+        "403":
+          content:
+            application/json:
+              schema:
+                properties:
+                  code:
+                    enum:
+                      - banned
+                    type: string
+                  error:
+                    type: string
+                required:
+                  - error
+                  - code
+                type: object
+          description: The bot's owner is banned.
+      security:
+        - bearerAuth: []
+      summary: Read the bot's own account.
+      tags:
+        - Account
     patch:
       description: "Only the process holding the token may promise behaviour, which is why this is the
         bot's surface and not the owner's. Every field is optional; each present field replaces the
@@ -185,6 +276,10 @@ paths:
                     type: object
                   name:
                     type: string
+                  provisional:
+                    type: boolean
+                  rating:
+                    type: integer
                   repoUrl:
                     anyOf:
                       - format: uri
@@ -198,8 +293,10 @@ paths:
                     type: string
                 required:
                   - name
+                  - rating
+                  - provisional
                 type: object
-          description: The stored declaration, as the account stands now.
+          description: The account as it stands now, the stored declaration included.
         "400":
           content:
             application/json:
@@ -610,15 +707,27 @@ paths:
                     properties:
                       name:
                         type: string
+                      provisional:
+                        type: boolean
+                      rating:
+                        type: integer
                     required:
                       - name
+                      - rating
+                      - provisional
                     type: object
                   destUser:
                     properties:
                       name:
                         type: string
+                      provisional:
+                        type: boolean
+                      rating:
+                        type: integer
                     required:
                       - name
+                      - rating
+                      - provisional
                     type: object
                   firstPlayer:
                     enum:
@@ -697,15 +806,27 @@ paths:
                     properties:
                       name:
                         type: string
+                      provisional:
+                        type: boolean
+                      rating:
+                        type: integer
                     required:
                       - name
+                      - rating
+                      - provisional
                     type: object
                   destUser:
                     properties:
                       name:
                         type: string
+                      provisional:
+                        type: boolean
+                      rating:
+                        type: integer
                     required:
                       - name
+                      - rating
+                      - provisional
                     type: object
                   firstPlayer:
                     enum:
@@ -1030,8 +1151,14 @@ paths:
                         properties:
                           name:
                             type: string
+                          provisional:
+                            type: boolean
+                          rating:
+                            type: integer
                         required:
                           - name
+                          - rating
+                          - provisional
                         type: object
                       rated:
                         type: boolean
@@ -1181,15 +1308,27 @@ paths:
                             properties:
                               name:
                                 type: string
+                              provisional:
+                                type: boolean
+                              rating:
+                                type: integer
                             required:
                               - name
+                              - rating
+                              - provisional
                             type: object
                           destUser:
                             properties:
                               name:
                                 type: string
+                              provisional:
+                                type: boolean
+                              rating:
+                                type: integer
                             required:
                               - name
+                              - rating
+                              - provisional
                             type: object
                           firstPlayer:
                             enum:
@@ -1273,15 +1412,27 @@ paths:
                             properties:
                               name:
                                 type: string
+                              provisional:
+                                type: boolean
+                              rating:
+                                type: integer
                             required:
                               - name
+                              - rating
+                              - provisional
                             type: object
                           destUser:
                             properties:
                               name:
                                 type: string
+                              provisional:
+                                type: boolean
+                              rating:
+                                type: integer
                             required:
                               - name
+                              - rating
+                              - provisional
                             type: object
                           firstPlayer:
                             enum:
@@ -1371,15 +1522,27 @@ paths:
                             properties:
                               name:
                                 type: string
+                              provisional:
+                                type: boolean
+                              rating:
+                                type: integer
                             required:
                               - name
+                              - rating
+                              - provisional
                             type: object
                           destUser:
                             properties:
                               name:
                                 type: string
+                              provisional:
+                                type: boolean
+                              rating:
+                                type: integer
                             required:
                               - name
+                              - rating
+                              - provisional
                             type: object
                           firstPlayer:
                             enum:
@@ -1512,7 +1675,8 @@ paths:
     get:
       description: The whole roster, ordered by name fold; hobby scale, no pagination yet. online and
         openForChallenges are live views of who holds a stream open; the declaration fields appear
-        once the bot declares itself.
+        once the bot declares itself. rating is Glicko-2 in whole points, provisional while the
+        deviation is above 75.
       operationId: listBots
       parameters:
         - description: Narrows the roster to bots holding a stream open.
@@ -1560,6 +1724,10 @@ paths:
                     ownerName:
                       nullable: true
                       type: string
+                    provisional:
+                      type: boolean
+                    rating:
+                      type: integer
                     repoUrl:
                       anyOf:
                         - format: uri
@@ -1576,6 +1744,8 @@ paths:
                     - ownerName
                     - online
                     - openForChallenges
+                    - rating
+                    - provisional
                   type: object
                 type: array
           description: The bot roster.
@@ -1960,8 +2130,14 @@ paths:
                         properties:
                           name:
                             type: string
+                          provisional:
+                            type: boolean
+                          rating:
+                            type: integer
                         required:
                           - name
+                          - rating
+                          - provisional
                         type: object
                       status:
                         enum:
@@ -2059,8 +2235,14 @@ paths:
                         properties:
                           name:
                             type: string
+                          provisional:
+                            type: boolean
+                          rating:
+                            type: integer
                         required:
                           - name
+                          - rating
+                          - provisional
                         type: object
                       reason:
                         enum:
@@ -2232,8 +2414,14 @@ paths:
                         properties:
                           name:
                             type: string
+                          provisional:
+                            type: boolean
+                          rating:
+                            type: integer
                         required:
                           - name
+                          - rating
+                          - provisional
                         type: object
                       status:
                         enum:
@@ -2331,8 +2519,14 @@ paths:
                         properties:
                           name:
                             type: string
+                          provisional:
+                            type: boolean
+                          rating:
+                            type: integer
                         required:
                           - name
+                          - rating
+                          - provisional
                         type: object
                       reason:
                         enum:
@@ -2520,8 +2714,14 @@ paths:
                         properties:
                           name:
                             type: string
+                          provisional:
+                            type: boolean
+                          rating:
+                            type: integer
                         required:
                           - name
+                          - rating
+                          - provisional
                         type: object
                       status:
                         enum:
@@ -2619,8 +2819,14 @@ paths:
                         properties:
                           name:
                             type: string
+                          provisional:
+                            type: boolean
+                          rating:
+                            type: integer
                         required:
                           - name
+                          - rating
+                          - provisional
                         type: object
                       reason:
                         enum:
@@ -2806,8 +3012,14 @@ paths:
                         properties:
                           name:
                             type: string
+                          provisional:
+                            type: boolean
+                          rating:
+                            type: integer
                         required:
                           - name
+                          - rating
+                          - provisional
                         type: object
                       status:
                         enum:
@@ -2905,8 +3117,14 @@ paths:
                         properties:
                           name:
                             type: string
+                          provisional:
+                            type: boolean
+                          rating:
+                            type: integer
                         required:
                           - name
+                          - rating
+                          - provisional
                         type: object
                       reason:
                         enum:
@@ -2997,6 +3215,70 @@ paths:
       summary: Resign a game the caller plays in.
       tags:
         - Games
+  /api/leaderboard:
+    get:
+      description: Players at deviation 75 or below, highest Glicko-2 rating first, ties by name fold;
+        provisional players never appear. Bots and humans share one pool; hobby scale, no pagination
+        yet.
+      operationId: getLeaderboard
+      parameters:
+        - description: Narrows the board to bots or humans; all when absent.
+          in: query
+          name: kind
+          required: false
+          schema:
+            enum:
+              - bots
+              - humans
+              - all
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                items:
+                  properties:
+                    kind:
+                      enum:
+                        - bot
+                        - human
+                      type: string
+                    name:
+                      type: string
+                    rank:
+                      minimum: 1
+                      type: integer
+                    rating:
+                      type: integer
+                  required:
+                    - rank
+                    - name
+                    - kind
+                    - rating
+                  type: object
+                type: array
+          description: The board.
+        "400":
+          content:
+            application/json:
+              schema:
+                properties:
+                  code:
+                    enum:
+                      - bad_request
+                    type: string
+                  error:
+                    type: string
+                required:
+                  - error
+                  - code
+                type: object
+          description: The request fails validation.
+      security: []
+      summary: List rankable players by rating.
+      tags:
+        - Directory
   /healthz:
     get:
       responses:

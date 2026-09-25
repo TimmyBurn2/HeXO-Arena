@@ -15,6 +15,7 @@ import {
 } from './challenge-store';
 import { botConcurrentGameCap, type GameRegistry } from './game-registry';
 import type { PresenceRegistry } from './presence';
+import { streamPlayerOf } from './rating-store';
 
 export const challengeTtlMs = 60_000;
 export const challengeInboxCap = 10;
@@ -43,11 +44,11 @@ export interface ChallengeDeps {
     games: GameRegistry;
 }
 
-function viewOf(record: ChallengeRecord, status: Challenge[`status`]): Challenge {
+function viewOf(query: Query, record: ChallengeRecord, status: Challenge[`status`]): Challenge {
     return challengeSchema.parse({
         challengeId: record.id,
-        challenger: { name: record.challengerName },
-        destUser: { name: record.destName },
+        challenger: streamPlayerOf(query, { kind: `bot`, id: record.challengerBotId }, record.challengerName),
+        destUser: streamPlayerOf(query, { kind: `bot`, id: record.destBotId }, record.destName),
         timeControl: record.timeControl,
         openingStones: record.openingStones,
         firstPlayer: record.firstPlayer,
@@ -90,7 +91,7 @@ export class ChallengeRegistry {
         // Idempotency outranks the gates: the creation already happened,
         // so the gates of this moment cannot unmake it.
         const existing = findChallengeByRequest(this.#query, input.challenger.id, input.requestKey);
-        if (existing !== undefined) return { kind: `replay`, view: viewOf(existing, existing.status) };
+        if (existing !== undefined) return { kind: `replay`, view: viewOf(this.#query, existing, existing.status) };
         const id = insertChallenge(this.#query, {
             challengerBotId: input.challenger.id,
             destBotId: input.dest.id,
@@ -103,7 +104,7 @@ export class ChallengeRegistry {
             const raced = findChallengeByRequest(this.#query, input.challenger.id, input.requestKey);
             // The unique key just conflicted, so the row exists.
             if (raced === undefined) throw new Error(`challenge row vanished on conflict`);
-            return { kind: `replay`, view: viewOf(raced, raced.status) };
+            return { kind: `replay`, view: viewOf(this.#query, raced, raced.status) };
         }
         const record = findChallenge(this.#query, id.id);
         // The insert just created the row.
@@ -118,9 +119,9 @@ export class ChallengeRegistry {
         this.#pending.set(id.id, live);
         this.#presence.send(input.dest.id, {
             type: `challenge`,
-            challenge: viewOf(record, `created`),
+            challenge: viewOf(this.#query, record, `created`),
         });
-        return { kind: `created`, view: viewOf(record, `created`) };
+        return { kind: `created`, view: viewOf(this.#query, record, `created`) };
     }
 
     // Only the challenged bot accepts, and only the one gate that can have
@@ -148,7 +149,7 @@ export class ChallengeRegistry {
         this.#decide(live, `declined`);
         this.#presence.send(live.record.challengerBotId, {
             type: `challengeDeclined`,
-            challenge: viewOf(live.record, `declined`),
+            challenge: viewOf(this.#query, live.record, `declined`),
         });
         return { kind: `ok` };
     }
@@ -166,7 +167,7 @@ export class ChallengeRegistry {
         this.#presence.send(live.record.destBotId, {
             type: `challengeCanceled`,
             reason: `canceled`,
-            challenge: viewOf(live.record, `canceled`),
+            challenge: viewOf(this.#query, live.record, `canceled`),
         });
         return { kind: `ok` };
     }
@@ -179,7 +180,7 @@ export class ChallengeRegistry {
             if (live.record.destBotId !== botId) continue;
             events.push({
                 type: `challenge`,
-                challenge: viewOf(live.record, `created`),
+                challenge: viewOf(this.#query, live.record, `created`),
             });
         }
         return events;
@@ -202,7 +203,7 @@ export class ChallengeRegistry {
     #expire(live: LiveChallenge): void {
         if (!this.#pending.has(live.record.id)) return;
         this.#decide(live, `expired`);
-        const view = viewOf(live.record, `expired`);
+        const view = viewOf(this.#query, live.record, `expired`);
         this.#presence.send(live.record.challengerBotId, {
             type: `challengeCanceled`,
             reason: `expired`,

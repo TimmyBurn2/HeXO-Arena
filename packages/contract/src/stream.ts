@@ -33,7 +33,13 @@ export type TimeControl = z.infer<typeof timeControlSchema>;
 
 // A player in a game or challenge, named by the one global namespace shared
 // by users and bots; the name is immutable, so it identifies without an id.
-export const streamPlayerSchema = z.object({ name: z.string() });
+// rating is the current Glicko-2 rating in whole points; provisional holds
+// while the deviation is above the leaderboard threshold.
+export const streamPlayerSchema = z.object({
+    name: z.string(),
+    rating: z.number().int(),
+    provisional: z.boolean(),
+});
 export type StreamPlayer = z.infer<typeof streamPlayerSchema>;
 
 // Opening variety the server places itself; the unit is a full turn because

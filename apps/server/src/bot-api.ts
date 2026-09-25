@@ -7,14 +7,17 @@ import {
     botsPath,
     botStreamPath,
     botStreamQuerySchema,
+    type BotAccount,
     type BotListing,
 } from '@hexarena/contract';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import type { BotPrincipal } from './bot-auth';
 import { authenticateBot } from './bot-auth';
-import { listBots, updateBotDeclaration } from './bots';
+import { listBots, readBotDeclaration, updateBotDeclaration, type BotDeclaration } from './bots';
 import { type Query } from './db';
 import type { PresenceRegistry } from './presence';
+import { isProvisional } from './rating';
+import { streamPlayerOf } from './rating-store';
 
 export interface BotApiDeps {
     query: Query;
@@ -68,12 +71,29 @@ export function registerBotApi(app: FastifyInstance, deps: BotApiDeps): void {
                 ownerName: row.ownerName,
                 online: presence.isOnline(row.id),
                 openForChallenges: presence.isOpenForChallenges(row.id),
+                rating: Math.round(row.rating.rating),
+                provisional: isProvisional(row.rating),
                 ...(row.about !== undefined && { about: row.about }),
                 ...(row.version !== undefined && { version: row.version }),
                 ...(row.repoUrl !== undefined && { repoUrl: row.repoUrl }),
                 ...(row.accepts !== undefined && { accepts: row.accepts }),
             }));
         return reply.code(200).send(botListingSchema.array().parse(listed));
+    });
+
+    const accountOf = (botId: string, declaration: BotDeclaration): BotAccount =>
+        botAccountSchema.parse({
+            ...streamPlayerOf(query, { kind: `bot`, id: botId }, declaration.name),
+            ...declaration,
+        });
+
+    app.get(botAccountPath, async (request, reply) => {
+        const bot = requireBot(query, request, reply);
+        if (!bot) return reply;
+        const declaration = readBotDeclaration(query, bot.id);
+        // The id came from a token the lookup just resolved.
+        if (declaration === undefined) throw new Error(`bot row vanished while reading: ${bot.id}`);
+        return reply.code(200).send(accountOf(bot.id, declaration));
     });
 
     app.patch(botAccountPath, async (request, reply) => {
@@ -83,7 +103,6 @@ export function registerBotApi(app: FastifyInstance, deps: BotApiDeps): void {
         if (!parsed.success) {
             return reply.code(400).send({ error: `the declaration fails validation`, code: `bad_request` });
         }
-        const account = updateBotDeclaration(query, bot.id, parsed.data);
-        return reply.code(200).send(botAccountSchema.parse(account));
+        return reply.code(200).send(accountOf(bot.id, updateBotDeclaration(query, bot.id, parsed.data)));
     });
 }

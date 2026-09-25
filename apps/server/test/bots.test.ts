@@ -149,9 +149,26 @@ describe('GET /api/bots', () => {
         const response = await app.inject({ method: 'GET', url: botsPath });
         expect(response.statusCode).toBe(200);
         expect(response.json()).toEqual([
-            { name: `alpha`, ownerName: `Ann`, online: false, openForChallenges: false },
-            { name: `Beta`, ownerName: `Zed`, online: false, openForChallenges: false },
+            { name: `alpha`, ownerName: `Ann`, online: false, openForChallenges: false, rating: 1500, provisional: true },
+            { name: `Beta`, ownerName: `Zed`, online: false, openForChallenges: false, rating: 1500, provisional: true },
         ]);
+        await app.close();
+    });
+
+    it('shows a stored rating in whole points and drops provisional at a settled deviation', async () => {
+        const { app, sqlite } = await createTestApp();
+        const owner = (await devLogin(app, `Zed`)).split(`=`)[1] ?? ``;
+        await app.inject({
+            method: 'POST',
+            url: botsPath,
+            payload: { name: `Rated` },
+            cookies: { hexarena_session: owner },
+        });
+        sqlite
+            .prepare(`insert into ratings (bot_id, rating, deviation, volatility) select id, 1723.6, 60, 0.06 from bots`)
+            .run();
+        const response = await app.inject({ method: 'GET', url: botsPath });
+        expect(response.json()).toMatchObject([{ name: `Rated`, rating: 1724, provisional: false }]);
         await app.close();
     });
 
@@ -184,8 +201,8 @@ describe('GET /api/bots', () => {
         presence.attach(live.id, new FakeStreamSocket(), true);
         const response = await app.inject({ method: 'GET', url: botsPath });
         expect(response.json()).toEqual([
-            { name: `Idle`, ownerName: `owner`, online: false, openForChallenges: false },
-            { name: `Live`, ownerName: `owner`, online: true, openForChallenges: true },
+            { name: `Idle`, ownerName: `owner`, online: false, openForChallenges: false, rating: 1500, provisional: true },
+            { name: `Live`, ownerName: `owner`, online: true, openForChallenges: true, rating: 1500, provisional: true },
         ]);
         await app.close();
     });
@@ -206,7 +223,7 @@ describe('GET /api/bots', () => {
         socket.emitClose();
         const response = await app.inject({ method: 'GET', url: botsPath });
         expect(response.json()).toEqual([
-            { name: `Dropped`, ownerName: `owner`, online: false, openForChallenges: false },
+            { name: `Dropped`, ownerName: `owner`, online: false, openForChallenges: false, rating: 1500, provisional: true },
         ]);
         await app.close();
     });
@@ -232,7 +249,7 @@ describe('GET /api/bots', () => {
         presence.attach(live.id, new FakeStreamSocket(), false);
         const narrowed = await app.inject({ method: 'GET', url: `${botsPath}?online=1` });
         expect(narrowed.json()).toEqual([
-            { name: `Live`, ownerName: `owner`, online: true, openForChallenges: false },
+            { name: `Live`, ownerName: `owner`, online: true, openForChallenges: false, rating: 1500, provisional: true },
         ]);
         const rejected = await app.inject({ method: 'GET', url: `${botsPath}?online=0` });
         expect(rejected.statusCode).toBe(400);

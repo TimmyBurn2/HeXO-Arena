@@ -14,6 +14,7 @@ import {
     type GameSnapshot,
     type Side,
     type StreamEvent,
+    type StreamPlayer,
     type TimeControl,
 } from '@hexarena/contract';
 import {
@@ -37,6 +38,7 @@ import {
 } from './game-store';
 import type { PresenceRegistry } from './presence';
 import { randomFloat } from './random';
+import { streamPlayerOf } from './rating-store';
 import { randomToken } from './tokens';
 
 export const botConcurrentGameCap = 4;
@@ -360,7 +362,7 @@ export class GameRegistry {
         this.#requestBotMove(game);
         const botSide = opponentOf(userSide);
         this.#presence.send(this.#botIdAt(game, botSide), this.#gameStartEvent(game, botSide));
-        return { gameId, snapshot: liveSnapshot(game) };
+        return { gameId, snapshot: this.#liveSnapshot(game) };
     }
 
     createBotGame(input: {
@@ -461,7 +463,7 @@ export class GameRegistry {
     snapshotFor(gameId: string): { userId: string | null; snapshot: GameSnapshot } | null {
         const live = this.#games.get(gameId);
         if (live !== undefined) {
-            return { userId: humanSide(live)?.seat.userId ?? null, snapshot: liveSnapshot(live) };
+            return { userId: humanSide(live)?.seat.userId ?? null, snapshot: this.#liveSnapshot(live) };
         }
         const record = findGame(this.#query, gameId);
         // A bot-vs-bot game belongs to no human, so every user reads it as
@@ -476,7 +478,7 @@ export class GameRegistry {
                 gameId: record.id,
                 status: `finished`,
                 you: record.userSide,
-                opponent: { name: record.botName },
+                opponent: streamPlayerOf(this.#query, { kind: `bot`, id: record.botId }, record.botName),
                 board: { cells: boardCells(replayPosition(this.#query, record)) },
                 winner: record.winner,
                 reason: record.finishReason,
@@ -791,7 +793,7 @@ export class GameRegistry {
             type: `gameStart`,
             gameId: game.id,
             side,
-            opponent: { name: game.seats[opponentOf(side)].name },
+            opponent: this.#playerOf(game.seats[opponentOf(side)]),
             timeControl: game.timeControl,
             ...(game.openingStones > 0 && { opening: { randomTurns: game.openingStones / 2 } }),
             rated: false,
@@ -854,6 +856,27 @@ export class GameRegistry {
         session.socket.close(code, reason);
     }
 
+    #liveSnapshot(game: LiveGame): GameSnapshot {
+        const human = humanSide(game);
+        // Every snapshot reader is a human action, so the human seat exists.
+        if (human === null) throw new Error(`snapshot for a game without a human: ${game.id}`);
+        return {
+            gameId: game.id,
+            status: `in-progress`,
+            you: human.side,
+            opponent: this.#playerOf(game.seats[opponentOf(human.side)]),
+            board: { cells: boardCells(game.position) },
+            toMove: sideToMove(game),
+            clock: liveClockView(game),
+        };
+    }
+
+    #playerOf(seat: Seat): StreamPlayer {
+        return seat.kind === `bot`
+            ? streamPlayerOf(this.#query, { kind: `bot`, id: seat.botId }, seat.name)
+            : streamPlayerOf(this.#query, { kind: `human`, id: seat.userId }, seat.name);
+    }
+
     #seatsBot(game: LiveGame, botId: string): Side | null {
         for (const side of [`x`, `o`] as const) {
             const seat = game.seats[side];
@@ -869,19 +892,4 @@ export class GameRegistry {
         if (seat.kind !== `bot`) throw new Error(`no bot seated on side ${side}`);
         return seat.botId;
     }
-}
-
-function liveSnapshot(game: LiveGame): GameSnapshot {
-    const human = humanSide(game);
-    // Every snapshot reader is a human action, so the human seat exists.
-    if (human === null) throw new Error(`snapshot for a game without a human: ${game.id}`);
-    return {
-        gameId: game.id,
-        status: `in-progress`,
-        you: human.side,
-        opponent: { name: game.seats[opponentOf(human.side)].name },
-        board: { cells: boardCells(game.position) },
-        toMove: sideToMove(game),
-        clock: liveClockView(game),
-    };
 }

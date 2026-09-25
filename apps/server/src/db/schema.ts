@@ -1,4 +1,4 @@
-import { check, index, integer, primaryKey, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core';
+import { check, index, integer, primaryKey, real, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core';
 import { sql } from 'drizzle-orm';
 // One global namespace shared by users and bots: a SQLite unique index
 // cannot span two tables, so the fold key is reserved here first and both
@@ -75,7 +75,9 @@ export const bots = sqliteTable(
 // The opening position including the origin stone is placed at creation
 // and cannot be derived, so it lives here as json; the two-placement turns
 // the players made live in moves. A game is in progress exactly while
-// finished_at is null. A game seats two players in one row: a human game
+// finished_at is null; finish_seq numbers finishes in the order they
+// happened, which finished_at cannot, since two games share a second.
+// A game seats two players in one row: a human game
 // sets the human's id, the facing bot, and the human's side; a bot-vs-bot
 // game sets the challenger, the challenged bot, and the challenger's side.
 // The seats constraint pins exactly one of the two groups.
@@ -97,9 +99,11 @@ export const games = sqliteTable(
         finishReason: text(`finish_reason`),
         createdAt: integer(`created_at`).notNull(),
         finishedAt: integer(`finished_at`),
+        finishSeq: integer(`finish_seq`),
     },
     (table) => [
         index(`games_user_id_idx`).on(table.userId),
+        uniqueIndex(`games_finish_seq_idx`).on(table.finishSeq),
         index(`games_bot_id_idx`).on(table.botId),
         index(`games_challenger_bot_id_idx`).on(table.challengerBotId),
         index(`games_dest_bot_id_idx`).on(table.destBotId),
@@ -122,6 +126,10 @@ export const games = sqliteTable(
         check(
             `games_finish_pair_check`,
             sql`(${table.finishedAt} is null) = (${table.finishReason} is null)`,
+        ),
+        check(
+            `games_finish_seq_check`,
+            sql`(${table.finishedAt} is null) = (${table.finishSeq} is null)`,
         ),
         check(
             `games_seats_check`,
@@ -210,5 +218,28 @@ export const challenges = sqliteTable(
             `challenges_game_check`,
             sql`(${table.status} = 'accepted') = (${table.gameId} is not null)`,
         ),
+    ],
+);
+
+// A cache of the game log folded in finish order: a player without a rated
+// game has no row and reads as the seed for their kind, so a recompute
+// rebuilds the table from the fold alone. The bounds mirror the rating
+// policy; a row outside them is a bug, not a rating.
+export const ratings = sqliteTable(
+    `ratings`,
+    {
+        userId: text(`user_id`).references(() => users.id, { onDelete: `cascade` }),
+        botId: text(`bot_id`).references(() => bots.id, { onDelete: `cascade` }),
+        rating: real(`rating`).notNull(),
+        deviation: real(`deviation`).notNull(),
+        volatility: real(`volatility`).notNull(),
+    },
+    (table) => [
+        uniqueIndex(`ratings_user_id_idx`).on(table.userId),
+        uniqueIndex(`ratings_bot_id_idx`).on(table.botId),
+        check(`ratings_player_check`, sql`(${table.userId} is null) <> (${table.botId} is null)`),
+        check(`ratings_rating_check`, sql`${table.rating} >= 400`),
+        check(`ratings_deviation_check`, sql`${table.deviation} >= 45 and ${table.deviation} <= 500`),
+        check(`ratings_volatility_check`, sql`${table.volatility} > 0 and ${table.volatility} <= 0.1`),
     ],
 );

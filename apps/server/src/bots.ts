@@ -8,7 +8,8 @@ import {
 import { and, count, eq } from 'drizzle-orm';
 import { randomUUID } from 'node:crypto';
 import { nowSeconds, type Query } from './db';
-import { bots, nameReservations, users } from './db/schema';
+import { bots, nameReservations, ratings, users } from './db/schema';
+import { seedRating, type PlayerRating } from './rating';
 import { randomToken, sha256Hex } from './tokens';
 
 export const botCapPerUser = 3;
@@ -98,14 +99,35 @@ export function createBot(query: Query, ownerId: string, name: string): CreateBo
     });
 }
 
-export function listBots(query: Query): BotRow[] {
+export function listBots(query: Query): (BotRow & { rating: PlayerRating })[] {
     return query
-        .select({ id: bots.id, name: bots.name, ownerId: bots.ownerId, ownerName: users.name, ...declarationColumns })
+        .select({
+            id: bots.id,
+            name: bots.name,
+            ownerId: bots.ownerId,
+            ownerName: users.name,
+            ...declarationColumns,
+            rating: ratings.rating,
+            deviation: ratings.deviation,
+            volatility: ratings.volatility,
+        })
         .from(bots)
         .innerJoin(users, eq(bots.ownerId, users.id))
+        .leftJoin(ratings, eq(ratings.botId, bots.id))
         .orderBy(bots.nameKey)
         .all()
-        .map((row) => ({ id: row.id, name: row.name, ownerId: row.ownerId, ownerName: row.ownerName, ...declarationView(row) }));
+        .map((row) => ({
+            id: row.id,
+            name: row.name,
+            ownerId: row.ownerId,
+            ownerName: row.ownerName,
+            ...declarationView(row),
+            // No row means no rated game yet: the bot still sits at its seed.
+            rating:
+                row.rating === null || row.deviation === null || row.volatility === null
+                    ? seedRating(`bot`)
+                    : { rating: row.rating, deviation: row.deviation, volatility: row.volatility },
+        }));
 }
 
 export function findBot(query: Query, nameKey: string): BotRow | undefined {
@@ -120,7 +142,18 @@ export function findBot(query: Query, nameKey: string): BotRow | undefined {
         : { id: row.id, name: row.name, ownerId: row.ownerId, ownerName: row.ownerName, ...declarationView(row) };
 }
 
-export function updateBotDeclaration(query: Query, botId: string, changes: AccountDeclaration): BotAccount {
+export type BotDeclaration = Omit<BotAccount, `rating` | `provisional`>;
+
+export function readBotDeclaration(query: Query, botId: string): BotDeclaration | undefined {
+    const row = query
+        .select({ name: bots.name, ...declarationColumns })
+        .from(bots)
+        .where(eq(bots.id, botId))
+        .get();
+    return row === undefined ? undefined : { name: row.name, ...declarationView(row) };
+}
+
+export function updateBotDeclaration(query: Query, botId: string, changes: AccountDeclaration): BotDeclaration {
     return query.transaction((tx) => {
         const set: Partial<DeclarationColumns> = {};
         if (changes.about !== undefined) set.about = clearableText(changes.about);

@@ -7,6 +7,7 @@ import {
     gameStartEventSchema,
     moveRequestEventSchema,
     streamEventSchema,
+    streamPlayerSchema,
     timeControlSchema,
 } from '../src';
 
@@ -14,7 +15,7 @@ const gameStart = {
     type: `gameStart`,
     gameId: `g1`,
     side: `x`,
-    opponent: { name: `otherbot` },
+    opponent: { name: `otherbot`, rating: 1500, provisional: true },
     timeControl: { mode: `unlimited` },
     rated: false,
     engine: { socketUrl: `/api/bot/game/g1/socket`, token: `hgs_token` },
@@ -41,8 +42,8 @@ describe('streamEventSchema', () => {
                 type: `challenge`,
                 challenge: {
                     challengeId: `c1`,
-                    challenger: { name: `abot` },
-                    destUser: { name: `bbot` },
+                    challenger: { name: `abot`, rating: 1500, provisional: true },
+                    destUser: { name: `bbot`, rating: 1500, provisional: true },
                     timeControl: { mode: `turn`, turnTimeMs: 30_000 },
                     openingStones: 2,
                     firstPlayer: `challenger`,
@@ -54,8 +55,8 @@ describe('streamEventSchema', () => {
                 reason: `expired`,
                 challenge: {
                     challengeId: `c1`,
-                    challenger: { name: `abot` },
-                    destUser: { name: `bbot` },
+                    challenger: { name: `abot`, rating: 1500, provisional: true },
+                    destUser: { name: `bbot`, rating: 1500, provisional: true },
                     timeControl: { mode: `unlimited` },
                     openingStones: 0,
                     firstPlayer: `random`,
@@ -66,8 +67,8 @@ describe('streamEventSchema', () => {
                 type: `challengeDeclined`,
                 challenge: {
                     challengeId: `c1`,
-                    challenger: { name: `abot` },
-                    destUser: { name: `bbot` },
+                    challenger: { name: `abot`, rating: 1500, provisional: true },
+                    destUser: { name: `bbot`, rating: 1500, provisional: true },
                     timeControl: { mode: `unlimited` },
                     openingStones: 0,
                     firstPlayer: `random`,
@@ -90,8 +91,8 @@ describe('streamEventSchema', () => {
             type: `challengeCanceled`,
             challenge: {
                 challengeId: `c1`,
-                challenger: { name: `abot` },
-                destUser: { name: `bbot` },
+                challenger: { name: `abot`, rating: 1500, provisional: true },
+                destUser: { name: `bbot`, rating: 1500, provisional: true },
                 timeControl: { mode: `unlimited` },
                 status: `created`,
             },
@@ -112,6 +113,14 @@ describe('streamEventSchema', () => {
         expect(gameFinishEventSchema.safeParse({ type: `gameFinish`, gameId: `g`, winner: `o`, reason: `surrender` }).success).toBe(true);
         expect(gameFinishEventSchema.safeParse({ type: `gameFinish`, gameId: `g`, winner: null, reason: `aborted` }).success).toBe(true);
         expect(gameFinishEventSchema.safeParse({ type: `gameFinish`, gameId: `g`, winner: null, reason: `draw` }).success).toBe(false);
+    });
+});
+
+describe('streamPlayerSchema', () => {
+    it('wants a whole-point rating and the provisional flag beside the name', () => {
+        expect(streamPlayerSchema.safeParse({ name: `abot`, rating: 1512, provisional: false }).success).toBe(true);
+        expect(streamPlayerSchema.safeParse({ name: `abot` }).success).toBe(false);
+        expect(streamPlayerSchema.safeParse({ name: `abot`, rating: 1512.5, provisional: false }).success).toBe(false);
     });
 });
 

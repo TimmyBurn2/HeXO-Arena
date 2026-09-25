@@ -36,6 +36,8 @@ import {
     gamesPath,
     healthzPath,
     humanMoveRequestSchema,
+    leaderboardEntrySchema,
+    leaderboardPath,
     notFoundErrorCodes,
     okSchema,
     sessionCookieName,
@@ -161,7 +163,7 @@ export function buildOpenApiDocument() {
         operationId: 'listBots',
         tags: ['Directory'],
         security: [],
-        description: `The whole roster, ordered by name fold; hobby scale, no pagination yet. online and openForChallenges are live views of who holds a stream open; the declaration fields appear once the bot declares itself.`,
+        description: `The whole roster, ordered by name fold; hobby scale, no pagination yet. online and openForChallenges are live views of who holds a stream open; the declaration fields appear once the bot declares itself. rating is Glicko-2 in whole points, provisional while the deviation is above 75.`,
         parameters: [
             {
                 name: 'online',
@@ -176,6 +178,34 @@ export function buildOpenApiDocument() {
                 description: 'The bot roster.',
                 content: {
                     'application/json': { schema: botListingSchema.array() },
+                },
+            },
+            400: badRequest(),
+        },
+    });
+
+    registry.registerPath({
+        method: 'get',
+        path: leaderboardPath,
+        summary: 'List rankable players by rating.',
+        operationId: 'getLeaderboard',
+        tags: ['Directory'],
+        security: [],
+        description: `Players at deviation 75 or below, highest Glicko-2 rating first, ties by name fold; provisional players never appear. Bots and humans share one pool; hobby scale, no pagination yet.`,
+        parameters: [
+            {
+                name: 'kind',
+                in: 'query',
+                required: false,
+                description: `Narrows the board to bots or humans; all when absent.`,
+                schema: { type: 'string', enum: ['bots', 'humans', 'all'] },
+            },
+        ],
+        responses: {
+            200: {
+                description: 'The board.',
+                content: {
+                    'application/json': { schema: leaderboardEntrySchema.array() },
                 },
             },
             400: badRequest(),
@@ -297,6 +327,24 @@ export function buildOpenApiDocument() {
     });
 
     registry.registerPath({
+        method: 'get',
+        path: botAccountPath,
+        summary: `Read the bot's own account.`,
+        operationId: 'getAccount',
+        tags: ['Account'],
+        security: [{ bearerAuth: [] }],
+        description: `The bot's name, its Glicko-2 rating in whole points, provisional while the deviation is above 75, and the declaration as stored.`,
+        responses: {
+            200: {
+                description: 'The account as it stands now.',
+                content: { 'application/json': { schema: botAccountSchema } },
+            },
+            401: botUnauthorized(),
+            403: botForbidden(),
+        },
+    });
+
+    registry.registerPath({
         method: 'patch',
         path: botAccountPath,
         summary: `Declare the bot's about, version, repo, and what it accepts.`,
@@ -312,7 +360,7 @@ export function buildOpenApiDocument() {
         },
         responses: {
             200: {
-                description: 'The stored declaration, as the account stands now.',
+                description: 'The account as it stands now, the stored declaration included.',
                 content: { 'application/json': { schema: botAccountSchema } },
             },
             400: badRequest(),

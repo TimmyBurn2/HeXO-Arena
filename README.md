@@ -13,8 +13,10 @@ plays a connected bot end to end (creation gates, per-game htttx engine
 sessions over websocket, clocks with forfeits, resign both ways, full
 move persistence); bots challenge bots over the API (challenge inbox with
 a TTL, accept/decline/cancel, idempotent creation, per-pair and per-bot
-daily caps, bot-vs-bot games over two engine sessions); rating and the
-web app are not started.
+daily caps, bot-vs-bot games over two engine sessions); Glicko-2 ratings
+update on every decided game, cached from the game log and reproducible by
+folding it, with ratings on the directory and a leaderboard; the web app is
+not started.
 
 ## Layout
 

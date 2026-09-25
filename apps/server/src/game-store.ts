@@ -5,11 +5,12 @@ import {
     type Side,
     type TimeControl,
 } from '@hexarena/contract';
-import { and, count, desc, eq, gte, isNull, or } from 'drizzle-orm';
+import { and, count, desc, eq, gte, isNull, or, sql } from 'drizzle-orm';
 import { randomUUID } from 'node:crypto';
 import { emptyPosition, place, type Coord, type Position } from '@hexarena/rules';
 import { nowSeconds, type Query } from './db';
 import { bots, games, moves } from './db/schema';
+import { applyFinishedGame, finishedGameOf, seatColumns } from './rating-store';
 
 // The position a game starts from: the origin stone plus the server-placed
 // opening stones, in placement order.
@@ -118,24 +119,33 @@ export function insertBotGame(
     return id;
 }
 
+// The subquery runs once per statement, so each finish is its own update:
+// a bulk update would hand every row the same number.
+const nextFinishSeq = sql`(select coalesce(max(${games.finishSeq}), 0) + 1 from ${games})`;
+
 export function recordFinish(
     query: Query,
     gameId: string,
     finish: { winner: Side | null; reason: FinishReason },
 ): void {
-    query.update(games)
-        .set({ winner: finish.winner, finishReason: finish.reason, finishedAt: nowSeconds() })
-        .where(and(eq(games.id, gameId), isNull(games.finishedAt)))
-        .run();
+    query.transaction((tx) => {
+        const [finished] = tx
+            .update(games)
+            .set({ winner: finish.winner, finishReason: finish.reason, finishedAt: nowSeconds(), finishSeq: nextFinishSeq })
+            .where(and(eq(games.id, gameId), isNull(games.finishedAt)))
+            .returning(seatColumns)
+            .all();
+        if (finished !== undefined) applyFinishedGame(tx, finishedGameOf(finished));
+    });
 }
 
 // Live games die with the process that ran their clocks and sockets, so a
 // boot sweep closes whatever a crash or restart left open.
 export function abortUnfinishedGames(query: Query): void {
-    query.update(games)
-        .set({ winner: null, finishReason: `aborted`, finishedAt: nowSeconds() })
-        .where(isNull(games.finishedAt))
-        .run();
+    query.transaction((tx) => {
+        const open = tx.select({ id: games.id }).from(games).where(isNull(games.finishedAt)).orderBy(games.createdAt).all();
+        for (const { id } of open) recordFinish(tx, id, { winner: null, reason: `aborted` });
+    });
 }
 
 export function findGame(query: Query, gameId: string): GameRecord | undefined {

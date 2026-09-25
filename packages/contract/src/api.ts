@@ -60,11 +60,15 @@ export type Accepts = z.infer<typeof acceptsSchema>;
 // every listed bot carries its owner's name.
 // online and openForChallenges are live views of who holds a stream open;
 // the declaration fields are absent until the bot declares itself.
+// rating is the Glicko-2 rating rounded to a whole point; provisional holds
+// while the deviation is above the leaderboard threshold.
 export const botListingSchema = z.object({
     name: z.string(),
     ownerName: z.string().nullable(),
     online: z.boolean(),
     openForChallenges: z.boolean(),
+    rating: z.number().int(),
+    provisional: z.boolean(),
     about: botAboutSchema.optional(),
     version: botVersionSchema.optional(),
     repoUrl: botRepoUrlSchema.optional(),
@@ -93,8 +97,12 @@ export const accountDeclarationSchema = z.strictObject({
 });
 export type AccountDeclaration = z.infer<typeof accountDeclarationSchema>;
 
+// The bot's own view of itself: identity and rating as the directory
+// shows them, plus the stored declaration.
 export const botAccountSchema = z.object({
     name: z.string(),
+    rating: z.number().int(),
+    provisional: z.boolean(),
     about: botAboutSchema.optional(),
     version: botVersionSchema.optional(),
     repoUrl: botRepoUrlSchema.optional(),

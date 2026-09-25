@@ -336,8 +336,8 @@ describe('the bot-vs-bot challenge inbox', () => {
         const offered = await eventOn(second.stream, `challenge`);
         expect(offered.challenge).toMatchObject({
             challengeId,
-            challenger: { name: `firstbot` },
-            destUser: { name: `secondbot` },
+            challenger: { name: `firstbot`, rating: 1500, provisional: true },
+            destUser: { name: `secondbot`, rating: 1500, provisional: true },
             timeControl: turnControl,
             openingStones: 0,
             firstPlayer: `challenger`,
@@ -352,7 +352,7 @@ describe('the bot-vs-bot challenge inbox', () => {
         // The challenger was named first player and no opening stones were
         // asked for, so the challenger takes o and the first turn.
         expect(challengerStart.side).toBe(`o`);
-        expect(challengerStart.opponent).toEqual({ name: `secondbot` });
+        expect(challengerStart.opponent).toEqual({ name: `secondbot`, rating: 1500, provisional: true });
         expect(destStart.side).toBe(`x`);
         expect(challengerStart.engine.token).not.toBe(destStart.engine.token);
 

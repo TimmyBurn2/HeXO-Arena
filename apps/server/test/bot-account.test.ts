@@ -44,6 +44,50 @@ async function patch(
     return { statusCode: response.statusCode, body: response.json() };
 }
 
+// An unrated bot sits at the bot seed, provisional until it has played.
+const seed = { rating: 1500, provisional: true };
+
+describe('GET /api/bot/account', () => {
+    it('reads the seed rating and the declaration as stored', async () => {
+        const { app } = await createTestApp();
+        const owner = await devLogin(app, `owner`);
+        const token = await mintBotToken(app, owner, `Reader`);
+        await patch(app, token, { about: `hello` });
+        const response = await app.inject({
+            method: 'GET',
+            url: botAccountPath,
+            headers: { authorization: `Bearer ${token}` },
+        });
+        expect(response.statusCode).toBe(200);
+        expect(response.json()).toEqual({ name: `Reader`, ...seed, about: `hello` });
+        await app.close();
+    });
+
+    it('reads the rating the bot holds now, in whole points', async () => {
+        const { app, sqlite } = await createTestApp();
+        const owner = await devLogin(app, `owner`);
+        const token = await mintBotToken(app, owner, `Rated`);
+        sqlite
+            .prepare(`insert into ratings (bot_id, rating, deviation, volatility) select id, 1622.5, 70, 0.06 from bots`)
+            .run();
+        const response = await app.inject({
+            method: 'GET',
+            url: botAccountPath,
+            headers: { authorization: `Bearer ${token}` },
+        });
+        expect(response.json()).toEqual({ name: `Rated`, rating: 1623, provisional: false });
+        await app.close();
+    });
+
+    it('answers 401 without a token', async () => {
+        const { app } = await createTestApp();
+        const response = await app.inject({ method: 'GET', url: botAccountPath });
+        expect(response.statusCode).toBe(401);
+        expect(response.json()).toMatchObject({ code: `unauthorized` });
+        await app.close();
+    });
+});
+
 describe('PATCH /api/bot/account', () => {
     it('stores the whole declaration and answers with the account as it stands', async () => {
         const { app } = await createTestApp();
@@ -57,8 +101,8 @@ describe('PATCH /api/bot/account', () => {
         };
         const result = await patch(app, token, declaration);
         expect(result.statusCode).toBe(200);
-        expect(result.body).toEqual({ name: `Declarer`, ...declaration });
-        expect(botAccountSchema.parse(result.body)).toEqual({ name: `Declarer`, ...declaration });
+        expect(result.body).toEqual({ name: `Declarer`, ...seed, ...declaration });
+        expect(botAccountSchema.parse(result.body)).toEqual({ name: `Declarer`, ...seed, ...declaration });
         await app.close();
     });
 
@@ -68,7 +112,7 @@ describe('PATCH /api/bot/account', () => {
         const token = await mintBotToken(app, owner, `Partial`);
         await patch(app, token, { about: `first`, version: `1` });
         const second = await patch(app, token, { version: `2` });
-        expect(second.body).toEqual({ name: `Partial`, about: `first`, version: `2` });
+        expect(second.body).toEqual({ name: `Partial`, ...seed, about: `first`, version: `2` });
         await app.close();
     });
 
@@ -79,7 +123,7 @@ describe('PATCH /api/bot/account', () => {
         await patch(app, token, { about: `stays` });
         const result = await patch(app, token, {});
         expect(result.statusCode).toBe(200);
-        expect(result.body).toEqual({ name: `Quiet`, about: `stays` });
+        expect(result.body).toEqual({ name: `Quiet`, ...seed, about: `stays` });
         await app.close();
     });
 
@@ -89,7 +133,7 @@ describe('PATCH /api/bot/account', () => {
         const token = await mintBotToken(app, owner, `Clearer`);
         await patch(app, token, { about: `gone soon`, repoUrl: `https://example.com/bot` });
         const cleared = await patch(app, token, { about: ``, repoUrl: `` });
-        expect(cleared.body).toEqual({ name: `Clearer` });
+        expect(cleared.body).toEqual({ name: `Clearer`, ...seed });
         await app.close();
     });
 
@@ -101,6 +145,7 @@ describe('PATCH /api/bot/account', () => {
         const replaced = await patch(app, token, { accepts: { turnMs: null, match: false, unlimited: true } });
         expect(replaced.body).toEqual({
             name: `Picky`,
+            ...seed,
             accepts: { turnMs: null, match: false, unlimited: true },
         });
         await app.close();
@@ -153,6 +198,8 @@ describe('PATCH /api/bot/account', () => {
                 ownerName: `owner`,
                 online: false,
                 openForChallenges: false,
+                rating: 1500,
+                provisional: true,
                 about: `look at me`,
                 version: `9.9.9`,
                 repoUrl: `https://example.com/visible`,
@@ -168,7 +215,7 @@ describe('PATCH /api/bot/account', () => {
         await mintBotToken(app, owner, `Quiet`);
         const response = await app.inject({ method: 'GET', url: botsPath });
         expect(response.json()).toEqual([
-            { name: `Quiet`, ownerName: `owner`, online: false, openForChallenges: false },
+            { name: `Quiet`, ownerName: `owner`, online: false, openForChallenges: false, rating: 1500, provisional: true },
         ]);
         await app.close();
     });

@@ -23,6 +23,7 @@ import { createQuery, type Sqlite } from './db';
 import { abortUnfinishedGames } from './game-store';
 import { engineFrameLimitBytes, registerGameApi } from './game-api';
 import { GameRegistry, wirePresence } from './game-registry';
+import { registerLeaderboardApi } from './leaderboard-api';
 import type { DiscordOAuth } from './discord';
 import { consumeOAuthState, createOAuthState } from './oauth-state';
 import type { PresenceRegistry } from './presence';
@@ -74,6 +75,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     registerBotApi(app, { query, presence });
     registerChallengeApi(app, { query, presence, games, challenges });
     registerGameApi(app, { query, presence, games });
+    registerLeaderboardApi(app, { query });
 
     if (deps.devLogin) {
         app.post(devLoginPath, async (request, reply) => {

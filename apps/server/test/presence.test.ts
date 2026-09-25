@@ -8,7 +8,7 @@ const gameStart = (gameId: string): StreamEvent => ({
     type: `gameStart`,
     gameId,
     side: `x`,
-    opponent: { name: `otherbot` },
+    opponent: { name: `otherbot`, rating: 1500, provisional: true },
     timeControl: { mode: `unlimited` },
     rated: false,
     engine: { socketUrl: `/api/bot/game/${gameId}/socket`, token: `hgs_token` },

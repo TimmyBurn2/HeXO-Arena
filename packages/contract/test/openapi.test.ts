@@ -16,6 +16,7 @@ import {
     gamePath,
     gameResignPath,
     gamesPath,
+    leaderboardPath,
 } from '../src';
 import { buildOpenApiDocument } from '../src/openapi';
 
@@ -55,6 +56,11 @@ describe('openapi document', () => {
         expect(document.paths[botTokenPath]?.post).toBeDefined();
     });
 
+    it('documents the leaderboard route', () => {
+        const document = buildOpenApiDocument();
+        expect(document.paths[leaderboardPath]?.get).toBeDefined();
+    });
+
     it('documents the discord oauth routes', () => {
         const document = buildOpenApiDocument();
         expect(document.paths[discordLoginPath]?.get).toBeDefined();
@@ -71,9 +77,11 @@ describe('openapi document', () => {
         const stream = dig(document, `paths`, botStreamPath, `get`);
         expect(dig(stream, `security`)).toEqual([{ bearerAuth: [] }]);
         expect(dig(stream, `responses`, `200`, `content`, `application/x-ndjson`)).toBeDefined();
-        const account = dig(document, `paths`, botAccountPath, `patch`);
-        expect(dig(account, `security`)).toEqual([{ bearerAuth: [] }]);
-        expect(dig(account, `responses`, `200`, `content`, `application/json`)).toBeDefined();
+        for (const method of [`get`, `patch`]) {
+            const account = dig(document, `paths`, botAccountPath, method);
+            expect(dig(account, `security`)).toEqual([{ bearerAuth: [] }]);
+            expect(dig(account, `responses`, `200`, `content`, `application/json`)).toBeDefined();
+        }
     });
 
     it('exposes the bearer scheme and the closed event union on the stream', () => {

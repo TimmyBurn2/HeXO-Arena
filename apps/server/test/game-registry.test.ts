@@ -14,6 +14,7 @@ import {
     type EngineSocket,
 } from '../src/game-registry';
 import { PresenceRegistry } from '../src/presence';
+import { readRating } from '../src/rating-store';
 import { randomFloat } from '../src/random';
 import { FakeStreamSocket } from './helpers';
 
@@ -165,6 +166,19 @@ describe('game creation', () => {
         expect(replayed.engine.token).not.toBe(start.engine.token);
         vi.advanceTimersByTime(sessionTokenTtlMs);
         expect(world.games.claimSession(start.gameId, start.engine.token)).toBeNull();
+    });
+
+    it('names each side to the other with the rating it holds now', () => {
+        const insert = world.sqlite.prepare(
+            `insert into ratings (user_id, bot_id, rating, deviation, volatility) values (?, ?, ?, ?, 0.06)`,
+        );
+        insert.run(user.id, null, 1234.4, 60);
+        insert.run(null, bot.id, 1777.6, 200);
+        const created = world.games.createGame({ user, bot, timeControl: unlimitedControl, openingStones: 0 });
+        const start = latestEvent(world, `gameStart`);
+        if (start?.type !== `gameStart`) throw new Error(`no gameStart`);
+        expect(start.opponent).toEqual({ name: `humanplayer`, rating: 1234, provisional: false });
+        expect(created.snapshot.opponent).toEqual({ name: `opponentbot`, rating: 1778, provisional: true });
     });
 
     it('counts active games per bot for the concurrent cap', () => {
@@ -495,6 +509,19 @@ describe('persistence', () => {
             { x: 6, y: 0 },
         ]);
         expect(replay).toMatchObject({ kind: `rejected`, code: `game_over` });
+    });
+
+    it('rates both sides when a game ends with a winner', () => {
+        const created = world.games.createGame({
+            user,
+            bot,
+            timeControl: unlimitedControl,
+            openingStones: 0,
+        });
+        world.games.humanResign(created.gameId, user.id);
+        const query = createQuery(world.sqlite);
+        expect(readRating(query, { kind: `human`, id: user.id }).rating).toBeLessThan(1000);
+        expect(readRating(query, { kind: `bot`, id: bot.id }).rating).toBeGreaterThan(1500);
     });
 
     it('aborts whatever an earlier process left unfinished', () => {
