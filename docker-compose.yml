@@ -8,6 +8,7 @@ services:
             HOST: '0.0.0.0'
             PORT: '3000'
             DATABASE_PATH: /data/hexarena.sqlite
+            DEV_LOGIN: '1'
         ports:
             - '127.0.0.1:3000:3000'
         volumes:

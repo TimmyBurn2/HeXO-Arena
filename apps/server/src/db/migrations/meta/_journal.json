@@ -1,0 +1,20 @@
+{
+  "version": "7",
+  "dialect": "sqlite",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "6",
+      "when": 1790327770018,
+      "tag": "0000_yielding_kulan_gath",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1790328313415,
+      "tag": "0001_hesitant_bloodscream",
+      "breakpoints": true
+    }
+  ]
+}

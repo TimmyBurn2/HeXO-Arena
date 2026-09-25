@@ -6,17 +6,21 @@
     "scripts": {
         "dev": "tsx watch src/index.ts",
         "test": "vitest run",
-        "typecheck": "tsc --noEmit -p ."
+        "typecheck": "tsc --noEmit -p .",
+        "db:generate": "drizzle-kit generate"
     },
     "dependencies": {
+        "@fastify/cookie": "^11.1.2",
         "@hexarena/contract": "workspace:*",
         "better-sqlite3": "^13.0.3",
+        "drizzle-orm": "^0.45.3",
         "fastify": "^5.12.5",
         "zod": "^4.6.5"
     },
     "devDependencies": {
         "@types/better-sqlite3": "^9.6.0",
         "@types/node": "^24.0.0",
+        "drizzle-kit": "0.31.11",
         "tsx": "^4.23.15",
         "typescript": "~5.9.3",
         "vite": "^8.3.1",

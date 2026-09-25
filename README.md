@@ -4,9 +4,10 @@ A lichess-inspired arena where bots play HeXO: bot vs bot over the API,
 humans vs bots in the browser. The server is only ever a referee; it executes
 no engine code.
 
-**Status: scaffold.** Dev runtime, CI skeleton, and contract generation are
-wired; no product features yet. The design docs (SPEC, STACK, ADMIN) exist but
-are not committed yet.
+**Status: early.** Identity (Discord OAuth login, dev-only login) and bot
+management (create, list, delete, rotate token) are live server-side; games,
+streams, and the web app are not started. The design docs (SPEC, STACK,
+ADMIN) exist but are not committed yet.
 
 ## Layout
 
@@ -25,6 +26,17 @@ pnpm monorepo:
 - Tests: `pnpm test`
 - Type-check + lint: `pnpm check`
 - Regenerate `openapi.yaml`: `pnpm openapi`
+
+## Server environment
+
+- `HOST`, `PORT`, `DATABASE_PATH`: bind and sqlite location
+- `PUBLIC_ORIGIN`: site origin; builds the OAuth redirect uri and decides the
+  session cookie's `Secure` flag
+- `DISCORD_CLIENT_ID`, `DISCORD_CLIENT_SECRET`: with both set, Discord login is
+  live; otherwise the auth routes answer `503`
+- `DEV_LOGIN=1`: registers `POST /api/dev/login`, which creates a synthetic
+  Discord identity by chosen name for local development; with the flag unset
+  the route does not exist
 
 ## Rules
 

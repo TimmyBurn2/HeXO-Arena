@@ -1,10 +1,27 @@
 import { buildApp } from './app';
-import { openDatabase } from './db';
+import { openDatabase, runMigrations } from './db';
 import { parseEnv } from './env';
+import { createDiscordOAuth } from './discord';
 
 const env = parseEnv(process.env);
 const db = openDatabase(env.DATABASE_PATH);
-const app = buildApp();
+runMigrations(db);
+
+const discord =
+    env.DISCORD_CLIENT_ID && env.DISCORD_CLIENT_SECRET
+        ? createDiscordOAuth({
+              clientId: env.DISCORD_CLIENT_ID,
+              clientSecret: env.DISCORD_CLIENT_SECRET,
+              redirectUri: `${env.PUBLIC_ORIGIN}/api/auth/discord/callback`,
+          })
+        : null;
+
+const app = await buildApp({
+    sqlite: db,
+    discord,
+    secureCookies: env.PUBLIC_ORIGIN.startsWith(`https://`),
+    devLogin: env.DEV_LOGIN,
+});
 
 // once, not on: a second signal during shutdown must not start a
 // concurrent close.
