@@ -1,0 +1,3 @@
+#!/bin/sh
+# Talks to the admin socket of the server running in this container.
+exec node /app/dist/admin-cli.js "$@"

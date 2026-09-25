@@ -86,6 +86,8 @@ export const gameCreateErrorCodes = [
     `clock_not_accepted`,
     `bot_busy`,
 ] as const;
+// A delisted bot takes no new games from humans either.
+export const gameCreateForbiddenErrorCodes = [`delisted`] as const;
 export const gameMoveErrorCodes = [
     `not_your_turn`,
     `cell_occupied`,

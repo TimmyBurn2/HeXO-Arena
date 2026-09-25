@@ -3,7 +3,7 @@ import tsdocPlugin from 'eslint-plugin-tsdoc';
 import tseslint from 'typescript-eslint';
 
 export default tseslint.config(
-    { ignores: ['dist/', 'coverage/', 'data/', 'node_modules/', 'openapi.yaml'] },
+    { ignores: ['**/dist/', '**/coverage/', 'data/', 'node_modules/', 'openapi.yaml'] },
     eslint.configs.recommended,
     ...tseslint.configs.strictTypeChecked,
     {

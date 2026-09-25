@@ -1,0 +1,59 @@
+FROM node:24-slim AS build
+
+RUN npm install --global pnpm@12.6.0
+
+WORKDIR /src
+
+COPY package.json pnpm-workspace.yaml pnpm-lock.yaml ./
+COPY apps/server/package.json apps/server/package.json
+COPY apps/web/package.json apps/web/package.json
+COPY packages/contract/package.json packages/contract/package.json
+COPY packages/rules/package.json packages/rules/package.json
+
+# Manifests are copied before the sources so source edits never bust the
+# dependency layer.
+RUN --mount=type=cache,target=/root/.local/share/pnpm/store pnpm install --frozen-lockfile
+
+COPY . .
+
+RUN pnpm build \
+    && pnpm --filter @hexarena/server deploy --prod /out
+
+FROM node:24-slim
+
+# A dedicated uid that matches nothing on the host.
+# A fresh named volume takes the owner of its mount point, so every
+# directory a volume or tmpfs lands on exists here, owned by that uid.
+RUN groupadd --gid 10001 hexarena \
+    && useradd --uid 10001 --gid hexarena --no-create-home --shell /usr/sbin/nologin hexarena \
+    && mkdir -p /data /backup /run/hexarena /srv/web \
+    && chown hexarena:hexarena /data /backup /run/hexarena /srv/web \
+    && chmod 0700 /run/hexarena
+
+WORKDIR /app
+
+COPY --from=build /out/package.json ./package.json
+COPY --from=build /out/node_modules ./node_modules
+COPY --from=build /out/dist ./dist
+# The static site rides along so one pulled tag carries a matching front
+# end; a one-shot service copies it into the volume the proxy serves.
+COPY --from=build /src/apps/web/dist ./web
+COPY docker/prod/hexarena-admin /usr/local/bin/hexarena-admin
+
+ENV NODE_ENV=production \
+    HOST=0.0.0.0 \
+    PORT=3000 \
+    DATABASE_PATH=/data/hexarena.sqlite \
+    ADMIN_SOCKET_PATH=/run/hexarena/admin.sock \
+    BACKUP_DIR=/backup
+
+USER hexarena
+
+EXPOSE 3000
+
+# Liveness only: /healthz answers 503 while paused or draining, and a
+# paused process is healthy, so any answer at all passes.
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
+    CMD ["node", "-e", "fetch('http://127.0.0.1:3000/healthz').then(() => process.exit(0), () => process.exit(1))"]
+
+CMD ["node", "--max-old-space-size=256", "dist/index.js"]

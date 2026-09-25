@@ -14,7 +14,9 @@ import websocketPlugin from '@fastify/websocket';
 import cookiePlugin from '@fastify/cookie';
 import { z } from 'zod';
 import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest, type FastifyServerOptions } from 'fastify';
-import { createBot, deleteBot, rotateBotToken } from './bots';
+import { createAdminHandler } from './admin-ops';
+import type { AdminHandler } from './admin-socket';
+import { createBot, rotateBotToken } from './bots';
 import { registerBotApi } from './bot-api';
 import { registerChallengeApi } from './challenge-api';
 import { ChallengeRegistry, challengeTtlSeconds } from './challenge-registry';
@@ -25,9 +27,12 @@ import { engineFrameLimitBytes, registerGameApi } from './game-api';
 import { GameRegistry, wirePresence } from './game-registry';
 import { registerLeaderboardApi } from './leaderboard-api';
 import type { DiscordOAuth } from './discord';
+import { drain } from './drain';
+import { deleteBotByPolicy, ownedBotId } from './moderation';
 import { consumeOAuthState, createOAuthState } from './oauth-state';
 import type { PresenceRegistry } from './presence';
 import { createSession, sessionCookieMaxAge, sessionUser } from './sessions';
+import { beginGeneration, StartGate } from './site-state';
 import {
     createUserWithDerivedName,
     createUserWithExactName,
@@ -40,8 +45,17 @@ export interface AppDeps {
     secureCookies: boolean;
     devLogin: boolean;
     presence: PresenceRegistry;
+    // Stamped on every audit row; one operator today, a named moderator
+    // once there is more than one.
+    adminActor: string;
     random?: () => number;
     logger?: FastifyServerOptions[`logger`];
+}
+
+export interface BuiltApp {
+    app: FastifyInstance;
+    admin: AdminHandler;
+    drain: (graceMs: number) => Promise<number>;
 }
 
 const callbackQuerySchema = z.object({
@@ -51,17 +65,21 @@ const callbackQuerySchema = z.object({
 
 const devLoginRequestSchema = z.object({ name: nameSyntaxSchema });
 
-export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
+export async function buildApp(deps: AppDeps): Promise<BuiltApp> {
     const app = Fastify({ logger: deps.logger ?? true });
     const query = createQuery(deps.sqlite);
     // A process serves only games it created: whatever an earlier process
     // left unfinished is closed here, before any route can reach it.
+    const generation = beginGeneration(query);
     abortUnfinishedGames(query);
     expireStaleChallenges(query, challengeTtlSeconds);
     await app.register(cookiePlugin);
     await app.register(websocketPlugin, { options: { maxPayload: engineFrameLimitBytes } });
     const presence = deps.presence;
-    const games = new GameRegistry(deps.random === undefined ? { query, presence } : { query, presence, random: deps.random });
+    const gate = new StartGate(query);
+    const games = new GameRegistry(
+        deps.random === undefined ? { query, presence, generation } : { query, presence, generation, random: deps.random },
+    );
     const challenges = new ChallengeRegistry({ query, presence, games });
     wirePresence(presence, games);
     // Challenge lines lead the replay: they wait on a TTL that the games,
@@ -72,10 +90,11 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
         challenges.stop();
         games.stop();
     });
-    registerBotApi(app, { query, presence });
-    registerChallengeApi(app, { query, presence, games, challenges });
-    registerGameApi(app, { query, presence, games });
+    registerBotApi(app, { query, presence, gate });
+    registerChallengeApi(app, { query, presence, games, challenges, gate });
+    registerGameApi(app, { query, presence, games, gate });
     registerLeaderboardApi(app, { query });
+    const admin = createAdminHandler({ query, presence, games, challenges, actor: deps.adminActor });
 
     if (deps.devLogin) {
         app.post(devLoginPath, async (request, reply) => {
@@ -101,6 +120,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
                     .code(409)
                     .send({ error: `the name fold is already taken`, code: `name_taken` });
             }
+            if (user.banned) return sendBanned(reply);
             const token = createSession(query, user.id);
             setSessionCookie(reply, token, deps.secureCookies);
             return reply.code(200).send({ name: user.name });
@@ -108,9 +128,10 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     }
 
     app.get(healthzPath, async (_request, reply) => {
-        // Liveness only: no db probe, no version, no uptime, so the
-        // endpoint leaks nothing.
-        reply.code(200).send();
+        // One bit: up and serving, or up and refusing new starts, which
+        // uptime monitors read as the pause signal.
+        // No version, no uptime, nothing else.
+        reply.code(gate.closed() ? 503 : 200).send();
     });
     app.get(discordLoginPath, async (_request, reply) => {
         if (!deps.discord) {
@@ -137,6 +158,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
         const user =
             findUserByDiscordId(query, identity.id) ??
             createUserWithDerivedName(query, identity.id, identity.username);
+        if (user.banned) return sendBanned(reply);
         const token = createSession(query, user.id);
         setSessionCookie(reply, token, deps.secureCookies);
         return reply.redirect(`/`);
@@ -180,9 +202,16 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
         if (!nameSyntaxSchema.safeParse(name).success) {
             return reply.code(404).send({ error: `no such bot`, code: `not_found` });
         }
-        if (!deleteBot(query, user.id, nameKeyOf(name))) {
+        const botId = ownedBotId(query, user.id, nameKeyOf(name));
+        if (botId === undefined) {
             return reply.code(404).send({ error: `no such bot`, code: `not_found` });
         }
+        if (games.activeGameCount(botId) > 0) {
+            return reply.code(409).send({ error: `the bot is in a live game`, code: `in_game` });
+        }
+        presence.close(botId);
+        challenges.withdrawFor(botId);
+        query.transaction((tx) => deleteBotByPolicy(tx, botId));
         return reply.code(204).send();
     });
 
@@ -202,7 +231,12 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
         return reply.code(200).send(rotated);
     });
 
-    return app;
+    return { app, admin, drain: (graceMs) => drain({ query, gate, games, generation }, graceMs) };
+}
+
+// A banned identity gets the defined refusal instead of a session.
+function sendBanned(reply: FastifyReply): FastifyReply {
+    return reply.code(403).send({ error: `the account is banned`, code: `banned` });
 }
 
 function setSessionCookie(reply: FastifyReply, token: string, secure: boolean): void {

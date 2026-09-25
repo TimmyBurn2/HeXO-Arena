@@ -6,6 +6,7 @@ import {
     badRequestErrorCodes,
     botAccountPath,
     botAccountSchema,
+    botDeleteConflictErrorCodes,
     botForbiddenErrorCodes,
     botGameResignPath,
     botGameSocketPath,
@@ -29,6 +30,7 @@ import {
     discordCallbackPath,
     discordLoginPath,
     gameCreateErrorCodes,
+    gameCreateForbiddenErrorCodes,
     gameMovePath,
     gamePath,
     gameResignPath,
@@ -40,6 +42,8 @@ import {
     leaderboardPath,
     notFoundErrorCodes,
     okSchema,
+    pausedErrorCodes,
+    pausedRetryAfterSeconds,
     sessionCookieName,
     streamEventSchema,
     unauthorizedErrorCodes,
@@ -61,13 +65,24 @@ const botUnauthorized = () => ({
 });
 
 const botForbidden = () => ({
-    description: `The bot's owner is banned.`,
+    description: `The bot's owner is banned; the token answers this until the ban lifts, and dies then.`,
     content: { 'application/json': { schema: errorBodySchema(botForbiddenErrorCodes) } },
 });
 
 const badRequest = () => ({
     description: `The request fails validation.`,
     content: { 'application/json': { schema: errorBodySchema(badRequestErrorCodes) } },
+});
+
+const paused = () => ({
+    description: `The site is paused: nothing new starts, while open streams and live games run on. Retry after the advertised delay.`,
+    headers: {
+        'Retry-After': {
+            description: `Seconds to wait before retrying; ${String(pausedRetryAfterSeconds)} while paused.`,
+            schema: { type: 'integer', minimum: 1 },
+        },
+    } as const,
+    content: { 'application/json': { schema: errorBodySchema(pausedErrorCodes) } },
 });
 
 // A fresh object per registration: one shared object would serialize as a
@@ -103,9 +118,11 @@ export function buildOpenApiDocument() {
         method: 'get',
         path: healthzPath,
         summary: 'Liveness probe.',
-        // No response content: the probe carries zero information.
+        // No response content: the probe carries one bit, which doubles as
+        // the pause signal for uptime monitors.
         responses: {
-            200: { description: 'The process is up.' },
+            200: { description: 'The process is up and serving.' },
+            503: { description: 'The process is up and paused.' },
         },
     });
 
@@ -138,6 +155,10 @@ export function buildOpenApiDocument() {
                 description: `The state is unknown, expired, or already used.`,
                 content: { 'application/json': { schema: errorBodySchema([`bad_state`]) } },
             },
+            403: {
+                description: `The Discord identity belongs to a banned user; no session is created.`,
+                content: { 'application/json': { schema: errorBodySchema([`banned`]) } },
+            },
             502: {
                 description: `Discord rejected the code or the identity lookup failed.`,
                 content: { 'application/json': { schema: errorBodySchema([`discord_error`]) } },
@@ -163,7 +184,7 @@ export function buildOpenApiDocument() {
         operationId: 'listBots',
         tags: ['Directory'],
         security: [],
-        description: `The whole roster, ordered by name fold; hobby scale, no pagination yet. online and openForChallenges are live views of who holds a stream open; the declaration fields appear once the bot declares itself. rating is Glicko-2 in whole points, provisional while the deviation is above 75.`,
+        description: `The whole listed roster, ordered by name fold; delisted bots and bots of banned owners are hidden. Hobby scale, no pagination yet. online and openForChallenges are live views of who holds a stream open; the declaration fields appear once the bot declares itself. rating is Glicko-2 in whole points, provisional while the deviation is above 75.`,
         parameters: [
             {
                 name: 'online',
@@ -191,7 +212,7 @@ export function buildOpenApiDocument() {
         operationId: 'getLeaderboard',
         tags: ['Directory'],
         security: [],
-        description: `Players at deviation 75 or below, highest Glicko-2 rating first, ties by name fold; provisional players never appear. Bots and humans share one pool; hobby scale, no pagination yet.`,
+        description: `Players at deviation 75 or below, highest Glicko-2 rating first, ties by name fold; provisional players, banned users, delisted bots, and bots of banned owners never appear. Bots and humans share one pool; hobby scale, no pagination yet.`,
         parameters: [
             {
                 name: 'kind',
@@ -253,6 +274,7 @@ export function buildOpenApiDocument() {
         operationId: 'deleteBot',
         tags: ['Bots'],
         security: [{ sessionCookie: [] }],
+        description: `A bot with rated games is anonymized: its games and every rating they moved stay, it is renamed to a deleted-<n> placeholder, and its name stays reserved. A bot without rated games is deleted outright and its name is freed.`,
         parameters: [
             {
                 name: 'name',
@@ -266,6 +288,10 @@ export function buildOpenApiDocument() {
             204: { description: 'The bot and its token are gone.' },
             401: unauthorized(),
             404: notFound(),
+            409: {
+                description: `The bot is seated in a live game; finish or resign it first.`,
+                content: { 'application/json': { schema: errorBodySchema(botDeleteConflictErrorCodes) } },
+            },
         },
     });
 
@@ -323,6 +349,7 @@ export function buildOpenApiDocument() {
             400: badRequest(),
             401: botUnauthorized(),
             403: botForbidden(),
+            503: paused(),
         },
     });
 
@@ -401,6 +428,11 @@ export function buildOpenApiDocument() {
                 },
             },
             401: unauthorized(),
+            403: {
+                description: `The bot is delisted and takes no new games.`,
+                content: { 'application/json': { schema: errorBodySchema(gameCreateForbiddenErrorCodes) } },
+            },
+            503: paused(),
         },
     });
 
@@ -568,7 +600,7 @@ export function buildOpenApiDocument() {
             },
             401: botUnauthorized(),
             403: {
-                description: `The challenger's owner also owns the target, or the owner is banned.`,
+                description: `The challenger's owner also owns the target (own_bot), either bot is delisted (delisted), or the challenger's owner is banned (banned).`,
                 content: {
                     'application/json': {
                         schema: errorBodySchema([...botForbiddenErrorCodes, ...challengeForbiddenErrorCodes]),
@@ -576,6 +608,7 @@ export function buildOpenApiDocument() {
                 },
             },
             404: notFound(),
+            503: paused(),
         },
     });
 
@@ -604,6 +637,7 @@ export function buildOpenApiDocument() {
             401: botUnauthorized(),
             403: botForbidden(),
             404: notFound(),
+            503: paused(),
         },
     });
 

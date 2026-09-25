@@ -39,6 +39,7 @@ import {
 import type { PresenceRegistry } from './presence';
 import { randomFloat } from './random';
 import { streamPlayerOf } from './rating-store';
+import { isCurrentGeneration } from './site-state';
 import { randomToken } from './tokens';
 
 export const botConcurrentGameCap = 4;
@@ -146,6 +147,7 @@ export type BotResignResult =
 export interface RegistryDeps {
     query: Query;
     presence: PresenceRegistry;
+    generation: number;
     random?: () => number;
 }
 
@@ -295,14 +297,20 @@ export class GameRegistry {
     readonly #games = new Map<string, LiveGame>();
     readonly #query: Query;
     readonly #presence: PresenceRegistry;
+    readonly #generation: number;
     readonly #random: () => number;
 
     constructor(deps: RegistryDeps) {
         this.#query = deps.query;
         this.#presence = deps.presence;
+        this.#generation = deps.generation;
         // The crypto source is the default; the injection seam exists so
         // tests can script a draw.
         this.#random = deps.random ?? randomFloat;
+    }
+
+    liveGameCount(): number {
+        return this.#games.size;
     }
 
     activeGameCount(botId: string): number {
@@ -712,8 +720,37 @@ export class GameRegistry {
         this.#finish(game, opponentOf(sideToMove(game)), `timeout`);
     }
 
+    // An abort has no winner, so it leaves every rating alone; both bot
+    // seats hear it as gameFinish like any other end.
+    abort(gameId: string): boolean {
+        const game = this.#games.get(gameId);
+        if (game === undefined) return false;
+        this.#finish(game, null, `aborted`);
+        return true;
+    }
+
+    abortForHuman(userId: string): number {
+        const seated = [...this.#games.values()].filter((game) => humanSide(game)?.seat.userId === userId);
+        for (const game of seated) this.#finish(game, null, `aborted`);
+        return seated.length;
+    }
+
+    abortForBot(botId: string): number {
+        const seated = [...this.#games.values()].filter((game) => this.#seatsBot(game, botId) !== null);
+        for (const game of seated) this.#finish(game, null, `aborted`);
+        return seated.length;
+    }
+
+    abortAll(): number {
+        const live = [...this.#games.values()];
+        for (const game of live) this.#finish(game, null, `aborted`);
+        return live.length;
+    }
+
     // Presence is the stream; a bot whose stream is gone this long forfeits
     // every live game, so a vanished bot cannot stall the arena.
+    // Once this process's generation is retired, a lost stream is the
+    // shutdown's fault, not the bot's, so the game aborts unrated instead.
     botOffline(botId: string): void {
         for (const game of this.#games.values()) {
             for (const side of [`x`, `o`] as const) {
@@ -721,7 +758,11 @@ export class GameRegistry {
                 if (seat.kind !== `bot` || seat.botId !== botId || seat.orphanTimer !== null) continue;
                 seat.orphanTimer = setTimeout(() => {
                     if (this.#games.get(game.id) !== game) return;
-                    this.#finish(game, opponentOf(side), `disconnect`);
+                    if (isCurrentGeneration(this.#query, this.#generation)) {
+                        this.#finish(game, opponentOf(side), `disconnect`);
+                    } else {
+                        this.#finish(game, null, `aborted`);
+                    }
                 }, orphanForfeitMs);
             }
         }

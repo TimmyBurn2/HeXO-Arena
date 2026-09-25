@@ -1,5 +1,5 @@
 import { botTokenPattern } from '@hexarena/contract';
-import { eq } from 'drizzle-orm';
+import { and, eq, isNull } from 'drizzle-orm';
 import type { Query } from './db';
 import { bots, users } from './db/schema';
 import { sha256Hex } from './tokens';
@@ -11,6 +11,7 @@ export interface BotPrincipal {
     name: string;
     nameKey: string;
     ownerId: string;
+    delisted: boolean;
 }
 
 export type BotAuth =
@@ -31,13 +32,20 @@ export function authenticateBot(query: Query, authorization: string | undefined)
             scope: bots.scope,
             ownerId: users.id,
             bannedAt: users.bannedAt,
+            delistedAt: bots.delistedAt,
         })
         .from(bots)
         .innerJoin(users, eq(bots.ownerId, users.id))
-        .where(eq(bots.tokenHash, sha256Hex(token)))
+        .where(and(eq(bots.tokenHash, sha256Hex(token)), isNull(bots.deletedAt)))
         .all();
     if (!row) return { kind: `none` };
-    const bot: BotPrincipal = { id: row.id, name: row.name, nameKey: row.nameKey, ownerId: row.ownerId };
+    const bot: BotPrincipal = {
+        id: row.id,
+        name: row.name,
+        nameKey: row.nameKey,
+        ownerId: row.ownerId,
+        delisted: row.delistedAt !== null,
+    };
     // A token without the play scope does not authenticate on this surface;
     // the schema constraint admits only bot:play today, so this carries the
     // requirement for the day the scope set widens.

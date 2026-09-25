@@ -1,5 +1,6 @@
 import type { LeaderboardQuery, Side, StreamPlayer } from '@hexarena/contract';
-import { and, asc, desc, eq, isNotNull, lte, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, isNotNull, isNull, lte, or, sql } from 'drizzle-orm';
+import { alias } from 'drizzle-orm/sqlite-core';
 import type { Query } from './db';
 import { bots, games, ratings, users } from './db/schema';
 import {
@@ -57,11 +58,12 @@ export function finishedGameOf(row: SeatRow): FinishedGame {
     throw new Error(`stored game row seats nobody`);
 }
 
+// Voided games stay in the log for the record and drop out of the fold.
 export function finishedGameLog(query: Query): FinishedGame[] {
     return query
         .select(seatColumns)
         .from(games)
-        .where(isNotNull(games.finishSeq))
+        .where(and(isNotNull(games.finishSeq), isNull(games.voidedAt)))
         .orderBy(asc(games.finishSeq))
         .all()
         .map(finishedGameOf);
@@ -125,12 +127,15 @@ export function storedRatings(query: Query): Map<string, RatedPlayer> {
 /**
  * Rebuilds the stored ratings from the game log alone; the answer to any
  * rating dispute, and idempotent on a table the live path kept.
+ * Answers how many rated games the fold went through.
  */
-export function recomputeRatings(query: Query): void {
-    query.transaction((tx) => {
-        const folded = foldRatings(finishedGameLog(tx));
+export function recomputeRatings(query: Query): number {
+    return query.transaction((tx) => {
+        const log = finishedGameLog(tx);
+        const folded = foldRatings(log);
         tx.delete(ratings).run();
         for (const { player, rating } of folded.values()) saveRating(tx, player, rating);
+        return log.filter((game) => game.winner !== null).length;
     });
 }
 
@@ -140,6 +145,8 @@ export interface RankedPlayer {
     readonly rating: number;
 }
 
+const botOwners = alias(users, `bot_owner`);
+
 export function rankablePlayers(query: Query, kind: LeaderboardQuery[`kind`]): RankedPlayer[] {
     const narrowed =
         kind === `bots` ? isNotNull(ratings.botId) : kind === `humans` ? isNotNull(ratings.userId) : undefined;
@@ -148,7 +155,21 @@ export function rankablePlayers(query: Query, kind: LeaderboardQuery[`kind`]): R
         .from(ratings)
         .leftJoin(users, eq(ratings.userId, users.id))
         .leftJoin(bots, eq(ratings.botId, bots.id))
-        .where(and(lte(ratings.deviation, rankableDeviation), narrowed))
+        .leftJoin(botOwners, eq(bots.ownerId, botOwners.id))
+        .where(
+            and(
+                lte(ratings.deviation, rankableDeviation),
+                narrowed,
+                // Delisted and deleted bots, banned and deleted humans, and
+                // banned owners' bots are hidden wherever players are listed.
+                isNull(users.bannedAt),
+                isNull(users.deletedAt),
+                or(
+                    isNull(ratings.botId),
+                    and(isNull(bots.delistedAt), isNull(bots.deletedAt), isNull(botOwners.bannedAt)),
+                ),
+            ),
+        )
         .orderBy(desc(ratings.rating), sql`coalesce(${users.nameKey}, ${bots.nameKey})`)
         .all()
         .map((row): RankedPlayer => {

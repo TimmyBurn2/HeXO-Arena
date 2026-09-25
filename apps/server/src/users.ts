@@ -9,6 +9,7 @@ export interface UserRow {
     discordId: string;
     name: string;
     nameKey: string;
+    banned: boolean;
 }
 
 // Discord usernames may hold characters the name charset rejects; the
@@ -28,16 +29,20 @@ function suffixedCandidate(base: string, attempt: number): string {
 }
 
 export function findUserByDiscordId(query: Query, discordId: string): UserRow | undefined {
-    return query
+    const row = query
         .select({
             id: users.id,
             discordId: users.discordId,
             name: users.name,
             nameKey: users.nameKey,
+            bannedAt: users.bannedAt,
         })
         .from(users)
         .where(eq(users.discordId, discordId))
         .get();
+    if (row === undefined) return undefined;
+    const { bannedAt, ...user } = row;
+    return { ...user, banned: bannedAt !== null };
 }
 
 export function createUserWithDerivedName(
@@ -73,7 +78,7 @@ export function createUserWithDerivedName(
                     nameKey: users.nameKey,
                 })
                 .get();
-            return row;
+            return { ...row, banned: false };
         }
         throw new Error(`no free name for base ${base}`);
     });
@@ -94,7 +99,7 @@ export function createUserWithExactName(
             .onConflictDoNothing()
             .run().changes;
         if (claimed !== 1) return `name_taken`;
-        return tx
+        const row = tx
             .insert(users)
             .values({
                 id: randomUUID(),
@@ -110,5 +115,6 @@ export function createUserWithExactName(
                 nameKey: users.nameKey,
             })
             .get();
+        return { ...row, banned: false };
     });
 }

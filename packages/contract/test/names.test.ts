@@ -45,8 +45,13 @@ describe('reserved names', () => {
         `roots`,
         `hexoo`,
         `deleted-player`,
+        `deleted-1a`,
     ])('%s is not reserved', (name) => {
         expect(isReservedName(name)).toBe(false);
+    });
+
+    it.each([`deleted-1`, `Deleted-42`])('%s is reserved as a deleted-player placeholder', (name) => {
+        expect(isReservedName(name)).toBe(true);
     });
 });
 

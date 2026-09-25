@@ -21,7 +21,7 @@ components:
       type: apiKey
 info:
   title: hexarena
-  version: 0.8.0
+  version: 0.12.0
 openapi: 3.0.3
 paths:
   /api/auth/discord/callback:
@@ -48,6 +48,22 @@ paths:
                   - code
                 type: object
           description: The state is unknown, expired, or already used.
+        "403":
+          content:
+            application/json:
+              schema:
+                properties:
+                  code:
+                    enum:
+                      - banned
+                    type: string
+                  error:
+                    type: string
+                required:
+                  - error
+                  - code
+                type: object
+          description: The Discord identity belongs to a banned user; no session is created.
         "502":
           content:
             application/json:
@@ -195,7 +211,7 @@ paths:
                   - error
                   - code
                 type: object
-          description: The bot's owner is banned.
+          description: The bot's owner is banned; the token answers this until the ban lifts, and dies then.
       security:
         - bearerAuth: []
       summary: Read the bot's own account.
@@ -344,7 +360,7 @@ paths:
                   - error
                   - code
                 type: object
-          description: The bot's owner is banned.
+          description: The bot's owner is banned; the token answers this until the ban lifts, and dies then.
       security:
         - bearerAuth: []
       summary: Declare the bot's about, version, repo, and what it accepts.
@@ -427,7 +443,7 @@ paths:
                   - error
                   - code
                 type: object
-          description: The bot's owner is banned.
+          description: The bot's owner is banned; the token answers this until the ban lifts, and dies then.
         "404":
           content:
             application/json:
@@ -445,6 +461,29 @@ paths:
                 type: object
           description: No such bot, or one that is not the caller's to act on; the two are indistinguishable
             on purpose.
+        "503":
+          content:
+            application/json:
+              schema:
+                properties:
+                  code:
+                    enum:
+                      - paused
+                    type: string
+                  error:
+                    type: string
+                required:
+                  - error
+                  - code
+                type: object
+          description: "The site is paused: nothing new starts, while open streams and live games run on.
+            Retry after the advertised delay."
+          headers:
+            Retry-After:
+              description: Seconds to wait before retrying; 60 while paused.
+              schema:
+                minimum: 1
+                type: integer
       security:
         - bearerAuth: []
       summary: Accept a challenge as the challenged bot.
@@ -507,7 +546,7 @@ paths:
                   - error
                   - code
                 type: object
-          description: The bot's owner is banned.
+          description: The bot's owner is banned; the token answers this until the ban lifts, and dies then.
         "404":
           content:
             application/json:
@@ -587,7 +626,7 @@ paths:
                   - error
                   - code
                 type: object
-          description: The bot's owner is banned.
+          description: The bot's owner is banned; the token answers this until the ban lifts, and dies then.
         "404":
           content:
             application/json:
@@ -944,6 +983,7 @@ paths:
                     enum:
                       - banned
                       - own_bot
+                      - delisted
                     type: string
                   error:
                     type: string
@@ -951,7 +991,8 @@ paths:
                   - error
                   - code
                 type: object
-          description: The challenger's owner also owns the target, or the owner is banned.
+          description: The challenger's owner also owns the target (own_bot), either bot is delisted
+            (delisted), or the challenger's owner is banned (banned).
         "404":
           content:
             application/json:
@@ -969,6 +1010,29 @@ paths:
                 type: object
           description: No such bot, or one that is not the caller's to act on; the two are indistinguishable
             on purpose.
+        "503":
+          content:
+            application/json:
+              schema:
+                properties:
+                  code:
+                    enum:
+                      - paused
+                    type: string
+                  error:
+                    type: string
+                required:
+                  - error
+                  - code
+                type: object
+          description: "The site is paused: nothing new starts, while open streams and live games run on.
+            Retry after the advertised delay."
+          headers:
+            Retry-After:
+              description: Seconds to wait before retrying; 60 while paused.
+              schema:
+                minimum: 1
+                type: integer
       security:
         - bearerAuth: []
       summary: Challenge another bot.
@@ -1665,7 +1729,30 @@ paths:
                   - error
                   - code
                 type: object
-          description: The bot's owner is banned.
+          description: The bot's owner is banned; the token answers this until the ban lifts, and dies then.
+        "503":
+          content:
+            application/json:
+              schema:
+                properties:
+                  code:
+                    enum:
+                      - paused
+                    type: string
+                  error:
+                    type: string
+                required:
+                  - error
+                  - code
+                type: object
+          description: "The site is paused: nothing new starts, while open streams and live games run on.
+            Retry after the advertised delay."
+          headers:
+            Retry-After:
+              description: Seconds to wait before retrying; 60 while paused.
+              schema:
+                minimum: 1
+                type: integer
       security:
         - bearerAuth: []
       summary: Open the bot's event stream.
@@ -1673,10 +1760,10 @@ paths:
         - Stream
   /api/bots:
     get:
-      description: The whole roster, ordered by name fold; hobby scale, no pagination yet. online and
-        openForChallenges are live views of who holds a stream open; the declaration fields appear
-        once the bot declares itself. rating is Glicko-2 in whole points, provisional while the
-        deviation is above 75.
+      description: The whole listed roster, ordered by name fold; delisted bots and bots of banned owners
+        are hidden. Hobby scale, no pagination yet. online and openForChallenges are live views of
+        who holds a stream open; the declaration fields appear once the bot declares itself. rating
+        is Glicko-2 in whole points, provisional while the deviation is above 75.
       operationId: listBots
       parameters:
         - description: Narrows the roster to bots holding a stream open.
@@ -1872,6 +1959,9 @@ paths:
         - Bots
   /api/bots/{name}:
     delete:
+      description: "A bot with rated games is anonymized: its games and every rating they moved stay, it
+        is renamed to a deleted-<n> placeholder, and its name stays reserved. A bot without rated
+        games is deleted outright and its name is freed."
       operationId: deleteBot
       parameters:
         - description: "Targeting by name is unambiguous: names are immutable and fold-unique."
@@ -1916,6 +2006,22 @@ paths:
                 type: object
           description: No such bot, or one that is not the caller's to act on; the two are indistinguishable
             on purpose.
+        "409":
+          content:
+            application/json:
+              schema:
+                properties:
+                  code:
+                    enum:
+                      - in_game
+                    type: string
+                  error:
+                    type: string
+                required:
+                  - error
+                  - code
+                type: object
+          description: The bot is seated in a live game; finish or resign it first.
       security:
         - sessionCookie: []
       summary: Delete a bot owned by the session user.
@@ -2318,6 +2424,45 @@ paths:
                   - code
                 type: object
           description: No session cookie, or the session is expired or unknown.
+        "403":
+          content:
+            application/json:
+              schema:
+                properties:
+                  code:
+                    enum:
+                      - delisted
+                    type: string
+                  error:
+                    type: string
+                required:
+                  - error
+                  - code
+                type: object
+          description: The bot is delisted and takes no new games.
+        "503":
+          content:
+            application/json:
+              schema:
+                properties:
+                  code:
+                    enum:
+                      - paused
+                    type: string
+                  error:
+                    type: string
+                required:
+                  - error
+                  - code
+                type: object
+          description: "The site is paused: nothing new starts, while open streams and live games run on.
+            Retry after the advertised delay."
+          headers:
+            Retry-After:
+              description: Seconds to wait before retrying; 60 while paused.
+              schema:
+                minimum: 1
+                type: integer
       security:
         - sessionCookie: []
       summary: Start a game against a bot.
@@ -3218,8 +3363,8 @@ paths:
   /api/leaderboard:
     get:
       description: Players at deviation 75 or below, highest Glicko-2 rating first, ties by name fold;
-        provisional players never appear. Bots and humans share one pool; hobby scale, no pagination
-        yet.
+        provisional players, banned users, delisted bots, and bots of banned owners never appear.
+        Bots and humans share one pool; hobby scale, no pagination yet.
       operationId: getLeaderboard
       parameters:
         - description: Narrows the board to bots or humans; all when absent.
@@ -3283,5 +3428,7 @@ paths:
     get:
       responses:
         "200":
-          description: The process is up.
+          description: The process is up and serving.
+        "503":
+          description: The process is up and paused.
       summary: Liveness probe.

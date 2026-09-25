@@ -1,9 +1,10 @@
 // The API version is spec semver, decoupled from package versions on
 // purpose.
-export const apiVersion = `0.8.0`;
+export const apiVersion = `0.12.0`;
 
 export const healthzPath = `/healthz`;
 
+export * from './admin';
 export * from './api';
 export * from './axial';
 export * from './board';

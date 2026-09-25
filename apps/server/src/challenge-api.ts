@@ -20,10 +20,12 @@ import {
     type ChallengeRegistry,
 } from './challenge-registry';
 import type { PresenceRegistry } from './presence';
+import type { StartGate } from './site-state';
 
 export interface ChallengeApiDeps {
     query: Query;
     presence: PresenceRegistry;
+    gate: StartGate;
     games: GameRegistry;
     challenges: ChallengeRegistry;
 }
@@ -42,7 +44,7 @@ function utcDayStartSeconds(seconds: number): number {
 }
 
 export function registerChallengeApi(app: FastifyInstance, deps: ChallengeApiDeps): void {
-    const { query, presence, games, challenges } = deps;
+    const { query, presence, games, challenges, gate } = deps;
 
     app.post(`/api/bot/challenge/:name`, async (request, reply) => {
         const challenger = requireBot(query, request, reply);
@@ -51,6 +53,7 @@ export function registerChallengeApi(app: FastifyInstance, deps: ChallengeApiDep
         if (!parsed.success) {
             return reply.code(400).send({ error: `the request fails validation`, code: `bad_request` });
         }
+        if (gate.refuse(reply)) return reply;
         const { name } = request.params as NameParams;
         if (!nameSyntaxSchema.safeParse(name).success) {
             return reply.code(404).send({ error: `no such bot`, code: `not_found` });
@@ -64,6 +67,9 @@ export function registerChallengeApi(app: FastifyInstance, deps: ChallengeApiDep
             return reply
                 .code(403)
                 .send({ error: `the challenger's owner also owns the target`, code: `own_bot` });
+        }
+        if (target.delisted || challenger.delisted) {
+            return reply.code(403).send({ error: `a delisted bot takes part in no challenge`, code: `delisted` });
         }
         if (!presence.isOnline(target.id) || !presence.isOpenForChallenges(target.id)) {
             return reply.code(400).send({
@@ -130,6 +136,9 @@ export function registerChallengeApi(app: FastifyInstance, deps: ChallengeApiDep
     app.post(`/api/bot/challenge/:challengeId/accept`, async (request, reply) => {
         const bot = requireBot(query, request, reply);
         if (!bot) return reply;
+        // Acceptance starts a game, so a pause holds it like any creation;
+        // the challenge stays pending and may still be accepted on resume.
+        if (gate.refuse(reply)) return reply;
         const { challengeId } = request.params as ChallengeParams;
         const result = challenges.accept(bot.id, challengeId);
         if (result.kind === `unknown`) {

@@ -16,6 +16,7 @@ import {
     gamePath,
     gameResignPath,
     gamesPath,
+    healthzPath,
     leaderboardPath,
 } from '../src';
 import { buildOpenApiDocument } from '../src/openapi';
@@ -131,5 +132,21 @@ describe('openapi document', () => {
             expect(dig(action, `responses`, `200`)).toBeDefined();
             expect(dig(action, `responses`, `404`)).toBeDefined();
         }
+    });
+
+    it('documents the pause refusal with Retry-After wherever something new starts', () => {
+        const document = buildOpenApiDocument();
+        const starts: [string, string][] = [
+            [botStreamPath, `get`],
+            [gamesPath, `post`],
+            [botChallengePath, `post`],
+            [challengeAcceptPath, `post`],
+        ];
+        for (const [path, method] of starts) {
+            const refusal = dig(document, `paths`, path, method, `responses`, `503`);
+            expect(dig(refusal, `headers`, `Retry-After`, `schema`)).toEqual({ type: `integer`, minimum: 1 });
+            expect(dig(refusal, `content`, `application/json`)).toBeDefined();
+        }
+        expect(dig(document, `paths`, healthzPath, `get`, `responses`, `503`)).toBeDefined();
     });
 });

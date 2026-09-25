@@ -1,0 +1,1 @@
+ALTER TABLE `site_state` ADD `generation` integer DEFAULT 0 NOT NULL;

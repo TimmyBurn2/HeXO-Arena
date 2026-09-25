@@ -13,6 +13,14 @@ describe('DEV_LOGIN env flag', () => {
     ])('%j parses to %j', (source, enabled) => {
         expect(parseEnv(source).DEV_LOGIN).toBe(enabled);
     });
+
+    it.each([`1`, `0`])('set to %j in production refuses to parse', (value) => {
+        expect(() => parseEnv({ NODE_ENV: `production`, DEV_LOGIN: value })).toThrow(/DEV_LOGIN/);
+    });
+
+    it('unset in production parses with the route off', () => {
+        expect(parseEnv({ NODE_ENV: `production` }).DEV_LOGIN).toBe(false);
+    });
 });
 
 describe('POST /api/dev/login', () => {

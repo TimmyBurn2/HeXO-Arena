@@ -4,8 +4,10 @@ import { describe, expect, it } from 'vitest';
 import { botCapPerUser } from '../src/bots';
 import { createQuery } from '../src/db';
 import { bots } from '../src/db/schema';
+import { insertBotGame, recordFinish } from '../src/game-store';
+import { storedRatings } from '../src/rating-store';
 import { sha256Hex } from '../src/tokens';
-import { createTestApp, FakeStreamSocket } from './helpers';
+import { createTestApp, FakeStreamSocket, loginAs, mintBot } from './helpers';
 
 function cookieFrom(response: { headers: { [key: string]: unknown } }): string {
     const setCookie = response.headers[`set-cookie`];
@@ -288,6 +290,71 @@ describe('DELETE /api/bots/:name', () => {
             cookies: { hexarena_session: session },
         });
         expect(relisted.statusCode).toBe(201);
+        await app.close();
+    });
+
+    it('keeps a bot with rated games under a placeholder, its name still reserved', async () => {
+        const { app, sqlite } = await createTestApp();
+        const owner = await loginAs(app, `owner`);
+        await mintBot(app, owner, `Veteran`);
+        const rival = await mintBot(app, await loginAs(app, `rival`), `rival-bot`);
+        const query = createQuery(sqlite);
+        const ids = sqlite.prepare(`select id, name from bots order by name`).all() as { id: string; name: string }[];
+        const [veteran, other] = [ids.find((row) => row.name === `Veteran`), ids.find((row) => row.name === `rival-bot`)];
+        if (veteran === undefined || other === undefined) throw new Error(`seed lookup failed`);
+        const gameId = insertBotGame(query, {
+            challengerBotId: veteran.id,
+            destBotId: other.id,
+            challengerSide: `x`,
+            timeControl: { mode: `unlimited` },
+            opening: [{ x: 0, y: 0, player: 0 }],
+        });
+        recordFinish(query, gameId, { winner: `o`, reason: `six-in-a-row` });
+        const ratingsBefore = storedRatings(query);
+        const deleted = await app.inject({ method: 'DELETE', url: `/api/bots/Veteran`, cookies: { hexarena_session: owner } });
+        expect(deleted.statusCode).toBe(204);
+        expect(sqlite.prepare(`select name from bots where id = ?`).get(veteran.id)).toEqual({ name: `deleted-1` });
+        expect(sqlite.prepare(`select count(*) as n from games`).get()).toEqual({ n: 1 });
+        expect(storedRatings(query)).toEqual(ratingsBefore);
+        const roster = await app.inject({ method: 'GET', url: botsPath });
+        expect(roster.json<{ name: string }[]>().map((bot) => bot.name)).toEqual([`rival-bot`]);
+        const reclaim = await app.inject({ method: 'POST', url: botsPath, payload: { name: `veteran` }, cookies: { hexarena_session: owner } });
+        expect(reclaim.statusCode).toBe(409);
+        const rotate = await app.inject({ method: 'POST', url: `/api/bots/deleted-1/token`, cookies: { hexarena_session: owner } });
+        expect(rotate.statusCode).toBe(404);
+        const challenge = await app.inject({
+            method: 'POST',
+            url: `/api/bot/challenge/deleted-1`,
+            headers: { authorization: `Bearer ${rival}` },
+            payload: { timeControl: { mode: `unlimited` }, requestId: `r1` },
+        });
+        expect(challenge.statusCode).toBe(404);
+        await app.close();
+    });
+
+    it('refuses to delete a bot seated in a live game with 409 in_game', async () => {
+        const { app, sqlite, presence } = await createTestApp();
+        const owner = await loginAs(app, `owner`);
+        const token = await mintBot(app, owner, `Busy`);
+        await app.inject({
+            method: 'PATCH',
+            url: `/api/bot/account`,
+            headers: { authorization: `Bearer ${token}` },
+            payload: { accepts: { turnMs: null, match: false, unlimited: true } },
+        });
+        const row = sqlite.prepare(`select id from bots`).get() as { id: string };
+        presence.attach(row.id, new FakeStreamSocket(), true);
+        const game = await app.inject({
+            method: 'POST',
+            url: `/api/games`,
+            cookies: { hexarena_session: await loginAs(app, `player`) },
+            payload: { bot: `Busy`, timeControl: { mode: `unlimited` } },
+        });
+        expect(game.statusCode).toBe(201);
+        const refused = await app.inject({ method: 'DELETE', url: `/api/bots/Busy`, cookies: { hexarena_session: owner } });
+        expect(refused.statusCode).toBe(409);
+        expect(refused.json()).toEqual({ error: `the bot is in a live game`, code: `in_game` });
+        presence.close(row.id);
         await app.close();
     });
 

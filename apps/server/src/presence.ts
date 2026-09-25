@@ -76,6 +76,10 @@ export class PresenceRegistry {
         this.watch?.(botId, false);
     }
 
+    streamCount(): number {
+        return this.#entries.size;
+    }
+
     isOnline(botId: string): boolean {
         return this.#entries.has(botId);
     }

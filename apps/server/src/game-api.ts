@@ -20,6 +20,7 @@ import {
 import { lastHumanGameCreatedAt } from './game-store';
 import type { PresenceRegistry } from './presence';
 import { sessionUser } from './sessions';
+import type { StartGate } from './site-state';
 
 // One move_response is a few hundred bytes; anything bigger is a broken or
 // hostile client, and the limit is structural, not advisory.
@@ -28,6 +29,7 @@ export const engineFrameLimitBytes = 16 * 1024;
 export interface GameApiDeps {
     query: Query;
     presence: PresenceRegistry;
+    gate: StartGate;
     games: GameRegistry;
 }
 
@@ -50,7 +52,7 @@ function requireUser(
 }
 
 export function registerGameApi(app: FastifyInstance, deps: GameApiDeps): void {
-    const { query, presence, games } = deps;
+    const { query, presence, games, gate } = deps;
 
     app.post(`/api/games`, async (request, reply) => {
         const user = requireUser(query, request, reply);
@@ -59,6 +61,7 @@ export function registerGameApi(app: FastifyInstance, deps: GameApiDeps): void {
         if (!parsed.success) {
             return reply.code(400).send({ error: `the request fails validation`, code: `bad_request` });
         }
+        if (gate.refuse(reply)) return reply;
         const name = parsed.data.bot;
         if (!nameSyntaxSchema.safeParse(name).success) {
             return reply.code(404).send({ error: `no such bot`, code: `not_found` });
@@ -66,6 +69,9 @@ export function registerGameApi(app: FastifyInstance, deps: GameApiDeps): void {
         const bot = findBot(query, nameKeyOf(name));
         if (bot === undefined) {
             return reply.code(404).send({ error: `no such bot`, code: `not_found` });
+        }
+        if (bot.delisted) {
+            return reply.code(403).send({ error: `the bot is delisted`, code: `delisted` });
         }
         if (games.activeHumanGameCount(user.id) >= humanConcurrentGameCap) {
             return reply.code(400).send({

@@ -133,9 +133,10 @@ export function recordFinish(
             .update(games)
             .set({ winner: finish.winner, finishReason: finish.reason, finishedAt: nowSeconds(), finishSeq: nextFinishSeq })
             .where(and(eq(games.id, gameId), isNull(games.finishedAt)))
-            .returning(seatColumns)
+            .returning({ ...seatColumns, voidedAt: games.voidedAt })
             .all();
-        if (finished !== undefined) applyFinishedGame(tx, finishedGameOf(finished));
+        // A game voided while live finishes on the record but never rates.
+        if (finished !== undefined && finished.voidedAt === null) applyFinishedGame(tx, finishedGameOf(finished));
     });
 }
 

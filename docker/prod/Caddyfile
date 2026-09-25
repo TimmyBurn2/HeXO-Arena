@@ -1,0 +1,25 @@
+# TLS and proxying only.
+# Rate limits live in the app, egress control in the network, and nothing
+# here compresses or buffers the API.
+
+{$HEXARENA_DOMAIN} {
+	handle /api/* {
+		# Flush every write at once: a buffered NDJSON line is a bot that
+		# looks offline.
+		# Websocket upgrades pass through as is.
+		reverse_proxy app:3000 {
+			flush_interval -1
+		}
+	}
+
+	handle /healthz {
+		reverse_proxy app:3000
+	}
+
+	handle {
+		root * /srv/web
+		encode zstd gzip
+		try_files {path} /index.html
+		file_server
+	}
+}

@@ -18,6 +18,8 @@ per package later; the nearest one wins.
 - Docker dev runtime: `pnpm dev:compose` (operator-run; containers are not
   verified by day-to-day dev)
 - Tests: `pnpm test`
+- Prod build: `pnpm build` (bundled server and admin CLI in `apps/server/dist`,
+  static site in `apps/web/dist`)
 - Type-check + lint: `pnpm check`
 - Regenerate `openapi.yaml`: `pnpm openapi`
 

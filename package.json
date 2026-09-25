@@ -10,6 +10,7 @@
     "scripts": {
         "dev": "pnpm -r --parallel --if-present dev",
         "dev:compose": "docker compose up --build",
+        "build": "pnpm -r --if-present build",
         "test": "pnpm -r --if-present test",
         "typecheck": "pnpm -r --if-present typecheck",
         "lint": "eslint .",

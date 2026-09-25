@@ -116,6 +116,16 @@ export const devLoginErrorCodes = [`invalid_name`, `name_reserved`, `name_taken`
 export const badRequestErrorCodes = [`bad_request`] as const;
 export const botForbiddenErrorCodes = [`banned`] as const;
 
+// A bot seated in a live game cannot be deleted: deletion would end the
+// game, and ending it unrated would be an escape from a losing position.
+export const botDeleteConflictErrorCodes = [`in_game`] as const;
+
+// While the site is paused, whatever would start something new answers 503
+// with this Retry-After; streams already open and games already live run
+// on untouched.
+export const pausedErrorCodes = [`paused`] as const;
+export const pausedRetryAfterSeconds = 60;
+
 // The acceptance body of actions that have nothing to report beyond that.
 export const okSchema = z.object({ ok: z.literal(true) });
 

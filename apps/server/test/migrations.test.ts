@@ -58,3 +58,49 @@ describe('the finish order migration', () => {
         ]);
     });
 });
+
+describe('the moderation migration', () => {
+    let sqlite: Sqlite;
+    let folder: string;
+
+    afterEach(() => {
+        sqlite.close();
+        rmSync(folder, { recursive: true, force: true });
+    });
+
+    it('keeps every earlier row and starts it unmoderated', () => {
+        sqlite = openDatabase(`:memory:`);
+        folder = migrationsUpTo(6);
+        migrate(drizzle(sqlite), { migrationsFolder: folder });
+        sqlite.exec(`
+            insert into name_reservations (name_key) values ('owner'), ('alpha'), ('beta');
+            insert into users (id, discord_id, name, name_key, created_at) values ('u1', 'd1', 'owner', 'owner', 1);
+            insert into bots (id, owner_id, name, name_key, token_hash, scope, created_at)
+                values ('b1', 'u1', 'alpha', 'alpha', 'h1', 'bot:play', 1), ('b2', 'u1', 'beta', 'beta', 'h2', 'bot:play', 1);
+            insert into games (id, challenger_bot_id, dest_bot_id, challenger_side, time_control, opening_cells, winner, finish_reason, created_at, finished_at, finish_seq)
+                values ('g1', 'b1', 'b2', 'x', '{}', '[]', 'x', 'surrender', 1, 2, 1);
+        `);
+        runMigrations(sqlite);
+        expect(sqlite.prepare(`select deleted_at as deletedAt from users`).all()).toEqual([{ deletedAt: null }]);
+        expect(sqlite.prepare(`select delisted_at as delistedAt, deleted_at as deletedAt from bots`).all()).toEqual([
+            { delistedAt: null, deletedAt: null },
+            { delistedAt: null, deletedAt: null },
+        ]);
+        expect(sqlite.prepare(`select id, voided_at as voidedAt from games`).all()).toEqual([{ id: `g1`, voidedAt: null }]);
+        expect(sqlite.prepare(`select count(*) as n from site_state`).get()).toEqual({ n: 0 });
+    });
+
+});
+
+describe('the admin tables', () => {
+    it('refuse an audit row without a reason or with an unknown action, and a second state row', () => {
+        const sqlite = openDatabase(`:memory:`);
+        runMigrations(sqlite);
+        const insert = sqlite.prepare(`insert into admin_actions (actor, action, target, reason, at) values (?, ?, null, ?, 1)`);
+        expect(() => insert.run(`operator`, `pause`, ``)).toThrow(/CHECK/);
+        expect(() => insert.run(`operator`, `reset-rating`, `abuse`)).toThrow(/CHECK/);
+        insert.run(`operator`, `pause`, `incident`);
+        expect(() => sqlite.prepare(`insert into site_state (id) values (2)`).run()).toThrow(/CHECK/);
+        sqlite.close();
+    });
+});

@@ -1,4 +1,5 @@
-import { buildApp } from '../src/app';
+import { botWithTokenSchema, botsPath, devLoginPath } from '@hexarena/contract';
+import { buildApp, type BuiltApp } from '../src/app';
 import { openDatabase, runMigrations, type Sqlite } from '../src/db';
 import type { DiscordIdentity, DiscordOAuth } from '../src/discord';
 import type { FastifyServerOptions } from 'fastify';
@@ -48,11 +49,14 @@ export class FakeStreamSocket implements StreamSocket {
 
 export interface TestApp {
     sqlite: Sqlite;
-    app: Awaited<ReturnType<typeof buildApp>>;
+    app: BuiltApp[`app`];
+    admin: BuiltApp[`admin`];
+    drain: BuiltApp[`drain`];
     presence: PresenceRegistry;
 }
 
 export async function createTestApp(options?: {
+    sqlite?: Sqlite;
     discord?: DiscordOAuth | null;
     secureCookies?: boolean;
     devLogin?: boolean;
@@ -61,17 +65,38 @@ export async function createTestApp(options?: {
     logger?: FastifyServerOptions[`logger`];
 }): Promise<TestApp> {
     const discord = options?.discord === undefined ? fakeDiscord({ id: `1`, username: `tester` }).oauth : options.discord;
-    const sqlite = openDatabase(`:memory:`);
+    const sqlite = options?.sqlite ?? openDatabase(`:memory:`);
     runMigrations(sqlite);
     const presence = options?.presence ?? new PresenceRegistry();
-    const app = await buildApp({
+    const { app, admin, drain } = await buildApp({
         sqlite,
         discord,
         secureCookies: options?.secureCookies ?? false,
         devLogin: options?.devLogin ?? true,
         presence,
+        adminActor: `operator`,
         ...(options?.random !== undefined && { random: options.random }),
         ...(options?.logger !== undefined && { logger: options.logger }),
     });
-    return { sqlite, app, presence };
+    return { sqlite, app, admin, drain, presence };
+}
+
+// The session cookie value of a dev login, for inject's cookies option.
+export async function loginAs(app: TestApp[`app`], name: string): Promise<string> {
+    const response = await app.inject({ method: `POST`, url: devLoginPath, payload: { name } });
+    if (response.statusCode !== 200) throw new Error(`dev login failed: ${response.body}`);
+    const cookie = response.cookies.find((entry) => entry.name === `hexarena_session`);
+    if (cookie === undefined) throw new Error(`dev login set no session cookie`);
+    return cookie.value;
+}
+
+export async function mintBot(app: TestApp[`app`], session: string, name: string): Promise<string> {
+    const response = await app.inject({
+        method: `POST`,
+        url: botsPath,
+        payload: { name },
+        cookies: { hexarena_session: session },
+    });
+    if (response.statusCode !== 201) throw new Error(`bot creation failed: ${response.body}`);
+    return botWithTokenSchema.parse(response.json()).token;
 }

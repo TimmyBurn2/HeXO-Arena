@@ -18,10 +18,12 @@ import { type Query } from './db';
 import type { PresenceRegistry } from './presence';
 import { isProvisional } from './rating';
 import { streamPlayerOf } from './rating-store';
+import type { StartGate } from './site-state';
 
 export interface BotApiDeps {
     query: Query;
     presence: PresenceRegistry;
+    gate: StartGate;
 }
 
 // Sends the failure itself and yields null, so handlers stay flat.
@@ -39,7 +41,7 @@ export function requireBot(query: Query, request: FastifyRequest, reply: Fastify
 }
 
 export function registerBotApi(app: FastifyInstance, deps: BotApiDeps): void {
-    const { query, presence } = deps;
+    const { query, presence, gate } = deps;
 
     app.get(botStreamPath, async (request, reply) => {
         const bot = requireBot(query, request, reply);
@@ -48,6 +50,7 @@ export function registerBotApi(app: FastifyInstance, deps: BotApiDeps): void {
         if (!parsed.success) {
             return reply.code(400).send({ error: `the open parameter must be exactly 1`, code: `bad_request` });
         }
+        if (gate.refuse(reply)) return reply;
         // Writing on reply.raw bypasses serialization and anything that
         // buffers; hijack keeps the framework from answering on its own.
         // Headers flush eagerly: a bot with no replay lines must not wait

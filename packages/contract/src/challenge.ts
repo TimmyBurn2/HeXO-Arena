@@ -37,8 +37,9 @@ export const challengeCreateErrorCodes = [
 ] as const;
 
 // The challenger's owner also owns the target: an owner cannot farm their
-// own bots against each other.
-export const challengeForbiddenErrorCodes = [`own_bot`] as const;
+// own bots against each other. A delisted bot neither challenges nor is
+// challenged, whichever side it sits on.
+export const challengeForbiddenErrorCodes = [`own_bot`, `delisted`] as const;
 
 // Acceptance re-checks the one gate that can have moved since creation.
 export const challengeAcceptErrorCodes = [`bot_busy`] as const;

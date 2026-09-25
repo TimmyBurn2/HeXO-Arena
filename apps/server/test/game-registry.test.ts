@@ -16,6 +16,7 @@ import {
 import { PresenceRegistry } from '../src/presence';
 import { readRating } from '../src/rating-store';
 import { randomFloat } from '../src/random';
+import { beginGeneration, retireGeneration } from '../src/site-state';
 import { FakeStreamSocket } from './helpers';
 
 const user = { id: `user-1`, name: `humanplayer` };
@@ -85,7 +86,7 @@ function harness(random: () => number = randomFloat): Harness {
     const query = createQuery(sqlite);
     seedPair(query);
     const presence = new PresenceRegistry();
-    const games = new GameRegistry({ query, presence, random });
+    const games = new GameRegistry({ query, presence, generation: beginGeneration(query), random });
     wirePresence(presence, games);
     const stream = new FakeStreamSocket();
     presence.attach(bot.id, stream, true);
@@ -466,6 +467,20 @@ describe('orphan rule', () => {
         expect(still?.status).toBe(`in-progress`);
     });
 
+    it('aborts unrated instead once the generation of the process is retired', async () => {
+        const query = createQuery(world.sqlite);
+        const created = world.games.createGame({ user, bot, timeControl: unlimitedControl, openingStones: 0 });
+        const before = readRating(query, { kind: `bot`, id: bot.id });
+        retireGeneration(query, 1);
+        world.stream.emitClose();
+        await vi.advanceTimersByTimeAsync(orphanForfeitMs);
+        const snapshot = world.games.snapshotFor(created.gameId)?.snapshot;
+        if (snapshot?.status !== `finished`) throw new Error(`not finished`);
+        expect(snapshot.winner).toBeNull();
+        expect(snapshot.reason).toBe(`aborted`);
+        expect(readRating(query, { kind: `bot`, id: bot.id })).toEqual(before);
+    });
+
     it('drops every timer on stop, so a late close event arms nothing', async () => {
         world.games.createGame({ user, bot, timeControl: unlimitedControl, openingStones: 0 });
         world.games.stop();
@@ -534,10 +549,8 @@ describe('persistence', () => {
         abortUnfinishedGames(createQuery(world.sqlite));
         // The sweep is a boot step: the next process reads with an empty
         // registry, so the record answers on its own.
-        const restarted = new GameRegistry({
-            query: createQuery(world.sqlite),
-            presence: new PresenceRegistry(),
-        });
+        const query = createQuery(world.sqlite);
+        const restarted = new GameRegistry({ query, presence: new PresenceRegistry(), generation: beginGeneration(query) });
         const snapshot = restarted.snapshotFor(created.gameId)?.snapshot;
         if (snapshot?.status !== `finished`) throw new Error(`not finished`);
         expect(snapshot.winner).toBeNull();

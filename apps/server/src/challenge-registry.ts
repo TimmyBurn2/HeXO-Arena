@@ -172,6 +172,24 @@ export class ChallengeRegistry {
         return { kind: `ok` };
     }
 
+    // A bot taken out of play takes its pending challenges with it, in both
+    // directions; both sides hear of it, since either may still be
+    // connected.
+    withdrawFor(botId: string): number {
+        let withdrawn = 0;
+        for (const live of [...this.#pending.values()]) {
+            const { challengerBotId, destBotId } = live.record;
+            if (challengerBotId !== botId && destBotId !== botId) continue;
+            this.#decide(live, `canceled`);
+            const view = viewOf(this.#query, live.record, `canceled`);
+            for (const side of [challengerBotId, destBotId]) {
+                this.#presence.send(side, { type: `challengeCanceled`, reason: `canceled`, challenge: view });
+            }
+            withdrawn += 1;
+        }
+        return withdrawn;
+    }
+
     // Pending inbox lines replay on reconnect, so a bot that dropped its
     // stream mid-off still sees what waits for it.
     replayForBot(botId: string): StreamEvent[] {

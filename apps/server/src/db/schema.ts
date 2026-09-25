@@ -15,9 +15,10 @@ export const users = sqliteTable(`users`, {
         .notNull()
         .unique()
         .references(() => nameReservations.nameKey),
-    // Carried from day one so the admin ban op never needs a migration;
-    // nothing sets it yet.
     bannedAt: integer(`banned_at`),
+    // Set when the user is forgotten but their games are kept: the row then
+    // carries a deleted-<n> placeholder name and no Discord identity.
+    deletedAt: integer(`deleted_at`),
     createdAt: integer(`created_at`).notNull(),
 });
 
@@ -65,6 +66,10 @@ export const bots = sqliteTable(
         version: text(`version`),
         repoUrl: text(`repo_url`),
         accepts: text(`accepts`),
+        delistedAt: integer(`delisted_at`),
+        // Set when a bot with rated games is deleted: the row stays so the
+        // game log stays whole, under a deleted-<n> placeholder name.
+        deletedAt: integer(`deleted_at`),
     },
     (table) => [
         index(`bots_owner_id_idx`).on(table.ownerId),
@@ -100,6 +105,8 @@ export const games = sqliteTable(
         createdAt: integer(`created_at`).notNull(),
         finishedAt: integer(`finished_at`),
         finishSeq: integer(`finish_seq`),
+        // A voided game stays in the log but never counts toward a rating.
+        voidedAt: integer(`voided_at`),
     },
     (table) => [
         index(`games_user_id_idx`).on(table.userId),
@@ -241,5 +248,41 @@ export const ratings = sqliteTable(
         check(`ratings_rating_check`, sql`${table.rating} >= 400`),
         check(`ratings_deviation_check`, sql`${table.deviation} >= 45 and ${table.deviation} <= 500`),
         check(`ratings_volatility_check`, sql`${table.volatility} > 0 and ${table.volatility} <= 0.1`),
+    ],
+);
+
+// A single row, created on first write; no row reads as running.
+export const siteState = sqliteTable(
+    `site_state`,
+    {
+        id: integer(`id`).primaryKey(),
+        pausedAt: integer(`paused_at`),
+        // Every boot claims the next generation and a draining process moves
+        // it past its own, so a live game whose process no longer holds the
+        // stored generation was interrupted by a shutdown.
+        generation: integer(`generation`).notNull().default(0),
+    },
+    (table) => [check(`site_state_single_row_check`, sql`${table.id} = 1`)],
+);
+
+// The audit of every admin mutation, written by the process that applied
+// it. Targets are names as they stood, not foreign keys, so a row outlives
+// the user or bot it names.
+export const adminActions = sqliteTable(
+    `admin_actions`,
+    {
+        id: integer(`id`).primaryKey({ autoIncrement: true }),
+        actor: text(`actor`).notNull(),
+        action: text(`action`).notNull(),
+        target: text(`target`),
+        reason: text(`reason`).notNull(),
+        at: integer(`at`).notNull(),
+    },
+    (table) => [
+        check(
+            `admin_actions_action_check`,
+            sql`${table.action} in ('pause', 'resume', 'ban-user', 'unban-user', 'delete-user', 'delist-bot', 'relist-bot', 'revoke-bot', 'abort-game', 'recompute-ratings')`,
+        ),
+        check(`admin_actions_reason_check`, sql`length(${table.reason}) > 0`),
     ],
 );

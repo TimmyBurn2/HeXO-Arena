@@ -9,8 +9,9 @@ export const namePattern = /^[A-Za-z][A-Za-z0-9_-]{0,28}[A-Za-z0-9]$/;
 
 export const nameSyntaxSchema = z.string().regex(namePattern);
 
-// Exact match on the lowercase fold. `deleted` keeps the delete-user
-// placeholder namespace free; the last two are the site and house names.
+// Exact match on the lowercase fold; the last two are the site and house
+// names. `deleted` and every `deleted-<n>` are the placeholder namespace
+// that deleted players are renamed into.
 export const reservedNames: readonly string[] = [
     `administrator`,
     `moderator`,
@@ -27,6 +28,9 @@ export function nameKeyOf(name: string): string {
     return name.toLowerCase();
 }
 
+export const placeholderNamePattern = /^deleted-[0-9]+$/;
+
 export function isReservedName(name: string): boolean {
-    return reservedNames.includes(nameKeyOf(name));
+    const key = nameKeyOf(name);
+    return reservedNames.includes(key) || placeholderNamePattern.test(key);
 }
