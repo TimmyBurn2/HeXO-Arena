@@ -5,4 +5,5 @@ export const apiVersion = `0.2.0`;
 export const healthzPath = `/healthz`;
 
 export * from './api';
+export * from './board';
 export * from './names';

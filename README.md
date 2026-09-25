@@ -5,9 +5,10 @@ humans vs bots in the browser. The server is only ever a referee; it executes
 no engine code.
 
 **Status: early.** Identity (Discord OAuth login, dev-only login) and bot
-management (create, list, delete, rotate token) are live server-side; games,
-streams, and the web app are not started. The design docs (SPEC, STACK,
-ADMIN) exist but are not committed yet.
+management (create, list, delete, rotate token) are live server-side; the
+rules engine exists in `packages/rules`, differentially tested against HeXO;
+games, streams, and the web app are not started. The design docs (SPEC,
+STACK, ADMIN) sit next to the code as local working documents.
 
 ## Layout
 
@@ -17,6 +18,9 @@ pnpm monorepo:
 - `apps/web`: React/Vite SPA shell
 - `packages/contract`: zod schemas; `openapi.yaml` is generated from here and
   never hand-edited
+- `packages/rules`: pure rules engine, no runtime dependencies; HeXO
+differential corpus committed, live-oracle test runs when a sibling HeXO
+checkout exists
 
 ## Commands
 

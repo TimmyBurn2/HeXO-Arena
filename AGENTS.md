@@ -5,7 +5,8 @@ Read `SPEC.md`, `STACK.md`, and `ADMIN.md` before any architectural change;
 they record decisions, not suggestions.
 
 Layout: pnpm monorepo. `apps/server` (Fastify), `apps/web` (React/Vite SPA),
-`packages/contract` (zod schemas, board types). Nested `AGENTS.md` files may appear
+`packages/contract` (zod schemas, board types), `packages/rules` (pure rules
+engine, no runtime dependencies). Nested `AGENTS.md` files may appear
 per package later; the nearest one wins.
 
 ## Commands
