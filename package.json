@@ -1,0 +1,25 @@
+{
+    "name": "hexarena",
+    "version": "0.0.0",
+    "private": true,
+    "type": "module",
+    "packageManager": "pnpm@12.6.0",
+    "engines": {
+        "node": ">=24"
+    },
+    "scripts": {
+        "dev": "pnpm -r --parallel --if-present dev",
+        "dev:compose": "docker compose up --build",
+        "test": "pnpm -r --if-present test",
+        "typecheck": "pnpm -r --if-present typecheck",
+        "lint": "eslint .",
+        "check": "pnpm typecheck && pnpm lint",
+        "openapi": "pnpm --filter @hexarena/contract generate"
+    },
+    "devDependencies": {
+        "@eslint/js": "^10.0.1",
+        "eslint": "^10.11.0",
+        "eslint-plugin-tsdoc": "^0.5.3",
+        "typescript-eslint": "^8.70.1"
+    }
+}

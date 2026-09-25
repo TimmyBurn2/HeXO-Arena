@@ -1,0 +1,14 @@
+components:
+  parameters: {}
+  schemas: {}
+info:
+  title: hexarena
+  version: 0.1.0
+openapi: 3.0.3
+paths:
+  /healthz:
+    get:
+      responses:
+        "200":
+          description: The process is up.
+      summary: Liveness probe.

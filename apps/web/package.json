@@ -1,0 +1,24 @@
+{
+    "name": "@hexarena/web",
+    "version": "0.0.0",
+    "private": true,
+    "type": "module",
+    "scripts": {
+        "dev": "vite",
+        "test": "vitest run",
+        "typecheck": "tsc --noEmit -p ."
+    },
+    "dependencies": {
+        "react": "^19.3.0",
+        "react-dom": "^19.3.0"
+    },
+    "devDependencies": {
+        "@types/node": "^24.0.0",
+        "@types/react": "^19.0.0",
+        "@types/react-dom": "^19.0.0",
+        "@vitejs/plugin-react": "^6.1.1",
+        "typescript": "~5.9.3",
+        "vite": "^8.3.1",
+        "vitest": "^5.0.1"
+    }
+}

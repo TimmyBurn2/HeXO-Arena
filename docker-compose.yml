@@ -1,0 +1,36 @@
+services:
+    server:
+        build:
+            context: .
+            dockerfile: docker/dev/Dockerfile
+        command: ['pnpm', '--filter', '@hexarena/server', 'dev']
+        environment:
+            HOST: '0.0.0.0'
+            PORT: '3000'
+            DATABASE_PATH: /data/hexarena.sqlite
+        ports:
+            - '127.0.0.1:3000:3000'
+        volumes:
+            - ./apps/server/src:/app/apps/server/src
+            - ./apps/server/test:/app/apps/server/test
+            - ./packages/contract/src:/app/packages/contract/src
+            - ./packages/contract/test:/app/packages/contract/test
+            - ./packages/contract/scripts:/app/packages/contract/scripts
+            - hexarena-data:/data
+    web:
+        build:
+            context: .
+            dockerfile: docker/dev/Dockerfile
+        command: ['pnpm', '--filter', '@hexarena/web', 'dev']
+        ports:
+            - '127.0.0.1:5173:5173'
+        volumes:
+            - ./apps/web/src:/app/apps/web/src
+            - ./apps/web/test:/app/apps/web/test
+            - ./apps/web/index.html:/app/apps/web/index.html
+            - ./packages/contract/src:/app/packages/contract/src
+            - ./packages/contract/test:/app/packages/contract/test
+            - ./packages/contract/scripts:/app/packages/contract/scripts
+
+volumes:
+    hexarena-data:
