@@ -1,0 +1,13 @@
+@layer screens {
+    @media (max-width: 48rem) {
+        .col-optional {
+            display: none;
+        }
+    }
+
+    @media (max-width: 30rem) {
+        .col-narrow-optional {
+            display: none;
+        }
+    }
+}

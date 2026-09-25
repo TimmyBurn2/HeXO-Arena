@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { AxialCoord } from '@hexarena/contract';
-import { rejection, type Position } from '@hexarena/rules';
+import type { AxialCoord, Side } from '@hexarena/contract';
+import { isWithinPlacementRadius, rejection, type Position } from '@hexarena/rules';
 import { Board, type BoardStone } from '../board/Board';
 import { useBoardSettings } from '../board/board-settings';
 import { rejectionNote } from './snapshot-views';
+import './GameBoard.css';
 
 const sixKeys: Record<string, AxialCoord> = {
     ArrowLeft: { x: -1, y: 0 },
@@ -19,9 +20,10 @@ const sixKeys: Record<string, AxialCoord> = {
  * pending ring, and a locally validated commit, so the server's move
  * rejections are unreachable by construction.
  */
-export function GameBoard({ stones, position, lastMove, winLine, yourMove, opponentMoving, opponentName, onCommit }: {
+export function GameBoard({ stones, position, you, lastMove, winLine, yourMove, opponentMoving, opponentName, onCommit }: {
     stones: readonly BoardStone[];
     position: Position;
+    you: Side;
     lastMove: readonly AxialCoord[];
     winLine: readonly AxialCoord[];
     yourMove: boolean;
@@ -79,7 +81,10 @@ export function GameBoard({ stones, position, lastMove, winLine, yourMove, oppon
         const step = sixKeys[event.key];
         if (step !== undefined) {
             event.preventDefault();
-            setFocus({ x: focus.x + step.x, y: focus.y + step.y });
+            const next = { x: focus.x + step.x, y: focus.y + step.y };
+            // The focus walks the frontier and stops at its edge, where
+            // the board ends.
+            if (isWithinPlacementRadius(position.stones, next)) setFocus(next);
             return;
         }
         if (event.key === `Enter` || event.key === ` `) {
@@ -116,12 +121,11 @@ export function GameBoard({ stones, position, lastMove, winLine, yourMove, oppon
                     settings={settings}
                     label={`game board, ${String(stones.length)} stones placed`}
                     overlays={{
-                        ...(pending === null ? {} : { pending }),
+                        ...(pending === null ? {} : { pending, pendingSide: you }),
                         ...(yourMove ? { focus } : {}),
                         ...(winLine.length === 0 ? {} : { winLine }),
                         lastMove,
                     }}
-                    extraCells={yourMove ? [focus] : []}
                     onCellClick={
                         yourMove
                             ? (cell) => {

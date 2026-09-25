@@ -1,0 +1,50 @@
+@layer screens {
+    .bot-head {
+        display: flex;
+        align-items: center;
+        gap: var(--space-3);
+        flex-wrap: wrap;
+    }
+
+    .bot-head h1 {
+        margin: 0;
+        font-size: var(--text-xl);
+    }
+
+    .bot-meta {
+        color: var(--c-text-dim);
+        font-size: var(--text-sm);
+        display: flex;
+        gap: var(--space-3);
+        flex-wrap: wrap;
+        margin: var(--space-2) 0 var(--space-4);
+    }
+
+    .kv {
+        display: grid;
+        grid-template-columns: max-content 1fr;
+        gap: var(--space-2) var(--space-4);
+        margin: var(--space-4) 0;
+        font-size: var(--text-sm);
+    }
+
+    .kv dt {
+        color: var(--c-text-dim);
+    }
+
+    .kv dd {
+        margin: 0;
+    }
+
+    .about {
+        max-width: var(--measure);
+    }
+
+    .play-row {
+        margin-top: var(--space-5);
+    }
+
+    .play-row .play-reason {
+        margin-left: var(--space-3);
+    }
+}

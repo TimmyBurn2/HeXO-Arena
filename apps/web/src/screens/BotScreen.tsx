@@ -8,6 +8,7 @@ import { ErrorFrame, SkeletonRows } from '../components/states';
 import { Link } from '../router/Link';
 import { useRoute } from '../router/use-route';
 import { useDocumentMeta } from '../use-document-meta';
+import './BotScreen.css';
 
 export function BotScreen({ name }: { name: string }) {
     const route = useRoute();
@@ -106,8 +107,8 @@ function BotProfile({ bot }: { bot: BotListing }) {
                     <table>
                         <thead>
                             <tr>
-                                <th scope="col">clock</th>
-                                <th scope="col">window</th>
+                                <th scope="col">Clock</th>
+                                <th scope="col">Window</th>
                             </tr>
                         </thead>
                         <tbody>

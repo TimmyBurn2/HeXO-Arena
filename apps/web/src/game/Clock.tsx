@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import './Clock.css';
 
 /**
  * A clock that ticks down from the snapshot's reading; the interval is
@@ -23,9 +24,15 @@ export function Clock({ remainingMs, running }: { remainingMs: number; running: 
     const seconds = Math.floor(ms / 1000);
     const minutes = Math.floor(seconds / 60);
     const text = `${pad(minutes)}:${pad(seconds % 60)}`;
-    const className = `clock${running && ms < 60_000 ? ` low` : ``}${running ? `` : ` idle`}`;
+    // The running clock is a plate; under ten seconds the plate turns to
+    // the alarm color once and stays there.
+    const state = !running ? `idle` : ms < 10_000 ? `low` : `active`;
 
-    return <span className={className}>{text}</span>;
+    return (
+        <span className={`clock ${state}`} role="timer" aria-live="off">
+            {text}
+        </span>
+    );
 }
 
 function pad(value: number): string {

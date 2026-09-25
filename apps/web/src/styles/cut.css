@@ -1,0 +1,90 @@
+/*
+ * The hex cut: controls and surfaces lose their corners along the slope
+ * of a cell's shoulder, so the board's geometry runs through the whole
+ * interface.
+ * Which element takes which cut is decided here once, and components
+ * never set a clip path.
+ * A clip path clips outlines too, so focus on a cut element draws inside
+ * its edge.
+ */
+
+@layer components {
+    .btn,
+    .pill,
+    .seg-btn,
+    .opt label,
+    .badge-bot,
+    .tag,
+    .skeleton,
+    .nav-link,
+    kbd,
+    input[type='text'] {
+        clip-path: var(--cut-sm-path);
+    }
+
+    .card,
+    .raised,
+    .pills,
+    .seg,
+    .table-wrap,
+    .empty,
+    .advanced,
+    .token-box,
+    .skip {
+        clip-path: var(--cut-md-path);
+    }
+
+    /* Small marks are whole cells: a checkbox, gray when off and the
+       accent when on, the slider thumb, and the step numbers. */
+    input[type='checkbox'],
+    input[type='range']::-webkit-slider-thumb,
+    .steps .step-n {
+        clip-path: var(--hex-path);
+    }
+
+    input[type='range']::-moz-range-thumb {
+        clip-path: var(--hex-path);
+    }
+
+    /* The hexagon clips the checkbox's own ring, so its label shows focus. */
+    .checkline:has(input:focus-visible) {
+        outline: var(--focus-w) solid var(--c-focus);
+        outline-offset: var(--focus-w);
+    }
+
+    .dialog-panel {
+        clip-path: var(--cut-lg-path);
+    }
+
+    .rung {
+        clip-path: var(--cut-md-path);
+    }
+
+    .rung.r1 {
+        clip-path: var(--cut-lg-path);
+    }
+
+    .strip,
+    .feed,
+    .banner,
+    .board-frame {
+        clip-path: var(--cut-md-path);
+    }
+
+    .btn:focus-visible,
+    .pill:focus-visible,
+    .seg-btn:focus-visible,
+    .nav-link:focus-visible,
+    .skip:focus-visible,
+    input[type='text']:focus-visible,
+    .opt input:focus-visible + label {
+        outline: var(--focus-w) solid var(--c-focus);
+        outline-offset: calc(-1 * var(--focus-w));
+    }
+
+    /* The focus color is the accent, so on an accent fill the ring
+       switches to the text on it. */
+    .btn-primary:focus-visible {
+        outline-color: var(--c-text-on-accent);
+    }
+}

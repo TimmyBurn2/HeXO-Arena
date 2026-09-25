@@ -1,0 +1,24 @@
+/*
+ * One accent and one bot hue, identical in every theme.
+ * Themes never set these; the contrast check holds them against each
+ * theme's surfaces.
+ */
+
+@layer brand {
+    :root {
+        --c-accent: hsl(43 92% 60%);
+        --c-accent-hover: hsl(43 95% 76%);
+        --c-accent-solid: hsl(43 92% 60%);
+        --c-accent-solid-hover: hsl(43 95% 68%);
+        --c-accent-bg: hsl(43 45% 17%);
+        --c-text-on-accent: hsl(222 32% 8%);
+        --c-focus: hsl(43 92% 60%);
+
+        --c-bot: hsl(188 70% 62%);
+        --c-bot-bg: hsl(188 45% 16%);
+
+        --board-pending: var(--c-accent-solid);
+        --board-last: var(--c-accent-solid);
+        --board-win: var(--c-accent-solid);
+    }
+}

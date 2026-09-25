@@ -25,7 +25,7 @@ export function ProfileScreen() {
                 </p>
             </div>
 
-            <h2 className="section-title">Board rendering</h2>
+            <h2 className="section-title">Look</h2>
             <BoardSettingsCard />
         </>
     );

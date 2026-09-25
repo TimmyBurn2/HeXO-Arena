@@ -3,10 +3,12 @@ import { cleanup, fireEvent, render } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
 import { BoardSettingsCard } from '../src/board/BoardSettingsCard';
 import { boardSettingsStore, defaultBoardSettings } from '../src/board/board-settings';
+import { defaultTheme, themeStore } from '../src/theme/themes';
 
 afterEach(() => {
     cleanup();
     boardSettingsStore.update(defaultBoardSettings);
+    themeStore.choose(defaultTheme);
 });
 
 function boardFrame(container: HTMLElement): HTMLElement {
@@ -14,16 +16,10 @@ function boardFrame(container: HTMLElement): HTMLElement {
 }
 
 describe('BoardSettingsCard', () => {
-    it('swap the palette attribute when the palette choice changes', () => {
+    it('restyle the whole site when the theme choice changes', () => {
         const { container } = render(<BoardSettingsCard />);
         fireEvent.click(container.querySelector(`input[value="walnut"]`) as HTMLInputElement);
-        expect(boardFrame(container).getAttribute(`data-board`)).toBe(`walnut`);
-    });
-
-    it('swap the stone style attribute when the stone choice changes', () => {
-        const { container } = render(<BoardSettingsCard />);
-        fireEvent.click(container.querySelector(`input[value="hex"]`) as HTMLInputElement);
-        expect(boardFrame(container).getAttribute(`data-stones`)).toBe(`hex`);
+        expect(document.documentElement.dataset.theme).toBe(`walnut`);
     });
 
     it('toggle the overlay attributes from the checkboxes', () => {
@@ -35,10 +31,11 @@ describe('BoardSettingsCard', () => {
         expect(frame.hasAttribute(`data-coords`)).toBe(true);
     });
 
-    it('persist the choice so every board renders from it', () => {
+    it('persist the theme so every page renders in it', () => {
         const { container } = render(<BoardSettingsCard />);
         fireEvent.click(container.querySelector(`input[value="walnut"]`) as HTMLInputElement);
-        expect(boardSettingsStore.read().palette).toBe(`walnut`);
+        expect(themeStore.read()).toBe(`walnut`);
+        expect(window.localStorage.getItem(`hexarena.theme.v1`)).toBe(`walnut`);
     });
 
     it('paint the pending, focus, and last-move rings on the preview', () => {

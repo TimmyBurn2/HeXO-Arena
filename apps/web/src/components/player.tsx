@@ -2,10 +2,11 @@ import type { ReactNode } from 'react';
 import type { Accepts } from '@hexarena/contract';
 import { Link } from '../router/Link';
 import { turnWindowOf } from './PlayDialog';
+import './player.css';
 
 /** The bot marker every bot name carries, wherever a name renders. */
 export function BotBadge() {
-    return <span className="badge-bot">bot</span>;
+    return <span className="badge-bot">BOT</span>;
 }
 
 /** Presence is the stream: filled green online, hollow gray offline. */
@@ -36,9 +37,9 @@ export function Rating({ value, provisional }: { value: number; provisional: boo
 
 /** Bot names link to the bot page; human names stay plain text. */
 export function PlayerName({ name, kind }: { name: string; kind: `bot` | `human` }): ReactNode {
-    if (kind === `human`) return name;
+    if (kind === `human`) return <span className="player-name">{name}</span>;
     return (
-        <Link to={`/bots/${encodeURIComponent(name)}`}>
+        <Link to={`/bots/${encodeURIComponent(name)}`} className="player-name">
             {name}
         </Link>
     );

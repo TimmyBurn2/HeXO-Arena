@@ -1,4 +1,5 @@
 import type { AxialCoord } from '@hexarena/contract';
+import { placementRadius } from '@hexarena/rules';
 
 // SVG user units per cell edge; the viewBox scales to the frame, so this
 // only fixes the coordinate system's resolution.
@@ -6,10 +7,6 @@ export const cellSize = 28;
 
 // Rings sit inside the cell edge; stones cover most of it.
 const ringScale = 0.92;
-
-// Empty cells render this far from any stone or focus anchor, so the
-// legal frontier is always visible without flooding the frame.
-const visiblePad = 2;
 
 // Frame breathing room around the outermost cell centers.
 const viewBoxPad = cellSize * 1.35;
@@ -70,23 +67,20 @@ export function stonePoints(): string {
 }
 
 /**
- * Every cell worth drawing: the union of visiblePad disks around the
- * stones and any extra anchors (the keyboard focus grows the board),
- * row-ordered top to bottom for a stable render.
+ * The placement frontier: every cell a stone may legally go, the union of
+ * placement-radius disks around the placed stones, row-ordered top to
+ * bottom for a stable render. Before any stone, only the origin is legal.
  */
-export function visibleCells(
-    stones: readonly AxialCoord[],
-    extraAnchors: readonly AxialCoord[] = [],
-): AxialCoord[] {
+export function frontierCells(stones: readonly AxialCoord[]): AxialCoord[] {
+    if (stones.length === 0) return [{ x: 0, y: 0 }];
     const seen = new Set<string>();
     const cells: AxialCoord[] = [];
-    const anchors = [...stones, ...extraAnchors];
-    for (const anchor of anchors) {
-        for (let dx = -visiblePad; dx <= visiblePad; dx += 1) {
-            for (let dy = -visiblePad; dy <= visiblePad; dy += 1) {
-                if ((Math.abs(dx) + Math.abs(dy) + Math.abs(dx + dy)) / 2 > visiblePad) continue;
-                const x = anchor.x + dx;
-                const y = anchor.y + dy;
+    const r = placementRadius;
+    for (const stone of stones) {
+        for (let dx = -r; dx <= r; dx += 1) {
+            for (let dy = Math.max(-r, -dx - r); dy <= Math.min(r, -dx + r); dy += 1) {
+                const x = stone.x + dx;
+                const y = stone.y + dy;
                 const key = `${String(x)},${String(y)}`;
                 if (seen.has(key)) continue;
                 seen.add(key);
@@ -94,8 +88,40 @@ export function visibleCells(
             }
         }
     }
-    if (cells.length === 0) return [{ x: 0, y: 0 }];
     return cells.sort((a, b) => (a.y === b.y ? a.x - b.x : a.y - b.y));
+}
+
+// The neighbor across each cell edge, edge k running from corner k to
+// corner k + 1 in hexPoints order.
+const edgeNeighbors: readonly AxialCoord[] = [
+    { x: 0, y: 1 },
+    { x: -1, y: 1 },
+    { x: -1, y: 0 },
+    { x: 0, y: -1 },
+    { x: 1, y: -1 },
+    { x: 1, y: 0 },
+];
+
+function corner(cx: number, cy: number, k: number): string {
+    const angle = (Math.PI / 180) * (60 * k + 30);
+    return `${(cx + cellSize * Math.cos(angle)).toFixed(2)},${(cy + cellSize * Math.sin(angle)).toFixed(2)}`;
+}
+
+/**
+ * The frontier's outer edge as one svg path: every cell edge whose
+ * neighbor lies outside the region.
+ */
+export function frontierOutline(cells: readonly AxialCoord[]): string {
+    const inside = new Set(cells.map((cell) => `${String(cell.x)},${String(cell.y)}`));
+    const segments: string[] = [];
+    for (const cell of cells) {
+        const { cx, cy } = hexCenter(cell);
+        for (const [k, step] of edgeNeighbors.entries()) {
+            if (inside.has(`${String(cell.x + step.x)},${String(cell.y + step.y)}`)) continue;
+            segments.push(`M${corner(cx, cy, k)}L${corner(cx, cy, (k + 1) % 6)}`);
+        }
+    }
+    return segments.join(``);
 }
 
 /** The frame's viewBox: every cell center padded by a uniform margin. */

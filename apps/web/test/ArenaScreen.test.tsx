@@ -22,22 +22,56 @@ afterEach(() => {
 });
 
 describe('ArenaScreen', () => {
-    it('render the whole board with its podium and linked bot names', async () => {
+    it('render the whole board with its top rungs and linked bot names', async () => {
         stubBoard(board);
         render(<ArenaScreen />);
         expect(await screen.findByRole(`table`)).toBeTruthy();
         expect(screen.getAllByRole(`link`, { name: /sealbot/ })[0]?.getAttribute(`href`)).toBe(`/bots/sealbot`);
         expect(document.querySelector(`a[href="/bots/tom"]`)).toBe(null);
-        expect(document.querySelectorAll(`.podium-step`).length).toBe(3);
+        expect(document.querySelectorAll(`.rung`).length).toBe(3);
         expect(document.querySelectorAll(`.badge-bot`).length).toBe(4);
     });
 
-    it('order the podium heights two one three', async () => {
+    it('step the rungs down in rank order and lift only the first', async () => {
         stubBoard(board);
         render(<ArenaScreen />);
         await screen.findByRole(`table`);
-        const steps = [...document.querySelectorAll(`.podium-step`)].map((step) => step.className);
-        expect(steps).toEqual([`podium-step p2`, `podium-step p1`, `podium-step p3`]);
+        const rungs = [...document.querySelectorAll(`.rung`)].map((rung) => rung.className);
+        expect(rungs).toEqual([`rung r1`, `rung r2`, `rung r3`]);
+        expect(document.querySelectorAll(`.rung-lift .rung`)).toHaveLength(1);
+        expect(document.querySelector(`.rung.r3 .rung-kind`)?.textContent).toBe(`human`);
+    });
+
+    it('count the ranked players and the bots online in one sentence', async () => {
+        vi.stubGlobal(
+            `fetch`,
+            vi.fn((url: string) =>
+                Promise.resolve(
+                    new Response(
+                        JSON.stringify(
+                            url.startsWith(`/api/bots`)
+                                ? [
+                                      { name: `sealbot`, ownerName: `tom`, online: true, openForChallenges: true, rating: 1712, provisional: false },
+                                      { name: `hextide`, ownerName: `ana`, online: true, openForChallenges: false, rating: 1690, provisional: false },
+                                  ]
+                                : board,
+                        ),
+                    ),
+                ),
+            ),
+        );
+        render(<ArenaScreen />);
+        await waitFor(() => {
+            expect(document.querySelector(`.pulse`)?.textContent).toBe(`3 ranked players, 2 bots online, 1 taking challenges`);
+        });
+        expect(document.querySelector(`.rung.r1 .rung-owner`)?.textContent).toBe(`by tom`);
+    });
+
+    it('keep the board when the directory does not load', async () => {
+        stubBoard(board);
+        render(<ArenaScreen />);
+        await screen.findByRole(`table`);
+        expect(document.querySelector(`.pulse`)?.textContent).toBe(`3 ranked players`);
     });
 
     it('never mark a leaderboard rating provisional', async () => {

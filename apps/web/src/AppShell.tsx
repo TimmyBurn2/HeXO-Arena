@@ -4,6 +4,7 @@ import { routePath, type Route } from './router/route';
 import { useRoute } from './router/use-route';
 import { siteStatusStore } from './site-status';
 import { useDocumentMeta } from './use-document-meta';
+import './AppShell.css';
 
 const ArenaScreen = lazy(async () => {
     const module = await import(`./screens/ArenaScreen`);

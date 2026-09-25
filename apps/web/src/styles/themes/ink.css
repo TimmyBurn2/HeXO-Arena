@@ -1,0 +1,41 @@
+/*
+ * Ink, the default: a navy page and board with bone and cinnabar stones.
+ * A theme names every color in the theme vocabulary and nothing else.
+ */
+
+@layer theme {
+    :root[data-theme='ink'] {
+        --c-bg: hsl(222 32% 11%);
+        --c-bg-raised: hsl(222 32% 14.5%);
+        --c-bg-overlay: hsl(222 32% 18%);
+        --c-bg-input: hsl(222 30% 20%);
+        --c-bg-hover: hsl(222 32% 21%);
+        --c-bg-active: hsl(222 30% 25%);
+        --c-border: hsl(222 28% 24%);
+        --c-border-strong: hsl(222 22% 38%);
+        --c-text: hsl(220 25% 90%);
+        --c-text-dim: hsl(222 16% 66%);
+        --c-good: hsl(142 50% 60%);
+        --c-good-solid: hsl(142 45% 40%);
+        --c-bad: hsl(2 80% 73%);
+        --c-bad-solid: hsl(2 72% 60%);
+        --c-warn: hsl(24 92% 64%);
+        --c-online: hsl(142 45% 40%);
+        --c-offline: hsl(222 14% 52%);
+        --c-backdrop: hsl(222 40% 4% / 72%);
+
+        --board-bg: hsl(222 34% 8%);
+        --board-cell: hsl(222 28% 15%);
+        --board-line: hsl(222 30% 10%);
+        --board-frontier: hsl(222 22% 52%);
+        --board-stone-x: hsl(40 30% 91%);
+        --board-stone-o: hsl(4 70% 56%);
+        --board-focus: hsl(220 25% 90%);
+        --board-number-x: hsl(222 32% 12%);
+        --board-number-o: hsl(40 30% 96%);
+        --board-coord: hsl(220 25% 85%);
+
+        --surface-edge-hi: hsl(220 60% 80% / 8%);
+        --lift: drop-shadow(0 10px 14px hsl(222 50% 3% / 55%)) drop-shadow(0 1px 2px hsl(222 50% 3% / 45%));
+    }
+}

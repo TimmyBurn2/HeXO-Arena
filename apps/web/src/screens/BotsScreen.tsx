@@ -6,6 +6,7 @@ import { BotBadge, PresenceDot, OpenTag, PlayerName, Rating, summarizeAccepts } 
 import { coveredModes, PlayDialog } from '../components/PlayDialog';
 import { ErrorFrame, SkeletonRows } from '../components/states';
 import { Link } from '../router/Link';
+import './BotsScreen.css';
 
 export function BotsScreen() {
     const [onlineOnly, setOnlineOnly] = useState(false);
@@ -55,15 +56,21 @@ function Directory({ onlineOnly, onPlay }: { onlineOnly: boolean; onPlay: (bot: 
                 <table>
                     <thead>
                         <tr>
-                            <th scope="col">player</th>
-                            <th scope="col">owner</th>
-                            <th scope="col">state</th>
-                            <th className="num" scope="col">
-                                rating
-                            </th>
-                            <th scope="col">accepts</th>
+                            <th scope="col">Player</th>
                             <th scope="col" className="col-optional">
-                                version
+                                Owner
+                            </th>
+                            <th scope="col" className="col-narrow-optional">
+                                State
+                            </th>
+                            <th className="num" scope="col">
+                                Rating
+                            </th>
+                            <th scope="col" className="col-optional">
+                                Accepts
+                            </th>
+                            <th scope="col" className="col-optional">
+                                Version
                             </th>
                             <th scope="col"></th>
                         </tr>
@@ -110,14 +117,14 @@ function BotRow({ bot, onPlay }: { bot: BotListing; onPlay: (bot: BotListing) =>
                     <BotBadge />
                 </span>
             </td>
-            <td>{bot.ownerName ?? ``}</td>
-            <td>
+            <td className="col-optional">{bot.ownerName ?? ``}</td>
+            <td className="col-narrow-optional">
                 <OpenTag open={bot.openForChallenges} />
             </td>
             <td className="num">
                 <Rating value={bot.rating} provisional={bot.provisional} />
             </td>
-            <td>{summarizeAccepts(bot.accepts)}</td>
+            <td className="col-optional">{summarizeAccepts(bot.accepts)}</td>
             <td className="col-optional">{bot.version ?? ``}</td>
             <td>
                 {playable ? (

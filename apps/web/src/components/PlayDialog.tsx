@@ -3,6 +3,7 @@ import { defaultOpeningTurns, discordLoginPath, type Accepts, type TimeControl }
 import { createGame, ApiError } from '../api/client';
 import { Dialog } from './Dialog';
 import { navigate } from '../router/use-route';
+import './PlayDialog.css';
 
 export interface PlayableBot {
     name: string;

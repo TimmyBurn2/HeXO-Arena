@@ -29,16 +29,14 @@ describe('Board', () => {
         expect(frame.querySelector(`g.stone .number`)?.textContent).toBe(`1`);
     });
 
-    it('carry the palette and stone style on the board root', () => {
-        const frame = frameOf(
-            <Board
-                stones={stones}
-                settings={{ ...defaultBoardSettings, palette: `walnut`, stones: `glyph` }}
-                label="test board"
-            />,
-        );
-        expect(frame.getAttribute(`data-board`)).toBe(`walnut`);
-        expect(frame.getAttribute(`data-stones`)).toBe(`glyph`);
+    it('render every stone as a hexagon matching its cell', () => {
+        const frame = frameOf(<Board stones={stones} settings={defaultBoardSettings} label="test board" />);
+        expect(frame.querySelectorAll(`g.stone polygon.body`).length).toBe(stones.length);
+        expect(frame.querySelectorAll(`g.stone circle`).length).toBe(0);
+    });
+
+    it('leave the overlay attributes off by default', () => {
+        const frame = frameOf(<Board stones={stones} settings={defaultBoardSettings} label="test board" />);
         expect(frame.hasAttribute(`data-numbers`)).toBe(false);
         expect(frame.hasAttribute(`data-coords`)).toBe(false);
     });
@@ -101,5 +99,43 @@ describe('Board', () => {
     it('expose the label to assistive technology', () => {
         render(<Board stones={stones} settings={defaultBoardSettings} label="the preview board" />);
         expect(screen.getByRole(`img`, { name: `the preview board` })).toBeTruthy();
+    });
+
+    it('draw the frontier edge and nothing beyond it', () => {
+        const frame = frameOf(<Board stones={stones.slice(0, 1)} settings={defaultBoardSettings} label="test board" />);
+        expect(frame.querySelector(`path.frontier`)?.getAttribute(`d`)).toMatch(/^M/);
+        expect(frame.querySelectorAll(`polygon.cell`)).toHaveLength(217);
+    });
+
+    it('give every stone a shine layer the theme can light', () => {
+        const frame = frameOf(<Board stones={stones} settings={defaultBoardSettings} label="test board" />);
+        const shine = frame.querySelector(`g.stone polygon.shine`)?.getAttribute(`fill`) ?? ``;
+        const id = /^url\(#(.+)\)$/.exec(shine)?.[1] ?? ``;
+        expect(frame.querySelector(`radialGradient[id="${id}"]`)).toBeTruthy();
+    });
+
+    it('animate only stones placed after the first render', () => {
+        const first = stones.slice(0, 3);
+        const { container, rerender } = render(
+            <Board stones={first} settings={defaultBoardSettings} label="test board" overlays={{ lastMove: first.slice(1) }} />,
+        );
+        expect(container.querySelectorAll(`g.stone.fresh`)).toHaveLength(0);
+        expect(container.querySelectorAll(`.last-ring.fresh`)).toHaveLength(0);
+        const next = stones.slice(0, 5);
+        rerender(<Board stones={next} settings={defaultBoardSettings} label="test board" overlays={{ lastMove: next.slice(3) }} />);
+        expect(container.querySelectorAll(`g.stone.fresh`)).toHaveLength(2);
+        expect(container.querySelectorAll(`.last-ring.fresh`)).toHaveLength(2);
+    });
+
+    it('preview the pending stone in the mover\'s color', () => {
+        const frame = frameOf(
+            <Board
+                stones={stones}
+                settings={defaultBoardSettings}
+                label="test board"
+                overlays={{ pending: { x: 4, y: 0 }, pendingSide: `o` }}
+            />,
+        );
+        expect(frame.querySelector(`polygon.ghost`)?.getAttribute(`class`)).toContain(`b-o`);
     });
 });

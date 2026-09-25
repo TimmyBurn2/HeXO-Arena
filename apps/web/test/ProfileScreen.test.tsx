@@ -3,10 +3,12 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
 import { ProfileScreen } from '../src/screens/ProfileScreen';
 import { boardSettingsStore, defaultBoardSettings } from '../src/board/board-settings';
+import { defaultTheme, themeStore } from '../src/theme/themes';
 
 afterEach(() => {
     cleanup();
     boardSettingsStore.update(defaultBoardSettings);
+    themeStore.choose(defaultTheme);
 });
 
 describe('ProfileScreen', () => {
@@ -18,18 +20,15 @@ describe('ProfileScreen', () => {
         expect(screen.getByRole(`link`, { name: `Connect` }).getAttribute(`href`)).toBe(`/connect`);
     });
 
-    it('carry the board rendering section in heading order', () => {
+    it('carry the look section in heading order', () => {
         render(<ProfileScreen />);
         const headings = screen.getAllByRole(`heading`).map((heading) => heading.textContent);
-        expect(headings).toEqual([`Profile`, `Identity`, `Board rendering`]);
+        expect(headings).toEqual([`Profile`, `Identity`, `Look`]);
     });
 
-    it('swap the live preview palette from the settings controls', () => {
+    it('switch the theme from the settings controls', () => {
         render(<ProfileScreen />);
-        const frame = document.querySelector(`.board-frame`) as HTMLElement;
-        expect(frame.getAttribute(`data-board`)).toBe(defaultBoardSettings.palette);
-        fireEvent.click(screen.getByRole(`radio`, { name: `walnut` }));
-        expect(frame.getAttribute(`data-board`)).toBe(`walnut`);
-        expect(boardSettingsStore.read().palette).toBe(`walnut`);
+        fireEvent.click(screen.getByRole(`radio`, { name: `Walnut` }));
+        expect(document.documentElement.dataset.theme).toBe(`walnut`);
     });
 });

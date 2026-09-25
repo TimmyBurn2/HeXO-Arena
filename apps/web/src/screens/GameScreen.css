@@ -1,0 +1,96 @@
+@layer screens {
+    .game-grid {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) var(--panel-w);
+        gap: var(--space-4);
+        align-items: start;
+        max-width: var(--game-max);
+    }
+
+    .game-main {
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-3);
+        min-width: 0;
+    }
+
+    .strip {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: var(--space-3);
+        background: var(--c-bg-raised);
+        box-shadow: inset 0 var(--border-w) 0 var(--surface-edge-hi);
+        padding: var(--space-2) var(--space-3);
+    }
+
+    .strip .who {
+        display: flex;
+        align-items: center;
+        gap: var(--space-2);
+        min-width: 0;
+        flex-wrap: wrap;
+    }
+
+    .strip .actions {
+        display: flex;
+        gap: var(--space-2);
+        align-items: center;
+    }
+
+    .feed {
+        box-shadow: inset 0 var(--border-w) 0 var(--surface-edge-hi);
+        background: var(--c-bg-raised);
+        padding: var(--space-3);
+        font-family: var(--font-mono);
+        font-variant-numeric: tabular-nums;
+        font-size: var(--text-sm);
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-1);
+        min-width: 0;
+    }
+
+    .feed .line {
+        display: flex;
+        gap: var(--space-2);
+    }
+
+    .feed .n {
+        color: var(--c-text-dim);
+        min-width: var(--space-6);
+        text-align: right;
+    }
+
+    .feed .label {
+        color: var(--c-text-dim);
+    }
+
+    .feed h2 {
+        font-family: var(--font-sans);
+        font-size: var(--text-sm);
+        margin: 0 0 var(--space-2);
+        color: var(--c-text-dim);
+    }
+
+    .banner {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: var(--space-3);
+        background: var(--c-bg-raised);
+        box-shadow: inset 0 var(--border-w) 0 var(--surface-edge-hi);
+        padding: var(--space-3) var(--space-4);
+    }
+
+    .banner .result {
+        font-size: var(--text-lg);
+        font-weight: var(--weight-strong);
+    }
+
+    @media (max-width: 60rem) {
+        .game-grid {
+            grid-template-columns: minmax(0, 1fr);
+        }
+    }
+}

@@ -1,0 +1,156 @@
+@layer components {
+    .board-frame {
+        background: var(--board-bg);
+        padding: var(--space-3);
+    }
+
+    .board-svg {
+        display: block;
+        width: 100%;
+        height: auto;
+    }
+
+    /* The field: every legal cell, separated by a gap darker than the
+       cell; the frontier edge, not the gaps, carries the contrast. */
+    .cell {
+        fill: var(--board-cell);
+        stroke: var(--board-line);
+        stroke-width: var(--board-line-w);
+    }
+
+    .cell:hover {
+        stroke: var(--board-focus);
+        stroke-width: var(--board-ring-w);
+    }
+
+    .frontier {
+        fill: none;
+        stroke: var(--board-frontier);
+        stroke-width: var(--board-frontier-w);
+        stroke-dasharray: var(--board-frontier-dash);
+        pointer-events: none;
+    }
+
+    .stone {
+        pointer-events: none;
+    }
+
+    .stone-art {
+        transform-box: fill-box;
+        transform-origin: center;
+    }
+
+    .stone.fresh .stone-art {
+        animation: stone-in var(--dur-base) var(--ease) both;
+    }
+
+    .body {
+        stroke: var(--stone-rim);
+        stroke-width: var(--stone-rim-w);
+    }
+
+    .b-x {
+        fill: var(--board-stone-x);
+    }
+
+    .b-o {
+        fill: var(--board-stone-o);
+    }
+
+    .shine {
+        opacity: var(--stone-shine-opacity);
+    }
+
+    .shine-x {
+        stop-color: var(--stone-shine-x);
+    }
+
+    .shine-o {
+        stop-color: var(--stone-shine-o);
+    }
+
+    .shine-fade {
+        stop-opacity: 0;
+    }
+
+    .ghost {
+        opacity: var(--board-ghost-opacity);
+        pointer-events: none;
+        animation: fade-in var(--dur-fast) var(--ease) both;
+    }
+
+    .stone .number {
+        display: none;
+        font-family: var(--font-sans);
+        font-weight: var(--weight-strong);
+        font-size: var(--board-number-size);
+        text-anchor: middle;
+    }
+
+    [data-numbers] .stone .number {
+        display: block;
+    }
+
+    .number.n-x {
+        fill: var(--board-number-x);
+    }
+
+    .number.n-o {
+        fill: var(--board-number-o);
+    }
+
+    .coord {
+        display: none;
+        fill: var(--board-coord);
+        font-family: var(--font-mono);
+        font-size: var(--text-sm);
+        text-anchor: middle;
+    }
+
+    [data-coords] .coord {
+        display: block;
+    }
+
+    .ring-pending {
+        fill: none;
+        stroke: var(--board-pending);
+        stroke-width: var(--board-ring-w);
+        stroke-dasharray: var(--board-pending-dash);
+    }
+
+    .ring-focus {
+        fill: none;
+        stroke: var(--board-focus);
+        stroke-width: var(--board-ring-w);
+    }
+
+    .last-ring {
+        fill: none;
+        stroke: var(--board-last);
+        stroke-width: var(--board-ring-w);
+    }
+
+    .last-ring.fresh {
+        animation: fade-in var(--dur-base) var(--ease) var(--dur-fast) both;
+    }
+
+    .win-line {
+        fill: none;
+        stroke: var(--board-win);
+        stroke-width: var(--board-win-w);
+        stroke-linecap: round;
+    }
+
+    @keyframes stone-in {
+        from {
+            opacity: 0;
+            transform: scale(0.85);
+        }
+    }
+
+    @keyframes fade-in {
+        from {
+            opacity: 0;
+        }
+    }
+}

@@ -1,4 +1,5 @@
 import type { Page } from '@playwright/test';
+import { themes } from '../src/theme/themes';
 import { world, type World } from './mock-api';
 
 /** A named look the whole site can wear; every screen is captured in each. */
@@ -7,10 +8,10 @@ export interface Look {
     storage: Record<string, string>;
 }
 
-export const looks: readonly Look[] = [
-    { name: `slate`, storage: { 'hexarena.board-rendering.v1': JSON.stringify({ palette: `slate` }) } },
-    { name: `walnut`, storage: { 'hexarena.board-rendering.v1': JSON.stringify({ palette: `walnut` }) } },
-];
+export const looks: readonly Look[] = themes.map((theme) => ({
+    name: theme.id,
+    storage: { 'hexarena.theme.v1': theme.id },
+}));
 
 export const viewports = [
     { name: `desktop`, width: 1440, height: 900 },

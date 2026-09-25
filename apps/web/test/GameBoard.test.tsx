@@ -21,6 +21,7 @@ describe('GameBoard', () => {
             <GameBoard
                 stones={cells.map((cell, index) => ({ ...cell, number: index + 1 }))}
                 position={{ stones: cells.map((cell) => ({ ...cell, player: cell.side === `x` ? 0 : 1 })) }}
+                you="x"
                 lastMove={[]}
                 winLine={[]}
                 yourMove
@@ -57,6 +58,7 @@ describe('GameBoard', () => {
             <GameBoard
                 stones={cells.map((cell, index) => ({ ...cell, number: index + 1 }))}
                 position={{ stones: cells.map((cell) => ({ ...cell, player: cell.side === `x` ? 0 : 1 })) }}
+                you="x"
                 lastMove={[]}
                 winLine={[]}
                 yourMove
@@ -81,6 +83,7 @@ describe('GameBoard', () => {
             <GameBoard
                 stones={cells.map((cell, index) => ({ ...cell, number: index + 1 }))}
                 position={{ stones: cells.map((cell) => ({ ...cell, player: cell.side === `x` ? 0 : 1 })) }}
+                you="x"
                 lastMove={[]}
                 winLine={[]}
                 yourMove
@@ -112,6 +115,7 @@ describe('GameBoard', () => {
             <GameBoard
                 stones={cells.map((cell, index) => ({ ...cell, number: index + 1 }))}
                 position={{ stones: cells.map((cell) => ({ ...cell, player: cell.side === `x` ? 0 : 1 })) }}
+                you="x"
                 lastMove={[]}
                 winLine={[]}
                 yourMove
@@ -135,6 +139,7 @@ describe('GameBoard', () => {
             <GameBoard
                 stones={cells.map((cell, index) => ({ ...cell, number: index + 1 }))}
                 position={{ stones: cells.map((cell) => ({ ...cell, player: cell.side === `x` ? 0 : 1 })) }}
+                you="x"
                 lastMove={[]}
                 winLine={[]}
                 yourMove={false}
@@ -151,5 +156,26 @@ describe('GameBoard', () => {
         expect(document.querySelector(`polygon.cell[data-x="10"][data-y="0"]`)).toBe(null);
         expect(document.querySelector(`.board-control-wrap kbd`)).toBe(null);
         expect(screen.getByText(`waiting for hextide to move`)).toBeTruthy();
+    });
+
+    it('stop the keyboard focus at the frontier edge', () => {
+        render(
+            <GameBoard
+                stones={[{ x: 0, y: 0, side: `x`, number: 1 }]}
+                position={{ stones: [{ x: 0, y: 0, player: 0 }] }}
+                you="o"
+                lastMove={[]}
+                winLine={[]}
+                yourMove
+                opponentMoving={false}
+                opponentName="hextide"
+                onCommit={() => Promise.resolve(true)}
+            />,
+        );
+        const control = document.querySelector(`.board-control`) as HTMLElement;
+        for (let step = 0; step < 12; step += 1) fireEvent.keyDown(control, { key: `ArrowRight` });
+        const focus = document.querySelector(`polygon.ring-focus`)?.getAttribute(`transform`);
+        const edge = document.querySelector(`polygon.cell[data-x="8"][data-y="0"]`)?.getAttribute(`transform`);
+        expect(focus).toBe(edge);
     });
 });

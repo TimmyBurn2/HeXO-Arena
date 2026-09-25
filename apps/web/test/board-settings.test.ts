@@ -6,12 +6,6 @@ import {
     parseBoardSettings,
 } from '../src/board/board-settings';
 
-describe('defaultBoardSettings', () => {
-    it('render stones as full hexagons until the viewer chooses otherwise', () => {
-        expect(defaultBoardSettings.stones).toBe(`hex`);
-    });
-});
-
 describe('parseBoardSettings', () => {
     it('default on nothing stored', () => {
         expect(parseBoardSettings(null)).toEqual(defaultBoardSettings);
@@ -21,21 +15,20 @@ describe('parseBoardSettings', () => {
         expect(parseBoardSettings(`{not json`)).toEqual(defaultBoardSettings);
     });
 
-    it('default on unknown enum values', () => {
-        const parsed = parseBoardSettings(JSON.stringify({ palette: `lava`, stones: `star` }));
-        expect(parsed).toEqual(defaultBoardSettings);
-    });
-
     it('keep the stored choices', () => {
         const parsed = parseBoardSettings(
-            JSON.stringify({ palette: `walnut`, stones: `glyph`, numbers: true, coords: true }),
+            JSON.stringify({ numbers: true, coords: true }),
         );
-        expect(parsed).toEqual({ palette: `walnut`, stones: `glyph`, numbers: true, coords: true });
+        expect(parsed).toEqual({ numbers: true, coords: true });
+    });
+
+    it('drop the palette and stone style stored by earlier versions', () => {
+        const parsed = parseBoardSettings(JSON.stringify({ palette: `walnut`, stones: `glyph`, numbers: true }));
+        expect(parsed).toEqual({ ...defaultBoardSettings, numbers: true });
     });
 
     it('treat absent booleans as false', () => {
-        const parsed = parseBoardSettings(JSON.stringify({ palette: `walnut` }));
-        expect(parsed).toEqual({ ...defaultBoardSettings, palette: `walnut` });
+        expect(parseBoardSettings(JSON.stringify({}))).toEqual(defaultBoardSettings);
     });
 });
 
@@ -46,8 +39,8 @@ describe('boardSettingsStore', () => {
     });
 
     it('persist updates to localStorage', () => {
-        boardSettingsStore.update({ palette: `walnut` });
-        expect(window.localStorage.getItem(`hexarena.board-rendering.v1`)).toContain(`walnut`);
+        boardSettingsStore.update({ coords: true });
+        expect(window.localStorage.getItem(`hexarena.board-rendering.v1`)).toContain(`"coords":true`);
     });
 
     it('read back what was written', () => {

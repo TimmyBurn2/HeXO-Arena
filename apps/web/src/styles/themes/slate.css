@@ -1,0 +1,38 @@
+/* Slate: cool gray page and board, ivory against amber stones. */
+
+@layer theme {
+    :root[data-theme='slate'] {
+        --c-bg: hsl(220 10% 10%);
+        --c-bg-raised: hsl(220 10% 14%);
+        --c-bg-overlay: hsl(220 10% 17%);
+        --c-bg-input: hsl(220 10% 18%);
+        --c-bg-hover: hsl(220 10% 16%);
+        --c-bg-active: hsl(220 10% 23%);
+        --c-border: hsl(220 10% 23%);
+        --c-border-strong: hsl(220 10% 37%);
+        --c-text: hsl(220 10% 84%);
+        --c-text-dim: hsl(220 10% 60%);
+        --c-good: hsl(145 45% 65%);
+        --c-good-solid: hsl(145 45% 38%);
+        --c-bad: hsl(2 70% 74%);
+        --c-bad-solid: hsl(2 65% 58%);
+        --c-warn: hsl(24 88% 66%);
+        --c-online: hsl(145 45% 38%);
+        --c-offline: hsl(220 10% 50%);
+        --c-backdrop: hsl(220 10% 6% / 70%);
+
+        --board-bg: hsl(220 12% 6%);
+        --board-cell: hsl(220 10% 14%);
+        --board-line: hsl(220 10% 8%);
+        --board-frontier: hsl(220 10% 50%);
+        --board-stone-x: hsl(40 25% 96%);
+        --board-stone-o: hsl(28 78% 44%);
+        --board-focus: hsl(220 10% 90%);
+        --board-number-x: hsl(220 10% 10%);
+        --board-number-o: hsl(40 25% 96%);
+        --board-coord: hsl(220 10% 84%);
+
+        --surface-edge-hi: hsl(220 20% 90% / 6%);
+        --lift: drop-shadow(0 10px 14px hsl(220 20% 3% / 55%)) drop-shadow(0 1px 2px hsl(220 20% 3% / 45%));
+    }
+}

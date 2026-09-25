@@ -1,25 +1,17 @@
 import { useSyncExternalStore } from 'react';
-
-export type BoardPalette = `slate` | `walnut`;
-export type StoneStyle = `disc` | `hex` | `glyph`;
+import { readStored, writeStored } from '../stored';
 
 export interface BoardSettings {
-    palette: BoardPalette;
-    stones: StoneStyle;
     numbers: boolean;
     coords: boolean;
 }
 
 export const defaultBoardSettings: BoardSettings = {
-    palette: `slate`,
-    stones: `hex`,
     numbers: false,
     coords: false,
 };
 
 const storageKey = `hexarena.board-rendering.v1`;
-const palettes: readonly BoardPalette[] = [`slate`, `walnut`];
-const stoneStyles: readonly StoneStyle[] = [`disc`, `hex`, `glyph`];
 
 /**
  * The stored settings are our own earlier writes behind a versioned key,
@@ -35,18 +27,10 @@ export function parseBoardSettings(raw: string | null): BoardSettings {
     }
     if (typeof value !== `object` || value === null) return defaultBoardSettings;
     const record = value as Record<string, unknown>;
-    const palette = palettes.find((candidate) => candidate === record.palette);
-    const stones = stoneStyles.find((candidate) => candidate === record.stones);
     return {
-        palette: palette ?? defaultBoardSettings.palette,
-        stones: stones ?? defaultBoardSettings.stones,
         numbers: record.numbers === true,
         coords: record.coords === true,
     };
-}
-
-function storage(): Storage | null {
-    return typeof window === `undefined` ? null : window.localStorage;
 }
 
 let current: BoardSettings | null = null;
@@ -54,7 +38,7 @@ const listeners = new Set<() => void>();
 
 function read(): BoardSettings {
     if (current === null) {
-        current = parseBoardSettings(storage()?.getItem(storageKey) ?? null);
+        current = parseBoardSettings(readStored(storageKey));
     }
     return current;
 }
@@ -68,7 +52,7 @@ function subscribe(listener: () => void): () => void {
 
 function update(changes: Partial<BoardSettings>): void {
     current = { ...read(), ...changes };
-    storage()?.setItem(storageKey, JSON.stringify(current));
+    writeStored(storageKey, JSON.stringify(current));
     for (const listener of listeners) listener();
 }
 

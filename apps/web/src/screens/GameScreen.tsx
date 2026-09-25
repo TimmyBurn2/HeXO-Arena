@@ -9,6 +9,7 @@ import { Clock } from '../game/Clock';
 import { GameBoard } from '../game/GameBoard';
 import { useGame, type GameSend } from '../game/use-game';
 import { feedOf, positionOf, reasonText, resultSentence, stonesOf, winLineOf } from '../game/snapshot-views';
+import './GameScreen.css';
 
 export function GameScreen({ gameId }: { gameId: string }) {
     const game = useGame(gameId);
@@ -74,6 +75,7 @@ function GameView({ snapshot, send }: { snapshot: GameSnapshot; send: GameSend }
                     <GameBoard
                         stones={stones}
                         position={positionOf(snapshot)}
+                        you={you}
                         lastMove={running ? stones.slice(-2) : []}
                         winLine={winLineOf(snapshot) ?? []}
                         yourMove={yourMove}
@@ -101,8 +103,8 @@ function GameView({ snapshot, send }: { snapshot: GameSnapshot; send: GameSend }
 
                     {running ? null : (
                         <p className="note">
-                            stones numbered by placement when numbers are on; board look lives
-                            in <Link to="/profile">Profile</Link>
+                            stones numbered by placement when numbers are on; the theme and
+                            board settings live in <Link to="/profile">Profile</Link>
                         </p>
                     )}
                 </div>

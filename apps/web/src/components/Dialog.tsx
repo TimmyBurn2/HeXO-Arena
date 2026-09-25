@@ -1,4 +1,5 @@
 import { useEffect, useRef, type ReactNode } from 'react';
+import './Dialog.css';
 
 /**
  * A native modal dialog: the browser owns the focus trap, the escape
@@ -33,7 +34,9 @@ export function Dialog({ open, onClose, label, children }: {
                 if (event.target === event.currentTarget) onClose();
             }}
         >
-            {children}
+            {/* the dialog lifts and the panel inside takes the cut, since
+                the cut would clip the lift */}
+            <div className="dialog-panel">{children}</div>
         </dialog>
     );
 }

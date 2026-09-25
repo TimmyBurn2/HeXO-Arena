@@ -1,0 +1,15 @@
+@layer components {
+    .board-control {
+    }
+
+    .board-control:focus-visible {
+        outline: var(--focus-w) solid var(--c-focus);
+        outline-offset: var(--focus-w);
+    }
+
+    .board-control-wrap {
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-2);
+    }
+}

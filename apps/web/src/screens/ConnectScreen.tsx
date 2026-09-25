@@ -4,6 +4,7 @@ import { ApiError, createBot } from '../api/client';
 import { Link } from '../router/Link';
 import { useRoute } from '../router/use-route';
 import { useDocumentMeta } from '../use-document-meta';
+import './ConnectScreen.css';
 
 const exampleRepo = `https://github.com/TimmyBurn2/Hexo-Bot-Api`;
 const exampleBot = `https://github.com/TimmyBurn2/Hexo-Bot-Api/blob/main/examples/simple_bot.py`;
