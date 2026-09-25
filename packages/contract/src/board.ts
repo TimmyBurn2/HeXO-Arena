@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
-// Axial hex coordinates; integers, unbounded, first stone at the origin
-// (SPEC.md section 12). Shared with the web for board rendering.
+// Axial hex coordinates; integers, unbounded, first stone at the origin.
+// Shared with the web for board rendering.
 export const axialCoordSchema = z.object({
     x: z.number().int(),
     y: z.number().int(),
@@ -23,8 +23,8 @@ export const boardSnapshotSchema = z.object({
 });
 export type BoardSnapshot = z.infer<typeof boardSnapshotSchema>;
 
-// A win is reported as exactly six cells: the window through the last placed
-// stone, clamped to the run (SPEC.md section 12.3).
+// A win is reported as exactly six cells: the window through the last
+// placed stone, clamped to the run.
 export const winLineSchema = z.object({
     player: playerColorSchema,
     cells: z.array(axialCoordSchema).length(6),

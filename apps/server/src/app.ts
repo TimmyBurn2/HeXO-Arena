@@ -13,10 +13,12 @@ import {
 import cookiePlugin from '@fastify/cookie';
 import { z } from 'zod';
 import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest } from 'fastify';
-import { createBot, deleteBot, listBots, rotateBotToken } from './bots';
+import { createBot, deleteBot, rotateBotToken } from './bots';
+import { registerBotApi } from './bot-api';
 import { createQuery, type Query, type Sqlite } from './db';
 import type { DiscordOAuth } from './discord';
 import { consumeOAuthState, createOAuthState } from './oauth-state';
+import type { PresenceRegistry } from './presence';
 import { createSession, findSessionUser, sessionCookieMaxAge } from './sessions';
 import {
     createUserWithDerivedName,
@@ -29,6 +31,7 @@ export interface AppDeps {
     discord: DiscordOAuth | null;
     secureCookies: boolean;
     devLogin: boolean;
+    presence: PresenceRegistry;
 }
 
 const callbackQuerySchema = z.object({
@@ -42,6 +45,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     const app = Fastify({ logger: true });
     const query = createQuery(deps.sqlite);
     await app.register(cookiePlugin);
+    registerBotApi(app, { query, presence: deps.presence });
 
     if (deps.devLogin) {
         app.post(devLoginPath, async (request, reply) => {
@@ -74,8 +78,8 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     }
 
     app.get(healthzPath, async (_request, reply) => {
-        // Liveness only: no db probe, no version, no uptime (ADMIN.md
-        // section 3), so the endpoint leaks nothing.
+        // Liveness only: no db probe, no version, no uptime, so the
+        // endpoint leaks nothing.
         reply.code(200).send();
     });
 
@@ -107,10 +111,6 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
         const token = createSession(query, user.id);
         setSessionCookie(reply, token, deps.secureCookies);
         return reply.redirect(`/`);
-    });
-
-    app.get(botsPath, async (_request, reply) => {
-        return reply.code(200).send(listBots(query));
     });
 
     app.post(botsPath, async (request, reply) => {

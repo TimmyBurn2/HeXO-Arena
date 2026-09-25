@@ -24,7 +24,13 @@ export default tseslint.config(
         },
     },
     {
-        files: ['eslint.config.js'],
+        files: ['eslint.config.js', 'scripts/**/*.mjs'],
         ...tseslint.configs.disableTypeChecked,
+    },
+    {
+        files: ['eslint.config.js', 'scripts/**/*.mjs'],
+        // These files run under node, where console and process are
+        // ambient; no-undef needs them named.
+        languageOptions: { globals: { console: `readonly`, process: `readonly` } },
     },
 );

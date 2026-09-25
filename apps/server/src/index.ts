@@ -2,6 +2,7 @@ import { buildApp } from './app';
 import { openDatabase, runMigrations } from './db';
 import { parseEnv } from './env';
 import { createDiscordOAuth } from './discord';
+import { PresenceRegistry } from './presence';
 
 const env = parseEnv(process.env);
 const db = openDatabase(env.DATABASE_PATH);
@@ -21,6 +22,7 @@ const app = await buildApp({
     discord,
     secureCookies: env.PUBLIC_ORIGIN.startsWith(`https://`),
     devLogin: env.DEV_LOGIN,
+    presence: new PresenceRegistry(),
 });
 
 // once, not on: a second signal during shutdown must not start a

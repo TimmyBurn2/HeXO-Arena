@@ -15,6 +15,13 @@
       "when": 1790328313415,
       "tag": "0001_hesitant_bloodscream",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1790332488078,
+      "tag": "0002_wild_brother_voodoo",
+      "breakpoints": true
     }
   ]
 }

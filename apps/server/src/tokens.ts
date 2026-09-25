@@ -4,8 +4,8 @@ export function randomToken(bytes: number): string {
     return randomBytes(bytes).toString(`base64url`);
 }
 
-// SPEC.md section 9: sha256 at rest is the recorded choice for bot tokens;
-// sessions use the same one-way storage.
+// Bot and session tokens are stored one-way: only their sha256 digests
+// are ever persisted or compared.
 export function sha256Hex(value: string): string {
     return createHash(`sha256`).update(value).digest(`hex`);
 }

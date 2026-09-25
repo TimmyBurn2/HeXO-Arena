@@ -1,6 +1,12 @@
+import {
+    acceptsSchema,
+    nameKeyOf,
+    type Accepts,
+    type AccountDeclaration,
+    type BotAccount,
+} from '@hexarena/contract';
 import { and, count, eq } from 'drizzle-orm';
 import { randomUUID } from 'node:crypto';
-import { nameKeyOf } from '@hexarena/contract';
 import { nowSeconds, type Query } from './db';
 import { bots, nameReservations, users } from './db/schema';
 import { randomToken, sha256Hex } from './tokens';
@@ -12,9 +18,45 @@ export type CreateBotResult =
     | { kind: `name_taken` }
     | { kind: `bot_limit` };
 
-export interface BotListing {
+export interface BotRow {
+    id: string;
     name: string;
     ownerName: string;
+    about?: string;
+    version?: string;
+    repoUrl?: string;
+    accepts?: Accepts;
+}
+
+interface DeclarationColumns {
+    about: string | null;
+    version: string | null;
+    repoUrl: string | null;
+    accepts: string | null;
+}
+
+const declarationColumns = {
+    about: bots.about,
+    version: bots.version,
+    repoUrl: bots.repoUrl,
+    accepts: bots.accepts,
+};
+
+// Absent, not null: the wire shape omits a field the bot never declared,
+// so the row nulls are dropped here and never cross a boundary again.
+function declarationView(row: DeclarationColumns): Pick<BotRow, `about` | `version` | `repoUrl` | `accepts`> {
+    const view: Pick<BotRow, `about` | `version` | `repoUrl` | `accepts`> = {};
+    if (row.about !== null) view.about = row.about;
+    if (row.version !== null) view.version = row.version;
+    if (row.repoUrl !== null) view.repoUrl = row.repoUrl;
+    if (row.accepts !== null) view.accepts = acceptsSchema.parse(JSON.parse(row.accepts));
+    return view;
+}
+
+// An empty string clears any text field, not only about and repoUrl: one
+// rule, no special cases.
+function clearableText(value: string): string | null {
+    return value === `` ? null : value;
 }
 
 function mintBotToken(): string {
@@ -55,13 +97,41 @@ export function createBot(query: Query, ownerId: string, name: string): CreateBo
     });
 }
 
-export function listBots(query: Query): BotListing[] {
+export function listBots(query: Query): BotRow[] {
     return query
-        .select({ name: bots.name, ownerName: users.name })
+        .select({ id: bots.id, name: bots.name, ownerName: users.name, ...declarationColumns })
         .from(bots)
         .innerJoin(users, eq(bots.ownerId, users.id))
         .orderBy(bots.nameKey)
-        .all();
+        .all()
+        .map((row) => ({ id: row.id, name: row.name, ownerName: row.ownerName, ...declarationView(row) }));
+}
+
+export function updateBotDeclaration(query: Query, botId: string, changes: AccountDeclaration): BotAccount {
+    return query.transaction((tx) => {
+        const set: Partial<DeclarationColumns> = {};
+        if (changes.about !== undefined) set.about = clearableText(changes.about);
+        if (changes.version !== undefined) set.version = clearableText(changes.version);
+        if (changes.repoUrl !== undefined) set.repoUrl = clearableText(changes.repoUrl);
+        if (changes.accepts !== undefined) set.accepts = JSON.stringify(changes.accepts);
+        const [row] =
+            Object.keys(set).length === 0
+                ? tx
+                      .select({ name: bots.name, ...declarationColumns })
+                      .from(bots)
+                      .where(eq(bots.id, botId))
+                      .all()
+                : tx
+                      .update(bots)
+                      .set(set)
+                      .where(eq(bots.id, botId))
+                      .returning({ name: bots.name, ...declarationColumns })
+                      .all();
+        // The bot id came from a token the lookup just resolved, so a
+        // missing row means the delete raced the patch.
+        if (!row) throw new Error(`bot row vanished while declaring: ${botId}`);
+        return { name: row.name, ...declarationView(row) };
+    });
 }
 
 export function deleteBot(query: Query, ownerId: string, nameKey: string): boolean {

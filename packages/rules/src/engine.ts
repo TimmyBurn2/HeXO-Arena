@@ -13,7 +13,7 @@ export interface Stone extends Coord {
 
 /**
  * A finished game's reported line: the six-cell window through the last
- * placed stone, clamped to the run (SPEC.md section 12).
+ * placed stone, clamped to the run.
  */
 export interface Win {
     readonly player: Player;
@@ -64,7 +64,7 @@ export function hexDistance(a: Coord, b: Coord): number {
 /**
  * The union semantics of the radius rule: legal means within placementRadius
  * of at least one placed stone, so the board grows outward without bound by
- * chaining; it is not a disk around the origin (SPEC.md section 12).
+ * chaining; it is not a disk around the origin.
  */
 export function isWithinPlacementRadius(
     stones: readonly Stone[],

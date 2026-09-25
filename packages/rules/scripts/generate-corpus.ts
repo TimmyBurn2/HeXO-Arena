@@ -5,8 +5,8 @@ import { type Corpus, generateTraces, planCorpus } from '../test/helpers/corpus'
 import { loadOracle } from '../test/helpers/oracle';
 
 // Local-only regeneration of the committed differential corpus against the
-// HeXO oracle; never runs in CI (AGENTS.md, SPEC.md section 12). Run from
-// the repo root: pnpm --filter @hexarena/rules corpus:generate
+// HeXO oracle; never runs in CI. Run from the repo root:
+// pnpm --filter @hexarena/rules corpus:generate
 const seed = 20260925;
 
 const oracle = await loadOracle();

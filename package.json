@@ -13,7 +13,7 @@
         "test": "pnpm -r --if-present test",
         "typecheck": "pnpm -r --if-present typecheck",
         "lint": "eslint .",
-        "check": "pnpm typecheck && pnpm lint",
+        "check": "pnpm typecheck && pnpm lint && node scripts/check-planning-refs.mjs",
         "openapi": "pnpm --filter @hexarena/contract generate"
     },
     "devDependencies": {

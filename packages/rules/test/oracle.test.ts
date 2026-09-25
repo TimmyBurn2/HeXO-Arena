@@ -19,7 +19,7 @@ import { type Seat, pickMove } from './helpers/strategies';
 const oracle = await loadOracle();
 
 // Runs only where the sibling HeXO checkout exists; CI replays the committed
-// corpus instead (SPEC.md section 12).
+// corpus instead.
 describe.skipIf(oracle === null)(`live oracle differential`, () => {
     // skipIf ran the body only when the load succeeded, so the oracle is set.
     const hexo = oracle as Oracle;

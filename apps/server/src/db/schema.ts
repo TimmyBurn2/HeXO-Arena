@@ -1,8 +1,8 @@
 import { check, index, integer, sqliteTable, text } from 'drizzle-orm/sqlite-core';
 import { sql } from 'drizzle-orm';
-// One global namespace shared by users and bots (SPEC.md section 4): a
-// SQLite unique index cannot span two tables, so the fold key is reserved
-// here first and both tables reference it.
+// One global namespace shared by users and bots: a SQLite unique index
+// cannot span two tables, so the fold key is reserved here first and both
+// tables reference it.
 export const nameReservations = sqliteTable(`name_reservations`, {
     nameKey: text(`name_key`).primaryKey(),
 });
@@ -15,8 +15,8 @@ export const users = sqliteTable(`users`, {
         .notNull()
         .unique()
         .references(() => nameReservations.nameKey),
-    // Carried from day one (SPEC.md section 4) so the admin ban op never
-    // needs a migration; nothing sets it yet.
+    // Carried from day one so the admin ban op never needs a migration;
+    // nothing sets it yet.
     bannedAt: integer(`banned_at`),
     createdAt: integer(`created_at`).notNull(),
 });
@@ -43,7 +43,9 @@ export const authStates = sqliteTable(`auth_states`, {
 });
 
 // The scope column exists from day one so adding scopes later is not a
-// breaking change (SPEC.md section 5); v0 mints `bot:play` only.
+// breaking change; v0 mints `bot:play` only.
+// The declaration columns are bot-written only (PATCH /api/bot/account);
+// null means never declared, and an empty string clears back to null.
 export const bots = sqliteTable(
     `bots`,
     {
@@ -59,6 +61,10 @@ export const bots = sqliteTable(
         tokenHash: text(`token_hash`).notNull().unique(),
         scope: text(`scope`).notNull(),
         createdAt: integer(`created_at`).notNull(),
+        about: text(`about`),
+        version: text(`version`),
+        repoUrl: text(`repo_url`),
+        accepts: text(`accepts`),
     },
     (table) => [
         index(`bots_owner_id_idx`).on(table.ownerId),

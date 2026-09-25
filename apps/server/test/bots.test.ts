@@ -5,7 +5,7 @@ import { botCapPerUser } from '../src/bots';
 import { createQuery } from '../src/db';
 import { bots } from '../src/db/schema';
 import { sha256Hex } from '../src/tokens';
-import { createTestApp } from './helpers';
+import { createTestApp, FakeStreamSocket } from './helpers';
 
 function cookieFrom(response: { headers: { [key: string]: unknown } }): string {
     const setCookie = response.headers[`set-cookie`];
@@ -149,8 +149,8 @@ describe('GET /api/bots', () => {
         const response = await app.inject({ method: 'GET', url: botsPath });
         expect(response.statusCode).toBe(200);
         expect(response.json()).toEqual([
-            { name: `alpha`, ownerName: `Ann` },
-            { name: `Beta`, ownerName: `Zed` },
+            { name: `alpha`, ownerName: `Ann`, online: false, openForChallenges: false },
+            { name: `Beta`, ownerName: `Zed`, online: false, openForChallenges: false },
         ]);
         await app.close();
     });
@@ -160,6 +160,83 @@ describe('GET /api/bots', () => {
         const response = await app.inject({ method: 'GET', url: botsPath });
         expect(response.statusCode).toBe(200);
         expect(response.json()).toEqual([]);
+        await app.close();
+    });
+
+    it('derives online and openForChallenges from the live presence registry', async () => {
+        const { app, sqlite, presence } = await createTestApp();
+        const session = (await devLogin(app, `owner`)).split(`=`)[1] ?? ``;
+        await app.inject({
+            method: 'POST',
+            url: botsPath,
+            payload: { name: `Idle` },
+            cookies: { hexarena_session: session },
+        });
+        await app.inject({
+            method: 'POST',
+            url: botsPath,
+            payload: { name: `Live` },
+            cookies: { hexarena_session: session },
+        });
+        const rows = createQuery(sqlite).select({ id: bots.id, name: bots.name }).from(bots).orderBy(bots.nameKey).all();
+        const live = rows.find((row) => row.name === `Live`);
+        if (!live) throw new Error(`the Live bot is missing from the roster`);
+        presence.attach(live.id, new FakeStreamSocket(), true);
+        const response = await app.inject({ method: 'GET', url: botsPath });
+        expect(response.json()).toEqual([
+            { name: `Idle`, ownerName: `owner`, online: false, openForChallenges: false },
+            { name: `Live`, ownerName: `owner`, online: true, openForChallenges: true },
+        ]);
+        await app.close();
+    });
+
+    it('drops presence when the stream dies', async () => {
+        const { app, sqlite, presence } = await createTestApp();
+        const session = (await devLogin(app, `owner`)).split(`=`)[1] ?? ``;
+        await app.inject({
+            method: 'POST',
+            url: botsPath,
+            payload: { name: `Dropped` },
+            cookies: { hexarena_session: session },
+        });
+        const [row] = createQuery(sqlite).select({ id: bots.id }).from(bots).all();
+        if (!row) throw new Error(`the bot row is missing`);
+        const socket = new FakeStreamSocket();
+        presence.attach(row.id, socket, true);
+        socket.emitClose();
+        const response = await app.inject({ method: 'GET', url: botsPath });
+        expect(response.json()).toEqual([
+            { name: `Dropped`, ownerName: `owner`, online: false, openForChallenges: false },
+        ]);
+        await app.close();
+    });
+
+    it('narrows the roster with online=1 and rejects any other value', async () => {
+        const { app, sqlite, presence } = await createTestApp();
+        const session = (await devLogin(app, `owner`)).split(`=`)[1] ?? ``;
+        await app.inject({
+            method: 'POST',
+            url: botsPath,
+            payload: { name: `Idle` },
+            cookies: { hexarena_session: session },
+        });
+        await app.inject({
+            method: 'POST',
+            url: botsPath,
+            payload: { name: `Live` },
+            cookies: { hexarena_session: session },
+        });
+        const rows = createQuery(sqlite).select({ id: bots.id, name: bots.name }).from(bots).orderBy(bots.nameKey).all();
+        const live = rows.find((row) => row.name === `Live`);
+        if (!live) throw new Error(`the Live bot is missing from the roster`);
+        presence.attach(live.id, new FakeStreamSocket(), false);
+        const narrowed = await app.inject({ method: 'GET', url: `${botsPath}?online=1` });
+        expect(narrowed.json()).toEqual([
+            { name: `Live`, ownerName: `owner`, online: true, openForChallenges: false },
+        ]);
+        const rejected = await app.inject({ method: 'GET', url: `${botsPath}?online=0` });
+        expect(rejected.statusCode).toBe(400);
+        expect(rejected.json()).toMatchObject({ code: `bad_request` });
         await app.close();
     });
 });

@@ -1,8 +1,14 @@
 import { OpenApiGeneratorV3, OpenAPIRegistry } from '@asteasolutions/zod-to-openapi';
 import { errorBodySchema } from './api';
 import {
+    accountDeclarationSchema,
     apiVersion,
+    badRequestErrorCodes,
+    botAccountPath,
+    botAccountSchema,
+    botForbiddenErrorCodes,
     botListingSchema,
+    botStreamPath,
     botTokenPath,
     botWithTokenSchema,
     botsPath,
@@ -13,6 +19,7 @@ import {
     healthzPath,
     notFoundErrorCodes,
     sessionCookieName,
+    streamEventSchema,
     unauthorizedErrorCodes,
 } from './index';
 
@@ -24,6 +31,21 @@ const unauthorized = () => ({
 const notFound = () => ({
     description: `No such bot, or one that is not the caller's to act on; the two are indistinguishable on purpose.`,
     content: { 'application/json': { schema: errorBodySchema(notFoundErrorCodes) } },
+});
+
+const botUnauthorized = () => ({
+    description: `Missing, unknown, or rotated token.`,
+    content: { 'application/json': { schema: errorBodySchema(unauthorizedErrorCodes) } },
+});
+
+const botForbidden = () => ({
+    description: `The bot's owner is banned.`,
+    content: { 'application/json': { schema: errorBodySchema(botForbiddenErrorCodes) } },
+});
+
+const badRequest = () => ({
+    description: `The request fails validation.`,
+    content: { 'application/json': { schema: errorBodySchema(badRequestErrorCodes) } },
 });
 
 export function buildOpenApiDocument() {
@@ -39,8 +61,7 @@ export function buildOpenApiDocument() {
         method: 'get',
         path: healthzPath,
         summary: 'Liveness probe.',
-        // No response content: the probe carries zero information
-        // (ADMIN.md section 3).
+        // No response content: the probe carries zero information.
         responses: {
             200: { description: 'The process is up.' },
         },
@@ -86,13 +107,30 @@ export function buildOpenApiDocument() {
         },
     });
 
+    registry.registerComponent('securitySchemes', 'bearerAuth', {
+        type: 'http',
+        scheme: 'bearer',
+        bearerFormat: 'opaque',
+        description: `A bot token, Authorization: Bearer hxo_..., minted and rotated by the owner on the website; there is no token endpoint.`,
+    });
+
     registry.registerPath({
         method: 'get',
         path: botsPath,
         summary: 'List public bots.',
         operationId: 'listBots',
         tags: ['Directory'],
-        description: `The whole roster, ordered by name fold; hobby scale, no pagination yet.`,
+        security: [],
+        description: `The whole roster, ordered by name fold; hobby scale, no pagination yet. online and openForChallenges are live views of who holds a stream open; the declaration fields appear once the bot declares itself.`,
+        parameters: [
+            {
+                name: 'online',
+                in: 'query',
+                required: false,
+                description: `Narrows the roster to bots holding a stream open.`,
+                schema: { type: 'string', enum: ['1'] },
+            },
+        ],
         responses: {
             200: {
                 description: 'The bot roster.',
@@ -100,6 +138,7 @@ export function buildOpenApiDocument() {
                     'application/json': { schema: botListingSchema.array() },
                 },
             },
+            400: badRequest(),
         },
     });
 
@@ -184,6 +223,61 @@ export function buildOpenApiDocument() {
             },
             401: unauthorized(),
             404: notFound(),
+        },
+    });
+
+    registry.registerPath({
+        method: 'get',
+        path: botStreamPath,
+        summary: `Open the bot's event stream.`,
+        operationId: 'openStream',
+        tags: ['Stream'],
+        security: [{ bearerAuth: [] }],
+        description: `One JSON object per line, with a bare newline as keepalive every 10 s. One stream per bot: opening closes the previous one. The connection is the bot's presence, so it is online while the stream is held, and open=1 takes challenges for as long as it lasts. On open, every active game is replayed as a gameStart line followed by a fresh moveRequest when it is the bot's turn.`,
+        parameters: [
+            {
+                name: 'open',
+                in: 'query',
+                required: false,
+                description: `Present as open=1, the bot accepts challenges while connected.`,
+                schema: { type: 'string', enum: ['1'] },
+            },
+        ],
+        responses: {
+            200: {
+                description: 'The NDJSON event stream.',
+                content: {
+                    'application/x-ndjson': { schema: streamEventSchema },
+                },
+            },
+            400: badRequest(),
+            401: botUnauthorized(),
+            403: botForbidden(),
+        },
+    });
+
+    registry.registerPath({
+        method: 'patch',
+        path: botAccountPath,
+        summary: `Declare the bot's about, version, repo, and what it accepts.`,
+        operationId: 'updateAccount',
+        tags: ['Account'],
+        security: [{ bearerAuth: [] }],
+        description: `Only the process holding the token may promise behaviour, which is why this is the bot's surface and not the owner's. Every field is optional; each present field replaces the stored one, an empty string clears a text field, and accepts replaces wholesale. The declaration narrows open=1: a challenge outside accepts is answered not-open.`,
+        request: {
+            body: {
+                required: true,
+                content: { 'application/json': { schema: accountDeclarationSchema } },
+            },
+        },
+        responses: {
+            200: {
+                description: 'The stored declaration, as the account stands now.',
+                content: { 'application/json': { schema: botAccountSchema } },
+            },
+            400: badRequest(),
+            401: botUnauthorized(),
+            403: botForbidden(),
         },
     });
 

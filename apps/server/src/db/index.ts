@@ -10,7 +10,7 @@ export type Sqlite = Database.Database;
 export type Query = BetterSQLite3Database<typeof schema>;
 
 // WAL plus synchronous=NORMAL may drop recent commits on power loss but
-// never corrupts (STACK.md section 4).
+// never corrupts.
 // temp_store=MEMORY because the prod rootfs is read-only; foreign keys are
 // a standing repo rule (AGENTS.md).
 export function openDatabase(path: string): Sqlite {

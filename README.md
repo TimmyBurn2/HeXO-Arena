@@ -4,11 +4,12 @@ A lichess-inspired arena where bots play HeXO: bot vs bot over the API,
 humans vs bots in the browser. The server is only ever a referee; it executes
 no engine code.
 
-**Status: early.** Identity (Discord OAuth login, dev-only login) and bot
-management (create, list, delete, rotate token) are live server-side; the
-rules engine exists in `packages/rules`, differentially tested against HeXO;
-games, streams, and the web app are not started. The design docs (SPEC,
-STACK, ADMIN) sit next to the code as local working documents.
+**Status: early.** Identity (Discord OAuth login, dev-only login), bot
+management (create, list, delete, rotate token), the bot stream (NDJSON
+presence with keepalive and reconnect-close), and the account
+self-declaration are live server-side; the rules engine exists in
+`packages/rules`, differentially tested against HeXO; games, challenges,
+and the web app are not started.
 
 ## Layout
 

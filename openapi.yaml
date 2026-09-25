@@ -2,6 +2,12 @@ components:
   parameters: {}
   schemas: {}
   securitySchemes:
+    bearerAuth:
+      bearerFormat: opaque
+      description: "A bot token, Authorization: Bearer hxo_..., minted and rotated by the owner on the
+        website; there is no token endpoint."
+      scheme: bearer
+      type: http
     sessionCookie:
       description: A browser session, set by the Discord OAuth callback and readable only by the server.
       in: cookie
@@ -9,7 +15,7 @@ components:
       type: apiKey
 info:
   title: hexarena
-  version: 0.2.0
+  version: 0.3.0
 openapi: 3.0.3
 paths:
   /api/auth/discord/callback:
@@ -97,10 +103,642 @@ paths:
       summary: "Start Discord OAuth: redirect to the authorize endpoint."
       tags:
         - Auth
+  /api/bot/account:
+    patch:
+      description: "Only the process holding the token may promise behaviour, which is why this is the
+        bot's surface and not the owner's. Every field is optional; each present field replaces the
+        stored one, an empty string clears a text field, and accepts replaces wholesale. The
+        declaration narrows open=1: a challenge outside accepts is answered not-open."
+      operationId: updateAccount
+      requestBody:
+        content:
+          application/json:
+            schema:
+              additionalProperties: false
+              properties:
+                about:
+                  maxLength: 280
+                  type: string
+                accepts:
+                  properties:
+                    match:
+                      type: boolean
+                    turnMs:
+                      items:
+                        type: integer
+                      maxItems: 2
+                      minItems: 2
+                      nullable: true
+                      type: array
+                    unlimited:
+                      type: boolean
+                  required:
+                    - turnMs
+                    - match
+                    - unlimited
+                  type: object
+                repoUrl:
+                  anyOf:
+                    - format: uri
+                      maxLength: 2048
+                      type: string
+                    - enum:
+                        - ""
+                      type: string
+                version:
+                  maxLength: 64
+                  type: string
+              type: object
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                properties:
+                  about:
+                    maxLength: 280
+                    type: string
+                  accepts:
+                    properties:
+                      match:
+                        type: boolean
+                      turnMs:
+                        items:
+                          type: integer
+                        maxItems: 2
+                        minItems: 2
+                        nullable: true
+                        type: array
+                      unlimited:
+                        type: boolean
+                    required:
+                      - turnMs
+                      - match
+                      - unlimited
+                    type: object
+                  name:
+                    type: string
+                  repoUrl:
+                    anyOf:
+                      - format: uri
+                        maxLength: 2048
+                        type: string
+                      - enum:
+                          - ""
+                        type: string
+                  version:
+                    maxLength: 64
+                    type: string
+                required:
+                  - name
+                type: object
+          description: The stored declaration, as the account stands now.
+        "400":
+          content:
+            application/json:
+              schema:
+                properties:
+                  code:
+                    enum:
+                      - bad_request
+                    type: string
+                  error:
+                    type: string
+                required:
+                  - error
+                  - code
+                type: object
+          description: The request fails validation.
+        "401":
+          content:
+            application/json:
+              schema:
+                properties:
+                  code:
+                    enum:
+                      - unauthorized
+                    type: string
+                  error:
+                    type: string
+                required:
+                  - error
+                  - code
+                type: object
+          description: Missing, unknown, or rotated token.
+        "403":
+          content:
+            application/json:
+              schema:
+                properties:
+                  code:
+                    enum:
+                      - banned
+                    type: string
+                  error:
+                    type: string
+                required:
+                  - error
+                  - code
+                type: object
+          description: The bot's owner is banned.
+      security:
+        - bearerAuth: []
+      summary: Declare the bot's about, version, repo, and what it accepts.
+      tags:
+        - Account
+  /api/bot/stream:
+    get:
+      description: "One JSON object per line, with a bare newline as keepalive every 10 s. One stream per
+        bot: opening closes the previous one. The connection is the bot's presence, so it is online
+        while the stream is held, and open=1 takes challenges for as long as it lasts. On open,
+        every active game is replayed as a gameStart line followed by a fresh moveRequest when it is
+        the bot's turn."
+      operationId: openStream
+      parameters:
+        - description: Present as open=1, the bot accepts challenges while connected.
+          in: query
+          name: open
+          required: false
+          schema:
+            enum:
+              - "1"
+            type: string
+      responses:
+        "200":
+          content:
+            application/x-ndjson:
+              schema:
+                oneOf:
+                  - properties:
+                      gameId:
+                        type: string
+                      opening:
+                        properties:
+                          randomTurns:
+                            maximum: 3
+                            minimum: 0
+                            type: integer
+                        required:
+                          - randomTurns
+                        type: object
+                      opponent:
+                        properties:
+                          name:
+                            type: string
+                        required:
+                          - name
+                        type: object
+                      rated:
+                        type: boolean
+                      side:
+                        enum:
+                          - x
+                          - o
+                        type: string
+                      timeControl:
+                        oneOf:
+                          - properties:
+                              mode:
+                                enum:
+                                  - unlimited
+                                type: string
+                            required:
+                              - mode
+                            type: object
+                          - properties:
+                              mode:
+                                enum:
+                                  - turn
+                                type: string
+                              turnTimeMs:
+                                minimum: 5000
+                                type: integer
+                            required:
+                              - mode
+                              - turnTimeMs
+                            type: object
+                          - properties:
+                              incrementMs:
+                                minimum: 0
+                                type: integer
+                              mainTimeMs:
+                                minimum: 60000
+                                type: integer
+                              mode:
+                                enum:
+                                  - match
+                                type: string
+                            required:
+                              - mode
+                              - mainTimeMs
+                              - incrementMs
+                            type: object
+                      type:
+                        enum:
+                          - gameStart
+                        type: string
+                    required:
+                      - type
+                      - gameId
+                      - side
+                      - opponent
+                      - timeControl
+                      - rated
+                    type: object
+                  - properties:
+                      gameId:
+                        type: string
+                      request:
+                        properties:
+                          board:
+                            properties:
+                              cells:
+                                items:
+                                  properties:
+                                    p:
+                                      enum:
+                                        - x
+                                        - o
+                                      type: string
+                                    q:
+                                      type: integer
+                                    r:
+                                      type: integer
+                                  required:
+                                    - q
+                                    - r
+                                    - p
+                                  type: object
+                                type: array
+                              to_move:
+                                enum:
+                                  - x
+                                  - o
+                                type: string
+                            required:
+                              - to_move
+                              - cells
+                            type: object
+                          request_id:
+                            minimum: 0
+                            type: integer
+                          time_limit:
+                            minimum: 0
+                            type: number
+                        required:
+                          - board
+                        type: object
+                      type:
+                        enum:
+                          - moveRequest
+                        type: string
+                    required:
+                      - type
+                      - gameId
+                      - request
+                    type: object
+                  - properties:
+                      gameId:
+                        type: string
+                      reason:
+                        enum:
+                          - aborted
+                          - disconnect
+                          - surrender
+                          - timeout
+                          - terminated
+                          - six-in-a-row
+                        type: string
+                      type:
+                        enum:
+                          - gameFinish
+                        type: string
+                      winner:
+                        enum:
+                          - x
+                          - o
+                          - null
+                        nullable: true
+                        type: string
+                    required:
+                      - type
+                      - gameId
+                      - winner
+                      - reason
+                    type: object
+                  - properties:
+                      challenge:
+                        properties:
+                          challengeId:
+                            type: string
+                          challenger:
+                            properties:
+                              name:
+                                type: string
+                            required:
+                              - name
+                            type: object
+                          destUser:
+                            properties:
+                              name:
+                                type: string
+                            required:
+                              - name
+                            type: object
+                          status:
+                            enum:
+                              - created
+                              - declined
+                              - canceled
+                              - expired
+                            type: string
+                          timeControl:
+                            oneOf:
+                              - properties:
+                                  mode:
+                                    enum:
+                                      - unlimited
+                                    type: string
+                                required:
+                                  - mode
+                                type: object
+                              - properties:
+                                  mode:
+                                    enum:
+                                      - turn
+                                    type: string
+                                  turnTimeMs:
+                                    minimum: 5000
+                                    type: integer
+                                required:
+                                  - mode
+                                  - turnTimeMs
+                                type: object
+                              - properties:
+                                  incrementMs:
+                                    minimum: 0
+                                    type: integer
+                                  mainTimeMs:
+                                    minimum: 60000
+                                    type: integer
+                                  mode:
+                                    enum:
+                                      - match
+                                    type: string
+                                required:
+                                  - mode
+                                  - mainTimeMs
+                                  - incrementMs
+                                type: object
+                        required:
+                          - challengeId
+                          - challenger
+                          - destUser
+                          - timeControl
+                          - status
+                        type: object
+                      type:
+                        enum:
+                          - challenge
+                        type: string
+                    required:
+                      - type
+                      - challenge
+                    type: object
+                  - properties:
+                      challenge:
+                        properties:
+                          challengeId:
+                            type: string
+                          challenger:
+                            properties:
+                              name:
+                                type: string
+                            required:
+                              - name
+                            type: object
+                          destUser:
+                            properties:
+                              name:
+                                type: string
+                            required:
+                              - name
+                            type: object
+                          status:
+                            enum:
+                              - created
+                              - declined
+                              - canceled
+                              - expired
+                            type: string
+                          timeControl:
+                            oneOf:
+                              - properties:
+                                  mode:
+                                    enum:
+                                      - unlimited
+                                    type: string
+                                required:
+                                  - mode
+                                type: object
+                              - properties:
+                                  mode:
+                                    enum:
+                                      - turn
+                                    type: string
+                                  turnTimeMs:
+                                    minimum: 5000
+                                    type: integer
+                                required:
+                                  - mode
+                                  - turnTimeMs
+                                type: object
+                              - properties:
+                                  incrementMs:
+                                    minimum: 0
+                                    type: integer
+                                  mainTimeMs:
+                                    minimum: 60000
+                                    type: integer
+                                  mode:
+                                    enum:
+                                      - match
+                                    type: string
+                                required:
+                                  - mode
+                                  - mainTimeMs
+                                  - incrementMs
+                                type: object
+                        required:
+                          - challengeId
+                          - challenger
+                          - destUser
+                          - timeControl
+                          - status
+                        type: object
+                      reason:
+                        enum:
+                          - canceled
+                          - expired
+                        type: string
+                      type:
+                        enum:
+                          - challengeCanceled
+                        type: string
+                    required:
+                      - type
+                      - reason
+                      - challenge
+                    type: object
+                  - properties:
+                      challenge:
+                        properties:
+                          challengeId:
+                            type: string
+                          challenger:
+                            properties:
+                              name:
+                                type: string
+                            required:
+                              - name
+                            type: object
+                          destUser:
+                            properties:
+                              name:
+                                type: string
+                            required:
+                              - name
+                            type: object
+                          status:
+                            enum:
+                              - created
+                              - declined
+                              - canceled
+                              - expired
+                            type: string
+                          timeControl:
+                            oneOf:
+                              - properties:
+                                  mode:
+                                    enum:
+                                      - unlimited
+                                    type: string
+                                required:
+                                  - mode
+                                type: object
+                              - properties:
+                                  mode:
+                                    enum:
+                                      - turn
+                                    type: string
+                                  turnTimeMs:
+                                    minimum: 5000
+                                    type: integer
+                                required:
+                                  - mode
+                                  - turnTimeMs
+                                type: object
+                              - properties:
+                                  incrementMs:
+                                    minimum: 0
+                                    type: integer
+                                  mainTimeMs:
+                                    minimum: 60000
+                                    type: integer
+                                  mode:
+                                    enum:
+                                      - match
+                                    type: string
+                                required:
+                                  - mode
+                                  - mainTimeMs
+                                  - incrementMs
+                                type: object
+                        required:
+                          - challengeId
+                          - challenger
+                          - destUser
+                          - timeControl
+                          - status
+                        type: object
+                      type:
+                        enum:
+                          - challengeDeclined
+                        type: string
+                    required:
+                      - type
+                      - challenge
+                    type: object
+          description: The NDJSON event stream.
+        "400":
+          content:
+            application/json:
+              schema:
+                properties:
+                  code:
+                    enum:
+                      - bad_request
+                    type: string
+                  error:
+                    type: string
+                required:
+                  - error
+                  - code
+                type: object
+          description: The request fails validation.
+        "401":
+          content:
+            application/json:
+              schema:
+                properties:
+                  code:
+                    enum:
+                      - unauthorized
+                    type: string
+                  error:
+                    type: string
+                required:
+                  - error
+                  - code
+                type: object
+          description: Missing, unknown, or rotated token.
+        "403":
+          content:
+            application/json:
+              schema:
+                properties:
+                  code:
+                    enum:
+                      - banned
+                    type: string
+                  error:
+                    type: string
+                required:
+                  - error
+                  - code
+                type: object
+          description: The bot's owner is banned.
+      security:
+        - bearerAuth: []
+      summary: Open the bot's event stream.
+      tags:
+        - Stream
   /api/bots:
     get:
-      description: The whole roster, ordered by name fold; hobby scale, no pagination yet.
+      description: The whole roster, ordered by name fold; hobby scale, no pagination yet. online and
+        openForChallenges are live views of who holds a stream open; the declaration fields appear
+        once the bot declares itself.
       operationId: listBots
+      parameters:
+        - description: Narrows the roster to bots holding a stream open.
+          in: query
+          name: online
+          required: false
+          schema:
+            enum:
+              - "1"
+            type: string
       responses:
         "200":
           content:
@@ -108,17 +746,72 @@ paths:
               schema:
                 items:
                   properties:
+                    about:
+                      maxLength: 280
+                      type: string
+                    accepts:
+                      properties:
+                        match:
+                          type: boolean
+                        turnMs:
+                          items:
+                            type: integer
+                          maxItems: 2
+                          minItems: 2
+                          nullable: true
+                          type: array
+                        unlimited:
+                          type: boolean
+                      required:
+                        - turnMs
+                        - match
+                        - unlimited
+                      type: object
                     name:
                       type: string
+                    online:
+                      type: boolean
+                    openForChallenges:
+                      type: boolean
                     ownerName:
                       nullable: true
+                      type: string
+                    repoUrl:
+                      anyOf:
+                        - format: uri
+                          maxLength: 2048
+                          type: string
+                        - enum:
+                            - ""
+                          type: string
+                    version:
+                      maxLength: 64
                       type: string
                   required:
                     - name
                     - ownerName
+                    - online
+                    - openForChallenges
                   type: object
                 type: array
           description: The bot roster.
+        "400":
+          content:
+            application/json:
+              schema:
+                properties:
+                  code:
+                    enum:
+                      - bad_request
+                    type: string
+                  error:
+                    type: string
+                required:
+                  - error
+                  - code
+                type: object
+          description: The request fails validation.
+      security: []
       summary: List public bots.
       tags:
         - Directory

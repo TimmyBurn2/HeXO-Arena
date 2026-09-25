@@ -1,0 +1,86 @@
+import {
+    accountDeclarationSchema,
+    botAccountPath,
+    botAccountSchema,
+    botDirectoryQuerySchema,
+    botListingSchema,
+    botsPath,
+    botStreamPath,
+    botStreamQuerySchema,
+    type BotListing,
+} from '@hexarena/contract';
+import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
+import type { BotPrincipal } from './bot-auth';
+import { authenticateBot } from './bot-auth';
+import { listBots, updateBotDeclaration } from './bots';
+import { type Query } from './db';
+import type { PresenceRegistry } from './presence';
+
+export interface BotApiDeps {
+    query: Query;
+    presence: PresenceRegistry;
+}
+
+// Sends the failure itself and yields null, so handlers stay flat.
+function requireBot(query: Query, request: FastifyRequest, reply: FastifyReply): BotPrincipal | null {
+    const auth = authenticateBot(query, request.headers.authorization);
+    if (auth.kind === `none`) {
+        reply.code(401).send({ error: `missing, unknown, or rotated token`, code: `unauthorized` });
+        return null;
+    }
+    if (auth.kind === `banned`) {
+        reply.code(403).send({ error: `the bot's owner is banned`, code: `banned` });
+        return null;
+    }
+    return auth.bot;
+}
+
+export function registerBotApi(app: FastifyInstance, deps: BotApiDeps): void {
+    const { query, presence } = deps;
+
+    app.get(botStreamPath, async (request, reply) => {
+        const bot = requireBot(query, request, reply);
+        if (!bot) return reply;
+        const parsed = botStreamQuerySchema.safeParse(request.query);
+        if (!parsed.success) {
+            return reply.code(400).send({ error: `the open parameter must be exactly 1`, code: `bad_request` });
+        }
+        // Writing on reply.raw bypasses serialization and anything that
+        // buffers; hijack keeps the framework from answering on its own.
+        reply.hijack();
+        reply.raw.writeHead(200, { 'content-type': `application/x-ndjson` });
+        presence.attach(bot.id, reply.raw, parsed.data.open === `1`);
+    });
+
+    app.get(botsPath, async (request, reply) => {
+        const parsed = botDirectoryQuerySchema.safeParse(request.query);
+        if (!parsed.success) {
+            return reply.code(400).send({ error: `the online parameter must be exactly 1`, code: `bad_request` });
+        }
+        const rows = listBots(query);
+        const listed = rows
+            .filter((row) => parsed.data.online !== `1` || presence.isOnline(row.id))
+            .map((row): BotListing => ({
+                name: row.name,
+                ownerName: row.ownerName,
+                online: presence.isOnline(row.id),
+                openForChallenges: presence.isOpenForChallenges(row.id),
+                ...(row.about !== undefined && { about: row.about }),
+                ...(row.version !== undefined && { version: row.version }),
+                ...(row.repoUrl !== undefined && { repoUrl: row.repoUrl }),
+                ...(row.accepts !== undefined && { accepts: row.accepts }),
+            }));
+        return reply.code(200).send(botListingSchema.array().parse(listed));
+    });
+
+    app.patch(botAccountPath, async (request, reply) => {
+        const bot = requireBot(query, request, reply);
+        if (!bot) return reply;
+        const parsed = accountDeclarationSchema.safeParse(request.body);
+        if (!parsed.success) {
+            return reply.code(400).send({ error: `the declaration fails validation`, code: `bad_request` });
+        }
+        const account = updateBotDeclaration(query, bot.id, parsed.data);
+        return reply.code(200).send(botAccountSchema.parse(account));
+    });
+}

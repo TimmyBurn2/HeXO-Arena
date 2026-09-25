@@ -1,8 +1,10 @@
 # AGENTS.md
 
 Rules for every coding agent working in this repo.
-Read `SPEC.md`, `STACK.md`, and `ADMIN.md` before any architectural change;
-they record decisions, not suggestions.
+
+Local decision docs (`SPEC.md`, `STACK.md`, `ADMIN.md`, untracked by design)
+record choices in depth; read them when present and follow them. The rules
+below hold regardless.
 
 Layout: pnpm monorepo. `apps/server` (Fastify), `apps/web` (React/Vite SPA),
 `packages/contract` (zod schemas, board types), `packages/rules` (pure rules
@@ -31,6 +33,9 @@ Every task ends green: type-check, lint, tests.
 - No phase, milestone, or step comments; no section banners; no narration of
   process or history. Comments describe the code as it is; history is git's job.
 - No comment may restate the line below it.
+- Committed files never reference the local decision docs, their sections,
+  slices, phases, or any planning language. Comments stand on their own;
+  process and planning live outside the repo.
 - ASCII only, in code, comments, docs, and commit messages. No em dashes, no
   decorative unicode; use `; , :` or a new sentence instead.
 - Prose is lean: if a sentence can be shorter, make it shorter; if a paragraph

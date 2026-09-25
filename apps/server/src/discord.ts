@@ -17,8 +17,7 @@ export interface DiscordOAuthConfig {
 }
 
 // The only outbound calls in the process, by construction: these two
-// constants are the whole surface behind the egress allowlist (SPEC.md
-// section 9).
+// constants are the whole surface behind the egress allowlist.
 const authorizeEndpoint = `https://discord.com/oauth2/authorize`;
 const tokenEndpoint = `https://discord.com/api/oauth2/token`;
 const userEndpoint = `https://discord.com/api/users/@me`;
