@@ -42,26 +42,26 @@ export const streamPlayerSchema = z.object({
 });
 export type StreamPlayer = z.infer<typeof streamPlayerSchema>;
 
-// Opening variety the server places itself; the unit is a full turn because
-// stones come in pairs after the origin stone.
+// A seat in a game: a bot or user as above, or an anonymous guest, which
+// has no rating (null) and so is never provisional.
+export const seatPlayerSchema = streamPlayerSchema.extend({
+    rating: z.number().int().nullable(),
+});
+export type SeatPlayer = z.infer<typeof seatPlayerSchema>;
+
+// Server-placed opening variety after the origin stone, in turns: the
+// origin stands alone and every turn after it places two stones, so a turn
+// count can never hand a player half a turn. Every surface speaks turns;
+// four turns after the origin keep the opening at five plies.
+export const openingTurnsSchema = z.number().int().min(0).max(4);
+export type OpeningTurns = z.infer<typeof openingTurnsSchema>;
+
+export const defaultOpeningTurns = 1;
+
 export const openingSchema = z.object({
-    randomTurns: z.number().int().min(0).max(3),
+    randomTurns: openingTurnsSchema,
 });
 export type Opening = z.infer<typeof openingSchema>;
-
-// Server-placed opening variety after the origin stone, in stones: stones
-// come two per turn, so an odd count would hand a player a half turn
-// nothing can answer. Every request surface speaks stones; gameStart
-// carries them as randomTurns.
-export const openingStonesSchema = z
-    .number()
-    .int()
-    .min(0)
-    .max(6)
-    .refine((stones) => stones % 2 === 0, { message: `opening stones must come in pairs` });
-export type OpeningStones = z.infer<typeof openingStonesSchema>;
-
-export const defaultOpeningStones = 2;
 
 // Which side takes the first player turn: the origin stone is automatic,
 // so the first turn is the first thing a player actually does.
@@ -84,7 +84,7 @@ export const challengeSchema = z.object({
     challenger: streamPlayerSchema,
     destUser: streamPlayerSchema,
     timeControl: timeControlSchema,
-    openingStones: openingStonesSchema,
+    openingTurns: openingTurnsSchema,
     firstPlayer: firstPlayerSchema,
     status: challengeStatusSchema,
 });
@@ -104,9 +104,10 @@ export const gameStartEventSchema = z.object({
     type: z.literal(`gameStart`),
     gameId: z.string(),
     side: sideSchema,
-    opponent: streamPlayerSchema,
+    opponent: seatPlayerSchema,
     timeControl: timeControlSchema,
     opening: openingSchema.optional(),
+    // False for a game against a guest: it moves no rating on either side.
     rated: z.boolean(),
     engine: engineSessionSchema,
 });

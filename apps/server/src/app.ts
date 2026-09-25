@@ -8,7 +8,6 @@ import {
     isReservedName,
     nameKeyOf,
     nameSyntaxSchema,
-    sessionCookieName,
 } from '@hexarena/contract';
 import websocketPlugin from '@fastify/websocket';
 import cookiePlugin from '@fastify/cookie';
@@ -31,7 +30,10 @@ import { drain } from './drain';
 import { deleteBotByPolicy, ownedBotId } from './moderation';
 import { consumeOAuthState, createOAuthState } from './oauth-state';
 import type { PresenceRegistry } from './presence';
-import { createSession, sessionCookieMaxAge, sessionUser } from './sessions';
+import { GuestSessions } from './guests';
+import { registerOgShell } from './og-shell';
+import { endGuestSession, registerSessionApi, setSessionCookie } from './session-api';
+import { createSession, sessionUser } from './sessions';
 import { beginGeneration, StartGate } from './site-state';
 import {
     createUserWithDerivedName,
@@ -48,6 +50,9 @@ export interface AppDeps {
     // Stamped on every audit row; one operator today, a named moderator
     // once there is more than one.
     adminActor: string;
+    // The deployed index.html; when set, the arena, bot, and game routes
+    // answer with the shell carrying live og meta. Dev leaves it to Vite.
+    webIndexPath?: string;
     random?: () => number;
     logger?: FastifyServerOptions[`logger`];
 }
@@ -82,6 +87,12 @@ export async function buildApp(deps: AppDeps): Promise<BuiltApp> {
     );
     const challenges = new ChallengeRegistry({ query, presence, games });
     wirePresence(presence, games);
+    const guests = new GuestSessions({
+        seated: (guestId) => games.activeHumanGameCount({ kind: `guest`, id: guestId }) > 0,
+        ended: (guestId) => {
+            games.endGuest(guestId);
+        },
+    });
     // Challenge lines lead the replay: they wait on a TTL that the games,
     // with their own clocks and sessions, do not.
     const gameReplay = presence.replay;
@@ -92,8 +103,12 @@ export async function buildApp(deps: AppDeps): Promise<BuiltApp> {
     });
     registerBotApi(app, { query, presence, gate });
     registerChallengeApi(app, { query, presence, games, challenges, gate });
-    registerGameApi(app, { query, presence, games, gate });
+    registerGameApi(app, { query, presence, games, gate, guests });
     registerLeaderboardApi(app, { query });
+    registerSessionApi(app, { query, guests, secureCookies: deps.secureCookies });
+    if (deps.webIndexPath !== undefined) {
+        registerOgShell(app, { query, presence, games, indexPath: deps.webIndexPath });
+    }
     const admin = createAdminHandler({ query, presence, games, challenges, actor: deps.adminActor });
 
     if (deps.devLogin) {
@@ -121,8 +136,9 @@ export async function buildApp(deps: AppDeps): Promise<BuiltApp> {
                     .send({ error: `the name fold is already taken`, code: `name_taken` });
             }
             if (user.banned) return sendBanned(reply);
+            endGuestSession(guests, request);
             const token = createSession(query, user.id);
-            setSessionCookie(reply, token, deps.secureCookies);
+            setSessionCookie(reply, token, deps.secureCookies, `account`);
             return reply.code(200).send({ name: user.name });
         });
     }
@@ -159,8 +175,9 @@ export async function buildApp(deps: AppDeps): Promise<BuiltApp> {
             findUserByDiscordId(query, identity.id) ??
             createUserWithDerivedName(query, identity.id, identity.username);
         if (user.banned) return sendBanned(reply);
+        endGuestSession(guests, request);
         const token = createSession(query, user.id);
-        setSessionCookie(reply, token, deps.secureCookies);
+        setSessionCookie(reply, token, deps.secureCookies, `account`);
         return reply.redirect(`/`);
     });
 
@@ -237,14 +254,4 @@ export async function buildApp(deps: AppDeps): Promise<BuiltApp> {
 // A banned identity gets the defined refusal instead of a session.
 function sendBanned(reply: FastifyReply): FastifyReply {
     return reply.code(403).send({ error: `the account is banned`, code: `banned` });
-}
-
-function setSessionCookie(reply: FastifyReply, token: string, secure: boolean): void {
-    reply.setCookie(sessionCookieName, token, {
-        path: `/`,
-        httpOnly: true,
-        sameSite: `lax`,
-        secure,
-        maxAge: sessionCookieMaxAge,
-    });
 }

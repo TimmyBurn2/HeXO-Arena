@@ -92,6 +92,42 @@ describe('the moderation migration', () => {
 
 });
 
+describe('the opening turns migration', () => {
+    let sqlite: Sqlite;
+    let folder: string;
+
+    afterEach(() => {
+        sqlite.close();
+        rmSync(folder, { recursive: true, force: true });
+    });
+
+    it('converts stored stone counts into turns and refuses a count past four', () => {
+        sqlite = openDatabase(`:memory:`);
+        folder = migrationsUpTo(8);
+        migrate(drizzle(sqlite), { migrationsFolder: folder });
+        sqlite.exec(`
+            insert into name_reservations (name_key) values ('owner'), ('alpha'), ('beta');
+            insert into users (id, discord_id, name, name_key, created_at) values ('u1', 'd1', 'owner', 'owner', 1);
+            insert into bots (id, owner_id, name, name_key, token_hash, scope, created_at)
+                values ('b1', 'u1', 'alpha', 'alpha', 'h1', 'bot:play', 1), ('b2', 'u1', 'beta', 'beta', 'h2', 'bot:play', 1);
+            insert into challenges (id, challenger_bot_id, dest_bot_id, request_key, time_control, opening_stones, first_player, status, created_at, decided_at)
+                values ('c0', 'b1', 'b2', 'r0', '{}', 0, 'random', 'expired', 1, 2),
+                       ('c6', 'b1', 'b2', 'r6', '{}', 6, 'random', 'expired', 1, 2);
+        `);
+        runMigrations(sqlite);
+        expect(sqlite.prepare(`select id, opening_turns as turns from challenges order by id`).all()).toEqual([
+            { id: `c0`, turns: 0 },
+            { id: `c6`, turns: 3 },
+        ]);
+        const insert = sqlite.prepare(`
+            insert into challenges (id, challenger_bot_id, dest_bot_id, request_key, time_control, opening_turns, first_player, status, created_at, decided_at)
+                values (?, 'b1', 'b2', ?, '{}', ?, 'random', 'expired', 1, 2)
+        `);
+        insert.run(`c4`, `r4`, 4);
+        expect(() => insert.run(`c5`, `r5`, 5)).toThrow(/CHECK/);
+    });
+});
+
 describe('the admin tables', () => {
     it('refuse an audit row without a reason or with an unknown action, and a second state row', () => {
         const sqlite = openDatabase(`:memory:`);

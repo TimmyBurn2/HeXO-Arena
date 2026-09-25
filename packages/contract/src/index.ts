@@ -1,6 +1,6 @@
 // The API version is spec semver, decoupled from package versions on
 // purpose.
-export const apiVersion = `0.12.0`;
+export const apiVersion = `0.16.0`;
 
 export const healthzPath = `/healthz`;
 

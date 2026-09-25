@@ -36,7 +36,15 @@ import {
     gameResignPath,
     gameSnapshotSchema,
     gamesPath,
+    guestConflictErrorCodes,
+    guestLimitErrorCodes,
+    guestMeSchema,
+    guestPath,
+    guestRetryAfterSeconds,
     healthzPath,
+    logoutPath,
+    mePath,
+    meSchema,
     humanMoveRequestSchema,
     leaderboardEntrySchema,
     leaderboardPath,
@@ -111,7 +119,7 @@ export function buildOpenApiDocument() {
         type: 'apiKey',
         in: 'cookie',
         name: sessionCookieName,
-        description: `A browser session, set by the Discord OAuth callback and readable only by the server.`,
+        description: `A browser session, set by the Discord OAuth callback or the guest route and readable only by the server.`,
     });
 
     registry.registerPath({
@@ -166,6 +174,69 @@ export function buildOpenApiDocument() {
             503: {
                 description: `Discord OAuth credentials are not configured.`,
                 content: { 'application/json': { schema: errorBodySchema([`oauth_unconfigured`]) } },
+            },
+        },
+    });
+
+    registry.registerPath({
+        method: 'get',
+        path: mePath,
+        summary: 'Who the session names.',
+        operationId: 'me',
+        tags: ['Auth'],
+        security: [{ sessionCookie: [] }, {}],
+        description: `Reads the session cookie alone. Without a live session the answer is null, never a 401, so a page can ask before it knows.`,
+        responses: {
+            200: {
+                description: 'The session holder, or null.',
+                content: { 'application/json': { schema: meSchema } },
+            },
+        },
+    });
+
+    registry.registerPath({
+        method: 'post',
+        path: logoutPath,
+        summary: 'Sign out: end the session and clear its cookie.',
+        operationId: 'logout',
+        tags: ['Auth'],
+        security: [{ sessionCookie: [] }, {}],
+        description: `Idempotent: without a live session it still clears the cookie and answers 204. Ending a guest session aborts its live games, which were unrated anyway.`,
+        responses: {
+            204: { description: 'The session is gone and the cookie cleared.' },
+        },
+    });
+
+    registry.registerPath({
+        method: 'post',
+        path: guestPath,
+        summary: 'Start an anonymous guest session.',
+        operationId: 'startGuest',
+        tags: ['Auth'],
+        security: [{ sessionCookie: [] }, {}],
+        description: `Nothing is persisted: the session lives in server memory, ends at sign-out, after 24 hours without a request, or at a restart, and is never swept while it sits in a live game. A guest plays bots under the human limits and every guest game is unrated for both sides. Signing in with Discord over a guest session ends it. Asking again with a live guest session answers that same guest.`,
+        responses: {
+            200: {
+                description: 'The caller already holds this guest session.',
+                content: { 'application/json': { schema: guestMeSchema } },
+            },
+            201: {
+                description: 'A fresh guest session; the session cookie is set.',
+                content: { 'application/json': { schema: guestMeSchema } },
+            },
+            409: {
+                description: 'A user is signed in; a guest session never replaces an account.',
+                content: { 'application/json': { schema: errorBodySchema(guestConflictErrorCodes) } },
+            },
+            429: {
+                description: `The global guest cap is full.`,
+                headers: {
+                    'Retry-After': {
+                        description: `Seconds to wait before retrying; ${String(guestRetryAfterSeconds)}.`,
+                        schema: { type: 'integer', minimum: 1 },
+                    },
+                } as const,
+                content: { 'application/json': { schema: errorBodySchema(guestLimitErrorCodes) } },
             },
         },
     });
@@ -410,7 +481,7 @@ export function buildOpenApiDocument() {
         operationId: 'createGame',
         tags: ['Games'],
         security: [{ sessionCookie: [] }],
-        description: `The bot must be online, open for games, under its concurrent-game cap, and declaring acceptance of the clock; every condition answers with a distinct code so a caller knows what to change. The caller is bounded too: at most three live games at once (human_busy) and sixty seconds between creations (game_cooldown). Colours are drawn at creation, the server places the origin stone and the opening stones itself, and the bot receives its engine-session handoff as a gameStart line on its stream.`,
+        description: `The bot must be online, open for games, under its concurrent-game cap, and declaring acceptance of the clock; every condition answers with a distinct code so a caller knows what to change. The caller is a signed-in user or a guest session, bounded either way: at most three live games at once (human_busy) and sixty seconds between creations (game_cooldown). A game against a guest is unrated for both sides. Colours are drawn at creation, the server places the origin stone and the opening turns itself, and the bot receives its engine-session handoff as a gameStart line on its stream.`,
         request: {
             body: { required: true, content: { 'application/json': { schema: createGameRequestSchema } } },
         },

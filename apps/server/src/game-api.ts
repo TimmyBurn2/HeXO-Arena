@@ -16,10 +16,12 @@ import {
     type EngineSocket,
     type GameRegistry,
     type MoveErrorCode,
+    type Person,
 } from './game-registry';
 import { lastHumanGameCreatedAt } from './game-store';
+import type { GuestSessions } from './guests';
 import type { PresenceRegistry } from './presence';
-import { sessionUser } from './sessions';
+import { sessionPerson } from './session-api';
 import type { StartGate } from './site-state';
 
 // One move_response is a few hundred bytes; anything bigger is a broken or
@@ -31,6 +33,7 @@ export interface GameApiDeps {
     presence: PresenceRegistry;
     gate: StartGate;
     games: GameRegistry;
+    guests: GuestSessions;
 }
 
 interface GameParams {
@@ -38,25 +41,33 @@ interface GameParams {
 }
 
 // Sends the failure itself and yields null, so handlers stay flat.
-function requireUser(
-    query: Query,
+function requirePerson(
+    deps: GameApiDeps,
     request: FastifyRequest,
     reply: FastifyReply,
-): { id: string; name: string } | null {
-    const user = sessionUser(query, request);
-    if (user === null) {
+): Person | null {
+    const person = sessionPerson(deps.query, deps.guests, request);
+    if (person === null) {
         reply.code(401).send({ error: `no session`, code: `unauthorized` });
         return null;
     }
-    return user;
+    return person;
+}
+
+// A user's cooldown reads the game log so a restart cannot reset it; a
+// guest's lives in its session, which a restart ends anyway.
+function lastGameCreatedAt(deps: GameApiDeps, person: Person): number | null {
+    return person.kind === `user`
+        ? lastHumanGameCreatedAt(deps.query, person.id)
+        : (deps.guests.byId(person.id)?.lastGameCreatedAt ?? null);
 }
 
 export function registerGameApi(app: FastifyInstance, deps: GameApiDeps): void {
     const { query, presence, games, gate } = deps;
 
     app.post(`/api/games`, async (request, reply) => {
-        const user = requireUser(query, request, reply);
-        if (user === null) return reply;
+        const person = requirePerson(deps, request, reply);
+        if (person === null) return reply;
         const parsed = createGameRequestSchema.safeParse(request.body);
         if (!parsed.success) {
             return reply.code(400).send({ error: `the request fails validation`, code: `bad_request` });
@@ -73,13 +84,13 @@ export function registerGameApi(app: FastifyInstance, deps: GameApiDeps): void {
         if (bot.delisted) {
             return reply.code(403).send({ error: `the bot is delisted`, code: `delisted` });
         }
-        if (games.activeHumanGameCount(user.id) >= humanConcurrentGameCap) {
+        if (games.activeHumanGameCount(person) >= humanConcurrentGameCap) {
             return reply.code(400).send({
                 error: `you already hold the active-game cap`,
                 code: `human_busy`,
             });
         }
-        const lastCreated = lastHumanGameCreatedAt(query, user.id);
+        const lastCreated = lastGameCreatedAt(deps, person);
         if (lastCreated !== null && nowSeconds() - lastCreated < humanGameCooldownSeconds) {
             return reply.code(400).send({
                 error: `a moment must pass between game creations`,
@@ -105,28 +116,30 @@ export function registerGameApi(app: FastifyInstance, deps: GameApiDeps): void {
             });
         }
         const created = games.createGame({
-            user,
+            person,
             bot: { id: bot.id, name: bot.name },
             timeControl: parsed.data.timeControl,
-            openingStones: parsed.data.openingStones,
+            openingTurns: parsed.data.openingTurns,
         });
+        const guest = person.kind === `guest` ? deps.guests.byId(person.id) : null;
+        if (guest !== null) guest.lastGameCreatedAt = nowSeconds();
         return reply.code(201).send(created.snapshot);
     });
 
     app.get(`/api/games/:gameId`, async (request, reply) => {
-        const user = requireUser(query, request, reply);
-        if (user === null) return reply;
+        const person = requirePerson(deps, request, reply);
+        if (person === null) return reply;
         const { gameId } = request.params as GameParams;
-        const found = games.snapshotFor(gameId);
-        if (found === null || found.userId !== user.id) {
+        const found = games.snapshotFor(gameId, person);
+        if (found === null) {
             return reply.code(404).send({ error: `no such game of yours`, code: `not_found` });
         }
-        return reply.code(200).send(found.snapshot);
+        return reply.code(200).send(found);
     });
 
     app.post(`/api/games/:gameId/move`, async (request, reply) => {
-        const user = requireUser(query, request, reply);
-        if (user === null) return reply;
+        const person = requirePerson(deps, request, reply);
+        if (person === null) return reply;
         const { gameId } = request.params as GameParams;
         const parsed = humanMoveRequestSchema.safeParse(request.body);
         if (!parsed.success) {
@@ -134,7 +147,7 @@ export function registerGameApi(app: FastifyInstance, deps: GameApiDeps): void {
         }
         // The length-2 array schema parse already proved both cells exist.
         const [first, second] = parsed.data.cells as [{ x: number; y: number }, { x: number; y: number }];
-        const result = games.humanMove(gameId, user.id, [first, second]);
+        const result = games.humanMove(gameId, person, [first, second]);
         if (result.kind === `unknown`) {
             return reply.code(404).send({ error: `no such game of yours`, code: `not_found` });
         }
@@ -145,10 +158,10 @@ export function registerGameApi(app: FastifyInstance, deps: GameApiDeps): void {
     });
 
     app.post(`/api/games/:gameId/resign`, async (request, reply) => {
-        const user = requireUser(query, request, reply);
-        if (user === null) return reply;
+        const person = requirePerson(deps, request, reply);
+        if (person === null) return reply;
         const { gameId } = request.params as GameParams;
-        const result = games.humanResign(gameId, user.id);
+        const result = games.humanResign(gameId, person);
         if (result.kind === `unknown`) {
             return reply.code(404).send({ error: `no such game of yours`, code: `not_found` });
         }

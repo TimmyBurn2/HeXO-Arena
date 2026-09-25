@@ -5,20 +5,20 @@ import {
     gameSnapshotSchema,
     humanMoveRequestSchema,
 } from '../src/games';
-import { defaultOpeningStones, openingStonesSchema } from '../src/stream';
+import { defaultOpeningTurns, openingTurnsSchema } from '../src/stream';
 
 const turnControl = { mode: `turn`, turnTimeMs: 30_000 };
 
-describe('openingStonesSchema', () => {
-    it('accepts every even stone count from none to six', () => {
-        for (const stones of [0, 2, 4, 6]) {
-            expect(openingStonesSchema.parse(stones)).toBe(stones);
+describe('openingTurnsSchema', () => {
+    it('accepts every whole turn count from none to four', () => {
+        for (const turns of [0, 1, 2, 3, 4]) {
+            expect(openingTurnsSchema.parse(turns)).toBe(turns);
         }
     });
 
-    it('rejects odd counts, which would hand someone a half turn', () => {
-        for (const stones of [1, 3, 5, 7, -2]) {
-            expect(openingStonesSchema.safeParse(stones).success).toBe(false);
+    it('rejects a fifth turn, a negative count, and a fraction', () => {
+        for (const turns of [5, -1, 1.5]) {
+            expect(openingTurnsSchema.safeParse(turns).success).toBe(false);
         }
     });
 });
@@ -29,8 +29,8 @@ describe('createGameRequestSchema', () => {
             bot: `opponentbot`,
             timeControl: turnControl,
         });
-        expect(parsed.openingStones).toBe(defaultOpeningStones);
-        expect(defaultOpeningStones).toBe(2);
+        expect(parsed.openingTurns).toBe(defaultOpeningTurns);
+        expect(defaultOpeningTurns).toBe(1);
     });
 
     it('keeps the time-control floors from the stream contract', () => {
@@ -73,6 +73,7 @@ describe('gameSnapshotSchema', () => {
             status: `in-progress`,
             you: `x`,
             opponent: { name: `opponentbot`, rating: 1500, provisional: true },
+            openingTurns: 0,
             board: { cells: [{ x: 0, y: 0, side: `x` }] },
             toMove: `o`,
             clock: { mode: `unlimited` },
@@ -83,6 +84,7 @@ describe('gameSnapshotSchema', () => {
             status: `finished`,
             you: `x`,
             opponent: { name: `opponentbot`, rating: 1500, provisional: true },
+            openingTurns: 0,
             board: { cells: [{ x: 0, y: 0, side: `x` }] },
             winner: null,
             reason: `aborted`,

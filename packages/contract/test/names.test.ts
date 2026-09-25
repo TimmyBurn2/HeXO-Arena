@@ -46,6 +46,8 @@ describe('reserved names', () => {
         `hexoo`,
         `deleted-player`,
         `deleted-1a`,
+        `guests`,
+        `guest-1`,
     ])('%s is not reserved', (name) => {
         expect(isReservedName(name)).toBe(false);
     });

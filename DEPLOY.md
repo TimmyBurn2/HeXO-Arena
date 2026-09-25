@@ -5,10 +5,10 @@ pulled image plus Caddy.
 
 | service | role |
 |---|---|
-| `app` | the server; on an internal network with no route out |
+| `app` | the server and the og shell for `/`, `/bots/*`, `/game/*`; on an internal network with no route out |
 | `egress` | CONNECT-only forward proxy; the app's only way out, to `discord.com:443` alone |
 | `web` | one-shot copy of the static site into the volume Caddy serves |
-| `caddy` | TLS, the static site, and the proxy to the API |
+| `caddy` | TLS, the static site, and the proxy to the API and the shell routes |
 
 The box never builds anything.
 CI builds the image on every push and publishes it to GHCR from `main`,
@@ -272,6 +272,9 @@ TLS and proxying:
   shows a bare newline every 10 s: nothing buffers.
 - [ ] A bot plays a game end to end, engine websocket included.
 - [ ] A Discord login completes.
+- [ ] `curl -s https://<domain>/bots/<bot name> | grep og:description`
+  shows the bot's owner and rating; with the app stopped the same URL still
+  answers the static shell.
 
 Drain and backup:
 

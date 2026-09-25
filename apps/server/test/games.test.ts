@@ -1,5 +1,7 @@
 import {
+    botListingSchema,
     botWithTokenSchema,
+    type BotListing,
     gameSnapshotSchema,
     type BwsMoveRequestPacket,
     type BwsSetupPacket,
@@ -9,6 +11,8 @@ import {
 import http from 'node:http';
 import WebSocket, { type RawData } from 'ws';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { createQuery, type Query } from '../src/db';
+import { recomputeRatings } from '../src/rating-store';
 import { createTestApp, type TestApp } from './helpers';
 
 // A random draw of 0.9 makes the human circles, so with no opening stones
@@ -130,6 +134,33 @@ class Arena {
         const cookie = result.setCookie[0];
         if (cookie === undefined) throw new Error(`no session cookie`);
         return cookie.split(`;`)[0] ?? ``;
+    }
+
+    async guest(): Promise<string> {
+        const result = await this.#call(`POST`, `/api/auth/guest`);
+        expect(result.status).toBe(201);
+        const cookie = result.setCookie[0];
+        if (cookie === undefined) throw new Error(`no guest cookie`);
+        return cookie.split(`;`)[0] ?? ``;
+    }
+
+    logout(cookie: string): Promise<HttpResult> {
+        return this.#call(`POST`, `/api/auth/logout`, { cookie });
+    }
+
+    async directoryEntry(name: string): Promise<BotListing | undefined> {
+        const result = await this.#call(`GET`, `/api/bots`);
+        return botListingSchema.array().parse(json(result)).find((bot) => bot.name === name);
+    }
+
+    count(table: `games` | `moves` | `ratings`): number {
+        // count(*) always answers exactly one row with an integer n.
+        const row = this.world.sqlite.prepare(`select count(*) as n from ${table}`).get() as { n: number };
+        return row.n;
+    }
+
+    get query(): Query {
+        return createQuery(this.world.sqlite);
     }
 
     async createBot(cookie: string, name: string): Promise<string> {
@@ -300,12 +331,12 @@ async function startGame(
     arena: Arena,
     cookie: string,
     timeControl: unknown = turnControl,
-    openingStones = 0,
+    openingTurns = 0,
 ): Promise<{ gameId: string; snapshot: GameSnapshot }> {
     const response = await arena.createGame(cookie, {
         bot: `opponentbot`,
         timeControl,
-        openingStones,
+        openingTurns,
     });
     expect(response.status).toBe(201);
     const snapshot = snapshotOf(response);
@@ -405,6 +436,7 @@ describe('a human plays a connected bot end to end', () => {
         expect(snapshot.you).toBe(`o`);
         expect(snapshot.board.cells).toEqual([{ x: 0, y: 0, side: `x` }]);
         const start = await gameStartOn(bot.stream);
+        expect(start.rated).toBe(true);
         expect(start.engine.socketUrl).toBe(`/api/bot/game/${gameId}/socket`);
         const engine = await arena.dialEngine(start.engine.socketUrl, start.engine.token);
         // The setup packet is origin-only; the request only comes once the
@@ -568,6 +600,16 @@ describe('a human plays a connected bot end to end', () => {
         expect(json(moved)).toMatchObject({ code: `game_over` });
     });
 
+    it('carries the opening turn count on live and stored snapshots', async () => {
+        const { gameId, snapshot } = await startGame(arena, bot.cookie, turnControl, 2);
+        expect(snapshot.openingTurns).toBe(2);
+        expect(snapshot.board.cells).toHaveLength(5);
+        await arena.humanResign(bot.cookie, gameId);
+        const stored = await arena.snapshot(bot.cookie, gameId);
+        expect(finished(stored).clock).toBeUndefined();
+        expect(stored.openingTurns).toBe(2);
+    });
+
     it('replays gameStart and a fresh moveRequest on a mid-game stream reconnect', async () => {
         const { gameId } = await startGame(arena, bot.cookie, unlimitedControl);
         const first = await gameStartOn(bot.stream);
@@ -624,6 +666,89 @@ describe('a human plays a connected bot end to end', () => {
         await vi.advanceTimersByTimeAsync(30_000);
         expect(bot.stream.keepalives).toBe(3);
         expect(bot.stream.events.some((event) => event.type === `gameFinish`)).toBe(false);
+    });
+});
+
+describe('a guest plays a connected bot', () => {
+    let arena: Arena;
+    let bot: Fixture;
+
+    beforeEach(async () => {
+        vi.useFakeTimers(timerFakes);
+        arena = await startArena();
+        bot = await standardBot(arena);
+    });
+
+    afterEach(async () => {
+        bot.dispose();
+        await arena.close();
+        vi.useRealTimers();
+    });
+
+    it('wins a decided game that leaves no row, no move, and no rating delta behind', async () => {
+        const guest = await arena.guest();
+        const before = await arena.directoryEntry(`opponentbot`);
+        const { gameId } = await startGame(arena, guest);
+        const start = await gameStartOn(bot.stream);
+        expect(start.rated).toBe(false);
+        expect(start.opponent.name).toMatch(/^Guest [a-z0-9]{4}$/);
+        expect(start.opponent).toMatchObject({ rating: null, provisional: false });
+        const engine = await arena.dialEngine(start.engine.socketUrl, start.engine.token);
+        await humanMove(arena, guest, gameId, [
+            { x: 1, y: -1 },
+            { x: 2, y: -2 },
+        ]);
+        await botAnswer(engine, [
+            { q: 1, r: 0 },
+            { q: 2, r: 0 },
+        ]);
+        await humanMove(arena, guest, gameId, [
+            { x: 3, y: -3 },
+            { x: 4, y: -4 },
+        ]);
+        await botAnswer(engine, [
+            { q: 3, r: 0 },
+            { q: 4, r: 0 },
+        ]);
+        const winning = finished(
+            await humanMove(arena, guest, gameId, [
+                { x: 5, y: -5 },
+                { x: 6, y: -6 },
+            ]),
+        );
+        expect(winning).toMatchObject({ winner: `o`, reason: `six-in-a-row`, openingTurns: 0 });
+        expect(await finishOn(bot.stream)).toMatchObject({ winner: `o`, reason: `six-in-a-row` });
+
+        expect(arena.count(`games`)).toBe(0);
+        expect(arena.count(`moves`)).toBe(0);
+        expect(arena.count(`ratings`)).toBe(0);
+        expect(recomputeRatings(arena.query)).toBe(0);
+        expect(arena.count(`ratings`)).toBe(0);
+        const after = await arena.directoryEntry(`opponentbot`);
+        expect(after?.rating).toBe(before?.rating);
+        expect(after?.provisional).toBe(before?.provisional);
+
+        expect(finished(await arena.snapshot(guest, gameId)).winner).toBe(`o`);
+        expect((await arena.getGame(bot.cookie, gameId)).status).toBe(404);
+        expect((await arena.getGame(await arena.guest(), gameId)).status).toBe(404);
+    });
+
+    it('holds each guest session to its own creation cooldown', async () => {
+        const guest = await arena.guest();
+        await startGame(arena, guest);
+        const immediate = await arena.createGame(guest, { bot: `opponentbot`, timeControl: turnControl });
+        expect(immediate.status).toBe(400);
+        expect(json(immediate)).toMatchObject({ code: `game_cooldown` });
+        await startGame(arena, await arena.guest());
+    });
+
+    it('aborts the live game when the guest signs out and forgets it after', async () => {
+        const guest = await arena.guest();
+        const { gameId } = await startGame(arena, guest);
+        expect((await arena.logout(guest)).status).toBe(204);
+        expect(await finishOn(bot.stream)).toMatchObject({ gameId, winner: null, reason: `aborted` });
+        expect((await arena.getGame(guest, gameId)).status).toBe(401);
+        expect(arena.count(`games`)).toBe(0);
     });
 });
 

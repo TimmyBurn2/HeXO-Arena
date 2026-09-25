@@ -1,0 +1,61 @@
+import type { ReactNode } from 'react';
+import type { Accepts } from '@hexarena/contract';
+import { Link } from '../router/Link';
+import { turnWindowOf } from './PlayDialog';
+
+/** The bot marker every bot name carries, wherever a name renders. */
+export function BotBadge() {
+    return <span className="badge-bot">bot</span>;
+}
+
+/** Presence is the stream: filled green online, hollow gray offline. */
+export function PresenceDot({ online }: { online: boolean }) {
+    return <span className={online ? `dot` : `dot offline`} title={online ? `online` : `offline`} />;
+}
+
+/** Open for challenges is a separate fact from online. */
+export function OpenTag({ open }: { open: boolean }) {
+    return <span className={open ? `tag` : `tag muted`}>{open ? `open` : `closed`}</span>;
+}
+
+export const provisionalNote = `provisional until the rating deviation settles`;
+
+/** Whole points, tabular, with the trailing question mark when provisional. */
+export function Rating({ value, provisional }: { value: number; provisional: boolean }) {
+    return (
+        <>
+            {String(value)}
+            {provisional ? (
+                <span className="prov" title={provisionalNote}>
+                    ?
+                </span>
+            ) : null}
+        </>
+    );
+}
+
+/** Bot names link to the bot page; human names stay plain text. */
+export function PlayerName({ name, kind }: { name: string; kind: `bot` | `human` }): ReactNode {
+    if (kind === `human`) return name;
+    return (
+        <Link to={`/bots/${encodeURIComponent(name)}`}>
+            {name}
+        </Link>
+    );
+}
+
+/**
+ * The compressed declaration view the directory shows: turn window in
+ * seconds plus the flat modes, nothing when nothing is declared.
+ */
+export function summarizeAccepts(accepts: Accepts | undefined): string {
+    if (accepts === undefined) return ``;
+    const parts: string[] = [];
+    const window = turnWindowOf(accepts);
+    if (window !== null) {
+        parts.push(`turn ${String(window[0] / 1000)}-${String(window[1] / 1000)}s`);
+    }
+    if (accepts.match) parts.push(`match`);
+    if (accepts.unlimited) parts.push(`unlimited`);
+    return parts.join(`, `);
+}

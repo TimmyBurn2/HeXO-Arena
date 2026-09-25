@@ -124,7 +124,7 @@ function forgetUser(deps: AdminDeps, tx: Query, name: string): Outcome {
     const userId = findUserId(tx, nameKeyOf(name));
     if (userId === undefined) return { response: notFound(`no such user`) };
     const botIds = liveBotIdsOf(tx, userId);
-    let aborted = deps.games.abortForHuman(userId);
+    let aborted = deps.games.abortForPerson({ kind: `user`, id: userId });
     for (const botId of botIds) {
         aborted += deps.games.abortForBot(botId);
         deps.presence.close(botId);

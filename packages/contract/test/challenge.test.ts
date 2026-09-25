@@ -15,7 +15,7 @@ describe('createChallengeRequestSchema', () => {
             timeControl: turnControl,
             requestId: `retry-1`,
         });
-        expect(parsed.openingStones).toBe(2);
+        expect(parsed.openingTurns).toBe(1);
         expect(parsed.firstPlayer).toBe(`random`);
     });
 
@@ -28,11 +28,11 @@ describe('createChallengeRequestSchema', () => {
         ).toBe(false);
     });
 
-    it('rejects an odd opening count and a missing request id', () => {
+    it('rejects an opening past four turns and a missing request id', () => {
         expect(
             createChallengeRequestSchema.safeParse({
                 timeControl: turnControl,
-                openingStones: 3,
+                openingTurns: 5,
                 requestId: `retry-1`,
             }).success,
         ).toBe(false);

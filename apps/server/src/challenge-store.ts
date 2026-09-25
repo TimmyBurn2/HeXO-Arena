@@ -19,7 +19,7 @@ export interface ChallengeRecord {
     readonly destName: string;
     readonly requestKey: string;
     readonly timeControl: TimeControl;
-    readonly openingStones: number;
+    readonly openingTurns: number;
     readonly firstPlayer: FirstPlayer;
     readonly status: ChallengeStatus;
     readonly gameId: string | null;
@@ -31,7 +31,7 @@ export interface NewChallenge {
     readonly destBotId: string;
     readonly requestKey: string;
     readonly timeControl: TimeControl;
-    readonly openingStones: number;
+    readonly openingTurns: number;
     readonly firstPlayer: FirstPlayer;
 }
 
@@ -46,7 +46,7 @@ const recordColumns = {
     destName: destBots.name,
     requestKey: challenges.requestKey,
     timeControl: challenges.timeControl,
-    openingStones: challenges.openingStones,
+    openingTurns: challenges.openingTurns,
     firstPlayer: challenges.firstPlayer,
     status: challenges.status,
     gameId: challenges.gameId,
@@ -61,7 +61,7 @@ function toRecord(row: {
     destName: string;
     requestKey: string;
     timeControl: string;
-    openingStones: number;
+    openingTurns: number;
     firstPlayer: string;
     status: string;
     gameId: string | null;
@@ -77,7 +77,7 @@ function toRecord(row: {
         destName: row.destName,
         requestKey: row.requestKey,
         timeControl: timeControlSchema.parse(JSON.parse(row.timeControl)),
-        openingStones: row.openingStones,
+        openingTurns: row.openingTurns,
         firstPlayer: firstPlayerSchema.parse(row.firstPlayer),
         status: row.status as ChallengeStatus,
         gameId: row.gameId,
@@ -101,7 +101,7 @@ export function insertChallenge(
                 destBotId: challenge.destBotId,
                 requestKey: challenge.requestKey,
                 timeControl: JSON.stringify(challenge.timeControl),
-                openingStones: challenge.openingStones,
+                openingTurns: challenge.openingTurns,
                 firstPlayer: challenge.firstPlayer,
                 status: `created`,
                 createdAt: nowSeconds(),

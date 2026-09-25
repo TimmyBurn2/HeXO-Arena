@@ -19,7 +19,7 @@ import { randomFloat } from '../src/random';
 import { beginGeneration, retireGeneration } from '../src/site-state';
 import { FakeStreamSocket } from './helpers';
 
-const user = { id: `user-1`, name: `humanplayer` };
+const user = { kind: `user` as const, id: `user-1`, name: `humanplayer` };
 const bot = { id: `bot-1`, name: `opponentbot` };
 const turnControl = { mode: `turn` as const, turnTimeMs: 5_000 };
 const matchControl = { mode: `match` as const, mainTimeMs: 60_000, incrementMs: 2_000 };
@@ -124,12 +124,12 @@ describe('game creation', () => {
         vi.useRealTimers();
     });
 
-    it('places the origin and the opening stones and reports them as turns', () => {
+    it('places the origin and the opening turns and reports them as random turns', () => {
         const created = world.games.createGame({
-            user,
+            person: user,
             bot,
             timeControl: unlimitedControl,
-            openingStones: 4,
+            openingTurns: 2,
         });
         const start = latestEvent(world, `gameStart`);
         expect(created.snapshot.board.cells).toHaveLength(5);
@@ -144,10 +144,10 @@ describe('game creation', () => {
     it('assigns colors by lot and hands the first turn to the bot when it is drawn x', () => {
         const world = harness(() => 0.1);
         const created = world.games.createGame({
-            user,
+            person: user,
             bot,
             timeControl: unlimitedControl,
-            openingStones: 0,
+            openingTurns: 0,
         });
         expect(created.snapshot.you).toBe(`x`);
         const replay = world.games.replayForBot(bot.id);
@@ -157,7 +157,7 @@ describe('game creation', () => {
     });
 
     it('carries a short-lived engine session token that every replay rotates', () => {
-        world.games.createGame({ user, bot, timeControl: unlimitedControl, openingStones: 0 });
+        world.games.createGame({ person: user, bot, timeControl: unlimitedControl, openingTurns: 0 });
         const start = latestEvent(world, `gameStart`);
         if (start?.type !== `gameStart`) throw new Error(`no gameStart`);
         expect(start.engine.socketUrl).toBe(`/api/bot/game/${start.gameId}/socket`);
@@ -175,7 +175,7 @@ describe('game creation', () => {
         );
         insert.run(user.id, null, 1234.4, 60);
         insert.run(null, bot.id, 1777.6, 200);
-        const created = world.games.createGame({ user, bot, timeControl: unlimitedControl, openingStones: 0 });
+        const created = world.games.createGame({ person: user, bot, timeControl: unlimitedControl, openingTurns: 0 });
         const start = latestEvent(world, `gameStart`);
         if (start?.type !== `gameStart`) throw new Error(`no gameStart`);
         expect(start.opponent).toEqual({ name: `humanplayer`, rating: 1234, provisional: false });
@@ -184,7 +184,7 @@ describe('game creation', () => {
 
     it('counts active games per bot for the concurrent cap', () => {
         for (let i = 0; i < 4; i += 1) {
-            world.games.createGame({ user, bot, timeControl: unlimitedControl, openingStones: 0 });
+            world.games.createGame({ person: user, bot, timeControl: unlimitedControl, openingTurns: 0 });
         }
         expect(world.games.activeGameCount(bot.id)).toBe(4);
     });
@@ -203,10 +203,10 @@ describe('engine session', () => {
         // pending request.
         world = harness(humanCircles);
         const created = world.games.createGame({
-            user,
+            person: user,
             bot,
             timeControl: unlimitedControl,
-            openingStones: 2,
+            openingTurns: 1,
         });
         gameId = created.gameId;
         const start = latestEvent(world, `gameStart`);
@@ -255,7 +255,7 @@ describe('engine session', () => {
                 request_id: 99,
             }),
         );
-        const snapshot = world.games.snapshotFor(gameId)?.snapshot;
+        const snapshot = world.games.snapshotFor(gameId, user);
         expect(snapshot?.status).toBe(`in-progress`);
         expect(snapshot?.board.cells).toHaveLength(3);
     });
@@ -273,13 +273,13 @@ describe('engine session', () => {
                 request_id: 1,
             }),
         );
-        const snapshot = world.games.snapshotFor(gameId)?.snapshot;
+        const snapshot = world.games.snapshotFor(gameId, user);
         if (snapshot?.status !== `in-progress`) throw new Error(`not in progress`);
         expect(snapshot.board.cells).toHaveLength(5);
         expect(snapshot.toMove).toBe(`o`);
-        const finish = world.games.humanResign(gameId, user.id);
+        const finish = world.games.humanResign(gameId, user);
         expect(finish).toMatchObject({ kind: `resigned` });
-        const after = world.games.snapshotFor(gameId)?.snapshot;
+        const after = world.games.snapshotFor(gameId, user);
         if (after?.status !== `finished`) throw new Error(`not finished`);
         expect(after.board.cells).toHaveLength(5);
         expect(after.reason).toBe(`surrender`);
@@ -316,7 +316,7 @@ describe('engine session', () => {
         if (claimed === null) throw new Error(`claim failed`);
         world.games.sessionMessage(claimed.side, claimed.game, `{not json`);
         expect(socket.closed).toBe(true);
-        expect(world.games.snapshotFor(gameId)?.snapshot.status).toBe(`in-progress`);
+        expect(world.games.snapshotFor(gameId, user)?.status).toBe(`in-progress`);
     });
 
     it('replaces a stale session when a fresh connection dials in', () => {
@@ -346,10 +346,10 @@ describe('clocks', () => {
 
     it('forfeits the side to move when a turn clock runs out', async () => {
         const { gameId } = world.games.createGame({
-            user,
+            person: user,
             bot,
             timeControl: turnControl,
-            openingStones: 0,
+            openingTurns: 0,
         });
         await vi.advanceTimersByTimeAsync(5_000);
         expect(latestEvent(world, `gameFinish`)).toEqual({
@@ -362,12 +362,12 @@ describe('clocks', () => {
 
     it('resets the turn budget after every move', async () => {
         const created = world.games.createGame({
-            user,
+            person: user,
             bot,
             timeControl: turnControl,
-            openingStones: 0,
+            openingTurns: 0,
         });
-        const moved = world.games.humanMove(created.gameId, user.id, [
+        const moved = world.games.humanMove(created.gameId, user, [
             { x: 1, y: 0 },
             { x: 2, y: 0 },
         ]);
@@ -376,20 +376,20 @@ describe('clocks', () => {
         if (request?.type !== `moveRequest`) throw new Error(`no moveRequest`);
         expect(request.request.time_limit).toBe(5);
         await vi.advanceTimersByTimeAsync(4_999);
-        expect(world.games.snapshotFor(created.gameId)?.snapshot.status).toBe(`in-progress`);
+        expect(world.games.snapshotFor(created.gameId, user)?.status).toBe(`in-progress`);
         await vi.advanceTimersByTimeAsync(1);
         expect(latestEvent(world, `gameFinish`)).toMatchObject({ reason: `timeout`, winner: `o` });
     });
 
     it('deducts main time, adds the increment, and reports both sides', async () => {
         const created = world.games.createGame({
-            user,
+            person: user,
             bot,
             timeControl: matchControl,
-            openingStones: 0,
+            openingTurns: 0,
         });
         await vi.advanceTimersByTimeAsync(10_000);
-        const moved = world.games.humanMove(created.gameId, user.id, [
+        const moved = world.games.humanMove(created.gameId, user, [
             { x: 1, y: 0 },
             { x: 2, y: 0 },
         ]);
@@ -405,10 +405,10 @@ describe('clocks', () => {
 
     it('ends an unlimited game at the wall cap with no winner', async () => {
         const { gameId } = world.games.createGame({
-            user,
+            person: user,
             bot,
             timeControl: unlimitedControl,
-            openingStones: 0,
+            openingTurns: 0,
         });
         await vi.advanceTimersByTimeAsync(unlimitedWallCapMs - 1);
         expect(world.games.activeGameCount(bot.id)).toBe(1);
@@ -438,10 +438,10 @@ describe('orphan rule', () => {
 
     it('forfeits the games of a bot whose stream stays gone for 30 s', async () => {
         const created = world.games.createGame({
-            user,
+            person: user,
             bot,
             timeControl: unlimitedControl,
-            openingStones: 0,
+            openingTurns: 0,
         });
         world.stream.emitClose();
         await vi.advanceTimersByTimeAsync(orphanForfeitMs - 1);
@@ -449,32 +449,32 @@ describe('orphan rule', () => {
         await vi.advanceTimersByTimeAsync(1);
         // The stream is gone, so the forfeit is read back from the record.
         expect(world.games.activeGameCount(bot.id)).toBe(0);
-        const snapshot = world.games.snapshotFor(created.gameId)?.snapshot;
+        const snapshot = world.games.snapshotFor(created.gameId, user);
         if (snapshot?.status !== `finished`) throw new Error(`not finished`);
         expect(snapshot.winner).toBe(`o`);
         expect(snapshot.reason).toBe(`disconnect`);
     });
 
     it('spares the games of a bot that reconnects inside the window', async () => {
-        const created = world.games.createGame({ user, bot, timeControl: unlimitedControl, openingStones: 0 });
+        const created = world.games.createGame({ person: user, bot, timeControl: unlimitedControl, openingTurns: 0 });
         world.stream.emitClose();
         await vi.advanceTimersByTimeAsync(orphanForfeitMs - 1);
         const fresh = new FakeStreamSocket();
         world.presence.attach(bot.id, fresh, true);
         await vi.advanceTimersByTimeAsync(orphanForfeitMs * 2);
         expect(world.games.activeGameCount(bot.id)).toBe(1);
-        const still = world.games.snapshotFor(created.gameId)?.snapshot;
+        const still = world.games.snapshotFor(created.gameId, user);
         expect(still?.status).toBe(`in-progress`);
     });
 
     it('aborts unrated instead once the generation of the process is retired', async () => {
         const query = createQuery(world.sqlite);
-        const created = world.games.createGame({ user, bot, timeControl: unlimitedControl, openingStones: 0 });
+        const created = world.games.createGame({ person: user, bot, timeControl: unlimitedControl, openingTurns: 0 });
         const before = readRating(query, { kind: `bot`, id: bot.id });
         retireGeneration(query, 1);
         world.stream.emitClose();
         await vi.advanceTimersByTimeAsync(orphanForfeitMs);
-        const snapshot = world.games.snapshotFor(created.gameId)?.snapshot;
+        const snapshot = world.games.snapshotFor(created.gameId, user);
         if (snapshot?.status !== `finished`) throw new Error(`not finished`);
         expect(snapshot.winner).toBeNull();
         expect(snapshot.reason).toBe(`aborted`);
@@ -482,7 +482,7 @@ describe('orphan rule', () => {
     });
 
     it('drops every timer on stop, so a late close event arms nothing', async () => {
-        world.games.createGame({ user, bot, timeControl: unlimitedControl, openingStones: 0 });
+        world.games.createGame({ person: user, bot, timeControl: unlimitedControl, openingTurns: 0 });
         world.games.stop();
         expect(world.games.activeGameCount(bot.id)).toBe(0);
         world.stream.emitClose();
@@ -507,19 +507,19 @@ describe('persistence', () => {
 
     it('answers finished games from the stored log and rejects further moves', () => {
         const created = world.games.createGame({
-            user,
+            person: user,
             bot,
             timeControl: unlimitedControl,
-            openingStones: 0,
+            openingTurns: 0,
         });
-        const moved = world.games.humanMove(created.gameId, user.id, [
+        const moved = world.games.humanMove(created.gameId, user, [
             { x: 3, y: 0 },
             { x: 4, y: 0 },
         ]);
         expect(moved.kind).toBe(`moved`);
-        const resigned = world.games.humanResign(created.gameId, user.id);
+        const resigned = world.games.humanResign(created.gameId, user);
         expect(resigned.kind).toBe(`resigned`);
-        const replay = world.games.humanMove(created.gameId, user.id, [
+        const replay = world.games.humanMove(created.gameId, user, [
             { x: 5, y: 0 },
             { x: 6, y: 0 },
         ]);
@@ -528,12 +528,12 @@ describe('persistence', () => {
 
     it('rates both sides when a game ends with a winner', () => {
         const created = world.games.createGame({
-            user,
+            person: user,
             bot,
             timeControl: unlimitedControl,
-            openingStones: 0,
+            openingTurns: 0,
         });
-        world.games.humanResign(created.gameId, user.id);
+        world.games.humanResign(created.gameId, user);
         const query = createQuery(world.sqlite);
         expect(readRating(query, { kind: `human`, id: user.id }).rating).toBeLessThan(1000);
         expect(readRating(query, { kind: `bot`, id: bot.id }).rating).toBeGreaterThan(1500);
@@ -541,17 +541,17 @@ describe('persistence', () => {
 
     it('aborts whatever an earlier process left unfinished', () => {
         const created = world.games.createGame({
-            user,
+            person: user,
             bot,
             timeControl: unlimitedControl,
-            openingStones: 0,
+            openingTurns: 0,
         });
         abortUnfinishedGames(createQuery(world.sqlite));
         // The sweep is a boot step: the next process reads with an empty
         // registry, so the record answers on its own.
         const query = createQuery(world.sqlite);
         const restarted = new GameRegistry({ query, presence: new PresenceRegistry(), generation: beginGeneration(query) });
-        const snapshot = restarted.snapshotFor(created.gameId)?.snapshot;
+        const snapshot = restarted.snapshotFor(created.gameId, user);
         if (snapshot?.status !== `finished`) throw new Error(`not finished`);
         expect(snapshot.winner).toBeNull();
         expect(snapshot.reason).toBe(`aborted`);
@@ -591,12 +591,12 @@ describe('bot-vs-bot games', () => {
             .find((event) => event.type === type);
     }
 
-    function create(firstPlayer: `challenger` | `challenged` | `random`, openingStones = 0): string {
+    function create(firstPlayer: `challenger` | `challenged` | `random`, openingTurns = 0): string {
         return world.games.createBotGame({
             challenger,
             dest: { id: bot.id, name: bot.name },
             timeControl: unlimitedControl,
-            openingStones,
+            openingTurns,
             firstPlayer,
         }).gameId;
     }
@@ -658,7 +658,7 @@ describe('bot-vs-bot games', () => {
         expect(secondRequest.previous).toHaveLength(1);
         expect(world.games.activeGameCount(challenger.id)).toBe(1);
         expect(world.games.activeGameCount(bot.id)).toBe(1);
-        expect(world.games.activeHumanGameCount(user.id)).toBe(0);
+        expect(world.games.activeHumanGameCount(user)).toBe(0);
     });
 
     it('hands the win to the other side and tells both bots when a move is illegal', () => {
@@ -699,7 +699,7 @@ describe('bot-vs-bot games', () => {
     });
 
     it('seats the named first player regardless of opening parity', () => {
-        create(`challenger`, 2);
+        create(`challenger`, 1);
         expect(gameStartFor(challenger.id).side).toBe(`x`);
         create(`challenged`, 0);
         expect(gameStartFor(bot.id).side).toBe(`o`);

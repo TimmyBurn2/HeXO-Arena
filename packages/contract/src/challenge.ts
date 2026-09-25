@@ -1,8 +1,8 @@
 import { z } from 'zod';
 import {
-    defaultOpeningStones,
+    defaultOpeningTurns,
     firstPlayerSchema,
-    openingStonesSchema,
+    openingTurnsSchema,
     timeControlSchema,
 } from './stream';
 
@@ -18,7 +18,7 @@ export const challengeRequestIdSchema = z.string().min(1).max(128);
 
 export const createChallengeRequestSchema = z.object({
     timeControl: timeControlSchema,
-    openingStones: openingStonesSchema.default(defaultOpeningStones),
+    openingTurns: openingTurnsSchema.default(defaultOpeningTurns),
     firstPlayer: firstPlayerSchema.default(`random`),
     requestId: challengeRequestIdSchema,
 });

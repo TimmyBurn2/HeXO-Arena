@@ -12,11 +12,13 @@ import {
     type FirstPlayer,
     type GameClock,
     type GameSnapshot,
+    type SeatPlayer,
     type Side,
     type StreamEvent,
     type StreamPlayer,
     type TimeControl,
 } from '@hexarena/contract';
+import { randomUUID } from 'node:crypto';
 import {
     emptyPosition,
     hexDistance,
@@ -29,12 +31,14 @@ import {
 } from '@hexarena/rules';
 import type { Query } from './db';
 import {
+    findFinishedHeadline,
     findGame,
     insertBotGame,
     insertGame,
     insertMove,
     recordFinish,
     replayPosition,
+    type GameHeadline,
 } from './game-store';
 import type { PresenceRegistry } from './presence';
 import { randomFloat } from './random';
@@ -104,10 +108,19 @@ interface BotSeat {
     orphanTimer: Timer | null;
 }
 
+/** Who a human-facing action names: an account or an anonymous guest. */
+export interface PersonRef {
+    readonly kind: `user` | `guest`;
+    readonly id: string;
+}
+
+export interface Person extends PersonRef {
+    readonly name: string;
+}
+
 interface HumanSeat {
     readonly kind: `human`;
-    readonly userId: string;
-    readonly name: string;
+    readonly person: Person;
 }
 
 type Seat = BotSeat | HumanSeat;
@@ -116,7 +129,7 @@ export interface LiveGame {
     readonly id: string;
     readonly seats: { readonly x: Seat; readonly o: Seat };
     readonly timeControl: TimeControl;
-    readonly openingStones: number;
+    readonly openingTurns: number;
     position: Position;
     turnLog: readonly TurnEntry[];
     nextSeq: number;
@@ -185,8 +198,20 @@ function opponentOf(side: Side): Side {
     return side === `x` ? `o` : `x`;
 }
 
-function humanSeat(user: { id: string; name: string }): HumanSeat {
-    return { kind: `human`, userId: user.id, name: user.name };
+function humanSeat(person: Person): HumanSeat {
+    return { kind: `human`, person };
+}
+
+function seatName(seat: Seat): string {
+    return seat.kind === `bot` ? seat.name : seat.person.name;
+}
+
+function seatNames(game: LiveGame): Record<Side, string> {
+    return { x: seatName(game.seats.x), o: seatName(game.seats.o) };
+}
+
+function samePerson(one: PersonRef, other: PersonRef): boolean {
+    return one.kind === other.kind && one.id === other.id;
 }
 
 function botSeat(bot: { id: string; name: string }): BotSeat {
@@ -198,6 +223,12 @@ function humanSide(game: LiveGame): { side: Side; seat: HumanSeat } | null {
     if (game.seats.x.kind === `human`) return { side: `x`, seat: game.seats.x };
     if (game.seats.o.kind === `human`) return { side: `o`, seat: game.seats.o };
     return null;
+}
+
+// A game against a guest lives in memory alone: no row, no moves, no
+// finish, so neither the rating fold nor a recompute can ever see it.
+function isGuestGame(game: LiveGame): boolean {
+    return humanSide(game)?.seat.person.kind === `guest`;
 }
 
 function secondsFromMs(ms: number): number {
@@ -295,6 +326,12 @@ function moveErrorCode(rejection: Rejection): MoveErrorCode {
 
 export class GameRegistry {
     readonly #games = new Map<string, LiveGame>();
+    // Finished guest games answer from here while their guest session
+    // lives; the session's end forgets them.
+    readonly #finishedGuestGames = new Map<
+        string,
+        { guestId: string; snapshot: GameSnapshot; headline: GameHeadline }
+    >();
     readonly #query: Query;
     readonly #presence: PresenceRegistry;
     readonly #generation: number;
@@ -321,41 +358,45 @@ export class GameRegistry {
         return count;
     }
 
-    activeHumanGameCount(userId: string): number {
+    activeHumanGameCount(person: PersonRef): number {
         let count = 0;
         for (const game of this.#games.values()) {
-            if (humanSide(game)?.seat.userId === userId) count += 1;
+            const human = humanSide(game);
+            if (human !== null && samePerson(human.seat.person, person)) count += 1;
         }
         return count;
     }
 
     createGame(input: {
-        user: { id: string; name: string };
+        person: Person;
         bot: { id: string; name: string };
         timeControl: TimeControl;
-        openingStones: number;
+        openingTurns: number;
     }): { gameId: string; snapshot: GameSnapshot } {
         const userSide: Side = this.#random() < 0.5 ? `x` : `o`;
-        const { position, turns } = this.#placeOpening(input.openingStones);
-        const gameId = insertGame(this.#query, {
-            userId: input.user.id,
-            botId: input.bot.id,
-            userSide,
-            timeControl: input.timeControl,
-            opening: position.stones.map((stone) => ({
-                x: stone.x,
-                y: stone.y,
-                player: stone.player,
-            })),
-        });
+        const { position, turns } = this.#placeOpening(input.openingTurns);
+        const gameId =
+            input.person.kind === `guest`
+                ? `g_${randomUUID()}`
+                : insertGame(this.#query, {
+                      userId: input.person.id,
+                      botId: input.bot.id,
+                      userSide,
+                      timeControl: input.timeControl,
+                      opening: position.stones.map((stone) => ({
+                          x: stone.x,
+                          y: stone.y,
+                          player: stone.player,
+                      })),
+                  });
         const game: LiveGame = {
             id: gameId,
             seats:
                 userSide === `x`
-                    ? { x: humanSeat(input.user), o: botSeat(input.bot) }
-                    : { x: botSeat(input.bot), o: humanSeat(input.user) },
+                    ? { x: humanSeat(input.person), o: botSeat(input.bot) }
+                    : { x: botSeat(input.bot), o: humanSeat(input.person) },
             timeControl: input.timeControl,
-            openingStones: input.openingStones,
+            openingTurns: input.openingTurns,
             position,
             turnLog: turns,
             nextSeq: 1,
@@ -377,10 +418,10 @@ export class GameRegistry {
         challenger: { id: string; name: string };
         dest: { id: string; name: string };
         timeControl: TimeControl;
-        openingStones: number;
+        openingTurns: number;
         firstPlayer: FirstPlayer;
     }): { gameId: string } {
-        const { position, turns } = this.#placeOpening(input.openingStones);
+        const { position, turns } = this.#placeOpening(input.openingTurns);
         // firstPlayer names who takes the first player turn; the placed
         // opening decides which side that is, parity included.
         const firstMover = sideOf(playerToMove(position));
@@ -410,7 +451,7 @@ export class GameRegistry {
                     ? { x: botSeat(input.challenger), o: botSeat(input.dest) }
                     : { x: botSeat(input.dest), o: botSeat(input.challenger) },
             timeControl: input.timeControl,
-            openingStones: input.openingStones,
+            openingTurns: input.openingTurns,
             position,
             turnLog: turns,
             nextSeq: 1,
@@ -431,12 +472,12 @@ export class GameRegistry {
     // The origin plus pairs of alternating random legal stones within the
     // opening radius; pairs keep turns whole, so the first player turn
     // always wants exactly two placements.
-    #placeOpening(stones: number): { position: Position; turns: TurnEntry[] } {
+    #placeOpening(openingTurns: number): { position: Position; turns: TurnEntry[] } {
         const origin = place(emptyPosition, { x: 0, y: 0 });
         if (!origin.ok) throw new Error(`the empty board rejected the origin`);
         let position = origin.position;
         const turns: TurnEntry[] = [];
-        for (let turn = 0; turn < stones / 2; turn += 1) {
+        for (let turn = 0; turn < openingTurns; turn += 1) {
             const side = sideOf(playerToMove(position));
             const first = this.#randomOpeningCell(position);
             const afterFirst = place(position, first);
@@ -463,66 +504,84 @@ export class GameRegistry {
             }
         }
         const chosen = candidates[Math.floor(this.#random() * candidates.length)];
-        // 18 cells fit the radius and at most 6 stones are ever taken.
+        // 18 cells fit the radius and at most 8 stones are ever taken.
         if (chosen === undefined) throw new Error(`opening candidates exhausted`);
         return chosen;
     }
 
-    snapshotFor(gameId: string): { userId: string | null; snapshot: GameSnapshot } | null {
+    /**
+     * Any game by id, live or finished, bot-vs-bot or guest: spectating is
+     * free, so who plays and how it stands is public.
+     */
+    headline(gameId: string): GameHeadline | null {
         const live = this.#games.get(gameId);
         if (live !== undefined) {
-            return { userId: humanSide(live)?.seat.userId ?? null, snapshot: this.#liveSnapshot(live) };
+            return { status: `live`, names: seatNames(live), toMove: sideToMove(live), timeControl: live.timeControl };
+        }
+        return this.#finishedGuestGames.get(gameId)?.headline ?? findFinishedHeadline(this.#query, gameId) ?? null;
+    }
+
+    // Unknown and not-yours read the same, so a game id reveals nothing.
+    snapshotFor(gameId: string, person: PersonRef): GameSnapshot | null {
+        const live = this.#games.get(gameId);
+        if (live !== undefined) {
+            const human = humanSide(live);
+            return human !== null && samePerson(human.seat.person, person) ? this.#liveSnapshot(live) : null;
+        }
+        if (person.kind === `guest`) {
+            const finished = this.#finishedGuestGames.get(gameId);
+            return finished?.guestId === person.id ? finished.snapshot : null;
         }
         const record = findGame(this.#query, gameId);
-        // A bot-vs-bot game belongs to no human, so every user reads it as
-        // unknown, and an unfinished game without a live registry entry
-        // belongs to an earlier process.
-        if (record === undefined || record.finishReason === null || record.kind !== `human`) {
+        // A bot-vs-bot game belongs to no human, and an unfinished game
+        // without a live registry entry belongs to an earlier process.
+        if (record?.kind !== `human` || record.finishReason === null || record.userId !== person.id) {
             return null;
         }
         return {
-            userId: record.userId,
-            snapshot: {
-                gameId: record.id,
-                status: `finished`,
-                you: record.userSide,
-                opponent: streamPlayerOf(this.#query, { kind: `bot`, id: record.botId }, record.botName),
-                board: { cells: boardCells(replayPosition(this.#query, record)) },
-                winner: record.winner,
-                reason: record.finishReason,
-            },
+            gameId: record.id,
+            status: `finished`,
+            you: record.userSide,
+            opponent: streamPlayerOf(this.#query, { kind: `bot`, id: record.botId }, record.botName),
+            // The stored opening holds the origin stone and then two per turn.
+            openingTurns: (record.opening.length - 1) / 2,
+            board: { cells: boardCells(replayPosition(this.#query, record)) },
+            winner: record.winner,
+            reason: record.finishReason,
         };
     }
 
-    humanMove(gameId: string, userId: string, cells: readonly [Coord, Coord]): HumanMoveResult {
+    humanMove(gameId: string, person: PersonRef, cells: readonly [Coord, Coord]): HumanMoveResult {
         const game = this.#games.get(gameId);
-        if (game === undefined) return this.#storedReject(gameId, userId);
+        if (game === undefined) return this.#finishedReject(gameId, person);
         const human = humanSide(game);
-        if (human === null || human.seat.userId !== userId) return { kind: `unknown` };
+        if (human === null || !samePerson(human.seat.person, person)) return { kind: `unknown` };
         if (sideToMove(game) !== human.side) return { kind: `rejected`, code: `not_your_turn` };
         const applied = applyTurn(game.position, cells);
         if (!applied.ok) return { kind: `rejected`, code: moveErrorCode(applied.rejection) };
         this.#completeTurn(game, cells, human.side, applied);
         // A winning move finished the game and removed it from the live
         // map, so the snapshot comes from wherever the game now lives.
-        return { kind: `moved`, snapshot: this.requireSnapshot(gameId) };
+        return { kind: `moved`, snapshot: this.requireSnapshot(gameId, person) };
     }
 
-    humanResign(gameId: string, userId: string): ResignResult {
+    humanResign(gameId: string, person: PersonRef): ResignResult {
         const game = this.#games.get(gameId);
-        if (game === undefined) return this.#storedReject(gameId, userId);
+        if (game === undefined) return this.#finishedReject(gameId, person);
         const human = humanSide(game);
-        if (human === null || human.seat.userId !== userId) return { kind: `unknown` };
+        if (human === null || !samePerson(human.seat.person, person)) return { kind: `unknown` };
         this.#finish(game, opponentOf(human.side), `surrender`);
-        return { kind: `resigned`, snapshot: this.requireSnapshot(gameId) };
+        return { kind: `resigned`, snapshot: this.requireSnapshot(gameId, person) };
     }
 
     botResign(gameId: string, token: string): BotResignResult {
         const holder = this.claimSession(gameId, token);
         if (holder === null) {
-            return findGame(this.#query, gameId) === undefined
-                ? { kind: `unknown` }
-                : { kind: `unauthorized` };
+            const known =
+                this.#games.has(gameId) ||
+                this.#finishedGuestGames.has(gameId) ||
+                findGame(this.#query, gameId) !== undefined;
+            return known ? { kind: `unauthorized` } : { kind: `unknown` };
         }
         this.#finish(holder.game, opponentOf(holder.side), `surrender`);
         return { kind: `resigned` };
@@ -530,19 +589,15 @@ export class GameRegistry {
 
     // A finished game still answers actions with its result instead of a
     // 404, so a caller can tell stale from unknown.
-    #storedReject(gameId: string, userId: string): { kind: `rejected`; code: `game_over` } | { kind: `unknown` } {
-        const record = findGame(this.#query, gameId);
-        if (record === undefined || record.kind !== `human` || record.userId !== userId) {
-            return { kind: `unknown` };
-        }
-        return { kind: `rejected`, code: `game_over` };
+    #finishedReject(gameId: string, person: PersonRef): { kind: `rejected`; code: `game_over` } | { kind: `unknown` } {
+        return this.snapshotFor(gameId, person) === null ? { kind: `unknown` } : { kind: `rejected`, code: `game_over` };
     }
 
-    requireSnapshot(gameId: string): GameSnapshot {
-        const found = this.snapshotFor(gameId);
-        // Every caller finishes the game first, so the row exists.
+    requireSnapshot(gameId: string, person: PersonRef): GameSnapshot {
+        const found = this.snapshotFor(gameId, person);
+        // Every caller finishes the game first, so the record exists.
         if (found === null) throw new Error(`finished game left no record: ${gameId}`);
-        return found.snapshot;
+        return found;
     }
 
     // Possession of the current, unexpired session token is the whole
@@ -643,7 +698,7 @@ export class GameRegistry {
         game.pending = null;
         game.position = applied.position;
         game.turnLog = [...game.turnLog, { side, cells }];
-        insertMove(this.#query, { gameId: game.id, seq: game.nextSeq, side, cells });
+        if (!isGuestGame(game)) insertMove(this.#query, { gameId: game.id, seq: game.nextSeq, side, cells });
         game.nextSeq += 1;
         if (applied.win !== null) {
             this.#finish(game, sideOf(applied.win.player), `six-in-a-row`);
@@ -729,10 +784,22 @@ export class GameRegistry {
         return true;
     }
 
-    abortForHuman(userId: string): number {
-        const seated = [...this.#games.values()].filter((game) => humanSide(game)?.seat.userId === userId);
+    abortForPerson(person: PersonRef): number {
+        const seated = [...this.#games.values()].filter((game) => {
+            const human = humanSide(game);
+            return human !== null && samePerson(human.seat.person, person);
+        });
         for (const game of seated) this.#finish(game, null, `aborted`);
         return seated.length;
+    }
+
+    // A guest session's end takes its games along: the live ones abort,
+    // unrated as they always were, and the finished ones are forgotten.
+    endGuest(guestId: string): void {
+        this.abortForPerson({ kind: `guest`, id: guestId });
+        for (const [gameId, finished] of [...this.#finishedGuestGames]) {
+            if (finished.guestId === guestId) this.#finishedGuestGames.delete(gameId);
+        }
     }
 
     abortForBot(botId: string): number {
@@ -802,6 +869,7 @@ export class GameRegistry {
             }
         }
         this.#games.clear();
+        this.#finishedGuestGames.clear();
     }
 
     replayForBot(botId: string): StreamEvent[] {
@@ -836,8 +904,8 @@ export class GameRegistry {
             side,
             opponent: this.#playerOf(game.seats[opponentOf(side)]),
             timeControl: game.timeControl,
-            ...(game.openingStones > 0 && { opening: { randomTurns: game.openingStones / 2 } }),
-            rated: false,
+            ...(game.openingTurns > 0 && { opening: { randomTurns: game.openingTurns } }),
+            rated: !isGuestGame(game),
             engine: {
                 socketUrl: botGameSocketPath.replace(`{gameId}`, game.id),
                 token: seat.sessionToken.token,
@@ -871,7 +939,16 @@ export class GameRegistry {
             clearTimeout(game.wallTimer);
             game.wallTimer = null;
         }
-        recordFinish(this.#query, game.id, { winner, reason });
+        const human = humanSide(game);
+        if (human?.seat.person.kind === `guest`) {
+            this.#finishedGuestGames.set(game.id, {
+                guestId: human.seat.person.id,
+                snapshot: { ...this.#seatedView(game, human.side), status: `finished`, winner, reason },
+                headline: { status: `finished`, names: seatNames(game), winner, reason },
+            });
+        } else {
+            recordFinish(this.#query, game.id, { winner, reason });
+        }
         for (const side of [`x`, `o`] as const) {
             const seat = game.seats[side];
             if (seat.kind !== `bot`) continue;
@@ -902,20 +979,36 @@ export class GameRegistry {
         // Every snapshot reader is a human action, so the human seat exists.
         if (human === null) throw new Error(`snapshot for a game without a human: ${game.id}`);
         return {
-            gameId: game.id,
+            ...this.#seatedView(game, human.side),
             status: `in-progress`,
-            you: human.side,
-            opponent: this.#playerOf(game.seats[opponentOf(human.side)]),
-            board: { cells: boardCells(game.position) },
             toMove: sideToMove(game),
             clock: liveClockView(game),
         };
     }
 
-    #playerOf(seat: Seat): StreamPlayer {
-        return seat.kind === `bot`
-            ? streamPlayerOf(this.#query, { kind: `bot`, id: seat.botId }, seat.name)
-            : streamPlayerOf(this.#query, { kind: `human`, id: seat.userId }, seat.name);
+    #seatedView(game: LiveGame, humanSideOf: Side) {
+        return {
+            gameId: game.id,
+            you: humanSideOf,
+            opponent: this.#botPlayerOf(game.seats[opponentOf(humanSideOf)]),
+            openingTurns: game.openingTurns,
+            board: { cells: boardCells(game.position) },
+        };
+    }
+
+    // A human game seats one human against one bot, so the seat across
+    // from the human is always a bot.
+    #botPlayerOf(seat: Seat): StreamPlayer {
+        if (seat.kind !== `bot`) throw new Error(`a human faces a human seat`);
+        return streamPlayerOf(this.#query, { kind: `bot`, id: seat.botId }, seat.name);
+    }
+
+    #playerOf(seat: Seat): SeatPlayer {
+        if (seat.kind === `bot`) return this.#botPlayerOf(seat);
+        const person = seat.person;
+        return person.kind === `guest`
+            ? { name: person.name, rating: null, provisional: false }
+            : streamPlayerOf(this.#query, { kind: `human`, id: person.id }, person.name);
     }
 
     #seatsBot(game: LiveGame, botId: string): Side | null {

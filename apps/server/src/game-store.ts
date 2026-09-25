@@ -9,7 +9,8 @@ import { and, count, desc, eq, gte, isNull, or, sql } from 'drizzle-orm';
 import { randomUUID } from 'node:crypto';
 import { emptyPosition, place, type Coord, type Position } from '@hexarena/rules';
 import { nowSeconds, type Query } from './db';
-import { bots, games, moves } from './db/schema';
+import { alias } from 'drizzle-orm/sqlite-core';
+import { bots, games, moves, users } from './db/schema';
 import { applyFinishedGame, finishedGameOf, seatColumns } from './rating-store';
 
 // The position a game starts from: the origin stone plus the server-placed
@@ -206,6 +207,59 @@ export function findGame(query: Query, gameId: string): GameRecord | undefined {
         };
     }
     throw new Error(`stored game row seats nobody: ${row.id}`);
+}
+
+/** Who sat where and how a game stands, as anyone may read it. */
+export type GameHeadline =
+    | { readonly status: `live`; readonly names: Record<Side, string>; readonly toMove: Side; readonly timeControl: TimeControl }
+    | {
+          readonly status: `finished`;
+          readonly names: Record<Side, string>;
+          readonly winner: Side | null;
+          readonly reason: FinishReason;
+      };
+
+const challengerBots = alias(bots, `challenger_bot`);
+const destBots = alias(bots, `dest_bot`);
+
+// Only finished games answer from the log: a live one is the registry's,
+// and an unfinished row without it belongs to an earlier process.
+export function findFinishedHeadline(query: Query, gameId: string): GameHeadline | undefined {
+    const row = query
+        .select({
+            userName: users.name,
+            botName: bots.name,
+            userSide: games.userSide,
+            challengerName: challengerBots.name,
+            destName: destBots.name,
+            challengerSide: games.challengerSide,
+            winner: games.winner,
+            finishReason: games.finishReason,
+        })
+        .from(games)
+        .leftJoin(users, eq(games.userId, users.id))
+        .leftJoin(bots, eq(games.botId, bots.id))
+        .leftJoin(challengerBots, eq(games.challengerBotId, challengerBots.id))
+        .leftJoin(destBots, eq(games.destBotId, destBots.id))
+        .where(eq(games.id, gameId))
+        .get();
+    if (row === undefined || row.finishReason === null) return undefined;
+    // The seats, side, winner, and reason checks admit only these values.
+    const seated = (firstSide: Side, first: string, second: string): Record<Side, string> =>
+        firstSide === `x` ? { x: first, o: second } : { x: second, o: first };
+    const names =
+        row.userName !== null && row.botName !== null && row.userSide !== null
+            ? seated(row.userSide as Side, row.userName, row.botName)
+            : row.challengerName !== null && row.destName !== null && row.challengerSide !== null
+              ? seated(row.challengerSide as Side, row.challengerName, row.destName)
+              : undefined;
+    if (names === undefined) throw new Error(`stored game row seats nobody: ${gameId}`);
+    return {
+        status: `finished`,
+        names,
+        winner: (row.winner as Side | null) ?? null,
+        reason: row.finishReason as FinishReason,
+    };
 }
 
 // The creation cooldown reads the log rather than memory, so a restart

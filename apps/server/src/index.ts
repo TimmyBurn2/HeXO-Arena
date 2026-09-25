@@ -27,6 +27,7 @@ const { app, admin, drain: drainApp } = await buildApp({
     devLogin: env.DEV_LOGIN,
     presence: new PresenceRegistry(),
     adminActor: env.ADMIN_ACTOR,
+    ...(env.WEB_INDEX_PATH !== `` && { webIndexPath: env.WEB_INDEX_PATH }),
 });
 
 // An app running without its admin socket is the failure mode to avoid, so

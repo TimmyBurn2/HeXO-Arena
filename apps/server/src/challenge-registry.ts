@@ -50,7 +50,7 @@ function viewOf(query: Query, record: ChallengeRecord, status: Challenge[`status
         challenger: streamPlayerOf(query, { kind: `bot`, id: record.challengerBotId }, record.challengerName),
         destUser: streamPlayerOf(query, { kind: `bot`, id: record.destBotId }, record.destName),
         timeControl: record.timeControl,
-        openingStones: record.openingStones,
+        openingTurns: record.openingTurns,
         firstPlayer: record.firstPlayer,
         status,
     });
@@ -84,7 +84,7 @@ export class ChallengeRegistry {
         challenger: { id: string; name: string };
         dest: { id: string; name: string };
         timeControl: TimeControl;
-        openingStones: number;
+        openingTurns: number;
         firstPlayer: FirstPlayer;
         requestKey: string;
     }): CreateChallengeOutcome {
@@ -97,7 +97,7 @@ export class ChallengeRegistry {
             destBotId: input.dest.id,
             requestKey: input.requestKey,
             timeControl: input.timeControl,
-            openingStones: input.openingStones,
+            openingTurns: input.openingTurns,
             firstPlayer: input.firstPlayer,
         });
         if (id.kind === `exists`) {
@@ -136,7 +136,7 @@ export class ChallengeRegistry {
             challenger: { id: live.record.challengerBotId, name: live.record.challengerName },
             dest: { id: live.record.destBotId, name: live.record.destName },
             timeControl: live.record.timeControl,
-            openingStones: live.record.openingStones,
+            openingTurns: live.record.openingTurns,
             firstPlayer: live.record.firstPlayer,
         });
         this.#decide(live, `accepted`, gameId);

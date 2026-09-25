@@ -12,9 +12,10 @@
         "dev:compose": "docker compose up --build",
         "build": "pnpm -r --if-present build",
         "test": "pnpm -r --if-present test",
+        "e2e": "pnpm --filter @hexarena/web e2e",
         "typecheck": "pnpm -r --if-present typecheck",
         "lint": "eslint .",
-        "check": "pnpm typecheck && pnpm lint && node scripts/check-planning-refs.mjs",
+        "check": "pnpm typecheck && pnpm lint && node scripts/check-planning-refs.mjs && node scripts/check-ui-literals.mjs",
         "openapi": "pnpm --filter @hexarena/contract generate"
     },
     "devDependencies": {

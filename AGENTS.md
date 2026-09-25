@@ -18,6 +18,9 @@ per package later; the nearest one wins.
 - Docker dev runtime: `pnpm dev:compose` (operator-run; containers are not
   verified by day-to-day dev)
 - Tests: `pnpm test`
+- Browser suite: `pnpm e2e` (Playwright against Vite with the API mocked;
+  every screen in every look and viewport, contrast, motion, six-key play;
+  screenshots land in `apps/web/e2e/shots`)
 - Prod build: `pnpm build` (bundled server and admin CLI in `apps/server/dist`,
   static site in `apps/web/dist`)
 - Type-check + lint: `pnpm check`

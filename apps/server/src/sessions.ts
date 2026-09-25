@@ -51,3 +51,7 @@ export function sessionUser(
     const token = request.cookies[sessionCookieName];
     return token ? findSessionUser(query, token) : null;
 }
+
+export function deleteSession(query: Query, token: string): void {
+    query.delete(sessions).where(eq(sessions.tokenHash, sha256Hex(token))).run();
+}

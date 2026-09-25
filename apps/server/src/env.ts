@@ -20,6 +20,8 @@ const envSchema = z.object({
     // keeps a bare `pnpm dev` beside the database.
     ADMIN_SOCKET_PATH: z.string().min(1).default(`data/run/admin.sock`),
     ADMIN_ACTOR: z.string().min(1).max(64).default(`operator`),
+    // Empty leaves the og shell routes off; Vite serves the page in dev.
+    WEB_INDEX_PATH: z.string().default(``),
     // Empty leaves nightly backups off, which suits a bare `pnpm dev`.
     BACKUP_DIR: z.string().default(``),
     BACKUP_KEEP: z.coerce.number().int().min(1).max(365).default(14),

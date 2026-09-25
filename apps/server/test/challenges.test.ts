@@ -298,7 +298,7 @@ async function botAnswer(engine: EngineHandle, cells: { q: number; r: number }[]
 async function createChallenge(arena: Arena, challenger: BotFixture, requestId: string): Promise<string> {
     const result = await arena.challenge(challenger.token, `secondbot`, {
         timeControl: turnControl,
-        openingStones: 0,
+        openingTurns: 0,
         firstPlayer: `challenger`,
         requestId,
     });
@@ -339,7 +339,7 @@ describe('the bot-vs-bot challenge inbox', () => {
             challenger: { name: `firstbot`, rating: 1500, provisional: true },
             destUser: { name: `secondbot`, rating: 1500, provisional: true },
             timeControl: turnControl,
-            openingStones: 0,
+            openingTurns: 0,
             firstPlayer: `challenger`,
             status: `created`,
         });

@@ -4,6 +4,9 @@ import { nameSyntaxSchema } from './names';
 export const discordLoginPath = `/api/auth/discord/login`;
 export const discordCallbackPath = `/api/auth/discord/callback`;
 export const devLoginPath = `/api/dev/login`;
+export const logoutPath = `/api/auth/logout`;
+export const guestPath = `/api/auth/guest`;
+export const mePath = `/api/me`;
 export const botsPath = `/api/bots`;
 export const botPath = `/api/bots/{name}`;
 export const botTokenPath = `/api/bots/{name}/token`;
@@ -11,6 +14,32 @@ export const botStreamPath = `/api/bot/stream`;
 export const botAccountPath = `/api/bot/account`;
 
 export const sessionCookieName = `hexarena_session`;
+
+// A guest's name is a display label, `Guest ` plus four characters; the
+// space keeps it outside the name syntax, so it never collides with an
+// account.
+export const guestLabelPattern = /^Guest [a-z0-9]{4}$/;
+
+export const guestMeSchema = z.object({
+    kind: z.literal(`guest`),
+    name: z.string().regex(guestLabelPattern),
+});
+export type GuestMe = z.infer<typeof guestMeSchema>;
+
+// Who the session cookie names: a user by their global name, an anonymous
+// guest by its label, or no one.
+export const meSchema = z
+    .discriminatedUnion(`kind`, [z.object({ kind: z.literal(`user`), name: z.string() }), guestMeSchema])
+    .nullable();
+export type Me = z.infer<typeof meSchema>;
+
+// A signed-in user keeps their account; guest minting never replaces it.
+export const guestConflictErrorCodes = [`signed_in`] as const;
+
+// Guest sessions live in memory under one global cap; minting past it
+// answers 429 with this Retry-After.
+export const guestLimitErrorCodes = [`guest_limit`] as const;
+export const guestRetryAfterSeconds = 60;
 
 export const createBotRequestSchema = z.object({ name: nameSyntaxSchema });
 export const devLoginRequestSchema = z.object({ name: nameSyntaxSchema });

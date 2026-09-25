@@ -24,6 +24,9 @@ services:
             # through the egress proxy or not at all.
             NODE_USE_ENV_PROXY: '1'
             HTTPS_PROXY: http://egress:3128
+            # Read per request, so a front-end redeploy reaches the og
+            # shell without restarting the app.
+            WEB_INDEX_PATH: /srv/web/index.html
         mem_limit: 512m
         cpus: 1.0
         pids_limit: 256
@@ -33,6 +36,7 @@ services:
         volumes:
             - data:/data
             - backup:/backup
+            - web:/srv/web:ro
         networks: [internal]
         # Covers the 120 s drain plus the close; docker's default of 10 s
         # would cut every live game short.

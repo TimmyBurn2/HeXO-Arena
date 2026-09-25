@@ -124,7 +124,7 @@ export function registerChallengeApi(app: FastifyInstance, deps: ChallengeApiDep
             challenger: { id: challenger.id, name: challenger.name },
             dest: { id: target.id, name: target.name },
             timeControl: parsed.data.timeControl,
-            openingStones: parsed.data.openingStones,
+            openingTurns: parsed.data.openingTurns,
             firstPlayer: parsed.data.firstPlayer,
             requestKey: parsed.data.requestId,
         });

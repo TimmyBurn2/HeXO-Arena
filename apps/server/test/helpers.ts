@@ -63,6 +63,7 @@ export async function createTestApp(options?: {
     presence?: PresenceRegistry;
     random?: () => number;
     logger?: FastifyServerOptions[`logger`];
+    webIndexPath?: string;
 }): Promise<TestApp> {
     const discord = options?.discord === undefined ? fakeDiscord({ id: `1`, username: `tester` }).oauth : options.discord;
     const sqlite = options?.sqlite ?? openDatabase(`:memory:`);
@@ -77,6 +78,7 @@ export async function createTestApp(options?: {
         adminActor: `operator`,
         ...(options?.random !== undefined && { random: options.random }),
         ...(options?.logger !== undefined && { logger: options.logger }),
+        ...(options?.webIndexPath !== undefined && { webIndexPath: options.webIndexPath }),
     });
     return { sqlite, app, admin, drain, presence };
 }

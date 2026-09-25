@@ -3,9 +3,9 @@ import type { Accepts } from './api';
 import { axialCoordSchema } from './board';
 import { nameSyntaxSchema } from './names';
 import {
-    defaultOpeningStones,
+    defaultOpeningTurns,
     finishReasonSchema,
-    openingStonesSchema,
+    openingTurnsSchema,
     sideSchema,
     streamPlayerSchema,
     timeControlSchema,
@@ -22,7 +22,7 @@ export const botGameResignPath = `/api/bot/game/{gameId}/resign`;
 export const createGameRequestSchema = z.object({
     bot: nameSyntaxSchema,
     timeControl: timeControlSchema,
-    openingStones: openingStonesSchema.default(defaultOpeningStones),
+    openingTurns: openingTurnsSchema.default(defaultOpeningTurns),
 });
 export type CreateGameRequest = z.infer<typeof createGameRequestSchema>;
 
@@ -43,10 +43,13 @@ export type GameClock = z.infer<typeof gameClockSchema>;
 export const gameCellSchema = axialCoordSchema.extend({ side: sideSchema });
 export type GameCell = z.infer<typeof gameCellSchema>;
 
+// openingTurns counts the server-placed turns after the origin, so a
+// reader can tell the opening from the turns the players made.
 const snapshotBase = {
     gameId: z.string(),
     you: sideSchema,
     opponent: streamPlayerSchema,
+    openingTurns: openingTurnsSchema,
     board: z.object({ cells: z.array(gameCellSchema) }),
 };
 

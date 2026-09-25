@@ -1,6 +1,8 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
-import { App } from './App';
+import { AppShell } from './AppShell';
+import './styles/tokens.css';
+import './styles/site.css';
 
 const rootElement = document.getElementById(`root`);
 if (!rootElement) {
@@ -9,6 +11,6 @@ if (!rootElement) {
 
 createRoot(rootElement).render(
     <StrictMode>
-        <App />
+        <AppShell />
     </StrictMode>,
 );
