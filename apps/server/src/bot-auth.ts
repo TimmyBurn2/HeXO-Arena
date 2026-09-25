@@ -10,6 +10,7 @@ export interface BotPrincipal {
     id: string;
     name: string;
     nameKey: string;
+    ownerId: string;
 }
 
 export type BotAuth =
@@ -28,6 +29,7 @@ export function authenticateBot(query: Query, authorization: string | undefined)
             name: bots.name,
             nameKey: bots.nameKey,
             scope: bots.scope,
+            ownerId: users.id,
             bannedAt: users.bannedAt,
         })
         .from(bots)
@@ -35,7 +37,7 @@ export function authenticateBot(query: Query, authorization: string | undefined)
         .where(eq(bots.tokenHash, sha256Hex(token)))
         .all();
     if (!row) return { kind: `none` };
-    const bot: BotPrincipal = { id: row.id, name: row.name, nameKey: row.nameKey };
+    const bot: BotPrincipal = { id: row.id, name: row.name, nameKey: row.nameKey, ownerId: row.ownerId };
     // A token without the play scope does not authenticate on this surface;
     // the schema constraint admits only bot:play today, so this carries the
     // requirement for the day the scope set widens.

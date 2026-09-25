@@ -1,5 +1,7 @@
 import { and, eq, gt, isNull, lt } from 'drizzle-orm';
 import { randomUUID } from 'node:crypto';
+import { sessionCookieName } from '@hexarena/contract';
+import type { FastifyRequest } from 'fastify';
 import { nowSeconds, type Query } from './db';
 import { sessions, users } from './db/schema';
 import { randomToken, sha256Hex } from './tokens';
@@ -39,4 +41,13 @@ export function findSessionUser(query: Query, token: string): { id: string; name
             )
             .get() ?? null
     );
+}
+
+/** The user behind a request's session cookie, or null without one. */
+export function sessionUser(
+    query: Query,
+    request: FastifyRequest,
+): { id: string; name: string } | null {
+    const token = request.cookies[sessionCookieName];
+    return token ? findSessionUser(query, token) : null;
 }

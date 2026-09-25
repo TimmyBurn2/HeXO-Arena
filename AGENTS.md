@@ -69,6 +69,10 @@ Every task ends green: type-check, lint, tests.
   OAuth.
 - Never weaken: the egress allowlist, token hashing, one-stream-per-bot, the
   numeric rate limits, the deploy-drain rule.
+- The vendored htttx schemas are immutable: verbatim from the htttx spec.
+  Deviation only when unavoidable, kept local, with a written reason in the
+  decision log. `Hexo-Bot-Api` changes only when a contract change is
+  genuinely needed.
 
 ## Commits
 

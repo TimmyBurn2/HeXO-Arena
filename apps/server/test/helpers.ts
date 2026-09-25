@@ -1,6 +1,7 @@
 import { buildApp } from '../src/app';
 import { openDatabase, runMigrations, type Sqlite } from '../src/db';
 import type { DiscordIdentity, DiscordOAuth } from '../src/discord';
+import type { FastifyServerOptions } from 'fastify';
 import { PresenceRegistry, type StreamSocket } from '../src/presence';
 
 export interface FakeDiscord {
@@ -56,6 +57,8 @@ export async function createTestApp(options?: {
     secureCookies?: boolean;
     devLogin?: boolean;
     presence?: PresenceRegistry;
+    random?: () => number;
+    logger?: FastifyServerOptions[`logger`];
 }): Promise<TestApp> {
     const discord = options?.discord === undefined ? fakeDiscord({ id: `1`, username: `tester` }).oauth : options.discord;
     const sqlite = openDatabase(`:memory:`);
@@ -67,6 +70,8 @@ export async function createTestApp(options?: {
         secureCookies: options?.secureCookies ?? false,
         devLogin: options?.devLogin ?? true,
         presence,
+        ...(options?.random !== undefined && { random: options.random }),
+        ...(options?.logger !== undefined && { logger: options.logger }),
     });
     return { sqlite, app, presence };
 }

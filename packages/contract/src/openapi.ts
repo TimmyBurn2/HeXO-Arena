@@ -7,17 +7,37 @@ import {
     botAccountPath,
     botAccountSchema,
     botForbiddenErrorCodes,
+    botGameResignPath,
+    botGameSocketPath,
     botListingSchema,
     botStreamPath,
     botTokenPath,
     botWithTokenSchema,
     botsPath,
     botPath,
+    botChallengePath,
+    challengeAcceptErrorCodes,
+    challengeAcceptPath,
+    challengeCancelPath,
+    challengeCreateErrorCodes,
+    challengeDeclinePath,
+    challengeForbiddenErrorCodes,
+    challengeSchema,
     createBotRequestSchema,
+    createChallengeRequestSchema,
+    createGameRequestSchema,
     discordCallbackPath,
     discordLoginPath,
+    gameCreateErrorCodes,
+    gameMovePath,
+    gamePath,
+    gameResignPath,
+    gameSnapshotSchema,
+    gamesPath,
     healthzPath,
+    humanMoveRequestSchema,
     notFoundErrorCodes,
+    okSchema,
     sessionCookieName,
     streamEventSchema,
     unauthorizedErrorCodes,
@@ -47,6 +67,26 @@ const badRequest = () => ({
     description: `The request fails validation.`,
     content: { 'application/json': { schema: errorBodySchema(badRequestErrorCodes) } },
 });
+
+// A fresh object per registration: one shared object would serialize as a
+// yaml alias.
+const gameIdParameter = () =>
+    ({
+        name: 'gameId',
+        in: 'path',
+        required: true,
+        description: `The game, as carried on gameStart and moveRequest.`,
+        schema: { type: 'string' },
+    }) as const;
+
+const challengeIdParameter = () =>
+    ({
+        name: 'challengeId',
+        in: 'path',
+        required: true,
+        description: `The challenge, as carried on its challenge line.`,
+        schema: { type: 'string' },
+    }) as const;
 
 export function buildOpenApiDocument() {
     const registry = new OpenAPIRegistry();
@@ -233,7 +273,7 @@ export function buildOpenApiDocument() {
         operationId: 'openStream',
         tags: ['Stream'],
         security: [{ bearerAuth: [] }],
-        description: `One JSON object per line, with a bare newline as keepalive every 10 s. One stream per bot: opening closes the previous one. The connection is the bot's presence, so it is online while the stream is held, and open=1 takes challenges for as long as it lasts. On open, every active game is replayed as a gameStart line followed by a fresh moveRequest when it is the bot's turn.`,
+        description: `One JSON object per line, with a bare newline as keepalive every 10 s. One stream per bot: opening closes the previous one. The connection is the bot's presence, so it is online while the stream is held, and open=1 takes games for as long as it lasts. On open, every active game is replayed as a gameStart line followed by a fresh moveRequest when it is the bot's turn; during play, move requests travel on the per-game engine session websocket that gameStart hands out.`,
         parameters: [
             {
                 name: 'open',
@@ -278,6 +318,284 @@ export function buildOpenApiDocument() {
             400: badRequest(),
             401: botUnauthorized(),
             403: botForbidden(),
+        },
+    });
+
+    registry.registerComponent('securitySchemes', 'gameToken', {
+        type: 'http',
+        scheme: 'bearer',
+        bearerFormat: 'opaque',
+        description: `A short-lived per-game engine-session token from the gameStart line, Authorization: Bearer hgs_...; every replay of gameStart rotates it.`,
+    });
+
+    registry.registerPath({
+        method: 'post',
+        path: gamesPath,
+        summary: 'Start a game against a bot.',
+        operationId: 'createGame',
+        tags: ['Games'],
+        security: [{ sessionCookie: [] }],
+        description: `The bot must be online, open for games, under its concurrent-game cap, and declaring acceptance of the clock; every condition answers with a distinct code so a caller knows what to change. The caller is bounded too: at most three live games at once (human_busy) and sixty seconds between creations (game_cooldown). Colours are drawn at creation, the server places the origin stone and the opening stones itself, and the bot receives its engine-session handoff as a gameStart line on its stream.`,
+        request: {
+            body: { required: true, content: { 'application/json': { schema: createGameRequestSchema } } },
+        },
+        responses: {
+            201: {
+                description: 'The game exists; the response is its snapshot.',
+                content: { 'application/json': { schema: gameSnapshotSchema } },
+            },
+            400: {
+                description: `Validation failed, the caller is at the live-game cap (human_busy) or inside the creation cooldown (game_cooldown), or the bot is not taking games (not_open), declines this clock (clock_not_accepted), or is at its concurrent-game cap (bot_busy).`,
+                content: {
+                    'application/json': {
+                        schema: errorBodySchema([...badRequestErrorCodes, ...gameCreateErrorCodes]),
+                    },
+                },
+            },
+            401: unauthorized(),
+        },
+    });
+
+    registry.registerPath({
+        method: 'get',
+        path: gamePath,
+        summary: `Read a game the caller plays in.`,
+        operationId: 'getGameSnapshot',
+        tags: ['Games'],
+        security: [{ sessionCookie: [] }],
+        description: `Board, turn, and clock in one read; a finished game carries the result instead. Unknown and not-yours answer the same 404 on purpose.`,
+        parameters: [gameIdParameter()],
+        responses: {
+            200: {
+                description: 'The game snapshot.',
+                content: { 'application/json': { schema: gameSnapshotSchema } },
+            },
+            401: unauthorized(),
+            404: notFound(),
+        },
+    });
+
+    registry.registerPath({
+        method: 'post',
+        path: gameMovePath,
+        summary: `Play the two placements of the caller's turn.`,
+        operationId: 'playHumanMove',
+        tags: ['Games'],
+        security: [{ sessionCookie: [] }],
+        description: `A move is exactly two placements and applies as one turn; a win can complete on the first placement, and the second is then not applied. An illegal move answers 400 and forfeits nothing: only a bot's illegal engine move forfeits.`,
+        parameters: [gameIdParameter()],
+        request: {
+            body: { required: true, content: { 'application/json': { schema: humanMoveRequestSchema } } },
+        },
+        responses: {
+            200: {
+                description: 'The move applied; the response is the snapshot after it.',
+                content: { 'application/json': { schema: gameSnapshotSchema } },
+            },
+            400: {
+                description: `Validation failed, or it is not the caller's turn (not_your_turn), a cell is taken (cell_occupied) or out of range (out_of_range), or the game is over (game_over).`,
+                content: {
+                    'application/json': {
+                        schema: errorBodySchema([...badRequestErrorCodes, `not_your_turn`, `cell_occupied`, `out_of_range`, `game_over`]),
+                    },
+                },
+            },
+            401: unauthorized(),
+            404: notFound(),
+        },
+    });
+
+    registry.registerPath({
+        method: 'post',
+        path: gameResignPath,
+        summary: 'Resign a game the caller plays in.',
+        operationId: 'resignHumanGame',
+        tags: ['Games'],
+        security: [{ sessionCookie: [] }],
+        description: `The opponent wins with reason surrender; the response is the finished snapshot.`,
+        parameters: [gameIdParameter()],
+        responses: {
+            200: {
+                description: 'The resignation applied.',
+                content: { 'application/json': { schema: gameSnapshotSchema } },
+            },
+            400: {
+                description: 'The game is already finished (game_over).',
+                content: { 'application/json': { schema: errorBodySchema([`game_over`]) } },
+            },
+            401: unauthorized(),
+            404: notFound(),
+        },
+    });
+
+    registry.registerPath({
+        method: 'get',
+        path: botGameSocketPath,
+        summary: 'Open the per-game engine session.',
+        operationId: 'openEngineSession',
+        tags: ['Engine session'],
+        security: [],
+        description: `The htttx basic_websocket protocol with the server in the client role and the bot in the bot role. The token query parameter is the short-lived per-game token from gameStart; every gameStart replay rotates it, and one session per game is enforced, a fresh connection replacing a stale one. On open the server sends the setup packet (the origin stone) and a move_request whenever it is the bot's turn, with every stone placed since the origin carried in previous; heartbeats flow every 10 s. A move_response must echo the outstanding request_id; stale or mismatched answers are dropped, and an illegal move forfeits the game server-side.`,
+        parameters: [
+            gameIdParameter(),
+            {
+                name: 'token',
+                in: 'query',
+                required: true,
+                description: `The per-game token carried beside socketUrl on the gameStart line.`,
+                schema: { type: 'string' },
+            },
+        ],
+        responses: {
+            101: { description: 'Switching protocols; the engine session is open.' },
+            404: {
+                description: 'Unknown game, or a token that is expired or rotated.',
+                content: { 'application/json': { schema: errorBodySchema([`not_found`]) } },
+            },
+        },
+    });
+
+    registry.registerPath({
+        method: 'post',
+        path: botGameResignPath,
+        summary: 'Resign a game over the engine-session token.',
+        operationId: 'resignBotGame',
+        tags: ['Engine session'],
+        security: [{ gameToken: [] }],
+        description: `The same short-lived per-game token the websocket takes, presented as a bearer header; resignation needs no live socket, so the websocket stays strictly htttx packets.`,
+        parameters: [gameIdParameter()],
+        responses: {
+            200: {
+                description: 'The resignation applied.',
+                content: { 'application/json': { schema: okSchema } },
+            },
+            400: {
+                description: 'The game is already finished (game_over).',
+                content: { 'application/json': { schema: errorBodySchema([`game_over`]) } },
+            },
+            401: {
+                description: 'Missing, unknown, expired, or rotated game token.',
+                content: { 'application/json': { schema: errorBodySchema(unauthorizedErrorCodes) } },
+            },
+            404: notFound(),
+        },
+    });
+
+    registry.registerPath({
+        method: 'post',
+        path: botChallengePath,
+        summary: 'Challenge another bot.',
+        operationId: 'createChallenge',
+        tags: ['Challenge'],
+        security: [{ bearerAuth: [] }],
+        description: `Bot to bot. The target is named by its global name and must be online with open=1 and inside what it declared itself willing to play; a challenge outside accepts answers clock_not_accepted exactly like the human surface. firstPlayer names who takes the first player turn (the origin stone is automatic, so the first turn is the first thing a player does); random draws at accept. The challenger's owner may not own the target (own_bot), both sides must be under their concurrent-game caps, the target's pending inbox holds at most 10, and daily caps bound bot-vs-bot games: 20 per pair and 100 per bot, counted over UTC days from the game log. A challenge lives 60 s, then expires and reaches both sides as challengeCanceled. Creation is idempotent on requestId, scoped to the challenger: resending the same id answers 200 with the stored challenge and whatever status it reached, never a second inbox entry.`,
+        parameters: [
+            {
+                name: 'name',
+                in: 'path',
+                required: true,
+                description: `The challenged bot, by its globally unique name.`,
+                schema: { type: 'string' },
+            },
+        ],
+        request: {
+            body: { required: true, content: { 'application/json': { schema: createChallengeRequestSchema } } },
+        },
+        responses: {
+            201: {
+                description: 'The challenge exists and waits in the target\'s inbox.',
+                content: { 'application/json': { schema: challengeSchema } },
+            },
+            200: {
+                description: 'The requestId is known; the stored challenge, with the status it reached.',
+                content: { 'application/json': { schema: challengeSchema } },
+            },
+            400: {
+                description: `Validation failed, or a gate refused: the target is not taking games (not_open), declines this clock (clock_not_accepted), a side is at its concurrent-game cap (bot_busy), the target's inbox is full (inbox_full), the pair hit its daily cap (daily_pair_cap), or a bot hit its daily bot-vs-bot cap (daily_bot_cap).`,
+                content: {
+                    'application/json': {
+                        schema: errorBodySchema([...badRequestErrorCodes, ...challengeCreateErrorCodes]),
+                    },
+                },
+            },
+            401: botUnauthorized(),
+            403: {
+                description: `The challenger's owner also owns the target, or the owner is banned.`,
+                content: {
+                    'application/json': {
+                        schema: errorBodySchema([...botForbiddenErrorCodes, ...challengeForbiddenErrorCodes]),
+                    },
+                },
+            },
+            404: notFound(),
+        },
+    });
+
+    registry.registerPath({
+        method: 'post',
+        path: challengeAcceptPath,
+        summary: 'Accept a challenge as the challenged bot.',
+        operationId: 'acceptChallenge',
+        tags: ['Challenge'],
+        security: [{ bearerAuth: [] }],
+        description: `Only the challenged bot may accept. The one gate that can have moved since creation is re-checked: if the target is now at its concurrent-game cap the answer is bot_busy and the challenge stays pending. On acceptance a normal game starts with both sides driven through their engine sessions, colors per firstPlayer, and both bots receive a gameStart line; the game lands in the same log as human games.`,
+        parameters: [challengeIdParameter()],
+        responses: {
+            200: {
+                description: 'Accepted; the game arrives as gameStart on both streams.',
+                content: { 'application/json': { schema: okSchema } },
+            },
+            400: {
+                description: 'The target is at its concurrent-game cap (bot_busy); the challenge stays pending.',
+                content: {
+                    'application/json': {
+                        schema: errorBodySchema([...badRequestErrorCodes, ...challengeAcceptErrorCodes]),
+                    },
+                },
+            },
+            401: botUnauthorized(),
+            403: botForbidden(),
+            404: notFound(),
+        },
+    });
+
+    registry.registerPath({
+        method: 'post',
+        path: challengeDeclinePath,
+        summary: 'Decline a challenge as the challenged bot.',
+        operationId: 'declineChallenge',
+        tags: ['Challenge'],
+        security: [{ bearerAuth: [] }],
+        description: `Only the challenged bot may decline. The challenger learns of it as a challengeDeclined line on its stream.`,
+        parameters: [challengeIdParameter()],
+        responses: {
+            200: {
+                description: 'Declined.',
+                content: { 'application/json': { schema: okSchema } },
+            },
+            401: botUnauthorized(),
+            403: botForbidden(),
+            404: notFound(),
+        },
+    });
+
+    registry.registerPath({
+        method: 'post',
+        path: challengeCancelPath,
+        summary: 'Cancel a challenge the caller issued.',
+        operationId: 'cancelChallenge',
+        tags: ['Challenge'],
+        security: [{ bearerAuth: [] }],
+        description: `Only the challenger may cancel. The target learns of it as a challengeCanceled line with reason canceled; expiry carries reason expired and reaches both sides.`,
+        parameters: [challengeIdParameter()],
+        responses: {
+            200: {
+                description: 'Canceled.',
+                content: { 'application/json': { schema: okSchema } },
+            },
+            401: botUnauthorized(),
+            403: botForbidden(),
+            404: notFound(),
         },
     });
 

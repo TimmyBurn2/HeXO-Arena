@@ -8,6 +8,12 @@ components:
         website; there is no token endpoint."
       scheme: bearer
       type: http
+    gameToken:
+      bearerFormat: opaque
+      description: "A short-lived per-game engine-session token from the gameStart line, Authorization:
+        Bearer hgs_...; every replay of gameStart rotates it."
+      scheme: bearer
+      type: http
     sessionCookie:
       description: A browser session, set by the Discord OAuth callback and readable only by the server.
       in: cookie
@@ -15,7 +21,7 @@ components:
       type: apiKey
 info:
   title: hexarena
-  version: 0.3.0
+  version: 0.5.0
 openapi: 3.0.3
 paths:
   /api/auth/discord/callback:
@@ -247,13 +253,741 @@ paths:
       summary: Declare the bot's about, version, repo, and what it accepts.
       tags:
         - Account
+  /api/bot/challenge/{challengeId}/accept:
+    post:
+      description: "Only the challenged bot may accept. The one gate that can have moved since creation is
+        re-checked: if the target is now at its concurrent-game cap the answer is bot_busy and the
+        challenge stays pending. On acceptance a normal game starts with both sides driven through
+        their engine sessions, colors per firstPlayer, and both bots receive a gameStart line; the
+        game lands in the same log as human games."
+      operationId: acceptChallenge
+      parameters:
+        - description: The challenge, as carried on its challenge line.
+          in: path
+          name: challengeId
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                properties:
+                  ok:
+                    enum:
+                      - true
+                    type: boolean
+                required:
+                  - ok
+                type: object
+          description: Accepted; the game arrives as gameStart on both streams.
+        "400":
+          content:
+            application/json:
+              schema:
+                properties:
+                  code:
+                    enum:
+                      - bad_request
+                      - bot_busy
+                    type: string
+                  error:
+                    type: string
+                required:
+                  - error
+                  - code
+                type: object
+          description: The target is at its concurrent-game cap (bot_busy); the challenge stays pending.
+        "401":
+          content:
+            application/json:
+              schema:
+                properties:
+                  code:
+                    enum:
+                      - unauthorized
+                    type: string
+                  error:
+                    type: string
+                required:
+                  - error
+                  - code
+                type: object
+          description: Missing, unknown, or rotated token.
+        "403":
+          content:
+            application/json:
+              schema:
+                properties:
+                  code:
+                    enum:
+                      - banned
+                    type: string
+                  error:
+                    type: string
+                required:
+                  - error
+                  - code
+                type: object
+          description: The bot's owner is banned.
+        "404":
+          content:
+            application/json:
+              schema:
+                properties:
+                  code:
+                    enum:
+                      - not_found
+                    type: string
+                  error:
+                    type: string
+                required:
+                  - error
+                  - code
+                type: object
+          description: No such bot, or one that is not the caller's to act on; the two are indistinguishable
+            on purpose.
+      security:
+        - bearerAuth: []
+      summary: Accept a challenge as the challenged bot.
+      tags:
+        - Challenge
+  /api/bot/challenge/{challengeId}/cancel:
+    post:
+      description: Only the challenger may cancel. The target learns of it as a challengeCanceled line
+        with reason canceled; expiry carries reason expired and reaches both sides.
+      operationId: cancelChallenge
+      parameters:
+        - description: The challenge, as carried on its challenge line.
+          in: path
+          name: challengeId
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                properties:
+                  ok:
+                    enum:
+                      - true
+                    type: boolean
+                required:
+                  - ok
+                type: object
+          description: Canceled.
+        "401":
+          content:
+            application/json:
+              schema:
+                properties:
+                  code:
+                    enum:
+                      - unauthorized
+                    type: string
+                  error:
+                    type: string
+                required:
+                  - error
+                  - code
+                type: object
+          description: Missing, unknown, or rotated token.
+        "403":
+          content:
+            application/json:
+              schema:
+                properties:
+                  code:
+                    enum:
+                      - banned
+                    type: string
+                  error:
+                    type: string
+                required:
+                  - error
+                  - code
+                type: object
+          description: The bot's owner is banned.
+        "404":
+          content:
+            application/json:
+              schema:
+                properties:
+                  code:
+                    enum:
+                      - not_found
+                    type: string
+                  error:
+                    type: string
+                required:
+                  - error
+                  - code
+                type: object
+          description: No such bot, or one that is not the caller's to act on; the two are indistinguishable
+            on purpose.
+      security:
+        - bearerAuth: []
+      summary: Cancel a challenge the caller issued.
+      tags:
+        - Challenge
+  /api/bot/challenge/{challengeId}/decline:
+    post:
+      description: Only the challenged bot may decline. The challenger learns of it as a challengeDeclined
+        line on its stream.
+      operationId: declineChallenge
+      parameters:
+        - description: The challenge, as carried on its challenge line.
+          in: path
+          name: challengeId
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                properties:
+                  ok:
+                    enum:
+                      - true
+                    type: boolean
+                required:
+                  - ok
+                type: object
+          description: Declined.
+        "401":
+          content:
+            application/json:
+              schema:
+                properties:
+                  code:
+                    enum:
+                      - unauthorized
+                    type: string
+                  error:
+                    type: string
+                required:
+                  - error
+                  - code
+                type: object
+          description: Missing, unknown, or rotated token.
+        "403":
+          content:
+            application/json:
+              schema:
+                properties:
+                  code:
+                    enum:
+                      - banned
+                    type: string
+                  error:
+                    type: string
+                required:
+                  - error
+                  - code
+                type: object
+          description: The bot's owner is banned.
+        "404":
+          content:
+            application/json:
+              schema:
+                properties:
+                  code:
+                    enum:
+                      - not_found
+                    type: string
+                  error:
+                    type: string
+                required:
+                  - error
+                  - code
+                type: object
+          description: No such bot, or one that is not the caller's to act on; the two are indistinguishable
+            on purpose.
+      security:
+        - bearerAuth: []
+      summary: Decline a challenge as the challenged bot.
+      tags:
+        - Challenge
+  /api/bot/challenge/{name}:
+    post:
+      description: "Bot to bot. The target is named by its global name and must be online with open=1 and
+        inside what it declared itself willing to play; a challenge outside accepts answers
+        clock_not_accepted exactly like the human surface. firstPlayer names who takes the first
+        player turn (the origin stone is automatic, so the first turn is the first thing a player
+        does); random draws at accept. The challenger's owner may not own the target (own_bot), both
+        sides must be under their concurrent-game caps, the target's pending inbox holds at most 10,
+        and daily caps bound bot-vs-bot games: 20 per pair and 100 per bot, counted over UTC days
+        from the game log. A challenge lives 60 s, then expires and reaches both sides as
+        challengeCanceled. Creation is idempotent on requestId, scoped to the challenger: resending
+        the same id answers 200 with the stored challenge and whatever status it reached, never a
+        second inbox entry."
+      operationId: createChallenge
+      parameters:
+        - description: The challenged bot, by its globally unique name.
+          in: path
+          name: name
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              properties:
+                firstPlayer:
+                  default: random
+                  enum:
+                    - challenger
+                    - challenged
+                    - random
+                  type: string
+                openingStones:
+                  default: 2
+                  maximum: 6
+                  minimum: 0
+                  type: integer
+                requestId:
+                  maxLength: 128
+                  minLength: 1
+                  type: string
+                timeControl:
+                  oneOf:
+                    - properties:
+                        mode:
+                          enum:
+                            - unlimited
+                          type: string
+                      required:
+                        - mode
+                      type: object
+                    - properties:
+                        mode:
+                          enum:
+                            - turn
+                          type: string
+                        turnTimeMs:
+                          minimum: 5000
+                          type: integer
+                      required:
+                        - mode
+                        - turnTimeMs
+                      type: object
+                    - properties:
+                        incrementMs:
+                          minimum: 0
+                          type: integer
+                        mainTimeMs:
+                          minimum: 60000
+                          type: integer
+                        mode:
+                          enum:
+                            - match
+                          type: string
+                      required:
+                        - mode
+                        - mainTimeMs
+                        - incrementMs
+                      type: object
+              required:
+                - timeControl
+                - requestId
+              type: object
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                properties:
+                  challengeId:
+                    type: string
+                  challenger:
+                    properties:
+                      name:
+                        type: string
+                    required:
+                      - name
+                    type: object
+                  destUser:
+                    properties:
+                      name:
+                        type: string
+                    required:
+                      - name
+                    type: object
+                  firstPlayer:
+                    enum:
+                      - challenger
+                      - challenged
+                      - random
+                    type: string
+                  openingStones:
+                    maximum: 6
+                    minimum: 0
+                    type: integer
+                  status:
+                    enum:
+                      - created
+                      - accepted
+                      - declined
+                      - canceled
+                      - expired
+                    type: string
+                  timeControl:
+                    oneOf:
+                      - properties:
+                          mode:
+                            enum:
+                              - unlimited
+                            type: string
+                        required:
+                          - mode
+                        type: object
+                      - properties:
+                          mode:
+                            enum:
+                              - turn
+                            type: string
+                          turnTimeMs:
+                            minimum: 5000
+                            type: integer
+                        required:
+                          - mode
+                          - turnTimeMs
+                        type: object
+                      - properties:
+                          incrementMs:
+                            minimum: 0
+                            type: integer
+                          mainTimeMs:
+                            minimum: 60000
+                            type: integer
+                          mode:
+                            enum:
+                              - match
+                            type: string
+                        required:
+                          - mode
+                          - mainTimeMs
+                          - incrementMs
+                        type: object
+                required:
+                  - challengeId
+                  - challenger
+                  - destUser
+                  - timeControl
+                  - openingStones
+                  - firstPlayer
+                  - status
+                type: object
+          description: The requestId is known; the stored challenge, with the status it reached.
+        "201":
+          content:
+            application/json:
+              schema:
+                properties:
+                  challengeId:
+                    type: string
+                  challenger:
+                    properties:
+                      name:
+                        type: string
+                    required:
+                      - name
+                    type: object
+                  destUser:
+                    properties:
+                      name:
+                        type: string
+                    required:
+                      - name
+                    type: object
+                  firstPlayer:
+                    enum:
+                      - challenger
+                      - challenged
+                      - random
+                    type: string
+                  openingStones:
+                    maximum: 6
+                    minimum: 0
+                    type: integer
+                  status:
+                    enum:
+                      - created
+                      - accepted
+                      - declined
+                      - canceled
+                      - expired
+                    type: string
+                  timeControl:
+                    oneOf:
+                      - properties:
+                          mode:
+                            enum:
+                              - unlimited
+                            type: string
+                        required:
+                          - mode
+                        type: object
+                      - properties:
+                          mode:
+                            enum:
+                              - turn
+                            type: string
+                          turnTimeMs:
+                            minimum: 5000
+                            type: integer
+                        required:
+                          - mode
+                          - turnTimeMs
+                        type: object
+                      - properties:
+                          incrementMs:
+                            minimum: 0
+                            type: integer
+                          mainTimeMs:
+                            minimum: 60000
+                            type: integer
+                          mode:
+                            enum:
+                              - match
+                            type: string
+                        required:
+                          - mode
+                          - mainTimeMs
+                          - incrementMs
+                        type: object
+                required:
+                  - challengeId
+                  - challenger
+                  - destUser
+                  - timeControl
+                  - openingStones
+                  - firstPlayer
+                  - status
+                type: object
+          description: The challenge exists and waits in the target's inbox.
+        "400":
+          content:
+            application/json:
+              schema:
+                properties:
+                  code:
+                    enum:
+                      - bad_request
+                      - not_open
+                      - clock_not_accepted
+                      - bot_busy
+                      - inbox_full
+                      - daily_pair_cap
+                      - daily_bot_cap
+                    type: string
+                  error:
+                    type: string
+                required:
+                  - error
+                  - code
+                type: object
+          description: "Validation failed, or a gate refused: the target is not taking games (not_open),
+            declines this clock (clock_not_accepted), a side is at its concurrent-game cap
+            (bot_busy), the target's inbox is full (inbox_full), the pair hit its daily cap
+            (daily_pair_cap), or a bot hit its daily bot-vs-bot cap (daily_bot_cap)."
+        "401":
+          content:
+            application/json:
+              schema:
+                properties:
+                  code:
+                    enum:
+                      - unauthorized
+                    type: string
+                  error:
+                    type: string
+                required:
+                  - error
+                  - code
+                type: object
+          description: Missing, unknown, or rotated token.
+        "403":
+          content:
+            application/json:
+              schema:
+                properties:
+                  code:
+                    enum:
+                      - banned
+                      - own_bot
+                    type: string
+                  error:
+                    type: string
+                required:
+                  - error
+                  - code
+                type: object
+          description: The challenger's owner also owns the target, or the owner is banned.
+        "404":
+          content:
+            application/json:
+              schema:
+                properties:
+                  code:
+                    enum:
+                      - not_found
+                    type: string
+                  error:
+                    type: string
+                required:
+                  - error
+                  - code
+                type: object
+          description: No such bot, or one that is not the caller's to act on; the two are indistinguishable
+            on purpose.
+      security:
+        - bearerAuth: []
+      summary: Challenge another bot.
+      tags:
+        - Challenge
+  /api/bot/game/{gameId}/resign:
+    post:
+      description: The same short-lived per-game token the websocket takes, presented as a bearer header;
+        resignation needs no live socket, so the websocket stays strictly htttx packets.
+      operationId: resignBotGame
+      parameters:
+        - description: The game, as carried on gameStart and moveRequest.
+          in: path
+          name: gameId
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                properties:
+                  ok:
+                    enum:
+                      - true
+                    type: boolean
+                required:
+                  - ok
+                type: object
+          description: The resignation applied.
+        "400":
+          content:
+            application/json:
+              schema:
+                properties:
+                  code:
+                    enum:
+                      - game_over
+                    type: string
+                  error:
+                    type: string
+                required:
+                  - error
+                  - code
+                type: object
+          description: The game is already finished (game_over).
+        "401":
+          content:
+            application/json:
+              schema:
+                properties:
+                  code:
+                    enum:
+                      - unauthorized
+                    type: string
+                  error:
+                    type: string
+                required:
+                  - error
+                  - code
+                type: object
+          description: Missing, unknown, expired, or rotated game token.
+        "404":
+          content:
+            application/json:
+              schema:
+                properties:
+                  code:
+                    enum:
+                      - not_found
+                    type: string
+                  error:
+                    type: string
+                required:
+                  - error
+                  - code
+                type: object
+          description: No such bot, or one that is not the caller's to act on; the two are indistinguishable
+            on purpose.
+      security:
+        - gameToken: []
+      summary: Resign a game over the engine-session token.
+      tags:
+        - Engine session
+  /api/bot/game/{gameId}/socket:
+    get:
+      description: The htttx basic_websocket protocol with the server in the client role and the bot in
+        the bot role. The token query parameter is the short-lived per-game token from gameStart;
+        every gameStart replay rotates it, and one session per game is enforced, a fresh connection
+        replacing a stale one. On open the server sends the setup packet (the origin stone) and a
+        move_request whenever it is the bot's turn, with every stone placed since the origin carried
+        in previous; heartbeats flow every 10 s. A move_response must echo the outstanding
+        request_id; stale or mismatched answers are dropped, and an illegal move forfeits the game
+        server-side.
+      operationId: openEngineSession
+      parameters:
+        - description: The game, as carried on gameStart and moveRequest.
+          in: path
+          name: gameId
+          required: true
+          schema:
+            type: string
+        - description: The per-game token carried beside socketUrl on the gameStart line.
+          in: query
+          name: token
+          required: true
+          schema:
+            type: string
+      responses:
+        "101":
+          description: Switching protocols; the engine session is open.
+        "404":
+          content:
+            application/json:
+              schema:
+                properties:
+                  code:
+                    enum:
+                      - not_found
+                    type: string
+                  error:
+                    type: string
+                required:
+                  - error
+                  - code
+                type: object
+          description: Unknown game, or a token that is expired or rotated.
+      security: []
+      summary: Open the per-game engine session.
+      tags:
+        - Engine session
   /api/bot/stream:
     get:
       description: "One JSON object per line, with a bare newline as keepalive every 10 s. One stream per
         bot: opening closes the previous one. The connection is the bot's presence, so it is online
-        while the stream is held, and open=1 takes challenges for as long as it lasts. On open,
-        every active game is replayed as a gameStart line followed by a fresh moveRequest when it is
-        the bot's turn."
+        while the stream is held, and open=1 takes games for as long as it lasts. On open, every
+        active game is replayed as a gameStart line followed by a fresh moveRequest when it is the
+        bot's turn; during play, move requests travel on the per-game engine session websocket that
+        gameStart hands out."
       operationId: openStream
       parameters:
         - description: Present as open=1, the bot accepts challenges while connected.
@@ -271,6 +1005,16 @@ paths:
               schema:
                 oneOf:
                   - properties:
+                      engine:
+                        properties:
+                          socketUrl:
+                            type: string
+                          token:
+                            type: string
+                        required:
+                          - socketUrl
+                          - token
+                        type: object
                       gameId:
                         type: string
                       opening:
@@ -345,6 +1089,7 @@ paths:
                       - opponent
                       - timeControl
                       - rated
+                      - engine
                     type: object
                   - properties:
                       gameId:
@@ -446,9 +1191,20 @@ paths:
                             required:
                               - name
                             type: object
+                          firstPlayer:
+                            enum:
+                              - challenger
+                              - challenged
+                              - random
+                            type: string
+                          openingStones:
+                            maximum: 6
+                            minimum: 0
+                            type: integer
                           status:
                             enum:
                               - created
+                              - accepted
                               - declined
                               - canceled
                               - expired
@@ -496,6 +1252,8 @@ paths:
                           - challenger
                           - destUser
                           - timeControl
+                          - openingStones
+                          - firstPlayer
                           - status
                         type: object
                       type:
@@ -525,9 +1283,20 @@ paths:
                             required:
                               - name
                             type: object
+                          firstPlayer:
+                            enum:
+                              - challenger
+                              - challenged
+                              - random
+                            type: string
+                          openingStones:
+                            maximum: 6
+                            minimum: 0
+                            type: integer
                           status:
                             enum:
                               - created
+                              - accepted
                               - declined
                               - canceled
                               - expired
@@ -575,6 +1344,8 @@ paths:
                           - challenger
                           - destUser
                           - timeControl
+                          - openingStones
+                          - firstPlayer
                           - status
                         type: object
                       reason:
@@ -610,9 +1381,20 @@ paths:
                             required:
                               - name
                             type: object
+                          firstPlayer:
+                            enum:
+                              - challenger
+                              - challenged
+                              - random
+                            type: string
+                          openingStones:
+                            maximum: 6
+                            minimum: 0
+                            type: integer
                           status:
                             enum:
                               - created
+                              - accepted
                               - declined
                               - canceled
                               - expired
@@ -660,6 +1442,8 @@ paths:
                           - challenger
                           - destUser
                           - timeControl
+                          - openingStones
+                          - firstPlayer
                           - status
                         type: object
                       type:
@@ -1032,6 +1816,1187 @@ paths:
       summary: Rotate a bot token.
       tags:
         - Bots
+  /api/games:
+    post:
+      description: "The bot must be online, open for games, under its concurrent-game cap, and declaring
+        acceptance of the clock; every condition answers with a distinct code so a caller knows what
+        to change. The caller is bounded too: at most three live games at once (human_busy) and
+        sixty seconds between creations (game_cooldown). Colours are drawn at creation, the server
+        places the origin stone and the opening stones itself, and the bot receives its
+        engine-session handoff as a gameStart line on its stream."
+      operationId: createGame
+      requestBody:
+        content:
+          application/json:
+            schema:
+              properties:
+                bot:
+                  pattern: ^[A-Za-z][A-Za-z0-9_-]{0,28}[A-Za-z0-9]$
+                  type: string
+                openingStones:
+                  default: 2
+                  maximum: 6
+                  minimum: 0
+                  type: integer
+                timeControl:
+                  oneOf:
+                    - properties:
+                        mode:
+                          enum:
+                            - unlimited
+                          type: string
+                      required:
+                        - mode
+                      type: object
+                    - properties:
+                        mode:
+                          enum:
+                            - turn
+                          type: string
+                        turnTimeMs:
+                          minimum: 5000
+                          type: integer
+                      required:
+                        - mode
+                        - turnTimeMs
+                      type: object
+                    - properties:
+                        incrementMs:
+                          minimum: 0
+                          type: integer
+                        mainTimeMs:
+                          minimum: 60000
+                          type: integer
+                        mode:
+                          enum:
+                            - match
+                          type: string
+                      required:
+                        - mode
+                        - mainTimeMs
+                        - incrementMs
+                      type: object
+              required:
+                - bot
+                - timeControl
+              type: object
+        required: true
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - properties:
+                      board:
+                        properties:
+                          cells:
+                            items:
+                              properties:
+                                side:
+                                  enum:
+                                    - x
+                                    - o
+                                  type: string
+                                x:
+                                  type: integer
+                                y:
+                                  type: integer
+                              required:
+                                - x
+                                - y
+                                - side
+                              type: object
+                            type: array
+                        required:
+                          - cells
+                        type: object
+                      clock:
+                        oneOf:
+                          - properties:
+                              mode:
+                                enum:
+                                  - unlimited
+                                type: string
+                            required:
+                              - mode
+                            type: object
+                          - properties:
+                              mode:
+                                enum:
+                                  - turn
+                                type: string
+                              remainingTurnMs:
+                                minimum: 0
+                                type: integer
+                            required:
+                              - mode
+                              - remainingTurnMs
+                            type: object
+                          - properties:
+                              mode:
+                                enum:
+                                  - match
+                                type: string
+                              remainingMainMs:
+                                properties:
+                                  o:
+                                    minimum: 0
+                                    type: integer
+                                  x:
+                                    minimum: 0
+                                    type: integer
+                                required:
+                                  - x
+                                  - o
+                                type: object
+                            required:
+                              - mode
+                              - remainingMainMs
+                            type: object
+                      gameId:
+                        type: string
+                      opponent:
+                        properties:
+                          name:
+                            type: string
+                        required:
+                          - name
+                        type: object
+                      status:
+                        enum:
+                          - in-progress
+                        type: string
+                      toMove:
+                        enum:
+                          - x
+                          - o
+                        type: string
+                      you:
+                        enum:
+                          - x
+                          - o
+                        type: string
+                    required:
+                      - gameId
+                      - you
+                      - opponent
+                      - board
+                      - status
+                      - toMove
+                      - clock
+                    type: object
+                  - properties:
+                      board:
+                        properties:
+                          cells:
+                            items:
+                              properties:
+                                side:
+                                  enum:
+                                    - x
+                                    - o
+                                  type: string
+                                x:
+                                  type: integer
+                                y:
+                                  type: integer
+                              required:
+                                - x
+                                - y
+                                - side
+                              type: object
+                            type: array
+                        required:
+                          - cells
+                        type: object
+                      clock:
+                        oneOf:
+                          - properties:
+                              mode:
+                                enum:
+                                  - unlimited
+                                type: string
+                            required:
+                              - mode
+                            type: object
+                          - properties:
+                              mode:
+                                enum:
+                                  - turn
+                                type: string
+                              remainingTurnMs:
+                                minimum: 0
+                                type: integer
+                            required:
+                              - mode
+                              - remainingTurnMs
+                            type: object
+                          - properties:
+                              mode:
+                                enum:
+                                  - match
+                                type: string
+                              remainingMainMs:
+                                properties:
+                                  o:
+                                    minimum: 0
+                                    type: integer
+                                  x:
+                                    minimum: 0
+                                    type: integer
+                                required:
+                                  - x
+                                  - o
+                                type: object
+                            required:
+                              - mode
+                              - remainingMainMs
+                            type: object
+                      gameId:
+                        type: string
+                      opponent:
+                        properties:
+                          name:
+                            type: string
+                        required:
+                          - name
+                        type: object
+                      reason:
+                        enum:
+                          - aborted
+                          - disconnect
+                          - surrender
+                          - timeout
+                          - terminated
+                          - six-in-a-row
+                        type: string
+                      status:
+                        enum:
+                          - finished
+                        type: string
+                      winner:
+                        enum:
+                          - x
+                          - o
+                          - null
+                        nullable: true
+                        type: string
+                      you:
+                        enum:
+                          - x
+                          - o
+                        type: string
+                    required:
+                      - gameId
+                      - you
+                      - opponent
+                      - board
+                      - status
+                      - winner
+                      - reason
+                    type: object
+          description: The game exists; the response is its snapshot.
+        "400":
+          content:
+            application/json:
+              schema:
+                properties:
+                  code:
+                    enum:
+                      - bad_request
+                      - human_busy
+                      - game_cooldown
+                      - not_open
+                      - clock_not_accepted
+                      - bot_busy
+                    type: string
+                  error:
+                    type: string
+                required:
+                  - error
+                  - code
+                type: object
+          description: Validation failed, the caller is at the live-game cap (human_busy) or inside the
+            creation cooldown (game_cooldown), or the bot is not taking games (not_open), declines
+            this clock (clock_not_accepted), or is at its concurrent-game cap (bot_busy).
+        "401":
+          content:
+            application/json:
+              schema:
+                properties:
+                  code:
+                    enum:
+                      - unauthorized
+                    type: string
+                  error:
+                    type: string
+                required:
+                  - error
+                  - code
+                type: object
+          description: No session cookie, or the session is expired or unknown.
+      security:
+        - sessionCookie: []
+      summary: Start a game against a bot.
+      tags:
+        - Games
+  /api/games/{gameId}:
+    get:
+      description: Board, turn, and clock in one read; a finished game carries the result instead. Unknown
+        and not-yours answer the same 404 on purpose.
+      operationId: getGameSnapshot
+      parameters:
+        - description: The game, as carried on gameStart and moveRequest.
+          in: path
+          name: gameId
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - properties:
+                      board:
+                        properties:
+                          cells:
+                            items:
+                              properties:
+                                side:
+                                  enum:
+                                    - x
+                                    - o
+                                  type: string
+                                x:
+                                  type: integer
+                                y:
+                                  type: integer
+                              required:
+                                - x
+                                - y
+                                - side
+                              type: object
+                            type: array
+                        required:
+                          - cells
+                        type: object
+                      clock:
+                        oneOf:
+                          - properties:
+                              mode:
+                                enum:
+                                  - unlimited
+                                type: string
+                            required:
+                              - mode
+                            type: object
+                          - properties:
+                              mode:
+                                enum:
+                                  - turn
+                                type: string
+                              remainingTurnMs:
+                                minimum: 0
+                                type: integer
+                            required:
+                              - mode
+                              - remainingTurnMs
+                            type: object
+                          - properties:
+                              mode:
+                                enum:
+                                  - match
+                                type: string
+                              remainingMainMs:
+                                properties:
+                                  o:
+                                    minimum: 0
+                                    type: integer
+                                  x:
+                                    minimum: 0
+                                    type: integer
+                                required:
+                                  - x
+                                  - o
+                                type: object
+                            required:
+                              - mode
+                              - remainingMainMs
+                            type: object
+                      gameId:
+                        type: string
+                      opponent:
+                        properties:
+                          name:
+                            type: string
+                        required:
+                          - name
+                        type: object
+                      status:
+                        enum:
+                          - in-progress
+                        type: string
+                      toMove:
+                        enum:
+                          - x
+                          - o
+                        type: string
+                      you:
+                        enum:
+                          - x
+                          - o
+                        type: string
+                    required:
+                      - gameId
+                      - you
+                      - opponent
+                      - board
+                      - status
+                      - toMove
+                      - clock
+                    type: object
+                  - properties:
+                      board:
+                        properties:
+                          cells:
+                            items:
+                              properties:
+                                side:
+                                  enum:
+                                    - x
+                                    - o
+                                  type: string
+                                x:
+                                  type: integer
+                                y:
+                                  type: integer
+                              required:
+                                - x
+                                - y
+                                - side
+                              type: object
+                            type: array
+                        required:
+                          - cells
+                        type: object
+                      clock:
+                        oneOf:
+                          - properties:
+                              mode:
+                                enum:
+                                  - unlimited
+                                type: string
+                            required:
+                              - mode
+                            type: object
+                          - properties:
+                              mode:
+                                enum:
+                                  - turn
+                                type: string
+                              remainingTurnMs:
+                                minimum: 0
+                                type: integer
+                            required:
+                              - mode
+                              - remainingTurnMs
+                            type: object
+                          - properties:
+                              mode:
+                                enum:
+                                  - match
+                                type: string
+                              remainingMainMs:
+                                properties:
+                                  o:
+                                    minimum: 0
+                                    type: integer
+                                  x:
+                                    minimum: 0
+                                    type: integer
+                                required:
+                                  - x
+                                  - o
+                                type: object
+                            required:
+                              - mode
+                              - remainingMainMs
+                            type: object
+                      gameId:
+                        type: string
+                      opponent:
+                        properties:
+                          name:
+                            type: string
+                        required:
+                          - name
+                        type: object
+                      reason:
+                        enum:
+                          - aborted
+                          - disconnect
+                          - surrender
+                          - timeout
+                          - terminated
+                          - six-in-a-row
+                        type: string
+                      status:
+                        enum:
+                          - finished
+                        type: string
+                      winner:
+                        enum:
+                          - x
+                          - o
+                          - null
+                        nullable: true
+                        type: string
+                      you:
+                        enum:
+                          - x
+                          - o
+                        type: string
+                    required:
+                      - gameId
+                      - you
+                      - opponent
+                      - board
+                      - status
+                      - winner
+                      - reason
+                    type: object
+          description: The game snapshot.
+        "401":
+          content:
+            application/json:
+              schema:
+                properties:
+                  code:
+                    enum:
+                      - unauthorized
+                    type: string
+                  error:
+                    type: string
+                required:
+                  - error
+                  - code
+                type: object
+          description: No session cookie, or the session is expired or unknown.
+        "404":
+          content:
+            application/json:
+              schema:
+                properties:
+                  code:
+                    enum:
+                      - not_found
+                    type: string
+                  error:
+                    type: string
+                required:
+                  - error
+                  - code
+                type: object
+          description: No such bot, or one that is not the caller's to act on; the two are indistinguishable
+            on purpose.
+      security:
+        - sessionCookie: []
+      summary: Read a game the caller plays in.
+      tags:
+        - Games
+  /api/games/{gameId}/move:
+    post:
+      description: "A move is exactly two placements and applies as one turn; a win can complete on the
+        first placement, and the second is then not applied. An illegal move answers 400 and
+        forfeits nothing: only a bot's illegal engine move forfeits."
+      operationId: playHumanMove
+      parameters:
+        - description: The game, as carried on gameStart and moveRequest.
+          in: path
+          name: gameId
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              properties:
+                cells:
+                  items:
+                    properties:
+                      x:
+                        type: integer
+                      y:
+                        type: integer
+                    required:
+                      - x
+                      - y
+                    type: object
+                  type: array
+              required:
+                - cells
+              type: object
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - properties:
+                      board:
+                        properties:
+                          cells:
+                            items:
+                              properties:
+                                side:
+                                  enum:
+                                    - x
+                                    - o
+                                  type: string
+                                x:
+                                  type: integer
+                                y:
+                                  type: integer
+                              required:
+                                - x
+                                - y
+                                - side
+                              type: object
+                            type: array
+                        required:
+                          - cells
+                        type: object
+                      clock:
+                        oneOf:
+                          - properties:
+                              mode:
+                                enum:
+                                  - unlimited
+                                type: string
+                            required:
+                              - mode
+                            type: object
+                          - properties:
+                              mode:
+                                enum:
+                                  - turn
+                                type: string
+                              remainingTurnMs:
+                                minimum: 0
+                                type: integer
+                            required:
+                              - mode
+                              - remainingTurnMs
+                            type: object
+                          - properties:
+                              mode:
+                                enum:
+                                  - match
+                                type: string
+                              remainingMainMs:
+                                properties:
+                                  o:
+                                    minimum: 0
+                                    type: integer
+                                  x:
+                                    minimum: 0
+                                    type: integer
+                                required:
+                                  - x
+                                  - o
+                                type: object
+                            required:
+                              - mode
+                              - remainingMainMs
+                            type: object
+                      gameId:
+                        type: string
+                      opponent:
+                        properties:
+                          name:
+                            type: string
+                        required:
+                          - name
+                        type: object
+                      status:
+                        enum:
+                          - in-progress
+                        type: string
+                      toMove:
+                        enum:
+                          - x
+                          - o
+                        type: string
+                      you:
+                        enum:
+                          - x
+                          - o
+                        type: string
+                    required:
+                      - gameId
+                      - you
+                      - opponent
+                      - board
+                      - status
+                      - toMove
+                      - clock
+                    type: object
+                  - properties:
+                      board:
+                        properties:
+                          cells:
+                            items:
+                              properties:
+                                side:
+                                  enum:
+                                    - x
+                                    - o
+                                  type: string
+                                x:
+                                  type: integer
+                                y:
+                                  type: integer
+                              required:
+                                - x
+                                - y
+                                - side
+                              type: object
+                            type: array
+                        required:
+                          - cells
+                        type: object
+                      clock:
+                        oneOf:
+                          - properties:
+                              mode:
+                                enum:
+                                  - unlimited
+                                type: string
+                            required:
+                              - mode
+                            type: object
+                          - properties:
+                              mode:
+                                enum:
+                                  - turn
+                                type: string
+                              remainingTurnMs:
+                                minimum: 0
+                                type: integer
+                            required:
+                              - mode
+                              - remainingTurnMs
+                            type: object
+                          - properties:
+                              mode:
+                                enum:
+                                  - match
+                                type: string
+                              remainingMainMs:
+                                properties:
+                                  o:
+                                    minimum: 0
+                                    type: integer
+                                  x:
+                                    minimum: 0
+                                    type: integer
+                                required:
+                                  - x
+                                  - o
+                                type: object
+                            required:
+                              - mode
+                              - remainingMainMs
+                            type: object
+                      gameId:
+                        type: string
+                      opponent:
+                        properties:
+                          name:
+                            type: string
+                        required:
+                          - name
+                        type: object
+                      reason:
+                        enum:
+                          - aborted
+                          - disconnect
+                          - surrender
+                          - timeout
+                          - terminated
+                          - six-in-a-row
+                        type: string
+                      status:
+                        enum:
+                          - finished
+                        type: string
+                      winner:
+                        enum:
+                          - x
+                          - o
+                          - null
+                        nullable: true
+                        type: string
+                      you:
+                        enum:
+                          - x
+                          - o
+                        type: string
+                    required:
+                      - gameId
+                      - you
+                      - opponent
+                      - board
+                      - status
+                      - winner
+                      - reason
+                    type: object
+          description: The move applied; the response is the snapshot after it.
+        "400":
+          content:
+            application/json:
+              schema:
+                properties:
+                  code:
+                    enum:
+                      - bad_request
+                      - not_your_turn
+                      - cell_occupied
+                      - out_of_range
+                      - game_over
+                    type: string
+                  error:
+                    type: string
+                required:
+                  - error
+                  - code
+                type: object
+          description: Validation failed, or it is not the caller's turn (not_your_turn), a cell is taken
+            (cell_occupied) or out of range (out_of_range), or the game is over (game_over).
+        "401":
+          content:
+            application/json:
+              schema:
+                properties:
+                  code:
+                    enum:
+                      - unauthorized
+                    type: string
+                  error:
+                    type: string
+                required:
+                  - error
+                  - code
+                type: object
+          description: No session cookie, or the session is expired or unknown.
+        "404":
+          content:
+            application/json:
+              schema:
+                properties:
+                  code:
+                    enum:
+                      - not_found
+                    type: string
+                  error:
+                    type: string
+                required:
+                  - error
+                  - code
+                type: object
+          description: No such bot, or one that is not the caller's to act on; the two are indistinguishable
+            on purpose.
+      security:
+        - sessionCookie: []
+      summary: Play the two placements of the caller's turn.
+      tags:
+        - Games
+  /api/games/{gameId}/resign:
+    post:
+      description: The opponent wins with reason surrender; the response is the finished snapshot.
+      operationId: resignHumanGame
+      parameters:
+        - description: The game, as carried on gameStart and moveRequest.
+          in: path
+          name: gameId
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - properties:
+                      board:
+                        properties:
+                          cells:
+                            items:
+                              properties:
+                                side:
+                                  enum:
+                                    - x
+                                    - o
+                                  type: string
+                                x:
+                                  type: integer
+                                y:
+                                  type: integer
+                              required:
+                                - x
+                                - y
+                                - side
+                              type: object
+                            type: array
+                        required:
+                          - cells
+                        type: object
+                      clock:
+                        oneOf:
+                          - properties:
+                              mode:
+                                enum:
+                                  - unlimited
+                                type: string
+                            required:
+                              - mode
+                            type: object
+                          - properties:
+                              mode:
+                                enum:
+                                  - turn
+                                type: string
+                              remainingTurnMs:
+                                minimum: 0
+                                type: integer
+                            required:
+                              - mode
+                              - remainingTurnMs
+                            type: object
+                          - properties:
+                              mode:
+                                enum:
+                                  - match
+                                type: string
+                              remainingMainMs:
+                                properties:
+                                  o:
+                                    minimum: 0
+                                    type: integer
+                                  x:
+                                    minimum: 0
+                                    type: integer
+                                required:
+                                  - x
+                                  - o
+                                type: object
+                            required:
+                              - mode
+                              - remainingMainMs
+                            type: object
+                      gameId:
+                        type: string
+                      opponent:
+                        properties:
+                          name:
+                            type: string
+                        required:
+                          - name
+                        type: object
+                      status:
+                        enum:
+                          - in-progress
+                        type: string
+                      toMove:
+                        enum:
+                          - x
+                          - o
+                        type: string
+                      you:
+                        enum:
+                          - x
+                          - o
+                        type: string
+                    required:
+                      - gameId
+                      - you
+                      - opponent
+                      - board
+                      - status
+                      - toMove
+                      - clock
+                    type: object
+                  - properties:
+                      board:
+                        properties:
+                          cells:
+                            items:
+                              properties:
+                                side:
+                                  enum:
+                                    - x
+                                    - o
+                                  type: string
+                                x:
+                                  type: integer
+                                y:
+                                  type: integer
+                              required:
+                                - x
+                                - y
+                                - side
+                              type: object
+                            type: array
+                        required:
+                          - cells
+                        type: object
+                      clock:
+                        oneOf:
+                          - properties:
+                              mode:
+                                enum:
+                                  - unlimited
+                                type: string
+                            required:
+                              - mode
+                            type: object
+                          - properties:
+                              mode:
+                                enum:
+                                  - turn
+                                type: string
+                              remainingTurnMs:
+                                minimum: 0
+                                type: integer
+                            required:
+                              - mode
+                              - remainingTurnMs
+                            type: object
+                          - properties:
+                              mode:
+                                enum:
+                                  - match
+                                type: string
+                              remainingMainMs:
+                                properties:
+                                  o:
+                                    minimum: 0
+                                    type: integer
+                                  x:
+                                    minimum: 0
+                                    type: integer
+                                required:
+                                  - x
+                                  - o
+                                type: object
+                            required:
+                              - mode
+                              - remainingMainMs
+                            type: object
+                      gameId:
+                        type: string
+                      opponent:
+                        properties:
+                          name:
+                            type: string
+                        required:
+                          - name
+                        type: object
+                      reason:
+                        enum:
+                          - aborted
+                          - disconnect
+                          - surrender
+                          - timeout
+                          - terminated
+                          - six-in-a-row
+                        type: string
+                      status:
+                        enum:
+                          - finished
+                        type: string
+                      winner:
+                        enum:
+                          - x
+                          - o
+                          - null
+                        nullable: true
+                        type: string
+                      you:
+                        enum:
+                          - x
+                          - o
+                        type: string
+                    required:
+                      - gameId
+                      - you
+                      - opponent
+                      - board
+                      - status
+                      - winner
+                      - reason
+                    type: object
+          description: The resignation applied.
+        "400":
+          content:
+            application/json:
+              schema:
+                properties:
+                  code:
+                    enum:
+                      - game_over
+                    type: string
+                  error:
+                    type: string
+                required:
+                  - error
+                  - code
+                type: object
+          description: The game is already finished (game_over).
+        "401":
+          content:
+            application/json:
+              schema:
+                properties:
+                  code:
+                    enum:
+                      - unauthorized
+                    type: string
+                  error:
+                    type: string
+                required:
+                  - error
+                  - code
+                type: object
+          description: No session cookie, or the session is expired or unknown.
+        "404":
+          content:
+            application/json:
+              schema:
+                properties:
+                  code:
+                    enum:
+                      - not_found
+                    type: string
+                  error:
+                    type: string
+                required:
+                  - error
+                  - code
+                type: object
+          description: No such bot, or one that is not the caller's to act on; the two are indistinguishable
+            on purpose.
+      security:
+        - sessionCookie: []
+      summary: Resign a game the caller plays in.
+      tags:
+        - Games
   /healthz:
     get:
       responses:

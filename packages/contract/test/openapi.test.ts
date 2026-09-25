@@ -1,11 +1,21 @@
 import { describe, expect, it } from 'vitest';
 import {
     botAccountPath,
+    botChallengePath,
+    botGameResignPath,
+    botGameSocketPath,
     botStreamPath,
     botTokenPath,
     botsPath,
+    challengeAcceptPath,
+    challengeCancelPath,
+    challengeDeclinePath,
     discordCallbackPath,
     discordLoginPath,
+    gameMovePath,
+    gamePath,
+    gameResignPath,
+    gamesPath,
 } from '../src';
 import { buildOpenApiDocument } from '../src/openapi';
 
@@ -73,10 +83,45 @@ describe('openapi document', () => {
         expect(oneOf(schema)).toHaveLength(6);
     });
 
+    it('documents the human game surface behind the session cookie', () => {
+        const document = buildOpenApiDocument();
+        expect(dig(document, `paths`, gamesPath, `post`, `security`)).toEqual([{ sessionCookie: [] }]);
+        expect(dig(document, `paths`, gamesPath, `post`, `responses`, `201`)).toBeDefined();
+        expect(dig(document, `paths`, gamePath, `get`, `security`)).toEqual([{ sessionCookie: [] }]);
+        expect(dig(document, `paths`, gameMovePath, `post`, `security`)).toEqual([{ sessionCookie: [] }]);
+        expect(dig(document, `paths`, gameResignPath, `post`, `security`)).toEqual([{ sessionCookie: [] }]);
+    });
+
+    it('documents the engine-session socket with its token parameter and the bot resign', () => {
+        const document = buildOpenApiDocument();
+        const socket = dig(document, `paths`, botGameSocketPath, `get`);
+        expect(dig(socket, `responses`, `101`)).toBeDefined();
+        const params = arrayOfUnknown(dig(socket, `parameters`));
+        const token = params.find((p: unknown) => dig(p, `name`) === `token`);
+        expect(dig(token, `required`)).toBe(true);
+        expect(dig(token, `in`)).toBe(`query`);
+        expect(dig(document, `paths`, botGameResignPath, `post`, `security`)).toEqual([{ gameToken: [] }]);
+        expect(dig(document, `components`, `securitySchemes`, `gameToken`)).toBeDefined();
+    });
+
     it('documents the online filter on the directory', () => {
         const document = buildOpenApiDocument();
         const params = arrayOfUnknown(dig(document, `paths`, botsPath, `get`, `parameters`));
         const online = params.find((p: unknown) => dig(p, `name`) === `online`);
         expect(dig(online, `schema`)).toEqual({ type: `string`, enum: [`1`] });
+    });
+
+    it('documents the challenge surface behind bearer auth', () => {
+        const document = buildOpenApiDocument();
+        const create = dig(document, `paths`, botChallengePath, `post`);
+        expect(dig(create, `security`)).toEqual([{ bearerAuth: [] }]);
+        expect(dig(create, `responses`, `201`)).toBeDefined();
+        expect(dig(create, `responses`, `200`)).toBeDefined();
+        for (const path of [challengeAcceptPath, challengeDeclinePath, challengeCancelPath]) {
+            const action = dig(document, `paths`, path, `post`);
+            expect(dig(action, `security`)).toEqual([{ bearerAuth: [] }]);
+            expect(dig(action, `responses`, `200`)).toBeDefined();
+            expect(dig(action, `responses`, `404`)).toBeDefined();
+        }
     });
 });

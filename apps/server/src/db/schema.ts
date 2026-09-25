@@ -1,4 +1,4 @@
-import { check, index, integer, sqliteTable, text } from 'drizzle-orm/sqlite-core';
+import { check, index, integer, primaryKey, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core';
 import { sql } from 'drizzle-orm';
 // One global namespace shared by users and bots: a SQLite unique index
 // cannot span two tables, so the fold key is reserved here first and both
@@ -69,5 +69,146 @@ export const bots = sqliteTable(
     (table) => [
         index(`bots_owner_id_idx`).on(table.ownerId),
         check(`bots_scope_check`, sql`${table.scope} in ('bot:play')`),
+    ],
+);
+
+// The opening position including the origin stone is placed at creation
+// and cannot be derived, so it lives here as json; the two-placement turns
+// the players made live in moves. A game is in progress exactly while
+// finished_at is null. A game seats two players in one row: a human game
+// sets the human's id, the facing bot, and the human's side; a bot-vs-bot
+// game sets the challenger, the challenged bot, and the challenger's side.
+// The seats constraint pins exactly one of the two groups.
+export const games = sqliteTable(
+    `games`,
+    {
+        id: text(`id`).primaryKey(),
+        userId: text(`user_id`).references(() => users.id, { onDelete: `cascade` }),
+        botId: text(`bot_id`).references(() => bots.id, { onDelete: `cascade` }),
+        userSide: text(`user_side`),
+        challengerBotId: text(`challenger_bot_id`).references(() => bots.id, {
+            onDelete: `cascade`,
+        }),
+        destBotId: text(`dest_bot_id`).references(() => bots.id, { onDelete: `cascade` }),
+        challengerSide: text(`challenger_side`),
+        timeControl: text(`time_control`).notNull(),
+        openingCells: text(`opening_cells`).notNull(),
+        winner: text(`winner`),
+        finishReason: text(`finish_reason`),
+        createdAt: integer(`created_at`).notNull(),
+        finishedAt: integer(`finished_at`),
+    },
+    (table) => [
+        index(`games_user_id_idx`).on(table.userId),
+        index(`games_bot_id_idx`).on(table.botId),
+        index(`games_challenger_bot_id_idx`).on(table.challengerBotId),
+        index(`games_dest_bot_id_idx`).on(table.destBotId),
+        check(
+            `games_user_side_check`,
+            sql`${table.userSide} is null or ${table.userSide} in ('x', 'o')`,
+        ),
+        check(
+            `games_challenger_side_check`,
+            sql`${table.challengerSide} is null or ${table.challengerSide} in ('x', 'o')`,
+        ),
+        check(
+            `games_winner_check`,
+            sql`${table.winner} is null or ${table.winner} in ('x', 'o')`,
+        ),
+        check(
+            `games_finish_reason_check`,
+            sql`${table.finishReason} is null or ${table.finishReason} in ('aborted', 'disconnect', 'surrender', 'timeout', 'terminated', 'six-in-a-row')`,
+        ),
+        check(
+            `games_finish_pair_check`,
+            sql`(${table.finishedAt} is null) = (${table.finishReason} is null)`,
+        ),
+        check(
+            `games_seats_check`,
+            sql`(
+                ${table.userId} is not null and ${table.botId} is not null and ${table.userSide} is not null
+                and ${table.challengerBotId} is null and ${table.destBotId} is null and ${table.challengerSide} is null
+            ) or (
+                ${table.userId} is null and ${table.botId} is null and ${table.userSide} is null
+                and ${table.challengerBotId} is not null and ${table.destBotId} is not null and ${table.challengerSide} is not null
+                and ${table.challengerBotId} <> ${table.destBotId}
+            )`,
+        ),
+    ],
+);
+
+// One row per completed player turn, seq rising from 1; replaying the
+// opening cells plus these rows in seq order reproduces the whole game.
+export const moves = sqliteTable(
+    `moves`,
+    {
+        gameId: text(`game_id`)
+            .notNull()
+            .references(() => games.id, { onDelete: `cascade` }),
+        seq: integer(`seq`).notNull(),
+        side: text(`side`).notNull(),
+        firstX: integer(`first_x`).notNull(),
+        firstY: integer(`first_y`).notNull(),
+        secondX: integer(`second_x`).notNull(),
+        secondY: integer(`second_y`).notNull(),
+        createdAt: integer(`created_at`).notNull(),
+    },
+    (table) => [
+        primaryKey({ columns: [table.gameId, table.seq] }),
+        check(`moves_side_check`, sql`${table.side} in ('x', 'o')`),
+        check(`moves_seq_check`, sql`${table.seq} >= 1`),
+    ],
+);
+
+// One challenge per client request id, scoped to the challenger: the
+// unique pair carries the idempotency, and the row outlives its decision
+// so a replayed request id answers with the stored outcome. `created`
+// means pending; `decided_at` is null exactly then, and `game_id` is set
+// exactly on acceptance.
+export const challenges = sqliteTable(
+    `challenges`,
+    {
+        id: text(`id`).primaryKey(),
+        challengerBotId: text(`challenger_bot_id`)
+            .notNull()
+            .references(() => bots.id, { onDelete: `cascade` }),
+        destBotId: text(`dest_bot_id`)
+            .notNull()
+            .references(() => bots.id, { onDelete: `cascade` }),
+        requestKey: text(`request_key`).notNull(),
+        timeControl: text(`time_control`).notNull(),
+        openingStones: integer(`opening_stones`).notNull(),
+        firstPlayer: text(`first_player`).notNull(),
+        status: text(`status`).notNull(),
+        gameId: text(`game_id`).references(() => games.id, { onDelete: `cascade` }),
+        createdAt: integer(`created_at`).notNull(),
+        decidedAt: integer(`decided_at`),
+    },
+    (table) => [
+        uniqueIndex(`challenges_challenger_request_idx`).on(table.challengerBotId, table.requestKey),
+        index(`challenges_challenger_bot_id_idx`).on(table.challengerBotId),
+        index(`challenges_dest_bot_id_idx`).on(table.destBotId),
+        index(`challenges_game_id_idx`).on(table.gameId),
+        check(
+            `challenges_status_check`,
+            sql`${table.status} in ('created', 'accepted', 'declined', 'canceled', 'expired')`,
+        ),
+        check(
+            `challenges_first_player_check`,
+            sql`${table.firstPlayer} in ('challenger', 'challenged', 'random')`,
+        ),
+        check(
+            `challenges_opening_check`,
+            sql`${table.openingStones} >= 0 and ${table.openingStones} <= 6 and ${table.openingStones} % 2 = 0`,
+        ),
+        check(`challenges_pair_check`, sql`${table.challengerBotId} <> ${table.destBotId}`),
+        check(
+            `challenges_decided_check`,
+            sql`(${table.status} = 'created') = (${table.decidedAt} is null)`,
+        ),
+        check(
+            `challenges_game_check`,
+            sql`(${table.status} = 'accepted') = (${table.gameId} is not null)`,
+        ),
     ],
 );

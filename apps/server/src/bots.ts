@@ -21,6 +21,7 @@ export type CreateBotResult =
 export interface BotRow {
     id: string;
     name: string;
+    ownerId: string;
     ownerName: string;
     about?: string;
     version?: string;
@@ -99,12 +100,24 @@ export function createBot(query: Query, ownerId: string, name: string): CreateBo
 
 export function listBots(query: Query): BotRow[] {
     return query
-        .select({ id: bots.id, name: bots.name, ownerName: users.name, ...declarationColumns })
+        .select({ id: bots.id, name: bots.name, ownerId: bots.ownerId, ownerName: users.name, ...declarationColumns })
         .from(bots)
         .innerJoin(users, eq(bots.ownerId, users.id))
         .orderBy(bots.nameKey)
         .all()
-        .map((row) => ({ id: row.id, name: row.name, ownerName: row.ownerName, ...declarationView(row) }));
+        .map((row) => ({ id: row.id, name: row.name, ownerId: row.ownerId, ownerName: row.ownerName, ...declarationView(row) }));
+}
+
+export function findBot(query: Query, nameKey: string): BotRow | undefined {
+    const row = query
+        .select({ id: bots.id, name: bots.name, ownerId: bots.ownerId, ownerName: users.name, ...declarationColumns })
+        .from(bots)
+        .innerJoin(users, eq(bots.ownerId, users.id))
+        .where(eq(bots.nameKey, nameKey))
+        .get();
+    return row === undefined
+        ? undefined
+        : { id: row.id, name: row.name, ownerId: row.ownerId, ownerName: row.ownerName, ...declarationView(row) };
 }
 
 export function updateBotDeclaration(query: Query, botId: string, changes: AccountDeclaration): BotAccount {

@@ -22,6 +22,20 @@
       "when": 1790332488078,
       "tag": "0002_wild_brother_voodoo",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1790337223564,
+      "tag": "0003_mysterious_mastermind",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1790342536417,
+      "tag": "0004_volatile_gabe_jones",
+      "breakpoints": true
     }
   ]
 }

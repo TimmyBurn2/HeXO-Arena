@@ -8,6 +8,12 @@ export const streamKeepaliveMs = 10_000;
 // one gameStart per active game, plus a fresh moveRequest on the bot's turn.
 export type ReplaySource = (botId: string) => readonly StreamEvent[];
 
+// Presence transitions reach the game layer through this hook: a bot going
+// offline starts the orphan countdown on its live games, coming back stops
+// it. Attach fires online after a replacement close fired offline; the
+// orphan logic is idempotent, so the transient pair is harmless.
+export type PresenceWatcher = (botId: string, online: boolean) => void;
+
 // The subset of http.ServerResponse the registry needs; narrowing to it
 // keeps the registry unit-testable against a plain fake.
 export interface StreamSocket {
@@ -27,9 +33,16 @@ function toLine(event: StreamEvent): string {
 }
 
 export class PresenceRegistry {
+    // Bound late by the composition root, which needs the game registry to
+    // build the replay and needs this registry to build the game registry.
+    replay: ReplaySource;
+    watch: PresenceWatcher | null = null;
+
     readonly #entries = new Map<string, Entry>();
 
-    constructor(private readonly replay: ReplaySource = () => []) {}
+    constructor(replay: ReplaySource = () => []) {
+        this.replay = replay;
+    }
 
     attach(botId: string, socket: StreamSocket, openForChallenges: boolean): void {
         this.close(botId);
@@ -42,6 +55,7 @@ export class PresenceRegistry {
             this.detach(botId, entry);
         });
         for (const event of this.replay(botId)) socket.write(toLine(event));
+        this.watch?.(botId, true);
     }
 
     close(botId: string): void {
@@ -50,6 +64,7 @@ export class PresenceRegistry {
         this.#entries.delete(botId);
         clearInterval(entry.keepalive);
         entry.socket.end();
+        this.watch?.(botId, false);
     }
 
     // The guard makes a late close from a replaced stream harmless: the
@@ -58,6 +73,7 @@ export class PresenceRegistry {
         if (this.#entries.get(botId) !== entry) return;
         this.#entries.delete(botId);
         clearInterval(entry.keepalive);
+        this.watch?.(botId, false);
     }
 
     isOnline(botId: string): boolean {
@@ -66,5 +82,11 @@ export class PresenceRegistry {
 
     isOpenForChallenges(botId: string): boolean {
         return this.#entries.get(botId)?.openForChallenges === true;
+    }
+
+    // A game event for a bot that is not connected is simply missed; the
+    // replay on its next attach covers recovery.
+    send(botId: string, event: StreamEvent): void {
+        this.#entries.get(botId)?.socket.write(toLine(event));
     }
 }

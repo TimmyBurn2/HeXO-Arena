@@ -22,7 +22,7 @@ export interface BotApiDeps {
 }
 
 // Sends the failure itself and yields null, so handlers stay flat.
-function requireBot(query: Query, request: FastifyRequest, reply: FastifyReply): BotPrincipal | null {
+export function requireBot(query: Query, request: FastifyRequest, reply: FastifyReply): BotPrincipal | null {
     const auth = authenticateBot(query, request.headers.authorization);
     if (auth.kind === `none`) {
         reply.code(401).send({ error: `missing, unknown, or rotated token`, code: `unauthorized` });
@@ -47,8 +47,11 @@ export function registerBotApi(app: FastifyInstance, deps: BotApiDeps): void {
         }
         // Writing on reply.raw bypasses serialization and anything that
         // buffers; hijack keeps the framework from answering on its own.
+        // Headers flush eagerly: a bot with no replay lines must not wait
+        // for the first keepalive to learn the stream is open.
         reply.hijack();
         reply.raw.writeHead(200, { 'content-type': `application/x-ndjson` });
+        reply.raw.flushHeaders();
         presence.attach(bot.id, reply.raw, parsed.data.open === `1`);
     });
 

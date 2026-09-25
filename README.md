@@ -8,8 +8,13 @@ no engine code.
 management (create, list, delete, rotate token), the bot stream (NDJSON
 presence with keepalive and reconnect-close), and the account
 self-declaration are live server-side; the rules engine exists in
-`packages/rules`, differentially tested against HeXO; games, challenges,
-and the web app are not started.
+`packages/rules`, differentially tested against HeXO; a logged-in human
+plays a connected bot end to end (creation gates, per-game htttx engine
+sessions over websocket, clocks with forfeits, resign both ways, full
+move persistence); bots challenge bots over the API (challenge inbox with
+a TTL, accept/decline/cancel, idempotent creation, per-pair and per-bot
+daily caps, bot-vs-bot games over two engine sessions); rating and the
+web app are not started.
 
 ## Layout
 

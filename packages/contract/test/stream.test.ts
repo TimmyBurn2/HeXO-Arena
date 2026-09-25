@@ -17,6 +17,7 @@ const gameStart = {
     opponent: { name: `otherbot` },
     timeControl: { mode: `unlimited` },
     rated: false,
+    engine: { socketUrl: `/api/bot/game/g1/socket`, token: `hgs_token` },
 };
 
 describe('streamEventSchema', () => {
@@ -43,6 +44,8 @@ describe('streamEventSchema', () => {
                     challenger: { name: `abot` },
                     destUser: { name: `bbot` },
                     timeControl: { mode: `turn`, turnTimeMs: 30_000 },
+                    openingStones: 2,
+                    firstPlayer: `challenger`,
                     status: `created`,
                 },
             },
@@ -54,7 +57,9 @@ describe('streamEventSchema', () => {
                     challenger: { name: `abot` },
                     destUser: { name: `bbot` },
                     timeControl: { mode: `unlimited` },
-                    status: `created`,
+                    openingStones: 0,
+                    firstPlayer: `random`,
+                    status: `expired`,
                 },
             },
             {
@@ -64,7 +69,9 @@ describe('streamEventSchema', () => {
                     challenger: { name: `abot` },
                     destUser: { name: `bbot` },
                     timeControl: { mode: `unlimited` },
-                    status: `created`,
+                    openingStones: 0,
+                    firstPlayer: `random`,
+                    status: `declined`,
                 },
             },
         ];

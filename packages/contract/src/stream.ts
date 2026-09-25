@@ -43,17 +43,56 @@ export const openingSchema = z.object({
 });
 export type Opening = z.infer<typeof openingSchema>;
 
-export const challengeStatusSchema = z.enum([`created`, `declined`, `canceled`, `expired`]);
+// Server-placed opening variety after the origin stone, in stones: stones
+// come two per turn, so an odd count would hand a player a half turn
+// nothing can answer. Every request surface speaks stones; gameStart
+// carries them as randomTurns.
+export const openingStonesSchema = z
+    .number()
+    .int()
+    .min(0)
+    .max(6)
+    .refine((stones) => stones % 2 === 0, { message: `opening stones must come in pairs` });
+export type OpeningStones = z.infer<typeof openingStonesSchema>;
+
+export const defaultOpeningStones = 2;
+
+// Which side takes the first player turn: the origin stone is automatic,
+// so the first turn is the first thing a player actually does.
+export const firstPlayerSchema = z.enum([`challenger`, `challenged`, `random`]);
+export type FirstPlayer = z.infer<typeof firstPlayerSchema>;
+
+export const challengeStatusSchema = z.enum([
+    `created`,
+    `accepted`,
+    `declined`,
+    `canceled`,
+    `expired`,
+]);
 export type ChallengeStatus = z.infer<typeof challengeStatusSchema>;
 
+// The whole offer, so the challenged side sees exactly what it accepts:
+// clock, opening, and who takes the first turn.
 export const challengeSchema = z.object({
     challengeId: z.string(),
     challenger: streamPlayerSchema,
     destUser: streamPlayerSchema,
     timeControl: timeControlSchema,
+    openingStones: openingStonesSchema,
+    firstPlayer: firstPlayerSchema,
     status: challengeStatusSchema,
 });
 export type Challenge = z.infer<typeof challengeSchema>;
+
+// The per-game engine-session handoff: socketUrl is origin-relative and
+// the token travels as the `token` query parameter on the upgrade. Both
+// are short-lived, and every gameStart replay mints a fresh pair, so a
+// reconnecting bot reads a new one off its stream.
+export const engineSessionSchema = z.object({
+    socketUrl: z.string(),
+    token: z.string(),
+});
+export type EngineSession = z.infer<typeof engineSessionSchema>;
 
 export const gameStartEventSchema = z.object({
     type: z.literal(`gameStart`),
@@ -63,6 +102,7 @@ export const gameStartEventSchema = z.object({
     timeControl: timeControlSchema,
     opening: openingSchema.optional(),
     rated: z.boolean(),
+    engine: engineSessionSchema,
 });
 export type GameStartEvent = z.infer<typeof gameStartEventSchema>;
 

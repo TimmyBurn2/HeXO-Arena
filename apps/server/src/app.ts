@@ -10,16 +10,23 @@ import {
     nameSyntaxSchema,
     sessionCookieName,
 } from '@hexarena/contract';
+import websocketPlugin from '@fastify/websocket';
 import cookiePlugin from '@fastify/cookie';
 import { z } from 'zod';
-import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest } from 'fastify';
+import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest, type FastifyServerOptions } from 'fastify';
 import { createBot, deleteBot, rotateBotToken } from './bots';
 import { registerBotApi } from './bot-api';
-import { createQuery, type Query, type Sqlite } from './db';
+import { registerChallengeApi } from './challenge-api';
+import { ChallengeRegistry, challengeTtlSeconds } from './challenge-registry';
+import { expireStaleChallenges } from './challenge-store';
+import { createQuery, type Sqlite } from './db';
+import { abortUnfinishedGames } from './game-store';
+import { engineFrameLimitBytes, registerGameApi } from './game-api';
+import { GameRegistry, wirePresence } from './game-registry';
 import type { DiscordOAuth } from './discord';
 import { consumeOAuthState, createOAuthState } from './oauth-state';
 import type { PresenceRegistry } from './presence';
-import { createSession, findSessionUser, sessionCookieMaxAge } from './sessions';
+import { createSession, sessionCookieMaxAge, sessionUser } from './sessions';
 import {
     createUserWithDerivedName,
     createUserWithExactName,
@@ -32,6 +39,8 @@ export interface AppDeps {
     secureCookies: boolean;
     devLogin: boolean;
     presence: PresenceRegistry;
+    random?: () => number;
+    logger?: FastifyServerOptions[`logger`];
 }
 
 const callbackQuerySchema = z.object({
@@ -42,10 +51,29 @@ const callbackQuerySchema = z.object({
 const devLoginRequestSchema = z.object({ name: nameSyntaxSchema });
 
 export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
-    const app = Fastify({ logger: true });
+    const app = Fastify({ logger: deps.logger ?? true });
     const query = createQuery(deps.sqlite);
+    // A process serves only games it created: whatever an earlier process
+    // left unfinished is closed here, before any route can reach it.
+    abortUnfinishedGames(query);
+    expireStaleChallenges(query, challengeTtlSeconds);
     await app.register(cookiePlugin);
-    registerBotApi(app, { query, presence: deps.presence });
+    await app.register(websocketPlugin, { options: { maxPayload: engineFrameLimitBytes } });
+    const presence = deps.presence;
+    const games = new GameRegistry(deps.random === undefined ? { query, presence } : { query, presence, random: deps.random });
+    const challenges = new ChallengeRegistry({ query, presence, games });
+    wirePresence(presence, games);
+    // Challenge lines lead the replay: they wait on a TTL that the games,
+    // with their own clocks and sessions, do not.
+    const gameReplay = presence.replay;
+    presence.replay = (botId) => [...challenges.replayForBot(botId), ...gameReplay(botId)];
+    app.addHook(`onClose`, () => {
+        challenges.stop();
+        games.stop();
+    });
+    registerBotApi(app, { query, presence });
+    registerChallengeApi(app, { query, presence, games, challenges });
+    registerGameApi(app, { query, presence, games });
 
     if (deps.devLogin) {
         app.post(devLoginPath, async (request, reply) => {
@@ -82,7 +110,6 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
         // endpoint leaks nothing.
         reply.code(200).send();
     });
-
     app.get(discordLoginPath, async (_request, reply) => {
         if (!deps.discord) {
             return reply.code(503).send({ error: `discord oauth is not configured`, code: `oauth_unconfigured` });
@@ -174,11 +201,6 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     });
 
     return app;
-}
-
-function sessionUser(query: Query, request: FastifyRequest): { id: string; name: string } | null {
-    const token = request.cookies[sessionCookieName];
-    return token ? findSessionUser(query, token) : null;
 }
 
 function setSessionCookie(reply: FastifyReply, token: string, secure: boolean): void {

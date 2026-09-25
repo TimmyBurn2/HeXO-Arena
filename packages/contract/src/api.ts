@@ -108,6 +108,9 @@ export const devLoginErrorCodes = [`invalid_name`, `name_reserved`, `name_taken`
 export const badRequestErrorCodes = [`bad_request`] as const;
 export const botForbiddenErrorCodes = [`banned`] as const;
 
+// The acceptance body of actions that have nothing to report beyond that.
+export const okSchema = z.object({ ok: z.literal(true) });
+
 export function errorBodySchema(codes: readonly [string, ...string[]]) {
     return z.object({ error: z.string(), code: z.enum(codes) });
 }
