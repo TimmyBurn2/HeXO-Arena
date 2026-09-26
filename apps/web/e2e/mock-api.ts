@@ -143,7 +143,7 @@ export const games: Record<string, GameSnapshot> = {
 
 export function world(overrides: Partial<World> = {}): World {
     return {
-        me: { kind: `user`, name: `tom` },
+        me: { kind: `user`, name: `tom`, rating: 1503, provisional: false },
         leaderboard,
         bots,
         games: structuredClone(games),

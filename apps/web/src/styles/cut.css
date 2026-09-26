@@ -18,6 +18,7 @@
     .skeleton,
     .nav-link,
     kbd,
+    .clock,
     input[type='text'] {
         clip-path: var(--cut-sm-path);
     }
@@ -37,6 +38,10 @@
     /* Small marks are whole cells: a checkbox, gray when off and the
        accent when on, the slider thumb, and the step numbers. */
     input[type='checkbox'],
+    .monogram,
+    .identity-monogram,
+    .swatch,
+    .pip,
     input[type='range']::-webkit-slider-thumb,
     .steps .step-n {
         clip-path: var(--hex-path);
@@ -56,22 +61,40 @@
         clip-path: var(--cut-lg-path);
     }
 
-    .rung {
+    .rung,
+    .rung-skeleton,
+    .bot-plate,
+    .bot-card,
+    .identity-plate,
+    .hud-chip {
         clip-path: var(--cut-md-path);
+    }
+
+    .hud-exit,
+    .hud-toggle,
+    .drawer-close,
+    .drawer-tab {
+        clip-path: var(--cut-sm-path);
     }
 
     .rung.r1 {
         clip-path: var(--cut-lg-path);
     }
 
-    .strip,
-    .feed,
-    .banner,
     .board-frame {
         clip-path: var(--cut-md-path);
     }
 
+    /* On the game stage the board is the screen, not a surface on it. */
+    .board-camera .board-frame {
+        clip-path: none;
+    }
+
     .btn:focus-visible,
+    .hud-exit:focus-visible,
+    .hud-toggle:focus-visible,
+    .drawer-close:focus-visible,
+    .drawer-tab:focus-visible,
     .pill:focus-visible,
     .seg-btn:focus-visible,
     .nav-link:focus-visible,

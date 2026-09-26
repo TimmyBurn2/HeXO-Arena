@@ -45,7 +45,8 @@ export function lastMoveOf(snapshot: GameSnapshot): AxialCoord[] {
 
 /**
  * The winning six for the frozen board, computed client-side; the snapshot
- * carries stones only. Returns nothing when the finish left no line.
+ * carries stones only.
+ * Returns nothing when the finish left no line.
  */
 export function winLineOf(snapshot: GameSnapshot): AxialCoord[] | null {
     if (snapshot.status !== `finished` || snapshot.winner === null) return null;
@@ -73,6 +74,16 @@ export function resultSentence(snapshot: GameSnapshot): string {
         return `nobody won, ${reasonText(snapshot.reason)}`;
     }
     return `${nameOf(snapshot, snapshot.winner)} won, ${reasonText(snapshot.reason)}`;
+}
+
+/**
+ * The result as the screen shows it: capitalized, except when it starts
+ * with a player's name, which keeps its own case.
+ * Titles and embeds keep the lowercase sentence.
+ */
+export function resultLine(snapshot: GameSnapshot): string {
+    const sentence = resultSentence(snapshot);
+    return /^(?:you|nobody) /.test(sentence) ? sentence.charAt(0).toUpperCase() + sentence.slice(1) : sentence;
 }
 
 /** The seated human reads their own side as "you". */
@@ -131,12 +142,12 @@ function coord(cell: AxialCoord): string {
 export function rejectionNote(rejection: Rejection): string {
     switch (rejection.kind) {
         case `game-finished`:
-            return `the game is over`;
+            return `The game is over`;
         case `cell-occupied`:
-            return `that cell is taken`;
+            return `That cell is taken`;
         case `first-stone-off-origin`:
-            return `the first stone belongs at the origin`;
+            return `The first stone belongs at the origin`;
         case `outside-placement-radius`:
-            return `too far from every stone`;
+            return `Too far from every stone`;
     }
 }

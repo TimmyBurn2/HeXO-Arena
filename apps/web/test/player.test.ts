@@ -11,13 +11,13 @@ const accepts = (overrides: Partial<Accepts>): Accepts => ({
 
 describe('summarizeAccepts', () => {
     it('compress the declaration into one line', () => {
-        expect(summarizeAccepts(accepts({}))).toBe(`turn 5-60s, match, unlimited`);
+        expect(summarizeAccepts(accepts({}))).toBe(`turn 5 to 60 s, match, unlimited`);
     });
 
     it('show only what is declared', () => {
         expect(summarizeAccepts(accepts({ turnMs: null, match: false }))).toBe(`unlimited`);
         expect(summarizeAccepts(accepts({ turnMs: [10000, 30000], unlimited: false }))).toBe(
-            `turn 10-30s, match`,
+            `turn 10 to 30 s, match`,
         );
     });
 

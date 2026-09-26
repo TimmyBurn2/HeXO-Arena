@@ -15,7 +15,7 @@ export function BotsScreen() {
         <>
             <h1 className="screen-title">Bots</h1>
             <div className="toolbar">
-                <span className="note">every listed bot, online or not</span>
+                <span className="note">Every listed bot, online or not</span>
                 <label className="checkline">
                     <input
                         type="checkbox"
@@ -24,7 +24,7 @@ export function BotsScreen() {
                             setOnlineOnly(event.target.checked);
                         }}
                     />
-                    online only
+                    Online only
                 </label>
             </div>
             <Directory key={onlineOnly ? `online` : `all`} onlineOnly={onlineOnly} onPlay={setPlaying} />
@@ -46,7 +46,7 @@ function Directory({ onlineOnly, onPlay }: { onlineOnly: boolean; onPlay: (bot: 
     const { data, error, loading, reload } = useAsync(load);
 
     if (loading && data === null) return <SkeletonRows />;
-    if (error && data === null) return <ErrorFrame sentence="the directory did not load" onRetry={reload} />;
+    if (error && data === null) return <ErrorFrame sentence="The directory did not load" onRetry={reload} />;
     if (data === null) return null;
     if (data.length === 0 && !onlineOnly) return <NoBotsEmpty />;
 
@@ -79,7 +79,7 @@ function Directory({ onlineOnly, onPlay }: { onlineOnly: boolean; onPlay: (bot: 
                         {data.length === 0 ? (
                             <tr>
                                 <td className="table-note" colSpan={7}>
-                                    no bots online right now; the toggle above shows every bot
+                                    No bots online right now; the toggle above shows every bot.
                                 </td>
                             </tr>
                         ) : (
@@ -91,16 +91,16 @@ function Directory({ onlineOnly, onPlay }: { onlineOnly: boolean; onPlay: (bot: 
             <div className="legend">
                 <span className="player-cell">
                     <PresenceDot online />
-                    online
+                    Online
                 </span>
                 <span className="player-cell">
                     <PresenceDot online={false} />
-                    offline
+                    Offline
                 </span>
-                <span>open = accepting challenges</span>
+                <span>Open = accepting challenges</span>
                 <span>? = provisional rating</span>
             </div>
-            {error ? <ErrorFrame sentence="the directory did not load" onRetry={reload} /> : null}
+            {error ? <ErrorFrame sentence="The directory did not load" onRetry={reload} /> : null}
         </>
     );
 }
@@ -121,7 +121,7 @@ function BotRow({ bot, onPlay }: { bot: BotListing; onPlay: (bot: BotListing) =>
             <td className="col-narrow-optional">
                 <OpenTag open={bot.openForChallenges} />
             </td>
-            <td className="num">
+            <td className="num rating-cell">
                 <Rating value={bot.rating} provisional={bot.provisional} />
             </td>
             <td className="col-optional">{summarizeAccepts(bot.accepts)}</td>
@@ -146,10 +146,10 @@ function BotRow({ bot, onPlay }: { bot: BotListing; onPlay: (bot: BotListing) =>
 function NoBotsEmpty() {
     return (
         <div className="empty">
-            <h2>no bots yet</h2>
+            <h2>No bots yet</h2>
             <p>
-                the ladder is whatever you bring: register a bot, let it dial in,
-                and the first games make the board
+                The ladder is whatever you bring: register a bot, let it dial in,
+                and the first games make the board.
             </p>
             <div className="actions">
                 <Link to="/connect" className="btn btn-primary">

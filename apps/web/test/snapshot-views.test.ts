@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { GameSnapshot } from '@hexarena/contract';
-import { feedOf, lastMoveOf, positionOf, reasonText, resultSentence, stonesOf, winLineOf } from '../src/game/snapshot-views';
+import { feedOf, lastMoveOf, positionOf, reasonText, resultLine, resultSentence, stonesOf, winLineOf } from '../src/game/snapshot-views';
 
 function snapshot(
     cells: readonly { x: number; y: number; side: `x` | `o` }[],
@@ -143,4 +143,12 @@ describe('the finish vocabulary', () => {
         const aborted = snapshot(originGame, { status: `finished`, winner: null, reason: `aborted` });
         expect(resultSentence(aborted)).toBe(`nobody won, aborted`);
     });
+
+    it('capitalize the shown result unless it starts with a name', () => {
+        const aborted = snapshot(originGame, { status: `finished`, winner: null, reason: `aborted` });
+        expect(resultLine(aborted)).toBe(`Nobody won, aborted`);
+        const named = snapshot(originGame, { status: `finished`, winner: `x`, reason: `surrender` });
+        expect(resultLine(named)).toBe(resultSentence(named).replace(/^you /, `You `));
+    });
 });
+

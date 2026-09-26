@@ -3,6 +3,8 @@ import { discordLoginPath, namePattern, isReservedName } from '@hexarena/contrac
 import { ApiError, createBot } from '../api/client';
 import { Link } from '../router/Link';
 import { useRoute } from '../router/use-route';
+import { TokenBox } from '../components/TokenBox';
+import { useMe } from '../me';
 import { useDocumentMeta } from '../use-document-meta';
 import './ConnectScreen.css';
 
@@ -18,28 +20,45 @@ export function ConnectScreen() {
     const route = useRoute();
     useDocumentMeta(route);
     const [created, setCreated] = useState<Created | null>(null);
+    const state = useMe();
+    const me = state.status === `ready` ? state.me : null;
 
     return (
         <>
             <h1 className="screen-title">Connect</h1>
             <p className="note">
-                the numbered path from sign-in to a first game; an account owns
-                up to three bots
+                The numbered path from sign-in to a first game; an account owns
+                up to three bots.
             </p>
             <ol className="steps">
-                <li>
+                <li className={me?.kind === `user` ? `done` : `active`}>
                     <span className="step-n" aria-hidden="true">
                         1
                     </span>
                     <div className="step-body">
-                        <h2 className="step-title">Sign in with Discord</h2>
-                        <p>Discord is the only login; no password is ever stored.</p>
-                        <a className="btn btn-primary" href={discordLoginPath}>
-                            Sign in with Discord
-                        </a>
+                        {me?.kind === `user` ? (
+                            <>
+                                <h2 className="step-title">Signed in as {me.name}</h2>
+                                <p>
+                                    Your bots gather in <Link to="/profile">Profile</Link>.
+                                </p>
+                            </>
+                        ) : (
+                            <>
+                                <h2 className="step-title">Sign in with Discord</h2>
+                                <p>
+                                    {me?.kind === `guest`
+                                        ? `You are playing as ${me.name}; owning a bot takes an account.`
+                                        : `Discord is the only login; no password is ever stored.`}
+                                </p>
+                                <a className="btn btn-primary" href={discordLoginPath}>
+                                    Sign in with Discord
+                                </a>
+                            </>
+                        )}
                     </div>
                 </li>
-                <li className={created === null ? `active` : `done`}>
+                <li className={me?.kind !== `user` ? `` : created === null ? `active` : `done`}>
                     <span className="step-n" aria-hidden="true">
                         2
                     </span>
@@ -55,7 +74,7 @@ export function ConnectScreen() {
                     <div className="step-body">
                         <h2 className="step-title">Copy the token</h2>
                         {created === null ? (
-                            <p>the token appears once, right after creation.</p>
+                            <p>The token appears once, right after creation.</p>
                         ) : (
                             <TokenBox token={created.token} />
                         )}
@@ -68,14 +87,14 @@ export function ConnectScreen() {
                     <div className="step-body">
                         <h2 className="step-title">Run the example</h2>
                         <p>
-                            a ready loop against the stream, in python:{` `}
+                            A ready loop against the stream, in python:{` `}
                             <a href={exampleRepo} rel="noreferrer" target="_blank">
                                 the Hexo-Bot-Api readme
                             </a>
                             {` `}and{` `}
                             <a href={exampleBot} rel="noreferrer" target="_blank">
                                 simple_bot.py
-                            </a>
+                            </a>.
                         </p>
                     </div>
                 </li>
@@ -86,10 +105,10 @@ export function ConnectScreen() {
                     <div className="step-body">
                         <h2 className="step-title">Watch it play</h2>
                         {created === null ? (
-                            <p>your bot appears in the directory once its stream opens.</p>
+                            <p>Your bot appears in the directory once its stream opens.</p>
                         ) : (
                             <p>
-                                your bot lives at <Link to={`/bots/${encodeURIComponent(created.name)}`}>its page</Link>
+                                Your bot lives at <Link to={`/bots/${encodeURIComponent(created.name)}`}>its page</Link>.
                             </p>
                         )}
                     </div>
@@ -101,10 +120,10 @@ export function ConnectScreen() {
                     <div className="step-body">
                         <h2 className="step-title">Read the spec</h2>
                         <p>
-                            endpoints and events, with examples:{` `}
+                            Endpoints and events, with examples:{` `}
                             <a href={exampleRepo} rel="noreferrer" target="_blank">
                                 Hexo-Bot-Api
-                            </a>
+                            </a>.
                         </p>
                     </div>
                 </li>
@@ -121,9 +140,9 @@ function CreateBotForm({ onCreated }: { onCreated: (created: Created) => void })
     function liveProblem(value: string): string | null {
         if (value === ``) return null;
         if (!namePattern.test(value)) {
-            return `letters first, then letters, digits, - or _; 2 to 30 characters`;
+            return `Letters first, then letters, digits, - or _; 2 to 30 characters`;
         }
-        if (isReservedName(value)) return `that name is reserved`;
+        if (isReservedName(value)) return `That name is reserved`;
         return null;
     }
 
@@ -136,7 +155,7 @@ function CreateBotForm({ onCreated }: { onCreated: (created: Created) => void })
             if (cause instanceof ApiError) {
                 setFailure(createErrorSentence(cause));
             } else {
-                setFailure(`the bot could not be created; try again`);
+                setFailure(`The bot could not be created; try again`);
             }
             setSending(false);
         }
@@ -185,43 +204,16 @@ function CreateBotForm({ onCreated }: { onCreated: (created: Created) => void })
 function createErrorSentence(error: ApiError): string {
     switch (error.code) {
         case `invalid_name`:
-            return `letters first, then letters, digits, - or _; 2 to 30 characters`;
+            return `Letters first, then letters, digits, - or _; 2 to 30 characters`;
         case `name_reserved`:
-            return `that name is reserved`;
+            return `That name is reserved`;
         case `name_taken`:
-            return `that name is taken`;
+            return `That name is taken`;
         case `bot_limit`:
-            return `you already hold the bot cap`;
+            return `You already hold the bot cap`;
         case `unauthorized`:
-            return `sign in first; step 1 opens Discord`;
+            return `Sign in first; step 1 opens Discord`;
         default:
-            return `the bot could not be created; try again`;
+            return `The bot could not be created; try again`;
     }
-}
-
-function TokenBox({ token }: { token: string }) {
-    const [copied, setCopied] = useState(false);
-
-    async function copy() {
-        try {
-            await navigator.clipboard.writeText(token);
-            setCopied(true);
-        } catch {
-            setCopied(false);
-        }
-    }
-
-    return (
-        <>
-            <div className="token-box">
-                <span className="token-value">{token}</span>
-                <button type="button" className="btn btn-ghost btn-sm" onClick={() => void copy()}>
-                    {copied ? `Copied` : `Copy`}
-                </button>
-            </div>
-            <p className="warn">
-                the token shows once; if it is lost, rotate it from the bot page
-            </p>
-        </>
-    );
 }

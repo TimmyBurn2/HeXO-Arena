@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { meStore } from '../src/me';
 import { ArenaScreen } from '../src/screens/ArenaScreen';
 
 const board = [
@@ -39,7 +40,7 @@ describe('ArenaScreen', () => {
         const rungs = [...document.querySelectorAll(`.rung`)].map((rung) => rung.className);
         expect(rungs).toEqual([`rung r1`, `rung r2`, `rung r3`]);
         expect(document.querySelectorAll(`.rung-lift .rung`)).toHaveLength(1);
-        expect(document.querySelector(`.rung.r3 .rung-kind`)?.textContent).toBe(`human`);
+        expect(document.querySelector(`.rung.r3 .rung-kind`)?.textContent).toBe(`Human`);
     });
 
     it('count the ranked players and the bots online in one sentence', async () => {
@@ -64,7 +65,7 @@ describe('ArenaScreen', () => {
         await waitFor(() => {
             expect(document.querySelector(`.pulse`)?.textContent).toBe(`3 ranked players, 2 bots online, 1 taking challenges`);
         });
-        expect(document.querySelector(`.rung.r1 .rung-owner`)?.textContent).toBe(`by tom`);
+        expect(document.querySelector(`.rung.r1 .rung-owner`)?.textContent).toBe(`By tom`);
     });
 
     it('keep the board when the directory does not load', async () => {
@@ -99,7 +100,7 @@ describe('ArenaScreen', () => {
     it('show the day-one empty state when the board has no rows', async () => {
         stubBoard([]);
         render(<ArenaScreen />);
-        expect(await screen.findByText(`no ranked players yet`)).toBeTruthy();
+        expect(await screen.findByText(`No ranked players yet`)).toBeTruthy();
         expect(screen.getByRole(`link`, { name: `Connect a bot` }).getAttribute(`href`)).toBe(`/connect`);
         expect(screen.getByRole(`link`, { name: `Browse bots` }).getAttribute(`href`)).toBe(`/bots`);
     });
@@ -107,11 +108,33 @@ describe('ArenaScreen', () => {
     it('offer a retry when the first load fails', async () => {
         stubBoard([], 500);
         render(<ArenaScreen />);
-        expect(await screen.findByText(`the board did not load`)).toBeTruthy();
+        expect(await screen.findByText(`The board did not load`)).toBeTruthy();
         stubBoard(board);
         fireEvent.click(screen.getByRole(`button`, { name: `Try again` }));
         await waitFor(() => {
             expect(screen.getByRole(`table`)).toBeTruthy();
         });
+    });
+
+    it('tint the signed-in player\'s own row', async () => {
+        vi.stubGlobal(
+            `fetch`,
+            vi.fn((url: string) =>
+                Promise.resolve(
+                    new Response(
+                        JSON.stringify(url === `/api/me` ? { kind: `user`, name: `tom`, rating: 1503, provisional: false } : board),
+                    ),
+                ),
+            ),
+        );
+        meStore.reset();
+        meStore.start();
+        render(<ArenaScreen />);
+        await screen.findByRole(`table`);
+        await waitFor(() => {
+            expect(document.querySelector(`tr.you .player-name`)?.textContent).toBe(`tom`);
+        });
+        expect(document.querySelectorAll(`tr.you`)).toHaveLength(1);
+        meStore.reset();
     });
 });

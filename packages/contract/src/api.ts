@@ -26,11 +26,18 @@ export const guestMeSchema = z.object({
 });
 export type GuestMe = z.infer<typeof guestMeSchema>;
 
-// Who the session cookie names: a user by their global name, an anonymous
-// guest by its label, or no one.
-export const meSchema = z
-    .discriminatedUnion(`kind`, [z.object({ kind: z.literal(`user`), name: z.string() }), guestMeSchema])
-    .nullable();
+// Who the session cookie names: a user by their global name with their
+// current rating in whole points, an anonymous guest by its label (guests
+// are never rated), or no one.
+export const userMeSchema = z.object({
+    kind: z.literal(`user`),
+    name: z.string(),
+    rating: z.number().int(),
+    provisional: z.boolean(),
+});
+export type UserMe = z.infer<typeof userMeSchema>;
+
+export const meSchema = z.discriminatedUnion(`kind`, [userMeSchema, guestMeSchema]).nullable();
 export type Me = z.infer<typeof meSchema>;
 
 // A signed-in user keeps their account; guest minting never replaces it.
@@ -40,6 +47,9 @@ export const guestConflictErrorCodes = [`signed_in`] as const;
 // answers 429 with this Retry-After.
 export const guestLimitErrorCodes = [`guest_limit`] as const;
 export const guestRetryAfterSeconds = 60;
+
+// Bots one account may hold at once; creating past it answers bot_limit.
+export const botCapPerUser = 3;
 
 export const createBotRequestSchema = z.object({ name: nameSyntaxSchema });
 export const devLoginRequestSchema = z.object({ name: nameSyntaxSchema });

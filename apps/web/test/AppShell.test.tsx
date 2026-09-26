@@ -2,6 +2,7 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { AppShell } from '../src/AppShell';
+import { meStore } from '../src/me';
 import { navigate } from '../src/router/use-route';
 
 afterEach(() => {
@@ -26,13 +27,43 @@ function topLink(name: string): HTMLElement {
 }
 
 describe('AppShell', () => {
+    it('offer sign-in on the right when nobody is signed in', async () => {
+        stubHealthOk();
+        meStore.reset();
+        meStore.start();
+        render(<AppShell />);
+        await waitFor(() => {
+            expect(topbar().querySelector(`.nav-right a`)?.textContent).toBe(`Sign in`);
+        });
+    });
+
+    it('name the signed-in user on the right, linking to their profile', async () => {
+        vi.stubGlobal(
+            `fetch`,
+            vi.fn((url: string) =>
+                Promise.resolve(
+                    new Response(url === `/api/me` ? JSON.stringify({ kind: `user`, name: `tom`, rating: 1503, provisional: false }) : null, {
+                        status: 200,
+                    }),
+                ),
+            ),
+        );
+        meStore.reset();
+        meStore.start();
+        render(<AppShell />);
+        await waitFor(() => {
+            expect(topbar().querySelector(`.nav-right a.identity`)?.getAttribute(`href`)).toBe(`/profile`);
+        });
+        expect(topbar().querySelector(`.nav-right a.identity`)?.textContent).toBe(`ttom`);
+    });
+
     it('render the four nav items with the arena active on the landing route', () => {
         stubHealthOk();
         window.history.replaceState(null, ``, `/`);
         render(<AppShell />);
         expect(topbar().querySelector(`.nav-links .nav-link`)?.textContent).toBe(`Arena`);
         expect(topbar().querySelectorAll(`.nav-links .nav-link`).length).toBe(3);
-        expect(topbar().querySelector(`.nav-right .nav-link`)?.textContent).toBe(`Profile`);
+
         expect(topLink(`Arena`).getAttribute(`aria-current`)).toBe(`page`);
         expect(topLink(`Bots`).getAttribute(`aria-current`)).toBe(null);
     });
@@ -79,7 +110,7 @@ describe('AppShell', () => {
         stubHealthOk();
         window.history.replaceState(null, ``, `/nope`);
         render(<AppShell />);
-        expect(await screen.findByRole(`heading`, { name: `not found` })).toBeTruthy();
+        expect(await screen.findByRole(`heading`, { name: `Not found` })).toBeTruthy();
         const back = document.querySelector(`main .btn-ghost`) as HTMLElement;
         expect(back.textContent).toBe(`Arena`);
         expect(back.getAttribute(`href`)).toBe(`/`);
@@ -90,7 +121,7 @@ describe('AppShell', () => {
         window.history.replaceState(null, ``, `/`);
         render(<AppShell />);
         await waitFor(() => {
-            expect(screen.getByRole(`status`).textContent).toBe(`starting games is paused; live games continue`);
+            expect(screen.getByRole(`status`).textContent).toBe(`Starting games is paused; live games continue`);
         });
     });
 
@@ -111,7 +142,7 @@ describe('AppShell', () => {
         stubHealthOk();
         window.history.replaceState(null, ``, `/`);
         render(<AppShell />);
-        const skip = screen.getByRole(`link`, { name: `skip to content` });
+        const skip = screen.getByRole(`link`, { name: `Skip to content` });
         expect(skip.getAttribute(`href`)).toBe(`#main`);
         expect(document.getElementById(`main`)).toBeTruthy();
     });
@@ -129,5 +160,17 @@ describe('AppShell', () => {
         expect(document.querySelector(`meta[property="og:description"]`)?.getAttribute(`content`)).toBe(
             `ranked ladder for HeXO bots and humans`,
         );
+    });
+
+    it('drop the site chrome on the immersive game route', async () => {
+        stubHealthOk();
+        window.history.replaceState(null, ``, `/game/g-1`);
+        render(<AppShell />);
+        expect(document.querySelector(`header.topbar`)).toBe(null);
+        expect(document.querySelector(`nav.tabbar`)).toBe(null);
+        navigate(`/`);
+        await waitFor(() => {
+            expect(document.querySelector(`header.topbar`)).toBeTruthy();
+        });
     });
 });

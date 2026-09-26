@@ -21,8 +21,9 @@ function notify(): void {
 
 /**
  * Client navigation: push the path, scroll up, and let every subscriber
- * re-read the location. Popstate feeds the same listeners, so back and
- * forward behave like any navigation.
+ * re-read the location.
+ * Popstate feeds the same listeners, so back and forward behave like any
+ * navigation.
  */
 export function navigate(path: string): void {
     if (window.location.pathname + window.location.search === path) return;

@@ -32,6 +32,8 @@ export interface Shot {
     // viewport and scrolls its board by design.
     framed: boolean;
     after?: (page: Page) => Promise<void>;
+    // Extra preferences this state needs before the app boots.
+    storage?: Record<string, string>;
 }
 
 const signedOut = world({ me: null });
@@ -47,7 +49,7 @@ export const shots: readonly Shot[] = [
     {
         name: `bot-visitor`,
         path: `/bots/sealbot`,
-        world: world({ me: { kind: `user`, name: `ana` } }),
+        world: world({ me: { kind: `user`, name: `ana`, rating: 1402, provisional: false } }),
         ready: `h1`,
         framed: true,
     },
@@ -82,6 +84,49 @@ export const shots: readonly Shot[] = [
     { name: `game-waiting`, path: `/game/waiting`, world: world(), ready: `svg polygon.cell`, framed: false },
     { name: `game-low-clock`, path: `/game/hurry`, world: world(), ready: `svg polygon.cell`, framed: false },
     { name: `game-finished`, path: `/game/finished`, world: world(), ready: `svg polygon.cell`, framed: false },
+    {
+        name: `game-drawer`,
+        path: `/game/running`,
+        world: world(),
+        ready: `svg polygon.cell`,
+        framed: false,
+        after: async (page) => {
+            await page.keyboard.press(`m`);
+            await page.locator(`#drawer-body:not([hidden])`).waitFor();
+        },
+    },
+    {
+        name: `game-pending`,
+        path: `/game/running`,
+        world: world(),
+        ready: `svg polygon.cell`,
+        framed: false,
+        after: async (page) => {
+            await page.getByRole(`application`).focus();
+            await page.keyboard.press(`ArrowRight`);
+            await page.keyboard.press(`Enter`);
+        },
+    },
+    { name: `game-loading`, path: `/game/running`, world: world({ stall: true }), ready: `.hud-skeleton`, framed: false },
+    {
+        name: `game-pinned`,
+        path: `/game/running`,
+        world: world(),
+        ready: `svg polygon.cell`,
+        framed: false,
+        storage: { 'hexarena.drawer-pinned.v1': `1` },
+    },
+    {
+        name: `game-look`,
+        path: `/game/running`,
+        world: world(),
+        ready: `svg polygon.cell`,
+        framed: false,
+        after: async (page) => {
+            await page.keyboard.press(`m`);
+            await page.getByRole(`tab`, { name: `Board` }).click();
+        },
+    },
     { name: `game-missing`, path: `/game/nope`, world: world(), ready: `h1`, framed: true },
     { name: `not-found`, path: `/nowhere`, world: world(), ready: `h1`, framed: true },
 ];

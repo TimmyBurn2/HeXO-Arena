@@ -185,7 +185,7 @@ export function buildOpenApiDocument() {
         operationId: 'me',
         tags: ['Auth'],
         security: [{ sessionCookie: [] }, {}],
-        description: `Reads the session cookie alone. Without a live session the answer is null, never a 401, so a page can ask before it knows.`,
+        description: `Reads the session cookie alone. Without a live session the answer is null, never a 401, so a page can ask before it knows. A user carries their current rating in whole points and whether it is still provisional; a guest is never rated.`,
         responses: {
             200: {
                 description: 'The session holder, or null.',

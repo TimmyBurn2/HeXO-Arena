@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { GameBoard } from '../src/game/GameBoard';
 
@@ -54,6 +54,7 @@ describe('GameBoard', () => {
 
     it('refuse an occupied cell with the note and no commit', () => {
         const commits: unknown[] = [];
+        const notes: (string | null)[] = [];
         render(
             <GameBoard
                 stones={cells.map((cell, index) => ({ ...cell, number: index + 1 }))}
@@ -69,10 +70,13 @@ describe('GameBoard', () => {
                     await Promise.resolve();
                     return true;
                 }}
+                onStatus={(status) => {
+                    notes.push(status.note);
+                }}
             />,
         );
         fireEvent.click(document.querySelector(`polygon.cell[data-x="0"][data-y="0"]`) as SVGElement);
-        expect(screen.getByText(`that cell is taken`)).toBeTruthy();
+        expect(notes.at(-1)).toBe(`That cell is taken`);
         expect(document.querySelector(`polygon.ring-pending`)).toBe(null);
         expect(commits).toEqual([]);
     });
@@ -134,7 +138,7 @@ describe('GameBoard', () => {
         expect(document.querySelector(`polygon.ring-pending`)).toBe(null);
     });
 
-    it('grow the board around the focus and ignore keys when it is not your move', () => {
+    it('draw only the frontier and take no keys when it is not your move', () => {
         render(
             <GameBoard
                 stones={cells.map((cell, index) => ({ ...cell, number: index + 1 }))}
@@ -154,8 +158,7 @@ describe('GameBoard', () => {
         const control = document.querySelector(`.board-control`) as HTMLElement;
         expect(control.hasAttribute(`tabindex`)).toBe(false);
         expect(document.querySelector(`polygon.cell[data-x="10"][data-y="0"]`)).toBe(null);
-        expect(document.querySelector(`.board-control-wrap kbd`)).toBe(null);
-        expect(screen.getByText(`waiting for hextide to move`)).toBeTruthy();
+        expect(control.getAttribute(`aria-label`)).toBe(`board, waiting for hextide`);
     });
 
     it('stop the keyboard focus at the frontier edge', () => {

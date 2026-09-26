@@ -60,12 +60,17 @@
         font-size: var(--text-rung-1);
     }
 
-    .rung.r2 {
+    .rung.r2,
+    .rung-skeleton.r2 {
         margin-left: var(--space-5);
+    }
+
+    .rung.r2 {
         font-size: var(--text-xl);
     }
 
-    .rung.r3 {
+    .rung.r3,
+    .rung-skeleton.r3 {
         margin-left: var(--space-7);
     }
 
@@ -117,8 +122,30 @@
         text-align: left;
     }
 
-    .rating-cell {
-        font-weight: var(--weight-display);
+    /* your own row carries the accent, once, so you find yourself */
+    tr.you td {
+        background: var(--c-accent-bg);
+    }
+
+    .you-tag {
+        color: var(--c-accent);
+        font-size: var(--text-sm);
+        font-weight: var(--weight-strong);
+    }
+
+    /* The empty and error cards sit where the pulse would. */
+    .arena-head + .empty,
+    .arena-head + .ladder-skeleton {
+        margin-top: var(--space-4);
+    }
+
+    .rung-skeleton {
+        height: var(--control-lg);
+        background: var(--c-bg-raised);
+    }
+
+    .rung-skeleton.r1 {
+        height: calc(var(--control-lg) * 2);
     }
 
     @media (max-width: 40rem) {

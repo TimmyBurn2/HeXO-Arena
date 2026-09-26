@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { defaultOpeningTurns, discordLoginPath, type Accepts, type TimeControl } from '@hexarena/contract';
 import { createGame, ApiError } from '../api/client';
 import { Dialog } from './Dialog';
+import { meStore, useMe } from '../me';
 import { navigate } from '../router/use-route';
 import './PlayDialog.css';
 
@@ -19,13 +20,15 @@ const defaultMainMinutes = 5;
 const defaultIncrementSeconds = 3;
 
 const errorSentences: Record<string, (name: string) => string> = {
-    human_busy: () => `you already have three live games`,
-    game_cooldown: () => `a moment: one new game per minute`,
+    human_busy: () => `You already have three live games`,
+    game_cooldown: () => `A moment: one new game per minute`,
     bot_busy: (name) => `${name} is seated elsewhere`,
     clock_not_accepted: (name) => `${name} declined that clock`,
     not_open: (name) => `${name} is not open for challenges right now`,
-    paused: () => `starting games is paused; live games continue`,
+    paused: () => `Starting games is paused; live games continue`,
 };
+
+const guestLimitSentence = `Too many guests right now; try in a minute or sign in`;
 
 /** The accepted turn window as a pair, or null when turn clocks are out. */
 export function turnWindowOf(accepts: Accepts | undefined): readonly [number, number] | null {
@@ -70,10 +73,32 @@ export function PlayDialog({ bot, open, onClose }: { bot: PlayableBot; open: boo
     const [openingTurns, setOpeningTurns] = useState<0 | 1 | 2 | 3 | 4>(defaultOpeningTurns);
     const [failure, setFailure] = useState<string | null>(null);
     const [sending, setSending] = useState(false);
+    const me = useMe();
+    const signedOut = me.status === `ready` && me.me === null;
+    const guestName = me.status === `ready` && me.me?.kind === `guest` ? me.me.name : null;
 
     const turnWindow = turnWindowOf(bot.accepts);
     const turnMin = turnWindow === null ? turnFloorSeconds : Math.max(turnFloorSeconds, turnWindow[0] / 1000);
     const turnMax = turnWindow === null ? 60 : Math.max(turnMin, turnWindow[1] / 1000);
+
+    // A signed-out player becomes a guest and starts the game in the same
+    // click, so the dialog stays one confirmation.
+    async function startAsGuest() {
+        setSending(true);
+        setFailure(null);
+        try {
+            await meStore.guest();
+        } catch (cause) {
+            setFailure(
+                cause instanceof ApiError && cause.code === `guest_limit`
+                    ? guestLimitSentence
+                    : `The guest session did not start; try again`,
+            );
+            setSending(false);
+            return;
+        }
+        await start();
+    }
 
     async function start() {
         setSending(true);
@@ -93,9 +118,9 @@ export function PlayDialog({ bot, open, onClose }: { bot: PlayableBot; open: boo
             if (sentence !== undefined) {
                 setFailure(sentence(bot.name));
             } else if (cause instanceof ApiError && cause.status === 401) {
-                setFailure(`sign in to start a game`);
+                setFailure(`Sign in to start a game`);
             } else {
-                setFailure(`the game could not start; try again`);
+                setFailure(`The game could not start; try again`);
             }
             setSending(false);
         }
@@ -105,7 +130,7 @@ export function PlayDialog({ bot, open, onClose }: { bot: PlayableBot; open: boo
         <Dialog open={open} onClose={onClose} label={`Play ${bot.name}`}>
             <h2>Play {bot.name}</h2>
             <div className="row">
-                <span className="row-label">clock mode, only what the bot accepts</span>
+                <span className="row-label">Clock mode, only what the bot accepts</span>
                 <div className="seg" role="group" aria-label="Clock mode">
                     {([`turn`, `match`, `unlimited`] as const).map((candidate) => (
                         <button
@@ -128,7 +153,7 @@ export function PlayDialog({ bot, open, onClose }: { bot: PlayableBot; open: boo
                 <div className="mode-panel">
                     <div className="slider-row">
                         <div className="slider-head">
-                            <span className="slider-label">turn clock</span>
+                            <span className="slider-label">Turn clock</span>
                             <span className="slider-value">{String(turnSeconds)} s</span>
                         </div>
                         <input
@@ -150,7 +175,7 @@ export function PlayDialog({ bot, open, onClose }: { bot: PlayableBot; open: boo
                         </div>
                     </div>
                     <p className="note">
-                        clamped to the bot's window: {String(turnMin)} - {String(turnMax)} s
+                        Clamped to the bot's window: {String(turnMin)} to {String(turnMax)} s.
                     </p>
                 </div>
             ) : null}
@@ -159,7 +184,7 @@ export function PlayDialog({ bot, open, onClose }: { bot: PlayableBot; open: boo
                 <div className="mode-panel">
                     <div className="slider-row">
                         <div className="slider-head">
-                            <span className="slider-label">main time</span>
+                            <span className="slider-label">Main time</span>
                             <span className="slider-value">{String(mainMinutes)} min</span>
                         </div>
                         <input
@@ -182,7 +207,7 @@ export function PlayDialog({ bot, open, onClose }: { bot: PlayableBot; open: boo
                     </div>
                     <div className="slider-row">
                         <div className="slider-head">
-                            <span className="slider-label">increment</span>
+                            <span className="slider-label">Increment</span>
                             <span className="slider-value">+{String(incrementSeconds)} s</span>
                         </div>
                         <input
@@ -208,15 +233,15 @@ export function PlayDialog({ bot, open, onClose }: { bot: PlayableBot; open: boo
 
             {mode === `unlimited` ? (
                 <div className="mode-panel">
-                    <p className="note">no clocks; the server caps the game at 24 hours</p>
+                    <p className="note">No clocks; the server caps the game at 24 hours.</p>
                 </div>
             ) : null}
 
             <div className="row">
                 <details className="advanced">
-                    <summary>advanced session</summary>
+                    <summary>Advanced session</summary>
                     <fieldset>
-                        <legend>opening turns after the origin, placed by the server</legend>
+                        <legend>Opening turns after the origin, placed by the server</legend>
                         <div className="controls">
                             {([0, 1, 2, 3, 4] as const).map((count) => (
                                 <span className="opt" key={count}>
@@ -240,26 +265,41 @@ export function PlayDialog({ bot, open, onClose }: { bot: PlayableBot; open: boo
 
             <p className="note">
                 {openingTurns === 0
-                    ? `the opening stone lands before your first turn; two stones per turn, always`
-                    : `the opening stone and ${String(openingTurns)} random ${openingTurns === 1 ? `turn` : `turns`} land before your first turn; two stones per turn, always`}
+                    ? `The opening stone lands before your first turn; two stones per turn, always.`
+                    : `The opening stone and ${String(openingTurns)} random ${openingTurns === 1 ? `turn` : `turns`} land before your first turn; two stones per turn, always.`}
             </p>
             {failure !== null ? (
                 <p className="field-error" role="alert">
                     {failure}
                 </p>
             ) : null}
-            {failure === `sign in to start a game` ? (
+            {failure === `Sign in to start a game` ? (
                 <p>
                     <a className="btn btn-ghost btn-sm" href={discordLoginPath}>
                         Sign in with Discord
                     </a>
                 </p>
             ) : null}
-            <p>
-                <button type="button" className="btn btn-primary" disabled={sending} onClick={() => void start()}>
-                    Start game
-                </button>
-            </p>
+            {guestName === null ? null : <p className="note">You play as {guestName}; guest games are unrated.</p>}
+            {signedOut ? (
+                <>
+                    <p className="note">Play now as a guest, unrated, or sign in to play rated.</p>
+                    <p className="card-actions">
+                        <button type="button" className="btn btn-primary" disabled={sending} onClick={() => void startAsGuest()}>
+                            Play as guest
+                        </button>
+                        <a className="btn btn-ghost" href={discordLoginPath}>
+                            Sign in with Discord
+                        </a>
+                    </p>
+                </>
+            ) : (
+                <p>
+                    <button type="button" className="btn btn-primary" disabled={sending} onClick={() => void start()}>
+                        Start game
+                    </button>
+                </p>
+            )}
         </Dialog>
     );
 }

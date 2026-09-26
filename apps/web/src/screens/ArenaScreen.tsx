@@ -4,6 +4,7 @@ import { fetchBots, fetchLeaderboard, type LeaderboardKind } from '../api/client
 import { useAsync } from '../api/use-async';
 import { BotBadge, PlayerName, Rating } from '../components/player';
 import { ErrorFrame, SkeletonRows } from '../components/states';
+import { useMe } from '../me';
 import { Link } from '../router/Link';
 import './ArenaScreen.css';
 
@@ -43,15 +44,17 @@ export function ArenaScreen() {
 function Board({ kind }: { kind: LeaderboardKind }) {
     const load = useCallback(async () => fetchLeaderboard(kind), [kind]);
     const { data, error, loading, reload } = useAsync(load);
+    const me = useMe();
     const loadBots = useCallback(async () => fetchBots(false), []);
     const roster = useAsync(loadBots).data;
 
-    if (loading && data === null) return <SkeletonRows />;
-    if (error && data === null) return <ErrorFrame sentence="the board did not load" onRetry={reload} />;
+    if (loading && data === null) return <LadderSkeleton />;
+    if (error && data === null) return <ErrorFrame sentence="The board did not load" onRetry={reload} />;
     if (data === null) return null;
     if (data.length === 0) return <DayOneEmpty />;
 
     const owners = new Map((roster ?? []).map((bot) => [bot.name, bot.ownerName]));
+    const self = me.status === `ready` && me.me?.kind === `user` ? me.me.name : null;
     return (
         <>
             <Pulse ranked={data.length} kind={kind} roster={roster} />
@@ -72,12 +75,13 @@ function Board({ kind }: { kind: LeaderboardKind }) {
                     </thead>
                     <tbody>
                         {data.map((entry) => (
-                            <tr key={entry.name}>
+                            <tr key={entry.name} className={entry.name === self ? `you` : undefined}>
                                 <td className="num rank-col">{String(entry.rank)}</td>
                                 <td>
                                     <span className="player-cell">
                                         <PlayerName name={entry.name} kind={entry.kind} />
                                         {entry.kind === `bot` ? <BotBadge /> : null}
+                                        {entry.name === self ? <span className="you-tag">you</span> : null}
                                     </span>
                                 </td>
                                 <td className="num rating-cell">
@@ -89,10 +93,10 @@ function Board({ kind }: { kind: LeaderboardKind }) {
                 </table>
             </div>
             <p className="note">
-                rankable players only; provisional ratings leave the board until
-                their deviation settles
+                Rankable players only; provisional ratings leave the board until
+                their deviation settles.
             </p>
-            {error ? <ErrorFrame sentence="the board did not load" onRetry={reload} /> : null}
+            {error ? <ErrorFrame sentence="The board did not load" onRetry={reload} /> : null}
         </>
     );
 }
@@ -137,9 +141,9 @@ function Rungs({ entries, owners }: { entries: readonly LeaderboardEntry[]; owne
                             <PlayerName name={entry.name} kind={entry.kind} />
                             {entry.kind === `bot` ? <BotBadge /> : null}
                             {entry.kind === `human` ? (
-                                <span className="rung-kind">human</span>
+                                <span className="rung-kind">Human</span>
                             ) : owner === null ? null : (
-                                <span className="rung-owner">by {owner}</span>
+                                <span className="rung-owner">By {owner}</span>
                             )}
                         </span>
                         <span className="rung-rating">{String(entry.rating)}</span>
@@ -159,13 +163,27 @@ function Rungs({ entries, owners }: { entries: readonly LeaderboardEntry[]; owne
     );
 }
 
+// The ladder's own shape while it loads, so nothing jumps when rows land.
+function LadderSkeleton() {
+    return (
+        <div className="ladder-skeleton" aria-hidden="true">
+            <div className="rungs">
+                <div className="rung-skeleton r1" />
+                <div className="rung-skeleton r2" />
+                <div className="rung-skeleton r3" />
+            </div>
+            <SkeletonRows />
+        </div>
+    );
+}
+
 function DayOneEmpty() {
     return (
         <div className="empty">
-            <h2>no ranked players yet</h2>
+            <h2>No ranked players yet</h2>
             <p>
-                the ladder is whatever you bring: register a bot, let it dial in,
-                and the first games make the board
+                The ladder is whatever you bring: register a bot, let it dial in,
+                and the first games make the board.
             </p>
             <div className="actions">
                 <Link to="/connect" className="btn btn-primary">

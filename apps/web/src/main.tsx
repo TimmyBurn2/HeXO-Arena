@@ -8,12 +8,14 @@ import './styles/cut.css';
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { AppShell } from './AppShell';
+import { meStore } from './me';
 import { themeStore } from './theme/themes';
 
 // Every sheet under themes loads; the root attribute picks one, so adding
 // a theme needs no import here.
 import.meta.glob(`./styles/themes/*.css`, { eager: true });
 themeStore.start();
+meStore.start();
 
 const rootElement = document.getElementById(`root`);
 if (!rootElement) {

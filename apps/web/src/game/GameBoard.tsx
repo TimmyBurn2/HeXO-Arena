@@ -1,8 +1,9 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { AxialCoord, Side } from '@hexarena/contract';
 import { isWithinPlacementRadius, rejection, type Position } from '@hexarena/rules';
 import { Board, type BoardStone } from '../board/Board';
 import { useBoardSettings } from '../board/board-settings';
+import { cellSize, frontierCells, viewBoxOf } from '../board/geometry';
 import { rejectionNote } from './snapshot-views';
 import './GameBoard.css';
 
@@ -15,12 +16,59 @@ const sixKeys: Record<string, AxialCoord> = {
     e: { x: -1, y: 1 },
 };
 
+/** What the board tells the rest of the screen about the turn in hand. */
+export interface TurnStatus {
+    placed: 0 | 1;
+    note: string | null;
+}
+
+// A cell spans this many svg units edge to edge across its flats.
+const cellWidth = Math.sqrt(3) * cellSize;
+
+// When the frontier is too big to fit, the camera frames the stones and
+// this many cells round them.
+const nearCells = 3;
+
+function nearBox(stones: readonly AxialCoord[]): { x: number; y: number; w: number; h: number } {
+    const box = viewBoxOf(stones);
+    const dx = nearCells * cellWidth;
+    const dy = nearCells * 1.5 * cellSize;
+    return { x: box.x - dx, y: box.y - dy, w: box.w + 2 * dx, h: box.h + 2 * dy };
+}
+
+/**
+ * The smallest a cell may render, from the scale sheet, which raises it
+ * for coarse pointers so a finger always hits one cell.
+ */
+function minCellPx(element: HTMLElement): number {
+    const style = getComputedStyle(element);
+    const raw = style.getPropertyValue(`--board-cell-min`).trim();
+    const rootPx = Number.parseFloat(getComputedStyle(document.documentElement).fontSize) || 16;
+    const value = Number.parseFloat(raw);
+    if (!Number.isFinite(value)) return 0;
+    return raw.endsWith(`rem`) ? value * rootPx : value;
+}
+
 /**
  * The interactive board: six-key cell focus, two-stone selection with a
  * pending ring, and a locally validated commit, so the server's move
  * rejections are unreachable by construction.
+ * The camera fits the whole frontier when every cell stays at its minimum
+ * size and scrolls natively otherwise; it refits between turns, never
+ * while placing.
  */
-export function GameBoard({ stones, position, you, lastMove, winLine, yourMove, opponentMoving, opponentName, onCommit }: {
+export function GameBoard({
+    stones,
+    position,
+    you,
+    lastMove,
+    winLine,
+    yourMove,
+    opponentMoving,
+    opponentName,
+    onCommit,
+    onStatus,
+}: {
     stones: readonly BoardStone[];
     position: Position;
     you: Side;
@@ -30,13 +78,22 @@ export function GameBoard({ stones, position, you, lastMove, winLine, yourMove, 
     opponentMoving: boolean;
     opponentName: string;
     onCommit: (cells: readonly [AxialCoord, AxialCoord]) => Promise<boolean>;
+    onStatus?: ((status: TurnStatus) => void) | undefined;
 }) {
     const [settings] = useBoardSettings();
     const [focus, setFocus] = useState<AxialCoord>(() => stones.at(-1) ?? { x: 0, y: 0 });
     const [pending, setPending] = useState<AxialCoord | null>(null);
     const [note, setNote] = useState<string | null>(null);
     const [sending, setSending] = useState(false);
-    const rootRef = useRef<HTMLDivElement>(null);
+    const cameraRef = useRef<HTMLDivElement>(null);
+    const [size, setSize] = useState<{ w: number; h: number } | null>(null);
+    const [scale, setScale] = useState<number | undefined>(undefined);
+    const centerOn = useRef<{ cx: number; cy: number } | null>(null);
+    const box = useMemo(() => viewBoxOf(frontierCells(stones)), [stones]);
+
+    useEffect(() => {
+        onStatus?.({ placed: pending === null ? 0 : 1, note });
+    }, [pending, note, onStatus]);
 
     // The opponent's move or the finish leaves the board static.
     useEffect(() => {
@@ -45,6 +102,51 @@ export function GameBoard({ stones, position, you, lastMove, winLine, yourMove, 
             setNote(null);
         }
     }, [yourMove]);
+
+    useEffect(() => {
+        const camera = cameraRef.current;
+        if (camera === null || typeof ResizeObserver === `undefined`) return;
+        const observer = new ResizeObserver(() => {
+            setSize({ w: camera.clientWidth, h: camera.clientHeight });
+        });
+        observer.observe(camera);
+        return () => {
+            observer.disconnect();
+        };
+    }, []);
+
+    // Refit on a new turn or a new viewport: the whole frontier when it
+    // fits at the minimum cell size, else the stones and three cells round
+    // them, centered once the new size has laid out.
+    // Only the turn count and the viewport refit; a pending mark never
+    // moves the camera under the player's hand.
+    useLayoutEffect(() => {
+        const camera = cameraRef.current;
+        if (camera === null || size === null || size.w === 0 || size.h === 0) return;
+        const style = getComputedStyle(camera);
+        const w = size.w - Number.parseFloat(style.paddingLeft) - Number.parseFloat(style.paddingRight);
+        const h = size.h - Number.parseFloat(style.paddingTop) - Number.parseFloat(style.paddingBottom);
+        const least = minCellPx(camera) / cellWidth;
+        const whole = Math.min(w / box.w, h / box.h);
+        if (whole >= least || stones.length === 0) {
+            centerOn.current = null;
+            setScale(whole);
+            return;
+        }
+        const near = nearBox(stones);
+        centerOn.current = { cx: near.x + near.w / 2, cy: near.y + near.h / 2 };
+        setScale(Math.max(least, Math.min(w / near.w, h / near.h)));
+    }, [stones.length, size]);
+
+    useLayoutEffect(() => {
+        const camera = cameraRef.current;
+        const target = centerOn.current;
+        if (camera === null || target === null || scale === undefined) return;
+        const style = getComputedStyle(camera);
+        camera.scrollLeft = Number.parseFloat(style.paddingLeft) + (target.cx - box.x) * scale - camera.clientWidth / 2;
+        camera.scrollTop = Number.parseFloat(style.paddingTop) + (target.cy - box.y) * scale - camera.clientHeight / 2;
+        centerOn.current = null;
+    }, [scale, box]);
 
     const tryMark = useCallback(
         (cell: AxialCoord) => {
@@ -70,7 +172,7 @@ export function GameBoard({ stones, position, you, lastMove, winLine, yourMove, 
             setNote(null);
             void onCommit(pair).then((landed) => {
                 setSending(false);
-                if (!landed) setNote(`the move did not land; try again`);
+                if (!landed) setNote(`The move did not land; try again`);
             });
         },
         [yourMove, sending, pending, position, onCommit],
@@ -99,16 +201,16 @@ export function GameBoard({ stones, position, you, lastMove, winLine, yourMove, 
         }
     }
 
-    // The focus ring scrolls into view as the board grows around it.
+    // The focus ring scrolls into view as it walks past the camera's edge.
     useEffect(() => {
         if (!yourMove) return;
-        rootRef.current
+        cameraRef.current
             ?.querySelector(`polygon.cell[data-x="${String(focus.x)}"][data-y="${String(focus.y)}"]`)
             ?.scrollIntoView({ block: `nearest`, inline: `nearest` });
     }, [focus, yourMove]);
 
     return (
-        <div className="board-control-wrap" ref={rootRef}>
+        <div className="board-camera" ref={cameraRef}>
             <div
                 className="board-control"
                 tabIndex={yourMove ? 0 : undefined}
@@ -120,6 +222,7 @@ export function GameBoard({ stones, position, you, lastMove, winLine, yourMove, 
                     stones={stones}
                     settings={settings}
                     label={`game board, ${String(stones.length)} stones placed`}
+                    scale={scale}
                     overlays={{
                         ...(pending === null ? {} : { pending, pendingSide: you }),
                         ...(yourMove ? { focus } : {}),
@@ -135,23 +238,6 @@ export function GameBoard({ stones, position, you, lastMove, winLine, yourMove, 
                     }
                 />
             </div>
-            {yourMove ? (
-                <p className="note" role="status">
-                    <kbd>tab</kbd> moves the cell focus, <kbd>enter</kbd> marks a stone, the
-                    second mark plays the turn, <kbd>esc</kbd> clears the pending stone; the
-                    dashed ring is the pending stone, the solid ring the last turn
-                </p>
-            ) : null}
-            {!yourMove && opponentMoving ? (
-                <p className="note" role="status">
-                    waiting for {opponentName} to move
-                </p>
-            ) : null}
-            {note !== null ? (
-                <p className="field-error" role="alert">
-                    {note}
-                </p>
-            ) : null}
         </div>
     );
 }

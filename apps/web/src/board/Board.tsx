@@ -32,6 +32,8 @@ export interface BoardProps {
     settings: BoardSettings;
     label: string;
     overlays?: BoardOverlays | undefined;
+    // Pixels per svg unit; absent, the board fills its frame's width.
+    scale?: number | undefined;
     onCellClick?: ((cell: AxialCoord) => void) | undefined;
 }
 
@@ -78,10 +80,11 @@ const Stone = memo(function Stone({ stone, fresh, shine }: { stone: BoardStone; 
 
 /**
  * The one board renderer: the placement frontier as the field, its edge,
- * stones, rings, and overlays as pure presentation. Nothing renders
- * outside the frontier, so an illegal distance cannot be clicked at all.
+ * stones, rings, and overlays as pure presentation.
+ * Nothing renders outside the frontier, so an illegal distance cannot be
+ * clicked at all.
  */
-export function Board({ stones, settings, label, overlays, onCellClick }: BoardProps) {
+export function Board({ stones, settings, label, overlays, scale, onCellClick }: BoardProps) {
     const cells = useMemo(() => frontierCells(stones), [stones]);
     const outline = useMemo(() => frontierOutline(cells), [cells]);
     const viewBox = useMemo(() => viewBoxOf(cells), [cells]);
@@ -115,6 +118,7 @@ export function Board({ stones, settings, label, overlays, onCellClick }: BoardP
                 viewBox={`${viewBox.x.toFixed(2)} ${viewBox.y.toFixed(2)} ${viewBox.w.toFixed(2)} ${viewBox.h.toFixed(2)}`}
                 role="img"
                 aria-label={label}
+                {...(scale === undefined ? {} : { width: viewBox.w * scale, height: viewBox.h * scale })}
                 onClick={onCellClick === undefined ? undefined : handleClick}
             >
                 <defs>
@@ -129,7 +133,6 @@ export function Board({ stones, settings, label, overlays, onCellClick }: BoardP
                     <Cell key={`${String(cell.x)},${String(cell.y)}`} cell={cell} />
                 ))}
                 <path className="frontier" d={outline} />
-                {overlays?.focus !== undefined && <Ring className="ring-focus" coord={overlays.focus} />}
                 {pending !== undefined && (
                     <>
                         <Ring className="ring-pending" coord={pending} />
@@ -148,6 +151,7 @@ export function Board({ stones, settings, label, overlays, onCellClick }: BoardP
                         shine={shine}
                     />
                 ))}
+                {overlays?.focus !== undefined && <Ring className="ring-focus" coord={overlays.focus} />}
                 {overlays?.lastMove?.map((coord) => (
                     <Ring
                         key={`last,${String(coord.x)},${String(coord.y)}`}

@@ -1,5 +1,6 @@
 import {
     acceptsSchema,
+    botCapPerUser,
     nameKeyOf,
     type Accepts,
     type AccountDeclaration,
@@ -11,8 +12,6 @@ import { nowSeconds, type Query } from './db';
 import { bots, nameReservations, ratings, users } from './db/schema';
 import { seedRating, type PlayerRating } from './rating';
 import { randomToken, sha256Hex } from './tokens';
-
-export const botCapPerUser = 3;
 
 export type CreateBotResult =
     | { kind: `created`; name: string; token: string }

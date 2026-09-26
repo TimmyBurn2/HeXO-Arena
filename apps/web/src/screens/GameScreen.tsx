@@ -1,184 +1,224 @@
-import { useState } from 'react';
-import type { GameSnapshot, Side } from '@hexarena/contract';
-import { BotBadge, provisionalNote } from '../components/player';
-import { ErrorFrame, SkeletonRows } from '../components/states';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import type { GameSnapshot } from '@hexarena/contract';
+import { ErrorFrame } from '../components/states';
 import { Link } from '../router/Link';
 import { useRoute } from '../router/use-route';
 import { useDocumentMeta } from '../use-document-meta';
-import { Clock } from '../game/Clock';
-import { GameBoard } from '../game/GameBoard';
+import { GameBoard, type TurnStatus } from '../game/GameBoard';
+import { GameDrawer } from '../game/GameDrawer';
+import { clockModeText, clockOf, OpponentChip, Pips, Swatch, TurnChip, YouChip } from '../game/GameHud';
+import { useDrawer } from '../game/use-drawer';
+import { selfName, useMe } from '../me';
 import { useGame, type GameSend } from '../game/use-game';
-import { feedOf, positionOf, reasonText, resultSentence, stonesOf, winLineOf } from '../game/snapshot-views';
+import { feedOf, positionOf, reasonText, resultLine, resultSentence, stonesOf, winLineOf } from '../game/snapshot-views';
 import './GameScreen.css';
 
 export function GameScreen({ gameId }: { gameId: string }) {
     const game = useGame(gameId);
 
-    if (game.state === `loading`) return <SkeletonRows />;
+    if (game.state === `loading`) return <LoadingStage />;
     if (game.state === `missing`) return <MissingGame />;
-    if (game.state === `error`) return <ErrorFrame sentence="the game did not load" onRetry={game.retry} />;
-    return <GameView snapshot={game.snapshot} send={game.send} />;
+    if (game.state === `error`) {
+        return (
+            <div className="stage-message">
+                <ErrorFrame sentence="The game did not load" onRetry={game.retry} />
+            </div>
+        );
+    }
+    return <GameView snapshot={game.snapshot} send={game.send} stale={game.stale} />;
 }
 
-function MissingGame() {
+// The stage's shape before the snapshot lands, so nothing jumps when it does.
+function LoadingStage() {
     return (
-        <div className="empty">
-            <h1>no such game of yours</h1>
-            <div className="actions">
-                <Link to="/" className="btn btn-ghost">
-                    Arena
-                </Link>
+        <div className="stage" aria-busy="true">
+            <div className="hud-lift hud-top-left">
+                <div className="hud-chip hud-skeleton" />
+            </div>
+            <div className="hud-lift hud-bottom-left">
+                <div className="hud-chip hud-skeleton" />
             </div>
         </div>
     );
 }
 
-function GameView({ snapshot, send }: { snapshot: GameSnapshot; send: GameSend }) {
+function MissingGame() {
+    return (
+        <div className="stage-message">
+            <Link to="/" className="brand">
+                hexarena
+            </Link>
+            <div className="empty">
+                <h1>No such game of yours</h1>
+                <div className="actions">
+                    <Link to="/" className="btn btn-ghost">
+                        Arena
+                    </Link>
+                </div>
+            </div>
+        </div>
+    );
+}
+
+const idleStatus: TurnStatus = { placed: 0, note: null };
+
+// Typing into a field never opens the drawer.
+function typingInto(target: EventTarget | null): boolean {
+    return target instanceof HTMLElement && (target.isContentEditable || [`INPUT`, `TEXTAREA`, `SELECT`].includes(target.tagName));
+}
+
+function GameView({ snapshot, send, stale }: { snapshot: GameSnapshot; send: GameSend; stale: boolean }) {
     const route = useRoute();
+    const drawer = useDrawer();
+    const me = useMe();
+    const self = selfName(me);
     const running = snapshot.status === `in-progress`;
     const you = snapshot.you;
     const yourMove = running && snapshot.toMove === you;
     const stones = stonesOf(snapshot);
     const feed = feedOf(snapshot);
-    const [resignArmed, setResignArmed] = useState(false);
-    const [resigning, setResigning] = useState(false);
+    const [status, setStatus] = useState<TurnStatus>(idleStatus);
+    const hoverTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const openedByHover = useRef(false);
+    const finishedShown = useRef(!running);
 
     useDocumentMeta(route, titleOf(snapshot), descriptionOf(snapshot));
 
-    async function confirmResign() {
-        if (!resignArmed) {
-            setResignArmed(true);
-            return;
+    const onStatus = useCallback((next: TurnStatus) => {
+        setStatus(next);
+    }, []);
+
+    // The game's end opens the record once, so the result has its story.
+    const show = drawer.show;
+    useEffect(() => {
+        if (!running && !finishedShown.current) {
+            finishedShown.current = true;
+            show(`moves`);
         }
-        setResigning(true);
-        await send.resign();
-        setResigning(false);
-        setResignArmed(false);
+    }, [running, show]);
+
+    const toggle = drawer.toggle;
+    useEffect(() => {
+        function onKey(event: KeyboardEvent) {
+            if (event.key !== `m` || event.metaKey || event.ctrlKey || event.altKey || typingInto(event.target)) return;
+            event.preventDefault();
+            toggle();
+        }
+        window.addEventListener(`keydown`, onKey);
+        return () => {
+            window.removeEventListener(`keydown`, onKey);
+        };
+    }, [toggle]);
+
+    // Your move puts the keyboard on the board.
+    useEffect(() => {
+        if (yourMove) document.querySelector<HTMLElement>(`.board-control`)?.focus({ preventScroll: true });
+    }, [yourMove]);
+
+    function hoverEdge() {
+        if (drawer.visible) return;
+        hoverTimer.current = setTimeout(() => {
+            openedByHover.current = true;
+            drawer.show(undefined, `hover`);
+        }, 150);
     }
 
-    return (
-        <>
-            <h1 className="screen-title">
-                {you === `x` ? `you` : snapshot.opponent.name} vs {you === `o` ? `you` : snapshot.opponent.name}
-            </h1>
-            <div className="game-grid">
-                <div className="game-main">
-                    <PlayerStrip snapshot={snapshot} side={you === `x` ? `o` : `x`} />
+    function leaveEdge() {
+        if (hoverTimer.current !== null) clearTimeout(hoverTimer.current);
+    }
 
-                    {running ? null : (
-                        <div className="banner">
-                            <span className="result">{resultSentence(snapshot)}</span>
-                            <span className="note">finished</span>
-                        </div>
-                    )}
+    function leaveDrawer() {
+        if (openedByHover.current) {
+            openedByHover.current = false;
+            drawer.hide();
+        }
+    }
 
-                    <GameBoard
-                        stones={stones}
-                        position={positionOf(snapshot)}
-                        you={you}
-                        lastMove={running ? stones.slice(-2) : []}
-                        winLine={winLineOf(snapshot) ?? []}
-                        yourMove={yourMove}
-                        opponentMoving={running && !yourMove}
-                        opponentName={snapshot.opponent.name}
-                        onCommit={send.playMove}
-                    />
-
-                    <PlayerStrip
-                        snapshot={snapshot}
-                        side={you}
-                        actions={
-                            running ? (
-                                <button
-                                    type="button"
-                                    className="btn btn-danger btn-sm"
-                                    disabled={resigning}
-                                    onClick={() => void confirmResign()}
-                                >
-                                    {resignArmed ? `Confirm resign` : `Resign`}
-                                </button>
-                            ) : undefined
-                        }
-                    />
-
-                    {running ? null : (
-                        <p className="note">
-                            stones numbered by placement when numbers are on; the theme and
-                            board settings live in <Link to="/profile">Profile</Link>
-                        </p>
-                    )}
-                </div>
-
-                <aside className="feed" aria-label="Moves">
-                    <h2>moves</h2>
-                    {feed.map((line) => (
-                        <div className="line" key={`${line.label}-${line.text}`}>
-                            <span className="n label">{line.label}</span>
-                            <span>{line.text}</span>
-                        </div>
-                    ))}
-                </aside>
-            </div>
-        </>
-    );
-}
-
-function PlayerStrip({ snapshot, side, actions }: {
-    snapshot: GameSnapshot;
-    side: Side;
-    actions?: React.ReactNode;
-}) {
-    const running = snapshot.status === `in-progress`;
-    const active = running && snapshot.toMove === side;
-    const you = side === snapshot.you;
-    const clock = clockOf(snapshot, side, active, running);
-
-    return (
-        <div className="strip">
-            <span className="who">
-                {you ? (
-                    <strong>you</strong>
-                ) : (
-                    <>
-                        <strong>{snapshot.opponent.name}</strong>
-                        <BotBadge />
-                        <span className="note">
-                            {String(snapshot.opponent.rating)}
-                            {snapshot.opponent.provisional ? (
-                                <span className="prov" title={provisionalNote}>
-                                    ?
-                                </span>
-                            ) : null}
-                        </span>
-                    </>
-                )}
-                <span className="note">
-                    {`, ${side}`}
-                    {active ? (you ? `, your move: two stones` : `, their move`) : ``}
+    const last = feed.at(-1);
+    const peek = (
+        <div className="peek-row">
+            <Swatch side={you} />
+            <span className="hud-name">{self}</span>
+            {clockOf(snapshot, you)}
+            {yourMove ? <Pips placed={status.placed} /> : null}
+            {last === undefined ? null : (
+                <span className="peek-line">
+                    {last.label} {last.text}
                 </span>
-            </span>
-            <span className="actions">
-                {clock}
-                {actions}
-            </span>
+            )}
+        </div>
+    );
+
+    return (
+        <div className="stage" data-pinned={drawer.pinned ? `` : undefined}>
+            <h1 className="sr-only">{headingOf(snapshot)}</h1>
+            <div className="board-host">
+                <GameBoard
+                    stones={stones}
+                    position={positionOf(snapshot)}
+                    you={you}
+                    lastMove={running ? stones.slice(-2) : []}
+                    winLine={winLineOf(snapshot) ?? []}
+                    yourMove={yourMove}
+                    opponentMoving={running && !yourMove}
+                    opponentName={snapshot.opponent.name}
+                    onCommit={send.playMove}
+                    onStatus={onStatus}
+                />
+                <OpponentChip snapshot={snapshot} />
+                <div className="hud-lift hud-top-right">
+                    <button
+                        type="button"
+                        id="drawer-toggle"
+                        className="hud-chip hud-toggle"
+                        aria-expanded={drawer.visible}
+                        aria-controls="game-drawer"
+                        aria-label="Moves, look, and game"
+                        onClick={drawer.toggle}
+                    >
+                        <svg viewBox="0 0 24 24" aria-hidden="true">
+                            <path d="M4 7h16M4 12h16M4 17h10" />
+                        </svg>
+                    </button>
+                </div>
+                <YouChip snapshot={snapshot} me={me} />
+                <TurnChip
+                    snapshot={snapshot}
+                    stale={stale}
+                    status={yourMove ? status : idleStatus}
+                    onMoves={() => {
+                        drawer.show(`moves`);
+                    }}
+                />
+                <div className="hot-edge" aria-hidden="true" onMouseEnter={hoverEdge} onMouseLeave={leaveEdge} />
+            </div>
+            <div className="drawer-slot" onMouseLeave={leaveDrawer}>
+                <GameDrawer
+                    drawer={drawer}
+                    feed={feed}
+                    facts={factsOf(snapshot)}
+                    running={running}
+                    onResign={send.resign}
+                    peek={peek}
+                />
+            </div>
         </div>
     );
 }
 
-function clockOf(snapshot: GameSnapshot, side: Side, active: boolean, running: boolean): React.ReactNode {
-    if (snapshot.status !== `in-progress`) {
-        const frozen = snapshot.clock;
-        if (frozen === undefined || frozen.mode !== `match`) return null;
-        return <Clock remainingMs={frozen.remainingMainMs[side]} running={running && active} />;
-    }
-    const clock = snapshot.clock;
-    if (clock.mode === `match`) {
-        return <Clock remainingMs={clock.remainingMainMs[side]} running={running && active} />;
-    }
-    if (clock.mode === `turn`) {
-        return active ? <Clock remainingMs={clock.remainingTurnMs} running={running} /> : null;
-    }
-    return null;
+function factsOf(snapshot: GameSnapshot): (readonly [string, string])[] {
+    const facts: (readonly [string, string])[] = [
+        [`Clock`, clockModeText(snapshot)],
+        [`Opening`, `${String(snapshot.openingTurns)} random ${snapshot.openingTurns === 1 ? `turn` : `turns`}`],
+        [`You play`, snapshot.you],
+    ];
+    if (snapshot.status === `finished`) facts.push([`Result`, resultLine(snapshot)]);
+    return facts;
+}
+
+function headingOf(snapshot: GameSnapshot): string {
+    const opponent = snapshot.opponent.name;
+    return snapshot.you === `x` ? `you vs ${opponent}` : `${opponent} vs you`;
 }
 
 function titleOf(snapshot: GameSnapshot): string {
@@ -192,7 +232,7 @@ function titleOf(snapshot: GameSnapshot): string {
         }
         return `${opponent} won (${reasonText(snapshot.reason)}) - hexarena`;
     }
-    return snapshot.you === `x` ? `you vs ${opponent} - hexarena` : `${opponent} vs you - hexarena`;
+    return `${headingOf(snapshot)} - hexarena`;
 }
 
 function descriptionOf(snapshot: GameSnapshot): string {
@@ -201,4 +241,3 @@ function descriptionOf(snapshot: GameSnapshot): string {
     }
     return `${snapshot.clock.mode} clock game against ${snapshot.opponent.name}`;
 }
-

@@ -11,7 +11,9 @@ export type GameLoad =
     | { state: `loading` }
     | { state: `missing` }
     | { state: `error`; retry: () => void }
-    | { state: `ready`; snapshot: GameSnapshot; send: GameSend };
+    // stale: the last read failed; the board keeps the last snapshot while
+    // the poll retries.
+    | { state: `ready`; snapshot: GameSnapshot; send: GameSend; stale: boolean };
 
 export interface GameSend {
     playMove: (cells: readonly [AxialCoord, AxialCoord]) => Promise<boolean>;
@@ -99,5 +101,5 @@ export function useGame(gameId: string): GameLoad {
         }
         return { state: `loading` };
     }
-    return { state: `ready`, snapshot, send };
+    return { state: `ready`, snapshot, send, stale: failed };
 }

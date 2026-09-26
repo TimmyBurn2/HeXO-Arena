@@ -84,9 +84,22 @@
         --shell-pad: var(--space-4);
         --panel-w: 20rem;
         --dialog-w: 26rem;
+        --identity-size: 4rem;
+        --card-min: 14rem;
+        --preview-max-h: 24rem;
         --rung-rank-w: 3.5rem;
         --game-max: 90rem;
         --header-h: 3.5rem;
+        --drawer-w: 21rem;
+        --sheet-peek-h: 4.5rem;
+        --swatch-size: 0.875rem;
+        --pip-size: 0.75rem;
+        --z-hud: 2;
+        --z-drawer: 3;
+        --hot-edge-w: 0.75rem;
+        /* the board's camera keeps this clear above and below for the
+           overlays */
+        --hud-clear: 4.75rem;
 
         /* every motion sits in one band, short enough to never delay play */
         --dur-fast: 120ms;
@@ -100,10 +113,18 @@
         --board-ring-w: 2px;
         --board-pending-dash: 6 4;
         --board-win-w: 4px;
+        /* a cell never renders smaller than this; a finger needs more */
+        --board-cell-min: 1.75rem;
         --board-frontier-w: 1.5px;
         --board-frontier-dash: 5 4;
         /* the pending mark previews its stone at this strength */
         --board-ghost-opacity: 0.35;
+    }
+
+    @media (pointer: coarse) {
+        :root {
+            --board-cell-min: 2.75rem;
+        }
     }
 
     @media (prefers-reduced-motion: reduce) {

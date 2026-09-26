@@ -19,7 +19,7 @@ export function OpenTag({ open }: { open: boolean }) {
     return <span className={open ? `tag` : `tag muted`}>{open ? `open` : `closed`}</span>;
 }
 
-export const provisionalNote = `provisional until the rating deviation settles`;
+export const provisionalNote = `Provisional until the rating deviation settles`;
 
 /** Whole points, tabular, with the trailing question mark when provisional. */
 export function Rating({ value, provisional }: { value: number; provisional: boolean }) {
@@ -54,7 +54,7 @@ export function summarizeAccepts(accepts: Accepts | undefined): string {
     const parts: string[] = [];
     const window = turnWindowOf(accepts);
     if (window !== null) {
-        parts.push(`turn ${String(window[0] / 1000)}-${String(window[1] / 1000)}s`);
+        parts.push(`turn ${String(window[0] / 1000)} to ${String(window[1] / 1000)} s`);
     }
     if (accepts.match) parts.push(`match`);
     if (accepts.unlimited) parts.push(`unlimited`);

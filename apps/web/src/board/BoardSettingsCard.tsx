@@ -28,8 +28,8 @@ export function BoardSettingsCard() {
                 overlays={previewOverlays}
             />
             <p className="note">
-                the theme restyles the whole site; the preview uses the same
-                rendering as the game screen, and choices persist in this browser
+                The theme restyles the whole site; the preview uses the same
+                rendering as the game screen, and choices persist in this browser.
             </p>
         </div>
     );

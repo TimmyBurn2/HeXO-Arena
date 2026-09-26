@@ -2,6 +2,7 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { PlayDialog } from '../src/components/PlayDialog';
+import { meStore } from '../src/me';
 
 const fullAccepts = { turnMs: [5000, 60000], match: true, unlimited: true };
 const turnOnly = { turnMs: [30000, 60000], match: false, unlimited: false };
@@ -15,6 +16,7 @@ function renderDialog(accepts: unknown, name = `sealbot`) {
 afterEach(() => {
     cleanup();
     vi.unstubAllGlobals();
+    meStore.reset();
     window.history.replaceState(null, ``, `/`);
 });
 
@@ -56,7 +58,7 @@ describe('PlayDialog', () => {
     it('show the wall-cap note instead of sliders for unlimited', () => {
         renderDialog(fullAccepts);
         fireEvent.click(screen.getByRole(`button`, { name: `Unlimited` }));
-        expect(screen.getByText(`no clocks; the server caps the game at 24 hours`)).toBeTruthy();
+        expect(screen.getByText(`No clocks; the server caps the game at 24 hours.`)).toBeTruthy();
         expect(screen.queryByRole(`slider`)).toBe(null);
     });
 
@@ -71,7 +73,7 @@ describe('PlayDialog', () => {
         renderDialog(fullAccepts);
         expect(screen.getByText(/1 random turn land/)).toBeTruthy();
         fireEvent.click(screen.getByRole(`radio`, { name: `0` }));
-        expect(screen.getByText(/the opening stone lands/)).toBeTruthy();
+        expect(screen.getByText(/The opening stone lands/)).toBeTruthy();
         expect(screen.queryByText(/random turn/)).toBe(null);
     });
 
@@ -153,7 +155,7 @@ describe('PlayDialog', () => {
         );
         renderDialog(fullAccepts);
         fireEvent.click(screen.getByRole(`button`, { name: `Start game` }));
-        expect(await screen.findByText(`sign in to start a game`)).toBeTruthy();
+        expect(await screen.findByText(`Sign in to start a game`)).toBeTruthy();
         expect(screen.getByRole(`link`, { name: `Sign in with Discord` }).getAttribute(`href`)).toBe(
             `/api/auth/discord/login`,
         );
@@ -173,4 +175,50 @@ describe('PlayDialog', () => {
         (document.querySelector(`dialog.dialog`) as HTMLDialogElement).close();
         expect(closed).toBe(true);
     });
+
+    it('offer a signed-out player an unrated guest game in the same click', async () => {
+        const posts: string[] = [];
+        let me: unknown = null;
+        vi.stubGlobal(
+            `fetch`,
+            vi.fn((url: string, init?: RequestInit) => {
+                if (init?.method === `POST`) {
+                    posts.push(url);
+                    if (url === `/api/auth/guest`) {
+                        me = { kind: `guest`, name: `Guest k3f9` };
+                        return Promise.resolve(new Response(JSON.stringify(me), { status: 201 }));
+                    }
+                    return Promise.resolve(new Response(JSON.stringify({ error: `busy`, code: `bot_busy` }), { status: 409 }));
+                }
+                return Promise.resolve(new Response(JSON.stringify(me)));
+            }),
+        );
+        meStore.start();
+        renderDialog(fullAccepts);
+        fireEvent.click(await screen.findByRole(`button`, { name: `Play as guest` }));
+        await waitFor(() => {
+            expect(posts).toEqual([`/api/auth/guest`, `/api/games`]);
+        });
+        expect(await screen.findByText(`sealbot is seated elsewhere`)).toBeTruthy();
+        expect(screen.getByText(`You play as Guest k3f9; guest games are unrated.`)).toBeTruthy();
+    });
+
+    it('explain a full guest house and keep the sign-in', async () => {
+        vi.stubGlobal(
+            `fetch`,
+            vi.fn((url: string, init?: RequestInit) =>
+                Promise.resolve(
+                    init?.method === `POST`
+                        ? new Response(JSON.stringify({ error: `full`, code: `guest_limit` }), { status: 429 })
+                        : new Response(`null`),
+                ),
+            ),
+        );
+        meStore.start();
+        renderDialog(fullAccepts);
+        fireEvent.click(await screen.findByRole(`button`, { name: `Play as guest` }));
+        expect(await screen.findByText(`Too many guests right now; try in a minute or sign in`)).toBeTruthy();
+        expect(screen.getByRole(`link`, { name: `Sign in with Discord` })).toBeTruthy();
+    });
 });
+

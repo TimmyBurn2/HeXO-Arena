@@ -1,7 +1,7 @@
 import { botsPath, botTokenPattern, botWithTokenSchema, devLoginPath } from '@hexarena/contract';
 import { desc } from 'drizzle-orm';
 import { describe, expect, it } from 'vitest';
-import { botCapPerUser } from '../src/bots';
+import { botCapPerUser } from '@hexarena/contract';
 import { createQuery } from '../src/db';
 import { bots } from '../src/db/schema';
 import { insertBotGame, recordFinish } from '../src/game-store';

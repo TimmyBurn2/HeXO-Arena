@@ -69,7 +69,8 @@ export function stonePoints(): string {
 /**
  * The placement frontier: every cell a stone may legally go, the union of
  * placement-radius disks around the placed stones, row-ordered top to
- * bottom for a stable render. Before any stone, only the origin is legal.
+ * bottom for a stable render.
+ * Before any stone, only the origin is legal.
  */
 export function frontierCells(stones: readonly AxialCoord[]): AxialCoord[] {
     if (stones.length === 0) return [{ x: 0, y: 0 }];

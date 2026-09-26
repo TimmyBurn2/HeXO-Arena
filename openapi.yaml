@@ -3571,7 +3571,8 @@ paths:
   /api/me:
     get:
       description: Reads the session cookie alone. Without a live session the answer is null, never a 401,
-        so a page can ask before it knows.
+        so a page can ask before it knows. A user carries their current rating in whole points and
+        whether it is still provisional; a guest is never rated.
       operationId: me
       responses:
         "200":
@@ -3586,9 +3587,15 @@ paths:
                         type: string
                       name:
                         type: string
+                      provisional:
+                        type: boolean
+                      rating:
+                        type: integer
                     required:
                       - kind
                       - name
+                      - rating
+                      - provisional
                     type: object
                   - properties:
                       kind:

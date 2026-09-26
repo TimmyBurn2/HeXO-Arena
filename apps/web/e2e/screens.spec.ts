@@ -11,7 +11,7 @@ for (const look of looks) {
         for (const shot of shots) {
             test(`${shot.name} holds contrast and layout in ${look.name} at ${viewport.name}`, async ({ page }) => {
                 await page.setViewportSize({ width: viewport.width, height: viewport.height });
-                await wear(page, look);
+                await wear(page, { name: look.name, storage: { ...look.storage, ...shot.storage } });
                 await serve(page, structuredClone(shot.world));
                 await page.goto(shot.path);
                 await page.locator(shot.ready).first().waitFor();

@@ -10,6 +10,11 @@
         height: auto;
     }
 
+    /* A scaled board takes its size from its width and height attributes. */
+    .board-svg[width] {
+        width: auto;
+    }
+
     /* The field: every legal cell, separated by a gap darker than the
        cell; the frontier edge, not the gaps, carries the contrast. */
     .cell {

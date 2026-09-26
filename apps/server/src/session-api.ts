@@ -11,6 +11,7 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import type { Query } from './db';
 import type { Person } from './game-registry';
 import type { GuestSessions } from './guests';
+import { streamPlayerOf } from './rating-store';
 import { deleteSession, findSessionUser, sessionCookieMaxAge } from './sessions';
 
 export interface SessionApiDeps {
@@ -55,13 +56,19 @@ export function endGuestSession(guests: GuestSessions, request: FastifyRequest):
     if (token !== undefined) guests.end(token);
 }
 
+function meOf(query: Query, person: Person | null): Me {
+    if (person === null) return null;
+    if (person.kind === `guest`) return { kind: `guest`, name: person.name };
+    const { rating, provisional } = streamPlayerOf(query, { kind: `human`, id: person.id }, person.name);
+    return { kind: `user`, name: person.name, rating, provisional };
+}
+
 export function registerSessionApi(app: FastifyInstance, deps: SessionApiDeps): void {
     const { query, guests, secureCookies } = deps;
 
     app.get(mePath, async (request, reply) => {
         const person = sessionPerson(query, guests, request);
-        const me: Me = person === null ? null : { kind: person.kind, name: person.name };
-        return reply.code(200).send(me);
+        return reply.code(200).send(meOf(query, person));
     });
 
     app.post(logoutPath, async (request, reply) => {

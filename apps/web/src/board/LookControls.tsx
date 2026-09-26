@@ -39,7 +39,7 @@ export function LookControls() {
                         update({ numbers: event.target.checked });
                     }}
                 />
-                stone numbers
+                Stone numbers
             </label>
             <label className="checkline">
                 <input
@@ -49,7 +49,7 @@ export function LookControls() {
                         update({ coords: event.target.checked });
                     }}
                 />
-                coordinates
+                Coordinates
             </label>
         </div>
     );

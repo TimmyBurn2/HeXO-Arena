@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { shots } from './matrix';
+import { shots, wear } from './matrix';
 import { serve } from './mock-api';
 
 // Every computed duration on every element: zero, or inside the motion
@@ -25,6 +25,7 @@ async function durations(page: Page): Promise<number[]> {
 
 for (const shot of shots) {
     test(`${shot.name} moves only inside the motion band`, async ({ page }) => {
+        await wear(page, { name: shot.name, storage: shot.storage ?? {} });
         await serve(page, structuredClone(shot.world));
         await page.goto(shot.path);
         await page.locator(shot.ready).first().waitFor();

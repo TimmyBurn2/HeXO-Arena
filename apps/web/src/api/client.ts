@@ -7,6 +7,11 @@ import {
     createGameRequestSchema,
     gamesPath,
     gameSnapshotSchema,
+    guestMeSchema,
+    guestPath,
+    logoutPath,
+    mePath,
+    meSchema,
     humanMoveRequestSchema,
     leaderboardEntrySchema,
     leaderboardPath,
@@ -15,7 +20,9 @@ import {
     type BotListing,
     type CreateGameRequest,
     type GameSnapshot,
+    type GuestMe,
     type LeaderboardEntry,
+    type Me,
 } from '@hexarena/contract';
 import type { ZodType } from 'zod';
 
@@ -73,6 +80,43 @@ async function sendJson<T>(url: string, method: string, body: unknown, schema: Z
         throw await failureOf(response);
     }
     return schema.parse(await response.json());
+}
+
+async function sendEmpty(url: string, method: string): Promise<void> {
+    let response: Response;
+    try {
+        response = await fetch(url, { method, cache: `no-store` });
+    } catch (cause) {
+        throw new ApiError(0, null, cause instanceof Error ? cause.message : `network`);
+    }
+    if (!response.ok) {
+        throw await failureOf(response);
+    }
+}
+
+/** Who the session names; null means signed out, never an error. */
+export function fetchMe(): Promise<Me> {
+    return getJson(mePath, meSchema);
+}
+
+/** End the session, account or guest; idempotent. */
+export function signOut(): Promise<void> {
+    return sendEmpty(logoutPath, `POST`);
+}
+
+/** Start an anonymous, unrated session, or rejoin the one this browser holds. */
+export function startGuest(): Promise<GuestMe> {
+    return sendJson(guestPath, `POST`, {}, guestMeSchema);
+}
+
+/** Mint a new token for an owned bot; the old one dies and the new one shows once. */
+export function rotateBotToken(name: string): Promise<{ name: string; token: string }> {
+    return sendJson(`/api/bots/${encodeURIComponent(name)}/token`, `POST`, {}, botWithTokenSchema);
+}
+
+/** Delete an owned bot; a bot seated in a live game answers in_game. */
+export function deleteBot(name: string): Promise<void> {
+    return sendEmpty(`/api/bots/${encodeURIComponent(name)}`, `DELETE`);
 }
 
 /**

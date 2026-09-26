@@ -52,7 +52,7 @@ describe('BotsScreen', () => {
         render(<BotsScreen />);
         expect(await screen.findByRole(`table`)).toBeTruthy();
         expect(screen.getByText(`tom`).tagName).toBe(`TD`);
-        expect(screen.getByText(`turn 5-60s, match, unlimited`)).toBeTruthy();
+        expect(screen.getByText(`turn 5 to 60 s, match, unlimited`)).toBeTruthy();
         expect(screen.getByText(`match, unlimited`)).toBeTruthy();
         expect(document.querySelectorAll(`tbody tr`).length).toBe(2);
     });
@@ -63,14 +63,14 @@ describe('BotsScreen', () => {
         await screen.findByRole(`table`);
         const prov = document.querySelector(`.prov`) as HTMLElement;
         expect(prov.textContent).toBe(`?`);
-        expect(prov.getAttribute(`title`)).toBe(`provisional until the rating deviation settles`);
+        expect(prov.getAttribute(`title`)).toBe(`Provisional until the rating deviation settles`);
     });
 
     it('explain both presence and open states in the legend', async () => {
         stubDirectory(directory);
         render(<BotsScreen />);
         await screen.findByRole(`table`);
-        expect(screen.getByText(`open = accepting challenges`)).toBeTruthy();
+        expect(screen.getByText(`Open = accepting challenges`)).toBeTruthy();
         expect(screen.getByText(`? = provisional rating`)).toBeTruthy();
     });
 
@@ -89,7 +89,7 @@ describe('BotsScreen', () => {
         render(<BotsScreen />);
         await screen.findByText(`sealbot`);
         fireEvent.click(screen.getByRole(`checkbox`));
-        expect(await screen.findByText(/no bots online right now/)).toBeTruthy();
+        expect(await screen.findByText(/No bots online right now/)).toBeTruthy();
         expect(screen.getByRole(`table`)).toBeTruthy();
     });
 
@@ -114,14 +114,14 @@ describe('BotsScreen', () => {
     it('show the day-one empty state only without the filter', async () => {
         stubDirectory([]);
         render(<BotsScreen />);
-        expect(await screen.findByText(`no bots yet`)).toBeTruthy();
+        expect(await screen.findByText(`No bots yet`)).toBeTruthy();
         expect(screen.getByRole(`link`, { name: `Connect a bot` }).getAttribute(`href`)).toBe(`/connect`);
     });
 
     it('offer a retry when the first load fails', async () => {
         stubDirectory([], 500);
         render(<BotsScreen />);
-        expect(await screen.findByText(`the directory did not load`)).toBeTruthy();
+        expect(await screen.findByText(`The directory did not load`)).toBeTruthy();
         stubDirectory(directory);
         fireEvent.click(screen.getByRole(`button`, { name: `Try again` }));
         await waitFor(() => {

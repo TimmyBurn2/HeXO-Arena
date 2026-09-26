@@ -31,10 +31,10 @@ describe('GET /api/me', () => {
         await arena.app.close();
     });
 
-    it('names the signed-in user', async () => {
+    it('names the signed-in user with the seeded, provisional rating before any game', async () => {
         const arena = await createTestApp();
         const session = await loginAs(arena.app, `alice`);
-        expect(await readMe(arena, session)).toEqual({ kind: `user`, name: `alice` });
+        expect(await readMe(arena, session)).toEqual({ kind: `user`, name: `alice`, rating: 1000, provisional: true });
         await arena.app.close();
     });
 });

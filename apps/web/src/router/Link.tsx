@@ -5,11 +5,12 @@ import { navigate } from './use-route';
  * An anchor that navigates in the SPA; modified clicks and non-primary
  * buttons fall through to the browser.
  */
-export function Link({ to, className, children, ariaCurrent }: {
+export function Link({ to, className, children, ariaCurrent, ariaLabel }: {
     to: string;
     className?: string;
     children: ReactNode;
     ariaCurrent?: boolean;
+    ariaLabel?: string;
 }) {
     function handleClick(event: MouseEvent<HTMLAnchorElement>) {
         if (event.defaultPrevented) return;
@@ -20,7 +21,13 @@ export function Link({ to, className, children, ariaCurrent }: {
     }
 
     return (
-        <a href={to} className={className} aria-current={ariaCurrent ? `page` : undefined} onClick={handleClick}>
+        <a
+            href={to}
+            className={className}
+            aria-current={ariaCurrent ? `page` : undefined}
+            aria-label={ariaLabel}
+            onClick={handleClick}
+        >
             {children}
         </a>
     );

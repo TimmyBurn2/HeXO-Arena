@@ -7,8 +7,8 @@ export interface RouteMeta {
 
 /**
  * Title and embed description per route; detail routes upgrade these from
- * fetched data, everything else is static. Descriptions carry the one
- * headline fact of the screen.
+ * fetched data, everything else is static.
+ * Descriptions carry the one headline fact of the screen.
  */
 export function routeMeta(route: Route): RouteMeta {
     switch (route.name) {

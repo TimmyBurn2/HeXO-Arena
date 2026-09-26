@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { meStore } from '../src/me';
 import { ConnectScreen } from '../src/screens/ConnectScreen';
 
 afterEach(() => {
@@ -38,11 +39,11 @@ describe('ConnectScreen', () => {
     it('validate the name live against the syntax rules', () => {
         render(<ConnectScreen />);
         type(`1badname`);
-        expect(screen.getByText(`letters first, then letters, digits, - or _; 2 to 30 characters`)).toBeTruthy();
+        expect(screen.getByText(`Letters first, then letters, digits, - or _; 2 to 30 characters`)).toBeTruthy();
         type(`admin`);
-        expect(screen.getByText(`that name is reserved`)).toBeTruthy();
+        expect(screen.getByText(`That name is reserved`)).toBeTruthy();
         type(`sealbot`);
-        expect(screen.queryByText(/letters first/)).toBe(null);
+        expect(screen.queryByText(/Letters first/)).toBe(null);
         expect(screen.queryByText(/reserved/)).toBe(null);
     });
 
@@ -88,7 +89,7 @@ describe('ConnectScreen', () => {
         render(<ConnectScreen />);
         type(`sealbot`);
         fireEvent.click(screen.getByRole(`button`, { name: `Create bot` }));
-        expect(await screen.findByText(`that name is taken`)).toBeTruthy();
+        expect(await screen.findByText(`That name is taken`)).toBeTruthy();
     });
 
     it('point a signed-out creator at step one', async () => {
@@ -103,6 +104,29 @@ describe('ConnectScreen', () => {
         render(<ConnectScreen />);
         type(`sealbot`);
         fireEvent.click(screen.getByRole(`button`, { name: `Create bot` }));
-        expect(await screen.findByText(`sign in first; step 1 opens Discord`)).toBeTruthy();
+        expect(await screen.findByText(`Sign in first; step 1 opens Discord`)).toBeTruthy();
+    });
+
+    it('mark the sign-in step done for a signed-in user', async () => {
+        vi.stubGlobal(
+            `fetch`,
+            vi.fn(() => Promise.resolve(new Response(JSON.stringify({ kind: `user`, name: `tom`, rating: 1503, provisional: false })))),
+        );
+        meStore.reset();
+        meStore.start();
+        render(<ConnectScreen />);
+        expect(await screen.findByRole(`heading`, { name: `Signed in as tom` })).toBeTruthy();
+        expect(screen.queryByRole(`link`, { name: `Sign in with Discord` })).toBe(null);
+        meStore.reset();
+    });
+
+    it('tell a guest that owning a bot takes an account', async () => {
+        vi.stubGlobal(`fetch`, vi.fn(() => Promise.resolve(new Response(JSON.stringify({ kind: `guest`, name: `Guest k3f9` })))));
+        meStore.reset();
+        meStore.start();
+        render(<ConnectScreen />);
+        expect(await screen.findByText(`You are playing as Guest k3f9; owning a bot takes an account.`)).toBeTruthy();
+        meStore.reset();
     });
 });
+

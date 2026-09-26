@@ -1,4 +1,6 @@
 import { lazy, Suspense, useEffect, useRef, useSyncExternalStore } from 'react';
+import { discordLoginPath } from '@hexarena/contract';
+import { useMe } from './me';
 import { Link } from './router/Link';
 import { routePath, type Route } from './router/route';
 import { useRoute } from './router/use-route';
@@ -63,10 +65,22 @@ export function AppShell() {
         mainRef.current?.focus({ preventScroll: true });
     }, [route]);
 
+    // The game is immersive: the board is the screen, with no site chrome;
+    // a paused banner would not apply, since live games continue.
+    if (layoutOf(route) === `immersive`) {
+        return (
+            <main id="main" ref={mainRef} tabIndex={-1}>
+                <Suspense fallback={null}>
+                    <RouteView route={route} />
+                </Suspense>
+            </main>
+        );
+    }
+
     return (
         <>
             <a className="skip" href="#main">
-                skip to content
+                Skip to content
             </a>
             <header className="topbar">
                 <div className="topbar-inner">
@@ -81,21 +95,17 @@ export function AppShell() {
                             ))}
                     </nav>
                     <div className="nav-right">
-                        {navItems
-                            .filter((item) => item.right)
-                            .map((item) => (
-                                <NavLink key={item.label} item={item} route={route} />
-                            ))}
+                        <Identity route={route} />
                     </div>
                 </div>
             </header>
             {paused === `paused` ? (
                 <div className="site-banner" role="status">
-                    <div className="site-banner-inner">starting games is paused; live games continue</div>
+                    <div className="site-banner-inner">Starting games is paused; live games continue</div>
                 </div>
             ) : null}
             <main className="shell" id="main" ref={mainRef} tabIndex={-1}>
-                <Suspense fallback={<p className="note">loading</p>}>
+                <Suspense fallback={<p className="note">Loading</p>}>
                     <RouteView route={route} />
                 </Suspense>
             </main>
@@ -106,6 +116,12 @@ export function AppShell() {
             </nav>
         </>
     );
+}
+
+type Layout = `framed` | `immersive`;
+
+function layoutOf(route: Route): Layout {
+    return route.name === `game` ? `immersive` : `framed`;
 }
 
 function RouteView({ route }: { route: Route }) {
@@ -125,6 +141,33 @@ function RouteView({ route }: { route: Route }) {
         case `not-found`:
             return <NotFoundScreen />;
     }
+}
+
+// The top bar's right edge names who is here: a user's monogram and name,
+// a guest's label marked unrated, or the way in.
+function Identity({ route }: { route: Route }) {
+    const state = useMe();
+    const active = route.name === `profile`;
+    if (state.status === `loading`) {
+        return <span className="identity" aria-hidden="true" />;
+    }
+    const me = state.me;
+    if (me === null) {
+        return (
+            <a className="btn btn-primary btn-sm" href={discordLoginPath}>
+                Sign in
+            </a>
+        );
+    }
+    return (
+        <Link to="/profile" className={`identity nav-link${active ? ` active` : ``}`} ariaCurrent={active}>
+            <span className="monogram" aria-hidden="true">
+                {me.kind === `user` ? me.name.slice(0, 1) : `g`}
+            </span>
+            {me.name}
+            {me.kind === `guest` ? <span className="tag muted">unrated</span> : null}
+        </Link>
+    );
 }
 
 function navActive(route: Route, item: Route): boolean {

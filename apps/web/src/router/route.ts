@@ -8,9 +8,9 @@ export type Route =
     | { readonly name: `not-found` };
 
 /**
- * The whole route table: parse a pathname, or build one back. Client
- * paths are the four surfaces plus the bot and game detail routes the
- * server shell-renders with og tags.
+ * The whole route table: parse a pathname, or build one back.
+ * Client paths are the four surfaces plus the bot and game detail routes
+ * the server shell-renders with og tags.
  */
 export function parseRoute(pathname: string): Route {
     const path = pathname.length > 1 && pathname.endsWith(`/`) ? pathname.slice(0, -1) : pathname;

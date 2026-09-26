@@ -30,3 +30,31 @@ test('escape clears the pending stone without sending', async ({ page }) => {
     await page.keyboard.press(`Escape`);
     await expect(page.locator(`.ring-pending`)).toHaveCount(0);
 });
+
+test('a full turn still plays with the drawer open beside the board', async ({ page }) => {
+    await serve(page, world());
+    await page.goto(`/game/running`);
+    await page.locator(`svg polygon.cell`).first().waitFor();
+    await page.keyboard.press(`m`);
+    await page.locator(`#drawer-body:not([hidden])`).waitFor();
+    await page.getByRole(`application`).focus();
+    const sent = page.waitForRequest((request) => request.url().endsWith(`/api/games/running/move`));
+    await page.keyboard.press(`ArrowRight`);
+    await page.keyboard.press(`Enter`);
+    await page.keyboard.press(`ArrowRight`);
+    await page.keyboard.press(`Enter`);
+    expect((await sent).postDataJSON()).toEqual({ cells: [{ x: 3, y: 0 }, { x: 4, y: 0 }] });
+});
+
+test('hovering the edge opens the drawer without taking the keyboard off the board', async ({ page }) => {
+    await serve(page, world());
+    await page.goto(`/game/running`);
+    await page.locator(`svg polygon.cell`).first().waitFor();
+    await page.getByRole(`application`).focus();
+    const box = page.viewportSize();
+    if (box === null) throw new Error(`no viewport`);
+    await page.mouse.move(box.width - 2, box.height / 2);
+    await page.locator(`#drawer-body:not([hidden])`).waitFor();
+    await expect(page.getByRole(`application`)).toBeFocused();
+});
+

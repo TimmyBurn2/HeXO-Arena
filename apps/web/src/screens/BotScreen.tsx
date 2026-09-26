@@ -2,7 +2,9 @@ import { useCallback, useState } from 'react';
 import { nameKeyOf, type BotListing } from '@hexarena/contract';
 import { fetchBots } from '../api/client';
 import { useAsync } from '../api/use-async';
-import { BotBadge, OpenTag, PresenceDot, provisionalNote } from '../components/player';
+import { OwnerPanel } from '../components/OwnerPanel';
+import { BotBadge, OpenTag, PresenceDot, Rating } from '../components/player';
+import { useMe } from '../me';
 import { coveredModes, PlayDialog, turnWindowOf } from '../components/PlayDialog';
 import { ErrorFrame, SkeletonRows } from '../components/states';
 import { Link } from '../router/Link';
@@ -25,7 +27,7 @@ export function BotScreen({ name }: { name: string }) {
     );
 
     if (loading && data === null) return <SkeletonRows />;
-    if (error && data === null) return <ErrorFrame sentence="the bot did not load" onRetry={reload} />;
+    if (error && data === null) return <ErrorFrame sentence="The bot did not load" onRetry={reload} />;
     if (data !== null && bot === undefined) return <MissingBot name={name} />;
     if (bot === undefined) return null;
 
@@ -35,7 +37,7 @@ export function BotScreen({ name }: { name: string }) {
 function MissingBot({ name }: { name: string }) {
     return (
         <div className="empty">
-            <h1>no bot named {name}</h1>
+            <h1>No bot named {name}</h1>
             <div className="actions">
                 <Link to="/bots" className="btn btn-ghost">
                     Browse bots
@@ -47,94 +49,97 @@ function MissingBot({ name }: { name: string }) {
 
 function BotProfile({ bot }: { bot: BotListing }) {
     const [dialogOpen, setDialogOpen] = useState(false);
+    const me = useMe();
+    const owned = me.status === `ready` && me.me?.kind === `user` && me.me.name === bot.ownerName;
     const accepts = bot.accepts;
     const covered = coveredModes(accepts);
     const anyClock = covered.turn || covered.match || covered.unlimited;
     const playPossible = bot.online && bot.openForChallenges && anyClock;
     const blockedReason = !bot.online
-        ? `offline`
+        ? `Offline`
         : !bot.openForChallenges
-          ? `closed for challenges`
-          : `accepts no clock yet`;
+          ? `Closed for challenges`
+          : `Accepts no clock yet`;
 
     return (
         <>
-            <div className="bot-head">
-                <h1>{bot.name}</h1>
-                <BotBadge />
-                <span className="player-cell">
-                    <PresenceDot online={bot.online} />
-                    <OpenTag open={bot.openForChallenges} />
-                </span>
-            </div>
-            <div className="bot-meta">
-                <span>
-                    rating <span className="num">{String(bot.rating)}</span>
-                    {bot.provisional ? (
-                        <span className="prov" title={provisionalNote}>
-                            ?
+            {/* The lift sits on a wrapper because the cut clips it. */}
+            <div className="bot-lift">
+                <header className="bot-plate">
+                    <div className="bot-title">
+                        <h1>{bot.name}</h1>
+                        <BotBadge />
+                    </div>
+                    <div className="bot-rating">
+                        <span className="bot-rating-number">
+                            <Rating value={bot.rating} provisional={bot.provisional} />
                         </span>
-                    ) : null}
-                </span>
-                <span>owner: {bot.ownerName ?? `someone`}</span>
+                        <span className="note">{bot.provisional ? `Provisional rating` : `Rating`}</span>
+                    </div>
+                    <div className="bot-facts">
+                        <span className="player-cell">
+                            <PresenceDot online={bot.online} />
+                            {bot.online ? `Online` : `Offline`}
+                        </span>
+                        <OpenTag open={bot.openForChallenges} />
+                        <span>By {bot.ownerName ?? `someone`}</span>
+                    </div>
+                </header>
             </div>
 
             {bot.about !== undefined ? <p className="about">{bot.about}</p> : null}
-            <dl className="kv">
-                {bot.version !== undefined ? (
-                    <>
-                        <dt>version</dt>
-                        <dd>{bot.version}</dd>
-                    </>
-                ) : null}
-                {bot.repoUrl !== undefined && bot.repoUrl !== `` ? (
-                    <>
-                        <dt>repo</dt>
-                        <dd>
-                            <a href={bot.repoUrl} rel="noreferrer" target="_blank">
-                                {shortRepo(bot.repoUrl)}
-                            </a>
-                        </dd>
-                    </>
-                ) : null}
-            </dl>
 
-            <h2 className="section-title">Accepts</h2>
-            {bot.accepts === undefined ? (
-                <p className="note">accepts nothing yet</p>
-            ) : (
-                <div className="table-wrap">
-                    <table>
-                        <thead>
-                            <tr>
-                                <th scope="col">Clock</th>
-                                <th scope="col">Window</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <tr>
-                                <td>turn</td>
-                                <td className="num">
-                                    {(() => {
-                                        const window = turnWindowOf(bot.accepts);
-                                        return window === null
-                                            ? `no`
-                                            : `${String(window[0] / 1000)} - ${String(window[1] / 1000)} s`;
-                                    })()}
-                                </td>
-                            </tr>
-                            <tr>
-                                <td>match</td>
-                                <td className="num">{bot.accepts.match ? `yes` : `no`}</td>
-                            </tr>
-                            <tr>
-                                <td>unlimited</td>
-                                <td className="num">{bot.accepts.unlimited ? `yes` : `no`}</td>
-                            </tr>
-                        </tbody>
-                    </table>
-                </div>
-            )}
+            <div className="bot-columns">
+                <section className="card" aria-labelledby="accepts-title">
+                    <h2 id="accepts-title" className="card-title">
+                        Accepts
+                    </h2>
+                    {bot.accepts === undefined ? (
+                        <p className="note">Accepts nothing yet.</p>
+                    ) : (
+                        <dl className="kv">
+                            <dt>Turn clock</dt>
+                            <dd>
+                                {(() => {
+                                    const window = turnWindowOf(bot.accepts);
+                                    return window === null
+                                        ? `No`
+                                        : `${String(window[0] / 1000)} to ${String(window[1] / 1000)} s`;
+                                })()}
+                            </dd>
+                            <dt>Match clock</dt>
+                            <dd>{bot.accepts.match ? `Yes` : `No`}</dd>
+                            <dt>Unlimited</dt>
+                            <dd>{bot.accepts.unlimited ? `Yes` : `No`}</dd>
+                        </dl>
+                    )}
+                </section>
+                {bot.version !== undefined || (bot.repoUrl !== undefined && bot.repoUrl !== ``) ? (
+                    <section className="card" aria-labelledby="build-title">
+                        <h2 id="build-title" className="card-title">
+                            Build
+                        </h2>
+                        <dl className="kv">
+                            {bot.version !== undefined ? (
+                                <>
+                                    <dt>Version</dt>
+                                    <dd>{bot.version}</dd>
+                                </>
+                            ) : null}
+                            {bot.repoUrl !== undefined && bot.repoUrl !== `` ? (
+                                <>
+                                    <dt>Repository</dt>
+                                    <dd>
+                                        <a href={bot.repoUrl} rel="noreferrer" target="_blank">
+                                            {shortRepo(bot.repoUrl)}
+                                        </a>
+                                    </dd>
+                                </>
+                            ) : null}
+                        </dl>
+                    </section>
+                ) : null}
+            </div>
 
             <p className="play-row">
                 <button
@@ -149,6 +154,7 @@ function BotProfile({ bot }: { bot: BotListing }) {
                 </button>
                 {playPossible ? null : <span className="note play-reason">{blockedReason}</span>}
             </p>
+            {owned ? <OwnerPanel bot={bot.name} /> : null}
             {playPossible && accepts !== undefined ? (
                 <PlayDialog
                     bot={{ name: bot.name, accepts }}
