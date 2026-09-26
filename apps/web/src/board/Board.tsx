@@ -118,6 +118,7 @@ export function Board({ stones, settings, label, overlays, scale, onCellClick }:
                 viewBox={`${viewBox.x.toFixed(2)} ${viewBox.y.toFixed(2)} ${viewBox.w.toFixed(2)} ${viewBox.h.toFixed(2)}`}
                 role="img"
                 aria-label={label}
+                {...(onCellClick === undefined ? {} : { 'data-marks': `` })}
                 {...(scale === undefined ? {} : { width: viewBox.w * scale, height: viewBox.h * scale })}
                 onClick={onCellClick === undefined ? undefined : handleClick}
             >

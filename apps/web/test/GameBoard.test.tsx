@@ -25,8 +25,7 @@ describe('GameBoard', () => {
                 lastMove={[]}
                 winLine={[]}
                 yourMove
-                opponentMoving={false}
-                opponentName="hextide"
+                idleLabel="game finished"
                 onCommit={async (pair) => {
                     commits.push(pair);
                     await Promise.resolve();
@@ -63,8 +62,7 @@ describe('GameBoard', () => {
                 lastMove={[]}
                 winLine={[]}
                 yourMove
-                opponentMoving={false}
-                opponentName="hextide"
+                idleLabel="game finished"
                 onCommit={async (pair) => {
                     commits.push(pair);
                     await Promise.resolve();
@@ -91,8 +89,7 @@ describe('GameBoard', () => {
                 lastMove={[]}
                 winLine={[]}
                 yourMove
-                opponentMoving={false}
-                opponentName="hextide"
+                idleLabel="game finished"
                 onCommit={async (pair) => {
                     commits.push(pair);
                     await Promise.resolve();
@@ -123,8 +120,7 @@ describe('GameBoard', () => {
                 lastMove={[]}
                 winLine={[]}
                 yourMove
-                opponentMoving={false}
-                opponentName="hextide"
+                idleLabel="game finished"
                 onCommit={async () => {
             await Promise.resolve();
             return true;
@@ -147,8 +143,7 @@ describe('GameBoard', () => {
                 lastMove={[]}
                 winLine={[]}
                 yourMove={false}
-                opponentMoving
-                opponentName="hextide"
+                idleLabel="waiting for hextide"
                 onCommit={async () => {
             await Promise.resolve();
             return true;
@@ -156,7 +151,12 @@ describe('GameBoard', () => {
             />,
         );
         const control = document.querySelector(`.board-control`) as HTMLElement;
-        expect(control.hasAttribute(`tabindex`)).toBe(false);
+        // Still focusable, so the arrows scroll the camera, but no longer an application.
+        expect(control.getAttribute(`tabindex`)).toBe(`0`);
+        expect(control.getAttribute(`role`)).toBe(`group`);
+        fireEvent.keyDown(control, { key: `Enter` });
+        expect(document.querySelector(`polygon.ring-pending`)).toBe(null);
+        expect(document.querySelector(`svg[data-marks]`)).toBe(null);
         expect(document.querySelector(`polygon.cell[data-x="10"][data-y="0"]`)).toBe(null);
         expect(control.getAttribute(`aria-label`)).toBe(`board, waiting for hextide`);
     });
@@ -170,8 +170,7 @@ describe('GameBoard', () => {
                 lastMove={[]}
                 winLine={[]}
                 yourMove
-                opponentMoving={false}
-                opponentName="hextide"
+                idleLabel="game finished"
                 onCommit={() => Promise.resolve(true)}
             />,
         );

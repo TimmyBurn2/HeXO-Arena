@@ -76,7 +76,7 @@ BACKUP_HOUR_UTC=3
 ```
 
 The image sets `NODE_ENV=production`, the bind address, and every path.
-Never set `DEV_LOGIN`: in production any value refuses the boot.
+Never set `DEV_LOGIN` or `DEV_FAST_STOP`: in production any value refuses the boot.
 
 ```sh
 chmod 0600 .env hexarena.env

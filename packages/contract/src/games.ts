@@ -6,8 +6,8 @@ import {
     finishReasonSchema,
     openingPliesRequestSchema,
     openingPliesSchema,
+    seatPlayerSchema,
     sideSchema,
-    streamPlayerSchema,
     timeControlSchema,
     type TimeControl,
 } from './stream';
@@ -24,6 +24,9 @@ export const botGameResignPath = `/api/bot/game/{gameId}/resign`;
 export const botConcurrentGameCap = 4;
 export const humanConcurrentGameCap = 3;
 export const humanGameCooldownSeconds = 60;
+
+// The live list is a glance, not an archive: this many games, newest first.
+export const liveGameListCap = 12;
 
 export const createGameRequestSchema = z.object({
     bot: nameSyntaxSchema,
@@ -53,10 +56,20 @@ export type GameCell = z.infer<typeof gameCellSchema>;
 
 export const gameBoardSchema = z.object({ cells: z.array(gameCellSchema) }).meta({ id: `GameBoard` });
 
+// Bots and users share one name namespace, so the kind is what tells a
+// watcher which seat is the bot; a guest seat has no rating.
+export const gamePlayerSchema = seatPlayerSchema
+    .extend({ kind: z.enum([`bot`, `user`, `guest`]) })
+    .meta({ id: `GamePlayer` });
+export type GamePlayer = z.infer<typeof gamePlayerSchema>;
+
+export const gamePlayersSchema = z.object({ x: gamePlayerSchema, o: gamePlayerSchema }).meta({ id: `GamePlayers` });
+export type GamePlayers = z.infer<typeof gamePlayersSchema>;
+
 const snapshotBase = {
     gameId: z.string(),
-    you: sideSchema,
-    opponent: streamPlayerSchema,
+    players: gamePlayersSchema,
+    you: sideSchema.optional(),
     openingPlies: openingPliesSchema,
     board: gameBoardSchema,
 };
@@ -81,9 +94,24 @@ export const gameSnapshotSchema = z
     ])
     .meta({
         id: `GameSnapshot`,
-        description: `board.cells lists stones in ply order, so its first openingPlies entries are the opening.`,
+        description: [
+            `you is the caller's side, present exactly when the caller holds a seat.`,
+            `board.cells lists stones in ply order, so its first openingPlies entries are the opening.`,
+        ].join(` `),
     });
 export type GameSnapshot = z.infer<typeof gameSnapshotSchema>;
+
+export const liveGameEntrySchema = z
+    .object({
+        gameId: z.string(),
+        players: gamePlayersSchema,
+        timeControl: timeControlSchema,
+        toMove: sideSchema,
+        rated: z.boolean(),
+        plies: z.number().int().min(1).meta({ description: `Stones on the board, the opening included.` }),
+    })
+    .meta({ id: `LiveGameEntry`, description: `A game in progress; a game with a guest seat is unrated.` });
+export type LiveGameEntry = z.infer<typeof liveGameEntrySchema>;
 
 // Exactly two placements per turn, always; the first stone ever placed is
 // the origin and the server places it.

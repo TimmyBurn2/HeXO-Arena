@@ -6,6 +6,10 @@
         inset: 0;
         display: grid;
         grid-template-columns: minmax(0, 1fr);
+        /* One viewport-high row: an auto row would grow to a long feed,
+           and a drawer in its own column would push the chips off screen
+           instead of scrolling its panel. */
+        grid-template-rows: minmax(0, 1fr);
         background: var(--board-bg);
     }
 
@@ -121,20 +125,6 @@
         stroke-width: 2;
         stroke-linecap: round;
         stroke-linejoin: round;
-    }
-
-    .swatch {
-        flex: none;
-        width: var(--swatch-size);
-        height: var(--swatch-size);
-    }
-
-    .swatch-x {
-        background: var(--board-stone-x);
-    }
-
-    .swatch-o {
-        background: var(--board-stone-o);
     }
 
     .hud-who {
@@ -331,6 +321,12 @@
 
     .feed-line.latest {
         background: var(--c-accent-bg);
+    }
+
+    /* Dim text on the accent tint falls under AA in slate, so the newest
+       line's label takes the full text color. */
+    .feed-line.latest .feed-n {
+        color: var(--c-text);
     }
 
     .feed-line.fresh {

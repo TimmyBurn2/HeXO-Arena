@@ -9,7 +9,10 @@ function snapshot(
     const base = {
         gameId: `g-1`,
         you: `o`,
-        opponent: { name: `hextide`, rating: 1690, provisional: false },
+        players: {
+            x: { name: `hextide`, rating: 1690, provisional: false, kind: `bot` },
+            o: { name: `tom`, rating: 1503, provisional: false, kind: `user` },
+        },
         openingPlies: 3,
         board: { cells },
     };

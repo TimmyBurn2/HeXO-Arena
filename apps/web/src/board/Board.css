@@ -23,7 +23,8 @@
         stroke-width: var(--board-line-w);
     }
 
-    .cell:hover {
+    /* The hover ring promises a mark, so only a board that takes one draws it. */
+    .board-svg[data-marks] .cell:hover {
         stroke: var(--board-focus);
         stroke-width: var(--board-ring-w);
     }

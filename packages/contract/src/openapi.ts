@@ -1,4 +1,5 @@
 import { OpenApiGeneratorV3, OpenAPIRegistry } from '@asteasolutions/zod-to-openapi';
+import { stringify } from 'yaml';
 import type { ZodType } from 'zod';
 import { errorBodySchema } from './api';
 import {
@@ -36,6 +37,8 @@ import {
     discordCallbackPath,
     discordLoginPath,
     gameCreateErrorCodes,
+    gameEventSchema,
+    gameEventsPath,
     gameCreateForbiddenErrorCodes,
     gameMoveErrorCodes,
     gameMovePath,
@@ -43,6 +46,7 @@ import {
     gameResignErrorCodes,
     gameResignPath,
     gameSnapshotSchema,
+    gameWatcherCap,
     gamesPath,
     guestConflictErrorCodes,
     guestIdleSeconds,
@@ -59,6 +63,8 @@ import {
     humanMoveRequestSchema,
     leaderboardEntrySchema,
     leaderboardPath,
+    liveGameEntrySchema,
+    liveGameListCap,
     notFoundErrorCodes,
     okSchema,
     pairDailyCap,
@@ -67,9 +73,12 @@ import {
     rankableDeviation,
     sessionCookieName,
     sessionHeartbeatMs,
+    siteWatcherCap,
     streamEventSchema,
     streamKeepaliveMs,
     unauthorizedErrorCodes,
+    watcherLimitErrorCodes,
+    watcherRetryAfterSeconds,
 } from './index';
 
 const seconds = (ms: number) => String(ms / 1000);
@@ -86,6 +95,7 @@ const badStateError = errorBodySchema([`bad_state`]).meta({ id: `BadStateError` 
 const discordError = errorBodySchema([`discord_error`]).meta({ id: `DiscordError` });
 const signedInError = errorBodySchema(guestConflictErrorCodes).meta({ id: `SignedInError` });
 const guestLimitError = errorBodySchema(guestLimitErrorCodes).meta({ id: `GuestLimitError` });
+const watcherLimitError = errorBodySchema(watcherLimitErrorCodes).meta({ id: `WatcherLimitError` });
 const botNameError = errorBodySchema([`invalid_name`, `name_reserved`]).meta({ id: `BotNameError` });
 const botLimitError = errorBodySchema([`bot_limit`]).meta({ id: `BotLimitError` });
 const nameTakenError = errorBodySchema([`name_taken`]).meta({ id: `NameTakenError` });
@@ -178,9 +188,9 @@ function registerSharedComponents(registry: OpenAPIRegistry) {
     };
 }
 
-export function buildOpenApiDocument() {
-    const registry = new OpenAPIRegistry();
-    const shared = registerSharedComponents(registry);
+type SharedComponents = ReturnType<typeof registerSharedComponents>;
+
+function registerSiteSurface(registry: OpenAPIRegistry, shared: SharedComponents) {
     registry.registerComponent('securitySchemes', 'sessionCookie', {
         type: 'apiKey',
         in: 'cookie',
@@ -296,41 +306,6 @@ export function buildOpenApiDocument() {
         },
     });
 
-    registry.registerComponent('securitySchemes', 'bearerAuth', {
-        type: 'http',
-        scheme: 'bearer',
-        bearerFormat: 'opaque',
-        description: `A bot token (hxo_...), minted and rotated by the owner on the website.`,
-    });
-
-    registry.registerPath({
-        method: 'get',
-        path: botsPath,
-        summary: 'List public bots.',
-        operationId: 'listBots',
-        tags: ['Directory'],
-        security: [],
-        description: `The listed roster, ordered by name fold, without pagination. Delisted bots and bots of banned owners are hidden.`,
-        parameters: [
-            {
-                name: 'online',
-                in: 'query',
-                required: false,
-                description: `Present as 1, narrows the roster to bots holding a stream open.`,
-                schema: { type: 'string', enum: ['1'] },
-            },
-        ],
-        responses: {
-            200: {
-                description: `The roster.`,
-                content: {
-                    'application/json': { schema: botListingSchema.array() },
-                },
-            },
-            400: shared.badRequest,
-        },
-    });
-
     registry.registerPath({
         method: 'get',
         path: leaderboardPath,
@@ -433,6 +408,180 @@ export function buildOpenApiDocument() {
     });
 
     registry.registerPath({
+        method: 'post',
+        path: gamesPath,
+        summary: 'Start a game against a bot.',
+        operationId: 'createGame',
+        tags: ['Games'],
+        security: [{ sessionCookie: [] }],
+        description: `The bot must hold its stream open with open=1, have fewer than ${String(botConcurrentGameCap)} live games, and accept the clock. The caller, a user or guest, may hold ${String(humanConcurrentGameCap)} live games and create one every ${String(humanGameCooldownSeconds)} s. The server draws sides and places the opening; the bot receives gameStart. A game against a guest is unrated.`,
+        request: {
+            body: { required: true, content: { 'application/json': { schema: createGameRequestSchema } } },
+        },
+        responses: {
+            201: {
+                description: `The new game's snapshot.`,
+                content: { 'application/json': { schema: gameSnapshotSchema } },
+            },
+            400: {
+                description: `Validation failed (bad_request), the caller is at its live-game cap (human_busy) or inside the creation cooldown (game_cooldown), or the bot is not open (not_open), excludes the clock (clock_not_accepted), or is at its game cap (bot_busy).`,
+                content: {
+                    'application/json': {
+                        schema: gameCreateError,
+                    },
+                },
+            },
+            401: shared.unauthorized,
+            403: shared.delisted,
+            503: shared.paused,
+        },
+    });
+
+    registry.registerPath({
+        method: 'get',
+        path: gamesPath,
+        summary: 'List live games.',
+        operationId: 'listLiveGames',
+        tags: ['Games'],
+        security: [],
+        description: `Games in progress, newest first, at most ${String(liveGameListCap)}, without pagination. Guest games are listed; finished games never are.`,
+        responses: {
+            200: {
+                description: `The live games.`,
+                content: { 'application/json': { schema: liveGameEntrySchema.array() } },
+            },
+        },
+    });
+
+    registry.registerPath({
+        method: 'get',
+        path: gamePath,
+        summary: `Read any game.`,
+        operationId: 'getGameSnapshot',
+        tags: ['Games'],
+        security: [{ sessionCookie: [] }, {}],
+        description: `Board, turn, and clock in one read; a finished game carries its result. Anyone may read a game, a guest's while the guest's session lives.`,
+        parameters: [shared.gameId],
+        responses: {
+            200: {
+                description: `The game's snapshot.`,
+                content: { 'application/json': { schema: gameSnapshotSchema } },
+            },
+            404: shared.notFound,
+        },
+    });
+
+    registry.registerPath({
+        method: 'get',
+        path: gameEventsPath,
+        summary: `Watch a game live.`,
+        operationId: 'watchGame',
+        tags: ['Games'],
+        security: [{ sessionCookie: [] }, {}],
+        description: `Server-sent events: on open a snapshot, then a turn event per applied turn, then a finish event, and the stream closes. A finished game sends its snapshot and closes. A comment line comes every ${seconds(streamKeepaliveMs)} s. Events carry no ids and nothing replays: a reconnect gets a fresh snapshot.`,
+        parameters: [shared.gameId],
+        responses: {
+            200: {
+                description: `The event stream.`,
+                content: { 'text/event-stream': { schema: gameEventSchema } },
+            },
+            404: shared.notFound,
+            429: {
+                description: `Watchers without a seat are capped at ${String(gameWatcherCap)} per game and ${String(siteWatcherCap)} in total; retry after ${String(watcherRetryAfterSeconds)} s. A seated caller is never refused.`,
+                headers: { 'Retry-After': shared.retryAfter },
+                content: { 'application/json': { schema: watcherLimitError } },
+            },
+        },
+    });
+
+    registry.registerPath({
+        method: 'post',
+        path: gameMovePath,
+        summary: `Play the two placements of the caller's turn.`,
+        operationId: 'playHumanMove',
+        tags: ['Games'],
+        security: [{ sessionCookie: [] }],
+        description: `Places both stones of the caller's turn. A win on the first placement ends the game, and the second is not applied. An illegal move answers 400 and forfeits nothing.`,
+        parameters: [shared.gameId],
+        request: {
+            body: { required: true, content: { 'application/json': { schema: humanMoveRequestSchema } } },
+        },
+        responses: {
+            200: {
+                description: `The snapshot after the move.`,
+                content: { 'application/json': { schema: gameSnapshotSchema } },
+            },
+            400: {
+                description: `Validation failed (bad_request), it is not the caller's turn (not_your_turn), a cell is taken (cell_occupied) or out of range (out_of_range), or the game is over (game_over).`,
+                content: {
+                    'application/json': {
+                        schema: moveError,
+                    },
+                },
+            },
+            401: shared.unauthorized,
+            404: shared.notFound,
+        },
+    });
+
+    registry.registerPath({
+        method: 'post',
+        path: gameResignPath,
+        summary: 'Resign a game the caller plays in.',
+        operationId: 'resignHumanGame',
+        tags: ['Games'],
+        security: [{ sessionCookie: [] }],
+        description: `The opponent wins with reason surrender.`,
+        parameters: [shared.gameId],
+        responses: {
+            200: {
+                description: `The finished snapshot.`,
+                content: { 'application/json': { schema: gameSnapshotSchema } },
+            },
+            400: shared.gameOver,
+            401: shared.unauthorized,
+            404: shared.notFound,
+        },
+    });
+}
+
+function registerBotSurface(registry: OpenAPIRegistry, shared: SharedComponents) {
+    registry.registerComponent('securitySchemes', 'bearerAuth', {
+        type: 'http',
+        scheme: 'bearer',
+        bearerFormat: 'opaque',
+        description: `A bot token (hxo_...), minted and rotated by the owner on the website.`,
+    });
+
+    registry.registerPath({
+        method: 'get',
+        path: botsPath,
+        summary: 'List public bots.',
+        operationId: 'listBots',
+        tags: ['Directory'],
+        security: [],
+        description: `The listed roster, ordered by name fold, without pagination. Delisted bots and bots of banned owners are hidden.`,
+        parameters: [
+            {
+                name: 'online',
+                in: 'query',
+                required: false,
+                description: `Present as 1, narrows the roster to bots holding a stream open.`,
+                schema: { type: 'string', enum: ['1'] },
+            },
+        ],
+        responses: {
+            200: {
+                description: `The roster.`,
+                content: {
+                    'application/json': { schema: botListingSchema.array() },
+                },
+            },
+            400: shared.badRequest,
+        },
+    });
+
+    registry.registerPath({
         method: 'get',
         path: botStreamPath,
         summary: `Open the bot's event stream.`,
@@ -511,105 +660,6 @@ export function buildOpenApiDocument() {
         scheme: 'bearer',
         bearerFormat: 'opaque',
         description: `A game token (hgs_...) from a gameStart line.`,
-    });
-
-    registry.registerPath({
-        method: 'post',
-        path: gamesPath,
-        summary: 'Start a game against a bot.',
-        operationId: 'createGame',
-        tags: ['Games'],
-        security: [{ sessionCookie: [] }],
-        description: `The bot must hold its stream open with open=1, have fewer than ${String(botConcurrentGameCap)} live games, and accept the clock. The caller, a user or guest, may hold ${String(humanConcurrentGameCap)} live games and create one every ${String(humanGameCooldownSeconds)} s. The server draws sides and places the opening; the bot receives gameStart. A game against a guest is unrated.`,
-        request: {
-            body: { required: true, content: { 'application/json': { schema: createGameRequestSchema } } },
-        },
-        responses: {
-            201: {
-                description: `The new game's snapshot.`,
-                content: { 'application/json': { schema: gameSnapshotSchema } },
-            },
-            400: {
-                description: `Validation failed (bad_request), the caller is at its live-game cap (human_busy) or inside the creation cooldown (game_cooldown), or the bot is not open (not_open), excludes the clock (clock_not_accepted), or is at its game cap (bot_busy).`,
-                content: {
-                    'application/json': {
-                        schema: gameCreateError,
-                    },
-                },
-            },
-            401: shared.unauthorized,
-            403: shared.delisted,
-            503: shared.paused,
-        },
-    });
-
-    registry.registerPath({
-        method: 'get',
-        path: gamePath,
-        summary: `Read a game the caller plays in.`,
-        operationId: 'getGameSnapshot',
-        tags: ['Games'],
-        security: [{ sessionCookie: [] }],
-        description: `Board, turn, and clock in one read; a finished game carries its result.`,
-        parameters: [shared.gameId],
-        responses: {
-            200: {
-                description: `The game's snapshot.`,
-                content: { 'application/json': { schema: gameSnapshotSchema } },
-            },
-            401: shared.unauthorized,
-            404: shared.notFound,
-        },
-    });
-
-    registry.registerPath({
-        method: 'post',
-        path: gameMovePath,
-        summary: `Play the two placements of the caller's turn.`,
-        operationId: 'playHumanMove',
-        tags: ['Games'],
-        security: [{ sessionCookie: [] }],
-        description: `Places both stones of the caller's turn. A win on the first placement ends the game, and the second is not applied. An illegal move answers 400 and forfeits nothing.`,
-        parameters: [shared.gameId],
-        request: {
-            body: { required: true, content: { 'application/json': { schema: humanMoveRequestSchema } } },
-        },
-        responses: {
-            200: {
-                description: `The snapshot after the move.`,
-                content: { 'application/json': { schema: gameSnapshotSchema } },
-            },
-            400: {
-                description: `Validation failed (bad_request), it is not the caller's turn (not_your_turn), a cell is taken (cell_occupied) or out of range (out_of_range), or the game is over (game_over).`,
-                content: {
-                    'application/json': {
-                        schema: moveError,
-                    },
-                },
-            },
-            401: shared.unauthorized,
-            404: shared.notFound,
-        },
-    });
-
-    registry.registerPath({
-        method: 'post',
-        path: gameResignPath,
-        summary: 'Resign a game the caller plays in.',
-        operationId: 'resignHumanGame',
-        tags: ['Games'],
-        security: [{ sessionCookie: [] }],
-        description: `The opponent wins with reason surrender.`,
-        parameters: [shared.gameId],
-        responses: {
-            200: {
-                description: `The finished snapshot.`,
-                content: { 'application/json': { schema: gameSnapshotSchema } },
-            },
-            400: shared.gameOver,
-            401: shared.unauthorized,
-            404: shared.notFound,
-        },
     });
 
     registry.registerPath({
@@ -781,7 +831,34 @@ export function buildOpenApiDocument() {
             404: shared.notFound,
         },
     });
+}
 
+/**
+ * The definitions behind the bot surface alone: every operation a bot token or
+ * game token secures, plus the public bot directory.
+ */
+export function botSurfaceDefinitions() {
+    const registry = new OpenAPIRegistry();
+    const shared = registerSharedComponents(registry);
+    registerBotSurface(registry, shared);
+    return [...registry.definitions, ...shared.referenced];
+}
+
+/**
+ * Renders a document as the committed YAML.
+ */
+export function renderOpenApiYaml(document: unknown) {
+    // Sorted keys keep a committed file byte-stable across regenerations.
+    // A repeated object, such as a shared $ref, is written out in full rather
+    // than as a yaml alias.
+    return stringify(document, { sortMapEntries: true, lineWidth: 100, aliasDuplicateObjects: false });
+}
+
+export function buildOpenApiDocument() {
+    const registry = new OpenAPIRegistry();
+    const shared = registerSharedComponents(registry);
+    registerSiteSurface(registry, shared);
+    registerBotSurface(registry, shared);
     const generator = new OpenApiGeneratorV3([...registry.definitions, ...shared.referenced]);
     return generator.generateDocument({
         openapi: '3.0.3',

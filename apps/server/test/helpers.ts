@@ -4,6 +4,7 @@ import { openDatabase, runMigrations, type Sqlite } from '../src/db';
 import type { DiscordIdentity, DiscordOAuth } from '../src/discord';
 import type { FastifyServerOptions } from 'fastify';
 import { PresenceRegistry, type StreamSocket } from '../src/presence';
+import { GameWatchers } from '../src/watchers';
 
 export interface FakeDiscord {
     oauth: DiscordOAuth;
@@ -53,6 +54,7 @@ export interface TestApp {
     admin: BuiltApp[`admin`];
     drain: BuiltApp[`drain`];
     presence: PresenceRegistry;
+    watchers: GameWatchers;
 }
 
 export async function createTestApp(options?: {
@@ -69,18 +71,20 @@ export async function createTestApp(options?: {
     const sqlite = options?.sqlite ?? openDatabase(`:memory:`);
     runMigrations(sqlite);
     const presence = options?.presence ?? new PresenceRegistry();
+    const watchers = new GameWatchers();
     const { app, admin, drain } = await buildApp({
         sqlite,
         discord,
         secureCookies: options?.secureCookies ?? false,
         devLogin: options?.devLogin ?? true,
         presence,
+        watchers,
         adminActor: `operator`,
         ...(options?.random !== undefined && { random: options.random }),
         ...(options?.logger !== undefined && { logger: options.logger }),
         ...(options?.webIndexPath !== undefined && { webIndexPath: options.webIndexPath }),
     });
-    return { sqlite, app, admin, drain, presence };
+    return { sqlite, app, admin, drain, presence, watchers };
 }
 
 // The session cookie value of a dev login, for inject's cookies option.

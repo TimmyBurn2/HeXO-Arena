@@ -65,6 +65,12 @@ export class PresenceRegistry {
         this.watch?.(botId, false);
     }
 
+    // A stream never ends on its own, so the server's close would wait on
+    // it forever; shutdown ends them all and the bots redial the next process.
+    closeAll(): void {
+        for (const botId of [...this.#entries.keys()]) this.close(botId);
+    }
+
     // The guard makes a late close from a replaced stream harmless: the
     // reconnect race resolves to whichever entry the map holds now.
     private detach(botId: string, entry: Entry): void {

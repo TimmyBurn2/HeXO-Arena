@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import type { Accepts } from '@hexarena/contract';
+import type { Accepts, Side } from '@hexarena/contract';
 import { Link } from '../router/Link';
 import { turnWindowOf } from './PlayDialog';
 import './player.css';
@@ -7,6 +7,11 @@ import './player.css';
 /** The bot marker every bot name carries, wherever a name renders. */
 export function BotBadge() {
     return <span className="badge-bot">BOT</span>;
+}
+
+/** A side's stone as a small cell, tying a name to the board without a legend. */
+export function Swatch({ side }: { side: Side }) {
+    return <span className={`swatch swatch-${side}`} aria-hidden="true" />;
 }
 
 /** Presence is the stream: filled green online, hollow gray offline. */

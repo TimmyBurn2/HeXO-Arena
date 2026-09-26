@@ -6,6 +6,8 @@ import { parseEnv } from './env';
 import { createDiscordOAuth } from './discord';
 import { drainGraceMs } from './drain';
 import { PresenceRegistry } from './presence';
+import { handleStopSignals } from './signals';
+import { GameWatchers } from './watchers';
 
 const env = parseEnv(process.env);
 const db = openDatabase(env.DATABASE_PATH);
@@ -26,6 +28,7 @@ const { app, admin, drain: drainApp } = await buildApp({
     secureCookies: env.PUBLIC_ORIGIN.startsWith(`https://`),
     devLogin: env.DEV_LOGIN,
     presence: new PresenceRegistry(),
+    watchers: new GameWatchers(),
     adminActor: env.ADMIN_ACTOR,
     ...(env.WEB_INDEX_PATH !== `` && { webIndexPath: env.WEB_INDEX_PATH }),
 });
@@ -42,10 +45,8 @@ const backups =
         ? null
         : scheduleBackups(db, { dir: env.BACKUP_DIR, keep: env.BACKUP_KEEP, hourUtc: env.BACKUP_HOUR_UTC }, app.log);
 
-// SIGTERM is the deploy path and drains; SIGINT is a developer's Ctrl-C
-// and stops at once, cutting a drain short.
-// Either way the close runs once, and the next boot's sweep aborts
-// whatever an immediate stop left open.
+// The close runs once whichever signal arrives, and the next boot's sweep
+// aborts whatever an immediate stop left open.
 let closing: Promise<void> | null = null;
 function close(): Promise<void> {
     closing ??= (async () => {
@@ -58,15 +59,17 @@ function close(): Promise<void> {
     return closing;
 }
 
-process.once(`SIGTERM`, () => {
-    app.log.info(`draining: new starts refused, live games have ${String(drainGraceMs / 1000)} s`);
-    void drainApp(drainGraceMs).then((aborted) => {
-        app.log.info({ aborted }, `drained`);
-        return close();
-    });
-});
-process.once(`SIGINT`, () => {
-    void close();
+handleStopSignals(process, env.DEV_FAST_STOP, {
+    drain: () => {
+        app.log.info(`draining: new starts refused, live games have ${String(drainGraceMs / 1000)} s`);
+        void drainApp(drainGraceMs).then((aborted) => {
+            app.log.info({ aborted }, `drained`);
+            return close();
+        });
+    },
+    stop: () => {
+        void close();
+    },
 });
 
 await app.listen({ port: env.PORT, host: env.HOST });

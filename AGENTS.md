@@ -15,6 +15,8 @@ per package later; the nearest one wins.
 
 - Install: `pnpm install`
 - Dev: `pnpm dev` (server :3000, web :5173, hot reload; Ctrl-C stops both)
+- Local opponents: `pnpm dev:bots` beside `pnpm dev` (three bots over the
+  bot API)
 - Docker dev runtime: `pnpm dev:compose` (operator-run; containers are not
   verified by day-to-day dev)
 - Tests: `pnpm test`
@@ -25,6 +27,8 @@ per package later; the nearest one wins.
   static site in `apps/web/dist`)
 - Type-check + lint: `pnpm check`
 - Regenerate `openapi.yaml`: `pnpm openapi`
+- Export the bot surface to Hexo-Bot-Api: `pnpm spec:export [path]` (default
+  `../Hexo-Bot-Api`; writes its `openapi.yaml` and `examples/stream.ndjson`)
 
 Every task ends green: type-check, lint, tests.
 `openapi.yaml` is generated from `packages/contract`; never hand-edit it.

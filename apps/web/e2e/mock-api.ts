@@ -3,11 +3,14 @@ import {
     botListingSchema,
     gameSnapshotSchema,
     leaderboardEntrySchema,
+    liveGameEntrySchema,
     meSchema,
     type BotListing,
     type GameSnapshot,
     type LeaderboardEntry,
+    type LiveGameEntry,
     type Me,
+    type Side,
 } from '@hexarena/contract';
 
 /**
@@ -20,6 +23,7 @@ export interface World {
     leaderboard: LeaderboardEntry[];
     bots: BotListing[];
     games: Record<string, GameSnapshot>;
+    live: LiveGameEntry[];
     paused: boolean;
     // Hold every data answer back, for loading-state captures.
     stall: boolean;
@@ -69,6 +73,49 @@ export const bots: BotListing[] = [
     },
 ];
 
+const seat = {
+    sealbot: { name: `sealbot`, rating: 1712, provisional: false, kind: `bot` },
+    hextide: { name: `hextide`, rating: 1690, provisional: false, kind: `bot` },
+    quietlake: { name: `quietlake`, rating: 1461, provisional: true, kind: `bot` },
+    driftwood: { name: `driftwood`, rating: 1388, provisional: false, kind: `bot` },
+    ember: { name: `ember`, rating: 1320, provisional: true, kind: `bot` },
+    tom: { name: `tom`, rating: 1503, provisional: false, kind: `user` },
+    ana: { name: `ana`, rating: 1402, provisional: false, kind: `user` },
+    guest: { name: `Guest k3f9`, rating: null, provisional: false, kind: `guest` },
+} as const;
+
+const clocks = [
+    { mode: `turn`, turnTimeMs: 30_000 },
+    { mode: `match`, mainTimeMs: 300_000, incrementMs: 2_000 },
+    { mode: `unlimited` },
+] as const;
+
+// A full list: the cap's worth of games, mixing bot pairs, users, and
+// guests, with no bot past its four live games.
+export const liveGames: LiveGameEntry[] = (
+    [
+        [seat.sealbot, seat.guest],
+        [seat.hextide, seat.sealbot],
+        [seat.tom, seat.quietlake],
+        [seat.driftwood, seat.hextide],
+        [seat.guest, seat.driftwood],
+        [seat.quietlake, seat.sealbot],
+        [seat.ana, seat.hextide],
+        [seat.sealbot, seat.driftwood],
+        [seat.guest, seat.ember],
+        [seat.quietlake, seat.driftwood],
+        [seat.tom, seat.ember],
+        [seat.hextide, seat.quietlake],
+    ] as const
+).map(([x, o], index) => ({
+    gameId: index === 0 ? `guest` : `live-${String(index)}`,
+    players: { x, o },
+    timeControl: clocks[index % clocks.length] ?? { mode: `unlimited` },
+    toMove: index % 2 === 0 ? `o` : `x`,
+    rated: x.kind !== `guest` && o.kind !== `guest`,
+    plies: 5 + 2 * index,
+}));
+
 const midCells: GameSnapshot[`board`][`cells`] = [
     { x: 0, y: 0, side: `x` },
     { x: 1, y: -1, side: `o` },
@@ -99,11 +146,55 @@ const originCells: GameSnapshot[`board`][`cells`] = [
     { x: 5, y: 0, side: `x` },
 ];
 
+// The default signed-in user sits on x, facing a bot on o; whoever else
+// opens the game watches it.
+function facing(bot: string, rating: number): GameSnapshot[`players`] {
+    return {
+        x: { name: `tom`, rating: 1503, provisional: false, kind: `user` },
+        o: { name: bot, rating, provisional: false, kind: `bot` },
+    };
+}
+
+// Sixty turns and more, ring by ring around the origin: a feed longer than
+// any viewport, which the drawer must scroll instead of growing the stage.
+const longCells: GameSnapshot[`board`][`cells`] = (() => {
+    const steps = [
+        { x: -1, y: 1 },
+        { x: -1, y: 0 },
+        { x: 0, y: -1 },
+        { x: 1, y: -1 },
+        { x: 1, y: 0 },
+        { x: 0, y: 1 },
+    ];
+    const cells: { x: number; y: number }[] = [{ x: 0, y: 0 }];
+    for (let ring = 1; cells.length < 121; ring += 1) {
+        let cell = { x: ring, y: 0 };
+        for (const step of steps) {
+            for (let walk = 0; walk < ring; walk += 1) {
+                cells.push(cell);
+                cell = { x: cell.x + step.x, y: cell.y + step.y };
+            }
+        }
+    }
+    return cells.slice(0, 121).map((cell, ply) => ({
+        ...cell,
+        side: ply === 0 || Math.floor((ply - 1) / 2) % 2 === 1 ? (`x` as const) : (`o` as const),
+    }));
+})();
+
 export const games: Record<string, GameSnapshot> = {
+    long: {
+        gameId: `long`,
+        players: facing(`sealbot`, 1712),
+        openingPlies: 5,
+        board: { cells: longCells },
+        status: `in-progress`,
+        toMove: `x`,
+        clock: { mode: `turn`, remainingTurnMs: 21_000 },
+    },
     running: {
         gameId: `running`,
-        you: `x`,
-        opponent: { name: `sealbot`, rating: 1712, provisional: false },
+        players: facing(`sealbot`, 1712),
         openingPlies: 5,
         board: { cells: midCells },
         status: `in-progress`,
@@ -112,8 +203,7 @@ export const games: Record<string, GameSnapshot> = {
     },
     waiting: {
         gameId: `waiting`,
-        you: `x`,
-        opponent: { name: `sealbot`, rating: 1712, provisional: false },
+        players: facing(`sealbot`, 1712),
         openingPlies: 5,
         board: { cells: midCells.slice(0, 9) },
         status: `in-progress`,
@@ -122,8 +212,7 @@ export const games: Record<string, GameSnapshot> = {
     },
     hurry: {
         gameId: `hurry`,
-        you: `x`,
-        opponent: { name: `sealbot`, rating: 1712, provisional: false },
+        players: facing(`sealbot`, 1712),
         openingPlies: 5,
         board: { cells: midCells },
         status: `in-progress`,
@@ -132,8 +221,7 @@ export const games: Record<string, GameSnapshot> = {
     },
     finished: {
         gameId: `finished`,
-        you: `x`,
-        opponent: { name: `hextide`, rating: 1690, provisional: false },
+        players: facing(`hextide`, 1690),
         openingPlies: 1,
         board: { cells: originCells },
         status: `finished`,
@@ -142,8 +230,7 @@ export const games: Record<string, GameSnapshot> = {
     },
     origin: {
         gameId: `origin`,
-        you: `x`,
-        opponent: { name: `hextide`, rating: 1690, provisional: false },
+        players: facing(`hextide`, 1690),
         openingPlies: 1,
         board: { cells: originCells.slice(0, 7) },
         status: `in-progress`,
@@ -152,8 +239,7 @@ export const games: Record<string, GameSnapshot> = {
     },
     nine: {
         gameId: `nine`,
-        you: `x`,
-        opponent: { name: `sealbot`, rating: 1712, provisional: false },
+        players: facing(`sealbot`, 1712),
         openingPlies: 9,
         board: { cells: midCells },
         status: `in-progress`,
@@ -162,18 +248,28 @@ export const games: Record<string, GameSnapshot> = {
     },
     'five-finished': {
         gameId: `five-finished`,
-        you: `x`,
-        opponent: { name: `sealbot`, rating: 1712, provisional: false },
+        players: facing(`sealbot`, 1712),
         openingPlies: 5,
         board: { cells: midCells },
         status: `finished`,
         winner: `o`,
         reason: `surrender`,
     },
+    guest: {
+        gameId: `guest`,
+        players: {
+            x: { name: `sealbot`, rating: 1712, provisional: false, kind: `bot` },
+            o: { name: `Guest k3f9`, rating: null, provisional: false, kind: `guest` },
+        },
+        openingPlies: 5,
+        board: { cells: midCells.slice(0, 9) },
+        status: `in-progress`,
+        toMove: `o`,
+        clock: { mode: `turn`, remainingTurnMs: 38_000 },
+    },
     'nine-finished': {
         gameId: `nine-finished`,
-        you: `x`,
-        opponent: { name: `sealbot`, rating: 1712, provisional: false },
+        players: facing(`sealbot`, 1712),
         openingPlies: 9,
         board: {
             cells: [
@@ -194,11 +290,75 @@ export function world(overrides: Partial<World> = {}): World {
         leaderboard,
         bots,
         games: structuredClone(games),
+        live: liveGames.slice(0, 1),
         paused: false,
         stall: false,
         broken: false,
         ...overrides,
     };
+}
+
+// The server's rule: the caller's side is present exactly when the
+// session holds a seat, which the mock reads as a name match.
+function seatOf(snapshot: GameSnapshot, me: Me): Side | undefined {
+    if (me === null) return undefined;
+    for (const side of [`x`, `o`] as const) {
+        const player = snapshot.players[side];
+        if (player.kind !== `bot` && player.name === me.name) return side;
+    }
+    return undefined;
+}
+
+function viewOf(snapshot: GameSnapshot, me: Me): GameSnapshot {
+    const you = seatOf(snapshot, me);
+    return gameSnapshotSchema.parse(you === undefined ? snapshot : { ...snapshot, you });
+}
+
+// Playwright fulfills a route with one whole body, so a stream cannot stay
+// open: the page gets an EventSource that fetches the mocked stream, hands
+// on its events, and then holds, as a quiet live stream would.
+function installHeldEventSource(): void {
+    class HeldEventSource extends EventTarget {
+        static readonly CONNECTING = 0;
+        static readonly OPEN = 1;
+        static readonly CLOSED = 2;
+        readyState = HeldEventSource.CONNECTING;
+        onerror: ((event: Event) => void) | null = null;
+
+        constructor(readonly url: string) {
+            super();
+            void fetch(url, { headers: { accept: `text/event-stream` } }).then(
+                async (response) => {
+                    if (this.readyState === HeldEventSource.CLOSED) return;
+                    if (!response.ok) {
+                        this.fail();
+                        return;
+                    }
+                    this.readyState = HeldEventSource.OPEN;
+                    for (const frame of (await response.text()).split(`\n\n`)) {
+                        const lines = frame.split(`\n`);
+                        const type = lines.find((line) => line.startsWith(`event: `))?.slice(7);
+                        const data = lines.find((line) => line.startsWith(`data: `))?.slice(6);
+                        if (type === undefined || data === undefined || this.readyState === HeldEventSource.CLOSED) continue;
+                        this.dispatchEvent(new MessageEvent(type, { data }));
+                    }
+                },
+                () => {
+                    this.fail();
+                },
+            );
+        }
+
+        close(): void {
+            this.readyState = HeldEventSource.CLOSED;
+        }
+
+        fail(): void {
+            this.readyState = HeldEventSource.CLOSED;
+            this.onerror?.(new Event(`error`));
+        }
+    }
+    Object.defineProperty(window, `EventSource`, { value: HeldEventSource, configurable: true, writable: true });
 }
 
 function json(route: Route, status: number, body: unknown): Promise<void> {
@@ -207,6 +367,7 @@ function json(route: Route, status: number, body: unknown): Promise<void> {
 
 /** Serve the world at the network layer for every API call the page makes. */
 export async function serve(page: Page, state: World): Promise<void> {
+    await page.addInitScript(installHeldEventSource);
     await page.route((url) => url.pathname === `/healthz`, (route) =>
         route.fulfill({ status: state.paused ? 503 : 200, contentType: `application/json`, body: `{"ok":true}` }),
     );
@@ -252,6 +413,17 @@ export async function serve(page: Page, state: World): Promise<void> {
             await json(route, 200, botListingSchema.array().parse(rows));
             return;
         }
+        const events = /^\/api\/games\/([^/]+)\/events$/.exec(path);
+        if (events !== null) {
+            const snapshot = state.games[decodeURIComponent(events[1] ?? ``)];
+            if (snapshot === undefined) {
+                await json(route, 404, { error: `no such game`, code: `not_found` });
+                return;
+            }
+            const data = JSON.stringify(viewOf(snapshot, state.me));
+            await route.fulfill({ status: 200, contentType: `text/event-stream`, body: `event: snapshot\ndata: ${data}\n\n` });
+            return;
+        }
         const game = /^\/api\/games\/([^/]+)(\/move|\/resign)?$/.exec(path);
         if (game !== null) {
             const id = decodeURIComponent(game[1] ?? ``);
@@ -269,20 +441,24 @@ export async function serve(page: Page, state: World): Promise<void> {
             if (game[2] === `/resign` && snapshot.status === `in-progress`) {
                 state.games[id] = {
                     gameId: snapshot.gameId,
-                    you: snapshot.you,
-                    opponent: snapshot.opponent,
+                    players: snapshot.players,
                     openingPlies: snapshot.openingPlies,
                     board: snapshot.board,
                     status: `finished`,
-                    winner: snapshot.you === `x` ? `o` : `x`,
+                    winner: seatOf(snapshot, state.me) === `x` ? `o` : `x`,
                     reason: `surrender`,
                 };
             }
-            await json(route, 200, gameSnapshotSchema.parse(state.games[id]));
+            const answered = state.games[id];
+            if (answered !== undefined) await json(route, 200, viewOf(answered, state.me));
+            return;
+        }
+        if (path === `/api/games` && method === `GET`) {
+            await json(route, 200, liveGameEntrySchema.array().parse(state.live));
             return;
         }
         if (path === `/api/games` && method === `POST`) {
-            await json(route, 201, gameSnapshotSchema.parse(state.games.running));
+            if (state.games.running !== undefined) await json(route, 201, viewOf(state.games.running, state.me));
             return;
         }
         const token = /^\/api\/bots\/([^/]+)\/token$/.exec(path);

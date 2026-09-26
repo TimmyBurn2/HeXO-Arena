@@ -14,12 +14,14 @@ import {
     type FinishReason,
     type FirstPlayer,
     type GameClock,
+    type GamePlayer,
+    type GamePlayers,
     type GameSnapshot,
+    type LiveGameEntry,
     type OpeningPlies,
     type SeatPlayer,
     type Side,
     type StreamEvent,
-    type StreamPlayer,
     type TimeControl,
 } from '@hexarena/contract';
 import { randomUUID } from 'node:crypto';
@@ -42,12 +44,14 @@ import {
     recordFinish,
     replayPosition,
     type GameHeadline,
+    type GameRecord,
 } from './game-store';
 import type { PresenceRegistry } from './presence';
 import { randomFloat, randomIndex } from './random';
 import { streamPlayerOf } from './rating-store';
 import { isCurrentGeneration } from './site-state';
 import { randomToken } from './tokens';
+import type { GameWatchers } from './watchers';
 
 export const orphanForfeitMs = 30_000;
 export const unlimitedWallCapMs = 24 * 60 * 60 * 1000;
@@ -160,6 +164,7 @@ export type BotResignResult =
 export interface RegistryDeps {
     query: Query;
     presence: PresenceRegistry;
+    watchers: GameWatchers;
     generation: number;
     random?: () => number;
     randomIndex?: (bound: number) => number;
@@ -335,10 +340,11 @@ export class GameRegistry {
     // lives; the session's end forgets them.
     readonly #finishedGuestGames = new Map<
         string,
-        { guestId: string; snapshot: GameSnapshot; headline: GameHeadline }
+        { guestId: string; guestSide: Side; snapshot: GameSnapshot; headline: GameHeadline }
     >();
     readonly #query: Query;
     readonly #presence: PresenceRegistry;
+    readonly #watchers: GameWatchers;
     readonly #generation: number;
     readonly #random: () => number;
     readonly #randomIndex: (bound: number) => number;
@@ -346,6 +352,7 @@ export class GameRegistry {
     constructor(deps: RegistryDeps) {
         this.#query = deps.query;
         this.#presence = deps.presence;
+        this.#watchers = deps.watchers;
         this.#generation = deps.generation;
         // The crypto source is the default; the injection seam exists so
         // tests can script a draw.
@@ -418,7 +425,7 @@ export class GameRegistry {
         this.#requestBotMove(game);
         const botSide = opponentOf(userSide);
         this.#presence.send(this.#botIdAt(game, botSide), this.#gameStartEvent(game, botSide));
-        return { gameId, snapshot: this.#liveSnapshot(game) };
+        return { gameId, snapshot: this.#liveSnapshot(game, input.person) };
     }
 
     createBotGame(input: {
@@ -509,28 +516,47 @@ export class GameRegistry {
         return this.#finishedGuestGames.get(gameId)?.headline ?? findFinishedHeadline(this.#query, gameId) ?? null;
     }
 
-    // Unknown and not-yours read the same, so a game id reveals nothing.
-    snapshotFor(gameId: string, person: PersonRef): GameSnapshot | null {
+    /** Live games, newest first: the map keeps creation order. */
+    liveGames(limit: number): LiveGameEntry[] {
+        return [...this.#games.values()]
+            .reverse()
+            .slice(0, limit)
+            .map((game) => ({
+                gameId: game.id,
+                players: this.#playersOf(game),
+                timeControl: game.timeControl,
+                toMove: sideToMove(game),
+                rated: !isGuestGame(game),
+                plies: game.position.stones.length,
+            }));
+    }
+
+    /**
+     * Any game by id, as the viewer reads it: every game is public, and
+     * `you` is present exactly when the viewer holds a seat.
+     * A guest's games answer while the guest's session lives.
+     */
+    snapshotFor(gameId: string, viewer: PersonRef | null): GameSnapshot | null {
         const live = this.#games.get(gameId);
-        if (live !== undefined) {
-            const human = humanSide(live);
-            return human !== null && samePerson(human.seat.person, person) ? this.#liveSnapshot(live) : null;
-        }
-        if (person.kind === `guest`) {
-            const finished = this.#finishedGuestGames.get(gameId);
-            return finished?.guestId === person.id ? finished.snapshot : null;
+        if (live !== undefined) return this.#liveSnapshot(live, viewer);
+        const guestGame = this.#finishedGuestGames.get(gameId);
+        if (guestGame !== undefined) {
+            const seated = viewer !== null && samePerson(viewer, { kind: `guest`, id: guestGame.guestId });
+            return seated ? { ...guestGame.snapshot, you: guestGame.guestSide } : guestGame.snapshot;
         }
         const record = findGame(this.#query, gameId);
-        // A bot-vs-bot game belongs to no human, and an unfinished game
-        // without a live registry entry belongs to an earlier process.
-        if (record?.kind !== `human` || record.finishReason === null || record.userId !== person.id) {
-            return null;
-        }
+        // An unfinished game without a live registry entry belongs to an
+        // earlier process, and its boot sweep has yet to close it.
+        if (record?.finishReason === undefined || record.finishReason === null) return null;
+        const you =
+            record.kind === `human` && viewer !== null && samePerson(viewer, { kind: `user`, id: record.userId })
+                ? record.userSide
+                : undefined;
         return {
             gameId: record.id,
             status: `finished`,
-            you: record.userSide,
-            opponent: streamPlayerOf(this.#query, { kind: `bot`, id: record.botId }, record.botName),
+            players: this.#storedPlayers(record),
+            ...(you !== undefined && { you }),
             // The stored opening holds every opening stone, the origin included.
             openingPlies: openingPliesSchema.parse(record.opening.length),
             board: { cells: boardCells(replayPosition(this.#query, record)) },
@@ -575,10 +601,12 @@ export class GameRegistry {
         return { kind: `resigned` };
     }
 
-    // A finished game still answers actions with its result instead of a
-    // 404, so a caller can tell stale from unknown.
+    // A finished game still answers its own players' actions with its
+    // result instead of a 404, so a player can tell stale from unknown.
     #finishedReject(gameId: string, person: PersonRef): { kind: `rejected`; code: `game_over` } | { kind: `unknown` } {
-        return this.snapshotFor(gameId, person) === null ? { kind: `unknown` } : { kind: `rejected`, code: `game_over` };
+        return this.snapshotFor(gameId, person)?.you === undefined
+            ? { kind: `unknown` }
+            : { kind: `rejected`, code: `game_over` };
     }
 
     requireSnapshot(gameId: string, person: PersonRef): GameSnapshot {
@@ -686,16 +714,29 @@ export class GameRegistry {
         side: Side,
         applied: { position: Position; win: Win | null },
     ): void {
+        const placedBefore = game.position.stones.length;
         game.pending = null;
         game.position = applied.position;
         game.turnLog = [...game.turnLog, { side, cells }];
         if (!isGuestGame(game)) insertMove(this.#query, { gameId: game.id, seq: game.nextSeq, side, cells });
         game.nextSeq += 1;
+        if (applied.win === null) this.#advanceClock(game, side);
+        // A turn starts on an odd ply, 2t - 1, and a win on its first stone
+        // leaves the second unplaced, so the position holds exactly what landed.
+        this.#watchers.publish(game.id, {
+            event: `turn`,
+            data: {
+                turn: (placedBefore + 1) / 2,
+                side,
+                cells: applied.position.stones.slice(placedBefore).map((stone) => ({ x: stone.x, y: stone.y })),
+                toMove: opponentOf(side),
+                clock: liveClockView(game),
+            },
+        });
         if (applied.win !== null) {
             this.#finish(game, sideOf(applied.win.player), `six-in-a-row`);
             return;
         }
-        this.#advanceClock(game, side);
         this.#requestBotMove(game);
     }
 
@@ -928,6 +969,7 @@ export class GameRegistry {
 
     #finish(game: LiveGame, winner: Side | null, reason: FinishReason): void {
         if (!this.#games.delete(game.id)) return;
+        this.#watchers.end(game.id, { event: `finish`, data: { winner, reason, clock: liveClockView(game) } });
         clearClockTimer(game.clock);
         if (game.wallTimer !== null) {
             clearTimeout(game.wallTimer);
@@ -937,7 +979,8 @@ export class GameRegistry {
         if (human?.seat.person.kind === `guest`) {
             this.#finishedGuestGames.set(game.id, {
                 guestId: human.seat.person.id,
-                snapshot: { ...this.#seatedView(game, human.side), status: `finished`, winner, reason },
+                guestSide: human.side,
+                snapshot: { ...this.#publicView(game), status: `finished`, winner, reason },
                 headline: { status: `finished`, names: seatNames(game), winner, reason },
             });
         } else {
@@ -968,41 +1011,63 @@ export class GameRegistry {
         session.socket.close(code, reason);
     }
 
-    #liveSnapshot(game: LiveGame): GameSnapshot {
+    #liveSnapshot(game: LiveGame, viewer: PersonRef | null): GameSnapshot {
         const human = humanSide(game);
-        // Every snapshot reader is a human action, so the human seat exists.
-        if (human === null) throw new Error(`snapshot for a game without a human: ${game.id}`);
+        const seated = human !== null && viewer !== null && samePerson(human.seat.person, viewer);
         return {
-            ...this.#seatedView(game, human.side),
+            ...this.#publicView(game),
+            ...(seated && { you: human.side }),
             status: `in-progress`,
             toMove: sideToMove(game),
             clock: liveClockView(game),
         };
     }
 
-    #seatedView(game: LiveGame, humanSideOf: Side) {
+    #publicView(game: LiveGame) {
         return {
             gameId: game.id,
-            you: humanSideOf,
-            opponent: this.#botPlayerOf(game.seats[opponentOf(humanSideOf)]),
+            players: this.#playersOf(game),
             openingPlies: game.openingPlies,
             board: { cells: boardCells(game.position) },
         };
     }
 
-    // A human game seats one human against one bot, so the seat across
-    // from the human is always a bot.
-    #botPlayerOf(seat: Seat): StreamPlayer {
-        if (seat.kind !== `bot`) throw new Error(`a human faces a human seat`);
-        return streamPlayerOf(this.#query, { kind: `bot`, id: seat.botId }, seat.name);
-    }
-
     #playerOf(seat: Seat): SeatPlayer {
-        if (seat.kind === `bot`) return this.#botPlayerOf(seat);
+        if (seat.kind === `bot`) return streamPlayerOf(this.#query, { kind: `bot`, id: seat.botId }, seat.name);
         const person = seat.person;
         return person.kind === `guest`
             ? { name: person.name, rating: null, provisional: false }
             : streamPlayerOf(this.#query, { kind: `human`, id: person.id }, person.name);
+    }
+
+    #playersOf(game: LiveGame): GamePlayers {
+        return { x: this.#gamePlayerOf(game.seats.x), o: this.#gamePlayerOf(game.seats.o) };
+    }
+
+    #gamePlayerOf(seat: Seat): GamePlayer {
+        return { ...this.#playerOf(seat), kind: seat.kind === `bot` ? `bot` : seat.person.kind };
+    }
+
+    // Guest games never reach the log, so every stored seat is a user or a bot.
+    #storedPlayers(record: GameRecord): GamePlayers {
+        const bot = (id: string, name: string): GamePlayer => ({
+            ...streamPlayerOf(this.#query, { kind: `bot`, id }, name),
+            kind: `bot`,
+        });
+        const seated = (side: Side, first: GamePlayer, second: GamePlayer): GamePlayers =>
+            side === `x` ? { x: first, o: second } : { x: second, o: first };
+        if (record.kind === `bots`) {
+            return seated(
+                record.challengerSide,
+                bot(record.challengerBotId, record.challengerName),
+                bot(record.destBotId, record.destName),
+            );
+        }
+        const user: GamePlayer = {
+            ...streamPlayerOf(this.#query, { kind: `human`, id: record.userId }, record.userName),
+            kind: `user`,
+        };
+        return seated(record.userSide, user, bot(record.botId, record.botName));
     }
 
     #seatsBot(game: LiveGame, botId: string): Side | null {

@@ -5,8 +5,8 @@ import {
     type AdminRequest,
     type AdminResponse,
 } from '@hexarena/contract';
-import { chmodSync, mkdirSync, statSync } from 'node:fs';
-import { createServer, type Server, type Socket } from 'node:net';
+import { chmodSync, lstatSync, mkdirSync, rmSync, statSync } from 'node:fs';
+import { connect, createServer, type Server, type Socket } from 'node:net';
 import { dirname } from 'node:path';
 
 export type AdminHandler = (request: AdminRequest) => AdminResponse;
@@ -36,6 +36,37 @@ export function assertPrivateDirectory(directory: string): void {
     if (stats.uid !== uid) {
         throw new Error(`admin socket directory ${directory} must be owned by uid ${String(uid)}, found ${String(stats.uid)}`);
     }
+}
+
+// Whether a process listens on the socket at `path`: a refused connection
+// means the socket file outlived its server.
+function socketAnswers(path: string): Promise<boolean> {
+    return new Promise((resolve, reject) => {
+        const probe = connect(path);
+        // The holder answers the empty request with bad_request; draining
+        // that answer lets both sides close without an error on its log.
+        probe.once(`connect`, () => {
+            probe.resume();
+            probe.end();
+            resolve(true);
+        });
+        probe.on(`error`, (error) => {
+            if (`code` in error && error.code === `ECONNREFUSED`) resolve(false);
+            else reject(error);
+        });
+    });
+}
+
+// The container's tmpfs dies with the process, but a bare dev run keeps
+// its socket on disk, and an unclean stop leaves it bound to nothing.
+// Only a socket nobody answers on is removed; anything else at the path
+// belongs to someone and ends the boot.
+async function clearStaleSocket(path: string): Promise<void> {
+    const stats = lstatSync(path, { throwIfNoEntry: false });
+    if (stats === undefined) return;
+    if (!stats.isSocket()) throw new Error(`admin socket path ${path} holds a file that is not a socket`);
+    if (await socketAnswers(path)) throw new Error(`admin socket ${path} is held by a running server`);
+    rmSync(path, { force: true });
 }
 
 function badRequest(error: string): AdminResponse {
@@ -109,14 +140,16 @@ function serveConnection(socket: Socket, handle: AdminHandler, log: AdminLog): v
 }
 
 /**
- * Creates the admin socket at `path` and serves it; rejects when the
- * directory is not private to this uid or the socket cannot be bound, so
- * the caller can exit instead of running without admin.
+ * Creates the admin socket at `path` and serves it, replacing a stale
+ * socket nobody answers on; rejects when the directory is not private to
+ * this uid, the path holds anything else, or the socket cannot be bound,
+ * so the caller can exit instead of running without admin.
  */
 export async function listenAdminSocket(path: string, handle: AdminHandler, log: AdminLog): Promise<Server> {
     const directory = dirname(path);
     mkdirSync(directory, { recursive: true, mode: 0o700 });
     assertPrivateDirectory(directory);
+    await clearStaleSocket(path);
     // Half-open, so a client that ends its side after the request still
     // reads the answer.
     const server = createServer({ allowHalfOpen: true }, (socket) => {

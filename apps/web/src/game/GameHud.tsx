@@ -1,16 +1,12 @@
 import type { ReactNode } from 'react';
 import type { GameSnapshot, Side } from '@hexarena/contract';
-import { BotBadge, provisionalNote, Rating } from '../components/player';
+import { BotBadge, Rating, Swatch } from '../components/player';
 import { selfName, type MeState } from '../me';
 import { Link } from '../router/Link';
 import { Clock } from './Clock';
 import type { TurnStatus } from './GameBoard';
+import type { GameLink } from './use-game';
 import { resultLine } from './snapshot-views';
-
-/** A side's stone as a small cell, tying a chip to the board without a legend. */
-export function Swatch({ side }: { side: Side }) {
-    return <span className={`swatch swatch-${side}`} aria-hidden="true" />;
-}
 
 /**
  * The side's clock at the read: match clocks on both chips, the shared turn
@@ -43,30 +39,38 @@ function Chip({ className, children }: { className: string; children: ReactNode 
     );
 }
 
-export function OpponentChip({ snapshot }: { snapshot: GameSnapshot }) {
-    const side: Side = snapshot.you === `x` ? `o` : `x`;
-    const opponent = snapshot.opponent;
+/**
+ * One seat as a chip: swatch, name with its BOT badge, rating or the
+ * unrated tag of a guest, and its clock.
+ * The top chip also carries the exit and, while running, the clock mode.
+ */
+export function SeatChip({ snapshot, side, corner }: { snapshot: GameSnapshot; side: Side; corner: `top` | `bottom` }) {
+    const player = snapshot.players[side];
+    const top = corner === `top`;
     return (
-        <Chip className="hud-top-left">
-            <Link to="/" className="hud-exit" ariaLabel="Leave to the arena">
-                <svg viewBox="0 0 24 24" aria-hidden="true">
-                    <path d="M15 5l-7 7 7 7" />
-                </svg>
-            </Link>
+        <Chip className={top ? `hud-top-left` : `hud-bottom-left`}>
+            {top ? (
+                <Link to="/" className="hud-exit" ariaLabel="Leave to the arena">
+                    <svg viewBox="0 0 24 24" aria-hidden="true">
+                        <path d="M15 5l-7 7 7 7" />
+                    </svg>
+                </Link>
+            ) : null}
             <Swatch side={side} />
             <span className="hud-who">
                 <span className="hud-name">
-                    {opponent.name}
-                    <BotBadge />
+                    {player.name}
+                    {player.kind === `bot` ? <BotBadge /> : null}
                 </span>
                 <span className="hud-meta">
-                    <span className="hud-rating">{String(opponent.rating)}</span>
-                    {opponent.provisional ? (
-                        <span className="prov" title={provisionalNote}>
-                            ?
+                    {player.rating === null ? (
+                        <span className="tag muted">unrated</span>
+                    ) : (
+                        <span className="hud-rating">
+                            <Rating value={player.rating} provisional={player.provisional} />
                         </span>
-                    ) : null}
-                    {snapshot.status === `in-progress` ? <span>{clockModeText(snapshot)}</span> : null}
+                    )}
+                    {top && snapshot.status === `in-progress` ? <span>{clockModeText(snapshot)}</span> : null}
                 </span>
             </span>
             {clockOf(snapshot, side)}
@@ -74,11 +78,11 @@ export function OpponentChip({ snapshot }: { snapshot: GameSnapshot }) {
     );
 }
 
-export function YouChip({ snapshot, me }: { snapshot: GameSnapshot; me: MeState }) {
+export function YouChip({ snapshot, you, me }: { snapshot: GameSnapshot; you: Side; me: MeState }) {
     const self = me.status === `ready` ? me.me : null;
     return (
         <Chip className="hud-bottom-left">
-            <Swatch side={snapshot.you} />
+            <Swatch side={you} />
             <span className="hud-who">
                 <span className="hud-name">{selfName(me)}</span>
                 <span className="hud-meta">
@@ -88,10 +92,10 @@ export function YouChip({ snapshot, me }: { snapshot: GameSnapshot; me: MeState 
                         </span>
                     ) : null}
                     {self?.kind === `guest` ? <span className="tag muted">unrated</span> : null}
-                    <span>Playing {snapshot.you}</span>
+                    <span>Playing {you}</span>
                 </span>
             </span>
-            {clockOf(snapshot, snapshot.you)}
+            {clockOf(snapshot, you)}
         </Chip>
     );
 }
@@ -107,16 +111,30 @@ export function Pips({ placed }: { placed: 0 | 1 }) {
 }
 
 /**
- * Whose turn it is, in one chip: your two stones, the opponent thinking,
- * or the result with the ways onward.
+ * Whose turn it is, in one chip: your two stones, the side to move
+ * thinking, or the result with the ways onward.
+ * A watcher, who holds no side, sees the side to move marked as watched.
  */
-export function TurnChip({ snapshot, status, stale, onMoves }: {
+export function TurnChip({ snapshot, you, status, link, onMoves }: {
     snapshot: GameSnapshot;
+    you: Side | null;
     status: TurnStatus;
-    stale: boolean;
+    link: GameLink;
     onMoves: () => void;
 }) {
-    if (stale) {
+    // A refused stream is the watcher cap, not a fault, so it reads calm; a
+    // seat is never refused, so a player only ever sees the loss.
+    if (link === `refused` && you === null) {
+        return (
+            <Chip className="hud-bottom-center">
+                <span className="tag muted">watching</span>
+                <span className="hud-hint" role="status">
+                    Many watching; the board catches up shortly
+                </span>
+            </Chip>
+        );
+    }
+    if (link !== `up`) {
         return (
             <Chip className="hud-bottom-center">
                 <span className="hud-note" role="status">
@@ -140,11 +158,12 @@ export function TurnChip({ snapshot, status, stale, onMoves }: {
             </Chip>
         );
     }
-    if (snapshot.toMove !== snapshot.you) {
+    if (snapshot.toMove !== you) {
         return (
             <Chip className="hud-bottom-center">
+                {you === null ? <span className="tag muted">watching</span> : null}
                 <span className="hud-turn" role="status">
-                    {snapshot.opponent.name} is thinking
+                    {snapshot.players[snapshot.toMove].name} is thinking
                 </span>
             </Chip>
         );

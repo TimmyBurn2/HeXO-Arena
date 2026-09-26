@@ -116,7 +116,10 @@ describe('PlayDialog', () => {
                         JSON.stringify({
                             gameId: `g-1`,
                             you: `o`,
-                            opponent: { name: `sealbot`, rating: 1712, provisional: false },
+                            players: {
+                                x: { name: `sealbot`, rating: 1712, provisional: false, kind: `bot` },
+                                o: { name: `tom`, rating: 1503, provisional: false, kind: `user` },
+                            },
                             openingPlies: 1,
                             board: { cells: [{ x: 0, y: 0, side: `x` }] },
                             status: `in-progress`,

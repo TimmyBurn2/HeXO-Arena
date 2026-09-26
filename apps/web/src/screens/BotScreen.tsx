@@ -1,7 +1,8 @@
 import { useCallback, useState } from 'react';
-import { nameKeyOf, type BotListing } from '@hexarena/contract';
+import { nameKeyOf, type BotListing, type LiveGameEntry } from '@hexarena/contract';
 import { fetchBots } from '../api/client';
 import { useAsync } from '../api/use-async';
+import { useLiveGames } from '../api/use-live-games';
 import { OwnerPanel } from '../components/OwnerPanel';
 import { BotBadge, OpenTag, PresenceDot, Rating } from '../components/player';
 import { useMe } from '../me';
@@ -87,6 +88,8 @@ function BotProfile({ bot }: { bot: BotListing }) {
                 </header>
             </div>
 
+            <LiveLinks bot={bot.name} />
+
             {bot.about !== undefined ? <p className="about">{bot.about}</p> : null}
 
             <div className="bot-columns">
@@ -165,6 +168,33 @@ function BotProfile({ bot }: { bot: BotListing }) {
                 />
             ) : null}
         </>
+    );
+}
+
+// Bot names are unique across users and bots, so a bot seat with the name
+// is this bot.
+function playing(entry: LiveGameEntry, bot: string): boolean {
+    return [entry.players.x, entry.players.o].some((player) => player.kind === `bot` && player.name === bot);
+}
+
+// Every game the bot plays right now, from the same list the arena rail
+// reads, so the page needs no read of its own.
+function LiveLinks({ bot }: { bot: string }) {
+    const games = (useLiveGames().data ?? []).filter((entry) => playing(entry, bot));
+    if (games.length === 0) return null;
+    return (
+        <p className="bot-live">
+            <span className="dot" aria-hidden="true" />
+            <span>Playing now</span>
+            {games.map((entry) => {
+                const opponent = entry.players.x.name === bot ? entry.players.o : entry.players.x;
+                return (
+                    <Link key={entry.gameId} to={`/game/${encodeURIComponent(entry.gameId)}`} className="btn btn-ghost btn-sm">
+                        Watch vs {opponent.name}
+                    </Link>
+                );
+            })}
+        </p>
     );
 }
 

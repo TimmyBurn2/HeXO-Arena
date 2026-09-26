@@ -555,6 +555,62 @@ components:
         - error
         - code
       type: object
+    GameEvent:
+      description: "One server-sent event: the event field names the kind, and the data field holds the
+        payload as one line of JSON."
+      oneOf:
+        - properties:
+            data:
+              $ref: "#/components/schemas/GameSnapshot"
+            event:
+              enum:
+                - snapshot
+              type: string
+          required:
+            - event
+            - data
+          type: object
+        - properties:
+            data:
+              $ref: "#/components/schemas/GameTurn"
+            event:
+              enum:
+                - turn
+              type: string
+          required:
+            - event
+            - data
+          type: object
+        - properties:
+            data:
+              $ref: "#/components/schemas/GameFinish"
+            event:
+              enum:
+                - finish
+              type: string
+          required:
+            - event
+            - data
+          type: object
+    GameFinish:
+      description: The result, with the clock as it stood at the end.
+      properties:
+        clock:
+          $ref: "#/components/schemas/GameClock"
+        reason:
+          $ref: "#/components/schemas/FinishReason"
+        winner:
+          enum:
+            - x
+            - o
+            - null
+          nullable: true
+          type: string
+      required:
+        - winner
+        - reason
+        - clock
+      type: object
     GameFinishEvent:
       properties:
         gameId:
@@ -591,8 +647,41 @@ components:
         - error
         - code
       type: object
+    GamePlayer:
+      properties:
+        kind:
+          enum:
+            - bot
+            - user
+            - guest
+          type: string
+        name:
+          type: string
+        provisional:
+          $ref: "#/components/schemas/Provisional"
+        rating:
+          allOf:
+            - $ref: "#/components/schemas/Rating"
+            - nullable: true
+      required:
+        - name
+        - rating
+        - provisional
+        - kind
+      type: object
+    GamePlayers:
+      properties:
+        o:
+          $ref: "#/components/schemas/GamePlayer"
+        x:
+          $ref: "#/components/schemas/GamePlayer"
+      required:
+        - x
+        - o
+      type: object
     GameSnapshot:
-      description: board.cells lists stones in ply order, so its first openingPlies entries are the opening.
+      description: you is the caller's side, present exactly when the caller holds a seat. board.cells
+        lists stones in ply order, so its first openingPlies entries are the opening.
       oneOf:
         - properties:
             board:
@@ -603,8 +692,8 @@ components:
               type: string
             openingPlies:
               $ref: "#/components/schemas/OpeningPlies"
-            opponent:
-              $ref: "#/components/schemas/Player"
+            players:
+              $ref: "#/components/schemas/GamePlayers"
             status:
               enum:
                 - in-progress
@@ -621,8 +710,7 @@ components:
               type: string
           required:
             - gameId
-            - you
-            - opponent
+            - players
             - openingPlies
             - board
             - status
@@ -638,8 +726,8 @@ components:
               type: string
             openingPlies:
               $ref: "#/components/schemas/OpeningPlies"
-            opponent:
-              $ref: "#/components/schemas/Player"
+            players:
+              $ref: "#/components/schemas/GamePlayers"
             reason:
               $ref: "#/components/schemas/FinishReason"
             status:
@@ -660,8 +748,7 @@ components:
               type: string
           required:
             - gameId
-            - you
-            - opponent
+            - players
             - openingPlies
             - board
             - status
@@ -702,6 +789,47 @@ components:
         - openingPlies
         - rated
         - engine
+      type: object
+    GameTurn:
+      description: One applied turn, numbered from turn 0 at the origin. cells holds its stones in order;
+        a turn whose first stone wins holds that stone alone. toMove and clock are the game's state
+        once the turn lands.
+      properties:
+        cells:
+          items:
+            properties:
+              x:
+                type: integer
+              y:
+                type: integer
+            required:
+              - x
+              - y
+            type: object
+          maxItems: 2
+          minItems: 1
+          type: array
+        clock:
+          $ref: "#/components/schemas/GameClock"
+        side:
+          enum:
+            - x
+            - o
+          type: string
+        toMove:
+          enum:
+            - x
+            - o
+          type: string
+        turn:
+          minimum: 1
+          type: integer
+      required:
+        - turn
+        - side
+        - cells
+        - toMove
+        - clock
       type: object
     Guest:
       properties:
@@ -760,6 +888,34 @@ components:
         - name
         - kind
         - rating
+      type: object
+    LiveGameEntry:
+      description: A game in progress; a game with a guest seat is unrated.
+      properties:
+        gameId:
+          type: string
+        players:
+          $ref: "#/components/schemas/GamePlayers"
+        plies:
+          description: Stones on the board, the opening included.
+          minimum: 1
+          type: integer
+        rated:
+          type: boolean
+        timeControl:
+          $ref: "#/components/schemas/TimeControl"
+        toMove:
+          enum:
+            - x
+            - o
+          type: string
+      required:
+        - gameId
+        - players
+        - timeControl
+        - toMove
+        - rated
+        - plies
       type: object
     MoveError:
       properties:
@@ -1010,6 +1166,18 @@ components:
         - rating
         - provisional
       type: object
+    WatcherLimitError:
+      properties:
+        code:
+          enum:
+            - watcher_limit
+          type: string
+        error:
+          type: string
+      required:
+        - error
+        - code
+      type: object
   securitySchemes:
     bearerAuth:
       bearerFormat: opaque
@@ -1028,7 +1196,7 @@ components:
       type: apiKey
 info:
   title: hexarena
-  version: 0.16.0
+  version: 0.19.0
 openapi: 3.0.3
 paths:
   /api/auth/discord/callback:
@@ -1555,6 +1723,23 @@ paths:
       tags:
         - Bots
   /api/games:
+    get:
+      description: Games in progress, newest first, at most 12, without pagination. Guest games are
+        listed; finished games never are.
+      operationId: listLiveGames
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: "#/components/schemas/LiveGameEntry"
+                type: array
+          description: The live games.
+      security: []
+      summary: List live games.
+      tags:
+        - Games
     post:
       description: The bot must hold its stream open with open=1, have fewer than 4 live games, and accept
         the clock. The caller, a user or guest, may hold 3 live games and create one every 60 s. The
@@ -1608,7 +1793,8 @@ paths:
         - Games
   /api/games/{gameId}:
     get:
-      description: Board, turn, and clock in one read; a finished game carries its result.
+      description: Board, turn, and clock in one read; a finished game carries its result. Anyone may read
+        a game, a guest's while the guest's session lives.
       operationId: getGameSnapshot
       parameters:
         - $ref: "#/components/parameters/GameId"
@@ -1619,13 +1805,46 @@ paths:
               schema:
                 $ref: "#/components/schemas/GameSnapshot"
           description: The game's snapshot.
-        "401":
-          $ref: "#/components/responses/Unauthorized"
         "404":
           $ref: "#/components/responses/NotFound"
       security:
         - sessionCookie: []
-      summary: Read a game the caller plays in.
+        - {}
+      summary: Read any game.
+      tags:
+        - Games
+  /api/games/{gameId}/events:
+    get:
+      description: "Server-sent events: on open a snapshot, then a turn event per applied turn, then a
+        finish event, and the stream closes. A finished game sends its snapshot and closes. A
+        comment line comes every 10 s. Events carry no ids and nothing replays: a reconnect gets a
+        fresh snapshot."
+      operationId: watchGame
+      parameters:
+        - $ref: "#/components/parameters/GameId"
+      responses:
+        "200":
+          content:
+            text/event-stream:
+              schema:
+                $ref: "#/components/schemas/GameEvent"
+          description: The event stream.
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WatcherLimitError"
+          description: Watchers without a seat are capped at 50 per game and 500 in total; retry after 30 s. A
+            seated caller is never refused.
+          headers:
+            Retry-After:
+              $ref: "#/components/headers/RetryAfter"
+      security:
+        - sessionCookie: []
+        - {}
+      summary: Watch a game live.
       tags:
         - Games
   /api/games/{gameId}/move:

@@ -1,9 +1,10 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { GameSnapshot } from '@hexarena/contract';
 import { meStore } from '../src/me';
 import { GameScreen } from '../src/screens/GameScreen';
+import { FakeEventSource, stubEventSource } from './event-source';
 
 const finishedCells = [
     { x: 0, y: 0, side: `x` as const },
@@ -19,10 +20,15 @@ const finishedCells = [
     { x: 6, y: 0, side: `o` as const },
 ];
 
+const players = {
+    x: { name: `hextide`, rating: 1690, provisional: false, kind: `bot` as const },
+    o: { name: `tom`, rating: 1503, provisional: false, kind: `user` as const },
+};
+
 const runningSnapshot = {
     gameId: `g-run`,
     you: `o`,
-    opponent: { name: `hextide`, rating: 1690, provisional: false },
+    players,
     openingPlies: 3,
     board: {
         cells: [
@@ -39,7 +45,7 @@ const runningSnapshot = {
 const finishedSnapshot = {
     gameId: `g-end`,
     you: `o`,
-    opponent: { name: `hextide`, rating: 1690, provisional: false },
+    players,
     openingPlies: 3,
     board: { cells: finishedCells },
     status: `finished`,
@@ -52,6 +58,13 @@ function stubGame(snapshot: GameSnapshot, status = 200): void {
         `fetch`,
         vi.fn(() => Promise.resolve(new Response(JSON.stringify(snapshot), { status }))),
     );
+    stubEventSource(status === 200 ? snapshot : null);
+}
+
+// The same games as a watcher reads them: no side of their own.
+function watched(snapshot: GameSnapshot): GameSnapshot {
+    const { you: _seat, ...rest } = snapshot;
+    return rest;
 }
 
 // The m listener registers in an effect that can land after the first
@@ -118,7 +131,7 @@ describe('GameScreen', () => {
         expect(await screen.findByText(`hextide won with six in a row`, { selector: `.hud-result` })).toBeTruthy();
         expect(document.querySelector(`polyline.win-line`)).toBeTruthy();
         expect(document.querySelector(`#drawer-body`)?.hasAttribute(`hidden`)).toBe(true);
-        expect(document.querySelector(`.board-control`)?.hasAttribute(`tabindex`)).toBe(false);
+        expect(document.querySelector(`.board-control`)?.getAttribute(`role`)).toBe(`group`);
         // The phone sheet's peek carries the result only while the open sheet covers the chip.
         expect(document.querySelector(`.peek-line`)?.textContent).not.toBe(`hextide won with six in a row`);
         await openWithM();
@@ -159,10 +172,10 @@ describe('GameScreen', () => {
         expect(document.querySelector(`.peek-line`)?.textContent).toBe(`hextide won with six in a row`);
     });
 
-    it('not-found for a game that is not yours', async () => {
+    it('not-found for an unknown game', async () => {
         stubGame(runningSnapshot, 404);
         render(<GameScreen gameId="g-x" />);
-        expect(await screen.findByText(`No such game of yours`)).toBeTruthy();
+        expect(await screen.findByText(`No such game`)).toBeTruthy();
         expect(screen.getByRole(`link`, { name: `Arena` }).getAttribute(`href`)).toBe(`/`);
     });
 
@@ -181,6 +194,7 @@ describe('GameScreen', () => {
                 );
             }),
         );
+        stubEventSource(runningSnapshot);
         render(<GameScreen gameId="g-run" />);
         await screen.findByRole(`heading`, { name: `hextide vs you` });
         fireEvent.click(screen.getByRole(`button`, { name: `Moves, look, and game` }));
@@ -198,6 +212,28 @@ describe('GameScreen', () => {
         });
     });
 
+    it('say so when a resign does not land and keep the button live', async () => {
+        vi.stubGlobal(
+            `fetch`,
+            vi.fn((_url: string, init?: RequestInit) =>
+                Promise.resolve(
+                    init?.method === `POST`
+                        ? new Response(`{}`, { status: 502 })
+                        : new Response(JSON.stringify(runningSnapshot), { status: 200 }),
+                ),
+            ),
+        );
+        stubEventSource(runningSnapshot);
+        render(<GameScreen gameId="g-run" />);
+        await screen.findByRole(`heading`, { name: `hextide vs you` });
+        await openWithM();
+        fireEvent.click(screen.getByRole(`tab`, { name: `Game` }));
+        fireEvent.click(screen.getByRole(`button`, { name: `Resign` }));
+        fireEvent.click(screen.getByRole(`button`, { name: `Confirm resign` }));
+        expect(await screen.findByRole(`alert`)).toHaveProperty(`textContent`, `The resign did not land; try again`);
+        expect(screen.getByRole(`button`, { name: `Resign` })).toBeTruthy();
+    });
+
     it('name the player in their own chip and mark a guest unrated', async () => {
         vi.stubGlobal(
             `fetch`,
@@ -209,6 +245,7 @@ describe('GameScreen', () => {
                 ),
             ),
         );
+        stubEventSource(runningSnapshot);
         meStore.reset();
         meStore.start();
         render(<GameScreen gameId="g-run" />);
@@ -231,23 +268,143 @@ describe('GameScreen', () => {
         expect(document.activeElement).not.toBe(document.body);
     });
 
-    it('keep the board and say so when the connection drops', async () => {
-        let calls = 0;
-        vi.stubGlobal(
-            `fetch`,
-            vi.fn(() => {
-                calls += 1;
-                return calls === 1
-                    ? Promise.resolve(new Response(JSON.stringify(runningSnapshot), { status: 200 }))
-                    : Promise.reject(new Error(`offline`));
-            }),
-        );
+    it('keep the board and say so when the connection drops, then resync on the fresh snapshot', async () => {
+        stubGame(runningSnapshot);
+        render(<GameScreen gameId="g-run" />);
+        await screen.findByRole(`heading`, { name: `hextide vs you` });
+        act(() => {
+            FakeEventSource.latest().fail(false);
+        });
+        expect(await screen.findByText(`Connection lost, retrying`)).toBeTruthy();
+        expect(document.querySelectorAll(`g.stone`)).toHaveLength(3);
+        const resynced = { ...runningSnapshot, board: { cells: finishedCells.slice(0, 5) }, toMove: `o` } as GameSnapshot;
+        act(() => {
+            FakeEventSource.latest().emit(`snapshot`, resynced);
+        });
+        expect(await screen.findByText(`Your move`)).toBeTruthy();
+        expect(document.querySelectorAll(`g.stone`)).toHaveLength(5);
+    });
+
+    it('reopen a refused stream after a plain read, keeping the board', async () => {
+        stubGame(runningSnapshot);
         vi.useFakeTimers({ shouldAdvanceTime: true });
         render(<GameScreen gameId="g-run" />);
         await screen.findByRole(`heading`, { name: `hextide vs you` });
-        await vi.advanceTimersByTimeAsync(2100);
+        act(() => {
+            FakeEventSource.latest().fail(true);
+        });
         expect(await screen.findByText(`Connection lost, retrying`)).toBeTruthy();
-        expect(document.querySelectorAll(`g.stone`)).toHaveLength(3);
+        const before = FakeEventSource.opened.length;
+        await act(async () => {
+            await vi.advanceTimersByTimeAsync(2_100);
+        });
+        expect(FakeEventSource.opened.length).toBe(before + 1);
+        await waitFor(() => {
+            expect(screen.queryByText(`Connection lost, retrying`)).toBe(null);
+        });
         vi.useRealTimers();
+    });
+
+    it('apply turn events as they land and hold a turn the move answer already placed', async () => {
+        const answered = {
+            ...runningSnapshot,
+            board: { cells: [...runningSnapshot.board.cells, { x: 3, y: 0, side: `o` }, { x: 4, y: 0, side: `o` }] },
+            toMove: `x`,
+        } as GameSnapshot;
+        vi.stubGlobal(
+            `fetch`,
+            vi.fn(() => Promise.resolve(new Response(JSON.stringify(answered), { status: 200 }))),
+        );
+        stubEventSource(runningSnapshot);
+        render(<GameScreen gameId="g-run" />);
+        await screen.findByText(`Your move`);
+        const control = document.querySelector(`.board-control`) as HTMLElement;
+        fireEvent.keyDown(control, { key: `ArrowRight` });
+        fireEvent.keyDown(control, { key: `Enter` });
+        fireEvent.keyDown(control, { key: `ArrowRight` });
+        fireEvent.keyDown(control, { key: `Enter` });
+        expect(await screen.findByText(`hextide is thinking`)).toBeTruthy();
+        const stream = FakeEventSource.latest();
+        act(() => {
+            stream.emit(`turn`, { turn: 2, side: `o`, cells: [{ x: 3, y: 0 }, { x: 4, y: 0 }], toMove: `x`, clock: { mode: `turn`, remainingTurnMs: 40_000 } });
+        });
+        expect(document.querySelectorAll(`g.stone`)).toHaveLength(5);
+        act(() => {
+            stream.emit(`turn`, { turn: 3, side: `x`, cells: [{ x: -1, y: 0 }, { x: -2, y: 0 }], toMove: `o`, clock: { mode: `turn`, remainingTurnMs: 45_000 } });
+        });
+        expect(document.querySelectorAll(`g.stone`)).toHaveLength(7);
+        expect(await screen.findByText(`Your move`)).toBeTruthy();
+        act(() => {
+            stream.emit(`finish`, { winner: `x`, reason: `timeout`, clock: { mode: `turn`, remainingTurnMs: 0 } });
+        });
+        expect(await screen.findByText(`hextide won on time`, { selector: `.hud-result` })).toBeTruthy();
+        expect(stream.readyState).toBe(FakeEventSource.CLOSED);
+    });
+});
+
+describe('GameScreen for a watcher', () => {
+    it('name both players on their chips and leave the board without selection or keys', async () => {
+        stubGame(watched(runningSnapshot));
+        render(<GameScreen gameId="g-run" />);
+        expect(await screen.findByRole(`heading`, { name: `hextide vs tom` })).toBeTruthy();
+        expect(document.querySelector(`.hud-top-left .hud-name`)?.textContent).toBe(`tom`);
+        expect(document.querySelector(`.hud-bottom-left .hud-name`)?.textContent).toBe(`hextideBOT`);
+        expect(document.querySelector(`.hud-bottom-center .hud-turn`)?.textContent).toBe(`tom is thinking`);
+        expect(document.querySelector(`.hud-bottom-center .tag`)?.textContent).toBe(`watching`);
+        const control = document.querySelector(`.board-control`);
+        expect(control?.getAttribute(`role`)).toBe(`group`);
+        expect(control?.getAttribute(`tabindex`)).toBe(`0`);
+        expect(control?.getAttribute(`aria-label`)).toBe(`board, watching hextide vs tom, tom to move`);
+        fireEvent.click(document.querySelector(`polygon.cell`) as Element);
+        expect(document.querySelector(`.ring-pending`)).toBe(null);
+        await waitFor(() => {
+            expect(document.title).toBe(`hextide vs tom - hexarena`);
+        });
+    });
+
+    it('keep the record and facts in the drawer and drop the actions', async () => {
+        stubGame(watched(runningSnapshot));
+        render(<GameScreen gameId="g-run" />);
+        await screen.findByRole(`heading`, { name: `hextide vs tom` });
+        await openWithM();
+        fireEvent.click(screen.getByRole(`tab`, { name: `Game` }));
+        expect(screen.queryByRole(`button`, { name: `Resign` })).toBe(null);
+        expect(document.querySelector(`.game-facts .note`)?.textContent).toBe(`With the board focused, arrows scroll it; m opens this panel.`);
+        expect(screen.getByText(`yes`, { selector: `.facts dd` })).toBeTruthy();
+        expect(document.querySelector(`.peek-row .hud-name`)?.textContent).toBe(`hextideBOT`);
+    });
+
+    it('read a refused stream as a busy one, calmly, while a plain read still answers', async () => {
+        stubGame(watched(runningSnapshot));
+        render(<GameScreen gameId="g-run" />);
+        await screen.findByRole(`heading`, { name: `hextide vs tom` });
+        act(() => {
+            FakeEventSource.latest().fail(true);
+        });
+        expect(await screen.findByText(`Many watching; the board catches up shortly`)).toBeTruthy();
+        expect(screen.queryByText(`Connection lost, retrying`)).toBe(null);
+    });
+
+    it('mark a guest seat unrated and the game unrated in the facts', async () => {
+        const guestGame = {
+            ...watched(runningSnapshot),
+            players: { ...players, o: { name: `Guest k3f9`, rating: null, provisional: false, kind: `guest` as const } },
+        } as GameSnapshot;
+        stubGame(guestGame);
+        render(<GameScreen gameId="g-run" />);
+        await screen.findByRole(`heading`, { name: `hextide vs Guest k3f9` });
+        expect(document.querySelector(`.hud-top-left .tag`)?.textContent).toBe(`unrated`);
+        await openWithM();
+        fireEvent.click(screen.getByRole(`tab`, { name: `Game` }));
+        expect(screen.getByText(`no, a guest plays`, { selector: `.facts dd` })).toBeTruthy();
+    });
+
+    it('name the winner in the result, never you', async () => {
+        stubGame(watched(finishedSnapshot));
+        render(<GameScreen gameId="g-end" />);
+        expect(await screen.findByText(`hextide won with six in a row`, { selector: `.hud-result` })).toBeTruthy();
+        await waitFor(() => {
+            expect(document.title).toBe(`hextide won (six in a row) - hexarena`);
+        });
     });
 });

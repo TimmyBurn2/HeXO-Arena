@@ -1,5 +1,6 @@
 import { adminRequestLimitBytes, adminResponseSchema, type AdminResponse } from '@hexarena/contract';
-import { chmodSync, mkdirSync, mkdtempSync, rmSync, statSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
+import { chmodSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { connect, type Server } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -133,11 +134,35 @@ describe('the admin socket', () => {
         await expect(listen()).rejects.toThrow(/mode 0700/);
     });
 
-    it('refuses to start when the socket path is already bound', async () => {
+    it('a stale socket is recovered', async () => {
+        mkdirSync(join(directory, `run`), { mode: 0o700 });
+        // A server killed outright never unlinks its socket, which is the
+        // unclean stop a bare dev run can suffer.
+        const killed = spawnSync(process.execPath, [
+            `-e`,
+            `require('node:net').createServer().listen(process.argv[1], () => process.kill(process.pid, 'SIGKILL'))`,
+            path,
+        ]);
+        expect(killed.signal).toBe(`SIGKILL`);
+        expect(lstatSync(path).isSocket()).toBe(true);
+        await listen();
+        expect(parseLine(await exchange(path, `{"op":"status"}\n`, { endSide: false }))).toEqual(statusAnswer);
+    });
+
+    it('a live holder refuses the boot', async () => {
         const first = await listen();
         await expect(
             listenAdminSocket(path, handle, { error: () => undefined }),
-        ).rejects.toThrow(/EADDRINUSE/);
+        ).rejects.toThrow(`admin socket ${path} is held by a running server`);
+        expect(parseLine(await exchange(path, `{"op":"status"}\n`, { endSide: false }))).toEqual(statusAnswer);
+        expect(errors).toEqual([]);
         first.close();
+    });
+
+    it('a regular file refuses the boot and survives', async () => {
+        mkdirSync(join(directory, `run`), { mode: 0o700 });
+        writeFileSync(path, `keep me`);
+        await expect(listen()).rejects.toThrow(`admin socket path ${path} holds a file that is not a socket`);
+        expect(readFileSync(path, `utf8`)).toBe(`keep me`);
     });
 });

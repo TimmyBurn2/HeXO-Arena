@@ -1,4 +1,5 @@
 import {
+    gameEventSchema,
     internalToWire,
     sessionHeartbeatMs,
     sessionTokenTtlMs,
@@ -30,6 +31,7 @@ import { PresenceRegistry } from '../src/presence';
 import { readRating } from '../src/rating-store';
 import { randomFloat } from '../src/random';
 import { beginGeneration, retireGeneration } from '../src/site-state';
+import { GameWatchers } from '../src/watchers';
 import { FakeStreamSocket } from './helpers';
 
 const user = { kind: `user` as const, id: `user-1`, name: `humanplayer` };
@@ -139,6 +141,7 @@ function scriptedCells(cells: readonly Coord[]): (bound: number) => number {
 interface Harness {
     sqlite: Sqlite;
     presence: PresenceRegistry;
+    watchers: GameWatchers;
     games: GameRegistry;
     stream: FakeStreamSocket;
     events: () => StreamEvent[];
@@ -153,9 +156,11 @@ function harness(random: () => number = randomFloat, randomIndex?: (bound: numbe
     const query = createQuery(sqlite);
     seedPair(query);
     const presence = new PresenceRegistry();
+    const watchers = new GameWatchers();
     const games = new GameRegistry({
         query,
         presence,
+        watchers,
         generation: beginGeneration(query),
         random,
         ...(randomIndex !== undefined && { randomIndex }),
@@ -166,6 +171,7 @@ function harness(random: () => number = randomFloat, randomIndex?: (bound: numbe
     return {
         sqlite,
         presence,
+        watchers,
         games,
         stream,
         events: () =>
@@ -333,7 +339,44 @@ describe('game creation', () => {
         const start = latestEvent(world, `gameStart`);
         if (start?.type !== `gameStart`) throw new Error(`no gameStart`);
         expect(start.opponent).toEqual({ name: `humanplayer`, rating: 1234, provisional: false });
-        expect(created.snapshot.opponent).toEqual({ name: `opponentbot`, rating: 1778, provisional: true });
+        const botSide = start.side;
+        const humanSide = botSide === `x` ? `o` : `x`;
+        expect(created.snapshot.you).toBe(humanSide);
+        expect(created.snapshot.players[botSide]).toEqual({ name: `opponentbot`, rating: 1778, provisional: true, kind: `bot` });
+        expect(created.snapshot.players[humanSide]).toEqual({ name: `humanplayer`, rating: 1234, provisional: false, kind: `user` });
+    });
+
+    it('shows a watcher both seats and no side of its own', () => {
+        const created = world.games.createGame({ person: user, bot, timeControl: unlimitedControl, openingPlies: 1 });
+        const stranger = { kind: `user` as const, id: `someone-else` };
+        for (const viewer of [null, stranger]) {
+            const snapshot = world.games.snapshotFor(created.gameId, viewer);
+            expect(snapshot?.status).toBe(`in-progress`);
+            expect(snapshot?.you).toBeUndefined();
+            expect([snapshot?.players.x.kind, snapshot?.players.o.kind].sort()).toEqual([`bot`, `user`]);
+        }
+        expect(world.games.snapshotFor(created.gameId, user)?.you).toBe(created.snapshot.you);
+    });
+
+    it('shows a guest seat without a rating to watchers, and its side to the guest alone', () => {
+        const guest = { kind: `guest` as const, id: `guest-1`, name: `Guest a1b2` };
+        const created = world.games.createGame({ person: guest, bot, timeControl: unlimitedControl, openingPlies: 1 });
+        const side = created.snapshot.you;
+        if (side === undefined) throw new Error(`the guest holds no seat`);
+        const watched = world.games.snapshotFor(created.gameId, null);
+        expect(watched?.you).toBeUndefined();
+        expect(watched?.players[side]).toEqual({ name: `Guest a1b2`, rating: null, provisional: false, kind: `guest` });
+        world.games.humanResign(created.gameId, guest);
+        const finished = world.games.snapshotFor(created.gameId, null);
+        expect(finished?.status).toBe(`finished`);
+        expect(finished?.you).toBeUndefined();
+        expect(world.games.snapshotFor(created.gameId, guest)?.you).toBe(side);
+        world.games.endGuest(guest.id);
+        expect(world.games.snapshotFor(created.gameId, null)).toBeNull();
+    });
+
+    it('answers an unknown game id with nothing', () => {
+        expect(world.games.snapshotFor(`g_unknown`, null)).toBeNull();
     });
 
     it('counts active games per bot for the concurrent cap', () => {
@@ -456,6 +499,12 @@ describe('engine session', () => {
         expect(after.reason).toBe(`surrender`);
         expect(after.winner).toBe(`x`);
         expect(after.clock).toBeUndefined();
+        expect(after.you).toBe(`o`);
+        const watched = world.games.snapshotFor(gameId, null);
+        expect(watched).toEqual({ ...after, you: undefined });
+        expect(watched && `you` in watched).toBe(false);
+        expect(watched?.players.o).toMatchObject({ name: `humanplayer`, kind: `user` });
+        expect(watched?.players.x).toMatchObject({ name: `opponentbot`, kind: `bot` });
     });
 
     it('forfeits an illegal engine move as a termination', () => {
@@ -756,7 +805,12 @@ describe('persistence', () => {
         // The sweep is a boot step: the next process reads with an empty
         // registry, so the record answers on its own.
         const query = createQuery(world.sqlite);
-        const restarted = new GameRegistry({ query, presence: new PresenceRegistry(), generation: beginGeneration(query) });
+        const restarted = new GameRegistry({
+            query,
+            presence: new PresenceRegistry(),
+            watchers: new GameWatchers(),
+            generation: beginGeneration(query),
+        });
         const snapshot = restarted.snapshotFor(created.gameId, user);
         if (snapshot?.status !== `finished`) throw new Error(`not finished`);
         expect(snapshot.winner).toBeNull();
@@ -864,6 +918,52 @@ describe('bot-vs-bot games', () => {
         world.games.attachSession(gameId, crosses.token, crossSocket);
         return { gameId, circles, crosses, circleSocket, crossSocket };
     }
+
+    it('lets anyone read a bot-vs-bot game, live and from the log, with both seats as bots', () => {
+        const gameId = create(`challenger`);
+        const live = world.games.snapshotFor(gameId, null);
+        expect(live?.status).toBe(`in-progress`);
+        expect(live?.you).toBeUndefined();
+        expect([live?.players.x.name, live?.players.o.name].sort()).toEqual([`challengerbot`, `opponentbot`]);
+        world.games.abort(gameId);
+        const stored = world.games.snapshotFor(gameId, user);
+        expect(stored).toMatchObject({ status: `finished`, winner: null, reason: `aborted`, players: live?.players });
+        expect(stored?.you).toBeUndefined();
+    });
+
+    it('publishes each turn to watchers, a first-stone win as that stone alone, then the finish', () => {
+        const { gameId, circles, crosses, circleSocket, crossSocket } = seatBoth(1);
+        const opened = world.games.snapshotFor(gameId, null);
+        if (opened === null) throw new Error(`no snapshot`);
+        const watcher = new FakeStreamSocket();
+        world.watchers.attach(gameId, watcher, false, { event: `snapshot`, data: opened });
+        // Crosses leave q = 4 open until their fourth turn, whose first
+        // stone then completes q = 0 to 5.
+        const crossPieces: [HtttxCoord, HtttxCoord][] = [
+            [{ q: 0, r: -4 }, { q: 1, r: -4 }],
+            [{ q: 2, r: -4 }, { q: 3, r: -4 }],
+            [{ q: 5, r: -4 }, { q: 10, r: -4 }],
+            [{ q: 4, r: -4 }, { q: 11, r: -4 }],
+        ];
+        crossPieces.forEach((pieces, index) => {
+            answerLatest(circleSocket, circles, circleTurn(index));
+            answerLatest(crossSocket, crosses, { side: `x`, pieces });
+        });
+        const events = watcher.writes.slice(1).map((frame) => {
+            const [event, data] = frame.split(`\n`).map((line) => line.slice(line.indexOf(`: `) + 2));
+            return gameEventSchema.parse({ event, data: JSON.parse(data ?? `null`) as unknown });
+        });
+        const turns = events.flatMap((event) => (event.event === `turn` ? [event.data] : []));
+        expect(turns.map((turn) => turn.turn)).toEqual([1, 2, 3, 4, 5, 6, 7, 8]);
+        expect(turns.map((turn) => turn.cells.length)).toEqual([2, 2, 2, 2, 2, 2, 2, 1]);
+        const board = world.games.snapshotFor(gameId, null)?.board.cells ?? [];
+        expect(turns.at(-1)?.cells).toEqual(board.slice(-1).map((cell) => ({ x: cell.x, y: cell.y })));
+        expect(events.at(-1)).toEqual({
+            event: `finish`,
+            data: { winner: `x`, reason: `six-in-a-row`, clock: { mode: `unlimited` } },
+        });
+        expect(watcher.ended).toBe(true);
+    });
 
     it('seats both bots with their own handoff and drives turns across two sessions', () => {
         const gameId = create(`challenger`);

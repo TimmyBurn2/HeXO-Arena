@@ -161,4 +161,45 @@ describe('BotScreen', () => {
         expect(await screen.findByText(`sealbot is in a game; finish or resign it first`)).toBeTruthy();
         expect(writes).toEqual([{ method: `DELETE`, url: `/api/bots/sealbot` }]);
     });
+
+    it('link every live game the bot plays and nothing when it plays none', async () => {
+        const live = [
+            {
+                gameId: `g-live`,
+                players: {
+                    x: { name: `sealbot`, rating: 1712, provisional: false, kind: `bot` },
+                    o: { name: `Guest k3f9`, rating: null, provisional: false, kind: `guest` },
+                },
+                timeControl: { mode: `unlimited` },
+                toMove: `o`,
+                rated: false,
+                plies: 5,
+            },
+        ];
+        vi.stubGlobal(
+            `fetch`,
+            vi.fn((url: string) =>
+                Promise.resolve(new Response(JSON.stringify(url === `/api/games` ? live : url === `/api/me` ? null : [sealbot]))),
+            ),
+        );
+        render(<BotScreen name="sealbot" />);
+        const watch = await screen.findByRole(`link`, { name: `Watch vs Guest k3f9` });
+        expect(watch.getAttribute(`href`)).toBe(`/game/g-live`);
+        cleanup();
+        const others = [{ ...live[0], players: { ...live[0]?.players, x: { name: `hextide`, rating: 1690, provisional: false, kind: `bot` } } }];
+        let listed = false;
+        vi.stubGlobal(
+            `fetch`,
+            vi.fn((url: string) => {
+                if (url === `/api/games`) listed = true;
+                return Promise.resolve(new Response(JSON.stringify(url === `/api/games` ? others : url === `/api/me` ? null : [sealbot])));
+            }),
+        );
+        render(<BotScreen name="sealbot" />);
+        await screen.findByRole(`heading`, { name: `sealbot` });
+        await waitFor(() => {
+            expect(listed).toBe(true);
+        });
+        expect(screen.queryByText(`Playing now`)).toBe(null);
+    });
 });

@@ -63,6 +63,7 @@
 
     .rung,
     .rung-skeleton,
+    .live-game,
     .bot-plate,
     .bot-card,
     .identity-plate,
@@ -98,6 +99,7 @@
     .pill:focus-visible,
     .seg-btn:focus-visible,
     .nav-link:focus-visible,
+    .live-game:focus-visible,
     .skip:focus-visible,
     input[type='text']:focus-visible,
     .opt input:focus-visible + label {

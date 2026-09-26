@@ -1,16 +1,27 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { GameSnapshot } from '@hexarena/contract';
+import { BotBadge, Swatch } from '../components/player';
 import { ErrorFrame } from '../components/states';
 import { Link } from '../router/Link';
 import { useRoute } from '../router/use-route';
 import { useDocumentMeta } from '../use-document-meta';
 import { GameBoard, type TurnStatus } from '../game/GameBoard';
 import { FeedLabel, GameDrawer } from '../game/GameDrawer';
-import { clockModeText, clockOf, OpponentChip, Pips, Swatch, TurnChip, YouChip } from '../game/GameHud';
+import { clockModeText, clockOf, Pips, SeatChip, TurnChip, YouChip } from '../game/GameHud';
 import { useDrawer } from '../game/use-drawer';
 import { selfName, useMe } from '../me';
-import { useGame, type GameSend } from '../game/use-game';
-import { feedOf, positionOf, reasonText, resultLine, resultSentence, stonesOf, winLineOf } from '../game/snapshot-views';
+import { useGame, type GameLink, type GameSend } from '../game/use-game';
+import {
+    feedOf,
+    matchName,
+    otherSide,
+    positionOf,
+    reasonText,
+    resultLine,
+    resultSentence,
+    stonesOf,
+    winLineOf,
+} from '../game/snapshot-views';
 import './GameScreen.css';
 
 export function GameScreen({ gameId }: { gameId: string }) {
@@ -25,7 +36,7 @@ export function GameScreen({ gameId }: { gameId: string }) {
             </div>
         );
     }
-    return <GameView snapshot={game.snapshot} send={game.send} stale={game.stale} />;
+    return <GameView snapshot={game.snapshot} send={game.send} link={game.link} />;
 }
 
 // The stage's shape before the snapshot lands, so nothing jumps when it does.
@@ -49,7 +60,7 @@ function MissingGame() {
                 hexarena
             </Link>
             <div className="empty">
-                <h1>No such game of yours</h1>
+                <h1>No such game</h1>
                 <div className="actions">
                     <Link to="/" className="btn btn-ghost">
                         Arena
@@ -67,13 +78,15 @@ function typingInto(target: EventTarget | null): boolean {
     return target instanceof HTMLElement && (target.isContentEditable || [`INPUT`, `TEXTAREA`, `SELECT`].includes(target.tagName));
 }
 
-function GameView({ snapshot, send, stale }: { snapshot: GameSnapshot; send: GameSend; stale: boolean }) {
+// A watcher holds no seat: the same regions with the actions gone, x on
+// the bottom chip and o on the top one.
+function GameView({ snapshot, send, link }: { snapshot: GameSnapshot; send: GameSend; link: GameLink }) {
     const route = useRoute();
     const drawer = useDrawer();
     const me = useMe();
-    const self = selfName(me);
+    const you = snapshot.you ?? null;
+    const bottom = you ?? `x`;
     const running = snapshot.status === `in-progress`;
-    const you = snapshot.you;
     const yourMove = running && snapshot.toMove === you;
     const stones = stonesOf(snapshot);
     const feed = feedOf(snapshot);
@@ -150,9 +163,16 @@ function GameView({ snapshot, send, stale }: { snapshot: GameSnapshot; send: Gam
     );
     const peek = (
         <div className="peek-row">
-            <Swatch side={you} />
-            <span className="hud-name">{self}</span>
-            {clockOf(snapshot, you)}
+            <Swatch side={bottom} />
+            {you === null ? (
+                <span className="hud-name">
+                    {snapshot.players[bottom].name}
+                    {snapshot.players[bottom].kind === `bot` ? <BotBadge /> : null}
+                </span>
+            ) : (
+                <span className="hud-name">{selfName(me)}</span>
+            )}
+            {clockOf(snapshot, bottom)}
             {yourMove ? <Pips placed={status.placed} /> : null}
             {peekLine}
         </div>
@@ -173,12 +193,11 @@ function GameView({ snapshot, send, stale }: { snapshot: GameSnapshot; send: Gam
                     lastMove={running ? stones.slice(-2) : []}
                     winLine={winLineOf(snapshot) ?? []}
                     yourMove={yourMove}
-                    opponentMoving={running && !yourMove}
-                    opponentName={snapshot.opponent.name}
+                    idleLabel={idleLabelOf(snapshot)}
                     onCommit={send.playMove}
                     onStatus={onStatus}
                 />
-                <OpponentChip snapshot={snapshot} />
+                <SeatChip snapshot={snapshot} side={otherSide(bottom)} corner="top" />
                 <div className="hud-lift hud-top-right">
                     <button
                         type="button"
@@ -194,10 +213,15 @@ function GameView({ snapshot, send, stale }: { snapshot: GameSnapshot; send: Gam
                         </svg>
                     </button>
                 </div>
-                <YouChip snapshot={snapshot} me={me} />
+                {you === null ? (
+                    <SeatChip snapshot={snapshot} side={bottom} corner="bottom" />
+                ) : (
+                    <YouChip snapshot={snapshot} you={you} me={me} />
+                )}
                 <TurnChip
                     snapshot={snapshot}
-                    stale={stale}
+                    you={you}
+                    link={link}
                     status={yourMove ? status : idleStatus}
                     onMoves={() => {
                         drawer.show(`moves`);
@@ -211,7 +235,7 @@ function GameView({ snapshot, send, stale }: { snapshot: GameSnapshot; send: Gam
                     feed={feed}
                     facts={factsOf(snapshot)}
                     running={running}
-                    onResign={send.resign}
+                    onResign={you === null ? null : send.resign}
                     peek={peek}
                 />
             </div>
@@ -223,27 +247,41 @@ function factsOf(snapshot: GameSnapshot): (readonly [string, string])[] {
     const facts: (readonly [string, string])[] = [
         [`Clock`, clockModeText(snapshot)],
         [`Opening`, snapshot.openingPlies === 1 ? `origin only` : `${String(snapshot.openingPlies)} stones, origin included`],
-        [`You play`, snapshot.you],
     ];
+    if (snapshot.you === undefined) {
+        const guest = snapshot.players.x.kind === `guest` || snapshot.players.o.kind === `guest`;
+        facts.push([`Rated`, guest ? `no, a guest plays` : `yes`]);
+    } else {
+        facts.push([`You play`, snapshot.you]);
+    }
     if (snapshot.status === `finished`) facts.push([`Result`, resultLine(snapshot)]);
     return facts;
 }
 
+// The seated player reads the game from their own side; a watcher reads it
+// as x against o.
 function headingOf(snapshot: GameSnapshot): string {
-    const opponent = snapshot.opponent.name;
-    return snapshot.you === `x` ? `you vs ${opponent}` : `${opponent} vs you`;
+    const you = snapshot.you;
+    if (you === undefined) return matchName(snapshot);
+    const opponent = snapshot.players[otherSide(you)].name;
+    return you === `x` ? `you vs ${opponent}` : `${opponent} vs you`;
+}
+
+function idleLabelOf(snapshot: GameSnapshot): string {
+    const state =
+        snapshot.status === `finished`
+            ? `game finished`
+            : snapshot.you === undefined
+              ? `${snapshot.players[snapshot.toMove].name} to move`
+              : `waiting for ${snapshot.players[snapshot.toMove].name}`;
+    return snapshot.you === undefined ? `watching ${matchName(snapshot)}, ${state}` : state;
 }
 
 function titleOf(snapshot: GameSnapshot): string {
-    const opponent = snapshot.opponent.name;
     if (snapshot.status === `finished`) {
-        if (snapshot.winner === null) {
-            return `nobody won (${reasonText(snapshot.reason)}) - hexarena`;
-        }
-        if (snapshot.winner === snapshot.you) {
-            return `you won (${reasonText(snapshot.reason)}) - hexarena`;
-        }
-        return `${opponent} won (${reasonText(snapshot.reason)}) - hexarena`;
+        const winner = snapshot.winner;
+        const who = winner === null ? `nobody` : winner === snapshot.you ? `you` : snapshot.players[winner].name;
+        return `${who} won (${reasonText(snapshot.reason)}) - hexarena`;
     }
     return `${headingOf(snapshot)} - hexarena`;
 }
@@ -252,5 +290,8 @@ function descriptionOf(snapshot: GameSnapshot): string {
     if (snapshot.status === `finished`) {
         return resultSentence(snapshot);
     }
-    return `${snapshot.clock.mode} clock game against ${snapshot.opponent.name}`;
+    const you = snapshot.you;
+    return you === undefined
+        ? `${snapshot.clock.mode} clock game, ${matchName(snapshot)}`
+        : `${snapshot.clock.mode} clock game against ${snapshot.players[otherSide(you)].name}`;
 }

@@ -58,3 +58,20 @@ test('hovering the edge opens the drawer without taking the keyboard off the boa
     await expect(page.getByRole(`application`)).toBeFocused();
 });
 
+
+test('a watcher\'s board takes no marks and sends no move', async ({ page }) => {
+    await serve(page, world({ me: null }));
+    const moves: string[] = [];
+    page.on(`request`, (request) => {
+        if (request.url().endsWith(`/move`)) moves.push(request.url());
+    });
+    await page.goto(`/game/running`);
+    await page.locator(`svg polygon.cell`).first().waitFor();
+    const board = page.locator(`.board-control`);
+    await expect(board).toHaveAttribute(`role`, `group`);
+    await expect(board).toHaveAttribute(`aria-label`, /^board, watching /);
+    await page.locator(`svg polygon.cell`).first().click({ force: true });
+    await page.keyboard.press(`Enter`);
+    await expect(page.locator(`.ring-pending`)).toHaveCount(0);
+    expect(moves).toEqual([]);
+});

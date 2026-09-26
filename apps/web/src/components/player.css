@@ -65,4 +65,19 @@
     .prov {
         color: var(--c-text-dim);
     }
+
+    .swatch {
+        display: inline-block;
+        flex: none;
+        width: var(--swatch-size);
+        height: var(--swatch-size);
+    }
+
+    .swatch-x {
+        background: var(--board-stone-x);
+    }
+
+    .swatch-o {
+        background: var(--board-stone-o);
+    }
 }

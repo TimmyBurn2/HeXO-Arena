@@ -1,8 +1,9 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import type { BotListing, LeaderboardEntry } from '@hexarena/contract';
 import { fetchBots, fetchLeaderboard, type LeaderboardKind } from '../api/client';
 import { useAsync } from '../api/use-async';
 import { BotBadge, PlayerName, Rating } from '../components/player';
+import { LiveRail } from '../components/LiveRail';
 import { ErrorFrame, SkeletonRows } from '../components/states';
 import { useMe } from '../me';
 import { Link } from '../router/Link';
@@ -16,6 +17,9 @@ const kinds: readonly { value: LeaderboardKind; label: string }[] = [
 
 export function ArenaScreen() {
     const [kind, setKind] = useState<LeaderboardKind>(`all`);
+    // Unknown until the ladder answers, so day one never flashes the rail's
+    // quiet line under the skeleton.
+    const [ladderEmpty, setLadderEmpty] = useState<boolean | null>(null);
     return (
         <>
             <div className="arena-head">
@@ -36,17 +40,28 @@ export function ArenaScreen() {
                     ))}
                 </div>
             </div>
-            <Board key={kind} kind={kind} />
+            <Board key={kind} kind={kind} onRows={setLadderEmpty} />
+            {/* The live list is its own data, so the rail stays mounted
+                through a filter switch, a ladder reload, and a ladder error.
+                Day one leads with its empty state, whose copy is the way
+                forward; the rail follows it only while a game is live. */}
+            {ladderEmpty === null ? null : <LiveRail onlyWhenLive={ladderEmpty} />}
         </>
     );
 }
 
-function Board({ kind }: { kind: LeaderboardKind }) {
+function Board({ kind, onRows }: { kind: LeaderboardKind; onRows: (empty: boolean) => void }) {
     const load = useCallback(async () => fetchLeaderboard(kind), [kind]);
     const { data, error, loading, reload } = useAsync(load);
     const me = useMe();
     const loadBots = useCallback(async () => fetchBots(false), []);
     const roster = useAsync(loadBots).data;
+
+    // A ladder that failed to load is not day one, so the rail still shows.
+    useEffect(() => {
+        if (data !== null) onRows(data.length === 0);
+        else if (error) onRows(false);
+    }, [data, error, onRows]);
 
     if (loading && data === null) return <LadderSkeleton />;
     if (error && data === null) return <ErrorFrame sentence="The board did not load" onRetry={reload} />;

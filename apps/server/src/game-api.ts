@@ -5,8 +5,11 @@ import {
     humanConcurrentGameCap,
     humanGameCooldownSeconds,
     humanMoveRequestSchema,
+    liveGameListCap,
     nameKeyOf,
     nameSyntaxSchema,
+    watcherRetryAfterSeconds,
+    type GameEvent,
 } from '@hexarena/contract';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import type { WebSocket } from 'ws';
@@ -23,6 +26,7 @@ import type { GuestSessions } from './guests';
 import type { PresenceRegistry } from './presence';
 import { sessionPerson } from './session-api';
 import type { StartGate } from './site-state';
+import { frameOf, type GameWatchers } from './watchers';
 
 // One move_response is a few hundred bytes; anything bigger is a broken or
 // hostile client, and the limit is structural, not advisory.
@@ -33,6 +37,7 @@ export interface GameApiDeps {
     presence: PresenceRegistry;
     gate: StartGate;
     games: GameRegistry;
+    watchers: GameWatchers;
     guests: GuestSessions;
 }
 
@@ -63,7 +68,7 @@ function lastGameCreatedAt(deps: GameApiDeps, person: Person): number | null {
 }
 
 export function registerGameApi(app: FastifyInstance, deps: GameApiDeps): void {
-    const { query, presence, games, gate } = deps;
+    const { query, presence, games, watchers, gate } = deps;
 
     app.post(`/api/games`, async (request, reply) => {
         const person = requirePerson(deps, request, reply);
@@ -126,15 +131,46 @@ export function registerGameApi(app: FastifyInstance, deps: GameApiDeps): void {
         return reply.code(201).send(created.snapshot);
     });
 
+    app.get(`/api/games`, async (_request, reply) => {
+        return reply.code(200).send(games.liveGames(liveGameListCap));
+    });
+
+    // Every game is public; the session only decides whether the reader
+    // sees its own seat as `you`.
     app.get(`/api/games/:gameId`, async (request, reply) => {
-        const person = requirePerson(deps, request, reply);
-        if (person === null) return reply;
         const { gameId } = request.params as GameParams;
-        const found = games.snapshotFor(gameId, person);
+        const found = games.snapshotFor(gameId, sessionPerson(deps.query, deps.guests, request));
         if (found === null) {
-            return reply.code(404).send({ error: `no such game of yours`, code: `not_found` });
+            return reply.code(404).send({ error: `no such game`, code: `not_found` });
         }
         return reply.code(200).send(found);
+    });
+
+    // Written like the bot stream: on reply.raw behind hijack, so nothing
+    // serializes, compresses, or buffers an event.
+    // The snapshot read and the attach run in one synchronous stretch, so
+    // no turn can land between them.
+    app.get(`/api/games/:gameId/events`, async (request, reply) => {
+        const { gameId } = request.params as GameParams;
+        const snapshot = games.snapshotFor(gameId, sessionPerson(deps.query, deps.guests, request));
+        if (snapshot === null) {
+            return reply.code(404).send({ error: `no such game`, code: `not_found` });
+        }
+        const seated = snapshot.you !== undefined;
+        const live = snapshot.status === `in-progress`;
+        if (live && !seated && !watchers.admits(gameId)) {
+            reply.header(`retry-after`, String(watcherRetryAfterSeconds));
+            return reply.code(429).send({ error: `the watcher cap is full`, code: `watcher_limit` });
+        }
+        reply.hijack();
+        reply.raw.writeHead(200, { 'content-type': `text/event-stream`, 'cache-control': `no-store` });
+        reply.raw.flushHeaders();
+        const first: GameEvent = { event: `snapshot`, data: snapshot };
+        if (live) {
+            watchers.attach(gameId, reply.raw, seated, first);
+        } else {
+            reply.raw.end(frameOf(first));
+        }
     });
 
     app.post(`/api/games/:gameId/move`, async (request, reply) => {

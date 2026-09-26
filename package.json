@@ -10,13 +10,15 @@
     "scripts": {
         "dev": "pnpm -r --parallel --if-present dev",
         "dev:compose": "docker compose up --build",
+        "dev:bots": "pnpm --filter @hexarena/dev-bots start",
         "build": "pnpm -r --if-present build",
         "test": "pnpm -r --if-present test",
         "e2e": "pnpm --filter @hexarena/web e2e",
         "typecheck": "pnpm -r --if-present typecheck",
         "lint": "eslint .",
         "check": "pnpm typecheck && pnpm lint && node scripts/check-planning-refs.mjs && node scripts/check-ui-literals.mjs && node scripts/check-contrast.mjs",
-        "openapi": "pnpm --filter @hexarena/contract generate"
+        "openapi": "pnpm --filter @hexarena/contract generate",
+        "spec:export": "pnpm --filter @hexarena/contract spec:export"
     },
     "devDependencies": {
         "@eslint/js": "^10.0.1",

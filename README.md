@@ -30,18 +30,49 @@ pnpm monorepo:
 - `packages/rules`: pure rules engine, no runtime dependencies; HeXO
 differential corpus committed, live-oracle test runs when a sibling HeXO
 checkout exists
+- `scripts/dev-bots`: local opponents for development, a separate client
+  process that never ships
 
 ## Commands
 
 - Install: `pnpm install`
-- Dev: `pnpm dev` (server :3000, web :5173, hot reload; Ctrl-C stops both)
+- Dev: `cp .env.example .env` once, then `pnpm dev` (server :3000, web
+  :5173, hot reload; Ctrl-C stops both). The server and the admin client
+  load `.env` when it exists; production uses the env files in `DEPLOY.md`
+  instead
 - Docker dev runtime: `pnpm dev:compose` (operator-run)
+- Local opponents: `pnpm dev:bots` in a second terminal (below)
 - Tests: `pnpm test`
 - Prod build: `pnpm build`
 - Type-check + lint: `pnpm check`
 - Regenerate `openapi.yaml`: `pnpm openapi`
 
+## Local play, signed out
+
+The site runs no bots of its own, so a bare dev stack has nobody to play.
+`pnpm dev:bots` supplies opponents as a separate process that plays over
+the same bot API as any other bot:
+
+1. `cp .env.example .env`, once
+2. `pnpm dev`
+3. `pnpm dev:bots` in a second terminal
+4. open http://localhost:5173 signed out, pick a `devbot` under Bots,
+   Play, then Play as guest
+
+The runner refuses a target that does not answer the dev login route.
+It signs in `devowner-a` to `devowner-c`, one owner per bot since an
+owner's bots may not challenge each other, and claims `devbot-a` to
+`devbot-c` with fresh tokens, kept in `apps/server/data/dev-bots.json`.
+The bots play random turns next to the stones, accept turn clocks from
+5 s to five minutes and every match and unlimited clock, and challenge
+each other once a minute until a daily cap refuses.
+Ctrl-C closes every stream; `pnpm dev` never starts the runner.
+`DEV_BOTS_ORIGIN` (default `http://127.0.0.1:$PORT`) and `DEV_BOTS_COUNT`
+(1 to 3, default 3) adjust it.
+
 ## Server environment
+
+`.env.example` lists every variable with its development value.
 
 - `HOST`, `PORT`, `DATABASE_PATH`: bind and sqlite location
 - `PUBLIC_ORIGIN`: site origin; builds the OAuth redirect uri and decides the
@@ -52,16 +83,22 @@ checkout exists
   Discord identity by chosen name for local development; with the flag unset
   the route does not exist
 - `ADMIN_SOCKET_PATH`: the admin socket, default `data/run/admin.sock`; its
-  directory must be mode 0700 and owned by the server's uid, or boot fails
+  directory must be mode 0700 and owned by the server's uid, or boot fails.
+  A socket left by an unclean stop is replaced at boot; a socket another
+  server answers on, or any other file at the path, fails the boot
 - `ADMIN_ACTOR`: the name stamped on audit rows, default `operator`
-- `NODE_ENV=production`: with any `DEV_LOGIN` value set, boot fails
+- `DEV_FAST_STOP=1`: SIGTERM stops at once instead of draining, so
+  `tsx watch` restarts never wait on a live game
+- `NODE_ENV=production`: with any `DEV_LOGIN` or `DEV_FAST_STOP` value set,
+  boot fails
 - `BACKUP_DIR`: nightly `VACUUM INTO` snapshots land here; unset, none are
   taken
 - `BACKUP_KEEP` (default 14), `BACKUP_HOUR_UTC` (default 3): rotation and
   schedule
 
-SIGTERM drains: new streams, games, and challenges answer `503 paused`, live
-games get 120 s to end, and the rest end aborted and unrated.
+SIGTERM drains, unless `DEV_FAST_STOP=1`: new streams, games, and challenges
+answer `503 paused`, live games get 120 s to end, and the rest end aborted and
+unrated.
 SIGINT stops at once.
 
 ## Deploying

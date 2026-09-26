@@ -4,12 +4,12 @@
     "private": true,
     "type": "module",
     "scripts": {
-        "dev": "tsx watch src/index.ts",
+        "dev": "tsx watch --env-file-if-exists=../../.env src/index.ts",
         "build": "vite build --config build.config.ts && cp -r src/db/migrations dist/migrations",
         "test": "vitest run",
         "typecheck": "tsc --noEmit -p .",
         "db:generate": "drizzle-kit generate",
-        "admin": "tsx src/admin-cli.ts"
+        "admin": "tsx --env-file-if-exists=../../.env src/admin-cli.ts"
     },
     "dependencies": {
         "@fastify/cookie": "^11.1.2",

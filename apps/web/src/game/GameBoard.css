@@ -20,6 +20,12 @@
         outline: none;
     }
 
+    /* Off your move no cell carries focus, so the board itself shows it. */
+    .board-control[role='group']:focus-visible {
+        outline: var(--focus-w) solid var(--c-focus);
+        outline-offset: var(--focus-w);
+    }
+
     .board-camera .board-frame {
         padding: 0;
         background: none;

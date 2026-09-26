@@ -40,3 +40,29 @@ for (const game of [`running`, `finished`, `nine-finished`]) {
         }
     });
 }
+
+// A feed longer than the viewport scrolls inside the drawer's panel, so the
+// newest line and the turn chip stay on screen whether the drawer takes a
+// column at tablet width or is pinned on a wide screen.
+for (const layout of [
+    { name: `a tablet column`, width: 768, height: 1024, storage: {} },
+    { name: `a pinned drawer`, width: 1440, height: 900, storage: { 'hexarena.drawer-pinned.v1': `1` } },
+]) {
+    test(`a long game keeps its newest line and turn chip in view in ${layout.name}`, async ({ page }) => {
+        await page.setViewportSize({ width: layout.width, height: layout.height });
+        await page.addInitScript((entries: Record<string, string>) => {
+            for (const [key, value] of Object.entries(entries)) window.localStorage.setItem(key, value);
+        }, layout.storage);
+        await serve(page, world({ me: null }));
+        await page.goto(`/game/long`);
+        await page.locator(`svg polygon.cell`).first().waitFor();
+        if (layout.width < 1440) await page.keyboard.press(`m`);
+        await expect(page.locator(`#drawer-body`)).toBeVisible();
+        for (const selector of [`.feed-line.latest`, `.hud-bottom-center`]) {
+            await expect
+                .poll(() => page.locator(selector).evaluate((element) => element.getBoundingClientRect().bottom))
+                .toBeLessThanOrEqual(layout.height);
+        }
+        expect(await page.evaluate(() => document.querySelector(`.stage`)?.getBoundingClientRect().height)).toBe(layout.height);
+    });
+}

@@ -21,7 +21,8 @@ export function GameDrawer({ drawer, feed, facts, running, onResign, peek }: {
     feed: readonly FeedLine[];
     facts: readonly (readonly [string, string])[];
     running: boolean;
-    onResign: () => Promise<void>;
+    // Null for a watcher, whose Game tab carries no play keys and no resign.
+    onResign: (() => Promise<boolean>) | null;
     peek: ReactNode;
 }) {
     const bodyRef = useRef<HTMLDivElement>(null);
@@ -125,10 +126,11 @@ export function GameDrawer({ drawer, feed, facts, running, onResign, peek }: {
                 <div
                     className="drawer-panel"
                     role="tabpanel"
+                    tabIndex={0}
                     id={`drawer-panel-${drawer.tab}`}
                     aria-labelledby={`drawer-tab-${drawer.tab}`}
                 >
-                    {drawer.tab === `moves` ? <MoveFeed feed={feed} /> : null}
+                    {drawer.tab === `moves` ? <MoveFeed feed={feed} visible={drawer.visible} /> : null}
                     {drawer.tab === `board` ? <LookControls /> : null}
                     {drawer.tab === `game` ? <GameFacts facts={facts} running={running} onResign={onResign} /> : null}
                 </div>
@@ -153,14 +155,16 @@ export function FeedLabel({ line }: { line: FeedLine }) {
 }
 
 // The record, newest at the bottom; lines added after first render rise in.
-function MoveFeed({ feed }: { feed: readonly FeedLine[] }) {
+// The panel around the list is what scrolls, and a hidden panel has no
+// height, so it follows the newest line on every turn and on every open.
+function MoveFeed({ feed, visible }: { feed: readonly FeedLine[]; visible: boolean }) {
     const listRef = useRef<HTMLOListElement>(null);
     const settled = useRef(feed.length);
 
     useEffect(() => {
-        const list = listRef.current;
-        if (list !== null) list.scrollTop = list.scrollHeight;
-    }, [feed.length]);
+        const panel = listRef.current?.closest(`.drawer-panel`);
+        if (visible && panel instanceof HTMLElement) panel.scrollTop = panel.scrollHeight;
+    }, [feed.length, visible]);
 
     return (
         <ol className="feed" ref={listRef}>
@@ -189,18 +193,22 @@ function MoveFeed({ feed }: { feed: readonly FeedLine[] }) {
 function GameFacts({ facts, running, onResign }: {
     facts: readonly (readonly [string, string])[];
     running: boolean;
-    onResign: () => Promise<void>;
+    onResign: (() => Promise<boolean>) | null;
 }) {
     const [armed, setArmed] = useState(false);
     const [resigning, setResigning] = useState(false);
+    const [failed, setFailed] = useState(false);
+
+    const playing = running && onResign !== null;
 
     async function resign() {
+        if (onResign === null) return;
         if (!armed) {
             setArmed(true);
             return;
         }
         setResigning(true);
-        await onResign();
+        setFailed(!(await onResign()));
         setResigning(false);
         setArmed(false);
     }
@@ -215,23 +223,33 @@ function GameFacts({ facts, running, onResign }: {
                     </div>
                 ))}
             </dl>
-            {running ? (
+            {playing ? (
                 <p className="note">
                     <kbd>arrows</kbd> <kbd>q</kbd> <kbd>e</kbd> walk the board, <kbd>enter</kbd> marks a
                     stone and the second mark plays the turn, <kbd>esc</kbd> clears it, <kbd>m</kbd> opens
                     this panel.
                 </p>
             ) : null}
+            {onResign === null ? (
+                <p className="note">
+                    With the board focused, <kbd>arrows</kbd> scroll it; <kbd>m</kbd> opens this panel.
+                </p>
+            ) : null}
             <div className="card-actions">
                 <Link to="/" className="btn btn-ghost">
                     Leave to the arena
                 </Link>
-                {running ? (
+                {playing ? (
                     <button type="button" className="btn btn-danger" disabled={resigning} onClick={() => void resign()}>
                         {armed ? `Confirm resign` : `Resign`}
                     </button>
                 ) : null}
             </div>
+            {playing && failed ? (
+                <p className="hud-note" role="alert">
+                    The resign did not land; try again
+                </p>
+            ) : null}
         </div>
     );
 }

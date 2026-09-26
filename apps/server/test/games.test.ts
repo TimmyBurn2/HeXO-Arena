@@ -742,9 +742,15 @@ describe('a guest plays a connected bot', () => {
         expect(after?.rating).toBe(before?.rating);
         expect(after?.provisional).toBe(before?.provisional);
 
-        expect(finished(await arena.snapshot(guest, gameId)).winner).toBe(`o`);
-        expect((await arena.getGame(bot.cookie, gameId)).status).toBe(404);
-        expect((await arena.getGame(await arena.guest(), gameId)).status).toBe(404);
+        const own = finished(await arena.snapshot(guest, gameId));
+        expect(own).toMatchObject({ winner: `o`, you: `o` });
+        expect(own.players.o).toMatchObject({ rating: null, provisional: false, kind: `guest` });
+        for (const reader of [bot.cookie, await arena.guest(), ``]) {
+            const watched = finished(await arena.snapshot(reader, gameId));
+            expect(watched.winner).toBe(`o`);
+            expect(watched.you).toBeUndefined();
+            expect(watched.players).toEqual(own.players);
+        }
     });
 
     it('holds each guest session to its own creation cooldown', async () => {
@@ -761,7 +767,8 @@ describe('a guest plays a connected bot', () => {
         const { gameId } = await startGame(arena, guest);
         expect((await arena.logout(guest)).status).toBe(204);
         expect(await finishOn(bot.stream)).toMatchObject({ gameId, winner: null, reason: `aborted` });
-        expect((await arena.getGame(guest, gameId)).status).toBe(401);
+        expect((await arena.getGame(guest, gameId)).status).toBe(404);
+        expect((await arena.getGame(``, gameId)).status).toBe(404);
         expect(arena.count(`games`)).toBe(0);
     });
 });
@@ -929,12 +936,15 @@ describe('human move gates', () => {
         expect(inProgress(await arena.snapshot(bot.cookie, gameId)).status).toBe(`in-progress`);
     });
 
-    it('hides one player\'s games from another player and from strangers', async () => {
+    it('shows a game to another player and to strangers without a seat, and refuses their moves', async () => {
         const other = await arena.login(`otherplayer`);
-        const denied = await arena.getGame(other, gameId);
-        expect(denied.status).toBe(404);
-        const anonymous = await arena.getGame(``, gameId);
-        expect(anonymous.status).toBe(401);
+        for (const reader of [other, ``]) {
+            const watched = inProgress(await arena.snapshot(reader, gameId));
+            expect(watched.you).toBeUndefined();
+            expect(watched.players.x).toMatchObject({ name: `opponentbot`, kind: `bot` });
+            expect(watched.players.o).toMatchObject({ name: `humanplayer`, kind: `user` });
+        }
+        expect((await arena.getGame(``, `g_unknown`)).status).toBe(404);
         const movedAsOther = await arena.move(other, gameId, [
             { x: 1, y: 0 },
             { x: 2, y: 0 },

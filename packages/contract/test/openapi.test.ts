@@ -13,6 +13,7 @@ import {
     defaultOpeningPlies,
     discordCallbackPath,
     discordLoginPath,
+    gameEventsPath,
     gameMovePath,
     gamePath,
     gameResignPath,
@@ -191,13 +192,38 @@ describe('openapi document', () => {
         expect(oneOf(schema)).toHaveLength(6);
     });
 
-    it('documents the human game surface behind the session cookie', () => {
+    it('documents the human game actions behind the session cookie and the game read open to anyone', () => {
         const document = buildOpenApiDocument();
         expect(dig(document, `paths`, gamesPath, `post`, `security`)).toEqual([{ sessionCookie: [] }]);
         expect(dig(document, `paths`, gamesPath, `post`, `responses`, `201`)).toBeDefined();
-        expect(dig(document, `paths`, gamePath, `get`, `security`)).toEqual([{ sessionCookie: [] }]);
+        expect(dig(document, `paths`, gamePath, `get`, `security`)).toEqual([{ sessionCookie: [] }, {}]);
+        expect(dig(document, `paths`, gamePath, `get`, `responses`, `401`)).toBeUndefined();
         expect(dig(document, `paths`, gameMovePath, `post`, `security`)).toEqual([{ sessionCookie: [] }]);
         expect(dig(document, `paths`, gameResignPath, `post`, `security`)).toEqual([{ sessionCookie: [] }]);
+    });
+
+    it('documents the live game list open to anyone as named entries', () => {
+        const document = buildOpenApiDocument();
+        const operation = dig(document, `paths`, gamesPath, `get`);
+        expect(dig(operation, `security`)).toEqual([]);
+        expect(dig(operation, `responses`, `200`, `content`, `application/json`, `schema`, `items`)).toEqual(
+            dig(document, `components`, `schemas`, `LiveGameEntry`),
+        );
+    });
+
+    it('documents the game event stream open to anyone, with named payloads and the watcher 429', () => {
+        const document = buildOpenApiDocument();
+        const operation = dig(document, `paths`, gameEventsPath, `get`);
+        expect(dig(operation, `security`)).toEqual([{ sessionCookie: [] }, {}]);
+        const schema = dig(operation, `responses`, `200`, `content`, `text/event-stream`, `schema`);
+        const payloads = oneOf(schema).map((variant) => dig(variant, `properties`, `data`));
+        expect(payloads).toEqual([
+            dig(document, `components`, `schemas`, `GameSnapshot`),
+            dig(document, `components`, `schemas`, `GameTurn`),
+            dig(document, `components`, `schemas`, `GameFinish`),
+        ]);
+        expect(dig(operation, `responses`, `429`, `headers`, `Retry-After`)).toBeDefined();
+        expect(dig(operation, `responses`, `404`)).toBeDefined();
     });
 
     it('documents the engine-session socket with its token parameter and the bot resign', () => {

@@ -5,6 +5,7 @@ import {
     botsPath,
     createBotRequestSchema,
     createGameRequestSchema,
+    gameEventsPath,
     gamesPath,
     gameSnapshotSchema,
     guestMeSchema,
@@ -16,12 +17,14 @@ import {
     leaderboardEntrySchema,
     leaderboardPath,
     leaderboardQuerySchema,
+    liveGameEntrySchema,
     type AxialCoord,
     type BotListing,
     type CreateGameRequest,
     type GameSnapshot,
     type GuestMe,
     type LeaderboardEntry,
+    type LiveGameEntry,
     type Me,
 } from '@hexarena/contract';
 import type { ZodType } from 'zod';
@@ -149,9 +152,19 @@ export function createGame(request: CreateGameRequest): Promise<GameSnapshot> {
     return sendJson(gamesPath, `POST`, createGameRequestSchema.parse(request), gameSnapshotSchema);
 }
 
-/** One game as the seated human reads it; the read is session-authed. */
+/** The games in progress, newest first, as far as the list's cap reaches. */
+export function fetchLiveGames(): Promise<LiveGameEntry[]> {
+    return getJson(gamesPath, liveGameEntrySchema.array());
+}
+
+/** Any game; the session only decides whether the caller's side is present. */
 export function fetchGameSnapshot(gameId: string): Promise<GameSnapshot> {
     return getJson(`/api/games/${encodeURIComponent(gameId)}`, gameSnapshotSchema);
+}
+
+/** Where a game's live events stream from, for EventSource. */
+export function gameEventsUrl(gameId: string): string {
+    return gameEventsPath.replace(`{gameId}`, encodeURIComponent(gameId));
 }
 
 /** Play one full turn; the answer is the snapshot after it lands. */

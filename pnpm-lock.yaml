@@ -338,6 +338,34 @@ importers:
         specifier: ^4.6.5
         version: 4.6.5
 
+  scripts/dev-bots:
+    dependencies:
+      '@hexarena/contract':
+        specifier: workspace:*
+        version: link:../../packages/contract
+      '@hexarena/rules':
+        specifier: workspace:*
+        version: link:../../packages/rules
+      zod:
+        specifier: ^4.6.5
+        version: 4.6.5
+    devDependencies:
+      '@types/node':
+        specifier: ^24.0.0
+        version: 24.13.6
+      tsx:
+        specifier: ^4.23.15
+        version: 4.23.15
+      typescript:
+        specifier: ~5.9.3
+        version: 5.9.3
+      vite:
+        specifier: ^8.3.1
+        version: 8.3.1(@types/node@24.13.6)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1)
+      vitest:
+        specifier: ^5.0.1
+        version: 5.0.1(@types/node@24.13.6)(jsdom@26.1.0)(vite@8.3.1(@types/node@24.13.6)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))
+
 packages:
 
   '@asamuzakjp/css-color@3.2.0':

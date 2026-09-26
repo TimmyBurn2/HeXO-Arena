@@ -29,6 +29,7 @@ export interface HumanGameRecord {
     readonly kind: `human`;
     readonly id: string;
     readonly userId: string;
+    readonly userName: string;
     readonly botId: string;
     readonly botName: string;
     readonly userSide: Side;
@@ -42,7 +43,9 @@ export interface BotGameRecord {
     readonly kind: `bots`;
     readonly id: string;
     readonly challengerBotId: string;
+    readonly challengerName: string;
     readonly destBotId: string;
+    readonly destName: string;
     readonly challengerSide: Side;
     readonly timeControl: TimeControl;
     readonly opening: readonly OpeningCell[];
@@ -150,16 +153,22 @@ export function abortUnfinishedGames(query: Query): void {
     });
 }
 
+const challengerBots = alias(bots, `challenger_bot`);
+const destBots = alias(bots, `dest_bot`);
+
 export function findGame(query: Query, gameId: string): GameRecord | undefined {
     const row = query
         .select({
             id: games.id,
             userId: games.userId,
+            userName: users.name,
             botId: games.botId,
             botName: bots.name,
             userSide: games.userSide,
             challengerBotId: games.challengerBotId,
+            challengerName: challengerBots.name,
             destBotId: games.destBotId,
+            destName: destBots.name,
             challengerSide: games.challengerSide,
             timeControl: games.timeControl,
             openingCells: games.openingCells,
@@ -167,7 +176,10 @@ export function findGame(query: Query, gameId: string): GameRecord | undefined {
             finishReason: games.finishReason,
         })
         .from(games)
+        .leftJoin(users, eq(games.userId, users.id))
         .leftJoin(bots, eq(games.botId, bots.id))
+        .leftJoin(challengerBots, eq(games.challengerBotId, challengerBots.id))
+        .leftJoin(destBots, eq(games.destBotId, destBots.id))
         .where(eq(games.id, gameId))
         .get();
     if (row === undefined) return undefined;
@@ -177,11 +189,18 @@ export function findGame(query: Query, gameId: string): GameRecord | undefined {
     const opening = boardCellSchema.array().parse(JSON.parse(row.openingCells));
     const winner = (row.winner as Side | null) ?? null;
     const finishReason = (row.finishReason as FinishReason | null) ?? null;
-    if (row.userId !== null && row.botId !== null && row.botName !== null && row.userSide !== null) {
+    if (
+        row.userId !== null &&
+        row.userName !== null &&
+        row.botId !== null &&
+        row.botName !== null &&
+        row.userSide !== null
+    ) {
         return {
             kind: `human`,
             id: row.id,
             userId: row.userId,
+            userName: row.userName,
             botId: row.botId,
             botName: row.botName,
             // The seats constraint admits only x and o here.
@@ -192,12 +211,20 @@ export function findGame(query: Query, gameId: string): GameRecord | undefined {
             finishReason,
         };
     }
-    if (row.challengerBotId !== null && row.destBotId !== null && row.challengerSide !== null) {
+    if (
+        row.challengerBotId !== null &&
+        row.challengerName !== null &&
+        row.destBotId !== null &&
+        row.destName !== null &&
+        row.challengerSide !== null
+    ) {
         return {
             kind: `bots`,
             id: row.id,
             challengerBotId: row.challengerBotId,
+            challengerName: row.challengerName,
             destBotId: row.destBotId,
+            destName: row.destName,
             // The seats constraint admits only x and o here.
             challengerSide: row.challengerSide as Side,
             timeControl,
@@ -218,9 +245,6 @@ export type GameHeadline =
           readonly winner: Side | null;
           readonly reason: FinishReason;
       };
-
-const challengerBots = alias(bots, `challenger_bot`);
-const destBots = alias(bots, `dest_bot`);
 
 // Only finished games answer from the log: a live one is the registry's,
 // and an unfinished row without it belongs to an earlier process.

@@ -35,6 +35,7 @@ import { registerOgShell } from './og-shell';
 import { endGuestSession, registerSessionApi, setSessionCookie } from './session-api';
 import { createSession, sessionUser } from './sessions';
 import { beginGeneration, StartGate } from './site-state';
+import type { GameWatchers } from './watchers';
 import {
     createUserWithDerivedName,
     createUserWithExactName,
@@ -47,6 +48,7 @@ export interface AppDeps {
     secureCookies: boolean;
     devLogin: boolean;
     presence: PresenceRegistry;
+    watchers: GameWatchers;
     // Stamped on every audit row; one operator today, a named moderator
     // once there is more than one.
     adminActor: string;
@@ -80,10 +82,12 @@ export async function buildApp(deps: AppDeps): Promise<BuiltApp> {
     expireStaleChallenges(query, challengeTtlSeconds);
     await app.register(cookiePlugin);
     await app.register(websocketPlugin, { options: { maxPayload: engineFrameLimitBytes } });
-    const presence = deps.presence;
+    const { presence, watchers } = deps;
     const gate = new StartGate(query);
     const games = new GameRegistry(
-        deps.random === undefined ? { query, presence, generation } : { query, presence, generation, random: deps.random },
+        deps.random === undefined
+            ? { query, presence, watchers, generation }
+            : { query, presence, watchers, generation, random: deps.random },
     );
     const challenges = new ChallengeRegistry({ query, presence, games });
     wirePresence(presence, games);
@@ -97,13 +101,19 @@ export async function buildApp(deps: AppDeps): Promise<BuiltApp> {
     // with their own clocks and sessions, do not.
     const gameReplay = presence.replay;
     presence.replay = (botId) => [...challenges.replayForBot(botId), ...gameReplay(botId)];
+    // Open streams would hold the server's close, so they end before it.
+    app.addHook(`preClose`, (done) => {
+        presence.closeAll();
+        watchers.closeAll();
+        done();
+    });
     app.addHook(`onClose`, () => {
         challenges.stop();
         games.stop();
     });
     registerBotApi(app, { query, presence, gate });
     registerChallengeApi(app, { query, presence, games, challenges, gate });
-    registerGameApi(app, { query, presence, games, gate, guests });
+    registerGameApi(app, { query, presence, games, watchers, gate, guests });
     registerLeaderboardApi(app, { query });
     registerSessionApi(app, { query, guests, secureCookies: deps.secureCookies });
     if (deps.webIndexPath !== undefined) {

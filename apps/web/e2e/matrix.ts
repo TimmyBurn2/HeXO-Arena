@@ -1,6 +1,6 @@
 import type { Page } from '@playwright/test';
 import { themes } from '../src/theme/themes';
-import { world, type World } from './mock-api';
+import { liveGames, world, type World } from './mock-api';
 
 /** A named look the whole site can wear; every screen is captured in each. */
 export interface Look {
@@ -41,12 +41,25 @@ const signedOut = world({ me: null });
 const guest = world({ me: { kind: `guest`, name: `Guest k3f9` } });
 
 export const shots: readonly Shot[] = [
-    { name: `arena`, path: `/`, world: world(), ready: `table`, framed: true },
-    { name: `arena-empty`, path: `/`, world: world({ leaderboard: [] }), ready: `.empty`, framed: true },
+    { name: `arena`, path: `/`, world: world(), ready: `.live-game`, framed: true },
+    { name: `arena-empty`, path: `/`, world: world({ leaderboard: [], live: [] }), ready: `.empty`, framed: true },
+    { name: `arena-empty-live`, path: `/`, world: world({ leaderboard: [] }), ready: `.live-game`, framed: true },
+    { name: `arena-live-none`, path: `/`, world: world({ live: [] }), ready: `.live-rail .note`, framed: true },
+    {
+        name: `arena-live-full`,
+        path: `/`,
+        world: world({ live: liveGames }),
+        ready: `.live-game`,
+        framed: true,
+        after: async (page) => {
+            await page.locator(`.live-rail`).scrollIntoViewIfNeeded();
+        },
+    },
     { name: `arena-loading`, path: `/`, world: world({ stall: true }), ready: `.skeleton`, framed: true },
     { name: `arena-error`, path: `/`, world: world({ broken: true }), ready: `.empty`, framed: true },
     { name: `bots`, path: `/bots`, world: world(), ready: `table`, framed: true },
-    { name: `bot-owner`, path: `/bots/sealbot`, world: world(), ready: `h1`, framed: true },
+    { name: `bot-owner`, path: `/bots/sealbot`, world: world(), ready: `.bot-live`, framed: true },
+    { name: `bot-live-none`, path: `/bots/sealbot`, world: world({ live: [] }), ready: `h1`, framed: true },
     {
         name: `bot-visitor`,
         path: `/bots/sealbot`,
@@ -156,6 +169,37 @@ export const shots: readonly Shot[] = [
         after: async (page) => {
             await page.keyboard.press(`m`);
             await page.getByRole(`tab`, { name: `Board` }).click();
+        },
+    },
+    { name: `watch-running`, path: `/game/running`, world: signedOut, ready: `svg polygon.cell`, framed: false },
+    { name: `watch-guest`, path: `/game/guest`, world: signedOut, ready: `svg polygon.cell`, framed: false },
+    { name: `watch-finished`, path: `/game/finished`, world: signedOut, ready: `svg polygon.cell`, framed: false },
+    ...(
+        [
+            [`watch-drawer`, `/game/running`],
+            [`watch-drawer-long`, `/game/long`],
+            [`watch-drawer-finished`, `/game/finished`],
+        ] as const
+    ).map(([name, path]) => ({
+        name,
+        path,
+        world: signedOut,
+        ready: `svg polygon.cell`,
+        framed: false,
+        after: async (page: Page) => {
+            await page.keyboard.press(`m`);
+            await page.locator(`#drawer-body:not([hidden])`).waitFor();
+        },
+    })),
+    {
+        name: `watch-facts`,
+        path: `/game/guest`,
+        world: signedOut,
+        ready: `svg polygon.cell`,
+        framed: false,
+        after: async (page) => {
+            await page.keyboard.press(`m`);
+            await page.getByRole(`tab`, { name: `Game` }).click();
         },
     },
     { name: `game-missing`, path: `/game/nope`, world: world(), ready: `h1`, framed: true },

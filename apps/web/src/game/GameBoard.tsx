@@ -64,19 +64,19 @@ export function GameBoard({
     lastMove,
     winLine,
     yourMove,
-    opponentMoving,
-    opponentName,
+    idleLabel,
     onCommit,
     onStatus,
 }: {
     stones: readonly BoardStone[];
     position: Position;
-    you: Side;
+    // Null for a watcher, who never marks a stone.
+    you: Side | null;
     lastMove: readonly AxialCoord[];
     winLine: readonly AxialCoord[];
     yourMove: boolean;
-    opponentMoving: boolean;
-    opponentName: string;
+    // What the board's accessible name says whenever it is not your move.
+    idleLabel: string;
     onCommit: (cells: readonly [AxialCoord, AxialCoord]) => Promise<boolean>;
     onStatus?: ((status: TurnStatus) => void) | undefined;
 }) {
@@ -211,11 +211,13 @@ export function GameBoard({
 
     return (
         <div className="board-camera" ref={cameraRef}>
+            {/* Off your move the board is read-only, but still takes focus
+                so the arrows scroll a board larger than the view. */}
             <div
                 className="board-control"
-                tabIndex={yourMove ? 0 : undefined}
-                role="application"
-                aria-label={`board, ${yourMove ? `your move: two stones` : opponentMoving ? `waiting for ${opponentName}` : `game finished`}`}
+                tabIndex={0}
+                role={yourMove ? `application` : `group`}
+                aria-label={`board, ${yourMove ? `your move: two stones` : idleLabel}`}
                 onKeyDown={handleKey}
             >
                 <Board
@@ -224,7 +226,7 @@ export function GameBoard({
                     label={`game board, ${String(stones.length)} stones placed`}
                     scale={scale}
                     overlays={{
-                        ...(pending === null ? {} : { pending, pendingSide: you }),
+                        ...(pending === null || you === null ? {} : { pending, pendingSide: you }),
                         ...(yourMove ? { focus } : {}),
                         ...(winLine.length === 0 ? {} : { winLine }),
                         lastMove,

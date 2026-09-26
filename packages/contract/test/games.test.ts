@@ -4,10 +4,16 @@ import {
     gameClockSchema,
     gameSnapshotSchema,
     humanMoveRequestSchema,
+    liveGameEntrySchema,
+    liveGameListCap,
 } from '../src/games';
 import { defaultOpeningPlies, openingPliesSchema } from '../src/stream';
 
 const turnControl = { mode: `turn`, turnTimeMs: 30_000 };
+const players = {
+    x: { name: `Guest a1b2`, rating: null, provisional: false, kind: `guest` },
+    o: { name: `opponentbot`, rating: 1500, provisional: true, kind: `bot` },
+};
 
 describe('openingPliesSchema', () => {
     it('accepts every odd ply count from one to nine', () => {
@@ -72,18 +78,18 @@ describe('gameSnapshotSchema', () => {
             gameId: `g1`,
             status: `in-progress`,
             you: `x`,
-            opponent: { name: `opponentbot`, rating: 1500, provisional: true },
+            players,
             openingPlies: 1,
             board: { cells: [{ x: 0, y: 0, side: `x` }] },
             toMove: `o`,
             clock: { mode: `unlimited` },
         });
         expect(inProgress.status).toBe(`in-progress`);
+        expect(inProgress.you).toBe(`x`);
         const finished = gameSnapshotSchema.parse({
             gameId: `g1`,
             status: `finished`,
-            you: `x`,
-            opponent: { name: `opponentbot`, rating: 1500, provisional: true },
+            players,
             openingPlies: 1,
             board: { cells: [{ x: 0, y: 0, side: `x` }] },
             winner: null,
@@ -91,6 +97,22 @@ describe('gameSnapshotSchema', () => {
         });
         expect(finished.status).toBe(`finished`);
         expect(`clock` in finished && finished.clock !== undefined).toBe(false);
+        expect(finished.you).toBeUndefined();
+    });
+
+    it('names both seats and rejects a seat of unknown kind', () => {
+        const base = {
+            gameId: `g1`,
+            status: `in-progress`,
+            openingPlies: 1,
+            board: { cells: [{ x: 0, y: 0, side: `x` }] },
+            toMove: `o`,
+            clock: { mode: `unlimited` },
+        };
+        expect(gameSnapshotSchema.parse({ ...base, players }).players).toEqual(players);
+        const unknownKind = { ...players, o: { ...players.o, kind: `robot` } };
+        expect(gameSnapshotSchema.safeParse({ ...base, players: unknownKind }).success).toBe(false);
+        expect(gameSnapshotSchema.safeParse({ ...base, opponent: players.o }).success).toBe(false);
     });
 });
 
@@ -104,5 +126,21 @@ describe('humanMoveRequestSchema', () => {
                 cells: [{ x: 1, y: 0 }, { x: 0, y: 1 }, { x: 1, y: 1 }],
             }).success,
         ).toBe(false);
+    });
+});
+
+describe('liveGameEntrySchema', () => {
+    it('lists a guest game as unrated with its plies and players', () => {
+        const entry = {
+            gameId: `g1`,
+            players,
+            timeControl: { mode: `turn`, turnTimeMs: 30_000 },
+            toMove: `o`,
+            rated: false,
+            plies: 5,
+        };
+        expect(liveGameEntrySchema.parse(entry)).toEqual(entry);
+        expect(liveGameEntrySchema.safeParse({ ...entry, plies: 0 }).success).toBe(false);
+        expect(liveGameListCap).toBe(12);
     });
 });

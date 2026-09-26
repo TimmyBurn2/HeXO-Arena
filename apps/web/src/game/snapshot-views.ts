@@ -114,7 +114,17 @@ export function resultLine(snapshot: GameSnapshot): string {
 
 /** The seated human reads their own side as "you". */
 export function nameOf(snapshot: GameSnapshot, side: Side): string {
-    return side === snapshot.you ? `you` : snapshot.opponent.name;
+    return side === snapshot.you ? `you` : snapshot.players[side].name;
+}
+
+/** Both seats by name, x first. */
+export function matchName(snapshot: GameSnapshot): string {
+    return `${snapshot.players.x.name} vs ${snapshot.players.o.name}`;
+}
+
+/** The side across the board. */
+export function otherSide(side: Side): Side {
+    return side === `x` ? `o` : `x`;
 }
 
 /**
