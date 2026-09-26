@@ -1,24 +1,20 @@
 import {
     acceptsCovers,
+    botConcurrentGameCap,
+    botDailyCap,
+    challengeInboxCap,
     createChallengeRequestSchema,
     nameKeyOf,
     nameSyntaxSchema,
+    pairDailyCap,
 } from '@hexarena/contract';
 import type { FastifyInstance } from 'fastify';
 import { requireBot } from './bot-api';
 import { findBot } from './bots';
 import { nowSeconds, type Query } from './db';
-import {
-    botConcurrentGameCap,
-    type GameRegistry,
-} from './game-registry';
+import type { GameRegistry } from './game-registry';
 import { countBotBotGamesSince, countPairBotGamesSince } from './game-store';
-import {
-    botDailyCap,
-    challengeInboxCap,
-    pairDailyCap,
-    type ChallengeRegistry,
-} from './challenge-registry';
+import type { ChallengeRegistry } from './challenge-registry';
 import type { PresenceRegistry } from './presence';
 import type { StartGate } from './site-state';
 
@@ -124,7 +120,7 @@ export function registerChallengeApi(app: FastifyInstance, deps: ChallengeApiDep
             challenger: { id: challenger.id, name: challenger.name },
             dest: { id: target.id, name: target.name },
             timeControl: parsed.data.timeControl,
-            openingTurns: parsed.data.openingTurns,
+            openingPlies: parsed.data.openingPlies,
             firstPlayer: parsed.data.firstPlayer,
             requestKey: parsed.data.requestId,
         });

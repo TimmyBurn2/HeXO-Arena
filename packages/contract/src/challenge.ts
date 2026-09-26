@@ -1,8 +1,7 @@
 import { z } from 'zod';
 import {
-    defaultOpeningTurns,
     firstPlayerSchema,
-    openingTurnsSchema,
+    openingPliesRequestSchema,
     timeControlSchema,
 } from './stream';
 
@@ -11,6 +10,13 @@ export const challengeAcceptPath = `/api/bot/challenge/{challengeId}/accept`;
 export const challengeDeclinePath = `/api/bot/challenge/{challengeId}/decline`;
 export const challengeCancelPath = `/api/bot/challenge/{challengeId}/cancel`;
 
+// A pending challenge expires after this; the target's inbox holds at most
+// the cap, and the daily caps count bot-vs-bot games per UTC day.
+export const challengeTtlMs = 60_000;
+export const challengeInboxCap = 10;
+export const pairDailyCap = 20;
+export const botDailyCap = 100;
+
 // The idempotency key for challenge creation, scoped to the challenger:
 // resending the same id returns the stored challenge with whatever outcome
 // it reached, so a retry can never stack a second inbox entry.
@@ -18,7 +24,7 @@ export const challengeRequestIdSchema = z.string().min(1).max(128);
 
 export const createChallengeRequestSchema = z.object({
     timeControl: timeControlSchema,
-    openingTurns: openingTurnsSchema.default(defaultOpeningTurns),
+    openingPlies: openingPliesRequestSchema,
     firstPlayer: firstPlayerSchema.default(`random`),
     requestId: challengeRequestIdSchema,
 });

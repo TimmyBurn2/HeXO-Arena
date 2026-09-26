@@ -15,7 +15,7 @@ import { createQuery, type Query } from '../src/db';
 import { recomputeRatings } from '../src/rating-store';
 import { createTestApp, type TestApp } from './helpers';
 
-// A random draw of 0.9 makes the human circles, so with no opening stones
+// A random draw of 0.9 makes the human circles, so after the origin alone
 // the human holds the first turn and the bot answers.
 const humanCircles = () => 0.9;
 const turnControl = { mode: `turn` as const, turnTimeMs: 30_000 };
@@ -331,12 +331,12 @@ async function startGame(
     arena: Arena,
     cookie: string,
     timeControl: unknown = turnControl,
-    openingTurns = 0,
+    openingPlies = 1,
 ): Promise<{ gameId: string; snapshot: GameSnapshot }> {
     const response = await arena.createGame(cookie, {
         bot: `opponentbot`,
         timeControl,
-        openingTurns,
+        openingPlies,
     });
     expect(response.status).toBe(201);
     const snapshot = snapshotOf(response);
@@ -600,14 +600,28 @@ describe('a human plays a connected bot end to end', () => {
         expect(json(moved)).toMatchObject({ code: `game_over` });
     });
 
-    it('carries the opening turn count on live and stored snapshots', async () => {
-        const { gameId, snapshot } = await startGame(arena, bot.cookie, turnControl, 2);
-        expect(snapshot.openingTurns).toBe(2);
+    it('carries the opening length on live and stored snapshots, read back from the stored stones', async () => {
+        const { gameId, snapshot } = await startGame(arena, bot.cookie, turnControl, 5);
+        expect(snapshot.openingPlies).toBe(5);
         expect(snapshot.board.cells).toHaveLength(5);
         await arena.humanResign(bot.cookie, gameId);
         const stored = await arena.snapshot(bot.cookie, gameId);
         expect(finished(stored).clock).toBeUndefined();
-        expect(stored.openingTurns).toBe(2);
+        expect(stored.openingPlies).toBe(5);
+        expect(stored.board.cells.slice(0, 5)).toEqual(snapshot.board.cells);
+    });
+
+    it('defaults a game without an opening length to five plies', async () => {
+        const response = await arena.createGame(bot.cookie, { bot: `opponentbot`, timeControl: turnControl });
+        expect(response.status).toBe(201);
+        expect(snapshotOf(response).openingPlies).toBe(5);
+        expect(snapshotOf(response).board.cells).toHaveLength(5);
+    });
+
+    it('refuses an even opening length', async () => {
+        const response = await arena.createGame(bot.cookie, { bot: `opponentbot`, timeControl: turnControl, openingPlies: 4 });
+        expect(response.status).toBe(400);
+        expect(json(response)).toMatchObject({ code: `bad_request` });
     });
 
     it('replays gameStart and a fresh moveRequest on a mid-game stream reconnect', async () => {
@@ -716,7 +730,7 @@ describe('a guest plays a connected bot', () => {
                 { x: 6, y: -6 },
             ]),
         );
-        expect(winning).toMatchObject({ winner: `o`, reason: `six-in-a-row`, openingTurns: 0 });
+        expect(winning).toMatchObject({ winner: `o`, reason: `six-in-a-row`, openingPlies: 1 });
         expect(await finishOn(bot.stream)).toMatchObject({ winner: `o`, reason: `six-in-a-row` });
 
         expect(arena.count(`games`)).toBe(0);

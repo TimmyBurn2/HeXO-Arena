@@ -114,7 +114,9 @@ describe('the opening turns migration', () => {
                 values ('c0', 'b1', 'b2', 'r0', '{}', 0, 'random', 'expired', 1, 2),
                        ('c6', 'b1', 'b2', 'r6', '{}', 6, 'random', 'expired', 1, 2);
         `);
-        runMigrations(sqlite);
+        const throughTurns = migrationsUpTo(9);
+        migrate(drizzle(sqlite), { migrationsFolder: throughTurns });
+        rmSync(throughTurns, { recursive: true, force: true });
         expect(sqlite.prepare(`select id, opening_turns as turns from challenges order by id`).all()).toEqual([
             { id: `c0`, turns: 0 },
             { id: `c6`, turns: 3 },
@@ -125,6 +127,50 @@ describe('the opening turns migration', () => {
         `);
         insert.run(`c4`, `r4`, 4);
         expect(() => insert.run(`c5`, `r5`, 5)).toThrow(/CHECK/);
+    });
+});
+
+describe('the opening plies migration', () => {
+    let sqlite: Sqlite;
+    let folder: string;
+
+    afterEach(() => {
+        sqlite.close();
+        rmSync(folder, { recursive: true, force: true });
+    });
+
+    it('converts stored turn counts into plies with the origin and refuses any other count', () => {
+        sqlite = openDatabase(`:memory:`);
+        folder = migrationsUpTo(9);
+        migrate(drizzle(sqlite), { migrationsFolder: folder });
+        sqlite.exec(`
+            insert into name_reservations (name_key) values ('owner'), ('alpha'), ('beta');
+            insert into users (id, discord_id, name, name_key, created_at) values ('u1', 'd1', 'owner', 'owner', 1);
+            insert into bots (id, owner_id, name, name_key, token_hash, scope, created_at)
+                values ('b1', 'u1', 'alpha', 'alpha', 'h1', 'bot:play', 1), ('b2', 'u1', 'beta', 'beta', 'h2', 'bot:play', 1);
+            insert into challenges (id, challenger_bot_id, dest_bot_id, request_key, time_control, opening_turns, first_player, status, created_at, decided_at)
+                values ('c0', 'b1', 'b2', 'r0', '{}', 0, 'random', 'expired', 1, 2),
+                       ('c1', 'b1', 'b2', 'r1', '{}', 1, 'challenger', 'expired', 1, 2),
+                       ('c2', 'b1', 'b2', 'r2', '{}', 2, 'random', 'declined', 1, 2),
+                       ('c3', 'b1', 'b2', 'r3', '{}', 3, 'random', 'canceled', 1, 2),
+                       ('c4', 'b1', 'b2', 'r4', '{}', 4, 'challenged', 'expired', 1, 2);
+        `);
+        runMigrations(sqlite);
+        expect(sqlite.prepare(`select id, opening_plies as plies, first_player as first from challenges order by id`).all()).toEqual([
+            { id: `c0`, plies: 1, first: `random` },
+            { id: `c1`, plies: 3, first: `challenger` },
+            { id: `c2`, plies: 5, first: `random` },
+            { id: `c3`, plies: 7, first: `random` },
+            { id: `c4`, plies: 9, first: `challenged` },
+        ]);
+        const insert = sqlite.prepare(`
+            insert into challenges (id, challenger_bot_id, dest_bot_id, request_key, time_control, opening_plies, first_player, status, created_at, decided_at)
+                values (?, 'b1', 'b2', ?, '{}', ?, 'random', 'expired', 1, 2)
+        `);
+        insert.run(`c5`, `r5`, 5);
+        for (const plies of [0, 2, 4, 11]) {
+            expect(() => insert.run(`bad${String(plies)}`, `bad${String(plies)}`, plies)).toThrow(/CHECK/);
+        }
     });
 });
 

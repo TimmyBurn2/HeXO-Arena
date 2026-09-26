@@ -8,7 +8,7 @@ export const axialCoordSchema = z.object({
 });
 export type AxialCoord = z.infer<typeof axialCoordSchema>;
 
-// The two seat colors; player 0 always places the opening stone.
+// The two seat colors; player 0 always owns the origin.
 export const playerColorSchema = z.union([z.literal(0), z.literal(1)]);
 export type PlayerColor = z.infer<typeof playerColorSchema>;
 

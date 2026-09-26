@@ -1,6 +1,4 @@
-import type { StreamEvent } from '@hexarena/contract';
-
-export const streamKeepaliveMs = 10_000;
+import { streamKeepaliveMs, type StreamEvent } from '@hexarena/contract';
 
 // Presence is the connection: the registry holds one live stream per bot and
 // nothing else, so online and open-for-challenges can never go stale.

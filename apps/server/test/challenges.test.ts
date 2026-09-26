@@ -298,7 +298,7 @@ async function botAnswer(engine: EngineHandle, cells: { q: number; r: number }[]
 async function createChallenge(arena: Arena, challenger: BotFixture, requestId: string): Promise<string> {
     const result = await arena.challenge(challenger.token, `secondbot`, {
         timeControl: turnControl,
-        openingTurns: 0,
+        openingPlies: 1,
         firstPlayer: `challenger`,
         requestId,
     });
@@ -339,7 +339,7 @@ describe('the bot-vs-bot challenge inbox', () => {
             challenger: { name: `firstbot`, rating: 1500, provisional: true },
             destUser: { name: `secondbot`, rating: 1500, provisional: true },
             timeControl: turnControl,
-            openingTurns: 0,
+            openingPlies: 1,
             firstPlayer: `challenger`,
             status: `created`,
         });
@@ -349,7 +349,7 @@ describe('the bot-vs-bot challenge inbox', () => {
 
         const challengerStart = await eventOn(first.stream, `gameStart`);
         const destStart = await eventOn(second.stream, `gameStart`);
-        // The challenger was named first player and no opening stones were
+        // The challenger was named first player and the origin alone was
         // asked for, so the challenger takes o and the first turn.
         expect(challengerStart.side).toBe(`o`);
         expect(challengerStart.opponent).toEqual({ name: `secondbot`, rating: 1500, provisional: true });
@@ -384,6 +384,17 @@ describe('the bot-vs-bot challenge inbox', () => {
         expect(arena.challengeRow(challengeId)).toMatchObject({ status: `accepted`, gameId: destStart.gameId });
         await until(() => challengerEngine.socket.readyState === WebSocket.CLOSED);
         await until(() => destEngine.socket.readyState === WebSocket.CLOSED);
+    });
+
+    it('offers a challenge without an opening length at five plies and starts both bots on it', async () => {
+        const created = await arena.challenge(first.token, `secondbot`, { timeControl: turnControl, requestId: `req-default` });
+        expect(created.status).toBe(201);
+        const challenge = challengeSchema.parse(json(created));
+        expect(challenge.openingPlies).toBe(5);
+        const accepted = await arena.accept(second.token, challenge.challengeId);
+        expect(accepted.status).toBe(200);
+        expect((await eventOn(first.stream, `gameStart`)).openingPlies).toBe(5);
+        expect((await eventOn(second.stream, `gameStart`)).openingPlies).toBe(5);
     });
 
     it('declines reach the challenger and close the challenge', async () => {

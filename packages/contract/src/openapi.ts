@@ -1,4 +1,5 @@
 import { OpenApiGeneratorV3, OpenAPIRegistry } from '@asteasolutions/zod-to-openapi';
+import type { ZodType } from 'zod';
 import { errorBodySchema } from './api';
 import {
     accountDeclarationSchema,
@@ -6,6 +7,9 @@ import {
     badRequestErrorCodes,
     botAccountPath,
     botAccountSchema,
+    botCapPerUser,
+    botConcurrentGameCap,
+    botDailyCap,
     botDeleteConflictErrorCodes,
     botForbiddenErrorCodes,
     botGameResignPath,
@@ -19,11 +23,13 @@ import {
     botChallengePath,
     challengeAcceptErrorCodes,
     challengeAcceptPath,
+    challengeInboxCap,
     challengeCancelPath,
     challengeCreateErrorCodes,
     challengeDeclinePath,
     challengeForbiddenErrorCodes,
     challengeSchema,
+    challengeTtlMs,
     createBotRequestSchema,
     createChallengeRequestSchema,
     createGameRequestSchema,
@@ -31,17 +37,22 @@ import {
     discordLoginPath,
     gameCreateErrorCodes,
     gameCreateForbiddenErrorCodes,
+    gameMoveErrorCodes,
     gameMovePath,
     gamePath,
+    gameResignErrorCodes,
     gameResignPath,
     gameSnapshotSchema,
     gamesPath,
     guestConflictErrorCodes,
+    guestIdleSeconds,
     guestLimitErrorCodes,
     guestMeSchema,
     guestPath,
     guestRetryAfterSeconds,
     healthzPath,
+    humanConcurrentGameCap,
+    humanGameCooldownSeconds,
     logoutPath,
     mePath,
     meSchema,
@@ -50,76 +61,131 @@ import {
     leaderboardPath,
     notFoundErrorCodes,
     okSchema,
+    pairDailyCap,
     pausedErrorCodes,
     pausedRetryAfterSeconds,
+    rankableDeviation,
     sessionCookieName,
+    sessionHeartbeatMs,
     streamEventSchema,
+    streamKeepaliveMs,
     unauthorizedErrorCodes,
 } from './index';
 
-const unauthorized = () => ({
-    description: `No session cookie, or the session is expired or unknown.`,
-    content: { 'application/json': { schema: errorBodySchema(unauthorizedErrorCodes) } },
+const seconds = (ms: number) => String(ms / 1000);
+
+// Every other component is named by .meta({ id }) where its schema is
+// defined, so each use renders as a $ref to one definition.
+const badRequestError = errorBodySchema(badRequestErrorCodes).meta({ id: `BadRequestError` });
+const unauthorizedError = errorBodySchema(unauthorizedErrorCodes).meta({ id: `UnauthorizedError` });
+const notFoundError = errorBodySchema(notFoundErrorCodes).meta({ id: `NotFoundError` });
+const bannedError = errorBodySchema(botForbiddenErrorCodes).meta({ id: `BannedError` });
+const pausedError = errorBodySchema(pausedErrorCodes).meta({ id: `PausedError` });
+const oauthUnconfiguredError = errorBodySchema([`oauth_unconfigured`]).meta({ id: `OAuthUnconfiguredError` });
+const badStateError = errorBodySchema([`bad_state`]).meta({ id: `BadStateError` });
+const discordError = errorBodySchema([`discord_error`]).meta({ id: `DiscordError` });
+const signedInError = errorBodySchema(guestConflictErrorCodes).meta({ id: `SignedInError` });
+const guestLimitError = errorBodySchema(guestLimitErrorCodes).meta({ id: `GuestLimitError` });
+const botNameError = errorBodySchema([`invalid_name`, `name_reserved`]).meta({ id: `BotNameError` });
+const botLimitError = errorBodySchema([`bot_limit`]).meta({ id: `BotLimitError` });
+const nameTakenError = errorBodySchema([`name_taken`]).meta({ id: `NameTakenError` });
+const inGameError = errorBodySchema(botDeleteConflictErrorCodes).meta({ id: `InGameError` });
+const gameCreateError = errorBodySchema([...badRequestErrorCodes, ...gameCreateErrorCodes]).meta({
+    id: `GameCreateError`,
+});
+const delistedError = errorBodySchema(gameCreateForbiddenErrorCodes).meta({ id: `DelistedError` });
+const moveError = errorBodySchema([...badRequestErrorCodes, ...gameMoveErrorCodes]).meta({ id: `MoveError` });
+const gameOverError = errorBodySchema(gameResignErrorCodes).meta({ id: `GameOverError` });
+const challengeCreateError = errorBodySchema([...badRequestErrorCodes, ...challengeCreateErrorCodes]).meta({
+    id: `ChallengeCreateError`,
+});
+const challengeForbiddenError = errorBodySchema([...botForbiddenErrorCodes, ...challengeForbiddenErrorCodes]).meta({
+    id: `ChallengeForbiddenError`,
+});
+const challengeAcceptError = errorBodySchema([...badRequestErrorCodes, ...challengeAcceptErrorCodes]).meta({
+    id: `ChallengeAcceptError`,
 });
 
-const notFound = () => ({
-    description: `No such bot, or one that is not the caller's to act on; the two are indistinguishable on purpose.`,
-    content: { 'application/json': { schema: errorBodySchema(notFoundErrorCodes) } },
-});
-
-const botUnauthorized = () => ({
-    description: `Missing, unknown, or rotated token.`,
-    content: { 'application/json': { schema: errorBodySchema(unauthorizedErrorCodes) } },
-});
-
-const botForbidden = () => ({
-    description: `The bot's owner is banned; the token answers this until the ban lifts, and dies then.`,
-    content: { 'application/json': { schema: errorBodySchema(botForbiddenErrorCodes) } },
-});
-
-const badRequest = () => ({
-    description: `The request fails validation.`,
-    content: { 'application/json': { schema: errorBodySchema(badRequestErrorCodes) } },
-});
-
-const paused = () => ({
-    description: `The site is paused: nothing new starts, while open streams and live games run on. Retry after the advertised delay.`,
-    headers: {
-        'Retry-After': {
-            description: `Seconds to wait before retrying; ${String(pausedRetryAfterSeconds)} while paused.`,
-            schema: { type: 'integer', minimum: 1 },
-        },
-    } as const,
-    content: { 'application/json': { schema: errorBodySchema(pausedErrorCodes) } },
-});
-
-// A fresh object per registration: one shared object would serialize as a
-// yaml alias.
-const gameIdParameter = () =>
-    ({
-        name: 'gameId',
-        in: 'path',
-        required: true,
-        description: `The game, as carried on gameStart and moveRequest.`,
-        schema: { type: 'string' },
-    }) as const;
-
-const challengeIdParameter = () =>
-    ({
-        name: 'challengeId',
-        in: 'path',
-        required: true,
-        description: `The challenge, as carried on its challenge line.`,
-        schema: { type: 'string' },
-    }) as const;
+// A raw component cannot hold a zod schema, so it points at a named one;
+// each such schema also goes to the generator, or its $ref would dangle.
+function registerSharedComponents(registry: OpenAPIRegistry) {
+    const referenced: { type: 'schema'; schema: ZodType }[] = [];
+    const json = (schema: ZodType) => {
+        const id = schema.meta()?.id;
+        if (id === undefined) throw new Error(`a shared response needs a named schema`);
+        referenced.push({ type: 'schema', schema });
+        return { 'application/json': { schema: { $ref: `#/components/schemas/${id}` } } };
+    };
+    const response = (name: string, description: string, schema: ZodType) =>
+        registry.registerComponent('responses', name, { description, content: json(schema) }).ref;
+    const retryAfter = registry.registerComponent('headers', 'RetryAfter', {
+        description: `Seconds to wait before retrying.`,
+        schema: { type: 'integer', minimum: 1 },
+    }).ref;
+    return {
+        referenced,
+        retryAfter,
+        unauthorized: response(
+            `Unauthorized`,
+            `No session cookie, or the session is expired or unknown.`,
+            unauthorizedError,
+        ),
+        botUnauthorized: response(`BotUnauthorized`, `Missing, unknown, or rotated bot token.`, unauthorizedError),
+        banned: response(
+            `Banned`,
+            `The bot's owner is banned; after the ban lifts, the owner must rotate the token.`,
+            bannedError,
+        ),
+        delisted: response(`Delisted`, `The bot is delisted and takes no new games.`, delistedError),
+        notFound: response(
+            `NotFound`,
+            `The target does not exist or is not the caller's to act on.`,
+            notFoundError,
+        ),
+        badRequest: response(`BadRequest`, `The request fails validation.`, badRequestError),
+        gameOver: response(`GameOver`, `The game is already finished (game_over).`, gameOverError),
+        oauthUnconfigured: response(
+            `OAuthUnconfigured`,
+            `Discord OAuth credentials are not configured.`,
+            oauthUnconfiguredError,
+        ),
+        paused: registry.registerComponent('responses', 'Paused', {
+            description: `The site is paused: nothing new starts, while open streams and live games run on. Retry after ${String(pausedRetryAfterSeconds)} s.`,
+            headers: { 'Retry-After': retryAfter },
+            content: json(pausedError),
+        }).ref,
+        gameId: registry.registerComponent('parameters', 'GameId', {
+            name: 'gameId',
+            in: 'path',
+            required: true,
+            description: `The game, as carried on gameStart and moveRequest.`,
+            schema: { type: 'string' },
+        }).ref,
+        challengeId: registry.registerComponent('parameters', 'ChallengeId', {
+            name: 'challengeId',
+            in: 'path',
+            required: true,
+            description: `The challenge, as carried on its challenge line.`,
+            schema: { type: 'string' },
+        }).ref,
+        botName: registry.registerComponent('parameters', 'BotName', {
+            name: 'name',
+            in: 'path',
+            required: true,
+            description: `The bot's name.`,
+            schema: { type: 'string' },
+        }).ref,
+    };
+}
 
 export function buildOpenApiDocument() {
     const registry = new OpenAPIRegistry();
+    const shared = registerSharedComponents(registry);
     registry.registerComponent('securitySchemes', 'sessionCookie', {
         type: 'apiKey',
         in: 'cookie',
         name: sessionCookieName,
-        description: `A browser session, set by the Discord OAuth callback or the guest route and readable only by the server.`,
+        description: `An HttpOnly session cookie, set by the Discord OAuth callback or the guest route.`,
     });
 
     registry.registerPath({
@@ -140,13 +206,10 @@ export function buildOpenApiDocument() {
         summary: 'Start Discord OAuth: redirect to the authorize endpoint.',
         operationId: 'discordLogin',
         tags: ['Auth'],
-        description: `Mandatory state and nonce, generated per redirect and validated once at the callback.`,
+        description: `Each redirect carries a fresh state and nonce, valid once at the callback.`,
         responses: {
             302: { description: `Redirect to Discord's authorize endpoint.` },
-            503: {
-                description: `Discord OAuth credentials are not configured.`,
-                content: { 'application/json': { schema: errorBodySchema([`oauth_unconfigured`]) } },
-            },
+            503: shared.oauthUnconfigured,
         },
     });
 
@@ -156,25 +219,22 @@ export function buildOpenApiDocument() {
         summary: 'Finish Discord OAuth: create the session.',
         operationId: 'discordCallback',
         tags: ['Auth'],
-        description: `Identify scope only: the Discord id and username, never an email. On success sets the session cookie and redirects to the app root.`,
+        description: `Requests the identify scope only: the Discord id and username.`,
         responses: {
-            302: { description: `Session cookie set; redirect to /.` },
+            302: { description: `The session cookie is set; redirect to /.` },
             400: {
                 description: `The state is unknown, expired, or already used.`,
-                content: { 'application/json': { schema: errorBodySchema([`bad_state`]) } },
+                content: { 'application/json': { schema: badStateError } },
             },
             403: {
                 description: `The Discord identity belongs to a banned user; no session is created.`,
-                content: { 'application/json': { schema: errorBodySchema([`banned`]) } },
+                content: { 'application/json': { schema: bannedError } },
             },
             502: {
                 description: `Discord rejected the code or the identity lookup failed.`,
-                content: { 'application/json': { schema: errorBodySchema([`discord_error`]) } },
+                content: { 'application/json': { schema: discordError } },
             },
-            503: {
-                description: `Discord OAuth credentials are not configured.`,
-                content: { 'application/json': { schema: errorBodySchema([`oauth_unconfigured`]) } },
-            },
+            503: shared.oauthUnconfigured,
         },
     });
 
@@ -185,10 +245,10 @@ export function buildOpenApiDocument() {
         operationId: 'me',
         tags: ['Auth'],
         security: [{ sessionCookie: [] }, {}],
-        description: `Reads the session cookie alone. Without a live session the answer is null, never a 401, so a page can ask before it knows. A user carries their current rating in whole points and whether it is still provisional; a guest is never rated.`,
+        description: `Reads the session cookie alone; without a live session the answer is null, never 401.`,
         responses: {
             200: {
-                description: 'The session holder, or null.',
+                description: `The session's user or guest, or null.`,
                 content: { 'application/json': { schema: meSchema } },
             },
         },
@@ -201,7 +261,7 @@ export function buildOpenApiDocument() {
         operationId: 'logout',
         tags: ['Auth'],
         security: [{ sessionCookie: [] }, {}],
-        description: `Idempotent: without a live session it still clears the cookie and answers 204. Ending a guest session aborts its live games, which were unrated anyway.`,
+        description: `Idempotent: without a live session it still clears the cookie. Ending a guest session aborts its live games.`,
         responses: {
             204: { description: 'The session is gone and the cookie cleared.' },
         },
@@ -214,29 +274,24 @@ export function buildOpenApiDocument() {
         operationId: 'startGuest',
         tags: ['Auth'],
         security: [{ sessionCookie: [] }, {}],
-        description: `Nothing is persisted: the session lives in server memory, ends at sign-out, after 24 hours without a request, or at a restart, and is never swept while it sits in a live game. A guest plays bots under the human limits and every guest game is unrated for both sides. Signing in with Discord over a guest session ends it. Asking again with a live guest session answers that same guest.`,
+        description: `The session lives in server memory only and ends at sign-out, a Discord sign-in, or a restart. It also ends after ${String(guestIdleSeconds / 3600)} h without a request, unless it sits in a live game. Every guest game is unrated.`,
         responses: {
             200: {
                 description: 'The caller already holds this guest session.',
                 content: { 'application/json': { schema: guestMeSchema } },
             },
             201: {
-                description: 'A fresh guest session; the session cookie is set.',
+                description: `A new guest session; the session cookie is set.`,
                 content: { 'application/json': { schema: guestMeSchema } },
             },
             409: {
-                description: 'A user is signed in; a guest session never replaces an account.',
-                content: { 'application/json': { schema: errorBodySchema(guestConflictErrorCodes) } },
+                description: `A user is signed in.`,
+                content: { 'application/json': { schema: signedInError } },
             },
             429: {
-                description: `The global guest cap is full.`,
-                headers: {
-                    'Retry-After': {
-                        description: `Seconds to wait before retrying; ${String(guestRetryAfterSeconds)}.`,
-                        schema: { type: 'integer', minimum: 1 },
-                    },
-                } as const,
-                content: { 'application/json': { schema: errorBodySchema(guestLimitErrorCodes) } },
+                description: `The global guest cap is full; retry after ${String(guestRetryAfterSeconds)} s.`,
+                headers: { 'Retry-After': shared.retryAfter },
+                content: { 'application/json': { schema: guestLimitError } },
             },
         },
     });
@@ -245,7 +300,7 @@ export function buildOpenApiDocument() {
         type: 'http',
         scheme: 'bearer',
         bearerFormat: 'opaque',
-        description: `A bot token, Authorization: Bearer hxo_..., minted and rotated by the owner on the website; there is no token endpoint.`,
+        description: `A bot token (hxo_...), minted and rotated by the owner on the website.`,
     });
 
     registry.registerPath({
@@ -255,24 +310,24 @@ export function buildOpenApiDocument() {
         operationId: 'listBots',
         tags: ['Directory'],
         security: [],
-        description: `The whole listed roster, ordered by name fold; delisted bots and bots of banned owners are hidden. Hobby scale, no pagination yet. online and openForChallenges are live views of who holds a stream open; the declaration fields appear once the bot declares itself. rating is Glicko-2 in whole points, provisional while the deviation is above 75.`,
+        description: `The listed roster, ordered by name fold, without pagination. Delisted bots and bots of banned owners are hidden.`,
         parameters: [
             {
                 name: 'online',
                 in: 'query',
                 required: false,
-                description: `Narrows the roster to bots holding a stream open.`,
+                description: `Present as 1, narrows the roster to bots holding a stream open.`,
                 schema: { type: 'string', enum: ['1'] },
             },
         ],
         responses: {
             200: {
-                description: 'The bot roster.',
+                description: `The roster.`,
                 content: {
                     'application/json': { schema: botListingSchema.array() },
                 },
             },
-            400: badRequest(),
+            400: shared.badRequest,
         },
     });
 
@@ -283,7 +338,7 @@ export function buildOpenApiDocument() {
         operationId: 'getLeaderboard',
         tags: ['Directory'],
         security: [],
-        description: `Players at deviation 75 or below, highest Glicko-2 rating first, ties by name fold; provisional players, banned users, delisted bots, and bots of banned owners never appear. Bots and humans share one pool; hobby scale, no pagination yet.`,
+        description: `Rankable players, highest rating first, ties by name fold, without pagination. A player is rankable at a rating deviation of ${String(rankableDeviation)} or below. Banned users, delisted bots, and bots of banned owners never appear. Bots and humans share one rating pool.`,
         parameters: [
             {
                 name: 'kind',
@@ -300,7 +355,7 @@ export function buildOpenApiDocument() {
                     'application/json': { schema: leaderboardEntrySchema.array() },
                 },
             },
-            400: badRequest(),
+            400: shared.badRequest,
         },
     });
 
@@ -311,29 +366,29 @@ export function buildOpenApiDocument() {
         operationId: 'createBot',
         tags: ['Bots'],
         security: [{ sessionCookie: [] }],
-        description: `Mints the token exactly once; this response is the only place it ever appears in the clear. Names share one global namespace with users and are immutable.`,
+        description: `Mints the bot's token; this response is its only appearance. Names share one global namespace with users and never change.`,
         request: {
             body: { content: { 'application/json': { schema: createBotRequestSchema } } },
         },
         responses: {
             201: {
-                description: 'The bot exists; the token will not be shown again.',
+                description: `The bot and its token.`,
                 content: { 'application/json': { schema: botWithTokenSchema } },
             },
             400: {
-                description: `The name fails the syntax rules or is reserved.`,
+                description: `The name fails the name syntax or is reserved.`,
                 content: {
-                    'application/json': { schema: errorBodySchema([`invalid_name`, `name_reserved`]) },
+                    'application/json': { schema: botNameError },
                 },
             },
-            401: unauthorized(),
+            401: shared.unauthorized,
             403: {
-                description: `The owner already holds the per-user bot cap (3).`,
-                content: { 'application/json': { schema: errorBodySchema([`bot_limit`]) } },
+                description: `The owner already holds ${String(botCapPerUser)} bots.`,
+                content: { 'application/json': { schema: botLimitError } },
             },
             409: {
-                description: `The name fold is already taken, by a user or a bot.`,
-                content: { 'application/json': { schema: errorBodySchema([`name_taken`]) } },
+                description: `The name fold is taken by a user or a bot.`,
+                content: { 'application/json': { schema: nameTakenError } },
             },
         },
     });
@@ -345,23 +400,15 @@ export function buildOpenApiDocument() {
         operationId: 'deleteBot',
         tags: ['Bots'],
         security: [{ sessionCookie: [] }],
-        description: `A bot with rated games is anonymized: its games and every rating they moved stay, it is renamed to a deleted-<n> placeholder, and its name stays reserved. A bot without rated games is deleted outright and its name is freed.`,
-        parameters: [
-            {
-                name: 'name',
-                in: 'path',
-                required: true,
-                description: `Targeting by name is unambiguous: names are immutable and fold-unique.`,
-                schema: { type: 'string' },
-            },
-        ],
+        description: `A bot with rated games is anonymized: it becomes a deleted-<n> placeholder, its games and ratings stay, and its name stays reserved. A bot without rated games is deleted and its name freed.`,
+        parameters: [shared.botName],
         responses: {
             204: { description: 'The bot and its token are gone.' },
-            401: unauthorized(),
-            404: notFound(),
+            401: shared.unauthorized,
+            404: shared.notFound,
             409: {
-                description: `The bot is seated in a live game; finish or resign it first.`,
-                content: { 'application/json': { schema: errorBodySchema(botDeleteConflictErrorCodes) } },
+                description: `The bot is seated in a live game.`,
+                content: { 'application/json': { schema: inGameError } },
             },
         },
     });
@@ -373,23 +420,15 @@ export function buildOpenApiDocument() {
         operationId: 'rotateBotToken',
         tags: ['Bots'],
         security: [{ sessionCookie: [] }],
-        description: `The previous token dies immediately; the response carries the only appearance of the new one.`,
-        parameters: [
-            {
-                name: 'name',
-                in: 'path',
-                required: true,
-                description: `Targeting by name is unambiguous: names are immutable and fold-unique.`,
-                schema: { type: 'string' },
-            },
-        ],
+        description: `The previous token stops working at once.`,
+        parameters: [shared.botName],
         responses: {
             200: {
-                description: 'The fresh token, shown once.',
+                description: `The bot and its new token, shown only here.`,
                 content: { 'application/json': { schema: botWithTokenSchema } },
             },
-            401: unauthorized(),
-            404: notFound(),
+            401: shared.unauthorized,
+            404: shared.notFound,
         },
     });
 
@@ -400,27 +439,27 @@ export function buildOpenApiDocument() {
         operationId: 'openStream',
         tags: ['Stream'],
         security: [{ bearerAuth: [] }],
-        description: `One JSON object per line, with a bare newline as keepalive every 10 s. One stream per bot: opening closes the previous one. The connection is the bot's presence, so it is online while the stream is held, and open=1 takes games for as long as it lasts. On open, every active game is replayed as a gameStart line followed by a fresh moveRequest when it is the bot's turn; during play, move requests travel on the per-game engine session websocket that gameStart hands out.`,
+        description: `One StreamEvent per line, with a bare newline as keepalive every ${seconds(streamKeepaliveMs)} s. Opening a stream closes the bot's previous one. The bot is online while its stream is open. On open, each active game replays as gameStart, followed by moveRequest on the bot's turn. Play runs on the engine session that gameStart hands out.`,
         parameters: [
             {
                 name: 'open',
                 in: 'query',
                 required: false,
-                description: `Present as open=1, the bot accepts challenges while connected.`,
+                description: `Present as 1, the bot takes challenges and games while the stream is open.`,
                 schema: { type: 'string', enum: ['1'] },
             },
         ],
         responses: {
             200: {
-                description: 'The NDJSON event stream.',
+                description: `The event stream, as NDJSON.`,
                 content: {
                     'application/x-ndjson': { schema: streamEventSchema },
                 },
             },
-            400: badRequest(),
-            401: botUnauthorized(),
-            403: botForbidden(),
-            503: paused(),
+            400: shared.badRequest,
+            401: shared.botUnauthorized,
+            403: shared.banned,
+            503: shared.paused,
         },
     });
 
@@ -431,14 +470,14 @@ export function buildOpenApiDocument() {
         operationId: 'getAccount',
         tags: ['Account'],
         security: [{ bearerAuth: [] }],
-        description: `The bot's name, its Glicko-2 rating in whole points, provisional while the deviation is above 75, and the declaration as stored.`,
+        description: `The bot's name, rating, and stored declaration.`,
         responses: {
             200: {
-                description: 'The account as it stands now.',
+                description: `The account.`,
                 content: { 'application/json': { schema: botAccountSchema } },
             },
-            401: botUnauthorized(),
-            403: botForbidden(),
+            401: shared.botUnauthorized,
+            403: shared.banned,
         },
     });
 
@@ -449,7 +488,7 @@ export function buildOpenApiDocument() {
         operationId: 'updateAccount',
         tags: ['Account'],
         security: [{ bearerAuth: [] }],
-        description: `Only the process holding the token may promise behaviour, which is why this is the bot's surface and not the owner's. Every field is optional; each present field replaces the stored one, an empty string clears a text field, and accepts replaces wholesale. The declaration narrows open=1: a challenge outside accepts is answered not-open.`,
+        description: `Each present field replaces the stored one; an empty string clears a text field, and accepts is replaced whole. An unknown key answers 400. A challenge or game outside accepts answers clock_not_accepted.`,
         request: {
             body: {
                 required: true,
@@ -458,12 +497,12 @@ export function buildOpenApiDocument() {
         },
         responses: {
             200: {
-                description: 'The account as it stands now, the stored declaration included.',
+                description: `The account after the update.`,
                 content: { 'application/json': { schema: botAccountSchema } },
             },
-            400: badRequest(),
-            401: botUnauthorized(),
-            403: botForbidden(),
+            400: shared.badRequest,
+            401: shared.botUnauthorized,
+            403: shared.banned,
         },
     });
 
@@ -471,7 +510,7 @@ export function buildOpenApiDocument() {
         type: 'http',
         scheme: 'bearer',
         bearerFormat: 'opaque',
-        description: `A short-lived per-game engine-session token from the gameStart line, Authorization: Bearer hgs_...; every replay of gameStart rotates it.`,
+        description: `A game token (hgs_...) from a gameStart line.`,
     });
 
     registry.registerPath({
@@ -481,29 +520,26 @@ export function buildOpenApiDocument() {
         operationId: 'createGame',
         tags: ['Games'],
         security: [{ sessionCookie: [] }],
-        description: `The bot must be online, open for games, under its concurrent-game cap, and declaring acceptance of the clock; every condition answers with a distinct code so a caller knows what to change. The caller is a signed-in user or a guest session, bounded either way: at most three live games at once (human_busy) and sixty seconds between creations (game_cooldown). A game against a guest is unrated for both sides. Colours are drawn at creation, the server places the origin stone and the opening turns itself, and the bot receives its engine-session handoff as a gameStart line on its stream.`,
+        description: `The bot must hold its stream open with open=1, have fewer than ${String(botConcurrentGameCap)} live games, and accept the clock. The caller, a user or guest, may hold ${String(humanConcurrentGameCap)} live games and create one every ${String(humanGameCooldownSeconds)} s. The server draws sides and places the opening; the bot receives gameStart. A game against a guest is unrated.`,
         request: {
             body: { required: true, content: { 'application/json': { schema: createGameRequestSchema } } },
         },
         responses: {
             201: {
-                description: 'The game exists; the response is its snapshot.',
+                description: `The new game's snapshot.`,
                 content: { 'application/json': { schema: gameSnapshotSchema } },
             },
             400: {
-                description: `Validation failed, the caller is at the live-game cap (human_busy) or inside the creation cooldown (game_cooldown), or the bot is not taking games (not_open), declines this clock (clock_not_accepted), or is at its concurrent-game cap (bot_busy).`,
+                description: `Validation failed (bad_request), the caller is at its live-game cap (human_busy) or inside the creation cooldown (game_cooldown), or the bot is not open (not_open), excludes the clock (clock_not_accepted), or is at its game cap (bot_busy).`,
                 content: {
                     'application/json': {
-                        schema: errorBodySchema([...badRequestErrorCodes, ...gameCreateErrorCodes]),
+                        schema: gameCreateError,
                     },
                 },
             },
-            401: unauthorized(),
-            403: {
-                description: `The bot is delisted and takes no new games.`,
-                content: { 'application/json': { schema: errorBodySchema(gameCreateForbiddenErrorCodes) } },
-            },
-            503: paused(),
+            401: shared.unauthorized,
+            403: shared.delisted,
+            503: shared.paused,
         },
     });
 
@@ -514,15 +550,15 @@ export function buildOpenApiDocument() {
         operationId: 'getGameSnapshot',
         tags: ['Games'],
         security: [{ sessionCookie: [] }],
-        description: `Board, turn, and clock in one read; a finished game carries the result instead. Unknown and not-yours answer the same 404 on purpose.`,
-        parameters: [gameIdParameter()],
+        description: `Board, turn, and clock in one read; a finished game carries its result.`,
+        parameters: [shared.gameId],
         responses: {
             200: {
-                description: 'The game snapshot.',
+                description: `The game's snapshot.`,
                 content: { 'application/json': { schema: gameSnapshotSchema } },
             },
-            401: unauthorized(),
-            404: notFound(),
+            401: shared.unauthorized,
+            404: shared.notFound,
         },
     });
 
@@ -533,26 +569,26 @@ export function buildOpenApiDocument() {
         operationId: 'playHumanMove',
         tags: ['Games'],
         security: [{ sessionCookie: [] }],
-        description: `A move is exactly two placements and applies as one turn; a win can complete on the first placement, and the second is then not applied. An illegal move answers 400 and forfeits nothing: only a bot's illegal engine move forfeits.`,
-        parameters: [gameIdParameter()],
+        description: `Places both stones of the caller's turn. A win on the first placement ends the game, and the second is not applied. An illegal move answers 400 and forfeits nothing.`,
+        parameters: [shared.gameId],
         request: {
             body: { required: true, content: { 'application/json': { schema: humanMoveRequestSchema } } },
         },
         responses: {
             200: {
-                description: 'The move applied; the response is the snapshot after it.',
+                description: `The snapshot after the move.`,
                 content: { 'application/json': { schema: gameSnapshotSchema } },
             },
             400: {
-                description: `Validation failed, or it is not the caller's turn (not_your_turn), a cell is taken (cell_occupied) or out of range (out_of_range), or the game is over (game_over).`,
+                description: `Validation failed (bad_request), it is not the caller's turn (not_your_turn), a cell is taken (cell_occupied) or out of range (out_of_range), or the game is over (game_over).`,
                 content: {
                     'application/json': {
-                        schema: errorBodySchema([...badRequestErrorCodes, `not_your_turn`, `cell_occupied`, `out_of_range`, `game_over`]),
+                        schema: moveError,
                     },
                 },
             },
-            401: unauthorized(),
-            404: notFound(),
+            401: shared.unauthorized,
+            404: shared.notFound,
         },
     });
 
@@ -563,19 +599,16 @@ export function buildOpenApiDocument() {
         operationId: 'resignHumanGame',
         tags: ['Games'],
         security: [{ sessionCookie: [] }],
-        description: `The opponent wins with reason surrender; the response is the finished snapshot.`,
-        parameters: [gameIdParameter()],
+        description: `The opponent wins with reason surrender.`,
+        parameters: [shared.gameId],
         responses: {
             200: {
-                description: 'The resignation applied.',
+                description: `The finished snapshot.`,
                 content: { 'application/json': { schema: gameSnapshotSchema } },
             },
-            400: {
-                description: 'The game is already finished (game_over).',
-                content: { 'application/json': { schema: errorBodySchema([`game_over`]) } },
-            },
-            401: unauthorized(),
-            404: notFound(),
+            400: shared.gameOver,
+            401: shared.unauthorized,
+            404: shared.notFound,
         },
     });
 
@@ -586,22 +619,22 @@ export function buildOpenApiDocument() {
         operationId: 'openEngineSession',
         tags: ['Engine session'],
         security: [],
-        description: `The htttx basic_websocket protocol with the server in the client role and the bot in the bot role. The token query parameter is the short-lived per-game token from gameStart; every gameStart replay rotates it, and one session per game is enforced, a fresh connection replacing a stale one. On open the server sends the setup packet (the origin stone) and a move_request whenever it is the bot's turn, with every stone placed since the origin carried in previous; heartbeats flow every 10 s. A move_response must echo the outstanding request_id; stale or mismatched answers are dropped, and an illegal move forfeits the game server-side.`,
+        description: `Speaks htttx basic_websocket v1-alpha, the server as client and the bot as bot. The bot must support the move_skips and request_id capabilities. A new connection replaces the previous one. Each move_request lists in previous only the turns this connection has not seen. Heartbeats come every ${seconds(sessionHeartbeatMs)} s. A move_response must echo request_id, or it is dropped. An illegal move forfeits.`,
         parameters: [
-            gameIdParameter(),
+            shared.gameId,
             {
                 name: 'token',
                 in: 'query',
                 required: true,
-                description: `The per-game token carried beside socketUrl on the gameStart line.`,
+                description: `The game token from the gameStart line.`,
                 schema: { type: 'string' },
             },
         ],
         responses: {
             101: { description: 'Switching protocols; the engine session is open.' },
             404: {
-                description: 'Unknown game, or a token that is expired or rotated.',
-                content: { 'application/json': { schema: errorBodySchema([`not_found`]) } },
+                description: `Unknown game, or a game token that is expired or rotated.`,
+                content: { 'application/json': { schema: notFoundError } },
             },
         },
     });
@@ -613,22 +646,19 @@ export function buildOpenApiDocument() {
         operationId: 'resignBotGame',
         tags: ['Engine session'],
         security: [{ gameToken: [] }],
-        description: `The same short-lived per-game token the websocket takes, presented as a bearer header; resignation needs no live socket, so the websocket stays strictly htttx packets.`,
-        parameters: [gameIdParameter()],
+        description: `The opponent wins with reason surrender; no engine session is needed.`,
+        parameters: [shared.gameId],
         responses: {
             200: {
-                description: 'The resignation applied.',
+                description: `Resigned.`,
                 content: { 'application/json': { schema: okSchema } },
             },
-            400: {
-                description: 'The game is already finished (game_over).',
-                content: { 'application/json': { schema: errorBodySchema([`game_over`]) } },
-            },
+            400: shared.gameOver,
             401: {
                 description: 'Missing, unknown, expired, or rotated game token.',
-                content: { 'application/json': { schema: errorBodySchema(unauthorizedErrorCodes) } },
+                content: { 'application/json': { schema: unauthorizedError } },
             },
-            404: notFound(),
+            404: shared.notFound,
         },
     });
 
@@ -639,13 +669,13 @@ export function buildOpenApiDocument() {
         operationId: 'createChallenge',
         tags: ['Challenge'],
         security: [{ bearerAuth: [] }],
-        description: `Bot to bot. The target is named by its global name and must be online with open=1 and inside what it declared itself willing to play; a challenge outside accepts answers clock_not_accepted exactly like the human surface. firstPlayer names who takes the first player turn (the origin stone is automatic, so the first turn is the first thing a player does); random draws at accept. The challenger's owner may not own the target (own_bot), both sides must be under their concurrent-game caps, the target's pending inbox holds at most 10, and daily caps bound bot-vs-bot games: 20 per pair and 100 per bot, counted over UTC days from the game log. A challenge lives 60 s, then expires and reaches both sides as challengeCanceled. Creation is idempotent on requestId, scoped to the challenger: resending the same id answers 200 with the stored challenge and whatever status it reached, never a second inbox entry.`,
+        description: `The target must hold its stream open with open=1 and accept the clock. A bot plays at most ${String(botConcurrentGameCap)} games at once. Per UTC day, a bot plays at most ${String(botDailyCap)} bot-vs-bot games, and a pair ${String(pairDailyCap)}. The target holds at most ${String(challengeInboxCap)} pending challenges. A challenge expires after ${seconds(challengeTtlMs)} s. Resending a requestId answers 200 with the stored challenge.`,
         parameters: [
             {
                 name: 'name',
                 in: 'path',
                 required: true,
-                description: `The challenged bot, by its globally unique name.`,
+                description: `The challenged bot's name.`,
                 schema: { type: 'string' },
             },
         ],
@@ -654,32 +684,32 @@ export function buildOpenApiDocument() {
         },
         responses: {
             201: {
-                description: 'The challenge exists and waits in the target\'s inbox.',
+                description: `The challenge, pending in the target's inbox.`,
                 content: { 'application/json': { schema: challengeSchema } },
             },
             200: {
-                description: 'The requestId is known; the stored challenge, with the status it reached.',
+                description: `The stored challenge for a known requestId, with the status it reached.`,
                 content: { 'application/json': { schema: challengeSchema } },
             },
             400: {
-                description: `Validation failed, or a gate refused: the target is not taking games (not_open), declines this clock (clock_not_accepted), a side is at its concurrent-game cap (bot_busy), the target's inbox is full (inbox_full), the pair hit its daily cap (daily_pair_cap), or a bot hit its daily bot-vs-bot cap (daily_bot_cap).`,
+                description: `Validation failed (bad_request), the target is not open (not_open) or excludes the clock (clock_not_accepted), a side is at its game cap (bot_busy), the target's inbox is full (inbox_full), or the pair (daily_pair_cap) or a bot (daily_bot_cap) is at its daily cap.`,
                 content: {
                     'application/json': {
-                        schema: errorBodySchema([...badRequestErrorCodes, ...challengeCreateErrorCodes]),
+                        schema: challengeCreateError,
                     },
                 },
             },
-            401: botUnauthorized(),
+            401: shared.botUnauthorized,
             403: {
-                description: `The challenger's owner also owns the target (own_bot), either bot is delisted (delisted), or the challenger's owner is banned (banned).`,
+                description: `The challenger's owner owns the target (own_bot), either bot is delisted (delisted), or the challenger's owner is banned (banned).`,
                 content: {
                     'application/json': {
-                        schema: errorBodySchema([...botForbiddenErrorCodes, ...challengeForbiddenErrorCodes]),
+                        schema: challengeForbiddenError,
                     },
                 },
             },
-            404: notFound(),
-            503: paused(),
+            404: shared.notFound,
+            503: shared.paused,
         },
     });
 
@@ -690,25 +720,25 @@ export function buildOpenApiDocument() {
         operationId: 'acceptChallenge',
         tags: ['Challenge'],
         security: [{ bearerAuth: [] }],
-        description: `Only the challenged bot may accept. The one gate that can have moved since creation is re-checked: if the target is now at its concurrent-game cap the answer is bot_busy and the challenge stays pending. On acceptance a normal game starts with both sides driven through their engine sessions, colors per firstPlayer, and both bots receive a gameStart line; the game lands in the same log as human games.`,
-        parameters: [challengeIdParameter()],
+        description: `Only the challenged bot may accept. The game starts at once, and both bots receive gameStart.`,
+        parameters: [shared.challengeId],
         responses: {
             200: {
-                description: 'Accepted; the game arrives as gameStart on both streams.',
+                description: `Accepted.`,
                 content: { 'application/json': { schema: okSchema } },
             },
             400: {
-                description: 'The target is at its concurrent-game cap (bot_busy); the challenge stays pending.',
+                description: `The challenged bot is at its game cap (bot_busy); the challenge stays pending.`,
                 content: {
                     'application/json': {
-                        schema: errorBodySchema([...badRequestErrorCodes, ...challengeAcceptErrorCodes]),
+                        schema: challengeAcceptError,
                     },
                 },
             },
-            401: botUnauthorized(),
-            403: botForbidden(),
-            404: notFound(),
-            503: paused(),
+            401: shared.botUnauthorized,
+            403: shared.banned,
+            404: shared.notFound,
+            503: shared.paused,
         },
     });
 
@@ -719,16 +749,16 @@ export function buildOpenApiDocument() {
         operationId: 'declineChallenge',
         tags: ['Challenge'],
         security: [{ bearerAuth: [] }],
-        description: `Only the challenged bot may decline. The challenger learns of it as a challengeDeclined line on its stream.`,
-        parameters: [challengeIdParameter()],
+        description: `Only the challenged bot may decline; the challenger receives challengeDeclined.`,
+        parameters: [shared.challengeId],
         responses: {
             200: {
                 description: 'Declined.',
                 content: { 'application/json': { schema: okSchema } },
             },
-            401: botUnauthorized(),
-            403: botForbidden(),
-            404: notFound(),
+            401: shared.botUnauthorized,
+            403: shared.banned,
+            404: shared.notFound,
         },
     });
 
@@ -739,20 +769,20 @@ export function buildOpenApiDocument() {
         operationId: 'cancelChallenge',
         tags: ['Challenge'],
         security: [{ bearerAuth: [] }],
-        description: `Only the challenger may cancel. The target learns of it as a challengeCanceled line with reason canceled; expiry carries reason expired and reaches both sides.`,
-        parameters: [challengeIdParameter()],
+        description: `Only the challenger may cancel; the target receives challengeCanceled.`,
+        parameters: [shared.challengeId],
         responses: {
             200: {
                 description: 'Canceled.',
                 content: { 'application/json': { schema: okSchema } },
             },
-            401: botUnauthorized(),
-            403: botForbidden(),
-            404: notFound(),
+            401: shared.botUnauthorized,
+            403: shared.banned,
+            404: shared.notFound,
         },
     });
 
-    const generator = new OpenApiGeneratorV3(registry.definitions);
+    const generator = new OpenApiGeneratorV3([...registry.definitions, ...shared.referenced]);
     return generator.generateDocument({
         openapi: '3.0.3',
         info: { title: 'hexarena', version: apiVersion },

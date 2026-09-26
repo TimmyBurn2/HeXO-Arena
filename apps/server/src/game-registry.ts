@@ -6,12 +6,16 @@ import {
     botGameSocketPath,
     htttxMoveRequestSchema,
     internalToWire,
+    openingPliesSchema,
+    sessionHeartbeatMs,
+    sessionTokenTtlMs,
     sideOf,
     wireToInternal,
     type FinishReason,
     type FirstPlayer,
     type GameClock,
     type GameSnapshot,
+    type OpeningPlies,
     type SeatPlayer,
     type Side,
     type StreamEvent,
@@ -20,8 +24,7 @@ import {
 } from '@hexarena/contract';
 import { randomUUID } from 'node:crypto';
 import {
-    emptyPosition,
-    hexDistance,
+    drawOpening,
     place,
     playerToMove,
     type Coord,
@@ -41,22 +44,13 @@ import {
     type GameHeadline,
 } from './game-store';
 import type { PresenceRegistry } from './presence';
-import { randomFloat } from './random';
+import { randomFloat, randomIndex } from './random';
 import { streamPlayerOf } from './rating-store';
 import { isCurrentGeneration } from './site-state';
 import { randomToken } from './tokens';
 
-export const botConcurrentGameCap = 4;
-export const humanConcurrentGameCap = 3;
-export const humanGameCooldownSeconds = 60;
 export const orphanForfeitMs = 30_000;
-export const sessionTokenTtlMs = 60_000;
-export const sessionHeartbeatMs = 10_000;
 export const unlimitedWallCapMs = 24 * 60 * 60 * 1000;
-
-// Opening stones land within this distance of the origin, so every opening
-// is compact and the first player turn starts in a known neighbourhood.
-const openingRadius = 2;
 
 type Timer = ReturnType<typeof setTimeout>;
 
@@ -68,9 +62,14 @@ export interface EngineSocket {
     onceClose(listener: () => void): void;
 }
 
+// bws forbids resending a move a connection has already carried, so each
+// session counts the turn log entries it has delivered.
+// The setup holds the origin alone, which is not in the log, so a fresh
+// session counts from zero.
 interface Session {
     readonly socket: EngineSocket;
     readonly heartbeat: ReturnType<typeof setInterval>;
+    delivered: number;
 }
 
 interface SessionToken {
@@ -78,8 +77,9 @@ interface SessionToken {
     readonly expiresAt: number;
 }
 
-// A two-placement turn that was played or server-placed; the log doubles
-// as the `previous` array of the next engine move_request.
+// A two-placement turn that was played or server-placed; each engine
+// session receives the log in order as the `previous` arrays of its
+// move_requests.
 interface TurnEntry {
     readonly side: Side;
     readonly cells: readonly [Coord, Coord];
@@ -129,7 +129,7 @@ export interface LiveGame {
     readonly id: string;
     readonly seats: { readonly x: Seat; readonly o: Seat };
     readonly timeControl: TimeControl;
-    readonly openingTurns: number;
+    readonly openingPlies: OpeningPlies;
     position: Position;
     turnLog: readonly TurnEntry[];
     nextSeq: number;
@@ -162,6 +162,7 @@ export interface RegistryDeps {
     presence: PresenceRegistry;
     generation: number;
     random?: () => number;
+    randomIndex?: (bound: number) => number;
 }
 
 /**
@@ -254,6 +255,10 @@ function sideToMove(game: LiveGame): Side {
     return sideOf(playerToMove(game.position));
 }
 
+function holdsRequest(game: LiveGame, side: Side): boolean {
+    return game.pending !== null && sideToMove(game) === side;
+}
+
 function elapsedMs(game: LiveGame): number {
     return game.clock.mode === `match` ? Date.now() - game.clock.turnStartedAt : 0;
 }
@@ -336,6 +341,7 @@ export class GameRegistry {
     readonly #presence: PresenceRegistry;
     readonly #generation: number;
     readonly #random: () => number;
+    readonly #randomIndex: (bound: number) => number;
 
     constructor(deps: RegistryDeps) {
         this.#query = deps.query;
@@ -344,6 +350,7 @@ export class GameRegistry {
         // The crypto source is the default; the injection seam exists so
         // tests can script a draw.
         this.#random = deps.random ?? randomFloat;
+        this.#randomIndex = deps.randomIndex ?? randomIndex;
     }
 
     liveGameCount(): number {
@@ -371,10 +378,10 @@ export class GameRegistry {
         person: Person;
         bot: { id: string; name: string };
         timeControl: TimeControl;
-        openingTurns: number;
+        openingPlies: OpeningPlies;
     }): { gameId: string; snapshot: GameSnapshot } {
         const userSide: Side = this.#random() < 0.5 ? `x` : `o`;
-        const { position, turns } = this.#placeOpening(input.openingTurns);
+        const { position, turns } = this.#placeOpening(input.openingPlies);
         const gameId =
             input.person.kind === `guest`
                 ? `g_${randomUUID()}`
@@ -396,7 +403,7 @@ export class GameRegistry {
                     ? { x: humanSeat(input.person), o: botSeat(input.bot) }
                     : { x: botSeat(input.bot), o: humanSeat(input.person) },
             timeControl: input.timeControl,
-            openingTurns: input.openingTurns,
+            openingPlies: input.openingPlies,
             position,
             turnLog: turns,
             nextSeq: 1,
@@ -418,10 +425,10 @@ export class GameRegistry {
         challenger: { id: string; name: string };
         dest: { id: string; name: string };
         timeControl: TimeControl;
-        openingTurns: number;
+        openingPlies: OpeningPlies;
         firstPlayer: FirstPlayer;
     }): { gameId: string } {
-        const { position, turns } = this.#placeOpening(input.openingTurns);
+        const { position, turns } = this.#placeOpening(input.openingPlies);
         // firstPlayer names who takes the first player turn; the placed
         // opening decides which side that is, parity included.
         const firstMover = sideOf(playerToMove(position));
@@ -451,7 +458,7 @@ export class GameRegistry {
                     ? { x: botSeat(input.challenger), o: botSeat(input.dest) }
                     : { x: botSeat(input.dest), o: botSeat(input.challenger) },
             timeControl: input.timeControl,
-            openingTurns: input.openingTurns,
+            openingPlies: input.openingPlies,
             position,
             turnLog: turns,
             nextSeq: 1,
@@ -469,44 +476,25 @@ export class GameRegistry {
         return { gameId };
     }
 
-    // The origin plus pairs of alternating random legal stones within the
-    // opening radius; pairs keep turns whole, so the first player turn
-    // always wants exactly two placements.
-    #placeOpening(openingTurns: number): { position: Position; turns: TurnEntry[] } {
-        const origin = place(emptyPosition, { x: 0, y: 0 });
-        if (!origin.ok) throw new Error(`the empty board rejected the origin`);
-        let position = origin.position;
+    // Pairs of plies after the origin are whole turns, so the opening
+    // reaches engine sessions as ordinary two-stone turns.
+    #placeOpening(openingPlies: OpeningPlies): { position: Position; turns: TurnEntry[] } {
+        const position = drawOpening(openingPlies, this.#randomIndex);
         const turns: TurnEntry[] = [];
-        for (let turn = 0; turn < openingTurns; turn += 1) {
-            const side = sideOf(playerToMove(position));
-            const first = this.#randomOpeningCell(position);
-            const afterFirst = place(position, first);
-            if (!afterFirst.ok) throw new Error(`opening candidate rejected`);
-            const second = this.#randomOpeningCell(afterFirst.position);
-            const afterSecond = place(afterFirst.position, second);
-            if (!afterSecond.ok) throw new Error(`opening candidate rejected`);
-            position = afterSecond.position;
-            turns.push({ side, cells: [first, second] });
+        for (let ply = 1; ply < position.stones.length; ply += 2) {
+            const first = position.stones[ply];
+            const second = position.stones[ply + 1];
+            // An odd ply count leaves every stone after the origin paired.
+            if (first === undefined || second === undefined) throw new Error(`an opening split a turn`);
+            turns.push({
+                side: sideOf(first.player),
+                cells: [
+                    { x: first.x, y: first.y },
+                    { x: second.x, y: second.y },
+                ],
+            });
         }
         return { position, turns };
-    }
-
-    #randomOpeningCell(position: Position): Coord {
-        const taken = new Set(position.stones.map((stone) => `${String(stone.x)},${String(stone.y)}`));
-        const candidates: Coord[] = [];
-        for (let x = -openingRadius; x <= openingRadius; x += 1) {
-            for (let y = -openingRadius; y <= openingRadius; y += 1) {
-                const cell = { x, y };
-                const distance = hexDistance(cell, { x: 0, y: 0 });
-                if (distance > 0 && distance <= openingRadius && !taken.has(`${String(x)},${String(y)}`)) {
-                    candidates.push(cell);
-                }
-            }
-        }
-        const chosen = candidates[Math.floor(this.#random() * candidates.length)];
-        // 18 cells fit the radius and at most 8 stones are ever taken.
-        if (chosen === undefined) throw new Error(`opening candidates exhausted`);
-        return chosen;
     }
 
     /**
@@ -543,8 +531,8 @@ export class GameRegistry {
             status: `finished`,
             you: record.userSide,
             opponent: streamPlayerOf(this.#query, { kind: `bot`, id: record.botId }, record.botName),
-            // The stored opening holds the origin stone and then two per turn.
-            openingTurns: (record.opening.length - 1) / 2,
+            // The stored opening holds every opening stone, the origin included.
+            openingPlies: openingPliesSchema.parse(record.opening.length),
             board: { cells: boardCells(replayPosition(this.#query, record)) },
             winner: record.winner,
             reason: record.finishReason,
@@ -626,16 +614,19 @@ export class GameRegistry {
         this.#closeSession(seat);
         const session: Session = {
             socket,
+            // bws obliges an idle bot that hears it is waited on to hang up,
+            // so waiting is true only for the seat holding the request.
             heartbeat: setInterval(() => {
                 socket.send(
                     JSON.stringify(
                         bwsHeartbeatPacketSchema.parse({
                             type: `heartbeat`,
-                            waiting: game.pending !== null,
+                            waiting: holdsRequest(game, side),
                         }),
                     ),
                 );
             }, sessionHeartbeatMs),
+            delivered: 0,
         };
         seat.session = session;
         socket.onceClose(() => {
@@ -653,8 +644,8 @@ export class GameRegistry {
         );
         // The outstanding request belongs to whoever holds the turn, so a
         // bot attaching off-turn receives only the setup.
-        if (game.pending !== null && sideToMove(game) === side) {
-            socket.send(this.#moveRequestPacket(game));
+        if (holdsRequest(game, side)) {
+            this.#sendMoveRequest(game, session);
         }
         return { game, side };
     }
@@ -715,20 +706,23 @@ export class GameRegistry {
         if (seat.kind !== `bot`) return;
         game.requestCounter += 1;
         game.pending = game.requestCounter;
-        seat.session?.socket.send(this.#moveRequestPacket(game));
+        if (seat.session !== null) this.#sendMoveRequest(game, seat.session);
     }
 
-    #moveRequestPacket(game: LiveGame): string {
+    #sendMoveRequest(game: LiveGame, session: Session): void {
         const limit = moveTimeLimit(game);
-        return JSON.stringify(
-            bwsMoveRequestPacketSchema.parse({
-                type: `move_request`,
-                side: sideToMove(game),
-                previous: toWireMoves(game.turnLog),
-                ...(limit !== undefined && { move_time_limit: limit }),
-                request_id: game.pending,
-            }),
+        session.socket.send(
+            JSON.stringify(
+                bwsMoveRequestPacketSchema.parse({
+                    type: `move_request`,
+                    side: sideToMove(game),
+                    previous: toWireMoves(game.turnLog.slice(session.delivered)),
+                    ...(limit !== undefined && { move_time_limit: limit }),
+                    request_id: game.pending,
+                }),
+            ),
         );
+        session.delivered = game.turnLog.length;
     }
 
     #armClock(game: LiveGame, clock: Clock): void {
@@ -879,7 +873,7 @@ export class GameRegistry {
                 const seat = game.seats[side];
                 if (seat.kind !== `bot` || seat.botId !== botId) continue;
                 events.push(this.#gameStartEvent(game, side));
-                if (sideToMove(game) === side && game.pending !== null) {
+                if (holdsRequest(game, side)) {
                     events.push(this.#moveRequestEvent(game));
                 }
             }
@@ -904,7 +898,7 @@ export class GameRegistry {
             side,
             opponent: this.#playerOf(game.seats[opponentOf(side)]),
             timeControl: game.timeControl,
-            ...(game.openingTurns > 0 && { opening: { randomTurns: game.openingTurns } }),
+            openingPlies: game.openingPlies,
             rated: !isGuestGame(game),
             engine: {
                 socketUrl: botGameSocketPath.replace(`{gameId}`, game.id),
@@ -991,7 +985,7 @@ export class GameRegistry {
             gameId: game.id,
             you: humanSideOf,
             opponent: this.#botPlayerOf(game.seats[opponentOf(humanSideOf)]),
-            openingTurns: game.openingTurns,
+            openingPlies: game.openingPlies,
             board: { cells: boardCells(game.position) },
         };
     }

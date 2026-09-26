@@ -3,9 +3,15 @@ import { winner, type Position, type Rejection, type Stone } from '@hexarena/rul
 import type { BoardStone } from '../board/Board';
 import type { AxialCoord } from '@hexarena/contract';
 
+/**
+ * One feed line: its turn label, the label as assistive tech reads it, and
+ * the side-and-stones groups it holds; a group is one turn's stones and
+ * never wraps apart.
+ */
 export interface FeedLine {
     label: string;
-    text: string;
+    spoken: string;
+    groups: readonly string[];
 }
 
 /**
@@ -56,9 +62,9 @@ export function winLineOf(snapshot: GameSnapshot): AxialCoord[] | null {
 
 const reasonWords: Record<FinishReason, string> = {
     'six-in-a-row': `six in a row`,
-    timeout: `clock`,
+    timeout: `on time`,
     disconnect: `disconnect`,
-    surrender: `surrender`,
+    surrender: `resignation`,
     terminated: `terminated`,
     aborted: `aborted`,
 };
@@ -68,12 +74,32 @@ export function reasonText(reason: FinishReason): string {
     return reasonWords[reason];
 }
 
+/**
+ * The result as one sentence: who won and how, naming the side that
+ * resigned or dropped rather than leaving the reason bare.
+ */
 export function resultSentence(snapshot: GameSnapshot): string {
     if (snapshot.status !== `finished`) return ``;
-    if (snapshot.winner === null) {
-        return `nobody won, ${reasonText(snapshot.reason)}`;
+    const winnerSide = snapshot.winner;
+    const won = winnerSide === null ? `nobody won` : `${nameOf(snapshot, winnerSide)} won`;
+    const loser = winnerSide === null ? null : nameOf(snapshot, winnerSide === `x` ? `o` : `x`);
+    switch (snapshot.reason) {
+        case `six-in-a-row`:
+            return `${won} with six in a row`;
+        case `timeout`:
+            return `${won} on time`;
+        case `surrender`:
+            return loser === null ? `${won}, a side resigned` : `${won}, ${loser} resigned`;
+        case `disconnect`:
+            return loser === null ? `${won}, a side disconnected` : `${won}, ${loser} disconnected`;
+        case `terminated`:
+        case `aborted`:
+            return `${won}, the game was ${reasonText(snapshot.reason)}`;
+        default: {
+            const unknown: never = snapshot.reason;
+            return unknown;
+        }
     }
-    return `${nameOf(snapshot, snapshot.winner)} won, ${reasonText(snapshot.reason)}`;
 }
 
 /**
@@ -92,41 +118,44 @@ export function nameOf(snapshot: GameSnapshot, side: Side): string {
 }
 
 /**
- * The move feed: one opening line for the server-placed stones, then one
- * numbered line per turn.
+ * The move feed: one opening line for the server-placed stones, labeled
+ * with the turns it spans, then one line per player turn, labeled with its
+ * turn number.
+ * The first openingPlies cells are the opening: the origin, then pairs.
  */
 export function feedOf(snapshot: GameSnapshot): FeedLine[] {
     const cells = snapshot.board.cells;
-    if (cells.length === 0) return [];
-    const lines: FeedLine[] = [];
     const origin = cells[0];
     if (origin === undefined) return [];
-    let opening = `x: ${coord(origin)}`;
+    const opening = [`x: ${coord(origin)}`];
     let index = 1;
-    for (let turn = 0; turn < snapshot.openingTurns; turn += 1) {
+    while (index < snapshot.openingPlies) {
         const second = cells[index];
         const third = cells[index + 1];
         if (second === undefined || third === undefined) break;
-        opening += ` ${sideAt(index)}: ${coord(second)} ${coord(third)}`;
+        opening.push(`${sideAt(index)}: ${coord(second)} ${coord(third)}`);
         index += 2;
     }
-    lines.push({ label: `op`, text: opening });
-    let turn = 1;
+    // Ply 2t-1 opens turn t, so the first player turn after the opening is
+    // turn (openingPlies + 1) / 2.
+    let turn = (index + 1) / 2;
+    const lines: FeedLine[] = [{ ...openingLabel(turn - 1), groups: opening }];
     while (index < cells.length) {
         const current = cells[index];
-        const next = cells[index + 1];
         if (current === undefined) break;
-        const side = sideAt(index);
-        const first = coord(current);
-        const second = next === undefined ? null : coord(next);
-        lines.push({
-            label: String(turn),
-            text: `${side}: ${first}${second === null ? `` : ` ${second}`}`,
-        });
+        const next = cells[index + 1];
+        const stones = next === undefined ? coord(current) : `${coord(current)} ${coord(next)}`;
+        lines.push({ label: String(turn), spoken: String(turn), groups: [`${sideAt(index)}: ${stones}`] });
         index += 2;
         turn += 1;
     }
     return lines;
+}
+
+// The short label would read as a word, so the spoken form spells it out.
+function openingLabel(lastTurn: number): Pick<FeedLine, `label` | `spoken`> {
+    if (lastTurn === 0) return { label: `op 0`, spoken: `opening, turn 0` };
+    return { label: `op 0-${String(lastTurn)}`, spoken: `opening, turns 0 to ${String(lastTurn)}` };
 }
 
 function sideAt(index: number): Side {

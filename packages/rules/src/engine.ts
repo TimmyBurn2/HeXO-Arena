@@ -127,8 +127,8 @@ export function place(position: Position, candidate: Coord): Placement {
     return { ok: true, position: { stones }, win: findWin(stones, stone) };
 }
 
-// The opening turn places one stone, every later turn places two, so parity
-// falls out of the stone count alone.
+// Turn 0 places the origin alone and every later turn places two stones,
+// so parity falls out of the stone count alone.
 function playerAtMoveCount(count: number): Player {
     if (count === 0) {
         return 0;
@@ -144,9 +144,12 @@ function placementsAtMoveCount(count: number): 1 | 2 {
     return count % 2 === 0 ? 1 : 2;
 }
 
-// The three line axes; each is checked with both signs, in this order, and
-// the first axis reaching six defines the reported line.
-const axes: readonly Coord[] = [
+/**
+ * The three hex line axes, one direction each.
+ * A win is checked along each with both signs, in this order,
+ * and the first axis reaching six defines the reported line.
+ */
+export const lineAxes: readonly Coord[] = [
     { x: 1, y: 0 },
     { x: 0, y: 1 },
     { x: 1, y: -1 },
@@ -159,7 +162,7 @@ function findWin(stones: readonly Stone[], last: Stone): Win | null {
             owned.add(cellKey(stone.x, stone.y));
         }
     }
-    for (const axis of axes) {
+    for (const axis of lineAxes) {
         const backward = walk(owned, last, -axis.x, -axis.y);
         const forward = walk(owned, last, axis.x, axis.y);
         const runLength = backward + 1 + forward;

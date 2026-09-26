@@ -192,7 +192,7 @@ export const challenges = sqliteTable(
             .references(() => bots.id, { onDelete: `cascade` }),
         requestKey: text(`request_key`).notNull(),
         timeControl: text(`time_control`).notNull(),
-        openingTurns: integer(`opening_turns`).notNull(),
+        openingPlies: integer(`opening_plies`).notNull(),
         firstPlayer: text(`first_player`).notNull(),
         status: text(`status`).notNull(),
         gameId: text(`game_id`).references(() => games.id, { onDelete: `cascade` }),
@@ -214,7 +214,7 @@ export const challenges = sqliteTable(
         ),
         check(
             `challenges_opening_check`,
-            sql`${table.openingTurns} >= 0 and ${table.openingTurns} <= 4`,
+            sql`${table.openingPlies} in (1, 3, 5, 7, 9)`,
         ),
         check(`challenges_pair_check`, sql`${table.challengerBotId} <> ${table.destBotId}`),
         check(

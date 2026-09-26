@@ -135,7 +135,7 @@ describe('the og shell routes', () => {
             method: `POST`,
             url: gamesPath,
             cookies: { hexarena_session: guest },
-            payload: { bot: `sealbot`, timeControl: { mode: `turn`, turnTimeMs: 30_000 }, openingTurns: 0 },
+            payload: { bot: `sealbot`, timeControl: { mode: `turn`, turnTimeMs: 30_000 }, openingPlies: 1 },
         });
         expect(created.statusCode).toBe(201);
         const snapshot = gameSnapshotSchema.parse(created.json());

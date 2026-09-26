@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { Fragment, useEffect, useRef, useState, type ReactNode } from 'react';
 import { LookControls } from '../board/LookControls';
 import { Link } from '../router/Link';
 import type { Drawer, DrawerTab } from './use-drawer';
@@ -137,6 +137,21 @@ export function GameDrawer({ drawer, feed, facts, running, onResign, peek }: {
     );
 }
 
+/**
+ * A feed line's label: where the short form would read as a word, the eye
+ * gets the short form and assistive tech the spoken one, with a pause
+ * before the stones.
+ */
+export function FeedLabel({ line }: { line: FeedLine }) {
+    if (line.spoken === line.label) return line.label;
+    return (
+        <>
+            <span aria-hidden="true">{line.label}</span>
+            <span className="sr-only">{`${line.spoken},`}</span>
+        </>
+    );
+}
+
 // The record, newest at the bottom; lines added after first render rise in.
 function MoveFeed({ feed }: { feed: readonly FeedLine[] }) {
     const listRef = useRef<HTMLOListElement>(null);
@@ -151,11 +166,20 @@ function MoveFeed({ feed }: { feed: readonly FeedLine[] }) {
         <ol className="feed" ref={listRef}>
             {feed.map((line, index) => (
                 <li
-                    key={`${line.label}-${line.text}`}
+                    key={`${line.label}-${line.groups.join(` `)}`}
                     className={`feed-line${index === feed.length - 1 ? ` latest` : ``}${index >= settled.current ? ` fresh` : ``}`}
                 >
-                    <span className="feed-n">{line.label}</span>
-                    <span>{line.text}</span>
+                    <span className="feed-n">
+                        <FeedLabel line={line} />
+                    </span>
+                    <span>
+                        {line.groups.map((group, index) => (
+                            <Fragment key={group}>
+                                {index > 0 ? ` ` : null}
+                                <span className="feed-group">{group}</span>
+                            </Fragment>
+                        ))}
+                    </span>
                 </li>
             ))}
         </ol>
@@ -191,11 +215,13 @@ function GameFacts({ facts, running, onResign }: {
                     </div>
                 ))}
             </dl>
-            <p className="note">
-                <kbd>arrows</kbd> <kbd>q</kbd> <kbd>e</kbd> walk the board, <kbd>enter</kbd> marks a
-                stone and the second mark plays the turn, <kbd>esc</kbd> clears it, <kbd>m</kbd> opens
-                this panel.
-            </p>
+            {running ? (
+                <p className="note">
+                    <kbd>arrows</kbd> <kbd>q</kbd> <kbd>e</kbd> walk the board, <kbd>enter</kbd> marks a
+                    stone and the second mark plays the turn, <kbd>esc</kbd> clears it, <kbd>m</kbd> opens
+                    this panel.
+                </p>
+            ) : null}
             <div className="card-actions">
                 <Link to="/" className="btn btn-ghost">
                     Leave to the arena

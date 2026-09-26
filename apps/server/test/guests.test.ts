@@ -1,5 +1,6 @@
+import { guestIdleSeconds } from '@hexarena/contract';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { guestIdleSeconds, GuestSessions } from '../src/guests';
+import { GuestSessions } from '../src/guests';
 
 describe('GuestSessions', () => {
     let seated: Set<string>;

@@ -299,7 +299,12 @@
         padding: var(--space-4);
     }
 
+    /* the opening span is wider than any turn number, and every line
+       shares its column so the numbers stay aligned under it */
     .feed {
+        display: grid;
+        grid-template-columns: max-content minmax(0, 1fr);
+        column-gap: var(--space-3);
         list-style: none;
         margin: 0;
         padding: 0;
@@ -310,14 +315,18 @@
 
     .feed-line {
         display: grid;
-        grid-template-columns: var(--space-6) minmax(0, 1fr);
-        gap: var(--space-3);
+        grid-column: 1 / -1;
+        grid-template-columns: subgrid;
         padding: var(--space-1) var(--space-2);
     }
 
     .feed-n {
         color: var(--c-text-dim);
         text-align: right;
+    }
+
+    .feed-group {
+        white-space: nowrap;
     }
 
     .feed-line.latest {
@@ -372,6 +381,37 @@
     @media (hover: none) {
         .hot-edge {
             display: none;
+        }
+    }
+
+    /* Between phones and the pinnable width a floating drawer would cover
+       much of the board, so an open one takes its own column and the
+       camera refits to what is left. */
+    @media (40rem < width < 80rem) {
+        .stage[data-open] {
+            grid-template-columns: minmax(0, 1fr) var(--drawer-w);
+        }
+
+        .stage[data-open] .drawer-slot {
+            position: relative;
+            width: auto;
+            filter: none;
+        }
+
+        .stage[data-open] .hot-edge {
+            display: none;
+        }
+
+        /* The narrowed board has no room for the turn chip beside your
+           own, so it stacks above it and the camera clears both rows. */
+        .stage[data-open] .hud-bottom-center {
+            left: var(--space-4);
+            bottom: var(--hud-clear);
+            transform: none;
+        }
+
+        .stage[data-open] .board-camera {
+            padding-bottom: calc(2 * var(--hud-clear));
         }
     }
 
@@ -457,6 +497,12 @@
             overflow: hidden;
             text-overflow: ellipsis;
             white-space: nowrap;
+        }
+
+        .peek-result {
+            color: var(--c-text);
+            font-family: inherit;
+            font-weight: var(--weight-display);
         }
 
         .drawer-body {

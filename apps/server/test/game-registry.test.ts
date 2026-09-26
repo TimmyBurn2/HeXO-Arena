@@ -1,5 +1,19 @@
-import type { BwsMoveRequestPacket, BwsSetupPacket, Side, StreamEvent } from '@hexarena/contract';
-import { hexDistance } from '@hexarena/rules';
+import {
+    internalToWire,
+    sessionHeartbeatMs,
+    sessionTokenTtlMs,
+    sideOf,
+    wireToInternal,
+    type BwsHeartbeatPacket,
+    type BwsMoveRequestPacket,
+    type BwsSetupPacket,
+    type HtttxCoord,
+    type HtttxPlayedMove,
+    type OpeningPlies,
+    type Side,
+    type StreamEvent,
+} from '@hexarena/contract';
+import { hexDistance, openingRegion, type Coord } from '@hexarena/rules';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createQuery, openDatabase, runMigrations, type Sqlite } from '../src/db';
 import { createBot, findBot } from '../src/bots';
@@ -8,7 +22,6 @@ import { abortUnfinishedGames, findGame } from '../src/game-store';
 import {
     GameRegistry,
     orphanForfeitMs,
-    sessionTokenTtlMs,
     unlimitedWallCapMs,
     wirePresence,
     type EngineSocket,
@@ -37,8 +50,8 @@ function seedPair(query: ReturnType<typeof createQuery>): void {
     bot.id = row.id;
 }
 
-// A random draw of 0.9 makes the human circles: with no opening stones the
-// human moves first, and with one opening pair the bot does.
+// A random draw of 0.9 makes the human circles: after the origin alone the
+// human moves first, and after a three-ply opening the bot does.
 const humanCircles = () => 0.9;
 
 class FakeEngineSocket implements EngineSocket {
@@ -67,6 +80,60 @@ class FakeEngineSocket implements EngineSocket {
     packets(): unknown[] {
         return this.sent.map((text) => JSON.parse(text) as unknown);
     }
+
+    moveRequests(): BwsMoveRequestPacket[] {
+        return this.packets().filter(
+            // The server sends only packet objects, each tagged by type.
+            (packet): packet is BwsMoveRequestPacket => (packet as { type?: unknown }).type === `move_request`,
+        );
+    }
+
+    history(): HtttxPlayedMove[] {
+        return this.moveRequests().flatMap((request) => request.previous);
+    }
+
+    lastHeartbeat(): BwsHeartbeatPacket | undefined {
+        return this.packets()
+            // The server sends only packet objects, each tagged by type.
+            .filter((packet): packet is BwsHeartbeatPacket => (packet as { type?: unknown }).type === `heartbeat`)
+            .at(-1);
+    }
+}
+
+interface ScriptedTurn {
+    readonly side: Side;
+    readonly pieces: [HtttxCoord, HtttxCoord];
+}
+
+// Scripted turns clear of the opening radius: circles leave gaps along
+// r = 4 and never win, crosses fill r = -4 and complete six on their third
+// turn.
+function circleTurn(index: number): ScriptedTurn {
+    return { side: `o`, pieces: [{ q: 4 * index, r: 4 }, { q: 4 * index + 2, r: 4 }] };
+}
+
+function crossTurn(index: number): ScriptedTurn {
+    return { side: `x`, pieces: [{ q: 2 * index, r: -4 }, { q: 2 * index + 1, r: -4 }] };
+}
+
+// An index source that places the given cells in order: each resolves to
+// its index among the region cells still empty, and a bound of 18 marks a
+// draw restarting from ply 1.
+function scriptedCells(cells: readonly Coord[]): (bound: number) => number {
+    let taken = new Set<string>();
+    let next = 0;
+    return (bound) => {
+        if (bound === openingRegion.length) taken = new Set<string>();
+        const cell = cells[next];
+        if (cell === undefined) throw new Error(`the script ran out of cells`);
+        next += 1;
+        const key = (candidate: Coord) => `${String(candidate.x)},${String(candidate.y)}`;
+        const empty = openingRegion.filter((candidate) => !taken.has(key(candidate)));
+        const index = empty.findIndex((candidate) => key(candidate) === key(cell));
+        if (index < 0) throw new Error(`scripted cell ${key(cell)} is not an empty region cell`);
+        taken.add(key(cell));
+        return index;
+    };
 }
 
 interface Harness {
@@ -80,13 +147,19 @@ interface Harness {
 
 // The stream socket records every line the bot would receive; presence and
 // the registry are wired exactly the way the app wires them.
-function harness(random: () => number = randomFloat): Harness {
+function harness(random: () => number = randomFloat, randomIndex?: (bound: number) => number): Harness {
     const sqlite = openDatabase(`:memory:`);
     runMigrations(sqlite);
     const query = createQuery(sqlite);
     seedPair(query);
     const presence = new PresenceRegistry();
-    const games = new GameRegistry({ query, presence, generation: beginGeneration(query), random });
+    const games = new GameRegistry({
+        query,
+        presence,
+        generation: beginGeneration(query),
+        random,
+        ...(randomIndex !== undefined && { randomIndex }),
+    });
     wirePresence(presence, games);
     const stream = new FakeStreamSocket();
     presence.attach(bot.id, stream, true);
@@ -111,6 +184,22 @@ function latestEvent(world: Harness, type: string): StreamEvent | undefined {
         .find((event) => event.type === type);
 }
 
+// The stored opening is the origin and then the server-placed stones in
+// placement order, two per turn.
+function openingMovesOf(world: Harness, gameId: string): HtttxPlayedMove[] {
+    const record = findGame(createQuery(world.sqlite), gameId);
+    if (record === undefined) throw new Error(`no record for ${gameId}`);
+    const stones = record.opening.slice(1);
+    const turns: HtttxPlayedMove[] = [];
+    for (let index = 0; index < stones.length; index += 2) {
+        const first = stones[index];
+        const second = stones[index + 1];
+        if (first === undefined || second === undefined) throw new Error(`odd opening in ${gameId}`);
+        turns.push({ side: sideOf(first.player), pieces: [internalToWire(first), internalToWire(second)] });
+    }
+    return turns;
+}
+
 describe('game creation', () => {
     let world: Harness;
 
@@ -124,21 +213,86 @@ describe('game creation', () => {
         vi.useRealTimers();
     });
 
-    it('places the origin and the opening turns and reports them as random turns', () => {
+    it('places every opening ply from the origin and reports the length on gameStart and the snapshot', () => {
         const created = world.games.createGame({
             person: user,
             bot,
             timeControl: unlimitedControl,
-            openingTurns: 2,
+            openingPlies: 5,
         });
         const start = latestEvent(world, `gameStart`);
+        expect(created.snapshot.openingPlies).toBe(5);
         expect(created.snapshot.board.cells).toHaveLength(5);
         expect(created.snapshot.board.cells[0]).toEqual({ x: 0, y: 0, side: `x` });
+        expect(created.snapshot.board.cells.map((cell) => cell.side)).toEqual([`x`, `o`, `o`, `x`, `x`]);
         if (start?.type !== `gameStart`) throw new Error(`no gameStart`);
-        expect(start.opening).toEqual({ randomTurns: 2 });
+        expect(start.openingPlies).toBe(5);
         for (const cell of created.snapshot.board.cells) {
             expect(hexDistance(cell, { x: 0, y: 0 })).toBeLessThanOrEqual(2);
         }
+    });
+
+    it('carries the opening length on gameStart and its replay for the origin alone and for nine plies', () => {
+        for (const openingPlies of [1, 9] as const) {
+            const scripted = harness(humanCircles);
+            scripted.games.createGame({ person: user, bot, timeControl: unlimitedControl, openingPlies });
+            const start = latestEvent(scripted, `gameStart`);
+            const replayed = scripted.games.replayForBot(bot.id).find((event) => event.type === `gameStart`);
+            scripted.dispose();
+            if (start?.type !== `gameStart` || replayed?.type !== `gameStart`) throw new Error(`no gameStart`);
+            expect(start.openingPlies).toBe(openingPlies);
+            expect(replayed.openingPlies).toBe(openingPlies);
+        }
+    });
+
+    it('draws each opening stone as an index over the empty cells within distance 2 of the origin', () => {
+        const bounds: number[] = [];
+        const scripted = harness(humanCircles, (bound) => {
+            bounds.push(bound);
+            return bound - 1;
+        });
+        const created = scripted.games.createGame({
+            person: user,
+            bot,
+            timeControl: unlimitedControl,
+            openingPlies: 5,
+        });
+        scripted.dispose();
+        expect(bounds).toEqual([18, 17, 16, 15]);
+        const cells = created.snapshot.board.cells.map((cell) => `${String(cell.x)},${String(cell.y)}`);
+        expect(new Set(cells).size).toBe(5);
+    });
+
+    it('redraws an opening that leaves four circles in a six-cell window without a cross', () => {
+        // Circles own plies 1, 2, 5, and 6; the first draw puts all four on
+        // the row y = 1, the second lets a cross block it.
+        const threat = [
+            { x: -2, y: 1 },
+            { x: -1, y: 1 },
+            { x: 1, y: -1 },
+            { x: 2, y: -1 },
+            { x: 0, y: 1 },
+            { x: 1, y: 1 },
+        ];
+        const clean = [
+            { x: -2, y: 1 },
+            { x: -1, y: 1 },
+            { x: 0, y: 1 },
+            { x: 2, y: -1 },
+            { x: 1, y: -1 },
+            { x: 1, y: 1 },
+        ];
+        const scripted = harness(humanCircles, scriptedCells([...threat, ...clean]));
+        const created = scripted.games.createGame({
+            person: user,
+            bot,
+            timeControl: unlimitedControl,
+            openingPlies: 7,
+        });
+        scripted.dispose();
+        const cells = created.snapshot.board.cells;
+        expect(cells.slice(1).map(({ x, y }) => ({ x, y }))).toEqual(clean);
+        expect(cells.map((cell) => cell.side)).toEqual([`x`, `o`, `o`, `x`, `x`, `o`, `o`]);
     });
 
     it('assigns colors by lot and hands the first turn to the bot when it is drawn x', () => {
@@ -147,7 +301,7 @@ describe('game creation', () => {
             person: user,
             bot,
             timeControl: unlimitedControl,
-            openingTurns: 0,
+            openingPlies: 1,
         });
         expect(created.snapshot.you).toBe(`x`);
         const replay = world.games.replayForBot(bot.id);
@@ -157,7 +311,7 @@ describe('game creation', () => {
     });
 
     it('carries a short-lived engine session token that every replay rotates', () => {
-        world.games.createGame({ person: user, bot, timeControl: unlimitedControl, openingTurns: 0 });
+        world.games.createGame({ person: user, bot, timeControl: unlimitedControl, openingPlies: 1 });
         const start = latestEvent(world, `gameStart`);
         if (start?.type !== `gameStart`) throw new Error(`no gameStart`);
         expect(start.engine.socketUrl).toBe(`/api/bot/game/${start.gameId}/socket`);
@@ -175,7 +329,7 @@ describe('game creation', () => {
         );
         insert.run(user.id, null, 1234.4, 60);
         insert.run(null, bot.id, 1777.6, 200);
-        const created = world.games.createGame({ person: user, bot, timeControl: unlimitedControl, openingTurns: 0 });
+        const created = world.games.createGame({ person: user, bot, timeControl: unlimitedControl, openingPlies: 1 });
         const start = latestEvent(world, `gameStart`);
         if (start?.type !== `gameStart`) throw new Error(`no gameStart`);
         expect(start.opponent).toEqual({ name: `humanplayer`, rating: 1234, provisional: false });
@@ -184,7 +338,7 @@ describe('game creation', () => {
 
     it('counts active games per bot for the concurrent cap', () => {
         for (let i = 0; i < 4; i += 1) {
-            world.games.createGame({ person: user, bot, timeControl: unlimitedControl, openingTurns: 0 });
+            world.games.createGame({ person: user, bot, timeControl: unlimitedControl, openingPlies: 1 });
         }
         expect(world.games.activeGameCount(bot.id)).toBe(4);
     });
@@ -198,7 +352,7 @@ describe('engine session', () => {
 
     beforeEach(() => {
         vi.useFakeTimers();
-        // Circles for the human, one opening pair: the bot plays crosses and
+        // Circles for the human, three opening plies: the bot plays crosses and
         // holds the first turn, so a session attaches straight into a
         // pending request.
         world = harness(humanCircles);
@@ -206,7 +360,7 @@ describe('engine session', () => {
             person: user,
             bot,
             timeControl: unlimitedControl,
-            openingTurns: 1,
+            openingPlies: 3,
         });
         gameId = created.gameId;
         const start = latestEvent(world, `gameStart`);
@@ -225,6 +379,23 @@ describe('engine session', () => {
         if (attached === null) throw new Error(`attach failed`);
     }
 
+    function answerBot(turn: ScriptedTurn, via: FakeEngineSocket = socket): void {
+        const request = via.moveRequests().at(-1);
+        if (request === undefined) throw new Error(`no move_request`);
+        const claimed = world.games.claimSession(gameId, token);
+        if (claimed === null) throw new Error(`claim failed`);
+        world.games.sessionMessage(
+            claimed.side,
+            claimed.game,
+            JSON.stringify({ type: `move_response`, move: { pieces: turn.pieces }, request_id: request.request_id }),
+        );
+    }
+
+    function moveHuman(turn: ScriptedTurn): void {
+        const moved = world.games.humanMove(gameId, user, [wireToInternal(turn.pieces[0]), wireToInternal(turn.pieces[1])]);
+        if (moved.kind !== `moved`) throw new Error(`human move rejected`);
+    }
+
     it('sends the origin-only setup and the outstanding move request on attach', () => {
         connect();
         const packets = socket.packets();
@@ -234,7 +405,7 @@ describe('engine session', () => {
         const request = packets[1] as BwsMoveRequestPacket;
         expect(request.type).toBe(`move_request`);
         expect(request.side).toBe(`x`);
-        // The opening pair the server placed travels as the first entry of
+        // The opening turn the server placed travels as the first entry of
         // previous, so a standard bot rebuilds the position from the origin.
         expect(request.previous).toHaveLength(1);
         expect(request.previous[0]?.side).toBe(`o`);
@@ -327,6 +498,41 @@ describe('engine session', () => {
         expect(stale.closed).toBe(true);
         expect(fresh.packets()[0]).toMatchObject({ type: `setup` });
     });
+
+    it('carries only the turns since the last request, the bot turn first and the human reply second', () => {
+        connect();
+        answerBot(crossTurn(0));
+        moveHuman(circleTurn(0));
+        answerBot(crossTurn(1));
+        moveHuman(circleTurn(1));
+        const requests = socket.moveRequests();
+        expect(requests).toHaveLength(3);
+        expect(requests[1]?.previous).toEqual([crossTurn(0), circleTurn(0)]);
+        expect(requests[2]?.previous).toEqual([crossTurn(1), circleTurn(1)]);
+    });
+
+    it('carries the whole log once to a mid-game reattach, then only new turns', () => {
+        connect();
+        answerBot(crossTurn(0));
+        moveHuman(circleTurn(0));
+        const fresh = new FakeEngineSocket();
+        world.games.attachSession(gameId, token, fresh);
+        answerBot(crossTurn(1), fresh);
+        moveHuman(circleTurn(1));
+        const requests = fresh.moveRequests();
+        expect(requests).toHaveLength(2);
+        expect(requests[0]?.previous).toEqual([...openingMovesOf(world, gameId), crossTurn(0), circleTurn(0)]);
+        expect(requests[1]?.previous).toEqual([crossTurn(1), circleTurn(1)]);
+    });
+
+    it('tells a bot facing a human that nothing waits on it while the human moves', () => {
+        connect();
+        vi.advanceTimersByTime(sessionHeartbeatMs);
+        expect(socket.lastHeartbeat()?.waiting).toBe(true);
+        answerBot(crossTurn(0));
+        vi.advanceTimersByTime(sessionHeartbeatMs);
+        expect(socket.lastHeartbeat()?.waiting).toBe(false);
+    });
 });
 
 describe('clocks', () => {
@@ -334,7 +540,7 @@ describe('clocks', () => {
 
     beforeEach(() => {
         vi.useFakeTimers();
-        // Circles for the human and no opening stones: the human holds the
+        // Circles for the human and the origin alone: the human holds the
         // first turn, so its clock is the one under test.
         world = harness(humanCircles);
     });
@@ -349,7 +555,7 @@ describe('clocks', () => {
             person: user,
             bot,
             timeControl: turnControl,
-            openingTurns: 0,
+            openingPlies: 1,
         });
         await vi.advanceTimersByTimeAsync(5_000);
         expect(latestEvent(world, `gameFinish`)).toEqual({
@@ -365,7 +571,7 @@ describe('clocks', () => {
             person: user,
             bot,
             timeControl: turnControl,
-            openingTurns: 0,
+            openingPlies: 1,
         });
         const moved = world.games.humanMove(created.gameId, user, [
             { x: 1, y: 0 },
@@ -386,7 +592,7 @@ describe('clocks', () => {
             person: user,
             bot,
             timeControl: matchControl,
-            openingTurns: 0,
+            openingPlies: 1,
         });
         await vi.advanceTimersByTimeAsync(10_000);
         const moved = world.games.humanMove(created.gameId, user, [
@@ -408,7 +614,7 @@ describe('clocks', () => {
             person: user,
             bot,
             timeControl: unlimitedControl,
-            openingTurns: 0,
+            openingPlies: 1,
         });
         await vi.advanceTimersByTimeAsync(unlimitedWallCapMs - 1);
         expect(world.games.activeGameCount(bot.id)).toBe(1);
@@ -441,7 +647,7 @@ describe('orphan rule', () => {
             person: user,
             bot,
             timeControl: unlimitedControl,
-            openingTurns: 0,
+            openingPlies: 1,
         });
         world.stream.emitClose();
         await vi.advanceTimersByTimeAsync(orphanForfeitMs - 1);
@@ -456,7 +662,7 @@ describe('orphan rule', () => {
     });
 
     it('spares the games of a bot that reconnects inside the window', async () => {
-        const created = world.games.createGame({ person: user, bot, timeControl: unlimitedControl, openingTurns: 0 });
+        const created = world.games.createGame({ person: user, bot, timeControl: unlimitedControl, openingPlies: 1 });
         world.stream.emitClose();
         await vi.advanceTimersByTimeAsync(orphanForfeitMs - 1);
         const fresh = new FakeStreamSocket();
@@ -469,7 +675,7 @@ describe('orphan rule', () => {
 
     it('aborts unrated instead once the generation of the process is retired', async () => {
         const query = createQuery(world.sqlite);
-        const created = world.games.createGame({ person: user, bot, timeControl: unlimitedControl, openingTurns: 0 });
+        const created = world.games.createGame({ person: user, bot, timeControl: unlimitedControl, openingPlies: 1 });
         const before = readRating(query, { kind: `bot`, id: bot.id });
         retireGeneration(query, 1);
         world.stream.emitClose();
@@ -482,7 +688,7 @@ describe('orphan rule', () => {
     });
 
     it('drops every timer on stop, so a late close event arms nothing', async () => {
-        world.games.createGame({ person: user, bot, timeControl: unlimitedControl, openingTurns: 0 });
+        world.games.createGame({ person: user, bot, timeControl: unlimitedControl, openingPlies: 1 });
         world.games.stop();
         expect(world.games.activeGameCount(bot.id)).toBe(0);
         world.stream.emitClose();
@@ -510,7 +716,7 @@ describe('persistence', () => {
             person: user,
             bot,
             timeControl: unlimitedControl,
-            openingTurns: 0,
+            openingPlies: 1,
         });
         const moved = world.games.humanMove(created.gameId, user, [
             { x: 3, y: 0 },
@@ -531,7 +737,7 @@ describe('persistence', () => {
             person: user,
             bot,
             timeControl: unlimitedControl,
-            openingTurns: 0,
+            openingPlies: 1,
         });
         world.games.humanResign(created.gameId, user);
         const query = createQuery(world.sqlite);
@@ -544,7 +750,7 @@ describe('persistence', () => {
             person: user,
             bot,
             timeControl: unlimitedControl,
-            openingTurns: 0,
+            openingPlies: 1,
         });
         abortUnfinishedGames(createQuery(world.sqlite));
         // The sweep is a boot step: the next process reads with an empty
@@ -557,6 +763,13 @@ describe('persistence', () => {
         expect(snapshot.reason).toBe(`aborted`);
     });
 });
+
+interface Handoff {
+    readonly gameId: string;
+    readonly side: Side;
+    readonly token: string;
+}
+
 describe('bot-vs-bot games', () => {
     let world: Harness;
     let challenger: { id: string; name: string };
@@ -591,26 +804,24 @@ describe('bot-vs-bot games', () => {
             .find((event) => event.type === type);
     }
 
-    function create(firstPlayer: `challenger` | `challenged` | `random`, openingTurns = 0): string {
+    function create(firstPlayer: `challenger` | `challenged` | `random`, openingPlies: OpeningPlies = 1): string {
         return world.games.createBotGame({
             challenger,
             dest: { id: bot.id, name: bot.name },
             timeControl: unlimitedControl,
-            openingTurns,
+            openingPlies,
             firstPlayer,
         }).gameId;
     }
 
-    function gameStartFor(botId: string): { gameId: string; side: Side; token: string } {
+    function gameStartFor(botId: string): Handoff {
         const found = world.games.replayForBot(botId).find((event) => event.type === `gameStart`);
         if (found?.type !== `gameStart`) throw new Error(`no gameStart for ${botId}`);
         return { gameId: found.gameId, side: found.side, token: found.engine.token };
     }
 
     function moveRequestFrom(socket: FakeEngineSocket): BwsMoveRequestPacket {
-        const request = socket
-            .packets()
-            .find((packet): packet is BwsMoveRequestPacket => (packet as { type?: unknown }).type === `move_request`);
+        const request = socket.moveRequests()[0];
         if (request === undefined) throw new Error(`no move_request`);
         return request;
     }
@@ -629,12 +840,37 @@ describe('bot-vs-bot games', () => {
         );
     }
 
+    function answerLatest(socket: FakeEngineSocket, seat: Handoff, turn: ScriptedTurn): void {
+        const request = socket.moveRequests().at(-1);
+        if (request === undefined) throw new Error(`no move_request`);
+        answer(seat.side, seat.gameId, seat.token, request, turn.pieces);
+    }
+
+    // The challenger takes the first player turn, so after an opening of 1,
+    // 5, or 9 plies it sits on o and the other bot on x.
+    function seatBoth(openingPlies: OpeningPlies): {
+        gameId: string;
+        circles: Handoff;
+        crosses: Handoff;
+        circleSocket: FakeEngineSocket;
+        crossSocket: FakeEngineSocket;
+    } {
+        const gameId = create(`challenger`, openingPlies);
+        const crosses = gameStartFor(bot.id);
+        const circles = gameStartFor(challenger.id);
+        const circleSocket = new FakeEngineSocket();
+        const crossSocket = new FakeEngineSocket();
+        world.games.attachSession(gameId, circles.token, circleSocket);
+        world.games.attachSession(gameId, crosses.token, crossSocket);
+        return { gameId, circles, crosses, circleSocket, crossSocket };
+    }
+
     it('seats both bots with their own handoff and drives turns across two sessions', () => {
         const gameId = create(`challenger`);
         // Only the side to move carries an outstanding request.
         expect(world.games.replayForBot(challenger.id)).toHaveLength(2);
         expect(world.games.replayForBot(bot.id)).toHaveLength(1);
-        // With no opening stones o holds the first turn, and the challenger
+        // After the origin alone o holds the first turn, and the challenger
         // was named first player, so the challenger sits on o. The captures
         // come last: every replay mints a fresh token.
         const dest = gameStartFor(bot.id);
@@ -699,16 +935,76 @@ describe('bot-vs-bot games', () => {
     });
 
     it('seats the named first player regardless of opening parity', () => {
-        create(`challenger`, 1);
+        create(`challenger`, 3);
         expect(gameStartFor(challenger.id).side).toBe(`x`);
-        create(`challenged`, 0);
+        create(`challenged`, 1);
         expect(gameStartFor(bot.id).side).toBe(`o`);
     });
 
     it('draws a random first player through the lottery seam', () => {
-        create(`random`, 0);
+        create(`random`, 1);
         // The draw is 0.9, past the halfway flip, so the challenger takes
         // the side that does not move first.
         expect(gameStartFor(challenger.id).side).toBe(`x`);
+    });
+
+    it('carries only the turns since the last request, the own turn first and the reply second', () => {
+        const { circles, crosses, circleSocket, crossSocket } = seatBoth(1);
+        answerLatest(circleSocket, circles, circleTurn(0));
+        answerLatest(crossSocket, crosses, crossTurn(0));
+        answerLatest(circleSocket, circles, circleTurn(1));
+        answerLatest(crossSocket, crosses, crossTurn(1));
+        answerLatest(circleSocket, circles, circleTurn(2));
+        const circleRequests = circleSocket.moveRequests();
+        expect(circleRequests).toHaveLength(3);
+        expect(circleRequests[1]?.previous).toEqual([circleTurn(0), crossTurn(0)]);
+        expect(circleRequests[2]?.previous).toEqual([circleTurn(1), crossTurn(1)]);
+        const crossRequests = crossSocket.moveRequests();
+        expect(crossRequests).toHaveLength(3);
+        expect(crossRequests[1]?.previous).toEqual([crossTurn(0), circleTurn(1)]);
+        expect(crossRequests[2]?.previous).toEqual([crossTurn(1), circleTurn(2)]);
+    });
+
+    it('delivers the opening turns to each bot exactly once, its own side included', () => {
+        const { gameId, circles, crosses, circleSocket, crossSocket } = seatBoth(5);
+        answerLatest(circleSocket, circles, circleTurn(0));
+        answerLatest(crossSocket, crosses, crossTurn(0));
+        answerLatest(circleSocket, circles, circleTurn(1));
+        const opening = openingMovesOf(world, gameId);
+        expect(opening.map((turn) => turn.side)).toEqual([`o`, `x`]);
+        expect(circleSocket.history()).toEqual([...opening, circleTurn(0), crossTurn(0)]);
+        expect(crossSocket.history()).toEqual([...opening, circleTurn(0), crossTurn(0), circleTurn(1)]);
+    });
+
+    it('concatenates the requests of every session into the turn log from the origin, with no turn twice', () => {
+        const { gameId, circles, crosses, circleSocket, crossSocket } = seatBoth(1);
+        answerLatest(circleSocket, circles, circleTurn(0));
+        answerLatest(crossSocket, crosses, crossTurn(0));
+        answerLatest(circleSocket, circles, circleTurn(1));
+        const reattached = new FakeEngineSocket();
+        world.games.attachSession(gameId, crosses.token, reattached);
+        answerLatest(reattached, crosses, crossTurn(1));
+        answerLatest(circleSocket, circles, circleTurn(2));
+        answerLatest(reattached, crosses, crossTurn(2));
+        expect(challengerLatest(`gameFinish`)).toMatchObject({ winner: `x`, reason: `six-in-a-row` });
+        const log = [circleTurn(0), crossTurn(0), circleTurn(1), crossTurn(1), circleTurn(2), crossTurn(2)];
+        expect(circleSocket.history()).toEqual(log.slice(0, 4));
+        expect(crossSocket.history()).toEqual(log.slice(0, 3));
+        expect(reattached.history()).toEqual(log.slice(0, 5));
+    });
+
+    it('waits on the bot whose turn it is and not on the other', () => {
+        const { circleSocket, crossSocket } = seatBoth(1);
+        vi.advanceTimersByTime(sessionHeartbeatMs);
+        expect(circleSocket.lastHeartbeat()?.waiting).toBe(true);
+        expect(crossSocket.lastHeartbeat()?.waiting).toBe(false);
+    });
+
+    it('moves the wait to the other bot once a turn is played', () => {
+        const { circles, circleSocket, crossSocket } = seatBoth(1);
+        answerLatest(circleSocket, circles, circleTurn(0));
+        vi.advanceTimersByTime(sessionHeartbeatMs);
+        expect(circleSocket.lastHeartbeat()?.waiting).toBe(false);
+        expect(crossSocket.lastHeartbeat()?.waiting).toBe(true);
     });
 });

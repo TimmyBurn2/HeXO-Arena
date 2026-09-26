@@ -1,4 +1,4 @@
-import type { Side } from '@hexarena/contract';
+import { rankableDeviation, type Side } from '@hexarena/contract';
 import { glicko2Update, type Glicko2Rating } from './glicko2';
 
 export const humanSeedRating = 1000;
@@ -10,7 +10,6 @@ export const deviationCap = 500;
 export const volatilityCap = 0.1;
 export const ratingFloor = 400;
 export const gameDeltaCap = 400;
-export const rankableDeviation = 75;
 export const glicko2Tau = 0.5;
 
 export type PlayerRating = Glicko2Rating;

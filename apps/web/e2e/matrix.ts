@@ -15,6 +15,7 @@ export const looks: readonly Look[] = themes.map((theme) => ({
 
 export const viewports = [
     { name: `desktop`, width: 1440, height: 900 },
+    { name: `tablet`, width: 768, height: 1024 },
     { name: `phone`, width: 390, height: 844 },
     { name: `narrow`, width: 360, height: 740 },
 ] as const;
@@ -93,6 +94,36 @@ export const shots: readonly Shot[] = [
         after: async (page) => {
             await page.keyboard.press(`m`);
             await page.locator(`#drawer-body:not([hidden])`).waitFor();
+        },
+    },
+    ...(
+        [
+            [`game-drawer-origin`, `/game/origin`],
+            [`game-drawer-nine`, `/game/nine`],
+            [`game-drawer-finished`, `/game/finished`],
+            [`game-drawer-five-finished`, `/game/five-finished`],
+            [`game-drawer-nine-finished`, `/game/nine-finished`],
+        ] as const
+    ).map(([name, path]) => ({
+        name,
+        path,
+        world: world(),
+        ready: `svg polygon.cell`,
+        framed: false,
+        after: async (page: Page) => {
+            await page.keyboard.press(`m`);
+            await page.locator(`#drawer-body:not([hidden])`).waitFor();
+        },
+    })),
+    {
+        name: `game-facts`,
+        path: `/game/running`,
+        world: world(),
+        ready: `svg polygon.cell`,
+        framed: false,
+        after: async (page) => {
+            await page.keyboard.press(`m`);
+            await page.getByRole(`tab`, { name: `Game` }).click();
         },
     },
     {

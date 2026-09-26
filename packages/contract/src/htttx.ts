@@ -20,21 +20,25 @@ export const htttxCellSchema = z.object({
 });
 export type HtttxCell = z.infer<typeof htttxCellSchema>;
 
-export const htttxBoardSchema = z.object({
-    to_move: htttxSideSchema,
-    cells: z.array(htttxCellSchema),
-});
+export const htttxBoardSchema = z
+    .object({
+        to_move: htttxSideSchema,
+        cells: z.array(htttxCellSchema),
+    })
+    .meta({ id: `Board` });
 export type HtttxBoard = z.infer<typeof htttxBoardSchema>;
 
 // Seconds, not milliseconds; a fraction is honest and needs no rounding
 // policy. Absent when the clock mode is unlimited.
 export const htttxTimeLimitSchema = z.number().min(0);
 
-export const htttxMoveRequestSchema = z.object({
-    board: htttxBoardSchema,
-    time_limit: htttxTimeLimitSchema.optional(),
-    request_id: z.number().int().min(0).optional(),
-});
+export const htttxMoveRequestSchema = z
+    .object({
+        board: htttxBoardSchema,
+        time_limit: htttxTimeLimitSchema.optional(),
+        request_id: z.number().int().min(0).optional(),
+    })
+    .meta({ id: `MoveRequest` });
 export type HtttxMoveRequest = z.infer<typeof htttxMoveRequestSchema>;
 
 export const htttxPositionEvaluationSchema = z.object({

@@ -1,5 +1,12 @@
 import { useMemo, useState } from 'react';
-import { defaultOpeningTurns, discordLoginPath, type Accepts, type TimeControl } from '@hexarena/contract';
+import {
+    defaultOpeningPlies,
+    discordLoginPath,
+    openingPliesValues,
+    type Accepts,
+    type OpeningPlies,
+    type TimeControl,
+} from '@hexarena/contract';
 import { createGame, ApiError } from '../api/client';
 import { Dialog } from './Dialog';
 import { meStore, useMe } from '../me';
@@ -70,7 +77,7 @@ export function PlayDialog({ bot, open, onClose }: { bot: PlayableBot; open: boo
     });
     const [mainMinutes, setMainMinutes] = useState(defaultMainMinutes);
     const [incrementSeconds, setIncrementSeconds] = useState(defaultIncrementSeconds);
-    const [openingTurns, setOpeningTurns] = useState<0 | 1 | 2 | 3 | 4>(defaultOpeningTurns);
+    const [openingPlies, setOpeningPlies] = useState<OpeningPlies>(defaultOpeningPlies);
     const [failure, setFailure] = useState<string | null>(null);
     const [sending, setSending] = useState(false);
     const me = useMe();
@@ -110,7 +117,7 @@ export function PlayDialog({ bot, open, onClose }: { bot: PlayableBot; open: boo
                   ? { mode: `match`, mainTimeMs: mainMinutes * 60_000, incrementMs: incrementSeconds * 1000 }
                   : { mode: `unlimited` };
         try {
-            const snapshot = await createGame({ bot: bot.name, timeControl, openingTurns });
+            const snapshot = await createGame({ bot: bot.name, timeControl, openingPlies });
             onClose();
             navigate(`/game/${encodeURIComponent(snapshot.gameId)}`);
         } catch (cause) {
@@ -241,18 +248,18 @@ export function PlayDialog({ bot, open, onClose }: { bot: PlayableBot; open: boo
                 <details className="advanced">
                     <summary>Advanced session</summary>
                     <fieldset>
-                        <legend>Opening turns after the origin, placed by the server</legend>
+                        <legend>Opening stones, the origin included</legend>
                         <div className="controls">
-                            {([0, 1, 2, 3, 4] as const).map((count) => (
+                            {openingPliesValues.map((count) => (
                                 <span className="opt" key={count}>
                                     <input
                                         type="radio"
                                         id={`opening-${String(count)}`}
-                                        name="opening-turns"
+                                        name="opening-plies"
                                         value={count}
-                                        checked={openingTurns === count}
+                                        checked={openingPlies === count}
                                         onChange={() => {
-                                            setOpeningTurns(count);
+                                            setOpeningPlies(count);
                                         }}
                                     />
                                     <label htmlFor={`opening-${String(count)}`}>{String(count)}</label>
@@ -264,9 +271,9 @@ export function PlayDialog({ bot, open, onClose }: { bot: PlayableBot; open: boo
             </div>
 
             <p className="note">
-                {openingTurns === 0
-                    ? `The opening stone lands before your first turn; two stones per turn, always.`
-                    : `The opening stone and ${String(openingTurns)} random ${openingTurns === 1 ? `turn` : `turns`} land before your first turn; two stones per turn, always.`}
+                {openingPlies === 1
+                    ? `Only the origin stone lands before either side moves; every turn after it places two stones.`
+                    : `The origin and ${String(openingPlies - 1)} random stones land before either side moves; every turn after them places two stones.`}
             </p>
             {failure !== null ? (
                 <p className="field-error" role="alert">

@@ -1,7 +1,10 @@
 import {
+    botConcurrentGameCap,
     challengeSchema,
+    challengeTtlMs,
     type Challenge,
     type FirstPlayer,
+    type OpeningPlies,
     type StreamEvent,
     type TimeControl,
 } from '@hexarena/contract';
@@ -13,14 +16,9 @@ import {
     insertChallenge,
     type ChallengeRecord,
 } from './challenge-store';
-import { botConcurrentGameCap, type GameRegistry } from './game-registry';
+import type { GameRegistry } from './game-registry';
 import type { PresenceRegistry } from './presence';
 import { streamPlayerOf } from './rating-store';
-
-export const challengeTtlMs = 60_000;
-export const challengeInboxCap = 10;
-export const pairDailyCap = 20;
-export const botDailyCap = 100;
 
 export const challengeTtlSeconds = challengeTtlMs / 1000;
 
@@ -50,7 +48,7 @@ function viewOf(query: Query, record: ChallengeRecord, status: Challenge[`status
         challenger: streamPlayerOf(query, { kind: `bot`, id: record.challengerBotId }, record.challengerName),
         destUser: streamPlayerOf(query, { kind: `bot`, id: record.destBotId }, record.destName),
         timeControl: record.timeControl,
-        openingTurns: record.openingTurns,
+        openingPlies: record.openingPlies,
         firstPlayer: record.firstPlayer,
         status,
     });
@@ -84,7 +82,7 @@ export class ChallengeRegistry {
         challenger: { id: string; name: string };
         dest: { id: string; name: string };
         timeControl: TimeControl;
-        openingTurns: number;
+        openingPlies: OpeningPlies;
         firstPlayer: FirstPlayer;
         requestKey: string;
     }): CreateChallengeOutcome {
@@ -97,7 +95,7 @@ export class ChallengeRegistry {
             destBotId: input.dest.id,
             requestKey: input.requestKey,
             timeControl: input.timeControl,
-            openingTurns: input.openingTurns,
+            openingPlies: input.openingPlies,
             firstPlayer: input.firstPlayer,
         });
         if (id.kind === `exists`) {
@@ -136,7 +134,7 @@ export class ChallengeRegistry {
             challenger: { id: live.record.challengerBotId, name: live.record.challengerName },
             dest: { id: live.record.destBotId, name: live.record.destName },
             timeControl: live.record.timeControl,
-            openingTurns: live.record.openingTurns,
+            openingPlies: live.record.openingPlies,
             firstPlayer: live.record.firstPlayer,
         });
         this.#decide(live, `accepted`, gameId);

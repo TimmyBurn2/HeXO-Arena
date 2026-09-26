@@ -1,8 +1,8 @@
+import { guestIdleSeconds } from '@hexarena/contract';
 import { randomInt } from 'node:crypto';
 import { nowSeconds } from './db';
 import { randomToken, sha256Hex } from './tokens';
 
-export const guestIdleSeconds = 24 * 60 * 60;
 export const guestSessionCap = 500;
 
 const labelAlphabet = `abcdefghijklmnopqrstuvwxyz0123456789`;

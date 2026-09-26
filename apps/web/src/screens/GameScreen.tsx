@@ -5,7 +5,7 @@ import { Link } from '../router/Link';
 import { useRoute } from '../router/use-route';
 import { useDocumentMeta } from '../use-document-meta';
 import { GameBoard, type TurnStatus } from '../game/GameBoard';
-import { GameDrawer } from '../game/GameDrawer';
+import { FeedLabel, GameDrawer } from '../game/GameDrawer';
 import { clockModeText, clockOf, OpponentChip, Pips, Swatch, TurnChip, YouChip } from '../game/GameHud';
 import { useDrawer } from '../game/use-drawer';
 import { selfName, useMe } from '../me';
@@ -134,23 +134,36 @@ function GameView({ snapshot, send, stale }: { snapshot: GameSnapshot; send: Gam
         }
     }
 
+    // On a phone the open sheet covers the result chip, so a finished game
+    // puts its result in the peek while the sheet is up, and the last move
+    // otherwise, as a running one does.
+    // The Game tab states the result in its own row, so there the peek
+    // keeps the last move and the sentence appears once.
     const last = feed.at(-1);
+    const showResult = !running && drawer.visible && drawer.tab !== `game`;
+    const peekLine = showResult ? (
+        <span className="peek-line peek-result">{resultLine(snapshot)}</span>
+    ) : last === undefined ? null : (
+        <span className="peek-line">
+            <FeedLabel line={last} /> {last.groups.join(` `)}
+        </span>
+    );
     const peek = (
         <div className="peek-row">
             <Swatch side={you} />
             <span className="hud-name">{self}</span>
             {clockOf(snapshot, you)}
             {yourMove ? <Pips placed={status.placed} /> : null}
-            {last === undefined ? null : (
-                <span className="peek-line">
-                    {last.label} {last.text}
-                </span>
-            )}
+            {peekLine}
         </div>
     );
 
     return (
-        <div className="stage" data-pinned={drawer.pinned ? `` : undefined}>
+        <div
+            className="stage"
+            data-pinned={drawer.pinned ? `` : undefined}
+            data-open={drawer.visible && !drawer.pinned ? `` : undefined}
+        >
             <h1 className="sr-only">{headingOf(snapshot)}</h1>
             <div className="board-host">
                 <GameBoard
@@ -209,7 +222,7 @@ function GameView({ snapshot, send, stale }: { snapshot: GameSnapshot; send: Gam
 function factsOf(snapshot: GameSnapshot): (readonly [string, string])[] {
     const facts: (readonly [string, string])[] = [
         [`Clock`, clockModeText(snapshot)],
-        [`Opening`, `${String(snapshot.openingTurns)} random ${snapshot.openingTurns === 1 ? `turn` : `turns`}`],
+        [`Opening`, snapshot.openingPlies === 1 ? `origin only` : `${String(snapshot.openingPlies)} stones, origin included`],
         [`You play`, snapshot.you],
     ];
     if (snapshot.status === `finished`) facts.push([`Result`, resultLine(snapshot)]);

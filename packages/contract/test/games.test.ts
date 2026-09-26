@@ -5,20 +5,20 @@ import {
     gameSnapshotSchema,
     humanMoveRequestSchema,
 } from '../src/games';
-import { defaultOpeningTurns, openingTurnsSchema } from '../src/stream';
+import { defaultOpeningPlies, openingPliesSchema } from '../src/stream';
 
 const turnControl = { mode: `turn`, turnTimeMs: 30_000 };
 
-describe('openingTurnsSchema', () => {
-    it('accepts every whole turn count from none to four', () => {
-        for (const turns of [0, 1, 2, 3, 4]) {
-            expect(openingTurnsSchema.parse(turns)).toBe(turns);
+describe('openingPliesSchema', () => {
+    it('accepts every odd ply count from one to nine', () => {
+        for (const plies of [1, 3, 5, 7, 9]) {
+            expect(openingPliesSchema.parse(plies)).toBe(plies);
         }
     });
 
-    it('rejects a fifth turn, a negative count, and a fraction', () => {
-        for (const turns of [5, -1, 1.5]) {
-            expect(openingTurnsSchema.safeParse(turns).success).toBe(false);
+    it('rejects zero, every even count, eleven, and a fraction', () => {
+        for (const plies of [0, 2, 4, 6, 8, 10, 11, -1, 4.5]) {
+            expect(openingPliesSchema.safeParse(plies).success).toBe(false);
         }
     });
 });
@@ -29,8 +29,8 @@ describe('createGameRequestSchema', () => {
             bot: `opponentbot`,
             timeControl: turnControl,
         });
-        expect(parsed.openingTurns).toBe(defaultOpeningTurns);
-        expect(defaultOpeningTurns).toBe(1);
+        expect(parsed.openingPlies).toBe(defaultOpeningPlies);
+        expect(defaultOpeningPlies).toBe(5);
     });
 
     it('keeps the time-control floors from the stream contract', () => {
@@ -73,7 +73,7 @@ describe('gameSnapshotSchema', () => {
             status: `in-progress`,
             you: `x`,
             opponent: { name: `opponentbot`, rating: 1500, provisional: true },
-            openingTurns: 0,
+            openingPlies: 1,
             board: { cells: [{ x: 0, y: 0, side: `x` }] },
             toMove: `o`,
             clock: { mode: `unlimited` },
@@ -84,7 +84,7 @@ describe('gameSnapshotSchema', () => {
             status: `finished`,
             you: `x`,
             opponent: { name: `opponentbot`, rating: 1500, provisional: true },
-            openingTurns: 0,
+            openingPlies: 1,
             board: { cells: [{ x: 0, y: 0, side: `x` }] },
             winner: null,
             reason: `aborted`,

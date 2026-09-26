@@ -99,7 +99,7 @@ const midTurnWinMoves: readonly Coord[] = [
     { x: 6, y: 0 },
 ];
 
-describe('opening turn', () => {
+describe('turn 0', () => {
     it('rejects a first stone anywhere but the origin', () => {
         expect(rejection(emptyPosition, { x: 1, y: 0 })?.kind).toBe(
             `first-stone-off-origin`,

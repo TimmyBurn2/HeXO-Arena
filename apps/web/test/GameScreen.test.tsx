@@ -23,7 +23,7 @@ const runningSnapshot = {
     gameId: `g-run`,
     you: `o`,
     opponent: { name: `hextide`, rating: 1690, provisional: false },
-    openingTurns: 1,
+    openingPlies: 3,
     board: {
         cells: [
             { x: 0, y: 0, side: `x` as const },
@@ -40,7 +40,7 @@ const finishedSnapshot = {
     gameId: `g-end`,
     you: `o`,
     opponent: { name: `hextide`, rating: 1690, provisional: false },
-    openingTurns: 1,
+    openingPlies: 3,
     board: { cells: finishedCells },
     status: `finished`,
     winner: `x`,
@@ -52,6 +52,15 @@ function stubGame(snapshot: GameSnapshot, status = 200): void {
         `fetch`,
         vi.fn(() => Promise.resolve(new Response(JSON.stringify(snapshot), { status }))),
     );
+}
+
+// The m listener registers in an effect that can land after the first
+// paint a test waits on, so the key is pressed until the drawer answers.
+async function openWithM(): Promise<void> {
+    await waitFor(() => {
+        fireEvent.keyDown(window, { key: `m` });
+        expect(document.querySelector(`#drawer-body`)?.hasAttribute(`hidden`)).toBe(false);
+    });
 }
 
 afterEach(() => {
@@ -87,9 +96,16 @@ describe('GameScreen', () => {
         render(<GameScreen gameId="g-run" />);
         await screen.findByRole(`heading`, { name: `hextide vs you` });
         expect(document.querySelector(`#drawer-body`)?.hasAttribute(`hidden`)).toBe(true);
-        fireEvent.keyDown(window, { key: `m` });
-        expect(document.querySelector(`#drawer-body`)?.hasAttribute(`hidden`)).toBe(false);
+        await openWithM();
         expect(document.querySelectorAll(`.feed .feed-line`)).toHaveLength(1);
+        // The opening line keeps each turn's stones together: the origin, then one pair.
+        expect([...document.querySelectorAll(`.feed .feed-group`)].map((group) => group.textContent)).toEqual([`x: (0,0)`, `o: (1,-1) (0,1)`]);
+        // The opening's label shows its turn span and reads it out in words,
+        // in the feed and in the peek that repeats the last line.
+        for (const label of [`.feed-n`, `.peek-line`]) {
+            expect(document.querySelector(`${label} [aria-hidden="true"]`)?.textContent).toBe(`op 0-1`);
+            expect(document.querySelector(`${label} .sr-only`)?.textContent).toBe(`opening, turns 0 to 1,`);
+        }
         fireEvent.click(screen.getByRole(`tab`, { name: `Game` }));
         expect(screen.getByRole(`button`, { name: `Resign` })).toBeTruthy();
         fireEvent.keyDown(screen.getByRole(`tab`, { name: `Game` }), { key: `Escape` });
@@ -99,13 +115,48 @@ describe('GameScreen', () => {
     it('freeze into the finished state with the result, the win line, and the record open', async () => {
         stubGame(finishedSnapshot);
         render(<GameScreen gameId="g-end" />);
-        expect(await screen.findByText(`hextide won, six in a row`, { selector: `.hud-result` })).toBeTruthy();
+        expect(await screen.findByText(`hextide won with six in a row`, { selector: `.hud-result` })).toBeTruthy();
         expect(document.querySelector(`polyline.win-line`)).toBeTruthy();
         expect(document.querySelector(`#drawer-body`)?.hasAttribute(`hidden`)).toBe(true);
         expect(document.querySelector(`.board-control`)?.hasAttribute(`tabindex`)).toBe(false);
+        // The phone sheet's peek carries the result only while the open sheet covers the chip.
+        expect(document.querySelector(`.peek-line`)?.textContent).not.toBe(`hextide won with six in a row`);
+        await openWithM();
+        expect(document.querySelector(`.peek-line`)?.textContent).toBe(`hextide won with six in a row`);
+        fireEvent.keyDown(window, { key: `m` });
         await waitFor(() => {
             expect(document.title).toBe(`hextide won (six in a row) - hexarena`);
         });
+    });
+
+    it('show the board keys on the game tab only while the game runs', async () => {
+        stubGame(runningSnapshot);
+        render(<GameScreen gameId="g-run" />);
+        await screen.findByRole(`heading`, { name: `hextide vs you` });
+        await openWithM();
+        fireEvent.click(screen.getByRole(`tab`, { name: `Game` }));
+        expect(document.querySelector(`.game-facts kbd`)).toBeTruthy();
+        cleanup();
+        stubGame(finishedSnapshot);
+        render(<GameScreen gameId="g-end" />);
+        await screen.findByText(`hextide won with six in a row`, { selector: `.hud-result` });
+        await openWithM();
+        fireEvent.click(screen.getByRole(`tab`, { name: `Game` }));
+        expect(document.querySelector(`.game-facts .facts`)).toBeTruthy();
+        expect(document.querySelector(`.game-facts kbd`)).toBe(null);
+    });
+
+    it('state a finished result once on the game tab, in its row and not the peek', async () => {
+        stubGame(finishedSnapshot);
+        render(<GameScreen gameId="g-end" />);
+        await screen.findByText(`hextide won with six in a row`, { selector: `.hud-result` });
+        await openWithM();
+        expect(document.querySelector(`.peek-line`)?.textContent).toBe(`hextide won with six in a row`);
+        fireEvent.click(screen.getByRole(`tab`, { name: `Game` }));
+        expect(screen.getByText(`hextide won with six in a row`, { selector: `.facts dd` })).toBeTruthy();
+        expect(document.querySelector(`.peek-line`)?.textContent).toBe(`5 o: (5,0) (6,0)`);
+        fireEvent.click(screen.getByRole(`tab`, { name: `Moves` }));
+        expect(document.querySelector(`.peek-line`)?.textContent).toBe(`hextide won with six in a row`);
     });
 
     it('not-found for a game that is not yours', async () => {
@@ -141,7 +192,7 @@ describe('GameScreen', () => {
         await waitFor(() => {
             expect(posts).toEqual([`/api/games/g-run/resign`]);
         });
-        expect(await screen.findByText(`hextide won, six in a row`, { selector: `.hud-result` })).toBeTruthy();
+        expect(await screen.findByText(`hextide won with six in a row`, { selector: `.hud-result` })).toBeTruthy();
         await waitFor(() => {
             expect(screen.getByRole(`tab`, { name: `Moves` }).getAttribute(`aria-selected`)).toBe(`true`);
         });

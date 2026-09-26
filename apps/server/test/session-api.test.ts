@@ -1,8 +1,16 @@
-import { devLoginPath, guestMeSchema, guestPath, logoutPath, mePath, meSchema } from '@hexarena/contract';
+import {
+    devLoginPath,
+    guestIdleSeconds,
+    guestMeSchema,
+    guestPath,
+    logoutPath,
+    mePath,
+    meSchema,
+} from '@hexarena/contract';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createQuery } from '../src/db';
 import { sessions } from '../src/db/schema';
-import { guestIdleSeconds, guestSessionCap } from '../src/guests';
+import { guestSessionCap } from '../src/guests';
 import { createTestApp, loginAs, type TestApp } from './helpers';
 
 async function mintGuest(arena: TestApp): Promise<{ session: string; name: string }> {

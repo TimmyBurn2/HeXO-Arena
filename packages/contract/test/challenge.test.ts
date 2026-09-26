@@ -15,7 +15,7 @@ describe('createChallengeRequestSchema', () => {
             timeControl: turnControl,
             requestId: `retry-1`,
         });
-        expect(parsed.openingTurns).toBe(1);
+        expect(parsed.openingPlies).toBe(5);
         expect(parsed.firstPlayer).toBe(`random`);
     });
 
@@ -28,14 +28,16 @@ describe('createChallengeRequestSchema', () => {
         ).toBe(false);
     });
 
-    it('rejects an opening past four turns and a missing request id', () => {
-        expect(
-            createChallengeRequestSchema.safeParse({
-                timeControl: turnControl,
-                openingTurns: 5,
-                requestId: `retry-1`,
-            }).success,
-        ).toBe(false);
+    it('rejects an opening of zero, an even count, or eleven plies, and a missing request id', () => {
+        for (const openingPlies of [0, 4, 11]) {
+            expect(
+                createChallengeRequestSchema.safeParse({
+                    timeControl: turnControl,
+                    openingPlies,
+                    requestId: `retry-1`,
+                }).success,
+            ).toBe(false);
+        }
         expect(
             createChallengeRequestSchema.safeParse({
                 timeControl: turnControl,

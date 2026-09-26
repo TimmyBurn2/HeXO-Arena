@@ -21,7 +21,7 @@ export function internalToWire(coord: { x: number; y: number }): { q: number; r:
     return { q: coord.x + coord.y, r: -coord.y + 0 };
 }
 
-// The wire names players by turn order: x places the opening stone, o answers.
+// The wire names players by turn order: x places the origin, o answers.
 // The engine numbers them, so the pair is fixed by construction.
 export function sideOf(player: PlayerColor): Side {
     return player === 0 ? `x` : `o`;

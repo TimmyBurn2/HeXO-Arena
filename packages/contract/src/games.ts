@@ -3,9 +3,9 @@ import type { Accepts } from './api';
 import { axialCoordSchema } from './board';
 import { nameSyntaxSchema } from './names';
 import {
-    defaultOpeningTurns,
     finishReasonSchema,
-    openingTurnsSchema,
+    openingPliesRequestSchema,
+    openingPliesSchema,
     sideSchema,
     streamPlayerSchema,
     timeControlSchema,
@@ -19,23 +19,31 @@ export const gameResignPath = `/api/games/{gameId}/resign`;
 export const botGameSocketPath = `/api/bot/game/{gameId}/socket`;
 export const botGameResignPath = `/api/bot/game/{gameId}/resign`;
 
+// Live games at once: a bot across every surface, a human, user or guest,
+// on the human surface.
+export const botConcurrentGameCap = 4;
+export const humanConcurrentGameCap = 3;
+export const humanGameCooldownSeconds = 60;
+
 export const createGameRequestSchema = z.object({
     bot: nameSyntaxSchema,
     timeControl: timeControlSchema,
-    openingTurns: openingTurnsSchema.default(defaultOpeningTurns),
+    openingPlies: openingPliesRequestSchema,
 });
 export type CreateGameRequest = z.infer<typeof createGameRequestSchema>;
 
 // The clock at the moment of the read, mirroring the time-control modes.
 // Match clocks are keyed by side; remaining values never go below zero.
-export const gameClockSchema = z.discriminatedUnion(`mode`, [
-    z.object({ mode: z.literal(`unlimited`) }),
-    z.object({ mode: z.literal(`turn`), remainingTurnMs: z.number().int().min(0) }),
-    z.object({
-        mode: z.literal(`match`),
-        remainingMainMs: z.object({ x: z.number().int().min(0), o: z.number().int().min(0) }),
-    }),
-]);
+export const gameClockSchema = z
+    .discriminatedUnion(`mode`, [
+        z.object({ mode: z.literal(`unlimited`) }),
+        z.object({ mode: z.literal(`turn`), remainingTurnMs: z.number().int().min(0) }),
+        z.object({
+            mode: z.literal(`match`),
+            remainingMainMs: z.object({ x: z.number().int().min(0), o: z.number().int().min(0) }),
+        }),
+    ])
+    .meta({ id: `GameClock` });
 export type GameClock = z.infer<typeof gameClockSchema>;
 
 // Geometry in the engine's x,y so the browser and the server share one
@@ -43,33 +51,38 @@ export type GameClock = z.infer<typeof gameClockSchema>;
 export const gameCellSchema = axialCoordSchema.extend({ side: sideSchema });
 export type GameCell = z.infer<typeof gameCellSchema>;
 
-// openingTurns counts the server-placed turns after the origin, so a
-// reader can tell the opening from the turns the players made.
+export const gameBoardSchema = z.object({ cells: z.array(gameCellSchema) }).meta({ id: `GameBoard` });
+
 const snapshotBase = {
     gameId: z.string(),
     you: sideSchema,
     opponent: streamPlayerSchema,
-    openingTurns: openingTurnsSchema,
-    board: z.object({ cells: z.array(gameCellSchema) }),
+    openingPlies: openingPliesSchema,
+    board: gameBoardSchema,
 };
 
-export const gameSnapshotSchema = z.discriminatedUnion(`status`, [
-    z.object({
-        ...snapshotBase,
-        status: z.literal(`in-progress`),
-        toMove: sideSchema,
-        clock: gameClockSchema,
-    }),
-    z.object({
-        ...snapshotBase,
-        status: z.literal(`finished`),
-        winner: sideSchema.nullable(),
-        reason: finishReasonSchema,
-        // Absent when the process that ran the clock is gone; the result
-        // stands without it.
-        clock: gameClockSchema.optional(),
-    }),
-]);
+export const gameSnapshotSchema = z
+    .discriminatedUnion(`status`, [
+        z.object({
+            ...snapshotBase,
+            status: z.literal(`in-progress`),
+            toMove: sideSchema,
+            clock: gameClockSchema,
+        }),
+        z.object({
+            ...snapshotBase,
+            status: z.literal(`finished`),
+            winner: sideSchema.nullable(),
+            reason: finishReasonSchema,
+            // Absent when the process that ran the clock is gone; the
+            // result stands without it.
+            clock: gameClockSchema.optional(),
+        }),
+    ])
+    .meta({
+        id: `GameSnapshot`,
+        description: `board.cells lists stones in ply order, so its first openingPlies entries are the opening.`,
+    });
 export type GameSnapshot = z.infer<typeof gameSnapshotSchema>;
 
 // Exactly two placements per turn, always; the first stone ever placed is
@@ -79,8 +92,8 @@ export const humanMoveRequestSchema = z.object({
 });
 export type HumanMoveRequest = z.infer<typeof humanMoveRequestSchema>;
 
-// Caller-side bounds on the human: at most three live games at once and
-// a cooldown between creations, so a browser cannot farm the create route.
+// Caller-side bounds on the human: the live-game cap and the creation
+// cooldown, so a browser cannot farm the create route.
 // Bot-side gates follow.
 export const gameCreateErrorCodes = [
     `human_busy`,

@@ -1,6 +1,6 @@
-import type { StreamEvent } from '@hexarena/contract';
+import { streamKeepaliveMs, type StreamEvent } from '@hexarena/contract';
 import { describe, expect, it, vi } from 'vitest';
-import { PresenceRegistry, streamKeepaliveMs } from '../src/presence';
+import { PresenceRegistry } from '../src/presence';
 import { FakeStreamSocket } from './helpers';
 
 
@@ -10,6 +10,7 @@ const gameStart = (gameId: string): StreamEvent => ({
     side: `x`,
     opponent: { name: `otherbot`, rating: 1500, provisional: true },
     timeControl: { mode: `unlimited` },
+    openingPlies: 5,
     rated: false,
     engine: { socketUrl: `/api/bot/game/${gameId}/socket`, token: `hgs_token` },
 });

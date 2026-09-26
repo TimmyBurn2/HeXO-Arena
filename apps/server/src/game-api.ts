@@ -1,6 +1,9 @@
 import {
     acceptsCovers,
+    botConcurrentGameCap,
     createGameRequestSchema,
+    humanConcurrentGameCap,
+    humanGameCooldownSeconds,
     humanMoveRequestSchema,
     nameKeyOf,
     nameSyntaxSchema,
@@ -10,9 +13,6 @@ import type { WebSocket } from 'ws';
 import { findBot } from './bots';
 import { nowSeconds, type Query } from './db';
 import {
-    botConcurrentGameCap,
-    humanConcurrentGameCap,
-    humanGameCooldownSeconds,
     type EngineSocket,
     type GameRegistry,
     type MoveErrorCode,
@@ -119,7 +119,7 @@ export function registerGameApi(app: FastifyInstance, deps: GameApiDeps): void {
             person,
             bot: { id: bot.id, name: bot.name },
             timeControl: parsed.data.timeControl,
-            openingTurns: parsed.data.openingTurns,
+            openingPlies: parsed.data.openingPlies,
         });
         const guest = person.kind === `guest` ? deps.guests.byId(person.id) : null;
         if (guest !== null) guest.lastGameCreatedAt = nowSeconds();

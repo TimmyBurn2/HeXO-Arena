@@ -1,8 +1,10 @@
 import {
     firstPlayerSchema,
+    openingPliesSchema,
     timeControlSchema,
     type ChallengeStatus,
     type FirstPlayer,
+    type OpeningPlies,
     type TimeControl,
 } from '@hexarena/contract';
 import { and, eq, lt, sql } from 'drizzle-orm';
@@ -19,7 +21,7 @@ export interface ChallengeRecord {
     readonly destName: string;
     readonly requestKey: string;
     readonly timeControl: TimeControl;
-    readonly openingTurns: number;
+    readonly openingPlies: OpeningPlies;
     readonly firstPlayer: FirstPlayer;
     readonly status: ChallengeStatus;
     readonly gameId: string | null;
@@ -31,7 +33,7 @@ export interface NewChallenge {
     readonly destBotId: string;
     readonly requestKey: string;
     readonly timeControl: TimeControl;
-    readonly openingTurns: number;
+    readonly openingPlies: OpeningPlies;
     readonly firstPlayer: FirstPlayer;
 }
 
@@ -46,7 +48,7 @@ const recordColumns = {
     destName: destBots.name,
     requestKey: challenges.requestKey,
     timeControl: challenges.timeControl,
-    openingTurns: challenges.openingTurns,
+    openingPlies: challenges.openingPlies,
     firstPlayer: challenges.firstPlayer,
     status: challenges.status,
     gameId: challenges.gameId,
@@ -61,7 +63,7 @@ function toRecord(row: {
     destName: string;
     requestKey: string;
     timeControl: string;
-    openingTurns: number;
+    openingPlies: number;
     firstPlayer: string;
     status: string;
     gameId: string | null;
@@ -77,7 +79,7 @@ function toRecord(row: {
         destName: row.destName,
         requestKey: row.requestKey,
         timeControl: timeControlSchema.parse(JSON.parse(row.timeControl)),
-        openingTurns: row.openingTurns,
+        openingPlies: openingPliesSchema.parse(row.openingPlies),
         firstPlayer: firstPlayerSchema.parse(row.firstPlayer),
         status: row.status as ChallengeStatus,
         gameId: row.gameId,
@@ -101,7 +103,7 @@ export function insertChallenge(
                 destBotId: challenge.destBotId,
                 requestKey: challenge.requestKey,
                 timeControl: JSON.stringify(challenge.timeControl),
-                openingTurns: challenge.openingTurns,
+                openingPlies: challenge.openingPlies,
                 firstPlayer: challenge.firstPlayer,
                 status: `created`,
                 createdAt: nowSeconds(),

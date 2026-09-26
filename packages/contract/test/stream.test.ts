@@ -17,6 +17,7 @@ const gameStart = {
     side: `x`,
     opponent: { name: `otherbot`, rating: 1500, provisional: true },
     timeControl: { mode: `unlimited` },
+    openingPlies: 5,
     rated: false,
     engine: { socketUrl: `/api/bot/game/g1/socket`, token: `hgs_token` },
 };
@@ -45,7 +46,7 @@ describe('streamEventSchema', () => {
                     challenger: { name: `abot`, rating: 1500, provisional: true },
                     destUser: { name: `bbot`, rating: 1500, provisional: true },
                     timeControl: { mode: `turn`, turnTimeMs: 30_000 },
-                    openingTurns: 1,
+                    openingPlies: 3,
                     firstPlayer: `challenger`,
                     status: `created`,
                 },
@@ -58,7 +59,7 @@ describe('streamEventSchema', () => {
                     challenger: { name: `abot`, rating: 1500, provisional: true },
                     destUser: { name: `bbot`, rating: 1500, provisional: true },
                     timeControl: { mode: `unlimited` },
-                    openingTurns: 0,
+                    openingPlies: 1,
                     firstPlayer: `random`,
                     status: `expired`,
                 },
@@ -70,7 +71,7 @@ describe('streamEventSchema', () => {
                     challenger: { name: `abot`, rating: 1500, provisional: true },
                     destUser: { name: `bbot`, rating: 1500, provisional: true },
                     timeControl: { mode: `unlimited` },
-                    openingTurns: 0,
+                    openingPlies: 1,
                     firstPlayer: `random`,
                     status: `declined`,
                 },
@@ -100,13 +101,11 @@ describe('streamEventSchema', () => {
         expect(challengeCanceledEventSchema.safeParse(withoutReason).success).toBe(false);
     });
 
-    it('carries the opening only when the game has one', () => {
-        const withOpening = gameStartEventSchema.parse({
-            ...gameStart,
-            opening: { randomTurns: 2 },
-        });
-        expect(withOpening.opening).toEqual({ randomTurns: 2 });
-        expect(`opening` in gameStartEventSchema.parse(gameStart)).toBe(false);
+    it('requires the opening length on every gameStart, the plain game included', () => {
+        expect(gameStartEventSchema.parse({ ...gameStart, openingPlies: 1 }).openingPlies).toBe(1);
+        expect(gameStartEventSchema.parse({ ...gameStart, openingPlies: 9 }).openingPlies).toBe(9);
+        const { openingPlies: _omitted, ...withoutOpening } = gameStart;
+        expect(gameStartEventSchema.safeParse(withoutOpening).success).toBe(false);
     });
 
     it('nulls the finish winner but keeps the reason closed', () => {

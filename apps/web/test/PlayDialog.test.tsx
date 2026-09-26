@@ -66,15 +66,23 @@ describe('PlayDialog', () => {
         renderDialog(fullAccepts);
         const advanced = document.querySelector(`details.advanced`) as HTMLDetailsElement;
         expect(advanced.open).toBe(false);
-        expect(screen.getByRole(`radio`, { name: `1` }).getAttribute(`checked`)).toBe(``);
+        expect(screen.getByRole(`radio`, { name: `5` }).getAttribute(`checked`)).toBe(``);
     });
 
-    it('state the opening truth for a zero-turn session', () => {
+    it('offer the odd opening lengths from one to nine, counted in stones with the origin', () => {
         renderDialog(fullAccepts);
-        expect(screen.getByText(/1 random turn land/)).toBeTruthy();
-        fireEvent.click(screen.getByRole(`radio`, { name: `0` }));
-        expect(screen.getByText(/The opening stone lands/)).toBeTruthy();
-        expect(screen.queryByText(/random turn/)).toBe(null);
+        expect(screen.getByRole(`group`, { name: `Opening stones, the origin included` })).toBeTruthy();
+        expect(screen.getAllByRole(`radio`).map((radio) => radio.getAttribute(`value`))).toEqual([`1`, `3`, `5`, `7`, `9`]);
+    });
+
+    it('state the opening truth in stones, the origin alone included', () => {
+        renderDialog(fullAccepts);
+        expect(screen.getByText(/The origin and 4 random stones land/)).toBeTruthy();
+        fireEvent.click(screen.getByRole(`radio`, { name: `1` }));
+        expect(screen.getByText(/Only the origin stone lands/)).toBeTruthy();
+        expect(screen.queryByText(/random stones/)).toBe(null);
+        fireEvent.click(screen.getByRole(`radio`, { name: `9` }));
+        expect(screen.getByText(/The origin and 8 random stones land/)).toBeTruthy();
     });
 
     it('announce failures to screen readers', async () => {
@@ -91,8 +99,8 @@ describe('PlayDialog', () => {
         expect(await screen.findByRole(`alert`)).toBeTruthy();
     });
 
-    it('send the chosen clock and opening turns, then navigate to the game', async () => {
-        const calls: { url: string; body: { bot: string; timeControl: unknown; openingTurns: number } | null }[] = [];
+    it('send the chosen clock and opening length, then navigate to the game', async () => {
+        const calls: { url: string; body: { bot: string; timeControl: unknown; openingPlies: number } | null }[] = [];
         vi.stubGlobal(
             `fetch`,
             vi.fn((url: string | URL, init?: RequestInit) => {
@@ -100,7 +108,7 @@ describe('PlayDialog', () => {
                     url: String(url),
                     body:
                         init !== undefined && typeof init.body === `string`
-                            ? (JSON.parse(init.body) as { bot: string; timeControl: unknown; openingTurns: number } | null)
+                            ? (JSON.parse(init.body) as { bot: string; timeControl: unknown; openingPlies: number } | null)
                             : null,
                 });
                 return Promise.resolve(
@@ -109,7 +117,7 @@ describe('PlayDialog', () => {
                             gameId: `g-1`,
                             you: `o`,
                             opponent: { name: `sealbot`, rating: 1712, provisional: false },
-                            openingTurns: 0,
+                            openingPlies: 1,
                             board: { cells: [{ x: 0, y: 0, side: `x` }] },
                             status: `in-progress`,
                             toMove: `o`,
@@ -129,7 +137,7 @@ describe('PlayDialog', () => {
         expect(request?.url).toBe(`/api/games`);
         expect(request?.body?.bot).toBe(`sealbot`);
         expect(request?.body?.timeControl).toEqual({ mode: `turn`, turnTimeMs: 10000 });
-        expect(request?.body?.openingTurns).toBe(1);
+        expect(request?.body?.openingPlies).toBe(5);
     });
 
     it('render the contract failure as one plain sentence', async () => {

@@ -10,6 +10,7 @@ import {
     challengeAcceptPath,
     challengeCancelPath,
     challengeDeclinePath,
+    defaultOpeningPlies,
     discordCallbackPath,
     discordLoginPath,
     gameMovePath,
@@ -23,11 +24,22 @@ import { buildOpenApiDocument } from '../src/openapi';
 
 // The generated response types degrade to any (index-signature hack in
 // openapi3-ts), so probes dig structurally instead of trusting the types.
+// Probes read through local $refs: where a shape is defined is the
+// document's layout, not its contract.
+const root = buildOpenApiDocument();
+
+function follow(value: unknown): unknown {
+    if (typeof value !== `object` || value === null) return value;
+    const ref: unknown = Reflect.get(value, `$ref`);
+    if (typeof ref !== `string`) return value;
+    return dig(root, ...ref.replace(`#/`, ``).split(`/`));
+}
+
 function dig(value: unknown, ...keys: string[]): unknown {
-    let current: unknown = value;
+    let current: unknown = follow(value);
     for (const key of keys) {
         if (typeof current !== `object` || current === null) return undefined;
-        current = Reflect.get(current, key) as unknown;
+        current = follow(Reflect.get(current, key) as unknown);
     }
     return current;
 }
@@ -39,12 +51,99 @@ function oneOf(schema: unknown): unknown[] {
     return Array.isArray(variants) ? (variants as unknown[]) : [];
 }
 
+function visitObjects(value: unknown, visit: (node: object) => void): void {
+    if (typeof value !== `object` || value === null) return;
+    visit(value);
+    Object.entries(value).forEach(([, child]: [string, unknown]) => {
+        visitObjects(child, visit);
+    });
+}
+
+function operationsIn(document: unknown): [string, unknown][] {
+    const paths = dig(document, `paths`);
+    if (typeof paths !== `object` || paths === null) return [];
+    return Object.entries(paths).flatMap(([path, item]: [string, unknown]) =>
+        typeof item === `object` && item !== null
+            ? Object.entries(item).map(([method, operation]: [string, unknown]): [string, unknown] => [
+                  `${method} ${path}`,
+                  operation,
+              ])
+            : [],
+    );
+}
+
+function repeatsIn(values: readonly string[]): string[] {
+    return values.filter((value, index) => values.indexOf(value) !== index);
+}
+
+const operationDescriptionWordLimit = 60;
+
 function arrayOfUnknown(value: unknown): unknown[] {
     // Array.isArray narrows unknown to any[]; this rebuilds the unknown[] view.
     return Array.isArray(value) ? (value as unknown[]) : [];
 }
 
 describe('openapi document', () => {
+    it('resolves every $ref to a component the document defines', () => {
+        const document = buildOpenApiDocument();
+        const refs: string[] = [];
+        visitObjects(document, (node) => {
+            const ref: unknown = Reflect.get(node, `$ref`);
+            if (typeof ref === `string`) refs.push(ref);
+        });
+        expect(refs.length).toBeGreaterThan(0);
+        for (const ref of refs) {
+            expect(dig(document, ...ref.replace(`#/`, ``).split(`/`)), ref).toBeDefined();
+        }
+    });
+
+    it('repeats no description text', () => {
+        const descriptions: string[] = [];
+        visitObjects(buildOpenApiDocument(), (node) => {
+            const description: unknown = Reflect.get(node, `description`);
+            if (typeof description === `string`) descriptions.push(description);
+        });
+        expect(descriptions.length).toBeGreaterThan(0);
+        expect(repeatsIn(descriptions)).toEqual([]);
+    });
+
+    it(`keeps every operation description to ${String(operationDescriptionWordLimit)} words or fewer`, () => {
+        const operations = operationsIn(buildOpenApiDocument());
+        expect(operations.length).toBeGreaterThan(0);
+        for (const [name, operation] of operations) {
+            const description = dig(operation, `description`);
+            const words = typeof description === `string` ? description.split(/\s+/).filter((word) => word !== ``) : [];
+            expect(words.length, name).toBeLessThanOrEqual(operationDescriptionWordLimit);
+        }
+    });
+
+    it('inlines no schema with properties in more than one place outside components', () => {
+        const inlined: string[] = [];
+        visitObjects(dig(buildOpenApiDocument(), `paths`), (node) => {
+            if (`properties` in node) inlined.push(JSON.stringify(node));
+        });
+        expect(inlined.length).toBeGreaterThan(0);
+        expect(repeatsIn(inlined)).toEqual([]);
+    });
+
+    it('names the opening length as an integer enum component without a default', () => {
+        const component = dig(buildOpenApiDocument(), `components`, `schemas`, `OpeningPlies`);
+        expect(dig(component, `type`)).toBe(`integer`);
+        expect(dig(component, `enum`)).toEqual([1, 3, 5, 7, 9]);
+        expect(dig(component, `default`)).toBeUndefined();
+    });
+
+    it('defaults the opening length to five plies on both creation requests', () => {
+        const document = buildOpenApiDocument();
+        for (const path of [botChallengePath, gamesPath]) {
+            const field = dig(document, `paths`, path, `post`, `requestBody`, `content`, `application/json`, `schema`, `properties`, `openingPlies`);
+            const parts = arrayOfUnknown(dig(field, `allOf`));
+            const refs = parts.map((part): unknown => (typeof part === `object` && part !== null ? Reflect.get(part, `$ref`) : undefined));
+            expect(refs).toContain(`#/components/schemas/OpeningPlies`);
+            expect(parts.map((part) => dig(part, `default`))).toContain(defaultOpeningPlies);
+        }
+    });
+
     it('documents the healthz route', () => {
         const document = buildOpenApiDocument();
         expect('/healthz' in document.paths).toBe(true);

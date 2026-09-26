@@ -3,10 +3,25 @@ import type { AxialCoord, BoardCell, PlayerColor, WinLine } from '@hexarena/cont
 import {
     axialCoordSchema,
     boardSnapshotSchema,
+    openingPliesSchema,
+    openingPliesValues,
+    openingRadius as contractOpeningRadius,
+    openingThreatStones,
+    openingWindowCells,
     winLineSchema,
 } from '@hexarena/contract';
 import type { Coord, Player, Position, Stone, Win } from '../src';
-import { emptyPosition, place, winner } from '../src';
+import {
+    drawOpening,
+    emptyPosition,
+    hexDistance,
+    isBalancedOpening,
+    maxOpeningPlies,
+    openingRadius,
+    openingRegion,
+    place,
+    winner,
+} from '../src';
 
 // The wire types must stay assignable to the engine's domain types in the
 // direction the server converts: parsed wire data flows into engine calls.
@@ -68,5 +83,35 @@ describe('contract compatibility', () => {
         });
         expect(wire.player).toBe(0);
         expect(wire.cells.map((cell) => cell.x)).toEqual([0, 1, 2, 3, 4, 5]);
+    });
+
+    it('draws on the region radius the contract states', () => {
+        expect(openingRadius).toBe(contractOpeningRadius);
+        const distances = openingRegion.map((cell) => hexDistance(cell, { x: 0, y: 0 }));
+        expect(Math.max(...distances)).toBe(contractOpeningRadius);
+    });
+
+    it('draws exactly the opening lengths the contract accepts', () => {
+        expect(maxOpeningPlies).toBe(Math.max(...openingPliesValues));
+        for (let plies = 0; plies <= maxOpeningPlies + 2; plies += 1) {
+            if (openingPliesSchema.safeParse(plies).success) {
+                expect(drawOpening(plies, () => 0).stones).toHaveLength(plies);
+            } else {
+                expect(() => drawOpening(plies, () => 0)).toThrow(RangeError);
+            }
+        }
+    });
+
+    it('rejects the threat the contract states and nothing shorter or wider', () => {
+        // All but one stone packed from x = 0, the last at the given x.
+        const row = (count: number, lastX: number): Position => ({
+            stones: [
+                ...Array.from({ length: count - 1 }, (_, x) => ({ x, y: 5, player: 1 as const })),
+                { x: lastX, y: 5, player: 1 },
+            ],
+        });
+        expect(isBalancedOpening(row(openingThreatStones, openingWindowCells - 1))).toBe(false);
+        expect(isBalancedOpening(row(openingThreatStones, openingWindowCells))).toBe(true);
+        expect(isBalancedOpening(row(openingThreatStones - 1, openingWindowCells - 1))).toBe(true);
     });
 });
