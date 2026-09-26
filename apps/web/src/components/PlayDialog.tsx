@@ -1,7 +1,6 @@
 import { useMemo, useState } from 'react';
 import {
     defaultOpeningPlies,
-    discordLoginPath,
     openingPliesValues,
     type Accepts,
     type OpeningPlies,
@@ -9,6 +8,7 @@ import {
 } from '@hexarena/contract';
 import { createGame, ApiError } from '../api/client';
 import { Dialog } from './Dialog';
+import { DiscordSignIn } from './DiscordButton';
 import { meStore, useMe } from '../me';
 import { navigate } from '../router/use-route';
 import './PlayDialog.css';
@@ -36,6 +36,10 @@ const errorSentences: Record<string, (name: string) => string> = {
 };
 
 const guestLimitSentence = `Too many guests right now; try in a minute or sign in`;
+
+// A refused session is its own failure, since it swaps the start action
+// for the sign-in rather than only saying what went wrong.
+type Failure = { kind: `message`; text: string } | { kind: `sign-in` };
 
 /** The accepted turn window as a pair, or null when turn clocks are out. */
 export function turnWindowOf(accepts: Accepts | undefined): readonly [number, number] | null {
@@ -78,7 +82,7 @@ export function PlayDialog({ bot, open, onClose }: { bot: PlayableBot; open: boo
     const [mainMinutes, setMainMinutes] = useState(defaultMainMinutes);
     const [incrementSeconds, setIncrementSeconds] = useState(defaultIncrementSeconds);
     const [openingPlies, setOpeningPlies] = useState<OpeningPlies>(defaultOpeningPlies);
-    const [failure, setFailure] = useState<string | null>(null);
+    const [failure, setFailure] = useState<Failure | null>(null);
     const [sending, setSending] = useState(false);
     const me = useMe();
     const signedOut = me.status === `ready` && me.me === null;
@@ -96,11 +100,13 @@ export function PlayDialog({ bot, open, onClose }: { bot: PlayableBot; open: boo
         try {
             await meStore.guest();
         } catch (cause) {
-            setFailure(
-                cause instanceof ApiError && cause.code === `guest_limit`
-                    ? guestLimitSentence
-                    : `The guest session did not start; try again`,
-            );
+            setFailure({
+                kind: `message`,
+                text:
+                    cause instanceof ApiError && cause.code === `guest_limit`
+                        ? guestLimitSentence
+                        : `The guest session did not start; try again`,
+            });
             setSending(false);
             return;
         }
@@ -123,11 +129,14 @@ export function PlayDialog({ bot, open, onClose }: { bot: PlayableBot; open: boo
         } catch (cause) {
             const sentence = cause instanceof ApiError && cause.code !== null ? errorSentences[cause.code] : undefined;
             if (sentence !== undefined) {
-                setFailure(sentence(bot.name));
+                setFailure({ kind: `message`, text: sentence(bot.name) });
             } else if (cause instanceof ApiError && cause.status === 401) {
-                setFailure(`Sign in to start a game`);
+                // The session ended on the server; asking again lets the
+                // top bar and this dialog show the visitor as signed out.
+                setFailure({ kind: `sign-in` });
+                void meStore.refresh();
             } else {
-                setFailure(`The game could not start; try again`);
+                setFailure({ kind: `message`, text: `The game could not start; try again` });
             }
             setSending(false);
         }
@@ -277,14 +286,7 @@ export function PlayDialog({ bot, open, onClose }: { bot: PlayableBot; open: boo
             </p>
             {failure !== null ? (
                 <p className="field-error" role="alert">
-                    {failure}
-                </p>
-            ) : null}
-            {failure === `Sign in to start a game` ? (
-                <p>
-                    <a className="btn btn-ghost btn-sm" href={discordLoginPath}>
-                        Sign in with Discord
-                    </a>
+                    {failure.kind === `message` ? failure.text : `Sign in to start a game`}
                 </p>
             ) : null}
             {guestName === null ? null : <p className="note">You play as {guestName}; guest games are unrated.</p>}
@@ -295,11 +297,11 @@ export function PlayDialog({ bot, open, onClose }: { bot: PlayableBot; open: boo
                         <button type="button" className="btn btn-primary" disabled={sending} onClick={() => void startAsGuest()}>
                             Play as guest
                         </button>
-                        <a className="btn btn-ghost" href={discordLoginPath}>
-                            Sign in with Discord
-                        </a>
                     </p>
+                    <DiscordSignIn />
                 </>
+            ) : failure?.kind === `sign-in` ? (
+                <DiscordSignIn />
             ) : (
                 <p>
                     <button type="button" className="btn btn-primary" disabled={sending} onClick={() => void start()}>

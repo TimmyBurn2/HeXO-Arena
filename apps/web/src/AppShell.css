@@ -25,6 +25,7 @@
     }
 
     .topbar-inner {
+        position: relative;
         max-width: var(--shell-max);
         margin: 0 auto;
         height: var(--header-h);
@@ -72,6 +73,10 @@
     }
 
     .nav-right {
+        display: flex;
+        align-items: center;
+        gap: var(--space-2);
+        min-width: 0;
         margin-left: auto;
     }
 
@@ -79,8 +84,23 @@
         display: inline-flex;
         align-items: center;
         gap: var(--space-2);
+        min-width: 0;
         min-height: var(--control-md);
         color: var(--c-text);
+    }
+
+    /* A name runs to 30 characters, more than the bar can spare beside
+       the nav, so it gives way before the gear or the page does. */
+    .identity-label {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .settings-gear,
+    .monogram,
+    .identity .tag {
+        flex: none;
     }
 
     .monogram {
@@ -132,6 +152,31 @@
     .tabbar .tab-link.active {
         color: var(--c-text);
         box-shadow: inset 0 var(--focus-w) 0 0 var(--c-accent);
+    }
+
+    /* The nav links return at the phone breakpoint and share the row
+       with the gear and who is here, so who is here folds into the
+       monogram; the words stay in the link's name. */
+    @media (max-width: 40rem) {
+        .identity-label,
+        .identity .tag {
+            position: absolute;
+            width: var(--border-w);
+            height: var(--border-w);
+            overflow: hidden;
+            clip-path: inset(50%);
+        }
+    }
+
+    /* Where the nav links sit beside them, the row tightens too. */
+    @media (30rem < width <= 40rem) {
+        .topbar-inner {
+            gap: var(--space-2);
+        }
+
+        .nav-link {
+            padding: 0 var(--space-2);
+        }
     }
 
     @media (max-width: 30rem) {

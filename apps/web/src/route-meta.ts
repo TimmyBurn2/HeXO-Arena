@@ -35,7 +35,12 @@ export function routeMeta(route: Route): RouteMeta {
         case `profile`:
             return {
                 title: `Profile - hexarena`,
-                description: `sign in and set your board rendering`,
+                description: `your identity, your bots, and sign-out`,
+            };
+        case `credits`:
+            return {
+                title: `Credits - hexarena`,
+                description: `where the community themes come from, and their licenses`,
             };
         case `game`:
             return {

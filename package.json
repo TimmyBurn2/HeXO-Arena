@@ -12,7 +12,7 @@
         "dev:compose": "docker compose up --build",
         "dev:bots": "pnpm --filter @hexarena/dev-bots start",
         "build": "pnpm -r --if-present build",
-        "test": "pnpm -r --if-present test",
+        "test": "node --test scripts/*.test.mjs && pnpm -r --if-present test",
         "e2e": "pnpm --filter @hexarena/web e2e",
         "typecheck": "pnpm -r --if-present typecheck",
         "lint": "eslint .",

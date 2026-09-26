@@ -17,6 +17,8 @@
     .tag,
     .skeleton,
     .nav-link,
+    .discord-face,
+    .discord-button::before,
     kbd,
     .clock,
     input[type='text'] {
@@ -74,8 +76,21 @@
     .hud-exit,
     .hud-toggle,
     .drawer-close,
-    .drawer-tab {
+    .drawer-tab,
+    .settings-gear,
+    .settings-close,
+    .theme-card,
+    .theme-swatch {
         clip-path: var(--cut-sm-path);
+    }
+
+    .settings-panel {
+        clip-path: var(--cut-md-path);
+    }
+
+    /* The sheet meets the screen's own edges, which leave nothing to cut. */
+    .settings[data-mode='sheet'] .settings-panel {
+        clip-path: none;
     }
 
     .rung.r1 {
@@ -96,6 +111,8 @@
     .hud-toggle:focus-visible,
     .drawer-close:focus-visible,
     .drawer-tab:focus-visible,
+    .settings-gear:focus-visible,
+    .settings-close:focus-visible,
     .pill:focus-visible,
     .seg-btn:focus-visible,
     .nav-link:focus-visible,
@@ -105,6 +122,13 @@
     .opt input:focus-visible + label {
         outline: var(--focus-w) solid var(--c-focus);
         outline-offset: calc(-1 * var(--focus-w));
+    }
+
+    /* A checked card already wears an accent frame, so its focus ring
+       sits a gap further in. */
+    .theme-card:has(input:focus-visible) {
+        outline: var(--focus-w) solid var(--c-focus);
+        outline-offset: calc(-3 * var(--focus-w));
     }
 
     /* The focus color is the accent, so on an accent fill the ring

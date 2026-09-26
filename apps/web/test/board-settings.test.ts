@@ -16,10 +16,11 @@ describe('parseBoardSettings', () => {
     });
 
     it('keep the stored choices', () => {
-        const parsed = parseBoardSettings(
-            JSON.stringify({ numbers: true, coords: true }),
-        );
-        expect(parsed).toEqual({ numbers: true, coords: true });
+        expect(parseBoardSettings(JSON.stringify({ numbers: true, glare: false }))).toEqual({ numbers: true, glare: false });
+    });
+
+    it('ignore the edge coordinates choice stored by earlier versions', () => {
+        expect(parseBoardSettings(JSON.stringify({ numbers: true, coords: true }))).toEqual({ numbers: true, glare: true });
     });
 
     it('drop the palette and stone style stored by earlier versions', () => {
@@ -27,8 +28,8 @@ describe('parseBoardSettings', () => {
         expect(parsed).toEqual({ ...defaultBoardSettings, numbers: true });
     });
 
-    it('treat absent booleans as false', () => {
-        expect(parseBoardSettings(JSON.stringify({}))).toEqual(defaultBoardSettings);
+    it('treat absent numbers as off and absent glare as on', () => {
+        expect(parseBoardSettings(JSON.stringify({}))).toEqual({ numbers: false, glare: true });
     });
 });
 
@@ -39,8 +40,17 @@ describe('boardSettingsStore', () => {
     });
 
     it('persist updates to localStorage', () => {
-        boardSettingsStore.update({ coords: true });
-        expect(window.localStorage.getItem(`hexarena.board-rendering.v1`)).toContain(`"coords":true`);
+        boardSettingsStore.update({ numbers: true });
+        expect(window.localStorage.getItem(`hexarena.board-rendering.v1`)).toBe(`{"numbers":true,"glare":true}`);
+    });
+
+    it('put the glare choice on the root, where every stone and preview reads it', () => {
+        expect(document.documentElement.dataset.glare).toBe(`on`);
+        boardSettingsStore.update({ glare: false });
+        expect(document.documentElement.dataset.glare).toBe(`off`);
+        delete document.documentElement.dataset.glare;
+        boardSettingsStore.start();
+        expect(document.documentElement.dataset.glare).toBe(`off`);
     });
 
     it('read back what was written', () => {
@@ -53,9 +63,9 @@ describe('boardSettingsStore', () => {
         const unsubscribe = boardSettingsStore.subscribe(() => {
             notified += 1;
         });
-        boardSettingsStore.update({ coords: true });
+        boardSettingsStore.update({ numbers: true });
         unsubscribe();
-        boardSettingsStore.update({ coords: false });
+        boardSettingsStore.update({ numbers: false });
         expect(notified).toBe(1);
     });
 });

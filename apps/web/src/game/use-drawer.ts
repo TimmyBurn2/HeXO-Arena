@@ -1,7 +1,7 @@
 import { useCallback, useState, useSyncExternalStore } from 'react';
 import { readStored, writeStored } from '../stored';
 
-export type DrawerTab = `moves` | `board` | `game`;
+export type DrawerTab = `moves` | `game`;
 
 // How the drawer came open: by hand it takes the keyboard, by hovering
 // the edge it leaves the keyboard on the board.

@@ -3,7 +3,6 @@ import type { AxialCoord } from '@hexarena/contract';
 import { isWithinPlacementRadius } from '@hexarena/rules';
 import {
     cellPoints,
-    coordLabels,
     frontierCells,
     frontierOutline,
     hexCenter,
@@ -108,18 +107,6 @@ describe('viewBoxOf', () => {
         const box = viewBoxOf([origin, { x: 4, y: 0 }]);
         expect(box.x).toBeLessThan(0);
         expect(box.w).toBeGreaterThan(4 * Math.sqrt(3) * 28);
-    });
-});
-
-describe('coordLabels', () => {
-    it('label both axes once with their letters', () => {
-        const labels = coordLabels(frontierCells([origin]));
-        expect(labels.map((label) => label.text)).toEqual([`-8`, `x`, `y`, `8`]);
-    });
-
-    it('carry the anchor extremes of the middle row and near column', () => {
-        const labels = coordLabels(frontierCells([{ x: 3, y: 0 }, { x: 0, y: -2 }]));
-        expect(labels.map((label) => label.text)).toEqual([`-8`, `x`, `y`, `8`]);
     });
 });
 

@@ -205,7 +205,7 @@ function GameView({ snapshot, send, link }: { snapshot: GameSnapshot; send: Game
                         className="hud-chip hud-toggle"
                         aria-expanded={drawer.visible}
                         aria-controls="game-drawer"
-                        aria-label="Moves, look, and game"
+                        aria-label="Moves and game"
                         onClick={drawer.toggle}
                     >
                         <svg viewBox="0 0 24 24" aria-hidden="true">

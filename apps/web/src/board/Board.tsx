@@ -3,10 +3,10 @@ import type { AxialCoord, Side } from '@hexarena/contract';
 import type { BoardSettings } from './board-settings';
 import {
     cellPoints,
-    coordLabels,
     frontierCells,
     frontierOutline,
     hexCenter,
+    markPoints,
     ringPoints,
     stonePoints,
     viewBoxOf,
@@ -53,9 +53,43 @@ const Ring = memo(function Ring({ className, coord }: { className: string; coord
     return <polygon className={className} points={ringPoints()} transform={translate(cx, cy)} />;
 });
 
-// Two fixed layers per stone, a body with a rim stroke and a shine above
-// it; themes reach both through effect slots, so a glare or an outline
-// needs no change here.
+/**
+ * A stone at the origin in three fixed layers, a body with a rim stroke, a
+ * shine, and an inset mark; themes reach each through effect slots, so a
+ * glare, an outline, or a mark needs no change here.
+ * `shine` names the gradients a {@link ShineDefs} in the same svg defines.
+ */
+export function StoneArt({ side, shine }: { side: Side; shine: string }) {
+    return (
+        <g className="stone-art">
+            <polygon className={`body b-${side}`} points={stonePoints()} />
+            <polygon className="shine" points={stonePoints()} fill={`url(#${shine}-${side})`} />
+            <polygon className={`stone-mark m-${side}`} points={markPoints()} />
+        </g>
+    );
+}
+
+/**
+ * The glare gradients for one svg, one per side; the stop colors and the
+ * strength come from the theme's shine slots.
+ * The highlight sits high on the stone's upper left and fades within half
+ * its width, so it reads as a glare rather than a wash.
+ */
+export function ShineDefs({ id }: { id: string }) {
+    return (
+        <defs>
+            {([`x`, `o`] as const).map((side) => (
+                <radialGradient key={side} id={`${id}-${side}`} cx="0.33" cy="0.27" r="0.5">
+                    <stop className={`shine-stop shine-${side}`} offset="0" />
+                    <stop className={`shine-stop shine-${side} shine-fade`} offset="1" />
+                </radialGradient>
+            ))}
+        </defs>
+    );
+}
+
+// The placement animation scales the art inside, since a css transform on
+// this group would replace its translate.
 const Stone = memo(function Stone({ stone, fresh, shine }: { stone: BoardStone; fresh: boolean; shine: string }) {
     const { cx, cy } = hexCenter(stone);
     return (
@@ -65,16 +99,18 @@ const Stone = memo(function Stone({ stone, fresh, shine }: { stone: BoardStone; 
             data-y={stone.y}
             transform={translate(cx, cy)}
         >
-            {/* the placement animation scales this inner group, since a css
-                transform on the outer one would replace its translate */}
-            <g className="stone-art">
-                <polygon className={`body b-${stone.side}`} points={stonePoints()} />
-                <polygon className="shine" points={stonePoints()} fill={`url(#${shine}-${stone.side})`} />
-            </g>
-            <text className={`number n-${stone.side}`} dy="0.35em">
-                {String(stone.number)}
-            </text>
+            <StoneArt side={stone.side} shine={shine} />
         </g>
+    );
+});
+
+// `cut` draws the digit into the win line's mask rather than onto its stone.
+const StoneNumber = memo(function StoneNumber({ stone, cut = false }: { stone: BoardStone; cut?: boolean }) {
+    const { cx, cy } = hexCenter(stone);
+    return (
+        <text className={`number ${cut ? `cut` : `n-${stone.side}`}`} dy="0.35em" transform={translate(cx, cy)}>
+            {String(stone.number)}
+        </text>
     );
 });
 
@@ -88,11 +124,14 @@ export function Board({ stones, settings, label, overlays, scale, onCellClick }:
     const cells = useMemo(() => frontierCells(stones), [stones]);
     const outline = useMemo(() => frontierOutline(cells), [cells]);
     const viewBox = useMemo(() => viewBoxOf(cells), [cells]);
-    const labels = useMemo(() => (settings.coords ? coordLabels(cells) : []), [settings.coords, cells]);
     const shine = `shine${useId().replace(/:/g, ``)}`;
+    const cut = `cut${useId().replace(/:/g, ``)}`;
     // Stones present at first render are history; only later ones animate in.
     const settled = useRef(stones.length);
     const freshKeys = new Set(stones.slice(settled.current).map((stone) => `${String(stone.x)},${String(stone.y)}`));
+    const winLine = overlays?.winLine;
+    const winKeys = new Set(winLine?.map((coord) => `${String(coord.x)},${String(coord.y)}`));
+    const crossed = settings.numbers ? stones.filter((stone) => winKeys.has(`${String(stone.x)},${String(stone.y)}`)) : [];
 
     function handleClick(event: React.MouseEvent<SVGSVGElement>) {
         if (onCellClick === undefined) return;
@@ -108,11 +147,7 @@ export function Board({ stones, settings, label, overlays, scale, onCellClick }:
 
     const pending = overlays?.pending;
     return (
-        <div
-            className="board-frame"
-            {...(settings.numbers ? { 'data-numbers': `` } : {})}
-            {...(settings.coords ? { 'data-coords': `` } : {})}
-        >
+        <div className="board-frame" {...(settings.numbers ? { 'data-numbers': `` } : {})}>
             <svg
                 className="board-svg"
                 viewBox={`${viewBox.x.toFixed(2)} ${viewBox.y.toFixed(2)} ${viewBox.w.toFixed(2)} ${viewBox.h.toFixed(2)}`}
@@ -122,14 +157,17 @@ export function Board({ stones, settings, label, overlays, scale, onCellClick }:
                 {...(scale === undefined ? {} : { width: viewBox.w * scale, height: viewBox.h * scale })}
                 onClick={onCellClick === undefined ? undefined : handleClick}
             >
-                <defs>
-                    {([`x`, `o`] as const).map((side) => (
-                        <radialGradient key={side} id={`${shine}-${side}`} cx="0.35" cy="0.3" r="0.7">
-                            <stop className={`shine-stop shine-${side}`} offset="0" />
-                            <stop className={`shine-stop shine-${side} shine-fade`} offset="1" />
-                        </radialGradient>
-                    ))}
-                </defs>
+                <ShineDefs id={shine} />
+                {crossed.length > 0 && (
+                    <defs>
+                        <mask id={cut} maskUnits="userSpaceOnUse" x={viewBox.x} y={viewBox.y} width={viewBox.w} height={viewBox.h}>
+                            <rect className="cut-keep" x={viewBox.x} y={viewBox.y} width={viewBox.w} height={viewBox.h} />
+                            {crossed.map((stone) => (
+                                <StoneNumber key={`${String(stone.x)},${String(stone.y)}`} stone={stone} cut />
+                            ))}
+                        </mask>
+                    </defs>
+                )}
                 {cells.map((cell) => (
                     <Cell key={`${String(cell.x)},${String(cell.y)}`} cell={cell} />
                 ))}
@@ -160,20 +198,21 @@ export function Board({ stones, settings, label, overlays, scale, onCellClick }:
                         coord={coord}
                     />
                 ))}
-                {overlays?.winLine !== undefined && (
-                    <polyline className="win-line" points={winLinePoints(overlays.winLine)} />
+                {winLine !== undefined && (
+                    // The casing keeps the line legible where it crosses
+                    // stones as light or as dark as the line itself; with
+                    // numbers on, both are cut away around the digits they
+                    // cross, so each reads whole on its own stone.
+                    <g className="win" mask={crossed.length > 0 ? `url(#${cut})` : undefined}>
+                        <polyline className="win-casing" points={winLinePoints(winLine)} />
+                        <polyline className="win-line" points={winLinePoints(winLine)} />
+                    </g>
                 )}
-                {labels.map((coord) => (
-                    <text
-                        key={`coord,${coord.text},${coord.x.toFixed(2)},${coord.y.toFixed(2)}`}
-                        className="coord"
-                        x={coord.x.toFixed(2)}
-                        y={coord.y.toFixed(2)}
-                        dy="0.35em"
-                    >
-                        {coord.text}
-                    </text>
-                ))}
+                <g className="numbers">
+                    {stones.map((stone) => (
+                        <StoneNumber key={`${String(stone.x)},${String(stone.y)}`} stone={stone} />
+                    ))}
+                </g>
             </svg>
         </div>
     );

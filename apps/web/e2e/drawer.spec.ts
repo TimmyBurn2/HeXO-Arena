@@ -66,3 +66,27 @@ for (const layout of [
         expect(await page.evaluate(() => document.querySelector(`.stage`)?.getBoundingClientRect().height)).toBe(layout.height);
     });
 }
+
+// On a phone the sheet stands in for the drawer: its half state reaches
+// both tabs, and the Moves header's switches keep a finger's target.
+for (const who of [{ name: `seated`, me: undefined }, { name: `watching`, me: null }] as const) {
+    test(`the phone sheet reaches Moves with its aids and Game, ${who.name}`, async ({ page }) => {
+        await page.setViewportSize({ width: 390, height: 844 });
+        await serve(page, who.me === undefined ? world() : world({ me: who.me }));
+        await page.goto(`/game/running`);
+        await page.locator(`svg polygon.cell`).first().waitFor();
+        await page.getByRole(`button`, { name: `Open the game panel` }).click();
+        await expect(page.getByRole(`tab`)).toHaveText([`Moves`, `Game`]);
+        const numbers = page.getByRole(`switch`, { name: `Stone numbers` });
+        await expect(numbers).toBeVisible();
+        const row = await page.locator(`.moves-head .checkline`).first().boundingBox();
+        expect(row === null ? 0 : row.height).toBeGreaterThanOrEqual(44);
+        await page.locator(`.moves-head .checkline`).first().click();
+        await expect(numbers).toBeChecked();
+        await expect(page.locator(`.board-frame`)).toHaveAttribute(`data-numbers`, ``);
+        await page.getByRole(`tab`, { name: `Game` }).click();
+        await expect(page.getByRole(`tabpanel`)).toContainText(`Clock`);
+        await page.getByRole(`tab`, { name: `Game` }).press(`ArrowLeft`);
+        await expect(page.getByRole(`tab`, { name: `Moves` })).toHaveAttribute(`aria-selected`, `true`);
+    });
+}

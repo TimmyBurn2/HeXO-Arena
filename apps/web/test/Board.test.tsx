@@ -3,9 +3,9 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
 import { Board, type BoardStone } from '../src/board/Board';
 import { defaultBoardSettings } from '../src/board/board-settings';
-import { previewStones } from '../src/board/preview-position';
+import { midGameStones } from './mid-game';
 
-const stones: readonly BoardStone[] = previewStones;
+const stones: readonly BoardStone[] = midGameStones;
 
 afterEach(() => {
     cleanup();
@@ -26,7 +26,7 @@ describe('Board', () => {
         expect(frame.querySelectorAll(`g.stone.s-x`).length).toBe(
             stones.filter((stone) => stone.side === `x`).length,
         );
-        expect(frame.querySelector(`g.stone .number`)?.textContent).toBe(`1`);
+        expect(frame.querySelector(`.numbers .number`)?.textContent).toBe(`1`);
     });
 
     it('render every stone as a hexagon matching its cell', () => {
@@ -35,19 +35,15 @@ describe('Board', () => {
         expect(frame.querySelectorAll(`g.stone circle`).length).toBe(0);
     });
 
-    it('leave the overlay attributes off by default', () => {
+    it('leave the numbers attribute off by default', () => {
         const frame = frameOf(<Board stones={stones} settings={defaultBoardSettings} label="test board" />);
         expect(frame.hasAttribute(`data-numbers`)).toBe(false);
-        expect(frame.hasAttribute(`data-coords`)).toBe(false);
     });
 
-    it('set the overlay attributes only when the overlays are on', () => {
-        const frame = frameOf(
-            <Board stones={stones} settings={{ ...defaultBoardSettings, numbers: true, coords: true }} label="test board" />,
-        );
+    it('set the numbers attribute only when numbers are on, and draw no edge labels', () => {
+        const frame = frameOf(<Board stones={stones} settings={{ ...defaultBoardSettings, numbers: true }} label="test board" />);
         expect(frame.hasAttribute(`data-numbers`)).toBe(true);
-        expect(frame.hasAttribute(`data-coords`)).toBe(true);
-        expect(frame.querySelectorAll(`text.coord`).length).toBe(4);
+        expect(frame.querySelectorAll(`text:not(.number)`).length).toBe(0);
     });
 
     it('draw the pending, focus, and last-move rings where asked', () => {
@@ -81,6 +77,51 @@ describe('Board', () => {
         expect((line?.getAttribute(`points`) ?? ``).split(` `)).toHaveLength(3);
     });
 
+    it('lay the win line on a casing along the same path', () => {
+        const frame = frameOf(
+            <Board
+                stones={stones}
+                settings={defaultBoardSettings}
+                label="test board"
+                overlays={{ winLine: [{ x: 1, y: 0 }, { x: 2, y: 0 }, { x: 3, y: 0 }] }}
+            />,
+        );
+        const [casing, line] = frame.querySelectorAll(`polyline`);
+        expect(casing?.getAttribute(`class`)).toBe(`win-casing`);
+        expect(line?.getAttribute(`class`)).toBe(`win-line`);
+        expect(casing?.getAttribute(`points`)).toBe(line?.getAttribute(`points`));
+    });
+
+    it('keep stone numbers above the win line', () => {
+        const frame = frameOf(
+            <Board
+                stones={stones}
+                settings={{ ...defaultBoardSettings, numbers: true }}
+                label="test board"
+                overlays={{ winLine: [{ x: 1, y: 0 }, { x: 2, y: 0 }] }}
+            />,
+        );
+        const order = [...frame.querySelectorAll(`polyline.win-line, g.numbers`)].map((node) => node.getAttribute(`class`));
+        expect(order).toEqual([`win-line`, `numbers`]);
+    });
+
+    it('cut the win line around exactly the numbers it crosses, only while numbers show', () => {
+        const line = stones.slice(0, 2).map(({ x, y }) => ({ x, y }));
+        const numbered = frameOf(
+            <Board stones={stones} settings={{ ...defaultBoardSettings, numbers: true }} label="test board" overlays={{ winLine: line }} />,
+        );
+        const mask = numbered.querySelector(`mask`);
+        expect([...(mask?.querySelectorAll(`text.number.cut`) ?? [])].map((node) => node.textContent)).toEqual(
+            stones.slice(0, 2).map((stone) => String(stone.number)),
+        );
+        expect(numbered.querySelector(`g.win`)?.getAttribute(`mask`)).toBe(`url(#${mask?.id ?? ``})`);
+        expect(numbered.querySelectorAll(`.numbers text.number`)).toHaveLength(stones.length);
+        cleanup();
+        const plain = frameOf(<Board stones={stones} settings={defaultBoardSettings} label="test board" overlays={{ winLine: line }} />);
+        expect(plain.querySelector(`mask`)).toBeNull();
+        expect(plain.querySelector(`g.win`)?.hasAttribute(`mask`)).toBe(false);
+    });
+
     it('report clicked cells by coordinate', () => {
         const clicked: { x: number; y: number }[] = [];
         const frame = frameOf(
@@ -112,6 +153,13 @@ describe('Board', () => {
         const shine = frame.querySelector(`g.stone polygon.shine`)?.getAttribute(`fill`) ?? ``;
         const id = /^url\(#(.+)\)$/.exec(shine)?.[1] ?? ``;
         expect(frame.querySelector(`radialGradient[id="${id}"]`)).toBeTruthy();
+    });
+
+    it('give every stone a mark layer above its shine', () => {
+        const frame = frameOf(<Board stones={stones} settings={defaultBoardSettings} label="test board" />);
+        const stone = frame.querySelector(`g.stone.s-o`);
+        const layers = [...(stone?.querySelectorAll(`polygon`) ?? [])].map((node) => node.getAttribute(`class`));
+        expect(layers).toEqual([`body b-o`, `shine`, `stone-mark m-o`]);
     });
 
     it('animate only stones placed after the first render', () => {

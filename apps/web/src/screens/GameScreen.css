@@ -289,6 +289,34 @@
         padding: var(--space-4);
     }
 
+    /* The feed scrolls under its header, so the panel's top padding
+       moves into the header, which stays pinned. */
+    .drawer-panel[data-tab='moves'] {
+        padding-top: 0;
+    }
+
+    /* The header spans the panel over its padding, so it repeats the
+       drawer's left hairline. */
+    .moves-head {
+        position: sticky;
+        top: 0;
+        z-index: var(--z-sticky);
+        margin: 0 calc(-1 * var(--space-4)) var(--space-2);
+        padding: var(--space-2) var(--space-4);
+        background: var(--c-bg-raised);
+        box-shadow: inset var(--border-w) 0 0 var(--c-border), inset 0 calc(-1 * var(--border-w)) 0 var(--c-border);
+    }
+
+    .moves-head .board-toggles {
+        display: flex;
+        flex-wrap: wrap;
+        column-gap: var(--space-4);
+    }
+
+    .moves-head .checkline {
+        min-height: var(--control-sm);
+    }
+
     /* the opening span is wider than any turn number, and every line
        shares its column so the numbers stay aligned under it */
     .feed {
@@ -323,7 +351,7 @@
         background: var(--c-accent-bg);
     }
 
-    /* Dim text on the accent tint falls under AA in slate, so the newest
+    /* Dim text on the accent tint falls under AA in some themes, so the newest
        line's label takes the full text color. */
     .feed-line.latest .feed-n {
         color: var(--c-text);
@@ -506,6 +534,16 @@
             max-height: 55dvh;
             box-shadow: none;
             background: transparent;
+        }
+
+        .moves-head {
+            background: var(--c-bg-overlay);
+            box-shadow: inset 0 calc(-1 * var(--border-w)) 0 var(--c-border);
+        }
+
+        /* A finger needs the full target on the sheet. */
+        .moves-head .checkline {
+            min-height: var(--control-lg);
         }
 
         .drawer[data-visible] .drawer-body {

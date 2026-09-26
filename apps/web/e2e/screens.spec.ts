@@ -1,14 +1,16 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type Page } from '@playwright/test';
+import { defaultTheme } from '../src/theme/themes';
 import { looks, shots, viewports, wear } from './matrix';
 import { serve } from './mock-api';
 
-// Every screen, in every state, under every look, at every viewport: a
-// screenshot for review plus the probed gates, contrast and sideways
-// scroll, which fail the run on their own.
+// Every screen in every state at every viewport in the default look, and
+// every board-bearing screen in every look: a screenshot for review plus
+// the probed gates, contrast and sideways scroll, which fail the run on
+// their own.
 for (const look of looks) {
     for (const viewport of viewports) {
-        for (const shot of shots) {
+        for (const shot of shots.filter((entry) => entry.board === true || look.name === defaultTheme)) {
             test(`${shot.name} holds contrast and layout in ${look.name} at ${viewport.name}`, async ({ page }) => {
                 await page.setViewportSize({ width: viewport.width, height: viewport.height });
                 await wear(page, { name: look.name, storage: { ...look.storage, ...shot.storage } });

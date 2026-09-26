@@ -8,6 +8,10 @@ export const cellSize = 28;
 // Rings sit inside the cell edge; stones cover most of it.
 const ringScale = 0.92;
 
+// The stone mark sits inside the stone's edge and leaves the middle to
+// the stone number.
+const markScale = 0.69;
+
 // Frame breathing room around the outermost cell centers.
 const viewBoxPad = cellSize * 1.35;
 
@@ -64,6 +68,11 @@ export function ringPoints(): string {
 /** The stone outline for the hex style, at the stone radius the sheet sets. */
 export function stonePoints(): string {
     return hexPoints(stoneRadius());
+}
+
+/** The inset hexagon a theme may edge a stone with. */
+export function markPoints(): string {
+    return hexPoints(cellSize * markScale);
 }
 
 /**
@@ -144,49 +153,4 @@ export function viewBoxOf(cells: readonly AxialCoord[]): { x: number; y: number;
         w: maxX - minX + 2 * viewBoxPad,
         h: maxY - minY + 2 * viewBoxPad,
     };
-}
-
-export interface CoordLabel {
-    x: number;
-    y: number;
-    text: string;
-}
-
-/**
- * Edge labels on two axes only: the x extent with its letter on the left
- * edge, the y extent with its letter on the bottom edge; a full label
- * honeycomb is unreadable.
- */
-export function coordLabels(cells: readonly AxialCoord[]): CoordLabel[] {
-    if (cells.length === 0) return [];
-    const row = nearestToZero(cells, (cell) => Math.abs(cell.y));
-    const xAnchor = row.reduce((min, cell) => (cell.x < min.x ? cell : min));
-    const column = nearestToZero(cells, (cell) => Math.abs(cell.x));
-    const yAnchor = column.reduce((max, cell) => (cell.y > max.y ? cell : max));
-    const xCenter = hexCenter(xAnchor);
-    const yCenter = hexCenter(yAnchor);
-    const offset = cellSize * 1.1;
-    const rowStep = 1.5 * cellSize;
-    const columnStep = Math.sqrt(3) * cellSize;
-    return [
-        { x: xCenter.cx - offset, y: xCenter.cy, text: String(xAnchor.x) },
-        { x: xCenter.cx - offset, y: xCenter.cy + rowStep, text: `x` },
-        { x: yCenter.cx, y: yCenter.cy + offset, text: `y` },
-        { x: yCenter.cx + columnStep, y: yCenter.cy + offset, text: String(yAnchor.y) },
-    ];
-}
-
-function nearestToZero(cells: readonly AxialCoord[], distance: (cell: AxialCoord) => number): AxialCoord[] {
-    let best = Infinity;
-    let picked: AxialCoord[] = [];
-    for (const cell of cells) {
-        const d = distance(cell);
-        if (d < best) {
-            best = d;
-            picked = [cell];
-        } else if (d === best) {
-            picked.push(cell);
-        }
-    }
-    return picked;
 }

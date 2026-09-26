@@ -1,0 +1,61 @@
+@layer screens {
+    .credits-lead,
+    .credits-prose {
+        max-width: var(--measure);
+    }
+
+    .credits-lead {
+        color: var(--c-text-dim);
+    }
+
+    /* The terms read as small print under the credits they qualify. */
+    .credits-prose {
+        color: var(--c-text-dim);
+        font-size: var(--text-sm);
+    }
+
+    .credit-list {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-4);
+    }
+
+    .credit-theme {
+        display: flex;
+        align-items: flex-start;
+        gap: var(--space-4);
+    }
+
+    .credit-theme .theme-swatch {
+        flex: none;
+        width: var(--credit-swatch-w);
+    }
+
+    .credit-name {
+        margin: 0;
+        font-size: var(--text-base);
+        font-weight: var(--weight-strong);
+    }
+
+    .credit-line {
+        margin: var(--space-1) 0 0;
+        max-width: var(--measure);
+        color: var(--c-text-dim);
+        font-size: var(--text-sm);
+    }
+
+    .credits-license {
+        max-width: var(--measure);
+        margin-top: var(--space-4);
+        color: var(--c-text-dim);
+        font-size: var(--text-sm);
+    }
+
+    .credits-license summary {
+        color: var(--c-accent);
+        cursor: pointer;
+    }
+}

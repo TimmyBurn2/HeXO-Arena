@@ -14,11 +14,14 @@
         align-items: flex-start;
     }
 
+    /* An upcoming step sits on the raised surface, the quietest one dim
+       text is held to AA on; done steps lift to hover, the current one
+       takes the accent. */
     .steps .step-n {
         flex: none;
         width: var(--control-md);
         height: var(--control-md);
-        background: var(--c-bg-active);
+        background: var(--c-bg-raised);
         color: var(--c-text-dim);
         display: inline-flex;
         align-items: center;
@@ -53,5 +56,9 @@
         margin: 0;
         color: var(--c-text-dim);
         font-size: var(--text-sm);
+    }
+
+    .steps .step-body .discord-sign-in {
+        margin: 0;
     }
 }

@@ -8,6 +8,7 @@ import './styles/cut.css';
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { AppShell } from './AppShell';
+import { boardSettingsStore } from './board/board-settings';
 import { meStore } from './me';
 import { themeStore } from './theme/themes';
 
@@ -15,6 +16,7 @@ import { themeStore } from './theme/themes';
 // a theme needs no import here.
 import.meta.glob(`./styles/themes/*.css`, { eager: true });
 themeStore.start();
+boardSettingsStore.start();
 meStore.start();
 
 const rootElement = document.getElementById(`root`);

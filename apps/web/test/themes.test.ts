@@ -10,6 +10,15 @@ function declaredProperties(css: string): string[] {
     return [...css.matchAll(/(--[a-z0-9-]+)\s*:/g)].map((match) => match[1] ?? ``);
 }
 
+// Every rule's selector list, whitespace folded, with comments and at-rule
+// preludes dropped.
+function ruleSelectors(css: string): string[] {
+    const bare = css.replace(/\/\*[\s\S]*?\*\//g, ``);
+    return [...bare.matchAll(/([^{};]+)\{/g)]
+        .map((match) => (match[1] ?? ``).replace(/\s+/g, ` `).trim())
+        .filter((selector) => !selector.startsWith(`@`));
+}
+
 function themeFiles(): string[] {
     return readdirSync(themeDir)
         .filter((file) => file.endsWith(`.css`) && !shared.includes(file))
@@ -24,12 +33,23 @@ describe('theme sheets', () => {
     for (const theme of themes) {
         it(`name every vocabulary color and only known slots in ${theme.id}`, () => {
             const css = readFileSync(join(themeDir, `${theme.id}.css`), `utf8`);
-            expect(css).toContain(`:root[data-theme='${theme.id}']`);
             const declared = declaredProperties(css);
             const slots = declaredProperties(readFileSync(join(themeDir, `slots.css`), `utf8`));
             expect(declared.filter((name) => !slots.includes(name)).sort()).toEqual([...themeVocabulary].sort());
         });
     }
+
+    for (const theme of themes) {
+        it(`apply ${theme.id} on the root and inside a preview of it, in one block`, () => {
+            const css = readFileSync(join(themeDir, `${theme.id}.css`), `utf8`);
+            expect(ruleSelectors(css)).toEqual([`:root[data-theme='${theme.id}'], [data-theme-preview='${theme.id}']`]);
+        });
+    }
+
+    it('start every preview from the neutral slots, as the root does', () => {
+        const css = readFileSync(join(themeDir, `slots.css`), `utf8`);
+        expect(ruleSelectors(css)).toEqual([`:root, [data-theme-preview]`]);
+    });
 
     it('keep the brand out of the theme vocabulary', () => {
         const brand = declaredProperties(readFileSync(join(themeDir, `brand.css`), `utf8`));
@@ -40,7 +60,17 @@ describe('theme sheets', () => {
 
 describe('parseTheme', () => {
     it('keep a stored theme', () => {
-        expect(parseTheme(`walnut`, null)).toBe(`walnut`);
+        expect(parseTheme(`omok`, null)).toBe(`omok`);
+    });
+
+    it('read a retired theme as its successor', () => {
+        expect(parseTheme(`slate`, null)).toBe(`ink`);
+        expect(parseTheme(`walnut`, null)).toBe(`omok`);
+    });
+
+    it('never read a stored name through to an object prototype', () => {
+        expect(parseTheme(`constructor`, null)).toBe(defaultTheme);
+        expect(parseTheme(`toString`, JSON.stringify({ palette: `__proto__` }))).toBe(defaultTheme);
     });
 
     it('fall back to the default on nothing or an unknown id', () => {
@@ -48,9 +78,11 @@ describe('parseTheme', () => {
         expect(parseTheme(`lava`, null)).toBe(defaultTheme);
     });
 
-    it('carry an earlier board palette over as its theme', () => {
-        expect(parseTheme(null, JSON.stringify({ palette: `walnut`, numbers: true }))).toBe(`walnut`);
-        expect(parseTheme(null, JSON.stringify({ palette: `slate` }))).toBe(`slate`);
+    it('carry an earlier board palette over as its theme, retired ones as their successor', () => {
+        expect(parseTheme(null, JSON.stringify({ palette: `omok`, numbers: true }))).toBe(`omok`);
+        expect(parseTheme(null, JSON.stringify({ palette: `walnut`, numbers: true }))).toBe(`omok`);
+        expect(parseTheme(null, JSON.stringify({ palette: `slate` }))).toBe(`ink`);
+        expect(parseTheme(null, JSON.stringify({ palette: `lava` }))).toBe(defaultTheme);
     });
 
     it('ignore a broken legacy entry', () => {

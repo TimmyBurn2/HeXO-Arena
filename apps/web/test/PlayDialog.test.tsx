@@ -167,9 +167,29 @@ describe('PlayDialog', () => {
         renderDialog(fullAccepts);
         fireEvent.click(screen.getByRole(`button`, { name: `Start game` }));
         expect(await screen.findByText(`Sign in to start a game`)).toBeTruthy();
-        expect(screen.getByRole(`link`, { name: `Sign in with Discord` }).getAttribute(`href`)).toBe(
-            `/api/auth/discord/login`,
+        const signIn = screen.getByRole(`link`, { name: `Sign in with Discord` });
+        expect(signIn.getAttribute(`href`)).toBe(`/api/auth/discord/login`);
+        expect(signIn.classList.contains(`discord-button`)).toBe(true);
+        expect(screen.getByText(`Discord shares your username only; no email.`)).toBeTruthy();
+        expect(screen.queryByRole(`button`, { name: `Start game` })).toBe(null);
+    });
+
+    it('ask the server again after a refused session, falling to the signed-out choices', async () => {
+        vi.stubGlobal(
+            `fetch`,
+            vi.fn((url: string) =>
+                Promise.resolve(
+                    url === `/api/me`
+                        ? new Response(`null`)
+                        : new Response(JSON.stringify({ error: `no session`, code: `unauthorized` }), { status: 401 }),
+                ),
+            ),
         );
+        renderDialog(fullAccepts);
+        fireEvent.click(screen.getByRole(`button`, { name: `Start game` }));
+        expect(await screen.findByRole(`button`, { name: `Play as guest` })).toBeTruthy();
+        expect(meStore.read()).toEqual({ status: `ready`, me: null });
+        expect(screen.getAllByRole(`link`, { name: `Sign in with Discord` })).toHaveLength(1);
     });
 
     it('runs onClose when the dialog closes, which escape triggers natively', () => {
@@ -227,7 +247,9 @@ describe('PlayDialog', () => {
         );
         meStore.start();
         renderDialog(fullAccepts);
-        fireEvent.click(await screen.findByRole(`button`, { name: `Play as guest` }));
+        expect((await screen.findByRole(`link`, { name: `Sign in with Discord` })).classList.contains(`discord-button`)).toBe(true);
+        expect(screen.getByText(`Discord shares your username only; no email.`)).toBeTruthy();
+        fireEvent.click(screen.getByRole(`button`, { name: `Play as guest` }));
         expect(await screen.findByText(`Too many guests right now; try in a minute or sign in`)).toBeTruthy();
         expect(screen.getByRole(`link`, { name: `Sign in with Discord` })).toBeTruthy();
     });

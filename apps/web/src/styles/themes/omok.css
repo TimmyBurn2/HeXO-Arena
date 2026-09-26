@@ -1,0 +1,53 @@
+/* Omok board and stones from HeXO Renderer by MineKing, MIT. */
+/*
+ * White and black stones on pale wood, on a warm brown page.
+ * The white stone sits close to the wood, so a dark rim sets it apart.
+ * The marks turn red, since brass vanishes on the wood: as bright as the
+ * wood allows, so a last-move ring still parts from a black stone's rim.
+ */
+
+@layer theme {
+    :root[data-theme='omok'],
+    [data-theme-preview='omok'] {
+        --c-bg: hsl(26 18% 10%);
+        --c-bg-raised: hsl(26 18% 13.5%);
+        --c-bg-overlay: hsl(26 18% 17%);
+        --c-bg-input: hsl(26 16% 19%);
+        --c-bg-hover: hsl(26 18% 20%);
+        --c-bg-active: hsl(26 16% 24%);
+        --c-border: hsl(26 14% 24%);
+        --c-border-strong: hsl(26 12% 38%);
+        --c-text: hsl(35 25% 88%);
+        --c-text-dim: hsl(30 12% 64%);
+        --c-good: hsl(142 45% 62%);
+        --c-good-solid: hsl(142 40% 40%);
+        --c-bad: hsl(4 75% 75%);
+        --c-bad-solid: hsl(4 66% 56%);
+        --c-warn: hsl(24 88% 66%);
+        --c-online: hsl(142 40% 40%);
+        --c-offline: hsl(26 8% 52%);
+        --c-backdrop: hsl(26 30% 4% / 72%);
+
+        --board-bg: #b58c5e;
+        --board-cell: #cda577;
+        --board-line: #4c402c;
+        --board-frontier: #4c402c;
+        --board-stone-x: #f3f3f3;
+        --board-stone-o: #141414;
+        --board-focus: #141414;
+        --board-number-x: #141414;
+        --board-number-o: #f3f3f3;
+        --board-pending: #ad1f1f;
+        --board-last: #ad1f1f;
+        --board-win: #ad1f1f;
+        --board-win-casing: #f3f3f3;
+
+        --stone-rim: #141414;
+        --stone-rim-w: 1.5px;
+        --stone-shine-x: #ffffff;
+        --stone-shine-o: #ffffff99;
+        --stone-shine-opacity: 0.55;
+        --surface-edge-hi: hsl(35 60% 85% / 7%);
+        --lift: drop-shadow(0 10px 14px hsl(26 40% 3% / 55%)) drop-shadow(0 1px 2px hsl(26 40% 3% / 45%));
+    }
+}

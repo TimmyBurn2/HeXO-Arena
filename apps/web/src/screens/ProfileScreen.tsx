@@ -1,8 +1,8 @@
 import { useCallback, useState } from 'react';
-import { botCapPerUser, discordLoginPath, type GuestMe, type UserMe } from '@hexarena/contract';
+import { botCapPerUser, type GuestMe, type UserMe } from '@hexarena/contract';
 import { fetchBots } from '../api/client';
 import { useAsync } from '../api/use-async';
-import { BoardSettingsCard } from '../board/BoardSettingsCard';
+import { DiscordButton } from '../components/DiscordButton';
 import { BotBadge, OpenTag, PresenceDot, Rating, provisionalNote } from '../components/player';
 import { ErrorFrame, SkeletonRows } from '../components/states';
 import { meStore, useMe } from '../me';
@@ -32,9 +32,6 @@ export function ProfileScreen() {
             )}
 
             {state.status === `ready` && state.me?.kind === `user` ? <YourBots owner={state.me.name} /> : null}
-
-            <h2 className="section-title">Look</h2>
-            <BoardSettingsCard />
         </>
     );
 }
@@ -44,9 +41,7 @@ function SignedOut() {
         <div className="card">
             <p className="note">Discord is the only login; bots are created in Connect.</p>
             <p className="card-actions">
-                <a className="btn btn-primary" href={discordLoginPath}>
-                    Sign in with Discord
-                </a>
+                <DiscordButton />
                 <Link to="/connect" className="btn btn-ghost">
                     Connect
                 </Link>
@@ -121,9 +116,7 @@ function GuestIdentity({ me }: { me: GuestMe }) {
                 <span className="note">Guest games are unrated and end with the session.</span>
             </div>
             <div className="card-actions">
-                <a className="btn btn-primary" href={discordLoginPath}>
-                    Sign in with Discord
-                </a>
+                <DiscordButton />
                 <SignOutButton confirmWith="Sign out and end guest games" />
             </div>
         </div>

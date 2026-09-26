@@ -1,8 +1,7 @@
-import type { BoardStone } from './Board';
+import type { BoardStone } from '../src/board/Board';
 
-// A mid-game position for previews and tests: origin, an opening pair,
-// and turns both sides could have played, spanning enough of the board to
-// show every overlay.
+// A mid-game position: origin, an opening pair, and turns both sides could
+// have played, spanning enough of the board to show every overlay.
 const placementOrder: readonly (readonly [number, number, `x` | `o`])[] = [
     [0, 0, `x`],
     [1, -1, `o`],
@@ -23,7 +22,7 @@ const placementOrder: readonly (readonly [number, number, `x` | `o`])[] = [
     [-4, 2, `x`],
 ];
 
-export const previewStones: readonly BoardStone[] = placementOrder.map(([x, y, side], index) => ({
+export const midGameStones: readonly BoardStone[] = placementOrder.map(([x, y, side], index) => ({
     x,
     y,
     side,

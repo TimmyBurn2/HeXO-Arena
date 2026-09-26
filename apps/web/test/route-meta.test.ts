@@ -7,6 +7,7 @@ describe('routeMeta', () => {
         expect(routeMeta({ name: `bots` }).title).toBe(`Bots - hexarena`);
         expect(routeMeta({ name: `connect` }).title).toBe(`Connect - hexarena`);
         expect(routeMeta({ name: `profile` }).title).toBe(`Profile - hexarena`);
+        expect(routeMeta({ name: `credits` }).title).toBe(`Credits - hexarena`);
     });
 
     it('carry the bot name into its title', () => {
@@ -20,6 +21,7 @@ describe('routeMeta', () => {
             { name: `bot`, bot: `sealbot` },
             { name: `connect` },
             { name: `profile` },
+            { name: `credits` },
             { name: `game`, gameId: `g1` },
             { name: `not-found` },
         ] as const) {

@@ -19,7 +19,7 @@ describe('ConnectScreen', () => {
         const headings = screen.getAllByRole(`heading`).map((heading) => heading.textContent);
         for (const expected of [
             `Connect`,
-            `Sign in with Discord`,
+            `Sign in`,
             `Create your bot`,
             `Copy the token`,
             `Run the example`,
@@ -28,9 +28,10 @@ describe('ConnectScreen', () => {
         ]) {
             expect(headings).toContain(expected);
         }
-        expect(screen.getByRole(`link`, { name: `Sign in with Discord` }).getAttribute(`href`)).toBe(
-            `/api/auth/discord/login`,
-        );
+        const signIn = screen.getByRole(`link`, { name: `Sign in with Discord` });
+        expect(signIn.getAttribute(`href`)).toBe(`/api/auth/discord/login`);
+        expect(signIn.classList.contains(`discord-button`)).toBe(true);
+        expect(screen.getByText(`Discord shares your username only; no email.`)).toBeTruthy();
         expect(screen.getByRole(`link`, { name: /simple_bot\.py/ }).getAttribute(`href`)).toContain(
             `github.com/TimmyBurn2/Hexo-Bot-Api`,
         );

@@ -33,7 +33,7 @@ describe('AppShell', () => {
         meStore.start();
         render(<AppShell />);
         await waitFor(() => {
-            expect(topbar().querySelector(`.nav-right a`)?.textContent).toBe(`Sign in`);
+            expect(topbar().querySelector(`.nav-right a.discord-button`)?.textContent).toBe(`Sign in with Discord`);
         });
     });
 
@@ -55,6 +55,24 @@ describe('AppShell', () => {
             expect(topbar().querySelector(`.nav-right a.identity`)?.getAttribute(`href`)).toBe(`/profile`);
         });
         expect(topbar().querySelector(`.nav-right a.identity`)?.textContent).toBe(`ttom`);
+    });
+
+    it('put the settings gear on the right, before who is here, on every framed screen', async () => {
+        stubHealthOk();
+        meStore.reset();
+        meStore.start();
+        render(<AppShell />);
+        for (const path of [`/`, `/bots`, `/bots/sealbot`, `/connect`, `/profile`, `/nowhere`]) {
+            navigate(path);
+            await waitFor(() => {
+                expect(topbar().querySelector(`.nav-right a.discord-button`)).toBeTruthy();
+            });
+            const right = [...topbar().querySelectorAll(`.nav-right > *`)];
+            expect(right.map((element) => element.getAttribute(`aria-label`) ?? element.className)).toEqual([
+                `Settings`,
+                `discord-button`,
+            ]);
+        }
     });
 
     it('render the four nav items with the arena active on the landing route', () => {
@@ -162,12 +180,13 @@ describe('AppShell', () => {
         );
     });
 
-    it('drop the site chrome on the immersive game route', async () => {
+    it('drop the site chrome and the gear on the immersive game route', async () => {
         stubHealthOk();
         window.history.replaceState(null, ``, `/game/g-1`);
         render(<AppShell />);
         expect(document.querySelector(`header.topbar`)).toBe(null);
         expect(document.querySelector(`nav.tabbar`)).toBe(null);
+        expect(screen.queryByRole(`button`, { name: `Settings` })).toBe(null);
         navigate(`/`);
         await waitFor(() => {
             expect(document.querySelector(`header.topbar`)).toBeTruthy();

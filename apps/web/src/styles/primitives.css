@@ -63,6 +63,7 @@
         font-size: var(--text-sm);
         color: var(--c-text-dim);
         min-height: var(--control-md);
+        cursor: pointer;
     }
 
     input[type='checkbox'] {

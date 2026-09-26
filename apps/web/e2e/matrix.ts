@@ -2,7 +2,7 @@ import type { Page } from '@playwright/test';
 import { themes } from '../src/theme/themes';
 import { liveGames, world, type World } from './mock-api';
 
-/** A named look the whole site can wear; every screen is captured in each. */
+/** A named look the whole site can wear. */
 export interface Look {
     name: string;
     storage: Record<string, string>;
@@ -35,10 +35,20 @@ export interface Shot {
     after?: (page: Page) => Promise<void>;
     // Extra preferences this state needs before the app boots.
     storage?: Record<string, string>;
+    // A board or the theme swatches are on screen, so every look is
+    // captured; elsewhere a look changes only surface and text tokens,
+    // which the contrast gate holds pair by pair and step by step, so the
+    // default look stands for all.
+    board?: true;
 }
 
 const signedOut = world({ me: null });
 const guest = world({ me: { kind: `guest`, name: `Guest k3f9` } });
+
+async function openSettings(page: Page): Promise<void> {
+    await page.getByRole(`button`, { name: `Settings`, exact: true }).click();
+    await page.locator(`dialog.settings[open]`).waitFor();
+}
 
 export const shots: readonly Shot[] = [
     { name: `arena`, path: `/`, world: world(), ready: `.live-game`, framed: true },
@@ -55,6 +65,18 @@ export const shots: readonly Shot[] = [
             await page.locator(`.live-rail`).scrollIntoViewIfNeeded();
         },
     },
+    { name: `settings`, path: `/`, world: world(), ready: `.live-game`, framed: true, after: openSettings, board: true },
+    {
+        name: `settings-aids`,
+        path: `/bots/sealbot`,
+        world: guest,
+        ready: `h1`,
+        framed: true,
+        after: openSettings,
+        storage: { 'hexarena.board-rendering.v1': `{"numbers":true}` },
+        board: true,
+    },
+    { name: `settings-signed-out`, path: `/connect`, world: signedOut, ready: `h1`, framed: true, after: openSettings, board: true },
     { name: `arena-loading`, path: `/`, world: world({ stall: true }), ready: `.skeleton`, framed: true },
     { name: `arena-error`, path: `/`, world: world({ broken: true }), ready: `.empty`, framed: true },
     { name: `bots`, path: `/bots`, world: world(), ready: `table`, framed: true },
@@ -94,10 +116,19 @@ export const shots: readonly Shot[] = [
     { name: `profile`, path: `/profile`, world: world(), ready: `h1`, framed: true },
     { name: `profile-guest`, path: `/profile`, world: guest, ready: `h1`, framed: true },
     { name: `profile-signed-out`, path: `/profile`, world: signedOut, ready: `h1`, framed: true },
-    { name: `game-your-move`, path: `/game/running`, world: world(), ready: `svg polygon.cell`, framed: false },
-    { name: `game-waiting`, path: `/game/waiting`, world: world(), ready: `svg polygon.cell`, framed: false },
-    { name: `game-low-clock`, path: `/game/hurry`, world: world(), ready: `svg polygon.cell`, framed: false },
-    { name: `game-finished`, path: `/game/finished`, world: world(), ready: `svg polygon.cell`, framed: false },
+    { name: `game-your-move`, path: `/game/running`, world: world(), ready: `svg polygon.cell`, framed: false, board: true },
+    { name: `game-waiting`, path: `/game/waiting`, world: world(), ready: `svg polygon.cell`, framed: false, board: true },
+    { name: `game-low-clock`, path: `/game/hurry`, world: world(), ready: `svg polygon.cell`, framed: false, board: true },
+    { name: `game-finished`, path: `/game/finished`, world: world(), ready: `svg polygon.cell`, framed: false, board: true },
+    {
+        name: `game-finished-numbers`,
+        path: `/game/finished`,
+        world: world(),
+        ready: `svg polygon.cell`,
+        framed: false,
+        storage: { 'hexarena.board-rendering.v1': `{"numbers":true}` },
+        board: true,
+    },
     {
         name: `game-drawer`,
         path: `/game/running`,
@@ -108,6 +139,7 @@ export const shots: readonly Shot[] = [
             await page.keyboard.press(`m`);
             await page.locator(`#drawer-body:not([hidden])`).waitFor();
         },
+        board: true,
     },
     ...(
         [
@@ -123,6 +155,7 @@ export const shots: readonly Shot[] = [
         world: world(),
         ready: `svg polygon.cell`,
         framed: false,
+        board: true as const,
         after: async (page: Page) => {
             await page.keyboard.press(`m`);
             await page.locator(`#drawer-body:not([hidden])`).waitFor();
@@ -138,6 +171,7 @@ export const shots: readonly Shot[] = [
             await page.keyboard.press(`m`);
             await page.getByRole(`tab`, { name: `Game` }).click();
         },
+        board: true,
     },
     {
         name: `game-pending`,
@@ -150,6 +184,7 @@ export const shots: readonly Shot[] = [
             await page.keyboard.press(`ArrowRight`);
             await page.keyboard.press(`Enter`);
         },
+        board: true,
     },
     { name: `game-loading`, path: `/game/running`, world: world({ stall: true }), ready: `.hud-skeleton`, framed: false },
     {
@@ -159,21 +194,24 @@ export const shots: readonly Shot[] = [
         ready: `svg polygon.cell`,
         framed: false,
         storage: { 'hexarena.drawer-pinned.v1': `1` },
+        board: true,
     },
     {
-        name: `game-look`,
+        name: `game-drawer-aids`,
         path: `/game/running`,
         world: world(),
         ready: `svg polygon.cell`,
         framed: false,
+        storage: { 'hexarena.board-rendering.v1': `{"numbers":true}` },
         after: async (page) => {
             await page.keyboard.press(`m`);
-            await page.getByRole(`tab`, { name: `Board` }).click();
+            await page.locator(`#drawer-body:not([hidden])`).waitFor();
         },
+        board: true,
     },
-    { name: `watch-running`, path: `/game/running`, world: signedOut, ready: `svg polygon.cell`, framed: false },
-    { name: `watch-guest`, path: `/game/guest`, world: signedOut, ready: `svg polygon.cell`, framed: false },
-    { name: `watch-finished`, path: `/game/finished`, world: signedOut, ready: `svg polygon.cell`, framed: false },
+    { name: `watch-running`, path: `/game/running`, world: signedOut, ready: `svg polygon.cell`, framed: false, board: true },
+    { name: `watch-guest`, path: `/game/guest`, world: signedOut, ready: `svg polygon.cell`, framed: false, board: true },
+    { name: `watch-finished`, path: `/game/finished`, world: signedOut, ready: `svg polygon.cell`, framed: false, board: true },
     ...(
         [
             [`watch-drawer`, `/game/running`],
@@ -186,6 +224,7 @@ export const shots: readonly Shot[] = [
         world: signedOut,
         ready: `svg polygon.cell`,
         framed: false,
+        board: true as const,
         after: async (page: Page) => {
             await page.keyboard.press(`m`);
             await page.locator(`#drawer-body:not([hidden])`).waitFor();
@@ -201,9 +240,11 @@ export const shots: readonly Shot[] = [
             await page.keyboard.press(`m`);
             await page.getByRole(`tab`, { name: `Game` }).click();
         },
+        board: true,
     },
     { name: `game-missing`, path: `/game/nope`, world: world(), ready: `h1`, framed: true },
     { name: `not-found`, path: `/nowhere`, world: world(), ready: `h1`, framed: true },
+    { name: `credits`, path: `/credits`, world: world(), ready: `h1`, framed: true, board: true },
 ];
 
 /** Seed the look's storage before any app script runs. */

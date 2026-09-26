@@ -3,12 +3,12 @@ import { readStored, writeStored } from '../stored';
 
 export interface BoardSettings {
     numbers: boolean;
-    coords: boolean;
+    glare: boolean;
 }
 
 export const defaultBoardSettings: BoardSettings = {
     numbers: false,
-    coords: false,
+    glare: true,
 };
 
 const storageKey = `hexarena.board-rendering.v1`;
@@ -29,7 +29,7 @@ export function parseBoardSettings(raw: string | null): BoardSettings {
     const record = value as Record<string, unknown>;
     return {
         numbers: record.numbers === true,
-        coords: record.coords === true,
+        glare: record.glare !== false,
     };
 }
 
@@ -43,6 +43,12 @@ function read(): BoardSettings {
     return current;
 }
 
+// The glare is off on the root, so every stone on the page, previews
+// included, drops it at once.
+function apply(settings: BoardSettings): void {
+    if (typeof document !== `undefined`) document.documentElement.dataset.glare = settings.glare ? `on` : `off`;
+}
+
 function subscribe(listener: () => void): () => void {
     listeners.add(listener);
     return () => {
@@ -53,17 +59,22 @@ function subscribe(listener: () => void): () => void {
 function update(changes: Partial<BoardSettings>): void {
     current = { ...read(), ...changes };
     writeStored(storageKey, JSON.stringify(current));
+    apply(current);
     for (const listener of listeners) listener();
 }
 
 /**
- * The rendering preferences as a store: Profile writes, every game board
- * reads, and the API keeps no settings.
+ * The rendering preferences as a store: the settings panel and the game
+ * drawer write, every game board reads, and the API keeps no settings.
  */
 export const boardSettingsStore = {
     read,
     subscribe,
     update,
+    /** Put the stored glare choice on the root before the first render. */
+    start(): void {
+        apply(read());
+    },
 };
 
 export function useBoardSettings(): readonly [BoardSettings, typeof boardSettingsStore.update] {

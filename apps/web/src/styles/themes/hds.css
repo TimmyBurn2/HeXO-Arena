@@ -1,0 +1,51 @@
+/* HDS board from HeXO Renderer by MineKing, MIT; page from the Tailwind palette, MIT. */
+/*
+ * Amber and sky stones on a slate board, the palette of hexo.did.science.
+ * The two stones differ in hue more than in lightness, so x carries an
+ * inset mark; derived steps fill the ramp between the source colors.
+ */
+
+@layer theme {
+    :root[data-theme='hds'],
+    [data-theme-preview='hds'] {
+        --c-bg: #0f172a;
+        --c-bg-raised: #162033;
+        --c-bg-overlay: #1e293b;
+        --c-bg-input: #1e293b;
+        --c-bg-hover: #243147;
+        --c-bg-active: #2b3950;
+        --c-border: #263348;
+        --c-border-strong: #475569;
+        --c-text: #e2e8f0;
+        --c-text-dim: #94a3b8;
+        --c-good: #34d399;
+        --c-good-solid: #059669;
+        --c-bad: #fca5a5;
+        --c-bad-solid: #ef4444;
+        --c-warn: #fb923c;
+        --c-online: #10b981;
+        --c-offline: #7c8ba1;
+        --c-backdrop: #020617b8;
+
+        --board-bg: #0f172a;
+        --board-cell: #111a2f;
+        --board-line: #232d43;
+        --board-frontier: #64748b;
+        --board-stone-x: #fbc139;
+        --board-stone-o: #38bdf8;
+        --board-focus: #ffffff;
+        --board-number-x: #0f172a;
+        --board-number-o: #0f172a;
+        --board-pending: #ec6fb1;
+        --board-last: #ffffff;
+        --board-win: #ec6fb1;
+        --board-win-casing: #0f172a;
+
+        --stone-mark-x: #0f172a;
+        --stone-shine-x: #ffffff;
+        --stone-shine-o: #ffffff;
+        --stone-shine-opacity: 0.4;
+        --surface-edge-hi: #e2e8f014;
+        --lift: drop-shadow(0 10px 14px #0206178c) drop-shadow(0 1px 2px #02061773);
+    }
+}

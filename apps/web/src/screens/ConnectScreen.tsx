@@ -1,8 +1,9 @@
 import { useState } from 'react';
-import { discordLoginPath, namePattern, isReservedName } from '@hexarena/contract';
+import { namePattern, isReservedName } from '@hexarena/contract';
 import { ApiError, createBot } from '../api/client';
 import { Link } from '../router/Link';
 import { useRoute } from '../router/use-route';
+import { DiscordSignIn } from '../components/DiscordButton';
 import { TokenBox } from '../components/TokenBox';
 import { useMe } from '../me';
 import { useDocumentMeta } from '../use-document-meta';
@@ -45,15 +46,11 @@ export function ConnectScreen() {
                             </>
                         ) : (
                             <>
-                                <h2 className="step-title">Sign in with Discord</h2>
-                                <p>
-                                    {me?.kind === `guest`
-                                        ? `You are playing as ${me.name}; owning a bot takes an account.`
-                                        : `Discord is the only login; no password is ever stored.`}
-                                </p>
-                                <a className="btn btn-primary" href={discordLoginPath}>
-                                    Sign in with Discord
-                                </a>
+                                <h2 className="step-title">Sign in</h2>
+                                {me?.kind === `guest` ? (
+                                    <p>You are playing as {me.name}; owning a bot takes an account.</p>
+                                ) : null}
+                                <DiscordSignIn />
                             </>
                         )}
                     </div>

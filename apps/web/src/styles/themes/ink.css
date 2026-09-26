@@ -1,10 +1,13 @@
 /*
  * Ink, the default: a navy page and board with bone and cinnabar stones.
  * A theme names every color in the theme vocabulary and nothing else.
+ * Its vocabulary also applies inside a preview element, so a picker can
+ * show a look while the page wears another.
  */
 
 @layer theme {
-    :root[data-theme='ink'] {
+    :root[data-theme='ink'],
+    [data-theme-preview='ink'] {
         --c-bg: hsl(222 32% 11%);
         --c-bg-raised: hsl(222 32% 14.5%);
         --c-bg-overlay: hsl(222 32% 18%);
@@ -33,8 +36,15 @@
         --board-focus: hsl(220 25% 90%);
         --board-number-x: hsl(222 32% 12%);
         --board-number-o: hsl(40 30% 96%);
-        --board-coord: hsl(220 25% 85%);
+        --board-pending: var(--c-accent-solid);
+        --board-last: var(--c-accent-solid);
+        --board-win: var(--c-accent-solid);
+        --board-win-casing: var(--board-bg);
 
+        --stone-shine-x: #ffffff;
+        /* the light number on cinnabar leaves the o glare little room */
+        --stone-shine-o: #ff9a8a55;
+        --stone-shine-opacity: 0.9;
         --surface-edge-hi: hsl(220 60% 80% / 8%);
         --lift: drop-shadow(0 10px 14px hsl(222 50% 3% / 55%)) drop-shadow(0 1px 2px hsl(222 50% 3% / 45%));
     }

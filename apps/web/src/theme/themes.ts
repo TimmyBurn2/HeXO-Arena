@@ -2,13 +2,17 @@ import { useSyncExternalStore } from 'react';
 import { readStored, writeStored } from '../stored';
 
 /**
- * Every theme the site ships; each id has exactly one sheet under
+ * Every theme the site ships, in picker order, with the line crediting
+ * where its palette comes from; each id has exactly one sheet under
  * styles/themes, which the vocabulary test holds both ways.
  */
 export const themes = [
-    { id: `ink`, label: `Ink` },
-    { id: `slate`, label: `Slate` },
-    { id: `walnut`, label: `Walnut` },
+    { id: `ink`, label: `Ink`, credit: `hexarena` },
+    { id: `hds`, label: `HDS`, credit: `hexo.did.science, via MineKing` },
+    { id: `htttx`, label: `HTTTX`, credit: `HeXO Renderer by MineKing` },
+    { id: `tyto`, label: `Tyto`, credit: `Tyto's Strix, via MineKing` },
+    { id: `omok`, label: `Omok`, credit: `HeXO Renderer by MineKing` },
+    { id: `six`, label: `Six`, credit: `playsix by CixMango` },
 ] as const;
 
 export type ThemeId = (typeof themes)[number][`id`];
@@ -47,7 +51,10 @@ export const themeVocabulary = [
     `--board-focus`,
     `--board-number-x`,
     `--board-number-o`,
-    `--board-coord`,
+    `--board-pending`,
+    `--board-last`,
+    `--board-win`,
+    `--board-win-casing`,
 ] as const;
 
 const storageKey = `hexarena.theme.v1`;
@@ -55,18 +62,27 @@ const storageKey = `hexarena.theme.v1`;
 // chose one keeps that look.
 const legacyKey = `hexarena.board-rendering.v1`;
 
-function isThemeId(value: unknown): value is ThemeId {
-    return themes.some((theme) => theme.id === value);
+// Retired looks read as their nearest successor: slate's cool gray as ink,
+// walnut as omok, which kept walnut's page.
+const retired: ReadonlyMap<string, ThemeId> = new Map([
+    [`slate`, `ink`],
+    [`walnut`, `omok`],
+]);
+
+function asTheme(value: unknown): ThemeId | null {
+    if (typeof value !== `string`) return null;
+    return themes.find((theme) => theme.id === value)?.id ?? retired.get(value) ?? null;
 }
 
 /** The stored choice, the legacy palette carried over, or the default. */
 export function parseTheme(stored: string | null, legacy: string | null): ThemeId {
-    if (isThemeId(stored)) return stored;
+    const chosen = asTheme(stored);
+    if (chosen !== null) return chosen;
     if (legacy !== null) {
         try {
             const value: unknown = JSON.parse(legacy);
-            if (typeof value === `object` && value !== null && `palette` in value && isThemeId(value.palette)) {
-                return value.palette;
+            if (typeof value === `object` && value !== null && `palette` in value) {
+                return asTheme(value.palette) ?? defaultTheme;
             }
         } catch {
             return defaultTheme;

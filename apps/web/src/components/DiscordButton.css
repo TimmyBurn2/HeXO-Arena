@@ -1,0 +1,67 @@
+@layer components {
+    /* The link stays unclipped so its focus ring can sit outside the cut
+       face, against the page, in the focus color every theme checks. */
+    .discord-button {
+        position: relative;
+        isolation: isolate;
+        display: inline-flex;
+        vertical-align: middle;
+        color: var(--c-on-discord);
+        font-size: var(--text-sm);
+        font-weight: var(--weight-strong);
+        white-space: nowrap;
+    }
+
+    .discord-button:hover {
+        color: var(--c-on-discord);
+    }
+
+    .discord-face {
+        display: inline-flex;
+        align-items: center;
+        gap: var(--space-2);
+        height: var(--control-md);
+        padding: 0 var(--space-4);
+        background: var(--c-discord);
+        transition: background var(--dur-fast) var(--ease);
+    }
+
+    .discord-button:hover .discord-face {
+        background: var(--c-discord-hover);
+    }
+
+    .discord-symbol {
+        width: var(--discord-symbol-w);
+        flex: none;
+        fill: var(--c-on-discord);
+    }
+
+    .discord-button::before {
+        content: '';
+        position: absolute;
+        inset: calc(-2 * var(--focus-w));
+        z-index: -1;
+        background: var(--c-focus);
+        visibility: hidden;
+    }
+
+    .discord-button:focus-visible {
+        outline: none;
+    }
+
+    .discord-button:focus-visible::before {
+        visibility: visible;
+    }
+
+    .discord-sign-in {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: var(--space-2) var(--space-3);
+        margin: var(--space-4) 0;
+    }
+
+    .discord-sign-in .note {
+        margin: 0;
+    }
+}

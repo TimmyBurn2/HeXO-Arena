@@ -1,18 +1,18 @@
 import { Fragment, useEffect, useRef, useState, type ReactNode } from 'react';
-import { LookControls } from '../board/LookControls';
+import { BoardToggles } from '../board/BoardToggles';
 import { Link } from '../router/Link';
 import type { Drawer, DrawerTab } from './use-drawer';
 import type { FeedLine } from './snapshot-views';
 
 const tabs: readonly { id: DrawerTab; label: string }[] = [
     { id: `moves`, label: `Moves` },
-    { id: `board`, label: `Board` },
     { id: `game`, label: `Game` },
 ];
 
 /**
- * Everything secondary to the board: the move feed, the look, and the
- * game's facts and actions.
+ * Everything secondary to the board: the move feed with its two reading
+ * aids, and the game's facts and actions; the look itself lives behind the
+ * settings gear, outside any game.
  * A right-hand drawer on wide screens, a bottom sheet on phones whose peek
  * keeps the player's own chip in reach.
  */
@@ -129,9 +129,18 @@ export function GameDrawer({ drawer, feed, facts, running, onResign, peek }: {
                     tabIndex={0}
                     id={`drawer-panel-${drawer.tab}`}
                     aria-labelledby={`drawer-tab-${drawer.tab}`}
+                    data-tab={drawer.tab}
                 >
-                    {drawer.tab === `moves` ? <MoveFeed feed={feed} visible={drawer.visible} /> : null}
-                    {drawer.tab === `board` ? <LookControls /> : null}
+                    {drawer.tab === `moves` ? (
+                        <>
+                            {/* the aids read the record, so they head it and
+                                stay in view as the feed scrolls under them */}
+                            <div className="moves-head">
+                                <BoardToggles />
+                            </div>
+                            <MoveFeed feed={feed} visible={drawer.visible} />
+                        </>
+                    ) : null}
                     {drawer.tab === `game` ? <GameFacts facts={facts} running={running} onResign={onResign} /> : null}
                 </div>
             </div>

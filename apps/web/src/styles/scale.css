@@ -78,15 +78,18 @@
         --hex-path: polygon(50% 0, 100% 25%, 100% 75%, 50% 100%, 0 75%, 0 25%);
 
         --border-w: 1px;
+        --underline-offset: 0.15em;
         --focus-w: 2px;
 
         --shell-max: 72rem;
         --shell-pad: var(--space-4);
         --panel-w: 20rem;
         --dialog-w: 26rem;
+        --settings-w: 24rem;
+        --theme-swatch-h: 2.75rem;
+        --credit-swatch-w: 7rem;
         --identity-size: 4rem;
         --card-min: 14rem;
-        --preview-max-h: 24rem;
         --rung-rank-w: 3.5rem;
         --game-max: 90rem;
         --header-h: 3.5rem;
@@ -94,8 +97,11 @@
         --sheet-peek-h: 4.5rem;
         --swatch-size: 0.875rem;
         --pip-size: 0.75rem;
+        --discord-symbol-w: 1.25rem;
+        --z-sticky: 1;
         --z-hud: 2;
         --z-drawer: 3;
+        --z-popover: 4;
         --hot-edge-w: 0.75rem;
         /* the board's camera keeps this clear above and below for the
            overlays */
@@ -112,7 +118,11 @@
         --board-number-size: 1.25rem;
         --board-ring-w: 2px;
         --board-pending-dash: 6 4;
+        /* screen pixels at any board scale: each casing edge beside the
+           line stays two whole pixels, never a sub-pixel fringe */
         --board-win-w: 4px;
+        --board-win-casing-w: 8px;
+        --board-stone-mark-w: 1.5px;
         /* a cell never renders smaller than this; a finger needs more */
         --board-cell-min: 1.75rem;
         --board-frontier-w: 1.5px;

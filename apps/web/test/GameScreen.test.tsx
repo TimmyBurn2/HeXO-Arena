@@ -2,6 +2,7 @@
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { GameSnapshot } from '@hexarena/contract';
+import { boardSettingsStore, defaultBoardSettings } from '../src/board/board-settings';
 import { meStore } from '../src/me';
 import { GameScreen } from '../src/screens/GameScreen';
 import { FakeEventSource, stubEventSource } from './event-source';
@@ -80,6 +81,7 @@ afterEach(() => {
     cleanup();
     vi.unstubAllGlobals();
     window.history.replaceState(null, ``, `/`);
+    boardSettingsStore.update(defaultBoardSettings);
 });
 
 describe('GameScreen', () => {
@@ -172,6 +174,54 @@ describe('GameScreen', () => {
         expect(document.querySelector(`.peek-line`)?.textContent).toBe(`hextide won with six in a row`);
     });
 
+    it('keep two tabs, Moves and Game, both reached by arrow keys either way', async () => {
+        stubGame(runningSnapshot);
+        render(<GameScreen gameId="g-run" />);
+        await screen.findByRole(`heading`, { name: `hextide vs you` });
+        await openWithM();
+        expect(screen.getAllByRole(`tab`).map((tab) => tab.textContent)).toEqual([`Moves`, `Game`]);
+        const moves = screen.getByRole(`tab`, { name: `Moves` });
+        fireEvent.keyDown(moves, { key: `ArrowRight` });
+        expect(screen.getByRole(`tab`, { name: `Game` }).getAttribute(`aria-selected`)).toBe(`true`);
+        expect(document.activeElement).toBe(screen.getByRole(`tab`, { name: `Game` }));
+        fireEvent.keyDown(screen.getByRole(`tab`, { name: `Game` }), { key: `ArrowRight` });
+        expect(moves.getAttribute(`aria-selected`)).toBe(`true`);
+        fireEvent.keyDown(moves, { key: `ArrowLeft` });
+        expect(screen.getByRole(`tab`, { name: `Game` }).getAttribute(`aria-selected`)).toBe(`true`);
+        fireEvent.keyDown(screen.getByRole(`tab`, { name: `Game` }), { key: `ArrowLeft` });
+        expect(document.activeElement).toBe(moves);
+    });
+
+    it('head the moves with the stone numbers switch, writing the one stored setting', async () => {
+        stubGame(runningSnapshot);
+        render(<GameScreen gameId="g-run" />);
+        await screen.findByRole(`heading`, { name: `hextide vs you` });
+        await openWithM();
+        const head = document.querySelector(`#drawer-panel-moves .moves-head`);
+        expect(head?.nextElementSibling?.classList.contains(`feed`)).toBe(true);
+        const frame = document.querySelector(`.board-frame`);
+        expect(screen.getAllByRole(`switch`).map((toggle) => toggle.closest(`label`)?.textContent)).toEqual([`Stone numbers`]);
+        fireEvent.click(screen.getByRole(`switch`, { name: `Stone numbers` }));
+        expect(boardSettingsStore.read()).toEqual({ numbers: true, glare: true });
+        expect(JSON.parse(window.localStorage.getItem(`hexarena.board-rendering.v1`) ?? `null`)).toEqual({ numbers: true, glare: true });
+        expect(frame?.hasAttribute(`data-numbers`)).toBe(true);
+    });
+
+    it('offer no theme choice and no settings gear anywhere in a game', async () => {
+        for (const snapshot of [runningSnapshot, finishedSnapshot, watched(runningSnapshot)]) {
+            stubGame(snapshot);
+            render(<GameScreen gameId="g-any" />);
+            await screen.findByRole(`heading`);
+            await openWithM();
+            for (const tab of [`Moves`, `Game`]) {
+                fireEvent.click(screen.getByRole(`tab`, { name: tab }));
+                expect(screen.queryAllByRole(`radio`)).toEqual([]);
+                expect(screen.queryByRole(`button`, { name: `Settings` })).toBe(null);
+            }
+            cleanup();
+        }
+    });
+
     it('not-found for an unknown game', async () => {
         stubGame(runningSnapshot, 404);
         render(<GameScreen gameId="g-x" />);
@@ -197,7 +247,7 @@ describe('GameScreen', () => {
         stubEventSource(runningSnapshot);
         render(<GameScreen gameId="g-run" />);
         await screen.findByRole(`heading`, { name: `hextide vs you` });
-        fireEvent.click(screen.getByRole(`button`, { name: `Moves, look, and game` }));
+        fireEvent.click(screen.getByRole(`button`, { name: `Moves and game` }));
         fireEvent.click(screen.getByRole(`tab`, { name: `Game` }));
         fireEvent.click(screen.getByRole(`button`, { name: `Resign` }));
         expect(screen.getByRole(`button`, { name: `Confirm resign` })).toBeTruthy();
@@ -260,7 +310,7 @@ describe('GameScreen', () => {
         stubGame(runningSnapshot);
         render(<GameScreen gameId="g-run" />);
         await screen.findByRole(`heading`, { name: `hextide vs you` });
-        fireEvent.click(screen.getByRole(`button`, { name: `Moves, look, and game` }));
+        fireEvent.click(screen.getByRole(`button`, { name: `Moves and game` }));
         expect(document.querySelector(`#drawer-body`)?.hasAttribute(`hidden`)).toBe(false);
         (document.querySelector(`.drawer-tab`) as HTMLElement).focus();
         fireEvent.click(document.querySelector(`.drawer-close`) as HTMLElement);

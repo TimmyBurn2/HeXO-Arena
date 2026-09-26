@@ -1,9 +1,10 @@
 import { lazy, Suspense, useEffect, useRef, useSyncExternalStore } from 'react';
-import { discordLoginPath } from '@hexarena/contract';
+import { DiscordButton } from './components/DiscordButton';
 import { useMe } from './me';
 import { Link } from './router/Link';
 import { routePath, type Route } from './router/route';
 import { useRoute } from './router/use-route';
+import { Settings } from './settings/Settings';
 import { siteStatusStore } from './site-status';
 import { useDocumentMeta } from './use-document-meta';
 import './AppShell.css';
@@ -27,6 +28,10 @@ const ConnectScreen = lazy(async () => {
 const ProfileScreen = lazy(async () => {
     const module = await import(`./screens/ProfileScreen`);
     return { default: module.ProfileScreen };
+});
+const CreditsScreen = lazy(async () => {
+    const module = await import(`./screens/CreditsScreen`);
+    return { default: module.CreditsScreen };
 });
 const GameScreen = lazy(async () => {
     const module = await import(`./screens/GameScreen`);
@@ -95,6 +100,7 @@ export function AppShell() {
                             ))}
                     </nav>
                     <div className="nav-right">
+                        <Settings />
                         <Identity route={route} />
                     </div>
                 </div>
@@ -136,6 +142,8 @@ function RouteView({ route }: { route: Route }) {
             return <ConnectScreen />;
         case `profile`:
             return <ProfileScreen />;
+        case `credits`:
+            return <CreditsScreen />;
         case `game`:
             return <GameScreen gameId={route.gameId} />;
         case `not-found`:
@@ -153,18 +161,14 @@ function Identity({ route }: { route: Route }) {
     }
     const me = state.me;
     if (me === null) {
-        return (
-            <a className="btn btn-primary btn-sm" href={discordLoginPath}>
-                Sign in
-            </a>
-        );
+        return <DiscordButton />;
     }
     return (
         <Link to="/profile" className={`identity nav-link${active ? ` active` : ``}`} ariaCurrent={active}>
             <span className="monogram" aria-hidden="true">
                 {me.kind === `user` ? me.name.slice(0, 1) : `g`}
             </span>
-            {me.name}
+            <span className="identity-label">{me.name}</span>
             {me.kind === `guest` ? <span className="tag muted">unrated</span> : null}
         </Link>
     );

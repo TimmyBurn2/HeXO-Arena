@@ -79,13 +79,30 @@
         stop-opacity: 0;
     }
 
+    .stone-mark {
+        fill: none;
+        stroke-width: var(--board-stone-mark-w);
+    }
+
+    .m-x {
+        stroke: var(--stone-mark-x);
+    }
+
+    .m-o {
+        stroke: var(--stone-mark-o);
+    }
+
     .ghost {
         opacity: var(--board-ghost-opacity);
         pointer-events: none;
         animation: fade-in var(--dur-fast) var(--ease) both;
     }
 
-    .stone .number {
+    .numbers {
+        pointer-events: none;
+    }
+
+    .number {
         display: none;
         font-family: var(--font-sans);
         font-weight: var(--weight-strong);
@@ -93,7 +110,7 @@
         text-anchor: middle;
     }
 
-    [data-numbers] .stone .number {
+    [data-numbers] .number {
         display: block;
     }
 
@@ -105,16 +122,18 @@
         fill: var(--board-number-o);
     }
 
-    .coord {
-        display: none;
-        fill: var(--board-coord);
-        font-family: var(--font-mono);
-        font-size: var(--text-sm);
-        text-anchor: middle;
+    /* The win line's mask keeps everything but a band round each digit it
+       crosses, as wide as the casing in screen pixels at any scale. */
+    .cut-keep {
+        fill: var(--mask-keep);
     }
 
-    [data-coords] .coord {
-        display: block;
+    .number.cut {
+        fill: var(--mask-cut);
+        stroke: var(--mask-cut);
+        stroke-width: var(--board-win-casing-w);
+        stroke-linejoin: round;
+        vector-effect: non-scaling-stroke;
     }
 
     .ring-pending {
@@ -140,11 +159,29 @@
         animation: fade-in var(--dur-base) var(--ease) var(--dur-fast) both;
     }
 
+    /* The line and its casing keep their widths however small the board
+       scales, where a scaled casing edge falls below a pixel. */
+    .win-casing {
+        fill: none;
+        stroke: var(--board-win-casing);
+        stroke-width: var(--board-win-casing-w);
+        stroke-linecap: round;
+        vector-effect: non-scaling-stroke;
+    }
+
     .win-line {
         fill: none;
         stroke: var(--board-win);
         stroke-width: var(--board-win-w);
         stroke-linecap: round;
+        vector-effect: non-scaling-stroke;
+    }
+
+    .theme-swatch {
+        display: block;
+        width: 100%;
+        height: var(--theme-swatch-h);
+        background: var(--board-bg);
     }
 
     @keyframes stone-in {
@@ -158,5 +195,13 @@
         from {
             opacity: 0;
         }
+    }
+}
+
+/* The viewer's glare choice outranks every theme, previews included. */
+@layer preferences {
+    :root[data-glare='off'],
+    :root[data-glare='off'] [data-theme-preview] {
+        --stone-shine-opacity: 0;
     }
 }

@@ -10,6 +10,7 @@ describe('parseRoute', () => {
         expect(parseRoute(`/bots`)).toEqual({ name: `bots` });
         expect(parseRoute(`/connect`)).toEqual({ name: `connect` });
         expect(parseRoute(`/profile`)).toEqual({ name: `profile` });
+        expect(parseRoute(`/credits`)).toEqual({ name: `credits` });
     });
 
     it('carry the bot name and game id', () => {
@@ -39,6 +40,7 @@ describe('routePath', () => {
         expect(routePath({ name: `bot`, bot: `sealbot` })).toBe(`/bots/sealbot`);
         expect(routePath({ name: `connect` })).toBe(`/connect`);
         expect(routePath({ name: `profile` })).toBe(`/profile`);
+        expect(routePath({ name: `credits` })).toBe(`/credits`);
         expect(routePath({ name: `game`, gameId: `g1` })).toBe(`/game/g1`);
     });
 
@@ -49,6 +51,7 @@ describe('routePath', () => {
             { name: `bot`, bot: `sealbot` },
             { name: `connect` },
             { name: `profile` },
+            { name: `credits` },
             { name: `game`, gameId: `g1` },
         ] as const;
         for (const route of routes) {
