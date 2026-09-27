@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { GameSnapshot } from '@hexarena/contract';
+import type { GameSnapshot } from '@hexo-arena/contract';
 import { boardSettingsStore, defaultBoardSettings } from '../src/board/board-settings';
 import { meStore } from '../src/me';
 import { GameScreen } from '../src/screens/GameScreen';
@@ -94,7 +94,7 @@ describe('GameScreen', () => {
         expect(document.querySelector(`.hud-bottom-center .hud-turn`)?.textContent).toBe(`Your move`);
         expect(document.querySelector(`.board-control`)?.getAttribute(`tabindex`)).toBe(`0`);
         await waitFor(() => {
-            expect(document.title).toBe(`hextide vs you - hexarena`);
+            expect(document.title).toBe(`hextide vs you - HeXO Arena`);
         });
     });
 
@@ -145,7 +145,7 @@ describe('GameScreen', () => {
         expect(document.querySelector(`.peek-line`)?.textContent).toBe(`hextide won with six in a row`);
         fireEvent.keyDown(window, { key: `m` });
         await waitFor(() => {
-            expect(document.title).toBe(`hextide won (six in a row) - hexarena`);
+            expect(document.title).toBe(`hextide won (six in a row) - HeXO Arena`);
         });
     });
 
@@ -224,7 +224,7 @@ describe('GameScreen', () => {
         expect(screen.getAllByRole(`switch`).map((toggle) => toggle.closest(`label`)?.textContent)).toEqual([`Stone numbers`]);
         fireEvent.click(screen.getByRole(`switch`, { name: `Stone numbers` }));
         expect(boardSettingsStore.read()).toEqual({ numbers: true, glare: true });
-        expect(JSON.parse(window.localStorage.getItem(`hexarena.board-rendering.v1`) ?? `null`)).toEqual({ numbers: true, glare: true });
+        expect(JSON.parse(window.localStorage.getItem(`hexo-arena.board-rendering.v1`) ?? `null`)).toEqual({ numbers: true, glare: true });
         expect(frame?.hasAttribute(`data-numbers`)).toBe(true);
     });
 
@@ -250,7 +250,7 @@ describe('GameScreen', () => {
         expect(screen.getByText(`That game does not exist.`)).toBeTruthy();
         expect(screen.getByRole(`link`, { name: `Ladder` }).getAttribute(`href`)).toBe(`/ladder`);
         await waitFor(() => {
-            expect(document.title).toBe(`Not found - hexarena`);
+            expect(document.title).toBe(`Not found - HeXO Arena`);
         });
     });
 
@@ -433,7 +433,7 @@ describe('GameScreen for a watcher', () => {
         fireEvent.click(document.querySelector(`polygon.cell`) as Element);
         expect(document.querySelector(`.ring-pending`)).toBe(null);
         await waitFor(() => {
-            expect(document.title).toBe(`hextide vs tom - hexarena`);
+            expect(document.title).toBe(`hextide vs tom - HeXO Arena`);
         });
     });
 
@@ -479,7 +479,7 @@ describe('GameScreen for a watcher', () => {
         render(<GameScreen gameId="g-end" />);
         expect(await screen.findByText(`hextide won with six in a row`, { selector: `.hud-result` })).toBeTruthy();
         await waitFor(() => {
-            expect(document.title).toBe(`hextide won (six in a row) - hexarena`);
+            expect(document.title).toBe(`hextide won (six in a row) - HeXO Arena`);
         });
     });
 });

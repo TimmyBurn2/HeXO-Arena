@@ -1,5 +1,5 @@
 import { memo, useId, useMemo, useRef } from 'react';
-import type { AxialCoord, Side } from '@hexarena/contract';
+import type { AxialCoord, Side } from '@hexo-arena/contract';
 import type { BoardSettings } from './board-settings';
 import {
     cellPoints,

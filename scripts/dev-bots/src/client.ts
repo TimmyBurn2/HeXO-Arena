@@ -12,7 +12,7 @@ import {
     type Accepts,
     type StreamEvent,
     type TimeControl,
-} from '@hexarena/contract';
+} from '@hexo-arena/contract';
 import { z } from 'zod';
 
 const errorCodeSchema = z.object({ code: z.string() });

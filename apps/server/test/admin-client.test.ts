@@ -73,7 +73,7 @@ describe('sendAdminRequest', () => {
     });
 
     it('carries a request to the running app and its answer back', async () => {
-        directory = mkdtempSync(join(tmpdir(), `hexarena-cli-`));
+        directory = mkdtempSync(join(tmpdir(), `hexo-arena-cli-`));
         const path = join(directory, `admin.sock`);
         world = await createTestApp({ logger: false });
         server = await listenAdminSocket(path, world.admin, { error: () => undefined });
@@ -82,7 +82,7 @@ describe('sendAdminRequest', () => {
     });
 
     it('rejects when the server drops the connection unanswered', async () => {
-        directory = mkdtempSync(join(tmpdir(), `hexarena-cli-`));
+        directory = mkdtempSync(join(tmpdir(), `hexo-arena-cli-`));
         const path = join(directory, `admin.sock`);
         world = await createTestApp({ logger: false });
         server = await listenAdminSocket(

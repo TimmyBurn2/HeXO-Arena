@@ -156,7 +156,7 @@ describe('Settings', () => {
         fireEvent.click(screen.getByRole(`radio`, { name: `Omok` }));
         expect(document.documentElement.dataset.theme).toBe(`omok`);
         expect(themeStore.read()).toBe(`omok`);
-        expect(window.localStorage.getItem(`hexarena.theme.v1`)).toBe(`omok`);
+        expect(window.localStorage.getItem(`hexo-arena.theme.v1`)).toBe(`omok`);
         expect(screen.getByRole(`radio`, { name: `Omok` }).matches(`:checked`)).toBe(true);
     });
 
@@ -164,10 +164,10 @@ describe('Settings', () => {
         render(<Settings />);
         open();
         fireEvent.click(screen.getByRole(`switch`, { name: `Stone numbers` }));
-        expect(JSON.parse(window.localStorage.getItem(`hexarena.board-rendering.v1`) ?? `null`)).toEqual({ numbers: true, glare: true });
+        expect(JSON.parse(window.localStorage.getItem(`hexo-arena.board-rendering.v1`) ?? `null`)).toEqual({ numbers: true, glare: true });
         expect(boardSettingsStore.read()).toEqual({ numbers: true, glare: true });
         fireEvent.click(screen.getByRole(`switch`, { name: `Stone numbers` }));
-        expect(JSON.parse(window.localStorage.getItem(`hexarena.board-rendering.v1`) ?? `null`)).toEqual({ numbers: false, glare: true });
+        expect(JSON.parse(window.localStorage.getItem(`hexo-arena.board-rendering.v1`) ?? `null`)).toEqual({ numbers: false, glare: true });
     });
 
     it('turn the glare off everywhere from its switch, on by default', () => {
@@ -176,7 +176,7 @@ describe('Settings', () => {
         const glare = screen.getByRole(`switch`, { name: `Stone glare` });
         expect(glare.matches(`:checked`)).toBe(true);
         fireEvent.click(glare);
-        expect(JSON.parse(window.localStorage.getItem(`hexarena.board-rendering.v1`) ?? `null`)).toEqual({ numbers: false, glare: false });
+        expect(JSON.parse(window.localStorage.getItem(`hexo-arena.board-rendering.v1`) ?? `null`)).toEqual({ numbers: false, glare: false });
         expect(document.documentElement.dataset.glare).toBe(`off`);
     });
 

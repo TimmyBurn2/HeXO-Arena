@@ -7,7 +7,7 @@ import {
     type OpeningPlies,
     type StreamEvent,
     type TimeControl,
-} from '@hexarena/contract';
+} from '@hexo-arena/contract';
 import type { Query } from './db';
 import {
     decideChallenge,

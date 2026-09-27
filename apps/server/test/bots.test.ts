@@ -1,7 +1,7 @@
-import { botsPath, botTokenPattern, botWithTokenSchema, devLoginPath } from '@hexarena/contract';
+import { botsPath, botTokenPattern, botWithTokenSchema, devLoginPath } from '@hexo-arena/contract';
 import { desc } from 'drizzle-orm';
 import { describe, expect, it } from 'vitest';
-import { botCapPerUser } from '@hexarena/contract';
+import { botCapPerUser } from '@hexo-arena/contract';
 import { createQuery } from '../src/db';
 import { bots } from '../src/db/schema';
 import { insertBotGame, recordFinish } from '../src/game-store';
@@ -39,7 +39,7 @@ describe('POST /api/bots', () => {
             method: 'POST',
             url: botsPath,
             payload: { name: `MyBot` },
-            cookies: { hexarena_session: cookie.split(`=`)[1] ?? `` },
+            cookies: { hexo_arena_session: cookie.split(`=`)[1] ?? `` },
         });
         expect(response.statusCode).toBe(201);
         const body: unknown = response.json();
@@ -64,7 +64,7 @@ describe('POST /api/bots', () => {
             method: 'POST',
             url: botsPath,
             payload: { name },
-            cookies: { hexarena_session: cookie.split(`=`)[1] ?? `` },
+            cookies: { hexo_arena_session: cookie.split(`=`)[1] ?? `` },
         });
         expect(response.statusCode).toBe(400);
         expect(response.json()).toMatchObject({ code });
@@ -79,14 +79,14 @@ describe('POST /api/bots', () => {
             method: 'POST',
             url: botsPath,
             payload: { name: `FoldBot` },
-            cookies: { hexarena_session: session },
+            cookies: { hexo_arena_session: session },
         });
         expect(first.statusCode).toBe(201);
         const second = await app.inject({
             method: 'POST',
             url: botsPath,
             payload: { name: `foldbot` },
-            cookies: { hexarena_session: session },
+            cookies: { hexo_arena_session: session },
         });
         expect(second.statusCode).toBe(409);
         expect(second.json()).toMatchObject({ code: `name_taken` });
@@ -100,7 +100,7 @@ describe('POST /api/bots', () => {
             method: 'POST',
             url: botsPath,
             payload: { name: `humanname` },
-            cookies: { hexarena_session: cookie.split(`=`)[1] ?? `` },
+            cookies: { hexo_arena_session: cookie.split(`=`)[1] ?? `` },
         });
         expect(response.statusCode).toBe(409);
         expect(response.json()).toMatchObject({ code: `name_taken` });
@@ -115,7 +115,7 @@ describe('POST /api/bots', () => {
                 method: 'POST',
                 url: botsPath,
                 payload: { name: `bot-${i.toString()}` },
-                cookies: { hexarena_session: session },
+                cookies: { hexo_arena_session: session },
             });
             expect(response.statusCode).toBe(201);
         }
@@ -123,7 +123,7 @@ describe('POST /api/bots', () => {
             method: 'POST',
             url: botsPath,
             payload: { name: `bot-3` },
-            cookies: { hexarena_session: session },
+            cookies: { hexo_arena_session: session },
         });
         expect(fourth.statusCode).toBe(403);
         expect(fourth.json()).toMatchObject({ code: `bot_limit` });
@@ -140,13 +140,13 @@ describe('GET /api/bots', () => {
             method: 'POST',
             url: botsPath,
             payload: { name: `Beta` },
-            cookies: { hexarena_session: owner },
+            cookies: { hexo_arena_session: owner },
         });
         await app.inject({
             method: 'POST',
             url: botsPath,
             payload: { name: `alpha` },
-            cookies: { hexarena_session: other },
+            cookies: { hexo_arena_session: other },
         });
         const response = await app.inject({ method: 'GET', url: botsPath });
         expect(response.statusCode).toBe(200);
@@ -164,7 +164,7 @@ describe('GET /api/bots', () => {
             method: 'POST',
             url: botsPath,
             payload: { name: `Rated` },
-            cookies: { hexarena_session: owner },
+            cookies: { hexo_arena_session: owner },
         });
         sqlite
             .prepare(`insert into ratings (bot_id, rating, deviation, volatility) select id, 1723.6, 60, 0.06 from bots`)
@@ -189,13 +189,13 @@ describe('GET /api/bots', () => {
             method: 'POST',
             url: botsPath,
             payload: { name: `Idle` },
-            cookies: { hexarena_session: session },
+            cookies: { hexo_arena_session: session },
         });
         await app.inject({
             method: 'POST',
             url: botsPath,
             payload: { name: `Live` },
-            cookies: { hexarena_session: session },
+            cookies: { hexo_arena_session: session },
         });
         const rows = createQuery(sqlite).select({ id: bots.id, name: bots.name }).from(bots).orderBy(bots.nameKey).all();
         const live = rows.find((row) => row.name === `Live`);
@@ -216,7 +216,7 @@ describe('GET /api/bots', () => {
             method: 'POST',
             url: botsPath,
             payload: { name: `Dropped` },
-            cookies: { hexarena_session: session },
+            cookies: { hexo_arena_session: session },
         });
         const [row] = createQuery(sqlite).select({ id: bots.id }).from(bots).all();
         if (!row) throw new Error(`the bot row is missing`);
@@ -237,13 +237,13 @@ describe('GET /api/bots', () => {
             method: 'POST',
             url: botsPath,
             payload: { name: `Idle` },
-            cookies: { hexarena_session: session },
+            cookies: { hexo_arena_session: session },
         });
         await app.inject({
             method: 'POST',
             url: botsPath,
             payload: { name: `Live` },
-            cookies: { hexarena_session: session },
+            cookies: { hexo_arena_session: session },
         });
         const rows = createQuery(sqlite).select({ id: bots.id, name: bots.name }).from(bots).orderBy(bots.nameKey).all();
         const live = rows.find((row) => row.name === `Live`);
@@ -268,18 +268,18 @@ describe('DELETE /api/bots/:name', () => {
             method: 'POST',
             url: botsPath,
             payload: { name: `Gone` },
-            cookies: { hexarena_session: session },
+            cookies: { hexo_arena_session: session },
         });
         const deleted = await app.inject({
             method: 'DELETE',
             url: `/api/bots/Gone`,
-            cookies: { hexarena_session: session },
+            cookies: { hexo_arena_session: session },
         });
         expect(deleted.statusCode).toBe(204);
         const second = await app.inject({
             method: 'DELETE',
             url: `/api/bots/Gone`,
-            cookies: { hexarena_session: session },
+            cookies: { hexo_arena_session: session },
         });
         expect(second.statusCode).toBe(404);
         expect(second.json()).toMatchObject({ code: `not_found` });
@@ -287,7 +287,7 @@ describe('DELETE /api/bots/:name', () => {
             method: 'POST',
             url: botsPath,
             payload: { name: `gone` },
-            cookies: { hexarena_session: session },
+            cookies: { hexo_arena_session: session },
         });
         expect(relisted.statusCode).toBe(201);
         await app.close();
@@ -311,16 +311,16 @@ describe('DELETE /api/bots/:name', () => {
         });
         recordFinish(query, gameId, { winner: `o`, reason: `six-in-a-row` });
         const ratingsBefore = storedRatings(query);
-        const deleted = await app.inject({ method: 'DELETE', url: `/api/bots/Veteran`, cookies: { hexarena_session: owner } });
+        const deleted = await app.inject({ method: 'DELETE', url: `/api/bots/Veteran`, cookies: { hexo_arena_session: owner } });
         expect(deleted.statusCode).toBe(204);
         expect(sqlite.prepare(`select name from bots where id = ?`).get(veteran.id)).toEqual({ name: `deleted-1` });
         expect(sqlite.prepare(`select count(*) as n from games`).get()).toEqual({ n: 1 });
         expect(storedRatings(query)).toEqual(ratingsBefore);
         const roster = await app.inject({ method: 'GET', url: botsPath });
         expect(roster.json<{ name: string }[]>().map((bot) => bot.name)).toEqual([`rival-bot`]);
-        const reclaim = await app.inject({ method: 'POST', url: botsPath, payload: { name: `veteran` }, cookies: { hexarena_session: owner } });
+        const reclaim = await app.inject({ method: 'POST', url: botsPath, payload: { name: `veteran` }, cookies: { hexo_arena_session: owner } });
         expect(reclaim.statusCode).toBe(409);
-        const rotate = await app.inject({ method: 'POST', url: `/api/bots/deleted-1/token`, cookies: { hexarena_session: owner } });
+        const rotate = await app.inject({ method: 'POST', url: `/api/bots/deleted-1/token`, cookies: { hexo_arena_session: owner } });
         expect(rotate.statusCode).toBe(404);
         const challenge = await app.inject({
             method: 'POST',
@@ -347,11 +347,11 @@ describe('DELETE /api/bots/:name', () => {
         const game = await app.inject({
             method: 'POST',
             url: `/api/games`,
-            cookies: { hexarena_session: await loginAs(app, `player`) },
+            cookies: { hexo_arena_session: await loginAs(app, `player`) },
             payload: { bot: `Busy`, timeControl: { mode: `unlimited` } },
         });
         expect(game.statusCode).toBe(201);
-        const refused = await app.inject({ method: 'DELETE', url: `/api/bots/Busy`, cookies: { hexarena_session: owner } });
+        const refused = await app.inject({ method: 'DELETE', url: `/api/bots/Busy`, cookies: { hexo_arena_session: owner } });
         expect(refused.statusCode).toBe(409);
         expect(refused.json()).toEqual({ error: `the bot is in a live game`, code: `in_game` });
         presence.close(row.id);
@@ -366,12 +366,12 @@ describe('DELETE /api/bots/:name', () => {
             method: 'POST',
             url: botsPath,
             payload: { name: `OwnBot` },
-            cookies: { hexarena_session: owner },
+            cookies: { hexo_arena_session: owner },
         });
         const response = await app.inject({
             method: 'DELETE',
             url: `/api/bots/OwnBot`,
-            cookies: { hexarena_session: stranger },
+            cookies: { hexo_arena_session: stranger },
         });
         expect(response.statusCode).toBe(404);
         const roster = await app.inject({ method: 'GET', url: botsPath });
@@ -388,7 +388,7 @@ describe('POST /api/bots/:name/token', () => {
             method: 'POST',
             url: botsPath,
             payload: { name: `Turncoat` },
-            cookies: { hexarena_session: session },
+            cookies: { hexo_arena_session: session },
         });
         expect(created.statusCode).toBe(201);
         const oldToken: unknown = created.json();
@@ -396,7 +396,7 @@ describe('POST /api/bots/:name/token', () => {
         const rotated = await app.inject({
             method: 'POST',
             url: `/api/bots/Turncoat/token`,
-            cookies: { hexarena_session: session },
+            cookies: { hexo_arena_session: session },
         });
         expect(rotated.statusCode).toBe(200);
         const rotatedBody: unknown = rotated.json();
@@ -415,7 +415,7 @@ describe('POST /api/bots/:name/token', () => {
         const response = await app.inject({
             method: 'POST',
             url: `/api/bots/ghost/token`,
-            cookies: { hexarena_session: session },
+            cookies: { hexo_arena_session: session },
         });
         expect(response.statusCode).toBe(404);
         await app.close();

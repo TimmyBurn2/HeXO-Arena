@@ -6,7 +6,7 @@ import {
     type FirstPlayer,
     type OpeningPlies,
     type TimeControl,
-} from '@hexarena/contract';
+} from '@hexo-arena/contract';
 import { and, eq, lt, sql } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/sqlite-core';
 import { randomUUID } from 'node:crypto';

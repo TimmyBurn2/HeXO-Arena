@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { LiveGameEntry } from '@hexarena/contract';
+import type { LiveGameEntry } from '@hexo-arena/contract';
 import { liveRefreshMs } from '../src/api/use-live-games';
 import { LiveRail, timeControlText } from '../src/components/LiveRail';
 import { LadderScreen } from '../src/screens/LadderScreen';

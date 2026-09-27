@@ -7,7 +7,7 @@ import {
     nameKeyOf,
     nameSyntaxSchema,
     pairDailyCap,
-} from '@hexarena/contract';
+} from '@hexo-arena/contract';
 import type { FastifyInstance } from 'fastify';
 import { requireBot } from './bot-api';
 import { findBot } from './bots';

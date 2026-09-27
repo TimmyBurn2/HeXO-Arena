@@ -1,6 +1,6 @@
 import { and, eq, gt, isNull, lt } from 'drizzle-orm';
 import { randomUUID } from 'node:crypto';
-import { sessionCookieName } from '@hexarena/contract';
+import { sessionCookieName } from '@hexo-arena/contract';
 import type { FastifyRequest } from 'fastify';
 import { nowSeconds, type Query } from './db';
 import { sessions, users } from './db/schema';

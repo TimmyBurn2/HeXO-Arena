@@ -10,7 +10,7 @@ export interface Look {
 
 export const looks: readonly Look[] = themes.map((theme) => ({
     name: theme.id,
-    storage: { 'hexarena.theme.v1': theme.id },
+    storage: { 'hexo-arena.theme.v1': theme.id },
 }));
 
 export interface Viewport {
@@ -94,7 +94,7 @@ export const shots: readonly Shot[] = [
         ready: `h1`,
         framed: true,
         after: openSettings,
-        storage: { 'hexarena.board-rendering.v1': `{"numbers":true}` },
+        storage: { 'hexo-arena.board-rendering.v1': `{"numbers":true}` },
         board: true,
     },
     { name: `settings-signed-out`, path: `/connect`, world: signedOut, ready: `h1`, framed: true, after: openSettings, board: true },
@@ -159,7 +159,7 @@ export const shots: readonly Shot[] = [
         world: world(),
         ready: `svg polygon.cell`,
         framed: false,
-        storage: { 'hexarena.board-rendering.v1': `{"numbers":true}` },
+        storage: { 'hexo-arena.board-rendering.v1': `{"numbers":true}` },
         board: true,
     },
     {
@@ -226,7 +226,7 @@ export const shots: readonly Shot[] = [
         world: world(),
         ready: `svg polygon.cell`,
         framed: false,
-        storage: { 'hexarena.drawer-pinned.v1': `1` },
+        storage: { 'hexo-arena.drawer-pinned.v1': `1` },
         board: true,
     },
     {
@@ -235,7 +235,7 @@ export const shots: readonly Shot[] = [
         world: world(),
         ready: `svg polygon.cell`,
         framed: false,
-        storage: { 'hexarena.board-rendering.v1': `{"numbers":true}` },
+        storage: { 'hexo-arena.board-rendering.v1': `{"numbers":true}` },
         after: async (page) => {
             await page.keyboard.press(`m`);
             await page.locator(`#drawer-body:not([hidden])`).waitFor();

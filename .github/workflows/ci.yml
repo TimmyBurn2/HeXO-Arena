@@ -33,7 +33,8 @@ jobs:
             - uses: docker/metadata-action@v5
               id: meta
               with:
-                  images: ghcr.io/${{ github.repository }}
+                  # Named for the site, whatever the repository is called.
+                  images: ghcr.io/${{ github.repository_owner }}/hexo-arena
                   tags: |
                       type=sha,format=long
                       type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}

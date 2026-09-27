@@ -7,7 +7,7 @@ import {
     watcherRetryAfterSeconds,
     type GameEvent,
     type GameSnapshot,
-} from '@hexarena/contract';
+} from '@hexo-arena/contract';
 import http from 'node:http';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { findBot } from '../src/bots';

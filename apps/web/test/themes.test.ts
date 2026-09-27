@@ -60,32 +60,16 @@ describe('theme sheets', () => {
 
 describe('parseTheme', () => {
     it('keep a stored theme', () => {
-        expect(parseTheme(`omok`, null)).toBe(`omok`);
-    });
-
-    it('read a retired theme as its successor', () => {
-        expect(parseTheme(`slate`, null)).toBe(`ink`);
-        expect(parseTheme(`walnut`, null)).toBe(`omok`);
+        expect(parseTheme(`omok`)).toBe(`omok`);
     });
 
     it('never read a stored name through to an object prototype', () => {
-        expect(parseTheme(`constructor`, null)).toBe(defaultTheme);
-        expect(parseTheme(`toString`, JSON.stringify({ palette: `__proto__` }))).toBe(defaultTheme);
+        expect(parseTheme(`constructor`)).toBe(defaultTheme);
+        expect(parseTheme(`__proto__`)).toBe(defaultTheme);
     });
 
     it('fall back to the default on nothing or an unknown id', () => {
-        expect(parseTheme(null, null)).toBe(defaultTheme);
-        expect(parseTheme(`lava`, null)).toBe(defaultTheme);
-    });
-
-    it('carry an earlier board palette over as its theme, retired ones as their successor', () => {
-        expect(parseTheme(null, JSON.stringify({ palette: `omok`, numbers: true }))).toBe(`omok`);
-        expect(parseTheme(null, JSON.stringify({ palette: `walnut`, numbers: true }))).toBe(`omok`);
-        expect(parseTheme(null, JSON.stringify({ palette: `slate` }))).toBe(`ink`);
-        expect(parseTheme(null, JSON.stringify({ palette: `lava` }))).toBe(defaultTheme);
-    });
-
-    it('ignore a broken legacy entry', () => {
-        expect(parseTheme(null, `{nope`)).toBe(defaultTheme);
+        expect(parseTheme(null)).toBe(defaultTheme);
+        expect(parseTheme(`lava`)).toBe(defaultTheme);
     });
 });

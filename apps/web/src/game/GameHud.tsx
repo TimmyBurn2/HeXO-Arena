@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import type { GameSnapshot, Side } from '@hexarena/contract';
+import type { GameSnapshot, Side } from '@hexo-arena/contract';
 import { BotBadge, Rating, Swatch } from '../components/player';
 import { selfName, type MeState } from '../me';
 import { Link } from '../router/Link';

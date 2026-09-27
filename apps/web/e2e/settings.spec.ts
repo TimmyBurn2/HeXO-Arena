@@ -7,7 +7,7 @@ async function ladder(page: Page, width: number, theme = `ink`): Promise<void> {
     await page.setViewportSize({ width, height: 900 });
     // Seeded once, so a reload keeps whatever the test chose since.
     await page.addInitScript((id: string) => {
-        if (window.localStorage.getItem(`hexarena.theme.v1`) === null) window.localStorage.setItem(`hexarena.theme.v1`, id);
+        if (window.localStorage.getItem(`hexo-arena.theme.v1`) === null) window.localStorage.setItem(`hexo-arena.theme.v1`, id);
     }, theme);
     await serve(page, world());
     await page.goto(`/`);
@@ -112,7 +112,7 @@ test('a theme applies live and persists, by click and by arrow key', async ({ pa
     await gear(page).click();
     await page.locator(`label.theme-card`, { hasText: `Omok` }).click();
     await expect(page.locator(`html`)).toHaveAttribute(`data-theme`, `omok`);
-    expect(await page.evaluate(() => window.localStorage.getItem(`hexarena.theme.v1`))).toBe(`omok`);
+    expect(await page.evaluate(() => window.localStorage.getItem(`hexo-arena.theme.v1`))).toBe(`omok`);
     await page.getByRole(`radio`, { name: `Omok` }).focus();
     await page.keyboard.press(`ArrowLeft`);
     await expect(page.locator(`html`)).toHaveAttribute(`data-theme`, before.id);
@@ -126,7 +126,7 @@ test('the stone numbers switch writes the stored board setting by click and by k
     await gear(page).click();
     await page.getByText(`Stone numbers`).click();
     await expect(page.getByRole(`switch`, { name: `Stone numbers` })).toBeChecked();
-    const read = () => page.evaluate(() => JSON.parse(window.localStorage.getItem(`hexarena.board-rendering.v1`) ?? `null`) as unknown);
+    const read = () => page.evaluate(() => JSON.parse(window.localStorage.getItem(`hexo-arena.board-rendering.v1`) ?? `null`) as unknown);
     expect(await read()).toEqual({ numbers: true, glare: true });
     await page.getByRole(`switch`, { name: `Stone numbers` }).focus();
     await page.keyboard.press(`Space`);
@@ -142,7 +142,7 @@ test('the credits link closes the panel and opens the credits page with its titl
     await expect(page).toHaveURL(/\/credits$/);
     await expect(panel(page)).toHaveCount(0);
     await expect(page.getByRole(`heading`, { level: 1 })).toHaveText(`Credits`);
-    await expect(page).toHaveTitle(`Credits - hexarena`);
+    await expect(page).toHaveTitle(`Credits - HeXO Arena`);
     await expect(gear(page)).not.toBeFocused();
 });
 
@@ -155,7 +155,7 @@ test('the glare switch, on by default, writes the setting and zeroes the glare o
     expect((await shine(`.theme-swatch`)).every((opacity) => opacity > 0)).toBe(true);
     await page.getByText(`Stone glare`).click();
     await expect(page.getByRole(`switch`, { name: `Stone glare` })).not.toBeChecked();
-    const stored = await page.evaluate(() => window.localStorage.getItem(`hexarena.board-rendering.v1`));
+    const stored = await page.evaluate(() => window.localStorage.getItem(`hexo-arena.board-rendering.v1`));
     expect(JSON.parse(stored ?? `null`)).toEqual({ numbers: false, glare: false });
     const faded = await shine(`.theme-swatch`);
     expect(faded).toHaveLength(2 * themes.length);

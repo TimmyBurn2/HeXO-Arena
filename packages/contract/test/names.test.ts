@@ -38,10 +38,17 @@ describe('reserved names', () => {
         expect(isReservedName(nameKeyOf(name))).toBe(true);
     });
 
+    it(`include the site's names in every spelling, its lookalike, and the house name`, () => {
+        for (const name of [`HeXO-Arena`, `hexo_arena`, `HexoArena`, `hexarena`, `HeXO`]) {
+            expect(isReservedName(name)).toBe(true);
+        }
+    });
+
     it.each([
         `admins`,
         `administrator-1`,
-        `hexarena-bot`,
+        `hexo-arena-bot`,
+        `hexo-arenas`,
         `roots`,
         `hexoo`,
         `deleted-player`,

@@ -1,4 +1,4 @@
-import { adminGameIdSchema, nameKeyOf } from '@hexarena/contract';
+import { adminGameIdSchema, nameKeyOf } from '@hexo-arena/contract';
 import { and, count, eq, inArray, isNotNull, isNull, like, or, type SQL } from 'drizzle-orm';
 import { nowSeconds, type Query } from './db';
 import { bots, games, nameReservations, sessions, users } from './db/schema';

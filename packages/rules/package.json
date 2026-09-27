@@ -1,5 +1,5 @@
 {
-    "name": "@hexarena/rules",
+    "name": "@hexo-arena/rules",
     "version": "0.0.0",
     "private": true,
     "type": "module",
@@ -12,7 +12,7 @@
         "corpus:generate": "tsx scripts/generate-corpus.ts"
     },
     "devDependencies": {
-        "@hexarena/contract": "workspace:*",
+        "@hexo-arena/contract": "workspace:*",
         "@types/node": "^24.0.0",
         "tsx": "^4.23.15",
         "typescript": "~5.9.3",

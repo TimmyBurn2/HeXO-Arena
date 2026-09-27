@@ -145,6 +145,12 @@ describe('openapi document', () => {
         }
     });
 
+    it('carries the site name as its title and on the session cookie', () => {
+        const document = buildOpenApiDocument();
+        expect(document.info.title).toBe(`HeXO Arena`);
+        expect(dig(document, `components`, `securitySchemes`, `sessionCookie`, `name`)).toBe(`hexo_arena_session`);
+    });
+
     it('documents the healthz route', () => {
         const document = buildOpenApiDocument();
         expect('/healthz' in document.paths).toBe(true);

@@ -10,8 +10,8 @@ describe('backups', () => {
     let sqlite: Sqlite;
 
     beforeEach(() => {
-        dir = mkdtempSync(join(tmpdir(), `hexarena-backup-`));
-        sqlite = openDatabase(join(dir, `live/hexarena.sqlite`));
+        dir = mkdtempSync(join(tmpdir(), `hexo-arena-backup-`));
+        sqlite = openDatabase(join(dir, `live/hexo-arena.sqlite`));
         runMigrations(sqlite);
         sqlite.exec(`insert into site_state (id, paused_at) values (1, 42)`);
     });
@@ -24,7 +24,7 @@ describe('backups', () => {
 
     it('writes a snapshot that opens as a database with the same rows', () => {
         const path = backupNow(sqlite, { dir: join(dir, `backup`), keep: 7 }, new Date(`2026-09-25T03:00:00Z`));
-        expect(path).toBe(join(dir, `backup/hexarena-2026-09-25.sqlite`));
+        expect(path).toBe(join(dir, `backup/hexo-arena-2026-09-25.sqlite`));
         const restored = openDatabase(path);
         expect(restored.prepare(`select paused_at as pausedAt from site_state`).get()).toEqual({ pausedAt: 42 });
         restored.close();
@@ -38,9 +38,9 @@ describe('backups', () => {
         writeFileSync(join(backupDir, `notes.txt`), `operator`);
         backupNow(sqlite, { dir: backupDir, keep: 3 }, new Date(`2026-09-06T03:00:00Z`));
         expect(readdirSync(backupDir).sort()).toEqual([
-            `hexarena-2026-09-04.sqlite`,
-            `hexarena-2026-09-05.sqlite`,
-            `hexarena-2026-09-06.sqlite`,
+            `hexo-arena-2026-09-04.sqlite`,
+            `hexo-arena-2026-09-05.sqlite`,
+            `hexo-arena-2026-09-06.sqlite`,
             `notes.txt`,
         ]);
     });
@@ -49,9 +49,9 @@ describe('backups', () => {
         const backupDir = join(dir, `backup`);
         const at = new Date(`2026-09-25T03:00:00Z`);
         backupNow(sqlite, { dir: backupDir, keep: 7 }, at);
-        writeFileSync(join(backupDir, `hexarena-2026-09-25.sqlite.partial`), `torn`);
+        writeFileSync(join(backupDir, `hexo-arena-2026-09-25.sqlite.partial`), `torn`);
         backupNow(sqlite, { dir: backupDir, keep: 7 }, at);
-        expect(readdirSync(backupDir)).toEqual([`hexarena-2026-09-25.sqlite`]);
+        expect(readdirSync(backupDir)).toEqual([`hexo-arena-2026-09-25.sqlite`]);
     });
 
     it('waits until the next run at the configured utc hour', () => {
@@ -66,7 +66,7 @@ describe('backups', () => {
         const backupDir = join(dir, `backup`);
         const schedule = scheduleBackups(sqlite, { dir: backupDir, keep: 7, hourUtc: 3 }, log);
         await vi.advanceTimersByTimeAsync(60 * 60 * 1000);
-        expect(readdirSync(backupDir)).toEqual([`hexarena-2026-09-25.sqlite`]);
+        expect(readdirSync(backupDir)).toEqual([`hexo-arena-2026-09-25.sqlite`]);
         rmSync(backupDir, { recursive: true });
         writeFileSync(backupDir, `not a directory`);
         await vi.advanceTimersByTimeAsync(24 * 60 * 60 * 1000);

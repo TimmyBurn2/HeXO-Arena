@@ -5,7 +5,7 @@ import {
     type Accepts,
     type AccountDeclaration,
     type BotAccount,
-} from '@hexarena/contract';
+} from '@hexo-arena/contract';
 import { and, count, eq, isNull } from 'drizzle-orm';
 import { randomUUID } from 'node:crypto';
 import { nowSeconds, type Query } from './db';

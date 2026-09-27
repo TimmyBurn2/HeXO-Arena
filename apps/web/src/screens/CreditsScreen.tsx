@@ -1,3 +1,4 @@
+import { siteName } from '@hexo-arena/contract';
 import { ThemeSwatch } from '../board/ThemeSwatch';
 import { useRoute } from '../router/use-route';
 import { themes, type ThemeId } from '../theme/themes';
@@ -7,11 +8,11 @@ import './CreditsScreen.css';
 // What each look takes and from where, typed over the registry so no
 // theme ships without its line here.
 const origins: Readonly<Record<ThemeId, string>> = {
-    ink: `hexarena's own look: a navy page and board with bone and cinnabar stones.`,
+    ink: `A navy page and board with bone and cinnabar stones.`,
     hds: `Named for hexo.did.science. Board and stones from HeXO Renderer's HDS theme; the page from the Tailwind palette.`,
     htttx: `Named for the HTTTX notation. Board and stones from HeXO Renderer's HTTTX theme; the page derived from them.`,
     tyto: `Board and stones from HeXO Renderer's Tyto theme; the page from the palette of Tyto's Strix observatory.`,
-    omok: `Board and stones from HeXO Renderer's Omok theme; the page is hexarena's own warm brown.`,
+    omok: `Board and stones from HeXO Renderer's Omok theme; the page is ${siteName}'s own warm brown.`,
     six: `Board, stones, and page after the default look of playsix.`,
 };
 
@@ -62,7 +63,7 @@ export function CreditsScreen() {
         <>
             <h1 className="screen-title">Credits</h1>
             <p className="credits-lead">
-                Ink is hexarena's own look. The other five themes take their colors from the projects below,
+                Ink is {siteName}'s own look. The other five themes take their colors from the projects below,
                 credited with thanks.
             </p>
 
@@ -127,7 +128,7 @@ export function CreditsScreen() {
             <h2 className="section-title">Discord</h2>
             <p className="credits-prose">
                 The Discord symbol on the sign-in button is Discord's own, shown unaltered as Discord's brand
-                guidelines allow. hexarena is not made by or affiliated with Discord.
+                guidelines allow. {siteName} is not made by or affiliated with Discord.
             </p>
         </>
     );

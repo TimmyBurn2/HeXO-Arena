@@ -12,7 +12,7 @@ const migrationsFolder = join(dirname(fileURLToPath(import.meta.url)), `../src/d
 // A copy of the migrations folder whose journal stops after `count`
 // entries, so a test can seed rows the way an older deploy left them.
 function migrationsUpTo(count: number): string {
-    const folder = mkdtempSync(join(tmpdir(), `hexarena-migrations-`));
+    const folder = mkdtempSync(join(tmpdir(), `hexo-arena-migrations-`));
     cpSync(migrationsFolder, folder, { recursive: true });
     const journalPath = join(folder, `meta/_journal.json`);
     const journal = JSON.parse(readFileSync(journalPath, `utf8`)) as { entries: unknown[] };

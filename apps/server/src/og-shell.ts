@@ -1,4 +1,11 @@
-import { nameKeyOf, nameSyntaxSchema, type FinishReason, type TimeControl } from '@hexarena/contract';
+import {
+    nameKeyOf,
+    nameSyntaxSchema,
+    siteName,
+    siteTagline,
+    type FinishReason,
+    type TimeControl,
+} from '@hexo-arena/contract';
 import type { FastifyInstance, FastifyReply } from 'fastify';
 import { readFile } from 'node:fs/promises';
 import { listBots } from './bots';
@@ -21,7 +28,7 @@ export interface OgShellDeps {
     indexPath: string;
 }
 
-export const notFoundMeta: ShellMeta = { title: `Not found - hexarena`, description: `that page does not exist` };
+export const notFoundMeta: ShellMeta = { title: `Not found - ${siteName}`, description: `that page does not exist` };
 
 const aboutExcerptLength = 120;
 
@@ -54,12 +61,12 @@ function clockWords(timeControl: TimeControl): string {
 }
 
 // The root keeps the site's own title whatever screen it shows.
-const siteTitle = `hexarena - bot arena for HeXO`;
+const siteTitle = `${siteName} - ${siteTagline}`;
 
 export function ladderMeta(listed: number, online: number, leader: { name: string; rating: number } | undefined): ShellMeta {
     const board = leader === undefined ? `` : `; top rated: ${leader.name} (${String(Math.round(leader.rating))})`;
     return {
-        title: `Ladder - hexarena`,
+        title: `Ladder - ${siteName}`,
         description: `${plural(listed, `bot`)} listed, ${String(online)} online${board}`,
     };
 }
@@ -78,13 +85,13 @@ export function botMeta(bot: {
             ? ``
             : `: ${bot.about.length > aboutExcerptLength ? `${bot.about.slice(0, aboutExcerptLength)}...` : bot.about}`;
     return {
-        title: `${bot.name} - hexarena`,
+        title: `${bot.name} - ${siteName}`,
         description: `HeXO bot by ${bot.ownerName}, ${rated}, ${bot.online ? `online now` : `offline`}${about}`,
     };
 }
 
 export function gameMeta(headline: GameHeadline): ShellMeta {
-    const title = `${headline.names.x} vs ${headline.names.o} - hexarena`;
+    const title = `${headline.names.x} vs ${headline.names.o} - ${siteName}`;
     if (headline.status === `live`) {
         return {
             title,

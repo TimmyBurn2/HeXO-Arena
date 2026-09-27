@@ -1,4 +1,4 @@
-import { botWithTokenSchema, discordCallbackPath, discordLoginPath, healthzPath, type StreamEvent } from '@hexarena/contract';
+import { botWithTokenSchema, discordCallbackPath, discordLoginPath, healthzPath, type StreamEvent } from '@hexo-arena/contract';
 import http from 'node:http';
 import { dirname, join } from 'node:path';
 import { Writable } from 'node:stream';

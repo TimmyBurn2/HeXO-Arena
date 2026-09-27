@@ -15,6 +15,6 @@ try {
     }
     console.log(text);
 } catch (error) {
-    console.error(`hexarena-admin: ${error instanceof Error ? error.message : String(error)}`);
+    console.error(`hexo-arena-admin: ${error instanceof Error ? error.message : String(error)}`);
     process.exit(1);
 }

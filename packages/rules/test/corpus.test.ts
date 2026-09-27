@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { z } from 'zod';
-import { axialCoordSchema, playerColorSchema } from '@hexarena/contract';
+import { axialCoordSchema, playerColorSchema } from '@hexo-arena/contract';
 import { describe, expect, it } from 'vitest';
 import {
     emptyPosition,

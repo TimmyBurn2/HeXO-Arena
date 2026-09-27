@@ -5,7 +5,7 @@ import {
     type Accepts,
     type OpeningPlies,
     type TimeControl,
-} from '@hexarena/contract';
+} from '@hexo-arena/contract';
 import { createGame, ApiError } from '../api/client';
 import { Dialog } from './Dialog';
 import { DiscordSignIn } from './DiscordButton';

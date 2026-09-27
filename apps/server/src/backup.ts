@@ -2,7 +2,7 @@ import { mkdirSync, readdirSync, renameSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import type { Sqlite } from './db';
 
-const backupPattern = /^hexarena-\d{4}-\d{2}-\d{2}\.sqlite$/;
+const backupPattern = /^hexo-arena-\d{4}-\d{2}-\d{2}\.sqlite$/;
 
 export interface BackupPolicy {
     dir: string;
@@ -16,7 +16,7 @@ export interface BackupLog {
 }
 
 function backupName(at: Date): string {
-    return `hexarena-${at.toISOString().slice(0, 10)}.sqlite`;
+    return `hexo-arena-${at.toISOString().slice(0, 10)}.sqlite`;
 }
 
 // VACUUM INTO writes a consistent snapshot through the live connection,

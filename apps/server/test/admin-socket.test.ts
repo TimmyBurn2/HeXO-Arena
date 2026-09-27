@@ -1,4 +1,4 @@
-import { adminRequestLimitBytes, adminResponseSchema, type AdminResponse } from '@hexarena/contract';
+import { adminRequestLimitBytes, adminResponseSchema, type AdminResponse } from '@hexo-arena/contract';
 import { spawnSync } from 'node:child_process';
 import { chmodSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { connect, type Server } from 'node:net';
@@ -44,7 +44,7 @@ describe('the admin socket', () => {
     let handle: AdminHandler;
 
     beforeEach(() => {
-        directory = mkdtempSync(join(tmpdir(), `hexarena-admin-`));
+        directory = mkdtempSync(join(tmpdir(), `hexo-arena-admin-`));
         path = join(directory, `run`, `admin.sock`);
         server = null;
         errors = [];

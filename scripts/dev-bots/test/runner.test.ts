@@ -1,4 +1,4 @@
-import { botAccountPath, botListingSchema, botsPath } from '@hexarena/contract';
+import { botAccountPath, botListingSchema, botsPath } from '@hexo-arena/contract';
 import { existsSync, mkdtempSync, readFileSync, rmSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -39,7 +39,7 @@ describe('the dev bot runner', () => {
     let lines: string[];
 
     beforeEach(() => {
-        directory = mkdtempSync(join(tmpdir(), `hexarena-dev-bots-`));
+        directory = mkdtempSync(join(tmpdir(), `hexo-arena-dev-bots-`));
         tokenFile = join(directory, `data`, `dev-bots.json`);
         world = null;
         running = [];

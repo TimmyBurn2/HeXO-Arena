@@ -36,7 +36,7 @@ async function startGame(w: World): Promise<string> {
     const created = await w.app.app.inject({
         method: `POST`,
         url: `/api/games`,
-        cookies: { hexarena_session: w.player },
+        cookies: { hexo_arena_session: w.player },
         payload: { bot: `drainbot`, timeControl: { mode: `unlimited` } },
     });
     if (created.statusCode !== 201) throw new Error(`game creation failed: ${created.body}`);
@@ -47,7 +47,7 @@ async function gameState(w: World, gameId: string): Promise<{ status: string; wi
     const response = await w.app.app.inject({
         method: `GET`,
         url: `/api/games/${gameId}`,
-        cookies: { hexarena_session: w.player },
+        cookies: { hexo_arena_session: w.player },
     });
     return response.json();
 }
@@ -81,7 +81,7 @@ describe('deploy drain', () => {
             await w.app.app.inject({
                 method: `POST`,
                 url: `/api/games`,
-                cookies: { hexarena_session: w.player },
+                cookies: { hexo_arena_session: w.player },
                 payload: { bot: `drainbot`, timeControl: { mode: `unlimited` } },
             }),
             await w.app.app.inject({
@@ -111,7 +111,7 @@ describe('deploy drain', () => {
         const resigned = await w.app.app.inject({
             method: `POST`,
             url: `/api/games/${gameId}/resign`,
-            cookies: { hexarena_session: w.player },
+            cookies: { hexo_arena_session: w.player },
         });
         expect(resigned.json()).toMatchObject({ status: `finished`, reason: `surrender` });
         await vi.advanceTimersByTimeAsync(1_000);

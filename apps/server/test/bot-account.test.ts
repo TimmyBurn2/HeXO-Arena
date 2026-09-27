@@ -4,7 +4,7 @@ import {
     botsPath,
     botWithTokenSchema,
     devLoginPath,
-} from '@hexarena/contract';
+} from '@hexo-arena/contract';
 import { describe, expect, it } from 'vitest';
 import { createTestApp } from './helpers';
 
@@ -23,7 +23,7 @@ async function mintBotToken(
         method: 'POST',
         url: botsPath,
         payload: { name },
-        cookies: { hexarena_session: owner },
+        cookies: { hexo_arena_session: owner },
     });
     expect(created.statusCode).toBe(201);
     const body: unknown = created.json();

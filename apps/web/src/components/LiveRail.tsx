@@ -1,4 +1,4 @@
-import type { GamePlayer, LiveGameEntry, Side, TimeControl } from '@hexarena/contract';
+import type { GamePlayer, LiveGameEntry, Side, TimeControl } from '@hexo-arena/contract';
 import { useLiveGames } from '../api/use-live-games';
 import { Link } from '../router/Link';
 import { BotBadge, Swatch } from './player';

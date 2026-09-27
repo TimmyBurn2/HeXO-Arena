@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import type { AxialCoord, Side } from '@hexarena/contract';
-import { isWithinPlacementRadius, rejection, type Position } from '@hexarena/rules';
+import type { AxialCoord, Side } from '@hexo-arena/contract';
+import { isWithinPlacementRadius, rejection, type Position } from '@hexo-arena/rules';
 import { Board, type BoardStone } from '../board/Board';
 import { useBoardSettings } from '../board/board-settings';
 import { cellSize, frontierCells, viewBoxOf } from '../board/geometry';

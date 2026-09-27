@@ -23,7 +23,7 @@ import {
     type Side,
     type StreamEvent,
     type TimeControl,
-} from '@hexarena/contract';
+} from '@hexo-arena/contract';
 import { randomUUID } from 'node:crypto';
 import {
     drawOpening,
@@ -33,7 +33,7 @@ import {
     type Position,
     type Rejection,
     type Win,
-} from '@hexarena/rules';
+} from '@hexo-arena/rules';
 import type { Query } from './db';
 import {
     findFinishedHeadline,

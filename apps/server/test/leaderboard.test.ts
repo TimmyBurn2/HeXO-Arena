@@ -1,4 +1,4 @@
-import { botsPath, devLoginPath, leaderboardPath } from '@hexarena/contract';
+import { botsPath, devLoginPath, leaderboardPath } from '@hexo-arena/contract';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { createTestApp, type TestApp } from './helpers';
 
@@ -16,7 +16,7 @@ describe('GET /api/leaderboard', () => {
             method: 'POST',
             url: botsPath,
             payload: { name },
-            cookies: { hexarena_session: session },
+            cookies: { hexo_arena_session: session },
         });
     }
 

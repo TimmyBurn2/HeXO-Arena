@@ -1,4 +1,4 @@
-import { devLoginPath } from '@hexarena/contract';
+import { devLoginPath } from '@hexo-arena/contract';
 import { describe, expect, it } from 'vitest';
 import { parseEnv } from '../src/env';
 import { createQuery } from '../src/db';

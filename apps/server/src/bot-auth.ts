@@ -1,4 +1,4 @@
-import { botTokenPattern } from '@hexarena/contract';
+import { botTokenPattern } from '@hexo-arena/contract';
 import { and, eq, isNull } from 'drizzle-orm';
 import type { Query } from './db';
 import { bots, users } from './db/schema';

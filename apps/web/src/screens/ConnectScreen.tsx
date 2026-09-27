@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { namePattern, isReservedName } from '@hexarena/contract';
+import { namePattern, isReservedName } from '@hexo-arena/contract';
 import { ApiError, createBot } from '../api/client';
 import { Link } from '../router/Link';
 import { useRoute } from '../router/use-route';

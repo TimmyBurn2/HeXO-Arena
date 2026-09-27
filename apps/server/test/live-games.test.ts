@@ -1,4 +1,4 @@
-import { guestPath, liveGameEntrySchema, liveGameListCap, sessionCookieName, type LiveGameEntry } from '@hexarena/contract';
+import { guestPath, liveGameEntrySchema, liveGameListCap, sessionCookieName, type LiveGameEntry } from '@hexo-arena/contract';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { findBot } from '../src/bots';
 import { createQuery } from '../src/db';

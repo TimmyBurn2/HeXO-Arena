@@ -16,5 +16,5 @@ export default defineConfig({
             output: { entryFileNames: `[name].js`, chunkFileNames: `[name]-[hash].js` },
         },
     },
-    ssr: { noExternal: [`@hexarena/contract`, `@hexarena/rules`] },
+    ssr: { noExternal: [`@hexo-arena/contract`, `@hexo-arena/rules`] },
 });

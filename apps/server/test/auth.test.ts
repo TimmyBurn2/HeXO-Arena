@@ -1,4 +1,4 @@
-import { discordCallbackPath, discordLoginPath, healthzPath } from '@hexarena/contract';
+import { discordCallbackPath, discordLoginPath, healthzPath } from '@hexo-arena/contract';
 import type { FastifyInstance } from 'fastify';
 import { describe, expect, it } from 'vitest';
 import { createQuery } from '../src/db';

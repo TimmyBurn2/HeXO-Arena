@@ -22,7 +22,7 @@ RUN chmod -R a+w node_modules apps packages \
 COPY . .
 
 # The admin client ships in the image, so `docker compose exec server
-# hexarena-admin ...` always matches the server it talks to.
-RUN ln -s /app/apps/server/bin/hexarena-admin /usr/local/bin/hexarena-admin
+# hexo-arena-admin ...` always matches the server it talks to.
+RUN ln -s /app/apps/server/bin/hexo-arena-admin /usr/local/bin/hexo-arena-admin
 
 USER node

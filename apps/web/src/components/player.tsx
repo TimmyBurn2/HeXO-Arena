@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import type { Accepts, Side } from '@hexarena/contract';
+import type { Accepts, Side } from '@hexo-arena/contract';
 import { Link } from '../router/Link';
 import { turnWindowOf } from './PlayDialog';
 import './player.css';

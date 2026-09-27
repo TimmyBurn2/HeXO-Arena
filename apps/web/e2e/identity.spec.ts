@@ -1,6 +1,6 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type Page } from '@playwright/test';
-import type { Me } from '@hexarena/contract';
+import type { Me } from '@hexo-arena/contract';
 import { looks, wear } from './matrix';
 import { serve, world } from './mock-api';
 

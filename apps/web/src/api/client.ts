@@ -26,7 +26,7 @@ import {
     type LeaderboardEntry,
     type LiveGameEntry,
     type Me,
-} from '@hexarena/contract';
+} from '@hexo-arena/contract';
 import type { ZodType } from 'zod';
 
 export type LeaderboardKind = `all` | `bots` | `humans`;

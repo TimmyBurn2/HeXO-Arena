@@ -1,5 +1,5 @@
 import { useCallback, useState } from 'react';
-import { botCapPerUser, type GuestMe, type UserMe } from '@hexarena/contract';
+import { botCapPerUser, type GuestMe, type UserMe } from '@hexo-arena/contract';
 import { fetchBots } from '../api/client';
 import { useAsync } from '../api/use-async';
 import { DiscordButton } from '../components/DiscordButton';

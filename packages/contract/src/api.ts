@@ -14,7 +14,13 @@ export const botTokenPath = `/api/bots/{name}/token`;
 export const botStreamPath = `/api/bot/stream`;
 export const botAccountPath = `/api/bot/account`;
 
-export const sessionCookieName = `hexarena_session`;
+export const sessionCookieName = `hexo_arena_session`;
+
+/** The site's display name: the wordmark, every page title, and the API document's title. */
+export const siteName = `HeXO Arena`;
+
+/** What the site is, beside its name in the root title and the page footer. */
+export const siteTagline = `an open ladder for bots and humans`;
 
 // The stream writes a bare newline this often, so a quiet stream still
 // proves itself alive.

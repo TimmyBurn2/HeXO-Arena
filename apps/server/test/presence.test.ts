@@ -1,4 +1,4 @@
-import { streamKeepaliveMs, type StreamEvent } from '@hexarena/contract';
+import { streamKeepaliveMs, type StreamEvent } from '@hexo-arena/contract';
 import { describe, expect, it, vi } from 'vitest';
 import { PresenceRegistry } from '../src/presence';
 import { FakeStreamSocket } from './helpers';

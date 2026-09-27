@@ -1,4 +1,4 @@
-import type { Side } from '@hexarena/contract';
+import type { Side } from '@hexo-arena/contract';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { createBot, findBot } from '../src/bots';
 import { createQuery, openDatabase, runMigrations, type Query, type Sqlite } from '../src/db';

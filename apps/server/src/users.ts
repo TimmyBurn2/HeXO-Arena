@@ -1,6 +1,6 @@
 import { eq } from 'drizzle-orm';
 import { randomUUID } from 'node:crypto';
-import { isReservedName, nameKeyOf, nameSyntaxSchema } from '@hexarena/contract';
+import { isReservedName, nameKeyOf, nameSyntaxSchema } from '@hexo-arena/contract';
 import { nowSeconds, type Query } from './db';
 import { nameReservations, users } from './db/schema';
 

@@ -1,5 +1,5 @@
 import { Fragment, useCallback, useState } from 'react';
-import { nameKeyOf, type BotListing, type LiveGameEntry } from '@hexarena/contract';
+import { nameKeyOf, siteName, type BotListing, type LiveGameEntry } from '@hexo-arena/contract';
 import { fetchBots } from '../api/client';
 import { useAsync } from '../api/use-async';
 import { useLiveGames } from '../api/use-live-games';
@@ -21,7 +21,7 @@ export function BotScreen({ name }: { name: string }) {
 
     useDocumentMeta(
         route,
-        bot === undefined ? undefined : `${bot.name} (${String(bot.rating)}) - hexarena`,
+        bot === undefined ? undefined : `${bot.name} (${String(bot.rating)}) - ${siteName}`,
         bot === undefined
             ? undefined
             : `bot by ${bot.ownerName ?? `someone`}, ${bot.online ? `online` : `offline`}, ${bot.openForChallenges ? `accepting challenges` : `closed for challenges`}`,

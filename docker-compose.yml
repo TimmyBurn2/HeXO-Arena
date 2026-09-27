@@ -3,18 +3,18 @@ services:
         build:
             context: .
             dockerfile: docker/dev/Dockerfile
-        command: ['pnpm', '--filter', '@hexarena/server', 'dev']
+        command: ['pnpm', '--filter', '@hexo-arena/server', 'dev']
         environment:
             HOST: '0.0.0.0'
             PORT: '3000'
-            DATABASE_PATH: /data/hexarena.sqlite
+            DATABASE_PATH: /data/hexo-arena.sqlite
             DEV_LOGIN: '1'
-            ADMIN_SOCKET_PATH: /run/hexarena/admin.sock
+            ADMIN_SOCKET_PATH: /run/hexo-arena/admin.sock
         # The admin socket lives on a private tmpfs owned by the app uid
         # (node, 1000); it dies with the container, so no stale socket
         # survives a restart.
         tmpfs:
-            - /run/hexarena:mode=0700,uid=1000,gid=1000
+            - /run/hexo-arena:mode=0700,uid=1000,gid=1000
         ports:
             - '127.0.0.1:3000:3000'
         volumes:
@@ -23,12 +23,12 @@ services:
             - ./packages/contract/src:/app/packages/contract/src
             - ./packages/contract/test:/app/packages/contract/test
             - ./packages/contract/scripts:/app/packages/contract/scripts
-            - hexarena-data:/data
+            - hexo-arena-data:/data
     web:
         build:
             context: .
             dockerfile: docker/dev/Dockerfile
-        command: ['pnpm', '--filter', '@hexarena/web', 'dev']
+        command: ['pnpm', '--filter', '@hexo-arena/web', 'dev']
         ports:
             - '127.0.0.1:5173:5173'
         volumes:
@@ -40,4 +40,4 @@ services:
             - ./packages/contract/scripts:/app/packages/contract/scripts
 
 volumes:
-    hexarena-data:
+    hexo-arena-data:

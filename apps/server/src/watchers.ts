@@ -1,4 +1,4 @@
-import { gameWatcherCap, siteWatcherCap, streamKeepaliveMs, type GameEvent } from '@hexarena/contract';
+import { gameWatcherCap, siteWatcherCap, streamKeepaliveMs, type GameEvent } from '@hexo-arena/contract';
 import type { StreamSocket } from './presence';
 
 interface Watcher {

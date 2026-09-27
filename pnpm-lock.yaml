@@ -187,10 +187,10 @@ importers:
       '@fastify/websocket':
         specifier: ^11.3.1
         version: 11.3.1
-      '@hexarena/contract':
+      '@hexo-arena/contract':
         specifier: workspace:*
         version: link:../../packages/contract
-      '@hexarena/rules':
+      '@hexo-arena/rules':
         specifier: workspace:*
         version: link:../../packages/rules
       better-sqlite3:
@@ -236,10 +236,10 @@ importers:
 
   apps/web:
     dependencies:
-      '@hexarena/contract':
+      '@hexo-arena/contract':
         specifier: workspace:*
         version: link:../../packages/contract
-      '@hexarena/rules':
+      '@hexo-arena/rules':
         specifier: workspace:*
         version: link:../../packages/rules
       react:
@@ -316,7 +316,7 @@ importers:
 
   packages/rules:
     devDependencies:
-      '@hexarena/contract':
+      '@hexo-arena/contract':
         specifier: workspace:*
         version: link:../contract
       '@types/node':
@@ -340,10 +340,10 @@ importers:
 
   scripts/dev-bots:
     dependencies:
-      '@hexarena/contract':
+      '@hexo-arena/contract':
         specifier: workspace:*
         version: link:../../packages/contract
-      '@hexarena/rules':
+      '@hexo-arena/rules':
         specifier: workspace:*
         version: link:../../packages/rules
       zod:

@@ -46,7 +46,7 @@ for (const game of [`running`, `finished`, `nine-finished`]) {
 // column at tablet width or is pinned on a wide screen.
 for (const layout of [
     { name: `a tablet column`, width: 768, height: 1024, storage: {} },
-    { name: `a pinned drawer`, width: 1440, height: 900, storage: { 'hexarena.drawer-pinned.v1': `1` } },
+    { name: `a pinned drawer`, width: 1440, height: 900, storage: { 'hexo-arena.drawer-pinned.v1': `1` } },
 ]) {
     test(`a long game keeps its newest line and turn chip in view in ${layout.name}`, async ({ page }) => {
         await page.setViewportSize({ width: layout.width, height: layout.height });

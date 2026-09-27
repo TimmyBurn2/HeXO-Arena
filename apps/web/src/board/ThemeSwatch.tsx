@@ -1,5 +1,5 @@
 import { useId } from 'react';
-import type { Side } from '@hexarena/contract';
+import type { Side } from '@hexo-arena/contract';
 import type { ThemeId } from '../theme/themes';
 import { ShineDefs, StoneArt } from './Board';
 import { cellPoints, cellSize, hexCenter } from './geometry';

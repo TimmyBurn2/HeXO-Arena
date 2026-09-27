@@ -1,4 +1,4 @@
-import { guestIdleSeconds } from '@hexarena/contract';
+import { guestIdleSeconds } from '@hexo-arena/contract';
 import { randomInt } from 'node:crypto';
 import { nowSeconds } from './db';
 import { randomToken, sha256Hex } from './tokens';

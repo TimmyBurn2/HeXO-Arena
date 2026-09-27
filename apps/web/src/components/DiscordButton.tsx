@@ -1,5 +1,5 @@
 import type { Ref } from 'react';
-import { discordLoginPath } from '@hexarena/contract';
+import { discordLoginPath } from '@hexo-arena/contract';
 import { DiscordSymbol } from './DiscordSymbol';
 import './DiscordButton.css';
 

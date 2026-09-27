@@ -1,5 +1,5 @@
 {
-    "name": "@hexarena/web",
+    "name": "@hexo-arena/web",
     "version": "0.0.0",
     "private": true,
     "type": "module",
@@ -11,8 +11,8 @@
         "e2e": "playwright test"
     },
     "dependencies": {
-        "@hexarena/contract": "workspace:*",
-        "@hexarena/rules": "workspace:*",
+        "@hexo-arena/contract": "workspace:*",
+        "@hexo-arena/rules": "workspace:*",
         "react": "^19.3.0",
         "react-dom": "^19.3.0",
         "zod": "^4.6.5"

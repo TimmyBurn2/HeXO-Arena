@@ -1,4 +1,4 @@
-import { pausedRetryAfterSeconds, healthzPath } from '@hexarena/contract';
+import { pausedRetryAfterSeconds, healthzPath } from '@hexo-arena/contract';
 
 // The health probe is one bit: up, or refusing new starts.
 // The pause retry-after doubles as the poll cadence, so a lifted pause

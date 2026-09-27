@@ -1,4 +1,4 @@
-import type { Accepts, StreamEvent, TimeControl } from '@hexarena/contract';
+import type { Accepts, StreamEvent, TimeControl } from '@hexo-arena/contract';
 import { randomUUID } from 'node:crypto';
 import { chmodSync, mkdirSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';

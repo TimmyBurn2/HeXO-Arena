@@ -1,4 +1,5 @@
 import { lazy, Suspense, useEffect, useRef, useSyncExternalStore } from 'react';
+import { siteName } from '@hexo-arena/contract';
 import { SiteFooter } from './components/SiteFooter';
 import { useFrameLent } from './frame';
 import { Identity } from './identity/Identity';
@@ -96,7 +97,7 @@ export function AppShell() {
                 <header className="topbar">
                     <div className="topbar-inner">
                         <Link to="/" className="brand">
-                            hexarena
+                            {siteName}
                         </Link>
                         <nav className="nav-links" aria-label="Main">
                             {nav.map((entry) => (

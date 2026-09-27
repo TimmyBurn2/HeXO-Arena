@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { Accepts } from '@hexarena/contract';
+import type { Accepts } from '@hexo-arena/contract';
 import { summarizeAccepts } from '../src/components/player';
 
 const accepts = (overrides: Partial<Accepts>): Accepts => ({

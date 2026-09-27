@@ -1,4 +1,4 @@
-import { pausedRetryAfterSeconds } from '@hexarena/contract';
+import { pausedRetryAfterSeconds } from '@hexo-arena/contract';
 import { eq, sql } from 'drizzle-orm';
 import type { FastifyReply } from 'fastify';
 import { nowSeconds, type Query } from './db';

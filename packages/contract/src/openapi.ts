@@ -73,6 +73,7 @@ import {
     rankableDeviation,
     sessionCookieName,
     sessionHeartbeatMs,
+    siteName,
     siteWatcherCap,
     streamEventSchema,
     streamKeepaliveMs,
@@ -862,6 +863,6 @@ export function buildOpenApiDocument() {
     const generator = new OpenApiGeneratorV3([...registry.definitions, ...shared.referenced]);
     return generator.generateDocument({
         openapi: '3.0.3',
-        info: { title: 'hexarena', version: apiVersion },
+        info: { title: siteName, version: apiVersion },
     });
 }

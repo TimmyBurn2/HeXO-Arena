@@ -19,13 +19,8 @@ describe('parseBoardSettings', () => {
         expect(parseBoardSettings(JSON.stringify({ numbers: true, glare: false }))).toEqual({ numbers: true, glare: false });
     });
 
-    it('ignore the edge coordinates choice stored by earlier versions', () => {
+    it('ignore fields it does not know', () => {
         expect(parseBoardSettings(JSON.stringify({ numbers: true, coords: true }))).toEqual({ numbers: true, glare: true });
-    });
-
-    it('drop the palette and stone style stored by earlier versions', () => {
-        const parsed = parseBoardSettings(JSON.stringify({ palette: `walnut`, stones: `glyph`, numbers: true }));
-        expect(parsed).toEqual({ ...defaultBoardSettings, numbers: true });
     });
 
     it('treat absent numbers as off and absent glare as on', () => {
@@ -41,7 +36,7 @@ describe('boardSettingsStore', () => {
 
     it('persist updates to localStorage', () => {
         boardSettingsStore.update({ numbers: true });
-        expect(window.localStorage.getItem(`hexarena.board-rendering.v1`)).toBe(`{"numbers":true,"glare":true}`);
+        expect(window.localStorage.getItem(`hexo-arena.board-rendering.v1`)).toBe(`{"numbers":true,"glare":true}`);
     });
 
     it('put the glare choice on the root, where every stone and preview reads it', () => {

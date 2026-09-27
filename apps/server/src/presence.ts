@@ -1,4 +1,4 @@
-import { streamKeepaliveMs, type StreamEvent } from '@hexarena/contract';
+import { streamKeepaliveMs, type StreamEvent } from '@hexo-arena/contract';
 
 // Presence is the connection: the registry holds one live stream per bot and
 // nothing else, so online and open-for-challenges can never go stale.

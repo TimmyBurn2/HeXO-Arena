@@ -3,7 +3,7 @@
 # here compresses or buffers the API.
 # No access log, so no client address is stored.
 
-{$HEXARENA_DOMAIN} {
+{$HEXO_ARENA_DOMAIN} {
 	handle /api/* {
 		# Flush every write at once: a buffered NDJSON line is a bot that
 		# looks offline.

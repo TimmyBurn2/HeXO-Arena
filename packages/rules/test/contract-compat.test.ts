@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { AxialCoord, BoardCell, PlayerColor, WinLine } from '@hexarena/contract';
+import type { AxialCoord, BoardCell, PlayerColor, WinLine } from '@hexo-arena/contract';
 import {
     axialCoordSchema,
     boardSnapshotSchema,
@@ -9,7 +9,7 @@ import {
     openingThreatStones,
     openingWindowCells,
     winLineSchema,
-} from '@hexarena/contract';
+} from '@hexo-arena/contract';
 import type { Coord, Player, Position, Stone, Win } from '../src';
 import {
     drawOpening,

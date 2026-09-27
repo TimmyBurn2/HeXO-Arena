@@ -1,4 +1,4 @@
-import { botWithTokenSchema, botsPath, devLoginPath } from '@hexarena/contract';
+import { botWithTokenSchema, botsPath, devLoginPath } from '@hexo-arena/contract';
 import { buildApp, type BuiltApp } from '../src/app';
 import { openDatabase, runMigrations, type Sqlite } from '../src/db';
 import type { DiscordIdentity, DiscordOAuth } from '../src/discord';
@@ -91,7 +91,7 @@ export async function createTestApp(options?: {
 export async function loginAs(app: TestApp[`app`], name: string): Promise<string> {
     const response = await app.inject({ method: `POST`, url: devLoginPath, payload: { name } });
     if (response.statusCode !== 200) throw new Error(`dev login failed: ${response.body}`);
-    const cookie = response.cookies.find((entry) => entry.name === `hexarena_session`);
+    const cookie = response.cookies.find((entry) => entry.name === `hexo_arena_session`);
     if (cookie === undefined) throw new Error(`dev login set no session cookie`);
     return cookie.value;
 }
@@ -101,7 +101,7 @@ export async function mintBot(app: TestApp[`app`], session: string, name: string
         method: `POST`,
         url: botsPath,
         payload: { name },
-        cookies: { hexarena_session: session },
+        cookies: { hexo_arena_session: session },
     });
     if (response.statusCode !== 201) throw new Error(`bot creation failed: ${response.body}`);
     return botWithTokenSchema.parse(response.json()).token;

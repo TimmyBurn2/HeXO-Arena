@@ -1,4 +1,4 @@
-import { nameKeyOf, type AdminMutation, type AdminRequest, type AdminResponse, type AdminStatus } from '@hexarena/contract';
+import { nameKeyOf, type AdminMutation, type AdminRequest, type AdminResponse, type AdminStatus } from '@hexo-arena/contract';
 import type { AdminHandler } from './admin-socket';
 import { recentAdminActions, recordAdminAction } from './admin-store';
 import {

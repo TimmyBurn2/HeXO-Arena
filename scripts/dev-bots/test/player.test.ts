@@ -1,4 +1,4 @@
-import { hexDistance, place, type Position } from '@hexarena/rules';
+import { hexDistance, place, type Position } from '@hexo-arena/rules';
 import { describe, expect, it } from 'vitest';
 import { chooseTurn } from '../src/player';
 

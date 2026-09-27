@@ -1,5 +1,5 @@
 import { useCallback, useState } from 'react';
-import type { BotListing } from '@hexarena/contract';
+import type { BotListing } from '@hexo-arena/contract';
 import { fetchBots } from '../api/client';
 import { useAsync } from '../api/use-async';
 import { BotBadge, PresenceDot, OpenTag, PlayerName, Rating, summarizeAccepts } from '../components/player';

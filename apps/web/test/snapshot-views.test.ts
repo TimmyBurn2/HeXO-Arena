@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { GameSnapshot } from '@hexarena/contract';
+import type { GameSnapshot } from '@hexo-arena/contract';
 import { feedOf, lastMoveOf, positionOf, reasonText, resultLine, resultSentence, stonesOf, winLineOf } from '../src/game/snapshot-views';
 
 function snapshot(

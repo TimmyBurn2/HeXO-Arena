@@ -1,7 +1,7 @@
-import type { FinishReason, GameSnapshot, Side } from '@hexarena/contract';
-import { winner, type Position, type Rejection, type Stone } from '@hexarena/rules';
+import type { FinishReason, GameSnapshot, Side } from '@hexo-arena/contract';
+import { winner, type Position, type Rejection, type Stone } from '@hexo-arena/rules';
 import type { BoardStone } from '../board/Board';
-import type { AxialCoord } from '@hexarena/contract';
+import type { AxialCoord } from '@hexo-arena/contract';
 
 /**
  * One feed line: its turn label, the label as assistive tech reads it, and

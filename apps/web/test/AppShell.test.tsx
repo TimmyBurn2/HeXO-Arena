@@ -87,7 +87,7 @@ describe('AppShell', () => {
         expect(topbar().querySelector(`.nav-links .nav-link`)?.textContent).toBe(`Ladder`);
         expect(topbar().querySelectorAll(`.nav-links .nav-link`).length).toBe(3);
         expect(topLink(`Ladder`).getAttribute(`href`)).toBe(`/ladder`);
-        expect(topLink(`hexarena`).getAttribute(`href`)).toBe(`/`);
+        expect(topLink(`HeXO Arena`).getAttribute(`href`)).toBe(`/`);
 
         expect(await screen.findByRole(`heading`, { level: 1, name: `Ladder` })).toBeTruthy();
         expect(topLink(`Ladder`).getAttribute(`aria-current`)).toBe(`page`);
@@ -164,19 +164,19 @@ describe('AppShell', () => {
         window.history.replaceState(null, ``, `/bots`);
         render(<AppShell />);
         await waitFor(() => {
-            expect(document.title).toBe(`Bots - hexarena`);
+            expect(document.title).toBe(`Bots - HeXO Arena`);
         });
         navigate(`/connect`);
         await waitFor(() => {
-            expect(document.title).toBe(`Build a bot - hexarena`);
+            expect(document.title).toBe(`Build a bot - HeXO Arena`);
         });
         navigate(`/ladder`);
         await waitFor(() => {
-            expect(document.title).toBe(`Ladder - hexarena`);
+            expect(document.title).toBe(`Ladder - HeXO Arena`);
         });
         navigate(`/`);
         await waitFor(() => {
-            expect(document.title).toBe(`hexarena - bot arena for HeXO`);
+            expect(document.title).toBe(`HeXO Arena - an open ladder for bots and humans`);
         });
     });
 
@@ -194,13 +194,13 @@ describe('AppShell', () => {
         window.history.replaceState(null, ``, `/`);
         render(<AppShell />);
         await waitFor(() => {
-            expect(document.title).toBe(`hexarena - bot arena for HeXO`);
+            expect(document.title).toBe(`HeXO Arena - an open ladder for bots and humans`);
         });
         expect(document.querySelector(`meta[property="og:title"]`)?.getAttribute(`content`)).toBe(
-            `hexarena - bot arena for HeXO`,
+            `HeXO Arena - an open ladder for bots and humans`,
         );
         expect(document.querySelector(`meta[property="og:description"]`)?.getAttribute(`content`)).toBe(
-            `ranked ladder for HeXO bots and humans`,
+            `connect a bot or play in the browser; one rating for every player`,
         );
     });
 
@@ -214,7 +214,7 @@ describe('AppShell', () => {
                 expect(document.querySelector(`footer.site-footer`)).toBeTruthy();
             });
             const footer = document.querySelector(`footer.site-footer`) as HTMLElement;
-            expect(footer.querySelector(`.site-tagline`)?.textContent).toBe(`hexarena, a bot arena for HeXO`);
+            expect(footer.querySelector(`.site-tagline`)?.textContent).toBe(`HeXO Arena, an open ladder for bots and humans`);
             expect([...footer.querySelectorAll(`a`)].map((a) => [a.textContent, a.getAttribute(`href`), a.getAttribute(`target`)])).toEqual([
                 [`Credits`, `/credits`, null],
                 [`Bot API`, `https://github.com/TimmyBurn2/Hexo-Bot-Api`, null],
@@ -264,7 +264,7 @@ describe('AppShell', () => {
         // An error page marks no nav item as the place you are.
         expect(document.querySelector(`header [aria-current], nav.tabbar [aria-current]`)).toBe(null);
         await waitFor(() => {
-            expect(document.title).toBe(`Not found - hexarena`);
+            expect(document.title).toBe(`Not found - HeXO Arena`);
         });
         navigate(`/bots`);
         await waitFor(() => {

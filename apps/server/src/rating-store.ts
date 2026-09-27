@@ -1,4 +1,4 @@
-import { rankableDeviation, type LeaderboardQuery, type Side, type StreamPlayer } from '@hexarena/contract';
+import { rankableDeviation, type LeaderboardQuery, type Side, type StreamPlayer } from '@hexo-arena/contract';
 import { and, asc, desc, eq, isNotNull, isNull, lte, or, sql } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/sqlite-core';
 import type { Query } from './db';

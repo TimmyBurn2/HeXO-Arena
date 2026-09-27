@@ -9,10 +9,13 @@ export const namePattern = /^[A-Za-z][A-Za-z0-9_-]{0,28}[A-Za-z0-9]$/;
 
 export const nameSyntaxSchema = z.string().regex(namePattern);
 
-// Exact match on the lowercase fold; `hexarena` and `hexo` are the site
-// and house names. `deleted` and every `deleted-<n>` are the placeholder
-// namespace that deleted players are renamed into. `guest` stays free of
-// any account, so no one can pass for the anonymous Guest labels.
+// Exact match on the lowercase fold.
+// `hexo-arena` in its three spellings and the lookalike `hexarena` name
+// the site, `hexo` the house.
+// `deleted` and every `deleted-<n>` are the placeholder namespace that
+// deleted players are renamed into.
+// `guest` stays free of any account, so no one can pass for the anonymous
+// Guest labels.
 export const reservedNames: readonly string[] = [
     `administrator`,
     `moderator`,
@@ -21,6 +24,9 @@ export const reservedNames: readonly string[] = [
     `admin`,
     `deleted`,
     `guest`,
+    `hexo-arena`,
+    `hexo_arena`,
+    `hexoarena`,
     `hexarena`,
     `hexo`,
 ];

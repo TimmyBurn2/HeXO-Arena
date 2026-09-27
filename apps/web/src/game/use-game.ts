@@ -6,7 +6,7 @@ import {
     watcherRetryAfterSeconds,
     type AxialCoord,
     type GameSnapshot,
-} from '@hexarena/contract';
+} from '@hexo-arena/contract';
 import type { ZodType } from 'zod';
 import { ApiError, fetchGameSnapshot, gameEventsUrl, playHumanMove, resignGame } from '../api/client';
 import { applyFinish, applyTurn, laterOf } from './live';

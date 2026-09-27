@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import type { LiveGameEntry } from '@hexarena/contract';
+import type { LiveGameEntry } from '@hexo-arena/contract';
 import { fetchLiveGames } from './client';
 import { useAsync, type AsyncView } from './use-async';
 

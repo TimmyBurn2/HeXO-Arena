@@ -1,4 +1,5 @@
 import { useSyncExternalStore } from 'react';
+import { siteName } from '@hexo-arena/contract';
 import { readStored, writeStored } from '../stored';
 
 /**
@@ -7,7 +8,7 @@ import { readStored, writeStored } from '../stored';
  * styles/themes, which the vocabulary test holds both ways.
  */
 export const themes = [
-    { id: `ink`, label: `Ink`, credit: `hexarena` },
+    { id: `ink`, label: `Ink`, credit: siteName },
     { id: `hds`, label: `HDS`, credit: `hexo.did.science, via MineKing` },
     { id: `htttx`, label: `HTTTX`, credit: `HeXO Renderer by MineKing` },
     { id: `tyto`, label: `Tyto`, credit: `Tyto's Strix, via MineKing` },
@@ -57,45 +58,18 @@ export const themeVocabulary = [
     `--board-win-casing`,
 ] as const;
 
-const storageKey = `hexarena.theme.v1`;
-// A stored board palette names the theme it matches, so a viewer who
-// chose one keeps that look.
-const legacyKey = `hexarena.board-rendering.v1`;
+const storageKey = `hexo-arena.theme.v1`;
 
-// Retired looks read as their nearest successor: slate's cool gray as ink,
-// walnut as omok, which kept walnut's page.
-const retired: ReadonlyMap<string, ThemeId> = new Map([
-    [`slate`, `ink`],
-    [`walnut`, `omok`],
-]);
-
-function asTheme(value: unknown): ThemeId | null {
-    if (typeof value !== `string`) return null;
-    return themes.find((theme) => theme.id === value)?.id ?? retired.get(value) ?? null;
-}
-
-/** The stored choice, the legacy palette carried over, or the default. */
-export function parseTheme(stored: string | null, legacy: string | null): ThemeId {
-    const chosen = asTheme(stored);
-    if (chosen !== null) return chosen;
-    if (legacy !== null) {
-        try {
-            const value: unknown = JSON.parse(legacy);
-            if (typeof value === `object` && value !== null && `palette` in value) {
-                return asTheme(value.palette) ?? defaultTheme;
-            }
-        } catch {
-            return defaultTheme;
-        }
-    }
-    return defaultTheme;
+/** The stored choice, or the default. */
+export function parseTheme(stored: string | null): ThemeId {
+    return themes.find((theme) => theme.id === stored)?.id ?? defaultTheme;
 }
 
 let current: ThemeId | null = null;
 const listeners = new Set<() => void>();
 
 function read(): ThemeId {
-    current ??= parseTheme(readStored(storageKey), readStored(legacyKey));
+    current ??= parseTheme(readStored(storageKey));
     return current;
 }
 

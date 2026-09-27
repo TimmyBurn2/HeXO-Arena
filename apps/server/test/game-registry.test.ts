@@ -13,8 +13,8 @@ import {
     type OpeningPlies,
     type Side,
     type StreamEvent,
-} from '@hexarena/contract';
-import { hexDistance, openingRegion, type Coord } from '@hexarena/rules';
+} from '@hexo-arena/contract';
+import { hexDistance, openingRegion, type Coord } from '@hexo-arena/rules';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createQuery, openDatabase, runMigrations, type Sqlite } from '../src/db';
 import { createBot, findBot } from '../src/bots';

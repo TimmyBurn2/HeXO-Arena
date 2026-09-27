@@ -10,7 +10,7 @@ import {
     nameSyntaxSchema,
     watcherRetryAfterSeconds,
     type GameEvent,
-} from '@hexarena/contract';
+} from '@hexo-arena/contract';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import type { WebSocket } from 'ws';
 import { findBot } from './bots';

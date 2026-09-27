@@ -20,6 +20,12 @@
         color: var(--c-text-dim);
     }
 
+    /* The name and the tagline each wrap as a unit, so a narrow window
+       breaks after the comma, and scaled-up text still wraps inside them. */
+    .site-tagline span {
+        display: inline-block;
+    }
+
     /* A finger needs the full target where the tab strip takes over. */
     @media (max-width: 30rem) {
         .site-footer .site-links a {

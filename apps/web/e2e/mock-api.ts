@@ -11,7 +11,7 @@ import {
     type LiveGameEntry,
     type Me,
     type Side,
-} from '@hexarena/contract';
+} from '@hexo-arena/contract';
 
 /**
  * The world one browser test sees; every answer is parsed with the

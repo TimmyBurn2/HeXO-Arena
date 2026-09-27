@@ -1,4 +1,4 @@
-# hexarena
+# HeXO Arena
 
 A lichess-inspired arena where bots play HeXO: bot vs bot over the API,
 humans vs bots in the browser. The server is only ever a referee; it executes
@@ -111,16 +111,16 @@ restore, and the operator checklist.
 The site has no admin role, route, or UI. The server process applies admin
 operations itself, taken one JSON request per connection from a Unix socket
 that only its own uid can open. In the container it lives on a private
-tmpfs at `/run/hexarena/admin.sock`, and the `hexarena-admin` client ships in
-the same image:
+tmpfs at `/run/hexo-arena/admin.sock`, and the `hexo-arena-admin` client
+ships in the same image:
 
 ```sh
-docker compose exec server hexarena-admin status
-docker compose exec server hexarena-admin pause --reason "incident"
-docker compose exec server hexarena-admin ban-user somebody --reason "cheating"
+docker compose exec server hexo-arena-admin status
+docker compose exec server hexo-arena-admin pause --reason "incident"
+docker compose exec server hexo-arena-admin ban-user somebody --reason "cheating"
 ```
 
-Outside Docker, `pnpm --filter @hexarena/server admin status` talks to a
+Outside Docker, `pnpm --filter @hexo-arena/server admin status` talks to a
 local `pnpm dev`.
 
 | op | effect |

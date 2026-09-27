@@ -1,4 +1,4 @@
-import { leaderboardEntrySchema, leaderboardPath, leaderboardQuerySchema, type LeaderboardEntry } from '@hexarena/contract';
+import { leaderboardEntrySchema, leaderboardPath, leaderboardQuerySchema, type LeaderboardEntry } from '@hexo-arena/contract';
 import type { FastifyInstance } from 'fastify';
 import type { Query } from './db';
 import { rankablePlayers } from './rating-store';

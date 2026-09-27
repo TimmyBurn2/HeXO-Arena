@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { Me } from '@hexarena/contract';
+import type { Me } from '@hexo-arena/contract';
 import { Identity } from '../src/identity/Identity';
 import { meStore } from '../src/me';
 import type { Route } from '../src/router/route';

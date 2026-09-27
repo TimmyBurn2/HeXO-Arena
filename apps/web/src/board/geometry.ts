@@ -1,5 +1,5 @@
-import type { AxialCoord } from '@hexarena/contract';
-import { placementRadius } from '@hexarena/rules';
+import type { AxialCoord } from '@hexo-arena/contract';
+import { placementRadius } from '@hexo-arena/rules';
 
 // SVG user units per cell edge; the viewBox scales to the frame, so this
 // only fixes the coordinate system's resolution.

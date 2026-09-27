@@ -1,5 +1,5 @@
 {
-    "name": "@hexarena/dev-bots",
+    "name": "@hexo-arena/dev-bots",
     "version": "0.0.0",
     "private": true,
     "type": "module",
@@ -9,8 +9,8 @@
         "typecheck": "tsc --noEmit -p ."
     },
     "dependencies": {
-        "@hexarena/contract": "workspace:*",
-        "@hexarena/rules": "workspace:*",
+        "@hexo-arena/contract": "workspace:*",
+        "@hexo-arena/rules": "workspace:*",
         "zod": "^4.6.5"
     },
     "devDependencies": {

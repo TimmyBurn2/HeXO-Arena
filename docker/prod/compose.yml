@@ -1,7 +1,8 @@
 # Production stack.
 # The box never builds: every image is pulled.
-# Interpolation reads HEXARENA_IMAGE and HEXARENA_DOMAIN from `.env` beside
-# this file; the app's own settings and secrets live in `hexarena.env`.
+# Interpolation reads HEXO_ARENA_IMAGE and HEXO_ARENA_DOMAIN from `.env`
+# beside this file; the app's own settings and secrets live in
+# `hexo-arena.env`.
 
 x-hardened: &hardened
     read_only: true
@@ -17,8 +18,8 @@ x-hardened: &hardened
 services:
     app:
         <<: *hardened
-        image: ${HEXARENA_IMAGE:?set HEXARENA_IMAGE in .env}
-        env_file: hexarena.env
+        image: ${HEXO_ARENA_IMAGE:?set HEXO_ARENA_IMAGE in .env}
+        env_file: hexo-arena.env
         environment:
             # The internal network has no route out; Discord is reached
             # through the egress proxy or not at all.
@@ -31,7 +32,7 @@ services:
         cpus: 1.0
         pids_limit: 256
         tmpfs:
-            - /run/hexarena:mode=0700,uid=10001,gid=10001
+            - /run/hexo-arena:mode=0700,uid=10001,gid=10001
             - /tmp:mode=1777,size=16m
         volumes:
             - data:/data
@@ -45,7 +46,7 @@ services:
 
     egress:
         <<: *hardened
-        image: ${HEXARENA_IMAGE:?set HEXARENA_IMAGE in .env}
+        image: ${HEXO_ARENA_IMAGE:?set HEXO_ARENA_IMAGE in .env}
         command: [node, --max-old-space-size=32, dist/egress.js]
         mem_limit: 64m
         cpus: 0.25
@@ -62,7 +63,7 @@ services:
     web:
         <<: *hardened
         restart: 'no'
-        image: ${HEXARENA_IMAGE:?set HEXARENA_IMAGE in .env}
+        image: ${HEXO_ARENA_IMAGE:?set HEXO_ARENA_IMAGE in .env}
         command: [sh, -c, 'find /srv/web -mindepth 1 -delete && cp -R /app/web/. /srv/web/']
         network_mode: none
         mem_limit: 64m
@@ -77,7 +78,7 @@ services:
         <<: *hardened
         image: caddy:2.10
         environment:
-            HEXARENA_DOMAIN: ${HEXARENA_DOMAIN:?set HEXARENA_DOMAIN in .env}
+            HEXO_ARENA_DOMAIN: ${HEXO_ARENA_DOMAIN:?set HEXO_ARENA_DOMAIN in .env}
         cap_add: [NET_BIND_SERVICE]
         mem_limit: 64m
         cpus: 0.25

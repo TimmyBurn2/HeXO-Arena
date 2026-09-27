@@ -17,18 +17,18 @@ RUN --mount=type=cache,target=/root/.local/share/pnpm/store pnpm install --froze
 COPY . .
 
 RUN pnpm build \
-    && pnpm --filter @hexarena/server deploy --prod /out
+    && pnpm --filter @hexo-arena/server deploy --prod /out
 
 FROM node:24-slim
 
 # A dedicated uid that matches nothing on the host.
 # A fresh named volume takes the owner of its mount point, so every
 # directory a volume or tmpfs lands on exists here, owned by that uid.
-RUN groupadd --gid 10001 hexarena \
-    && useradd --uid 10001 --gid hexarena --no-create-home --shell /usr/sbin/nologin hexarena \
-    && mkdir -p /data /backup /run/hexarena /srv/web \
-    && chown hexarena:hexarena /data /backup /run/hexarena /srv/web \
-    && chmod 0700 /run/hexarena
+RUN groupadd --gid 10001 hexo-arena \
+    && useradd --uid 10001 --gid hexo-arena --no-create-home --shell /usr/sbin/nologin hexo-arena \
+    && mkdir -p /data /backup /run/hexo-arena /srv/web \
+    && chown hexo-arena:hexo-arena /data /backup /run/hexo-arena /srv/web \
+    && chmod 0700 /run/hexo-arena
 
 WORKDIR /app
 
@@ -38,16 +38,16 @@ COPY --from=build /out/dist ./dist
 # The static site rides along so one pulled tag carries a matching front
 # end; a one-shot service copies it into the volume the proxy serves.
 COPY --from=build /src/apps/web/dist ./web
-COPY docker/prod/hexarena-admin /usr/local/bin/hexarena-admin
+COPY docker/prod/hexo-arena-admin /usr/local/bin/hexo-arena-admin
 
 ENV NODE_ENV=production \
     HOST=0.0.0.0 \
     PORT=3000 \
-    DATABASE_PATH=/data/hexarena.sqlite \
-    ADMIN_SOCKET_PATH=/run/hexarena/admin.sock \
+    DATABASE_PATH=/data/hexo-arena.sqlite \
+    ADMIN_SOCKET_PATH=/run/hexo-arena/admin.sock \
     BACKUP_DIR=/backup
 
-USER hexarena
+USER hexo-arena
 
 EXPOSE 3000
 

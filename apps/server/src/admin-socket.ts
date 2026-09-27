@@ -4,7 +4,7 @@ import {
     adminResponseSchema,
     type AdminRequest,
     type AdminResponse,
-} from '@hexarena/contract';
+} from '@hexo-arena/contract';
 import { chmodSync, lstatSync, mkdirSync, rmSync, statSync } from 'node:fs';
 import { connect, createServer, type Server, type Socket } from 'node:net';
 import { dirname } from 'node:path';

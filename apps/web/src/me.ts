@@ -1,5 +1,5 @@
 import { useSyncExternalStore } from 'react';
-import type { Me } from '@hexarena/contract';
+import type { Me } from '@hexo-arena/contract';
 import { fetchMe, signOut, startGuest } from './api/client';
 
 export type MeState = { status: `loading` } | { status: `ready`; me: Me };

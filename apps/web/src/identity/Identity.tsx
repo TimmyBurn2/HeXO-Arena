@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import type { GuestMe, UserMe } from '@hexarena/contract';
+import type { GuestMe, UserMe } from '@hexo-arena/contract';
 import { DiscordButton, DiscordSignIn } from '../components/DiscordButton';
 import { Rating } from '../components/player';
 import { TopbarPanel, usePanel, type PanelControl } from '../components/TopbarPanel';

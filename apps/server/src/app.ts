@@ -8,7 +8,7 @@ import {
     isReservedName,
     nameKeyOf,
     nameSyntaxSchema,
-} from '@hexarena/contract';
+} from '@hexo-arena/contract';
 import websocketPlugin from '@fastify/websocket';
 import cookiePlugin from '@fastify/cookie';
 import { z } from 'zod';

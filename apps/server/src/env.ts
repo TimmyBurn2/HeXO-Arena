@@ -3,7 +3,7 @@ import { z } from 'zod';
 const envShape = z.object({
     HOST: z.string().default(`127.0.0.1`),
     PORT: z.coerce.number().int().min(1).max(65535).default(3000),
-    DATABASE_PATH: z.string().min(1).default(`data/hexarena.sqlite`),
+    DATABASE_PATH: z.string().min(1).default(`data/hexo-arena.sqlite`),
     // Public origin of the site: builds the OAuth redirect uri and decides
     // whether the session cookie carries Secure (TLS ends at the proxy).
     PUBLIC_ORIGIN: z
@@ -19,7 +19,7 @@ const envShape = z.object({
     // Exactly `1` makes SIGTERM stop at once like SIGINT: tsx watch
     // restarts with SIGTERM and kills 5 s later, so a drain only delays them.
     DEV_FAST_STOP: z.string().default(``),
-    // The container mounts a private tmpfs at /run/hexarena; the default
+    // The container mounts a private tmpfs at /run/hexo-arena; the default
     // keeps a bare `pnpm dev` beside the database.
     ADMIN_SOCKET_PATH: z.string().min(1).default(`data/run/admin.sock`),
     ADMIN_ACTOR: z.string().min(1).max(64).default(`operator`),

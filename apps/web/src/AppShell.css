@@ -37,10 +37,13 @@
         gap: var(--space-5);
     }
 
+    /* The wordmark never wraps or gives way; who is here yields instead. */
     .brand {
+        flex: none;
         font-family: var(--font-display);
         font-weight: 700;
         font-size: var(--text-wordmark);
+        white-space: nowrap;
         color: var(--c-text);
     }
 
@@ -122,7 +125,18 @@
         box-shadow: inset 0 var(--focus-w) 0 0 var(--c-accent);
     }
 
-    /* Where the nav links sit beside them, the row tightens too. */
+    /* Below the desktop row the wordmark steps down a size, so the
+       signed-out bar keeps one line at the band's narrow end and on the
+       narrowest phones. */
+    @media (max-width: 40rem) {
+        .brand {
+            font-size: var(--text-lg);
+        }
+    }
+
+    /* Where the nav links share the row with the gear and who is here, the
+       row tightens, and the wordmark keeps more room to its right than the
+       labels keep between them, so it stands apart from the first label. */
     @media (30rem < width <= 40rem) {
         .topbar-inner {
             gap: var(--space-2);
@@ -131,16 +145,28 @@
         .nav-link {
             padding: 0 var(--space-2);
         }
+
+        .brand {
+            margin-inline-end: var(--space-2);
+        }
+    }
+
+    /* Near the band's narrow end the sign-in button takes the pixels of
+       that margin, with a few to spare for wider system faces. */
+    @media (30rem < width <= 33rem) {
+        .topbar-inner:has(> .nav-right > .discord-button) .brand {
+            margin-inline-end: 0;
+        }
     }
 
     /* At the band's narrow end the sign-in button leaves the three labels
        a few pixels short, so the signed-out bar closes them up there only. */
     @media (30rem < width <= 32rem) {
-        .topbar-inner:has(.discord-button) .nav-links {
+        .topbar-inner:has(> .nav-right > .discord-button) .nav-links {
             gap: 0;
         }
 
-        .topbar-inner:has(.discord-button) .nav-link {
+        .topbar-inner:has(> .nav-right > .discord-button) .nav-link {
             padding: 0 var(--space-1);
         }
     }

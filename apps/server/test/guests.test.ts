@@ -1,4 +1,4 @@
-import { guestIdleSeconds } from '@hexarena/contract';
+import { guestIdleSeconds } from '@hexo-arena/contract';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { GuestSessions } from '../src/guests';
 

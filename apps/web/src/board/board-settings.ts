@@ -11,7 +11,7 @@ export const defaultBoardSettings: BoardSettings = {
     glare: true,
 };
 
-const storageKey = `hexarena.board-rendering.v1`;
+const storageKey = `hexo-arena.board-rendering.v1`;
 
 /**
  * The stored settings are our own earlier writes behind a versioned key,

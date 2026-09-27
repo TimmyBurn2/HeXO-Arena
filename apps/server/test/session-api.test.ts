@@ -6,7 +6,7 @@ import {
     logoutPath,
     mePath,
     meSchema,
-} from '@hexarena/contract';
+} from '@hexo-arena/contract';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createQuery } from '../src/db';
 import { sessions } from '../src/db/schema';
@@ -16,7 +16,7 @@ import { createTestApp, loginAs, type TestApp } from './helpers';
 async function mintGuest(arena: TestApp): Promise<{ session: string; name: string }> {
     const response = await arena.app.inject({ method: `POST`, url: guestPath });
     expect(response.statusCode).toBe(201);
-    const cookie = response.cookies.find((entry) => entry.name === `hexarena_session`);
+    const cookie = response.cookies.find((entry) => entry.name === `hexo_arena_session`);
     if (cookie === undefined) throw new Error(`guest minting set no cookie`);
     return { session: cookie.value, name: guestMeSchema.parse(response.json()).name };
 }
@@ -25,7 +25,7 @@ async function readMe(arena: TestApp, session?: string): Promise<unknown> {
     const response = await arena.app.inject({
         method: `GET`,
         url: mePath,
-        ...(session !== undefined && { cookies: { hexarena_session: session } }),
+        ...(session !== undefined && { cookies: { hexo_arena_session: session } }),
     });
     expect(response.statusCode).toBe(200);
     return meSchema.parse(response.json());
@@ -54,10 +54,10 @@ describe('POST /api/auth/logout', () => {
         const response = await arena.app.inject({
             method: `POST`,
             url: logoutPath,
-            cookies: { hexarena_session: session },
+            cookies: { hexo_arena_session: session },
         });
         expect(response.statusCode).toBe(204);
-        const cleared = response.cookies.find((cookie) => cookie.name === `hexarena_session`);
+        const cleared = response.cookies.find((cookie) => cookie.name === `hexo_arena_session`);
         expect(cleared?.value).toBe(``);
         expect(createQuery(arena.sqlite).select().from(sessions).all()).toHaveLength(0);
         expect(await readMe(arena, session)).toBeNull();
@@ -81,7 +81,7 @@ describe('POST /api/auth/guest', () => {
         const arena = await createTestApp();
         const response = await arena.app.inject({ method: `POST`, url: guestPath });
         expect(response.statusCode).toBe(201);
-        const cookie = response.cookies.find((entry) => entry.name === `hexarena_session`);
+        const cookie = response.cookies.find((entry) => entry.name === `hexo_arena_session`);
         expect(cookie?.httpOnly).toBe(true);
         expect(cookie?.maxAge).toBeUndefined();
         const { name } = guestMeSchema.parse(response.json());
@@ -97,7 +97,7 @@ describe('POST /api/auth/guest', () => {
         const again = await arena.app.inject({
             method: `POST`,
             url: guestPath,
-            cookies: { hexarena_session: guest.session },
+            cookies: { hexo_arena_session: guest.session },
         });
         expect(again.statusCode).toBe(200);
         expect(again.json()).toEqual({ kind: `guest`, name: guest.name });
@@ -110,7 +110,7 @@ describe('POST /api/auth/guest', () => {
         const response = await arena.app.inject({
             method: `POST`,
             url: guestPath,
-            cookies: { hexarena_session: session },
+            cookies: { hexo_arena_session: session },
         });
         expect(response.statusCode).toBe(409);
         expect(response.json()).toMatchObject({ code: `signed_in` });
@@ -143,7 +143,7 @@ describe('POST /api/auth/guest', () => {
             method: `POST`,
             url: devLoginPath,
             payload: { name: `alice` },
-            cookies: { hexarena_session: guest.session },
+            cookies: { hexo_arena_session: guest.session },
         });
         expect(login.statusCode).toBe(200);
         expect(await readMe(arena, guest.session)).toBeNull();
@@ -156,7 +156,7 @@ describe('POST /api/auth/guest', () => {
         const response = await arena.app.inject({
             method: `POST`,
             url: logoutPath,
-            cookies: { hexarena_session: guest.session },
+            cookies: { hexo_arena_session: guest.session },
         });
         expect(response.statusCode).toBe(204);
         expect(await readMe(arena, guest.session)).toBeNull();

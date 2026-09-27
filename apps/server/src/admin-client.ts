@@ -4,11 +4,11 @@ import {
     type AdminRequest,
     type AdminResponse,
     type AdminStatus,
-} from '@hexarena/contract';
+} from '@hexo-arena/contract';
 import { connect } from 'node:net';
 import { parseArgs } from 'node:util';
 
-export const adminUsage = `usage: hexarena-admin <op> [target] [--reason <text>]
+export const adminUsage = `usage: hexo-arena-admin <op> [target] [--reason <text>]
 
   status
   pause --reason <text>

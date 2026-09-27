@@ -1,4 +1,4 @@
-import type { GameFinish, GameSnapshot, GameTurn } from '@hexarena/contract';
+import type { GameFinish, GameSnapshot, GameTurn } from '@hexo-arena/contract';
 
 /**
  * The last turn the board holds: turn 0 is the origin and turn t is plies

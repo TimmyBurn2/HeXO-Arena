@@ -6,8 +6,8 @@ import {
     playerOf,
     wireToInternal,
     type BwsMoveRequestPacket,
-} from '@hexarena/contract';
-import { place, type Coord, type Position } from '@hexarena/rules';
+} from '@hexo-arena/contract';
+import { place, type Coord, type Position } from '@hexo-arena/rules';
 import { z } from 'zod';
 
 // Everything the server may send on an engine session.

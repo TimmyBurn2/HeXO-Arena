@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { GameSnapshot, GameTurn } from '@hexarena/contract';
+import type { GameSnapshot, GameTurn } from '@hexo-arena/contract';
 import { applyFinish, applyTurn, lastTurnOf, laterOf } from '../src/game/live';
 
 const running: GameSnapshot = {

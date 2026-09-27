@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import type { AxialCoord } from '@hexarena/contract';
-import { isWithinPlacementRadius } from '@hexarena/rules';
+import type { AxialCoord } from '@hexo-arena/contract';
+import { isWithinPlacementRadius } from '@hexo-arena/rules';
 import {
     cellPoints,
     frontierCells,

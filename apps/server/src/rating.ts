@@ -1,4 +1,4 @@
-import { rankableDeviation, type Side } from '@hexarena/contract';
+import { rankableDeviation, type Side } from '@hexo-arena/contract';
 import { glicko2Update, type Glicko2Rating } from './glicko2';
 
 export const humanSeedRating = 1000;

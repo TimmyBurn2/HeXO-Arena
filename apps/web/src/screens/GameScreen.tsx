@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { GameSnapshot } from '@hexarena/contract';
+import { siteName, type GameSnapshot } from '@hexo-arena/contract';
 import { BotBadge, Swatch } from '../components/player';
 import { ErrorFrame } from '../components/states';
 import { useBorrowFrame } from '../frame';
@@ -275,9 +275,9 @@ function titleOf(snapshot: GameSnapshot): string {
     if (snapshot.status === `finished`) {
         const winner = snapshot.winner;
         const who = winner === null ? `nobody` : winner === snapshot.you ? `you` : snapshot.players[winner].name;
-        return `${who} won (${reasonText(snapshot.reason)}) - hexarena`;
+        return `${who} won (${reasonText(snapshot.reason)}) - ${siteName}`;
     }
-    return `${headingOf(snapshot)} - hexarena`;
+    return `${headingOf(snapshot)} - ${siteName}`;
 }
 
 function descriptionOf(snapshot: GameSnapshot): string {

@@ -115,7 +115,7 @@ describe('pause and resume', () => {
             await world.app.inject({
                 method: `POST`,
                 url: `/api/games`,
-                cookies: { hexarena_session: player },
+                cookies: { hexo_arena_session: player },
                 payload: { bot: `pausebot`, timeControl: { mode: `unlimited` } },
             }),
             await world.app.inject({
@@ -150,7 +150,7 @@ describe('pause and resume', () => {
         const created = await world.app.inject({
             method: `POST`,
             url: `/api/games`,
-            cookies: { hexarena_session: player },
+            cookies: { hexo_arena_session: player },
             payload: { bot: `livebot`, timeControl: { mode: `unlimited` } },
         });
         expect(created.statusCode).toBe(201);
@@ -161,7 +161,7 @@ describe('pause and resume', () => {
         const resigned = await world.app.inject({
             method: `POST`,
             url: `/api/games/${gameId}/resign`,
-            cookies: { hexarena_session: player },
+            cookies: { hexo_arena_session: player },
         });
         expect(resigned.statusCode).toBe(200);
         expect(resigned.json()).toMatchObject({ status: `finished`, reason: `surrender` });
@@ -232,7 +232,7 @@ describe('delist and relist', () => {
         const human = await world.app.inject({
             method: `POST`,
             url: `/api/games`,
-            cookies: { hexarena_session: await loginAs(world.app, `cat`) },
+            cookies: { hexo_arena_session: await loginAs(world.app, `cat`) },
             payload: { bot: `beta`, timeControl: { mode: `unlimited` } },
         });
         for (const response of [inbound, outbound, human]) {
@@ -305,7 +305,7 @@ describe('ban and unban', () => {
         const session = await world.app.inject({
             method: `POST`,
             url: `/api/bots`,
-            cookies: { hexarena_session: annSession },
+            cookies: { hexo_arena_session: annSession },
             payload: { name: `gamma` },
         });
         expect(session.statusCode).toBe(401);
@@ -339,7 +339,7 @@ describe('ban and unban', () => {
         const created = await world.app.inject({
             method: `POST`,
             url: `/api/games`,
-            cookies: { hexarena_session: await loginAs(world.app, `cat`) },
+            cookies: { hexo_arena_session: await loginAs(world.app, `cat`) },
             payload: { bot: `alpha`, timeControl: { mode: `unlimited` } },
         });
         const { gameId, you } = created.json<{ gameId: string; you: string }>();
@@ -386,7 +386,7 @@ describe('revoke-bot', () => {
         const rotated = await world.app.inject({
             method: `POST`,
             url: `/api/bots/alpha/token`,
-            cookies: { hexarena_session: owner },
+            cookies: { hexo_arena_session: owner },
         });
         expect((await read(rotated.json<{ token: string }>().token)).statusCode).toBe(200);
         expect(world.admin({ op: `revoke-bot`, name: `nobody`, reason: `typo` })).toMatchObject({ code: `not_found` });
@@ -416,7 +416,7 @@ describe('abort-game', () => {
         const created = await world.app.inject({
             method: `POST`,
             url: `/api/games`,
-            cookies: { hexarena_session: await loginAs(world.app, human) },
+            cookies: { hexo_arena_session: await loginAs(world.app, human) },
             payload: { bot: `alpha`, timeControl: { mode: `unlimited` } },
         });
         expect(created.statusCode).toBe(201);
@@ -608,9 +608,9 @@ describe('delete-user', () => {
         const roster = await world.app.inject({ method: `GET`, url: `/api/bots` });
         expect(roster.json<{ name: string }[]>().map((row) => row.name)).toEqual([`beta`]);
         const bob = await loginAs(world.app, `bob`);
-        const reuseBot = await world.app.inject({ method: `POST`, url: `/api/bots`, payload: { name: `alpha` }, cookies: { hexarena_session: bob } });
+        const reuseBot = await world.app.inject({ method: `POST`, url: `/api/bots`, payload: { name: `alpha` }, cookies: { hexo_arena_session: bob } });
         expect(reuseBot.statusCode).toBe(409);
-        const freed = await world.app.inject({ method: `POST`, url: `/api/bots`, payload: { name: `spare` }, cookies: { hexarena_session: bob } });
+        const freed = await world.app.inject({ method: `POST`, url: `/api/bots`, payload: { name: `spare` }, cookies: { hexo_arena_session: bob } });
         expect(freed.statusCode).toBe(201);
         const fresh = await world.app.inject({ method: `POST`, url: `/api/dev/login`, payload: { name: `ann` } });
         expect(fresh.statusCode).toBe(200);
@@ -640,7 +640,7 @@ describe('delete-user', () => {
         const created = await world.app.inject({
             method: `POST`,
             url: `/api/games`,
-            cookies: { hexarena_session: await loginAs(world.app, `bob`) },
+            cookies: { hexo_arena_session: await loginAs(world.app, `bob`) },
             payload: { bot: `alpha`, timeControl: { mode: `unlimited` } },
         });
         expect(created.statusCode).toBe(201);

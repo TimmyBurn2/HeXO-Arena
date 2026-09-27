@@ -22,7 +22,7 @@ export interface Drawer {
     pin: (pinned: boolean) => void;
 }
 
-const pinKey = `hexarena.drawer-pinned.v1`;
+const pinKey = `hexo-arena.drawer-pinned.v1`;
 const wideQuery = `(min-width: 80rem)`;
 
 function subscribeWide(listener: () => void): () => void {

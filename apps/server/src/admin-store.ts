@@ -1,4 +1,4 @@
-import type { AdminAction, AdminMutation } from '@hexarena/contract';
+import type { AdminAction, AdminMutation } from '@hexo-arena/contract';
 import { desc } from 'drizzle-orm';
 import { nowSeconds, type Query } from './db';
 import { adminActions } from './db/schema';

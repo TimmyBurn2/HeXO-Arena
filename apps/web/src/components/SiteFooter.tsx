@@ -1,3 +1,4 @@
+import { siteName, siteTagline } from '@hexo-arena/contract';
 import { SiteLinks } from './SiteLinks';
 import './SiteFooter.css';
 
@@ -6,7 +7,9 @@ export function SiteFooter() {
     return (
         <footer className="site-footer">
             <div className="site-footer-inner">
-                <p className="site-tagline">hexarena, a bot arena for HeXO</p>
+                <p className="site-tagline">
+                    <span>{`${siteName},`}</span> <span>{siteTagline}</span>
+                </p>
                 <SiteLinks open="here" />
             </div>
         </footer>

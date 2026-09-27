@@ -1,4 +1,4 @@
-import { gameWatcherCap, siteWatcherCap, streamKeepaliveMs, type GameEvent } from '@hexarena/contract';
+import { gameWatcherCap, siteWatcherCap, streamKeepaliveMs, type GameEvent } from '@hexo-arena/contract';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { frameOf, GameWatchers } from '../src/watchers';
 import { FakeStreamSocket } from './helpers';

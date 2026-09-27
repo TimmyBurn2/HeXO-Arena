@@ -4,10 +4,10 @@ import {
     type FinishReason,
     type Side,
     type TimeControl,
-} from '@hexarena/contract';
+} from '@hexo-arena/contract';
 import { and, count, desc, eq, gte, isNull, or, sql } from 'drizzle-orm';
 import { randomUUID } from 'node:crypto';
-import { emptyPosition, place, type Coord, type Position } from '@hexarena/rules';
+import { emptyPosition, place, type Coord, type Position } from '@hexo-arena/rules';
 import { nowSeconds, type Query } from './db';
 import { alias } from 'drizzle-orm/sqlite-core';
 import { bots, games, moves, users } from './db/schema';

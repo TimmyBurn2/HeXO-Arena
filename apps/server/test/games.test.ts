@@ -7,7 +7,7 @@ import {
     type BwsSetupPacket,
     type GameSnapshot,
     type StreamEvent,
-} from '@hexarena/contract';
+} from '@hexo-arena/contract';
 import http from 'node:http';
 import WebSocket, { type RawData } from 'ws';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';

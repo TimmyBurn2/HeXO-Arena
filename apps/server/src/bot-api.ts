@@ -9,7 +9,7 @@ import {
     botStreamQuerySchema,
     type BotAccount,
     type BotListing,
-} from '@hexarena/contract';
+} from '@hexo-arena/contract';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import type { BotPrincipal } from './bot-auth';
 import { authenticateBot } from './bot-auth';

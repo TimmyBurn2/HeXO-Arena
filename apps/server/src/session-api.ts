@@ -6,7 +6,7 @@ import {
     sessionCookieName,
     type GuestMe,
     type Me,
-} from '@hexarena/contract';
+} from '@hexo-arena/contract';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import type { Query } from './db';
 import type { Person } from './game-registry';
