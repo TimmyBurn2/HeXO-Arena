@@ -2,8 +2,10 @@ import { describe, expect, it } from 'vitest';
 import { parseRoute, routePath } from '../src/router/route';
 
 describe('parseRoute', () => {
-    it('route the root to the arena', () => {
-        expect(parseRoute(`/`)).toEqual({ name: `arena` });
+    it('route the root and /ladder to the ladder', () => {
+        expect(parseRoute(`/`)).toEqual({ name: `ladder` });
+        expect(parseRoute(`/ladder`)).toEqual({ name: `ladder` });
+        expect(parseRoute(`/ladder/`)).toEqual({ name: `ladder` });
     });
 
     it('route the four surfaces', () => {
@@ -30,12 +32,13 @@ describe('parseRoute', () => {
         expect(parseRoute(`/nope`)).toEqual({ name: `not-found` });
         expect(parseRoute(`/bots/a/b`)).toEqual({ name: `not-found` });
         expect(parseRoute(`/game`)).toEqual({ name: `not-found` });
+        expect(parseRoute(`/ladder/x`)).toEqual({ name: `not-found` });
     });
 });
 
 describe('routePath', () => {
     it('builds the path for every route', () => {
-        expect(routePath({ name: `arena` })).toBe(`/`);
+        expect(routePath({ name: `ladder` })).toBe(`/ladder`);
         expect(routePath({ name: `bots` })).toBe(`/bots`);
         expect(routePath({ name: `bot`, bot: `sealbot` })).toBe(`/bots/sealbot`);
         expect(routePath({ name: `connect` })).toBe(`/connect`);
@@ -46,7 +49,7 @@ describe('routePath', () => {
 
     it('round-trips through parseRoute', () => {
         const routes = [
-            { name: `arena` },
+            { name: `ladder` },
             { name: `bots` },
             { name: `bot`, bot: `sealbot` },
             { name: `connect` },

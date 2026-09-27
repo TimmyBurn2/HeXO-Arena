@@ -1,0 +1,32 @@
+@layer components {
+    .site-links {
+        display: flex;
+        flex-wrap: wrap;
+        column-gap: var(--space-4);
+        margin: 0;
+        padding: 0;
+        list-style: none;
+    }
+
+    .site-links a {
+        display: inline-flex;
+        align-items: center;
+        gap: var(--space-half);
+        min-height: var(--control-sm);
+        font-weight: var(--weight-strong);
+    }
+
+    .site-links a[aria-current='page'] {
+        color: var(--c-text);
+    }
+
+    .new-tab-mark {
+        width: var(--text-sm);
+        height: var(--text-sm);
+        fill: none;
+        stroke: currentColor;
+        stroke-width: 2.5;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+    }
+}

@@ -1,7 +1,7 @@
 @layer components {
-    .settings-gear,
-    .settings-close {
+    .settings-gear {
         display: grid;
+        flex: none;
         place-items: center;
         width: var(--control-md);
         height: var(--control-md);
@@ -13,8 +13,7 @@
         transition: background var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease);
     }
 
-    .settings-gear:hover,
-    .settings-close:hover {
+    .settings-gear:hover {
         background: var(--c-bg-hover);
         color: var(--c-text);
     }
@@ -24,72 +23,19 @@
         color: var(--c-text);
     }
 
-    .settings-gear svg,
-    .settings-close svg {
+    /* The gear's teeth crowd at the close glyph's weight. */
+    .settings-gear svg {
         width: var(--text-xl);
         height: var(--text-xl);
         fill: none;
         stroke: currentColor;
-        stroke-width: 2;
+        stroke-width: 1.75;
         stroke-linecap: round;
         stroke-linejoin: round;
     }
 
-    /* The gear's teeth crowd at the close glyph's weight. */
-    .settings-gear svg {
-        stroke-width: 1.75;
-    }
-
-    /* The popover hangs under the bar's right edge, where the gear sits;
-       the bar's inner row is its containing block. */
     .settings {
-        position: absolute;
-        top: 100%;
-        right: var(--shell-pad);
-        left: auto;
-        z-index: var(--z-popover);
         width: var(--settings-w);
-        max-width: calc(100vw - 2 * var(--shell-pad));
-        margin: 0;
-        padding: 0;
-        border: none;
-        background: transparent;
-        color: var(--c-text);
-        overflow: visible;
-        filter: var(--lift);
-        animation: settings-drop var(--dur-base) var(--ease) both;
-    }
-
-    .settings-panel {
-        max-height: calc(100dvh - var(--header-h) - var(--space-4));
-        overflow-y: auto;
-        padding: var(--space-4);
-        background: var(--c-bg-overlay);
-        box-shadow: inset 0 var(--border-w) 0 var(--surface-edge-hi);
-    }
-
-    .settings[data-mode='sheet'] {
-        position: fixed;
-        inset: auto 0 0;
-        width: 100%;
-        max-width: none;
-        animation-name: settings-rise;
-    }
-
-    .settings[data-mode='sheet'] .settings-panel {
-        max-height: 85dvh;
-        padding-bottom: calc(var(--space-5) + env(safe-area-inset-bottom));
-    }
-
-    .settings::backdrop {
-        background: var(--c-backdrop);
-    }
-
-    .settings-head {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: var(--space-3);
     }
 
     .settings-title {
@@ -176,38 +122,13 @@
     }
 
     /* A finger needs the full target on the sheet. */
-    .settings[data-mode='sheet'] .checkline,
-    .settings[data-mode='sheet'] .settings-close {
+    .settings[data-mode='sheet'] .checkline {
         min-height: var(--control-lg);
-    }
-
-    .settings[data-mode='sheet'] .settings-close {
-        width: var(--control-lg);
     }
 
     .settings-foot {
         margin: var(--space-3) 0 0;
         padding-top: var(--space-3);
         box-shadow: inset 0 var(--border-w) 0 var(--c-border);
-    }
-
-    /* A link inside running text needs more than its hue to stand out. */
-    .settings-foot a {
-        text-decoration: underline;
-        text-underline-offset: var(--underline-offset);
-    }
-
-    @keyframes settings-drop {
-        from {
-            opacity: 0;
-            transform: translateY(calc(-1 * var(--space-2)));
-        }
-    }
-
-    @keyframes settings-rise {
-        from {
-            opacity: 0;
-            transform: translateY(var(--space-5));
-        }
     }
 }

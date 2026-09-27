@@ -6,12 +6,13 @@ import { serve } from './mock-api';
 
 // Every screen in every state at every viewport in the default look, and
 // every board-bearing screen in every look: a screenshot for review plus
-// the probed gates, contrast and sideways scroll, which fail the run on
-// their own.
+// the probed gates, which fail the run on their own: contrast, named
+// table headers, links told from their text by more than hue, and
+// sideways scroll.
 for (const look of looks) {
-    for (const viewport of viewports) {
-        for (const shot of shots.filter((entry) => entry.board === true || look.name === defaultTheme)) {
-            test(`${shot.name} holds contrast and layout in ${look.name} at ${viewport.name}`, async ({ page }) => {
+    for (const shot of shots.filter((entry) => entry.board === true || look.name === defaultTheme)) {
+        for (const viewport of shot.viewports ?? viewports) {
+            test(`${shot.name} holds its axe gates and layout in ${look.name} at ${viewport.name}`, async ({ page }) => {
                 await page.setViewportSize({ width: viewport.width, height: viewport.height });
                 await wear(page, { name: look.name, storage: { ...look.storage, ...shot.storage } });
                 await serve(page, structuredClone(shot.world));
@@ -24,8 +25,8 @@ for (const look of looks) {
                     path: `e2e/shots/${shot.name}--${look.name}--${viewport.name}.png`,
                 });
 
-                const contrast = await new AxeBuilder({ page }).withRules([`color-contrast`]).analyze();
-                expect(contrast.violations.flatMap((violation) => violation.nodes.map((node) => node.target))).toEqual([]);
+                const axe = await new AxeBuilder({ page }).withRules([`color-contrast`, `empty-table-header`, `link-in-text-block`]).analyze();
+                expect(axe.violations.flatMap((violation) => violation.nodes.map((node) => node.target))).toEqual([]);
 
                 if (shot.framed) {
                     const overflow = await page.evaluate(

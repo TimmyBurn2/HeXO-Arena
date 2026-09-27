@@ -1,6 +1,7 @@
 # TLS and proxying only.
 # Rate limits live in the app, egress control in the network, and nothing
 # here compresses or buffers the API.
+# No access log, so no client address is stored.
 
 {$HEXARENA_DOMAIN} {
 	handle /api/* {
@@ -18,7 +19,7 @@
 
 	# The routes a pasted link previews get their shell from the app, with
 	# og meta from live data.
-	@shell path / /bots/* /game/*
+	@shell path / /ladder /bots/* /game/*
 	handle @shell {
 		reverse_proxy app:3000
 	}
@@ -26,7 +27,7 @@
 	# An app that is down or restarting still leaves these routes the
 	# static shell, so the site stays usable through a deploy.
 	handle_errors 502 503 504 {
-		@shellDown path / /bots/* /game/*
+		@shellDown path / /ladder /bots/* /game/*
 		handle @shellDown {
 			root * /srv/web
 			rewrite * /index.html

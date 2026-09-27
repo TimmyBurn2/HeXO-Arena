@@ -1,14 +1,15 @@
 import { useEffect } from 'react';
-import { routeMeta } from './route-meta';
+import { routeMeta, siteMeta } from './route-meta';
 import type { Route } from './router/route';
+import { usePath } from './router/use-route';
 
 /**
- * Keep the document title and the embed tags in step with the route; the
- * server shell renders the same tags per route, so the two never disagree.
+ * Keep the document title and the embed tags in step with the route, under
+ * the titles the server shell renders for the same paths.
  * Detail screens pass the fetched headline; nothing else overrides.
  */
 export function useDocumentMeta(route: Route, titleOverride?: string, descriptionOverride?: string): void {
-    const base = routeMeta(route);
+    const base = usePath() === `/` ? siteMeta : routeMeta(route);
     const title = titleOverride ?? base.title;
     const description = descriptionOverride ?? base.description;
 

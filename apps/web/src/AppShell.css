@@ -1,5 +1,7 @@
 @layer components {
     .shell {
+        flex: 1 0 auto;
+        width: 100%;
         max-width: var(--shell-max);
         margin: 0 auto;
         padding: var(--space-5) var(--shell-pad) var(--space-8);
@@ -59,6 +61,7 @@
         color: var(--c-text-dim);
         font-size: var(--text-sm);
         font-weight: var(--weight-strong);
+        white-space: nowrap;
         transition: background var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease);
     }
 
@@ -78,41 +81,6 @@
         gap: var(--space-2);
         min-width: 0;
         margin-left: auto;
-    }
-
-    .identity {
-        display: inline-flex;
-        align-items: center;
-        gap: var(--space-2);
-        min-width: 0;
-        min-height: var(--control-md);
-        color: var(--c-text);
-    }
-
-    /* A name runs to 30 characters, more than the bar can spare beside
-       the nav, so it gives way before the gear or the page does. */
-    .identity-label {
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-    }
-
-    .settings-gear,
-    .monogram,
-    .identity .tag {
-        flex: none;
-    }
-
-    .monogram {
-        display: grid;
-        place-items: center;
-        width: var(--control-sm);
-        height: var(--control-sm);
-        background: var(--c-accent-bg);
-        color: var(--c-accent);
-        font-size: var(--text-sm);
-        font-weight: var(--weight-display);
-        text-transform: uppercase;
     }
 
     .site-banner {
@@ -154,20 +122,6 @@
         box-shadow: inset 0 var(--focus-w) 0 0 var(--c-accent);
     }
 
-    /* The nav links return at the phone breakpoint and share the row
-       with the gear and who is here, so who is here folds into the
-       monogram; the words stay in the link's name. */
-    @media (max-width: 40rem) {
-        .identity-label,
-        .identity .tag {
-            position: absolute;
-            width: var(--border-w);
-            height: var(--border-w);
-            overflow: hidden;
-            clip-path: inset(50%);
-        }
-    }
-
     /* Where the nav links sit beside them, the row tightens too. */
     @media (30rem < width <= 40rem) {
         .topbar-inner {
@@ -179,6 +133,18 @@
         }
     }
 
+    /* At the band's narrow end the sign-in button leaves the three labels
+       a few pixels short, so the signed-out bar closes them up there only. */
+    @media (30rem < width <= 32rem) {
+        .topbar-inner:has(.discord-button) .nav-links {
+            gap: 0;
+        }
+
+        .topbar-inner:has(.discord-button) .nav-link {
+            padding: 0 var(--space-1);
+        }
+    }
+
     @media (max-width: 30rem) {
         body {
             padding-bottom: calc(var(--header-h) + env(safe-area-inset-bottom));
@@ -186,11 +152,6 @@
 
         .nav-links {
             display: none;
-        }
-
-        /* The tab strip carries the pages; the bar keeps who is here. */
-        .identity {
-            font-size: var(--text-sm);
         }
 
         .tabbar {

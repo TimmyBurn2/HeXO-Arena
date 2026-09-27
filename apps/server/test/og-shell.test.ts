@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { arenaMeta, botMeta, gameMeta, renderShell } from '../src/og-shell';
+import { botMeta, gameMeta, ladderMeta, renderShell } from '../src/og-shell';
 import { createTestApp, FakeStreamSocket, loginAs, mintBot, type TestApp } from './helpers';
 
 const indexPath = join(dirname(fileURLToPath(import.meta.url)), `../../web/index.html`);
@@ -41,8 +41,8 @@ describe('renderShell', () => {
 
 describe('shell meta wording', () => {
     it('counts the roster and names the leader when there is one', () => {
-        expect(arenaMeta(0, 0, undefined).description).toBe(`0 bots listed, 0 online`);
-        expect(arenaMeta(1, 1, { name: `sealbot`, rating: 1712.4 }).description).toBe(
+        expect(ladderMeta(0, 0, undefined).description).toBe(`0 bots listed, 0 online`);
+        expect(ladderMeta(1, 1, { name: `sealbot`, rating: 1712.4 }).description).toBe(
             `1 bot listed, 1 online; top rated: sealbot (1712)`,
         );
     });
@@ -106,12 +106,22 @@ describe('the og shell routes', () => {
         arena.presence.attach(row.id, new FakeStreamSocket(), true);
     }
 
-    it('counts the roster on the arena route', async () => {
+    it('counts the roster on the root under the site title', async () => {
         await openBot(`sealbot`);
         const response = await shell(`/`);
         expect(response.status).toBe(200);
         expect(response.cacheControl).toBe(`no-cache`);
         expect(response.meta.ogTitle).toBe(`hexarena - bot arena for HeXO`);
+        expect(response.meta.ogDescription).toBe(`1 bot listed, 1 online`);
+    });
+
+    it('counts the roster on the ladder route under its own title', async () => {
+        await openBot(`sealbot`);
+        const response = await shell(`/ladder`);
+        expect(response.status).toBe(200);
+        expect(response.cacheControl).toBe(`no-cache`);
+        expect(response.meta.title).toBe(`Ladder - hexarena`);
+        expect(response.meta.ogTitle).toBe(`Ladder - hexarena`);
         expect(response.meta.ogDescription).toBe(`1 bot listed, 1 online`);
     });
 
@@ -122,7 +132,7 @@ describe('the og shell routes', () => {
         expect(listed.meta.ogTitle).toBe(`sealbot - hexarena`);
         expect(listed.meta.ogDescription).toBe(`HeXO bot by sealbotowner, rated 1500, provisional, online now: plays fast`);
         expect((await shell(`/bots/nobody`)).status).toBe(404);
-        expect((await shell(`/bots/-bad-`)).meta.title).toBe(`not found - hexarena`);
+        expect((await shell(`/bots/-bad-`)).meta.title).toBe(`Not found - hexarena`);
         arena.sqlite.prepare(`update bots set delisted_at = 1 where name = 'sealbot'`).run();
         expect((await shell(`/bots/sealbot`)).status).toBe(404);
     });
@@ -168,6 +178,7 @@ describe('without a web index', () => {
     it('leaves the shell routes unregistered', async () => {
         const arena = await createTestApp();
         expect((await arena.app.inject({ method: `GET`, url: `/` })).statusCode).toBe(404);
+        expect((await arena.app.inject({ method: `GET`, url: `/ladder` })).statusCode).toBe(404);
         await arena.app.close();
     });
 });

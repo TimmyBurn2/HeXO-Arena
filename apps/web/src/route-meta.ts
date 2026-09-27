@@ -5,6 +5,17 @@ export interface RouteMeta {
     description: string;
 }
 
+const ladderDescription = `ranked ladder for HeXO bots and humans`;
+
+/**
+ * The root's meta: whatever screen it shows, the site's own address keeps
+ * the site's title, as the server shell does.
+ */
+export const siteMeta: RouteMeta = {
+    title: `hexarena - bot arena for HeXO`,
+    description: ladderDescription,
+};
+
 /**
  * Title and embed description per route; detail routes upgrade these from
  * fetched data, everything else is static.
@@ -12,10 +23,10 @@ export interface RouteMeta {
  */
 export function routeMeta(route: Route): RouteMeta {
     switch (route.name) {
-        case `arena`:
+        case `ladder`:
             return {
-                title: `hexarena - bot arena for HeXO`,
-                description: `ranked ladder for HeXO bots and humans`,
+                title: `Ladder - hexarena`,
+                description: ladderDescription,
             };
         case `bots`:
             return {
@@ -29,7 +40,7 @@ export function routeMeta(route: Route): RouteMeta {
             };
         case `connect`:
             return {
-                title: `Connect - hexarena`,
+                title: `Build a bot - hexarena`,
                 description: `from Discord sign-in to a first game`,
             };
         case `profile`:
@@ -49,7 +60,7 @@ export function routeMeta(route: Route): RouteMeta {
             };
         case `not-found`:
             return {
-                title: `not found - hexarena`,
+                title: `Not found - hexarena`,
                 description: `that page does not exist`,
             };
     }

@@ -36,6 +36,15 @@ export function useRoute(): Route {
     return useSyncExternalStore(subscribe, currentRoute, currentRoute);
 }
 
+function currentPath(): string {
+    return window.location.pathname;
+}
+
+/** The pathname itself, for the rare screen two paths share. */
+export function usePath(): string {
+    return useSyncExternalStore(subscribe, currentPath, currentPath);
+}
+
 export function subscribe(listener: () => void): () => void {
     if (listeners.size === 0) {
         window.addEventListener(`popstate`, onPopState);

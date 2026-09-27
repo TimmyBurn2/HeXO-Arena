@@ -2,7 +2,7 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { meStore } from '../src/me';
-import { ArenaScreen } from '../src/screens/ArenaScreen';
+import { LadderScreen } from '../src/screens/LadderScreen';
 
 const board = [
     { rank: 1, name: `sealbot`, kind: `bot`, rating: 1712 },
@@ -22,10 +22,10 @@ afterEach(() => {
     vi.unstubAllGlobals();
 });
 
-describe('ArenaScreen', () => {
+describe('LadderScreen', () => {
     it('render the whole board with its top rungs and linked bot names', async () => {
         stubBoard(board);
-        render(<ArenaScreen />);
+        render(<LadderScreen />);
         expect(await screen.findByRole(`table`)).toBeTruthy();
         expect(screen.getAllByRole(`link`, { name: /sealbot/ })[0]?.getAttribute(`href`)).toBe(`/bots/sealbot`);
         expect(document.querySelector(`a[href="/bots/tom"]`)).toBe(null);
@@ -35,7 +35,7 @@ describe('ArenaScreen', () => {
 
     it('step the rungs down in rank order and lift only the first', async () => {
         stubBoard(board);
-        render(<ArenaScreen />);
+        render(<LadderScreen />);
         await screen.findByRole(`table`);
         const rungs = [...document.querySelectorAll(`.rung`)].map((rung) => rung.className);
         expect(rungs).toEqual([`rung r1`, `rung r2`, `rung r3`]);
@@ -61,7 +61,7 @@ describe('ArenaScreen', () => {
                 ),
             ),
         );
-        render(<ArenaScreen />);
+        render(<LadderScreen />);
         await waitFor(() => {
             expect(document.querySelector(`.pulse`)?.textContent).toBe(`3 ranked players, 2 bots online, 1 taking challenges`);
         });
@@ -70,21 +70,21 @@ describe('ArenaScreen', () => {
 
     it('keep the board when the directory does not load', async () => {
         stubBoard(board);
-        render(<ArenaScreen />);
+        render(<LadderScreen />);
         await screen.findByRole(`table`);
         expect(document.querySelector(`.pulse`)?.textContent).toBe(`3 ranked players`);
     });
 
     it('never mark a leaderboard rating provisional', async () => {
         stubBoard(board);
-        render(<ArenaScreen />);
+        render(<LadderScreen />);
         await screen.findByRole(`table`);
         expect(document.querySelector(`.prov`)).toBe(null);
     });
 
     it('carry aria-pressed on exactly the active kind pill', async () => {
         stubBoard(board);
-        render(<ArenaScreen />);
+        render(<LadderScreen />);
         await screen.findByRole(`table`);
         const all = screen.getByRole(`button`, { name: `All` });
         const bots = screen.getByRole(`button`, { name: `Bots` });
@@ -99,16 +99,16 @@ describe('ArenaScreen', () => {
 
     it('show the day-one empty state when the board has no rows', async () => {
         stubBoard([]);
-        render(<ArenaScreen />);
+        render(<LadderScreen />);
         expect(await screen.findByText(`No ranked players yet`)).toBeTruthy();
-        expect(screen.getByRole(`link`, { name: `Connect a bot` }).getAttribute(`href`)).toBe(`/connect`);
+        expect(screen.getByRole(`link`, { name: `Build a bot` }).getAttribute(`href`)).toBe(`/connect`);
         expect(screen.getByRole(`link`, { name: `Browse bots` }).getAttribute(`href`)).toBe(`/bots`);
     });
 
     it('offer a retry when the first load fails', async () => {
         stubBoard([], 500);
-        render(<ArenaScreen />);
-        expect(await screen.findByText(`The board did not load`)).toBeTruthy();
+        render(<LadderScreen />);
+        expect(await screen.findByText(`The ladder did not load`)).toBeTruthy();
         stubBoard(board);
         fireEvent.click(screen.getByRole(`button`, { name: `Try again` }));
         await waitFor(() => {
@@ -129,7 +129,7 @@ describe('ArenaScreen', () => {
         );
         meStore.reset();
         meStore.start();
-        render(<ArenaScreen />);
+        render(<LadderScreen />);
         await screen.findByRole(`table`);
         await waitFor(() => {
             expect(document.querySelector(`tr.you .player-name`)?.textContent).toBe(`tom`);

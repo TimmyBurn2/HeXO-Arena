@@ -1,5 +1,5 @@
 @layer screens {
-    .arena-head {
+    .ladder-head {
         display: flex;
         align-items: center;
         justify-content: space-between;
@@ -8,7 +8,7 @@
         margin-bottom: var(--space-2);
     }
 
-    .arena-head .screen-title {
+    .ladder-head .screen-title {
         margin: 0;
     }
 
@@ -134,8 +134,8 @@
     }
 
     /* The empty and error cards sit where the pulse would. */
-    .arena-head + .empty,
-    .arena-head + .ladder-skeleton {
+    .ladder-head + .empty,
+    .ladder-head + .ladder-skeleton {
         margin-top: var(--space-4);
     }
 

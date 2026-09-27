@@ -50,7 +50,7 @@ export function SeatChip({ snapshot, side, corner }: { snapshot: GameSnapshot; s
     return (
         <Chip className={top ? `hud-top-left` : `hud-bottom-left`}>
             {top ? (
-                <Link to="/" className="hud-exit" ariaLabel="Leave to the arena">
+                <Link to="/" className="hud-exit" ariaLabel="Leave to the ladder">
                     <svg viewBox="0 0 24 24" aria-hidden="true">
                         <path d="M15 5l-7 7 7 7" />
                     </svg>
@@ -149,8 +149,8 @@ export function TurnChip({ snapshot, you, status, link, onMoves }: {
                 <span className="hud-result" role="status">
                     {resultLine(snapshot)}
                 </span>
-                <Link to="/" className="btn btn-primary btn-sm">
-                    Arena
+                <Link to="/ladder" className="btn btn-primary btn-sm">
+                    Ladder
                 </Link>
                 <button type="button" className="btn btn-ghost btn-sm" onClick={onMoves}>
                     Moves

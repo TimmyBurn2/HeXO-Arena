@@ -2,8 +2,8 @@ import { botWithTokenSchema, botsPath, devLoginPath } from '@hexarena/contract';
 import { buildApp, type BuiltApp } from '../src/app';
 import { openDatabase, runMigrations, type Sqlite } from '../src/db';
 import type { DiscordIdentity, DiscordOAuth } from '../src/discord';
-import type { FastifyServerOptions } from 'fastify';
 import { PresenceRegistry, type StreamSocket } from '../src/presence';
+import type { LogTarget } from '../src/request-log';
 import { GameWatchers } from '../src/watchers';
 
 export interface FakeDiscord {
@@ -64,7 +64,7 @@ export async function createTestApp(options?: {
     devLogin?: boolean;
     presence?: PresenceRegistry;
     random?: () => number;
-    logger?: FastifyServerOptions[`logger`];
+    logger?: LogTarget;
     webIndexPath?: string;
 }): Promise<TestApp> {
     const discord = options?.discord === undefined ? fakeDiscord({ id: `1`, username: `tester` }).oauth : options.discord;

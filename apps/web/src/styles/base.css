@@ -10,13 +10,24 @@
         box-sizing: border-box;
     }
 
+    /* The page is a column at least a window tall, so a short screen's
+       footer still sits at the foot of the window. */
     body {
+        display: flex;
+        flex-direction: column;
+        min-height: 100dvh;
         margin: 0;
         background: var(--c-bg);
         color: var(--c-text);
         font-family: var(--font-sans);
         font-size: var(--text-base);
         line-height: var(--leading-normal);
+    }
+
+    #root {
+        display: flex;
+        flex: 1;
+        flex-direction: column;
     }
 
     a {
@@ -26,6 +37,12 @@
 
     a:hover {
         color: var(--c-accent-hover);
+    }
+
+    /* A link inside running text needs more than its hue to stand out. */
+    p a:not([class]) {
+        text-decoration: underline;
+        text-underline-offset: var(--underline-offset);
     }
 
     :focus-visible {

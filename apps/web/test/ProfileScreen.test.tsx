@@ -36,13 +36,13 @@ afterEach(() => {
 });
 
 describe('ProfileScreen', () => {
-    it('offer the discord sign-in and the connect path when signed out', async () => {
+    it('offer the discord sign-in and the way to build a bot when signed out', async () => {
         serve(null);
         render(<ProfileScreen />);
         const signIn = await screen.findByRole(`link`, { name: `Sign in with Discord` });
         expect(signIn.getAttribute(`href`)).toBe(`/api/auth/discord/login`);
         expect(signIn.classList.contains(`discord-button`)).toBe(true);
-        expect(screen.getByRole(`link`, { name: `Connect` }).getAttribute(`href`)).toBe(`/connect`);
+        expect(screen.getByRole(`link`, { name: `Build a bot` }).getAttribute(`href`)).toBe(`/connect`);
     });
 
     it('carry identity alone, the look living behind the settings gear', async () => {
@@ -82,15 +82,14 @@ describe('ProfileScreen', () => {
         });
     });
 
-    it('tell a guest their games are unrated and confirm before ending them', async () => {
+    it('tell a guest their games are unrated and end the session as the menu does', async () => {
         const posts: string[] = [];
         serve({ kind: `guest`, name: `Guest k3f9` }, posts);
         render(<ProfileScreen />);
         expect(await screen.findByText(`Guest k3f9`)).toBeTruthy();
         expect(screen.getByText(`Guest games are unrated and end with the session.`)).toBeTruthy();
-        fireEvent.click(screen.getByRole(`button`, { name: `Sign out` }));
-        expect(posts).toEqual([]);
-        fireEvent.click(screen.getByRole(`button`, { name: `Sign out and end guest games` }));
+        expect(screen.queryByRole(`button`, { name: `Sign out` })).toBe(null);
+        fireEvent.click(screen.getByRole(`button`, { name: `End guest session` }));
         await waitFor(() => {
             expect(posts).toEqual([`/api/auth/logout`]);
         });

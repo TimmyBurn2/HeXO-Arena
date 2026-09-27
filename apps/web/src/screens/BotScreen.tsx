@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { Fragment, useCallback, useState } from 'react';
 import { nameKeyOf, type BotListing, type LiveGameEntry } from '@hexarena/contract';
 import { fetchBots } from '../api/client';
 import { useAsync } from '../api/use-async';
@@ -134,7 +134,7 @@ function BotProfile({ bot }: { bot: BotListing }) {
                                     <dt>Repository</dt>
                                     <dd>
                                         <a href={bot.repoUrl} rel="noreferrer" target="_blank">
-                                            {shortRepo(bot.repoUrl)}
+                                            <ShortRepo url={bot.repoUrl} />
                                         </a>
                                     </dd>
                                 </>
@@ -177,7 +177,7 @@ function playing(entry: LiveGameEntry, bot: string): boolean {
     return [entry.players.x, entry.players.o].some((player) => player.kind === `bot` && player.name === bot);
 }
 
-// Every game the bot plays right now, from the same list the arena rail
+// Every game the bot plays right now, from the same list the ladder rail
 // reads, so the page needs no read of its own.
 function LiveLinks({ bot }: { bot: string }) {
     const games = (useLiveGames().data ?? []).filter((entry) => playing(entry, bot));
@@ -198,6 +198,19 @@ function LiveLinks({ bot }: { bot: string }) {
     );
 }
 
-function shortRepo(url: string): string {
-    return url.replace(/^https?:\/\//, ``);
+// A narrow card breaks the path after a slash, never inside a name.
+function ShortRepo({ url }: { url: string }) {
+    return url
+        .replace(/^https?:\/\//, ``)
+        .split(`/`)
+        .map((part, index) => (
+            <Fragment key={`${String(index)}-${part}`}>
+                {index > 0 ? (
+                    <>
+                        /<wbr />
+                    </>
+                ) : null}
+                {part}
+            </Fragment>
+        ));
 }

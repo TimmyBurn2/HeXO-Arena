@@ -13,12 +13,25 @@ export const looks: readonly Look[] = themes.map((theme) => ({
     storage: { 'hexarena.theme.v1': theme.id },
 }));
 
-export const viewports = [
+export interface Viewport {
+    name: string;
+    width: number;
+    height: number;
+}
+
+export const viewports: readonly Viewport[] = [
     { name: `desktop`, width: 1440, height: 900 },
     { name: `tablet`, width: 768, height: 1024 },
     { name: `phone`, width: 390, height: 844 },
     { name: `narrow`, width: 360, height: 740 },
-] as const;
+];
+
+// An open top-bar panel is a popover or a sheet, so one width of each
+// shows it.
+const panelViewports: readonly Viewport[] = [
+    { name: `laptop`, width: 1280, height: 900 },
+    { name: `phone`, width: 390, height: 844 },
+];
 
 /**
  * One screen in one state: where to go, the world it sees, and the
@@ -40,6 +53,8 @@ export interface Shot {
     // which the contrast gate holds pair by pair and step by step, so the
     // default look stands for all.
     board?: true;
+    // Widths other than the matrix's own.
+    viewports?: readonly Viewport[];
 }
 
 const signedOut = world({ me: null });
@@ -50,13 +65,19 @@ async function openSettings(page: Page): Promise<void> {
     await page.locator(`dialog.settings[open]`).waitFor();
 }
 
+async function openIdentity(page: Page): Promise<void> {
+    await page.locator(`header button.identity`).click();
+    await page.locator(`dialog.identity-panel[open]`).waitFor();
+}
+
 export const shots: readonly Shot[] = [
-    { name: `arena`, path: `/`, world: world(), ready: `.live-game`, framed: true },
-    { name: `arena-empty`, path: `/`, world: world({ leaderboard: [], live: [] }), ready: `.empty`, framed: true },
-    { name: `arena-empty-live`, path: `/`, world: world({ leaderboard: [] }), ready: `.live-game`, framed: true },
-    { name: `arena-live-none`, path: `/`, world: world({ live: [] }), ready: `.live-rail .note`, framed: true },
+    { name: `ladder`, path: `/`, world: world(), ready: `.live-game`, framed: true },
+    { name: `ladder-path`, path: `/ladder`, world: world(), ready: `.live-game`, framed: true },
+    { name: `ladder-empty`, path: `/`, world: world({ leaderboard: [], live: [] }), ready: `.empty`, framed: true },
+    { name: `ladder-empty-live`, path: `/`, world: world({ leaderboard: [] }), ready: `.live-game`, framed: true },
+    { name: `ladder-live-none`, path: `/`, world: world({ live: [] }), ready: `.live-rail .note`, framed: true },
     {
-        name: `arena-live-full`,
+        name: `ladder-live-full`,
         path: `/`,
         world: world({ live: liveGames }),
         ready: `.live-game`,
@@ -77,8 +98,20 @@ export const shots: readonly Shot[] = [
         board: true,
     },
     { name: `settings-signed-out`, path: `/connect`, world: signedOut, ready: `h1`, framed: true, after: openSettings, board: true },
-    { name: `arena-loading`, path: `/`, world: world({ stall: true }), ready: `.skeleton`, framed: true },
-    { name: `arena-error`, path: `/`, world: world({ broken: true }), ready: `.empty`, framed: true },
+    { name: `menu-settings`, path: `/bots`, world: world(), ready: `table`, framed: true, after: openSettings, viewports: panelViewports },
+    { name: `menu-identity`, path: `/bots`, world: world(), ready: `table`, framed: true, after: openIdentity, viewports: panelViewports },
+    {
+        name: `menu-identity-provisional`,
+        path: `/profile`,
+        world: world({ me: { kind: `user`, name: `quietowner`, rating: 1420, provisional: true } }),
+        ready: `h1`,
+        framed: true,
+        after: openIdentity,
+        viewports: panelViewports,
+    },
+    { name: `menu-guest`, path: `/connect`, world: guest, ready: `h1`, framed: true, after: openIdentity, viewports: panelViewports },
+    { name: `ladder-loading`, path: `/`, world: world({ stall: true }), ready: `.skeleton`, framed: true },
+    { name: `ladder-error`, path: `/`, world: world({ broken: true }), ready: `.empty`, framed: true },
     { name: `bots`, path: `/bots`, world: world(), ready: `table`, framed: true },
     { name: `bot-owner`, path: `/bots/sealbot`, world: world(), ready: `.bot-live`, framed: true },
     { name: `bot-live-none`, path: `/bots/sealbot`, world: world({ live: [] }), ready: `h1`, framed: true },
@@ -111,8 +144,8 @@ export const shots: readonly Shot[] = [
             await page.locator(`dialog[open]`).waitFor();
         },
     },
-    { name: `connect`, path: `/connect`, world: world(), ready: `h1`, framed: true },
-    { name: `connect-signed-out`, path: `/connect`, world: signedOut, ready: `h1`, framed: true },
+    { name: `build`, path: `/connect`, world: world(), ready: `h1`, framed: true },
+    { name: `build-signed-out`, path: `/connect`, world: signedOut, ready: `h1`, framed: true },
     { name: `profile`, path: `/profile`, world: world(), ready: `h1`, framed: true },
     { name: `profile-guest`, path: `/profile`, world: guest, ready: `h1`, framed: true },
     { name: `profile-signed-out`, path: `/profile`, world: signedOut, ready: `h1`, framed: true },

@@ -17,6 +17,8 @@
     .tag,
     .skeleton,
     .nav-link,
+    .identity,
+    .identity-row,
     .discord-face,
     .discord-button::before,
     kbd,
@@ -78,18 +80,18 @@
     .drawer-close,
     .drawer-tab,
     .settings-gear,
-    .settings-close,
+    .topbar-panel-close,
     .theme-card,
     .theme-swatch {
         clip-path: var(--cut-sm-path);
     }
 
-    .settings-panel {
+    .topbar-panel-body {
         clip-path: var(--cut-md-path);
     }
 
     /* The sheet meets the screen's own edges, which leave nothing to cut. */
-    .settings[data-mode='sheet'] .settings-panel {
+    .topbar-panel[data-mode='sheet'] .topbar-panel-body {
         clip-path: none;
     }
 
@@ -112,10 +114,12 @@
     .drawer-close:focus-visible,
     .drawer-tab:focus-visible,
     .settings-gear:focus-visible,
-    .settings-close:focus-visible,
+    .topbar-panel-close:focus-visible,
     .pill:focus-visible,
     .seg-btn:focus-visible,
     .nav-link:focus-visible,
+    .identity:focus-visible,
+    .identity-row:focus-visible,
     .live-game:focus-visible,
     .skip:focus-visible,
     input[type='text']:focus-visible,

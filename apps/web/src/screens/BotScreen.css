@@ -77,9 +77,11 @@
         font-weight: var(--weight-display);
     }
 
+    /* A value such as a repository link is one long word, so the value
+       column may shrink and the word wrap rather than push the card wide. */
     .kv {
         display: grid;
-        grid-template-columns: max-content 1fr;
+        grid-template-columns: max-content minmax(0, 1fr);
         gap: var(--space-2) var(--space-5);
         margin: 0;
         font-size: var(--text-sm);
@@ -92,6 +94,7 @@
     .kv dd {
         margin: 0;
         font-weight: var(--weight-strong);
+        overflow-wrap: anywhere;
     }
 
     .play-row {

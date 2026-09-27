@@ -26,11 +26,6 @@
         padding: var(--space-4) var(--shell-pad) var(--space-7);
     }
 
-    .stage-message .brand {
-        align-self: flex-start;
-        line-height: var(--header-h);
-    }
-
     .hud-skeleton {
         width: var(--card-min);
         height: var(--control-lg);
@@ -289,6 +284,13 @@
         padding: var(--space-4);
     }
 
+    .drawer-foot {
+        flex: none;
+        padding: var(--space-1) var(--space-4);
+        box-shadow: inset var(--border-w) 0 0 var(--c-border), inset 0 var(--border-w) 0 var(--c-border);
+        font-size: var(--text-sm);
+    }
+
     /* The feed scrolls under its header, so the panel's top padding
        moves into the header, which stays pinned. */
     .drawer-panel[data-tab='moves'] {
@@ -539,6 +541,15 @@
         .moves-head {
             background: var(--c-bg-overlay);
             box-shadow: inset 0 calc(-1 * var(--border-w)) 0 var(--c-border);
+        }
+
+        .drawer-foot {
+            box-shadow: inset 0 var(--border-w) 0 var(--c-border);
+        }
+
+        /* A finger needs the full target on the sheet. */
+        .drawer-foot .site-links a {
+            min-height: var(--control-lg);
         }
 
         /* A finger needs the full target on the sheet. */

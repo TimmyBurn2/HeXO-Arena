@@ -1,3 +1,4 @@
+import type { Ref } from 'react';
 import { discordLoginPath } from '@hexarena/contract';
 import { DiscordSymbol } from './DiscordSymbol';
 import './DiscordButton.css';
@@ -7,9 +8,9 @@ import './DiscordButton.css';
  * The symbol names the provider to the eye, so the label reads "Sign in";
  * the hidden rest keeps the accessible name whole.
  */
-export function DiscordButton() {
+export function DiscordButton({ ref }: { ref?: Ref<HTMLAnchorElement> }) {
     return (
-        <a className="discord-button" href={discordLoginPath}>
+        <a ref={ref} className="discord-button" href={discordLoginPath}>
             <span className="discord-face">
                 <DiscordSymbol />
                 <span>

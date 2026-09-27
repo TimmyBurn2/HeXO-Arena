@@ -22,11 +22,13 @@
         text-transform: uppercase;
     }
 
+    /* The name keeps a column of its own; the plate's actions wrap below
+       it before a short name would break mid-word. */
     .identity-main {
         display: flex;
         flex-direction: column;
         gap: var(--space-1);
-        flex: 1;
+        flex: 1 1 var(--plate-name-w);
         min-width: 0;
     }
 

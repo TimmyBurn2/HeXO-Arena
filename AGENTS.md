@@ -77,7 +77,11 @@ Every task ends green: type-check, lint, tests.
 - The server executes no engine code and makes no outbound calls except Discord
   OAuth.
 - Never weaken: the egress allowlist, token hashing, one-stream-per-bot, the
-  numeric rate limits, the deploy-drain rule.
+  numeric rate limits, the deploy-drain rule, route-pattern logging (no URL,
+  query, body, or client address in a log line).
+- Committed files, examples, and generated documents write a placeholder such
+  as `<domain>` wherever a deployment's domain or anything identifying the
+  operator would go; the real values never land in a commit.
 - The vendored htttx schemas are immutable: verbatim from the htttx spec.
   Deviation only when unavoidable, kept local, with a written reason in the
   decision log. `Hexo-Bot-Api` changes only when a contract change is

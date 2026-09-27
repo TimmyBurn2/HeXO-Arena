@@ -13,6 +13,11 @@ export default defineConfig({
     use: {
         baseURL: `http://127.0.0.1:${String(port)}`,
         ...devices[`Desktop Chrome`],
+        // Playwright moves Chrome's shared memory from /dev/shm to /tmp, a
+        // default meant for containers with a tiny /dev/shm; on a host whose
+        // /tmp is a quota-limited tmpfs, parallel runs exhaust it and the
+        // renderers crash, so shared memory stays in /dev/shm.
+        launchOptions: { ignoreDefaultArgs: [`--disable-dev-shm-usage`] },
     },
     webServer: {
         command: `node node_modules/vite/bin/vite.js --port ${String(port)} --strictPort`,

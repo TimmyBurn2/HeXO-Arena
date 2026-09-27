@@ -1,13 +1,18 @@
 import { describe, expect, it } from 'vitest';
-import { routeMeta } from '../src/route-meta';
+import { routeMeta, siteMeta } from '../src/route-meta';
 
 describe('routeMeta', () => {
     it('titles every route with the site suffix', () => {
-        expect(routeMeta({ name: `arena` }).title).toBe(`hexarena - bot arena for HeXO`);
+        expect(routeMeta({ name: `ladder` }).title).toBe(`Ladder - hexarena`);
         expect(routeMeta({ name: `bots` }).title).toBe(`Bots - hexarena`);
-        expect(routeMeta({ name: `connect` }).title).toBe(`Connect - hexarena`);
+        expect(routeMeta({ name: `connect` }).title).toBe(`Build a bot - hexarena`);
         expect(routeMeta({ name: `profile` }).title).toBe(`Profile - hexarena`);
         expect(routeMeta({ name: `credits` }).title).toBe(`Credits - hexarena`);
+    });
+
+    it('keep the site title for the root, with the ladder it shows described', () => {
+        expect(siteMeta.title).toBe(`hexarena - bot arena for HeXO`);
+        expect(siteMeta.description).toBe(routeMeta({ name: `ladder` }).description);
     });
 
     it('carry the bot name into its title', () => {
@@ -16,7 +21,7 @@ describe('routeMeta', () => {
 
     it('describe each screen in one line', () => {
         for (const route of [
-            { name: `arena` },
+            { name: `ladder` },
             { name: `bots` },
             { name: `bot`, bot: `sealbot` },
             { name: `connect` },

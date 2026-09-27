@@ -12,7 +12,7 @@ import {
 import websocketPlugin from '@fastify/websocket';
 import cookiePlugin from '@fastify/cookie';
 import { z } from 'zod';
-import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest, type FastifyServerOptions } from 'fastify';
+import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest } from 'fastify';
 import { createAdminHandler } from './admin-ops';
 import type { AdminHandler } from './admin-socket';
 import { createBot, rotateBotToken } from './bots';
@@ -22,7 +22,7 @@ import { ChallengeRegistry, challengeTtlSeconds } from './challenge-registry';
 import { expireStaleChallenges } from './challenge-store';
 import { createQuery, type Sqlite } from './db';
 import { abortUnfinishedGames } from './game-store';
-import { engineFrameLimitBytes, registerGameApi } from './game-api';
+import { engineFrameLimitBytes, engineSocketRoute, registerGameApi } from './game-api';
 import { GameRegistry, wirePresence } from './game-registry';
 import { registerLeaderboardApi } from './leaderboard-api';
 import type { DiscordOAuth } from './discord';
@@ -32,6 +32,7 @@ import { consumeOAuthState, createOAuthState } from './oauth-state';
 import type { PresenceRegistry } from './presence';
 import { GuestSessions } from './guests';
 import { registerOgShell } from './og-shell';
+import { loggingOptions, type LogTarget } from './request-log';
 import { endGuestSession, registerSessionApi, setSessionCookie } from './session-api';
 import { createSession, sessionUser } from './sessions';
 import { beginGeneration, StartGate } from './site-state';
@@ -52,11 +53,11 @@ export interface AppDeps {
     // Stamped on every audit row; one operator today, a named moderator
     // once there is more than one.
     adminActor: string;
-    // The deployed index.html; when set, the arena, bot, and game routes
-    // answer with the shell carrying live og meta. Dev leaves it to Vite.
+    // The deployed index.html; when set, the root, ladder, bot, and game
+    // routes answer with the shell carrying live og meta. Dev leaves it to Vite.
     webIndexPath?: string;
     random?: () => number;
-    logger?: FastifyServerOptions[`logger`];
+    logger?: LogTarget;
 }
 
 export interface BuiltApp {
@@ -73,7 +74,7 @@ const callbackQuerySchema = z.object({
 const devLoginRequestSchema = z.object({ name: nameSyntaxSchema });
 
 export async function buildApp(deps: AppDeps): Promise<BuiltApp> {
-    const app = Fastify({ logger: deps.logger ?? true });
+    const app = Fastify(loggingOptions(deps.logger));
     const query = createQuery(deps.sqlite);
     // A process serves only games it created: whatever an earlier process
     // left unfinished is closed here, before any route can reach it.
@@ -82,6 +83,16 @@ export async function buildApp(deps: AppDeps): Promise<BuiltApp> {
     expireStaleChallenges(query, challengeTtlSeconds);
     await app.register(cookiePlugin);
     await app.register(websocketPlugin, { options: { maxPayload: engineFrameLimitBytes } });
+    // The plugin accepts an upgrade on any route, then logs the raw url as it
+    // closes one no socket handler serves; refused here, the upgrade never
+    // reaches that line.
+    app.addHook(`onRequest`, (request, reply, done) => {
+        if (request.ws && request.routeOptions.url !== engineSocketRoute) {
+            void reply.code(404).send({ error: `no websocket on this route`, code: `not_found` });
+            return;
+        }
+        done();
+    });
     const { presence, watchers } = deps;
     const gate = new StartGate(query);
     const games = new GameRegistry(

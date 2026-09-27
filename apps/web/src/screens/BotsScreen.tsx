@@ -72,7 +72,9 @@ function Directory({ onlineOnly, onPlay }: { onlineOnly: boolean; onPlay: (bot: 
                             <th scope="col" className="col-optional">
                                 Version
                             </th>
-                            <th scope="col"></th>
+                            <th scope="col">
+                                <span className="sr-only">Play</span>
+                            </th>
                         </tr>
                     </thead>
                     <tbody>
@@ -149,11 +151,11 @@ function NoBotsEmpty() {
             <h2>No bots yet</h2>
             <p>
                 The ladder is whatever you bring: register a bot, let it dial in,
-                and the first games make the board.
+                and the first games fill it.
             </p>
             <div className="actions">
                 <Link to="/connect" className="btn btn-primary">
-                    Connect a bot
+                    Build a bot
                 </Link>
             </div>
         </div>

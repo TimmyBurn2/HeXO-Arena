@@ -7,7 +7,7 @@ import { LiveRail } from '../components/LiveRail';
 import { ErrorFrame, SkeletonRows } from '../components/states';
 import { useMe } from '../me';
 import { Link } from '../router/Link';
-import './ArenaScreen.css';
+import './LadderScreen.css';
 
 const kinds: readonly { value: LeaderboardKind; label: string }[] = [
     { value: `all`, label: `All` },
@@ -15,15 +15,15 @@ const kinds: readonly { value: LeaderboardKind; label: string }[] = [
     { value: `humans`, label: `Humans` },
 ];
 
-export function ArenaScreen() {
+export function LadderScreen() {
     const [kind, setKind] = useState<LeaderboardKind>(`all`);
     // Unknown until the ladder answers, so day one never flashes the rail's
     // quiet line under the skeleton.
     const [ladderEmpty, setLadderEmpty] = useState<boolean | null>(null);
     return (
         <>
-            <div className="arena-head">
-                <h1 className="screen-title">Arena</h1>
+            <div className="ladder-head">
+                <h1 className="screen-title">Ladder</h1>
                 <div className="pills" role="group" aria-label="Kind filter">
                     {kinds.map((entry) => (
                         <button
@@ -40,7 +40,7 @@ export function ArenaScreen() {
                     ))}
                 </div>
             </div>
-            <Board key={kind} kind={kind} onRows={setLadderEmpty} />
+            <Standings key={kind} kind={kind} onRows={setLadderEmpty} />
             {/* The live list is its own data, so the rail stays mounted
                 through a filter switch, a ladder reload, and a ladder error.
                 Day one leads with its empty state, whose copy is the way
@@ -50,7 +50,7 @@ export function ArenaScreen() {
     );
 }
 
-function Board({ kind, onRows }: { kind: LeaderboardKind; onRows: (empty: boolean) => void }) {
+function Standings({ kind, onRows }: { kind: LeaderboardKind; onRows: (empty: boolean) => void }) {
     const load = useCallback(async () => fetchLeaderboard(kind), [kind]);
     const { data, error, loading, reload } = useAsync(load);
     const me = useMe();
@@ -64,7 +64,7 @@ function Board({ kind, onRows }: { kind: LeaderboardKind; onRows: (empty: boolea
     }, [data, error, onRows]);
 
     if (loading && data === null) return <LadderSkeleton />;
-    if (error && data === null) return <ErrorFrame sentence="The board did not load" onRetry={reload} />;
+    if (error && data === null) return <ErrorFrame sentence="The ladder did not load" onRetry={reload} />;
     if (data === null) return null;
     if (data.length === 0) return <DayOneEmpty />;
 
@@ -108,17 +108,17 @@ function Board({ kind, onRows }: { kind: LeaderboardKind; onRows: (empty: boolea
                 </table>
             </div>
             <p className="note">
-                Rankable players only; provisional ratings leave the board until
-                their deviation settles.
+                Rankable players only; a provisional player joins the ladder once
+                their rating settles.
             </p>
-            {error ? <ErrorFrame sentence="The board did not load" onRetry={reload} /> : null}
+            {error ? <ErrorFrame sentence="The ladder did not load" onRetry={reload} /> : null}
         </>
     );
 }
 
 /**
  * One sentence of live counts; the roster half drops out quietly when the
- * directory did not load, since the board stands on its own.
+ * directory did not load, since the ladder stands on its own.
  */
 function Pulse({ ranked, kind, roster }: { ranked: number; kind: LeaderboardKind; roster: BotListing[] | null }) {
     const noun = kind === `bots` ? `bots` : kind === `humans` ? `humans` : `players`;
@@ -139,7 +139,7 @@ function Pulse({ ranked, kind, roster }: { ranked: number; kind: LeaderboardKind
 }
 
 /**
- * The top of the filtered board as ladder rungs: a view of the table's
+ * The top of the filtered ladder as rungs: a view of the table's
  * first rows, never separate data, stepping inward as rank falls.
  */
 function Rungs({ entries, owners }: { entries: readonly LeaderboardEntry[]; owners: ReadonlyMap<string, string | null> }) {
@@ -198,11 +198,11 @@ function DayOneEmpty() {
             <h2>No ranked players yet</h2>
             <p>
                 The ladder is whatever you bring: register a bot, let it dial in,
-                and the first games make the board.
+                and the first games fill it.
             </p>
             <div className="actions">
                 <Link to="/connect" className="btn btn-primary">
-                    Connect a bot
+                    Build a bot
                 </Link>
                 <Link to="/bots" className="btn btn-ghost">
                     Browse bots

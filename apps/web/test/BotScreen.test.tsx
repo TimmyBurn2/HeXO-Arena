@@ -65,6 +65,10 @@ describe('BotScreen', () => {
         expect(screen.getByText(`5 to 60 s`)).toBeTruthy();
         expect(screen.getByText(`By tom`)).toBeTruthy();
         expect(document.querySelector(`.bot-rating-number`)?.textContent).toBe(`1712`);
+        // The repository reads whole and may break only after a slash.
+        const repo = document.querySelector(`a[href="https://github.com/tom/sealbot"]`);
+        expect(repo?.textContent).toBe(`github.com/tom/sealbot`);
+        expect(repo?.querySelectorAll(`wbr`)).toHaveLength(2);
         const play = screen.getByRole(`button`, { name: `Play sealbot` });
         expect(play.hasAttribute(`disabled`)).toBe(false);
     });

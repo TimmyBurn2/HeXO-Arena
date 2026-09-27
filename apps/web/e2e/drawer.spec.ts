@@ -90,3 +90,33 @@ for (const who of [{ name: `seated`, me: undefined }, { name: `watching`, me: nu
         await expect(page.getByRole(`tab`, { name: `Moves` })).toHaveAttribute(`aria-selected`, `true`);
     });
 }
+
+// Any standing link is two presses from the board: open the drawer, pick
+// the link, which opens beside the game rather than over it.
+for (const layout of [
+    { name: `a drawer`, width: 1280, height: 900, open: `#drawer-toggle` },
+    { name: `a phone sheet at half`, width: 390, height: 844, open: `.sheet-handle` },
+]) {
+    test(`the standing links sit two presses from the board in ${layout.name}, under either tab`, async ({ page, context }) => {
+        await page.setViewportSize({ width: layout.width, height: layout.height });
+        await serve(page, world());
+        await page.goto(`/game/long`);
+        await page.locator(`svg polygon.cell`).first().waitFor();
+        await page.locator(layout.open).click();
+        const foot = page.locator(`#drawer-body .drawer-foot`);
+        for (const tab of [`Moves`, `Game`]) {
+            await page.getByRole(`tab`, { name: tab }).click();
+            for (const name of [`Credits, opens in a new tab`, `Bot API, opens in a new tab`]) {
+                await expect(foot.getByRole(`link`, { name })).toBeInViewport({ ratio: 1 });
+            }
+        }
+        // The new tab has no mocked world; its reads stop at the browser.
+        await context.route((url) => url.pathname.startsWith(`/api/`) || url.pathname === `/healthz`, (route) => route.abort());
+        const opened = context.waitForEvent(`page`);
+        await foot.getByRole(`link`, { name: `Credits, opens in a new tab` }).click();
+        const credits = await opened;
+        await credits.waitForLoadState();
+        expect(new URL(credits.url()).pathname).toBe(`/credits`);
+        expect(new URL(page.url()).pathname).toBe(`/game/long`);
+    });
+}

@@ -78,7 +78,7 @@
         --hex-path: polygon(50% 0, 100% 25%, 100% 75%, 50% 100%, 0 75%, 0 25%);
 
         --border-w: 1px;
-        --underline-offset: 0.15em;
+        --underline-offset: 0.25em;
         --focus-w: 2px;
 
         --shell-max: 72rem;
@@ -86,9 +86,11 @@
         --panel-w: 20rem;
         --dialog-w: 26rem;
         --settings-w: 24rem;
+        --identity-menu-w: 16rem;
         --theme-swatch-h: 2.75rem;
         --credit-swatch-w: 7rem;
         --identity-size: 4rem;
+        --plate-name-w: 12rem;
         --card-min: 14rem;
         --rung-rank-w: 3.5rem;
         --game-max: 90rem;

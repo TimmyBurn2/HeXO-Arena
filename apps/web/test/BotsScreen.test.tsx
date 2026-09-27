@@ -57,6 +57,15 @@ describe('BotsScreen', () => {
         expect(document.querySelectorAll(`tbody tr`).length).toBe(2);
     });
 
+    it('name every column, the play column included', async () => {
+        stubDirectory(directory);
+        render(<BotsScreen />);
+        await screen.findByRole(`table`);
+        const headers = [...document.querySelectorAll(`thead th`)].map((header) => header.textContent);
+        expect(headers.at(-1)).toBe(`Play`);
+        expect(headers.every((header) => header !== ``)).toBe(true);
+    });
+
     it('mark provisional ratings with the trailing question', async () => {
         stubDirectory(directory);
         render(<BotsScreen />);
@@ -115,7 +124,7 @@ describe('BotsScreen', () => {
         stubDirectory([]);
         render(<BotsScreen />);
         expect(await screen.findByText(`No bots yet`)).toBeTruthy();
-        expect(screen.getByRole(`link`, { name: `Connect a bot` }).getAttribute(`href`)).toBe(`/connect`);
+        expect(screen.getByRole(`link`, { name: `Build a bot` }).getAttribute(`href`)).toBe(`/connect`);
     });
 
     it('offer a retry when the first load fails', async () => {

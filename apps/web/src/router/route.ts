@@ -1,5 +1,5 @@
 export type Route =
-    | { readonly name: `arena` }
+    | { readonly name: `ladder` }
     | { readonly name: `bots` }
     | { readonly name: `bot`; readonly bot: string }
     | { readonly name: `connect` }
@@ -10,14 +10,15 @@ export type Route =
 
 /**
  * The whole route table: parse a pathname, or build one back.
- * Client paths are the four surfaces and the credits, plus the bot and
- * game detail routes the server shell-renders with og tags.
+ * The root shows the ladder under the site's own address; the ladder's
+ * built path is `/ladder`, so a link to it names what it opens.
  */
 export function parseRoute(pathname: string): Route {
     const path = pathname.length > 1 && pathname.endsWith(`/`) ? pathname.slice(0, -1) : pathname;
     const segments = path.split(`/`).filter((segment) => segment !== ``);
     const [head, second] = segments;
-    if (segments.length === 0) return { name: `arena` };
+    if (segments.length === 0) return { name: `ladder` };
+    if (head === `ladder` && segments.length === 1) return { name: `ladder` };
     if (head === `bots` && segments.length === 1) return { name: `bots` };
     if (head === `bots` && segments.length === 2 && second !== undefined) {
         return { name: `bot`, bot: safeDecode(second) };
@@ -33,8 +34,8 @@ export function parseRoute(pathname: string): Route {
 
 export function routePath(route: Route): string {
     switch (route.name) {
-        case `arena`:
-            return `/`;
+        case `ladder`:
+            return `/ladder`;
         case `bots`:
             return `/bots`;
         case `bot`:

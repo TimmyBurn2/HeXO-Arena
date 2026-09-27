@@ -3,7 +3,7 @@ import { themes } from '../src/theme/themes';
 import { looks, wear } from './matrix';
 import { serve, world } from './mock-api';
 
-async function arena(page: Page, width: number, theme = `ink`): Promise<void> {
+async function ladder(page: Page, width: number, theme = `ink`): Promise<void> {
     await page.setViewportSize({ width, height: 900 });
     // Seeded once, so a reload keeps whatever the test chose since.
     await page.addInitScript((id: string) => {
@@ -23,7 +23,7 @@ function panel(page: Page) {
 }
 
 test('the gear opens a popover by click that Esc closes, focus going in and back', async ({ page }) => {
-    await arena(page, 1280, `omok`);
+    await ladder(page, 1280, `omok`);
     await gear(page).click();
     await expect(panel(page)).toBeVisible();
     expect(await panel(page).evaluate((dialog) => dialog.matches(`:modal`))).toBe(false);
@@ -34,7 +34,7 @@ test('the gear opens a popover by click that Esc closes, focus going in and back
 });
 
 test('the gear opens from the keyboard and the close button hands focus back', async ({ page }) => {
-    await arena(page, 1280);
+    await ladder(page, 1280);
     await gear(page).focus();
     await page.keyboard.press(`Enter`);
     await expect(page.getByRole(`radio`, { name: `Ink` })).toBeFocused();
@@ -47,17 +47,17 @@ test('the gear opens from the keyboard and the close button hands focus back', a
 });
 
 test('a click outside the popover closes it and a click inside does not', async ({ page }) => {
-    await arena(page, 1280);
+    await ladder(page, 1280);
     await gear(page).click();
     await panel(page).getByRole(`heading`, { name: `Settings` }).click();
     await expect(panel(page)).toBeVisible();
-    await page.getByRole(`heading`, { name: `Arena` }).click();
+    await page.getByRole(`heading`, { level: 1, name: `Ladder` }).click();
     await expect(panel(page)).toHaveCount(0);
     await expect(gear(page)).toBeFocused();
 });
 
 test('tabbing past the popover closes it and leaves focus where it went', async ({ page }) => {
-    await arena(page, 1280);
+    await ladder(page, 1280);
     await gear(page).click();
     await panel(page).getByRole(`link`, { name: `Credits` }).focus();
     await page.keyboard.press(`Tab`);
@@ -67,7 +67,7 @@ test('tabbing past the popover closes it and leaves focus where it went', async 
 
 for (const width of [481, 768, 1280]) {
     test(`the popover hangs under the gear inside the window at ${String(width)} px`, async ({ page }) => {
-        await arena(page, width);
+        await ladder(page, width);
         await gear(page).click();
         const box = await panel(page).boundingBox();
         const gearBox = await gear(page).boundingBox();
@@ -80,7 +80,7 @@ for (const width of [481, 768, 1280]) {
 }
 
 test('on a phone the panel is a modal bottom sheet that its backdrop and Esc close', async ({ page }) => {
-    await arena(page, 390);
+    await ladder(page, 390);
     await gear(page).click();
     await expect(panel(page)).toBeVisible();
     expect(await panel(page).evaluate((dialog) => dialog.matches(`:modal`))).toBe(true);
@@ -108,7 +108,7 @@ test('on a phone the panel is a modal bottom sheet that its backdrop and Esc clo
 test('a theme applies live and persists, by click and by arrow key', async ({ page }) => {
     const before = themes[themes.findIndex((theme) => theme.id === `omok`) - 1];
     if (before === undefined) throw new Error(`omok has no theme before it`);
-    await arena(page, 1280);
+    await ladder(page, 1280);
     await gear(page).click();
     await page.locator(`label.theme-card`, { hasText: `Omok` }).click();
     await expect(page.locator(`html`)).toHaveAttribute(`data-theme`, `omok`);
@@ -122,7 +122,7 @@ test('a theme applies live and persists, by click and by arrow key', async ({ pa
 });
 
 test('the stone numbers switch writes the stored board setting by click and by key', async ({ page }) => {
-    await arena(page, 1280);
+    await ladder(page, 1280);
     await gear(page).click();
     await page.getByText(`Stone numbers`).click();
     await expect(page.getByRole(`switch`, { name: `Stone numbers` })).toBeChecked();
@@ -135,7 +135,7 @@ test('the stone numbers switch writes the stored board setting by click and by k
 });
 
 test('the credits link closes the panel and opens the credits page with its title', async ({ page }) => {
-    await arena(page, 1280);
+    await ladder(page, 1280);
     await gear(page).click();
     await expect(page.locator(`label.theme-card`, { hasText: `HDS` })).toContainText(`hexo.did.science, via MineKing`);
     await panel(page).getByRole(`link`, { name: `Credits` }).click();
@@ -147,7 +147,7 @@ test('the credits link closes the panel and opens the credits page with its titl
 });
 
 test('the glare switch, on by default, writes the setting and zeroes the glare on swatches and boards', async ({ page }) => {
-    await arena(page, 1280);
+    await ladder(page, 1280);
     await gear(page).click();
     const shine = (scope: string) =>
         page.locator(`${scope} .shine`).evaluateAll((layers) => layers.map((layer) => Number(getComputedStyle(layer).opacity)));

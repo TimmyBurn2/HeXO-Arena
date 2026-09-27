@@ -39,27 +39,24 @@ export function ProfileScreen() {
 function SignedOut() {
     return (
         <div className="card">
-            <p className="note">Discord is the only login; bots are created in Connect.</p>
+            <p className="note">Discord is the only login; sign in to build a bot.</p>
             <p className="card-actions">
                 <DiscordButton />
                 <Link to="/connect" className="btn btn-ghost">
-                    Connect
+                    Build a bot
                 </Link>
             </p>
         </div>
     );
 }
 
-function SignOutButton({ confirmWith }: { confirmWith?: string }) {
-    const [armed, setArmed] = useState(false);
+// Ending a guest session ends its games; the card's sentence says so, as
+// the identity menu's does, so neither asks twice.
+function SignOutButton({ label, failure }: { label: string; failure: string }) {
     const [leaving, setLeaving] = useState(false);
     const [failed, setFailed] = useState(false);
 
     async function leave() {
-        if (confirmWith !== undefined && !armed) {
-            setArmed(true);
-            return;
-        }
         setLeaving(true);
         setFailed(false);
         try {
@@ -74,11 +71,11 @@ function SignOutButton({ confirmWith }: { confirmWith?: string }) {
     return (
         <>
             <button type="button" className="btn btn-ghost" disabled={leaving} onClick={() => void leave()}>
-                {armed && confirmWith !== undefined ? confirmWith : `Sign out`}
+                {label}
             </button>
             {failed ? (
                 <p className="field-error" role="alert">
-                    Sign-out did not reach the server; you are still signed in
+                    {failure}
                 </p>
             ) : null}
         </>
@@ -100,7 +97,7 @@ function UserIdentity({ me }: { me: UserMe }) {
                     <span className="note">{me.provisional ? provisionalNote : `Rating`}</span>
                 </span>
             </div>
-            <SignOutButton />
+            <SignOutButton label="Sign out" failure="Sign-out did not reach the server; you are still signed in" />
         </div>
     );
 }
@@ -117,7 +114,7 @@ function GuestIdentity({ me }: { me: GuestMe }) {
             </div>
             <div className="card-actions">
                 <DiscordButton />
-                <SignOutButton confirmWith="Sign out and end guest games" />
+                <SignOutButton label="End guest session" failure="The guest session did not end; try again" />
             </div>
         </div>
     );

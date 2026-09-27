@@ -21,7 +21,7 @@ export interface OgShellDeps {
     indexPath: string;
 }
 
-export const notFoundMeta: ShellMeta = { title: `not found - hexarena`, description: `that page does not exist` };
+export const notFoundMeta: ShellMeta = { title: `Not found - hexarena`, description: `that page does not exist` };
 
 const aboutExcerptLength = 120;
 
@@ -53,10 +53,13 @@ function clockWords(timeControl: TimeControl): string {
     }
 }
 
-export function arenaMeta(listed: number, online: number, leader: { name: string; rating: number } | undefined): ShellMeta {
+// The root keeps the site's own title whatever screen it shows.
+const siteTitle = `hexarena - bot arena for HeXO`;
+
+export function ladderMeta(listed: number, online: number, leader: { name: string; rating: number } | undefined): ShellMeta {
     const board = leader === undefined ? `` : `; top rated: ${leader.name} (${String(Math.round(leader.rating))})`;
     return {
-        title: `hexarena - bot arena for HeXO`,
+        title: `Ladder - hexarena`,
         description: `${plural(listed, `bot`)} listed, ${String(online)} online${board}`,
     };
 }
@@ -146,11 +149,15 @@ export function registerOgShell(app: FastifyInstance, deps: OgShellDeps): void {
             .send(renderShell(template, meta));
     }
 
-    app.get(`/`, async (_request, reply) => {
+    function currentLadderMeta(): ShellMeta {
         const listed = listBots(query);
         const online = listed.filter((bot) => presence.isOnline(bot.id)).length;
-        return sendShell(reply, 200, arenaMeta(listed.length, online, rankablePlayers(query, `all`)[0]));
-    });
+        return ladderMeta(listed.length, online, rankablePlayers(query, `all`)[0]);
+    }
+
+    app.get(`/`, async (_request, reply) => sendShell(reply, 200, { ...currentLadderMeta(), title: siteTitle }));
+
+    app.get(`/ladder`, async (_request, reply) => sendShell(reply, 200, currentLadderMeta()));
 
     app.get<{ Params: { name: string } }>(`/bots/:name`, async (request, reply) => {
         const { name } = request.params;

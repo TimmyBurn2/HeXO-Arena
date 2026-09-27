@@ -1,5 +1,6 @@
 import { Fragment, useEffect, useRef, useState, type ReactNode } from 'react';
 import { BoardToggles } from '../board/BoardToggles';
+import { SiteLinks } from '../components/SiteLinks';
 import { Link } from '../router/Link';
 import type { Drawer, DrawerTab } from './use-drawer';
 import type { FeedLine } from './snapshot-views';
@@ -11,8 +12,8 @@ const tabs: readonly { id: DrawerTab; label: string }[] = [
 
 /**
  * Everything secondary to the board: the move feed with its two reading
- * aids, and the game's facts and actions; the look itself lives behind the
- * settings gear, outside any game.
+ * aids, the game's facts and actions, and the site's standing links; the
+ * look itself lives behind the settings gear, outside any game.
  * A right-hand drawer on wide screens, a bottom sheet on phones whose peek
  * keeps the player's own chip in reach.
  */
@@ -143,6 +144,11 @@ export function GameDrawer({ drawer, feed, facts, running, onResign, peek }: {
                     ) : null}
                     {drawer.tab === `game` ? <GameFacts facts={facts} running={running} onResign={onResign} /> : null}
                 </div>
+                {/* under either tab, so a standing link is the drawer and one
+                    press away from the board */}
+                <div className="drawer-foot">
+                    <SiteLinks open="new-tab" />
+                </div>
             </div>
         </aside>
     );
@@ -246,7 +252,7 @@ function GameFacts({ facts, running, onResign }: {
             ) : null}
             <div className="card-actions">
                 <Link to="/" className="btn btn-ghost">
-                    Leave to the arena
+                    Leave to the ladder
                 </Link>
                 {playing ? (
                     <button type="button" className="btn btn-danger" disabled={resigning} onClick={() => void resign()}>

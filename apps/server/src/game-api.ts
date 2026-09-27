@@ -32,6 +32,9 @@ import { frameOf, type GameWatchers } from './watchers';
 // hostile client, and the limit is structural, not advisory.
 export const engineFrameLimitBytes = 16 * 1024;
 
+/** The one route that takes a websocket upgrade. */
+export const engineSocketRoute = `/api/bot/game/:gameId/socket`;
+
 export interface GameApiDeps {
     query: Query;
     presence: PresenceRegistry;
@@ -208,12 +211,9 @@ export function registerGameApi(app: FastifyInstance, deps: GameApiDeps): void {
     });
 
     app.get(
-        `/api/bot/game/:gameId/socket`,
+        engineSocketRoute,
         {
             websocket: true,
-            // The token rides the URL as a query parameter, so any request
-            // log line for this route would persist a live credential.
-            logLevel: `silent`,
             preHandler: async (request, reply) => {
             const { gameId } = request.params as GameParams;
             const token = (request.query as Record<string, unknown>).token;

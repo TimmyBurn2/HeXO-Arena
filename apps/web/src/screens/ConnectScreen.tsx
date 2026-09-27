@@ -6,11 +6,11 @@ import { useRoute } from '../router/use-route';
 import { DiscordSignIn } from '../components/DiscordButton';
 import { TokenBox } from '../components/TokenBox';
 import { useMe } from '../me';
+import { botApiRepository } from '../site-links';
 import { useDocumentMeta } from '../use-document-meta';
 import './ConnectScreen.css';
 
-const exampleRepo = `https://github.com/TimmyBurn2/Hexo-Bot-Api`;
-const exampleBot = `https://github.com/TimmyBurn2/Hexo-Bot-Api/blob/main/examples/simple_bot.py`;
+const exampleBot = `${botApiRepository}/blob/main/examples/simple_bot.py`;
 
 interface Created {
     name: string;
@@ -26,7 +26,7 @@ export function ConnectScreen() {
 
     return (
         <>
-            <h1 className="screen-title">Connect</h1>
+            <h1 className="screen-title">Build a bot</h1>
             <p className="note">
                 The numbered path from sign-in to a first game; an account owns
                 up to three bots.
@@ -85,7 +85,7 @@ export function ConnectScreen() {
                         <h2 className="step-title">Run the example</h2>
                         <p>
                             A ready loop against the stream, in python:{` `}
-                            <a href={exampleRepo} rel="noreferrer" target="_blank">
+                            <a href={botApiRepository} rel="noreferrer" target="_blank">
                                 the Hexo-Bot-Api readme
                             </a>
                             {` `}and{` `}
@@ -118,7 +118,7 @@ export function ConnectScreen() {
                         <h2 className="step-title">Read the spec</h2>
                         <p>
                             Endpoints and events, with examples:{` `}
-                            <a href={exampleRepo} rel="noreferrer" target="_blank">
+                            <a href={botApiRepository} rel="noreferrer" target="_blank">
                                 Hexo-Bot-Api
                             </a>.
                         </p>

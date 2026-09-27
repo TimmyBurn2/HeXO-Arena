@@ -123,6 +123,9 @@ describe('GameScreen', () => {
         }
         fireEvent.click(screen.getByRole(`tab`, { name: `Game` }));
         expect(screen.getByRole(`button`, { name: `Resign` })).toBeTruthy();
+        const exit = [...document.querySelectorAll(`#drawer-panel-game a`)];
+        expect(exit.map((link) => [link.textContent, link.getAttribute(`href`)])).toEqual([[`Leave to the ladder`, `/`]]);
+        expect(document.querySelector(`#drawer-body .drawer-foot`)).toBeTruthy();
         fireEvent.keyDown(screen.getByRole(`tab`, { name: `Game` }), { key: `Escape` });
         expect(document.querySelector(`#drawer-body`)?.hasAttribute(`hidden`)).toBe(true);
     });
@@ -132,6 +135,8 @@ describe('GameScreen', () => {
         render(<GameScreen gameId="g-end" />);
         expect(await screen.findByText(`hextide won with six in a row`, { selector: `.hud-result` })).toBeTruthy();
         expect(document.querySelector(`polyline.win-line`)).toBeTruthy();
+        expect(screen.getByRole(`link`, { name: `Ladder` }).getAttribute(`href`)).toBe(`/ladder`);
+        expect(screen.getByRole(`link`, { name: `Leave to the ladder` }).getAttribute(`href`)).toBe(`/`);
         expect(document.querySelector(`#drawer-body`)?.hasAttribute(`hidden`)).toBe(true);
         expect(document.querySelector(`.board-control`)?.getAttribute(`role`)).toBe(`group`);
         // The phone sheet's peek carries the result only while the open sheet covers the chip.
@@ -172,6 +177,22 @@ describe('GameScreen', () => {
         expect(document.querySelector(`.peek-line`)?.textContent).toBe(`5 o: (5,0) (6,0)`);
         fireEvent.click(screen.getByRole(`tab`, { name: `Moves` }));
         expect(document.querySelector(`.peek-line`)?.textContent).toBe(`hextide won with six in a row`);
+    });
+
+    it('foot the drawer under either tab with the standing links, each opening a new tab', async () => {
+        stubGame(runningSnapshot);
+        render(<GameScreen gameId="g-run" />);
+        await screen.findByRole(`heading`, { name: `hextide vs you` });
+        await openWithM();
+        for (const tab of [`Moves`, `Game`]) {
+            fireEvent.click(screen.getByRole(`tab`, { name: tab }));
+            const links = [...document.querySelectorAll(`#drawer-body .drawer-foot a`)];
+            expect(links.map((link) => [link.getAttribute(`aria-label`), link.getAttribute(`href`), link.getAttribute(`target`)])).toEqual([
+                [`Credits, opens in a new tab`, `/credits`, `_blank`],
+                [`Bot API, opens in a new tab`, `https://github.com/TimmyBurn2/Hexo-Bot-Api`, `_blank`],
+            ]);
+            expect(links.every((link) => link.getAttribute(`rel`) === `noreferrer`)).toBe(true);
+        }
     });
 
     it('keep two tabs, Moves and Game, both reached by arrow keys either way', async () => {
@@ -225,8 +246,12 @@ describe('GameScreen', () => {
     it('not-found for an unknown game', async () => {
         stubGame(runningSnapshot, 404);
         render(<GameScreen gameId="g-x" />);
-        expect(await screen.findByText(`No such game`)).toBeTruthy();
-        expect(screen.getByRole(`link`, { name: `Arena` }).getAttribute(`href`)).toBe(`/`);
+        expect(await screen.findByRole(`heading`, { level: 1, name: `No such game` })).toBeTruthy();
+        expect(screen.getByText(`That game does not exist.`)).toBeTruthy();
+        expect(screen.getByRole(`link`, { name: `Ladder` }).getAttribute(`href`)).toBe(`/ladder`);
+        await waitFor(() => {
+            expect(document.title).toBe(`Not found - hexarena`);
+        });
     });
 
     it('resign only on the confirm step, then open the record', async () => {

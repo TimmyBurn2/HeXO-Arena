@@ -18,7 +18,7 @@ describe('ConnectScreen', () => {
         render(<ConnectScreen />);
         const headings = screen.getAllByRole(`heading`).map((heading) => heading.textContent);
         for (const expected of [
-            `Connect`,
+            `Build a bot`,
             `Sign in`,
             `Create your bot`,
             `Copy the token`,

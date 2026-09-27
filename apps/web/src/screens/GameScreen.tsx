@@ -2,7 +2,8 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type { GameSnapshot } from '@hexarena/contract';
 import { BotBadge, Swatch } from '../components/player';
 import { ErrorFrame } from '../components/states';
-import { Link } from '../router/Link';
+import { useBorrowFrame } from '../frame';
+import { routeMeta } from '../route-meta';
 import { useRoute } from '../router/use-route';
 import { useDocumentMeta } from '../use-document-meta';
 import { GameBoard, type TurnStatus } from '../game/GameBoard';
@@ -22,6 +23,7 @@ import {
     stonesOf,
     winLineOf,
 } from '../game/snapshot-views';
+import { NotFoundScreen } from './NotFoundScreen';
 import './GameScreen.css';
 
 export function GameScreen({ gameId }: { gameId: string }) {
@@ -53,22 +55,14 @@ function LoadingStage() {
     );
 }
 
+// A game that does not exist has no board to show, so it takes the frame
+// and reads as any other missing page.
 function MissingGame() {
-    return (
-        <div className="stage-message">
-            <Link to="/" className="brand">
-                hexarena
-            </Link>
-            <div className="empty">
-                <h1>No such game</h1>
-                <div className="actions">
-                    <Link to="/" className="btn btn-ghost">
-                        Arena
-                    </Link>
-                </div>
-            </div>
-        </div>
-    );
+    const route = useRoute();
+    const meta = routeMeta({ name: `not-found` });
+    useBorrowFrame();
+    useDocumentMeta(route, meta.title, meta.description);
+    return <NotFoundScreen heading="No such game" sentence="That game does not exist." />;
 }
 
 const idleStatus: TurnStatus = { placed: 0, note: null };

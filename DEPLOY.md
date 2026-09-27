@@ -5,7 +5,7 @@ pulled image plus Caddy.
 
 | service | role |
 |---|---|
-| `app` | the server and the og shell for `/`, `/bots/*`, `/game/*`; on an internal network with no route out |
+| `app` | the server and the og shell for `/`, `/ladder`, `/bots/*`, `/game/*`; on an internal network with no route out |
 | `egress` | CONNECT-only forward proxy; the app's only way out, to `discord.com:443` alone |
 | `web` | one-shot copy of the static site into the volume Caddy serves |
 | `caddy` | TLS, the static site, and the proxy to the API and the shell routes |
@@ -167,6 +167,19 @@ docker volume rm hexarena-restore-test
 ```
 
 Pass: `ok`, a plausible game count, and a `status` answer.
+
+## Logs
+
+The app writes JSON lines to stdout; `docker compose logs app` reads them.
+Each request leaves lines tied by `reqId`:
+the method and route pattern, such as `/api/bots/:name` (`null` when nothing matched),
+then the status and response time.
+A client error logs its code and status; a server error its message and stack.
+No request line holds a URL, a query string, a request body, a header, or a client address.
+
+Caddy keeps no access log.
+One added later masks client addresses (`ip_mask`) and keeps at most 7 days (`roll_keep_for 168h`).
+Docker's json-file driver keeps 5 files of 10 MB per service, rotated by size, not by time.
 
 ## Break-glass
 

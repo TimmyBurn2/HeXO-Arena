@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { LiveGameEntry } from '@hexarena/contract';
 import { liveRefreshMs } from '../src/api/use-live-games';
 import { LiveRail, timeControlText } from '../src/components/LiveRail';
-import { ArenaScreen } from '../src/screens/ArenaScreen';
+import { LadderScreen } from '../src/screens/LadderScreen';
 
 const guestGame: LiveGameEntry = {
     gameId: `g-guest`,
@@ -84,10 +84,10 @@ describe('LiveRail', () => {
     });
 });
 
-describe('ArenaScreen live rail', () => {
+describe('LadderScreen live rail', () => {
     it('sit under the ladder', async () => {
         stubReads(() => [botGame]);
-        render(<ArenaScreen />);
+        render(<LadderScreen />);
         await screen.findByRole(`table`);
         expect(await screen.findByRole(`heading`, { name: `Live games` })).toBeTruthy();
         const order = [...document.querySelectorAll(`table, .live-rail`)].map((element) => element.tagName);
@@ -100,7 +100,7 @@ describe('ArenaScreen live rail', () => {
             return Promise.resolve(new Response(JSON.stringify(body)));
         });
         vi.stubGlobal(`fetch`, fetched);
-        render(<ArenaScreen />);
+        render(<LadderScreen />);
         const rail = await screen.findByRole(`region`, { name: `Live games` });
         await screen.findByRole(`link`, { name: /^Watch hextide/ });
         fireEvent.click(screen.getByRole(`button`, { name: `Bots` }));
@@ -113,14 +113,14 @@ describe('ArenaScreen live rail', () => {
 
     it('follow the day-one empty state only while a game is live', async () => {
         stubReads(() => [botGame], []);
-        render(<ArenaScreen />);
+        render(<LadderScreen />);
         expect(await screen.findByText(`No ranked players yet`)).toBeTruthy();
         expect(await screen.findByRole(`heading`, { name: `Live games` })).toBeTruthy();
         const order = [...document.querySelectorAll(`.empty, .live-rail`)].map((element) => element.className);
         expect(order).toEqual([`empty`, `live-rail`]);
         cleanup();
         stubReads(() => [], []);
-        render(<ArenaScreen />);
+        render(<LadderScreen />);
         await screen.findByText(`No ranked players yet`);
         await new Promise((resolve) => setTimeout(resolve, 20));
         expect(screen.queryByRole(`heading`, { name: `Live games` })).toBe(null);
