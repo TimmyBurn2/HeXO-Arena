@@ -21,9 +21,11 @@
     }
 
     /* The name and the tagline each wrap as a unit, so a narrow window
-       breaks after the comma, and scaled-up text still wraps inside them. */
+       breaks after the comma, and scaled-up text still wraps inside them,
+       in lines of even length that never leave one word alone. */
     .site-tagline span {
         display: inline-block;
+        text-wrap: balance;
     }
 
     /* A finger needs the full target where the tab strip takes over. */

@@ -1,5 +1,6 @@
 import type { Ref } from 'react';
 import { discordLoginPath } from '@hexo-arena/contract';
+import { text } from '../text';
 import { DiscordSymbol } from './DiscordSymbol';
 import './DiscordButton.css';
 
@@ -13,9 +14,7 @@ export function DiscordButton({ ref }: { ref?: Ref<HTMLAnchorElement> }) {
         <a ref={ref} className="discord-button" href={discordLoginPath}>
             <span className="discord-face">
                 <DiscordSymbol />
-                <span>
-                    Sign in<span className="sr-only"> with Discord</span>
-                </span>
+                <span>{text.shell.signIn((words) => <span className="sr-only">{words}</span>)}</span>
             </span>
         </a>
     );
@@ -29,7 +28,7 @@ export function DiscordSignIn() {
     return (
         <div className="discord-sign-in">
             <DiscordButton />
-            <p className="note">Discord shares your username only; no email.</p>
+            <p className="note">{text.shell.signInTrust}</p>
         </div>
     );
 }

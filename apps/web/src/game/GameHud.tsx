@@ -1,8 +1,9 @@
 import type { ReactNode } from 'react';
-import type { GameSnapshot, Side } from '@hexo-arena/contract';
+import { clockText, type GameSnapshot, type Side } from '@hexo-arena/contract';
 import { BotBadge, Rating, Swatch } from '../components/player';
 import { selfName, type MeState } from '../me';
 import { Link } from '../router/Link';
+import { text } from '../text';
 import { Clock } from './Clock';
 import type { TurnStatus } from './GameBoard';
 import type { GameLink } from './use-game';
@@ -20,14 +21,6 @@ export function clockOf(snapshot: GameSnapshot, side: Side): ReactNode {
     if (clock.mode === `match`) return <Clock remainingMs={clock.remainingMainMs[side]} running={active} />;
     if (clock.mode === `turn` && active) return <Clock remainingMs={clock.remainingTurnMs} running />;
     return null;
-}
-
-/** The time control in the words the play dialog used. */
-export function clockModeText(snapshot: GameSnapshot): string {
-    const clock = snapshot.clock;
-    if (clock === undefined) return `game over`;
-    if (clock.mode === `unlimited`) return `no clock`;
-    return clock.mode === `turn` ? `turn clock` : `match clock`;
 }
 
 function Chip({ className, children }: { className: string; children: ReactNode }) {
@@ -50,7 +43,7 @@ export function SeatChip({ snapshot, side, corner }: { snapshot: GameSnapshot; s
     return (
         <Chip className={top ? `hud-top-left` : `hud-bottom-left`}>
             {top ? (
-                <Link to="/" className="hud-exit" ariaLabel="Leave to the ladder">
+                <Link to="/" className="hud-exit" ariaLabel={text.game.exit}>
                     <svg viewBox="0 0 24 24" aria-hidden="true">
                         <path d="M15 5l-7 7 7 7" />
                     </svg>
@@ -64,13 +57,13 @@ export function SeatChip({ snapshot, side, corner }: { snapshot: GameSnapshot; s
                 </span>
                 <span className="hud-meta">
                     {player.rating === null ? (
-                        <span className="tag muted">unrated</span>
+                        <span className="tag muted">{text.game.unrated}</span>
                     ) : (
                         <span className="hud-rating">
                             <Rating value={player.rating} provisional={player.provisional} />
                         </span>
                     )}
-                    {top && snapshot.status === `in-progress` ? <span>{clockModeText(snapshot)}</span> : null}
+                    {top && snapshot.status === `in-progress` ? <span>{clockText(snapshot.clock.mode)}</span> : null}
                 </span>
             </span>
             {clockOf(snapshot, side)}
@@ -91,8 +84,8 @@ export function YouChip({ snapshot, you, me }: { snapshot: GameSnapshot; you: Si
                             <Rating value={self.rating} provisional={self.provisional} />
                         </span>
                     ) : null}
-                    {self?.kind === `guest` ? <span className="tag muted">unrated</span> : null}
-                    <span>Playing {you}</span>
+                    {self?.kind === `guest` ? <span className="tag muted">{text.game.unrated}</span> : null}
+                    <span>{text.game.playing(you)}</span>
                 </span>
             </span>
             {clockOf(snapshot, you)}
@@ -127,9 +120,9 @@ export function TurnChip({ snapshot, you, status, link, onMoves }: {
     if (link === `refused` && you === null) {
         return (
             <Chip className="hud-bottom-center">
-                <span className="tag muted">watching</span>
+                <span className="tag muted">{text.game.watching}</span>
                 <span className="hud-hint" role="status">
-                    Many watching; the board catches up shortly
+                    {text.game.manyWatching}
                 </span>
             </Chip>
         );
@@ -138,7 +131,7 @@ export function TurnChip({ snapshot, you, status, link, onMoves }: {
         return (
             <Chip className="hud-bottom-center">
                 <span className="hud-note" role="status">
-                    Connection lost, retrying
+                    {text.game.connectionLost}
                 </span>
             </Chip>
         );
@@ -149,32 +142,34 @@ export function TurnChip({ snapshot, you, status, link, onMoves }: {
                 <span className="hud-result" role="status">
                     {resultLine(snapshot)}
                 </span>
-                <Link to="/ladder" className="btn btn-primary btn-sm">
-                    Ladder
-                </Link>
-                <button type="button" className="btn btn-ghost btn-sm" onClick={onMoves}>
-                    Moves
-                </button>
+                <span className="hud-actions">
+                    <Link to="/ladder" className="btn btn-primary btn-sm">
+                        {text.game.ladder}
+                    </Link>
+                    <button type="button" className="btn btn-ghost btn-sm" onClick={onMoves}>
+                        {text.game.moves}
+                    </button>
+                </span>
             </Chip>
         );
     }
     if (snapshot.toMove !== you) {
         return (
             <Chip className="hud-bottom-center">
-                {you === null ? <span className="tag muted">watching</span> : null}
+                {you === null ? <span className="tag muted">{text.game.watching}</span> : null}
                 <span className="hud-turn" role="status">
-                    {snapshot.players[snapshot.toMove].name} is thinking
+                    {text.game.thinking(snapshot.players[snapshot.toMove].name)}
                 </span>
             </Chip>
         );
     }
     return (
         <Chip className="hud-bottom-center">
-            <span className="hud-turn">Your move</span>
+            <span className="hud-turn">{text.game.yourTurn}</span>
             <Pips placed={status.placed} />
             {status.note === null ? (
                 <span className="hud-hint" role="status">
-                    {status.placed === 0 ? `Two stones` : `One stone left`}
+                    {status.placed === 0 ? text.game.twoStones : text.game.oneStoneLeft}
                 </span>
             ) : (
                 <span className="hud-note" role="alert">

@@ -1,3 +1,4 @@
+import { text } from '../text';
 import { useBoardSettings } from './board-settings';
 
 /**
@@ -18,7 +19,7 @@ export function BoardToggles({ glare = false }: { glare?: boolean }) {
                         update({ numbers: event.target.checked });
                     }}
                 />
-                Stone numbers
+                {text.settings.stoneNumbers}
             </label>
             {glare ? (
                 <label className="checkline">
@@ -30,7 +31,7 @@ export function BoardToggles({ glare = false }: { glare?: boolean }) {
                             update({ glare: event.target.checked });
                         }}
                     />
-                    Stone glare
+                    {text.settings.stoneGlare}
                 </label>
             ) : null}
         </div>

@@ -3,7 +3,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-libra
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { LiveGameEntry } from '@hexo-arena/contract';
 import { liveRefreshMs } from '../src/api/use-live-games';
-import { LiveRail, timeControlText } from '../src/components/LiveRail';
+import { LiveRail } from '../src/components/LiveRail';
 import { LadderScreen } from '../src/screens/LadderScreen';
 
 const guestGame: LiveGameEntry = {
@@ -54,13 +54,13 @@ describe('LiveRail', () => {
         const links = await screen.findAllByRole(`link`);
         expect(links.map((link) => link.getAttribute(`href`))).toEqual([`/game/g-guest`, `/game/g-bots`]);
         expect(links[0]?.textContent).toBe(`Watch sealbotBOTvsGuest k3f9unratedturn clock 30 sGuest k3f9 to move`);
-        expect(links[1]?.textContent).toBe(`Watch hextideBOTvssealbotBOTmatch clock 5 min +2 shextide to move`);
+        expect(links[1]?.textContent).toBe(`Watch hextideBOTvssealbotBOTmatch clock 5 min + 2 shextide to move`);
     });
 
     it('say so in one quiet line when nothing is live', async () => {
         stubReads(() => []);
         render(<LiveRail />);
-        expect(await screen.findByText(`No games are live right now.`)).toBeTruthy();
+        expect(await screen.findByText(`No live games right now.`)).toBeTruthy();
     });
 
     it('reread the list on its beat', async () => {
@@ -68,19 +68,12 @@ describe('LiveRail', () => {
         let live: LiveGameEntry[] = [];
         stubReads(() => live);
         render(<LiveRail />);
-        await screen.findByText(`No games are live right now.`);
+        await screen.findByText(`No live games right now.`);
         live = [botGame];
         await act(async () => {
             await vi.advanceTimersByTimeAsync(liveRefreshMs);
         });
         expect(await screen.findByRole(`link`)).toBeTruthy();
-    });
-
-    it('word every clock mode', () => {
-        expect(timeControlText({ mode: `unlimited` })).toBe(`no clock`);
-        expect(timeControlText({ mode: `match`, mainTimeMs: 60_000, incrementMs: 0 })).toBe(`match clock 1 min`);
-        expect(timeControlText({ mode: `match`, mainTimeMs: 100_000, incrementMs: 1_500 })).toBe(`match clock 1 min 40 s +2 s`);
-        expect(timeControlText({ mode: `turn`, turnTimeMs: 12_345 })).toBe(`turn clock 12 s`);
     });
 });
 
@@ -124,6 +117,6 @@ describe('LadderScreen live rail', () => {
         await screen.findByText(`No ranked players yet`);
         await new Promise((resolve) => setTimeout(resolve, 20));
         expect(screen.queryByRole(`heading`, { name: `Live games` })).toBe(null);
-        expect(screen.queryByText(`No games are live right now.`)).toBe(null);
+        expect(screen.queryByText(`No live games right now.`)).toBe(null);
     });
 });

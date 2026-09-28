@@ -4,8 +4,9 @@ const envShape = z.object({
     HOST: z.string().default(`127.0.0.1`),
     PORT: z.coerce.number().int().min(1).max(65535).default(3000),
     DATABASE_PATH: z.string().min(1).default(`data/hexo-arena.sqlite`),
-    // Public origin of the site: builds the OAuth redirect uri and decides
-    // whether the session cookie carries Secure (TLS ends at the proxy).
+    // Public origin of the site: builds the OAuth redirect uri and the link
+    // preview's image address, and decides whether the session cookie
+    // carries Secure (TLS ends at the proxy).
     PUBLIC_ORIGIN: z
         .string()
         .default(`http://localhost:3000`)

@@ -73,6 +73,8 @@ import {
     rankableDeviation,
     sessionCookieName,
     sessionHeartbeatMs,
+    signInFailureParam,
+    signInFailureSchema,
     siteName,
     siteWatcherCap,
     streamEventSchema,
@@ -91,9 +93,6 @@ const unauthorizedError = errorBodySchema(unauthorizedErrorCodes).meta({ id: `Un
 const notFoundError = errorBodySchema(notFoundErrorCodes).meta({ id: `NotFoundError` });
 const bannedError = errorBodySchema(botForbiddenErrorCodes).meta({ id: `BannedError` });
 const pausedError = errorBodySchema(pausedErrorCodes).meta({ id: `PausedError` });
-const oauthUnconfiguredError = errorBodySchema([`oauth_unconfigured`]).meta({ id: `OAuthUnconfiguredError` });
-const badStateError = errorBodySchema([`bad_state`]).meta({ id: `BadStateError` });
-const discordError = errorBodySchema([`discord_error`]).meta({ id: `DiscordError` });
 const signedInError = errorBodySchema(guestConflictErrorCodes).meta({ id: `SignedInError` });
 const guestLimitError = errorBodySchema(guestLimitErrorCodes).meta({ id: `GuestLimitError` });
 const watcherLimitError = errorBodySchema(watcherLimitErrorCodes).meta({ id: `WatcherLimitError` });
@@ -155,11 +154,6 @@ function registerSharedComponents(registry: OpenAPIRegistry) {
         ),
         badRequest: response(`BadRequest`, `The request fails validation.`, badRequestError),
         gameOver: response(`GameOver`, `The game is already finished (game_over).`, gameOverError),
-        oauthUnconfigured: response(
-            `OAuthUnconfigured`,
-            `Discord OAuth credentials are not configured.`,
-            oauthUnconfiguredError,
-        ),
         paused: registry.registerComponent('responses', 'Paused', {
             description: `The site is paused: nothing new starts, while open streams and live games run on. Retry after ${String(pausedRetryAfterSeconds)} s.`,
             headers: { 'Retry-After': retryAfter },
@@ -198,6 +192,8 @@ function registerSiteSurface(registry: OpenAPIRegistry, shared: SharedComponents
         name: sessionCookieName,
         description: `An HttpOnly session cookie, set by the Discord OAuth callback or the guest route.`,
     });
+    // Named where the callback's redirect describes it, so the reasons are listed.
+    shared.referenced.push({ type: 'schema', schema: signInFailureSchema });
 
     registry.registerPath({
         method: 'get',
@@ -219,8 +215,9 @@ function registerSiteSurface(registry: OpenAPIRegistry, shared: SharedComponents
         tags: ['Auth'],
         description: `Each redirect carries a fresh state and nonce, valid once at the callback.`,
         responses: {
-            302: { description: `Redirect to Discord's authorize endpoint.` },
-            503: shared.oauthUnconfigured,
+            302: {
+                description: `Redirect to Discord's authorize endpoint, or to / with ${signInFailureParam}=unconfigured when Discord OAuth is not set up.`,
+            },
         },
     });
 
@@ -230,22 +227,17 @@ function registerSiteSurface(registry: OpenAPIRegistry, shared: SharedComponents
         summary: 'Finish Discord OAuth: create the session.',
         operationId: 'discordCallback',
         tags: ['Auth'],
-        description: `Requests the identify scope only: the Discord id and username.`,
+        description: `Requests the identify scope only: the Discord id and username. A failed sign-in creates no session.`,
         responses: {
-            302: { description: `The session cookie is set; redirect to /.` },
-            400: {
-                description: `The state is unknown, expired, or already used.`,
-                content: { 'application/json': { schema: badStateError } },
+            302: {
+                description: `A redirect to /, with the session cookie set, or on failure with ${signInFailureParam} naming a SignInFailure.`,
+                headers: {
+                    Location: {
+                        description: `/, or /?${signInFailureParam}= and the reason.`,
+                        schema: { type: 'string' },
+                    },
+                },
             },
-            403: {
-                description: `The Discord identity belongs to a banned user; no session is created.`,
-                content: { 'application/json': { schema: bannedError } },
-            },
-            502: {
-                description: `Discord rejected the code or the identity lookup failed.`,
-                content: { 'application/json': { schema: discordError } },
-            },
-            503: shared.oauthUnconfigured,
         },
     });
 

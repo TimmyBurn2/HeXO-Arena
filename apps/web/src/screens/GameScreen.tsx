@@ -1,28 +1,19 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { siteName, type GameSnapshot } from '@hexo-arena/contract';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { clockText, gameMeta, type GameHeadline, type GameSnapshot } from '@hexo-arena/contract';
 import { BotBadge, Swatch } from '../components/player';
-import { ErrorFrame } from '../components/states';
+import { Link } from '../router/Link';
 import { useBorrowFrame } from '../frame';
 import { routeMeta } from '../route-meta';
 import { useRoute } from '../router/use-route';
+import { text } from '../text';
 import { useDocumentMeta } from '../use-document-meta';
 import { GameBoard, type TurnStatus } from '../game/GameBoard';
 import { FeedLabel, GameDrawer } from '../game/GameDrawer';
-import { clockModeText, clockOf, Pips, SeatChip, TurnChip, YouChip } from '../game/GameHud';
+import { clockOf, Pips, SeatChip, TurnChip, YouChip } from '../game/GameHud';
 import { useDrawer } from '../game/use-drawer';
 import { selfName, useMe } from '../me';
 import { useGame, type GameLink, type GameSend } from '../game/use-game';
-import {
-    feedOf,
-    matchName,
-    otherSide,
-    positionOf,
-    reasonText,
-    resultLine,
-    resultSentence,
-    stonesOf,
-    winLineOf,
-} from '../game/snapshot-views';
+import { feedOf, matchName, otherSide, positionOf, resultLine, stonesOf, winLineOf } from '../game/snapshot-views';
 import { NotFoundScreen } from './NotFoundScreen';
 import './GameScreen.css';
 
@@ -31,14 +22,27 @@ export function GameScreen({ gameId }: { gameId: string }) {
 
     if (game.state === `loading`) return <LoadingStage />;
     if (game.state === `missing`) return <MissingGame />;
-    if (game.state === `error`) {
-        return (
-            <div className="stage-message">
-                <ErrorFrame sentence="The game did not load" onRetry={game.retry} />
-            </div>
-        );
-    }
+    if (game.state === `error`) return <FailedStage retry={game.retry} />;
     return <GameView snapshot={game.snapshot} send={game.send} link={game.link} />;
+}
+
+// The stage has no nav, so a game that did not load also offers the way out.
+function FailedStage({ retry }: { retry: () => void }) {
+    return (
+        <div className="stage-message">
+            <div className="empty">
+                <h1>{text.game.failed}</h1>
+                <div className="actions">
+                    <button type="button" className="btn btn-primary" onClick={retry}>
+                        {text.states.tryAgain}
+                    </button>
+                    <Link to="/ladder" className="btn btn-ghost">
+                        {text.game.ladder}
+                    </Link>
+                </div>
+            </div>
+        </div>
+    );
 }
 
 // The stage's shape before the snapshot lands, so nothing jumps when it does.
@@ -62,10 +66,44 @@ function MissingGame() {
     const meta = routeMeta({ name: `not-found` });
     useBorrowFrame();
     useDocumentMeta(route, meta.title, meta.description);
-    return <NotFoundScreen heading="No such game" sentence="That game does not exist." />;
+    return <NotFoundScreen heading={text.game.missingHeading} sentence={text.game.missingSentence} />;
 }
 
 const idleStatus: TurnStatus = { placed: 0, note: null };
+
+// A result wraps to as many rows as its names need, so under a finished
+// game the game screen measures its chip: one that would come nearer the
+// seat chip than the seat chip sits to the edge stacks above it, and the
+// camera clears the chip's reach when that passes the fixed allowance.
+// A running game keeps the allowance, so a note never moves the board
+// under the player's hand.
+function useResultReach(finished: boolean) {
+    const ref = useRef<HTMLDivElement>(null);
+    useLayoutEffect(() => {
+        const host = ref.current;
+        if (!finished || host === null || typeof ResizeObserver === `undefined`) return;
+        const chip = host.querySelector(`.hud-bottom-center`);
+        if (chip === null) return;
+        const observer = new ResizeObserver(() => {
+            const area = host.getBoundingClientRect();
+            const seat = host.querySelector(`.hud-bottom-left`)?.getBoundingClientRect();
+            // Stacking only lifts the chip, so the reading holds once stacked.
+            const own = chip.getBoundingClientRect();
+            const meets = seat !== undefined && seat.width > 0 && own.left < seat.right + (seat.left - area.left);
+            host.toggleAttribute(`data-stacked`, meets);
+            const reach = area.bottom - chip.getBoundingClientRect().top;
+            host.style.setProperty(`--hud-reach`, `${String(Math.ceil(reach))}px`);
+        });
+        observer.observe(host);
+        observer.observe(chip);
+        return () => {
+            observer.disconnect();
+            host.removeAttribute(`data-stacked`);
+            host.style.removeProperty(`--hud-reach`);
+        };
+    }, [finished]);
+    return ref;
+}
 
 // Typing into a field never opens the drawer.
 function typingInto(target: EventTarget | null): boolean {
@@ -88,8 +126,10 @@ function GameView({ snapshot, send, link }: { snapshot: GameSnapshot; send: Game
     const hoverTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
     const openedByHover = useRef(false);
     const finishedShown = useRef(!running);
+    const host = useResultReach(!running);
 
-    useDocumentMeta(route, titleOf(snapshot), descriptionOf(snapshot));
+    const meta = gameMeta(headlineOf(snapshot));
+    useDocumentMeta(route, meta.title, meta.description);
 
     const onStatus = useCallback((next: TurnStatus) => {
         setStatus(next);
@@ -157,15 +197,17 @@ function GameView({ snapshot, send, link }: { snapshot: GameSnapshot; send: Game
     );
     const peek = (
         <div className="peek-row">
-            <Swatch side={bottom} />
-            {you === null ? (
-                <span className="hud-name">
-                    {snapshot.players[bottom].name}
-                    {snapshot.players[bottom].kind === `bot` ? <BotBadge /> : null}
-                </span>
-            ) : (
-                <span className="hud-name">{selfName(me)}</span>
-            )}
+            <span className="peek-who">
+                <Swatch side={bottom} />
+                {you === null ? (
+                    <span className="hud-name">
+                        {snapshot.players[bottom].name}
+                        {snapshot.players[bottom].kind === `bot` ? <BotBadge /> : null}
+                    </span>
+                ) : (
+                    <span className="hud-name">{selfName(me)}</span>
+                )}
+            </span>
             {clockOf(snapshot, bottom)}
             {yourMove ? <Pips placed={status.placed} /> : null}
             {peekLine}
@@ -179,7 +221,7 @@ function GameView({ snapshot, send, link }: { snapshot: GameSnapshot; send: Game
             data-open={drawer.visible && !drawer.pinned ? `` : undefined}
         >
             <h1 className="sr-only">{headingOf(snapshot)}</h1>
-            <div className="board-host">
+            <div className="board-host" ref={host}>
                 <GameBoard
                     stones={stones}
                     position={positionOf(snapshot)}
@@ -187,6 +229,7 @@ function GameView({ snapshot, send, link }: { snapshot: GameSnapshot; send: Game
                     lastMove={running ? stones.slice(-2) : []}
                     winLine={winLineOf(snapshot) ?? []}
                     yourMove={yourMove}
+                    finished={!running}
                     idleLabel={idleLabelOf(snapshot)}
                     onCommit={send.playMove}
                     onStatus={onStatus}
@@ -199,7 +242,7 @@ function GameView({ snapshot, send, link }: { snapshot: GameSnapshot; send: Game
                         className="hud-chip hud-toggle"
                         aria-expanded={drawer.visible}
                         aria-controls="game-drawer"
-                        aria-label="Moves and game"
+                        aria-label={text.game.panelToggle}
                         onClick={drawer.toggle}
                     >
                         <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -229,6 +272,7 @@ function GameView({ snapshot, send, link }: { snapshot: GameSnapshot; send: Game
                     feed={feed}
                     facts={factsOf(snapshot)}
                     running={running}
+                    timed={snapshot.clock !== undefined && snapshot.clock.mode !== `unlimited`}
                     onResign={you === null ? null : send.resign}
                     peek={peek}
                 />
@@ -238,17 +282,20 @@ function GameView({ snapshot, send, link }: { snapshot: GameSnapshot; send: Game
 }
 
 function factsOf(snapshot: GameSnapshot): (readonly [string, string])[] {
-    const facts: (readonly [string, string])[] = [
-        [`Clock`, clockModeText(snapshot)],
-        [`Opening`, snapshot.openingPlies === 1 ? `origin only` : `${String(snapshot.openingPlies)} stones, origin included`],
-    ];
+    // A finished game whose clock went with its process has no clock to name.
+    const facts: (readonly [string, string])[] =
+        snapshot.clock === undefined ? [] : [[text.drawer.clock, text.drawer.clockValue(clockText(snapshot.clock.mode))]];
+    facts.push([
+        text.drawer.opening,
+        snapshot.openingPlies === 1 ? text.drawer.originOnly : text.drawer.openingStones(snapshot.openingPlies),
+    ]);
     if (snapshot.you === undefined) {
         const guest = snapshot.players.x.kind === `guest` || snapshot.players.o.kind === `guest`;
-        facts.push([`Rated`, guest ? `no, a guest plays` : `yes`]);
+        facts.push([text.drawer.rated, guest ? text.drawer.ratedNoGuest : text.drawer.ratedYes]);
     } else {
-        facts.push([`You play`, snapshot.you]);
+        facts.push([text.drawer.yourSide, snapshot.you]);
     }
-    if (snapshot.status === `finished`) facts.push([`Result`, resultLine(snapshot)]);
+    if (snapshot.status === `finished`) facts.push([text.drawer.result, resultLine(snapshot)]);
     return facts;
 }
 
@@ -258,34 +305,24 @@ function headingOf(snapshot: GameSnapshot): string {
     const you = snapshot.you;
     if (you === undefined) return matchName(snapshot);
     const opponent = snapshot.players[otherSide(you)].name;
-    return you === `x` ? `you vs ${opponent}` : `${opponent} vs you`;
+    return you === `x` ? text.game.vs(text.game.you, opponent) : text.game.vs(opponent, text.game.you);
 }
 
 function idleLabelOf(snapshot: GameSnapshot): string {
     const state =
         snapshot.status === `finished`
-            ? `game finished`
+            ? text.drawer.boardFinished
             : snapshot.you === undefined
-              ? `${snapshot.players[snapshot.toMove].name} to move`
-              : `waiting for ${snapshot.players[snapshot.toMove].name}`;
-    return snapshot.you === undefined ? `watching ${matchName(snapshot)}, ${state}` : state;
+              ? text.drawer.boardToMove(snapshot.players[snapshot.toMove].name)
+              : text.drawer.boardWaiting(snapshot.players[snapshot.toMove].name);
+    return snapshot.you === undefined ? text.drawer.boardWatching(matchName(snapshot), state) : state;
 }
 
-function titleOf(snapshot: GameSnapshot): string {
-    if (snapshot.status === `finished`) {
-        const winner = snapshot.winner;
-        const who = winner === null ? `nobody` : winner === snapshot.you ? `you` : snapshot.players[winner].name;
-        return `${who} won (${reasonText(snapshot.reason)}) - ${siteName}`;
-    }
-    return `${headingOf(snapshot)} - ${siteName}`;
-}
-
-function descriptionOf(snapshot: GameSnapshot): string {
-    if (snapshot.status === `finished`) {
-        return resultSentence(snapshot);
-    }
-    const you = snapshot.you;
-    return you === undefined
-        ? `${snapshot.clock.mode} clock game, ${matchName(snapshot)}`
-        : `${snapshot.clock.mode} clock game against ${snapshot.players[otherSide(you)].name}`;
+// The game as its preview reads it: names only, then the live state or
+// the result; the snapshot names the clock's mode, not its settings.
+function headlineOf(snapshot: GameSnapshot): GameHeadline {
+    const names = { x: snapshot.players.x.name, o: snapshot.players.o.name };
+    return snapshot.status === `finished`
+        ? { status: `finished`, names, winner: snapshot.winner, reason: snapshot.reason }
+        : { status: `live`, names, toMove: snapshot.toMove, timeControl: snapshot.clock.mode };
 }

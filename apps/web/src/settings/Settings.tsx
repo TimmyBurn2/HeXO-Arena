@@ -2,6 +2,7 @@ import { BoardToggles } from '../board/BoardToggles';
 import { ThemeSwatch } from '../board/ThemeSwatch';
 import { TopbarPanel, usePanel } from '../components/TopbarPanel';
 import { Link } from '../router/Link';
+import { text } from '../text';
 import { themes, useTheme } from '../theme/themes';
 import './Settings.css';
 
@@ -20,7 +21,7 @@ export function Settings() {
                 ref={control.button}
                 type="button"
                 className="settings-gear"
-                aria-label="Settings"
+                aria-label={text.settings.title}
                 aria-haspopup="dialog"
                 aria-expanded={control.mode !== `closed`}
                 aria-controls={control.mode === `closed` ? undefined : `settings-panel`}
@@ -40,14 +41,14 @@ export function Settings() {
                 labelledBy="settings-title"
                 head={
                     <h2 id="settings-title" className="settings-title">
-                        Settings
+                        {text.settings.title}
                     </h2>
                 }
-                closeLabel="Close settings"
+                closeLabel={text.settings.close}
                 initialFocus={`input[type="radio"]:checked`}
             >
                 <fieldset className="settings-group">
-                    <legend className="settings-legend">Look</legend>
+                    <legend className="settings-legend">{text.settings.theme}</legend>
                     <div className="theme-cards">
                         {/* the name labels each look and the credit describes it,
                             so arrowing through reads the name first */}
@@ -76,19 +77,20 @@ export function Settings() {
                     </div>
                 </fieldset>
                 <fieldset className="settings-group">
-                    <legend className="settings-legend">Board</legend>
+                    <legend className="settings-legend">{text.settings.board}</legend>
                     <BoardToggles glare />
                 </fieldset>
                 <p className="note settings-foot">
-                    Saved in this browser. Themes other than Ink come from community projects.{` `}
-                    <Link
-                        to="/credits"
-                        onNavigate={() => {
-                            control.close(false);
-                        }}
-                    >
-                        Credits
-                    </Link>
+                    {text.settings.foot((words) => (
+                        <Link
+                            to="/credits"
+                            onNavigate={() => {
+                                control.close(false);
+                            }}
+                        >
+                            {words}
+                        </Link>
+                    ))}
                 </p>
             </TopbarPanel>
         </>

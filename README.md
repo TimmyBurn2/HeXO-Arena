@@ -75,8 +75,8 @@ Ctrl-C closes every stream; `pnpm dev` never starts the runner.
 `.env.example` lists every variable with its development value.
 
 - `HOST`, `PORT`, `DATABASE_PATH`: bind and sqlite location
-- `PUBLIC_ORIGIN`: site origin; builds the OAuth redirect uri and decides the
-  session cookie's `Secure` flag
+- `PUBLIC_ORIGIN`: site origin; builds the OAuth redirect uri and the link
+  preview's image address, and decides the session cookie's `Secure` flag
 - `DISCORD_CLIENT_ID`, `DISCORD_CLIENT_SECRET`: with both set, Discord login is
   live; otherwise the auth routes answer `503`
 - `DEV_LOGIN=1`: registers `POST /api/dev/login`, which creates a synthetic

@@ -54,7 +54,7 @@ describe('Settings', () => {
         expect(open().dataset.mode).toBe(`sheet`);
     });
 
-    it('hold the look and the board aids and nothing else', () => {
+    it('hold the theme and the board aids and nothing else', () => {
         render(<Settings />);
         open();
         expect(screen.getAllByRole(`radio`).map((radio) => radio.getAttribute(`value`))).toEqual(themes.map((theme) => theme.id));
@@ -62,10 +62,10 @@ describe('Settings', () => {
             `Stone numbers`,
             `Stone glare`,
         ]);
-        expect(screen.getByRole(`group`, { name: `Look` })).toBeTruthy();
+        expect(screen.getByRole(`group`, { name: `Theme` })).toBeTruthy();
         expect(screen.getByRole(`group`, { name: `Board` })).toBeTruthy();
         expect(document.querySelector(`.settings-foot`)?.textContent).toBe(
-            `Saved in this browser. Themes other than Ink come from community projects. Credits`,
+            `Saved in this browser. Every theme but Ink takes its colors from a community project; see Credits.`,
         );
     });
 

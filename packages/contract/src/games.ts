@@ -25,6 +25,9 @@ export const botConcurrentGameCap = 4;
 export const humanConcurrentGameCap = 3;
 export const humanGameCooldownSeconds = 60;
 
+/** An unlimited game ends after this long with no winner, as `terminated`. */
+export const unlimitedWallCapMs = 24 * 60 * 60 * 1000;
+
 // The live list is a glance, not an archive: this many games, newest first.
 export const liveGameListCap = 12;
 

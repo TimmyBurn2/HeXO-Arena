@@ -6,6 +6,7 @@ import { BotBadge, PresenceDot, OpenTag, PlayerName, Rating, summarizeAccepts } 
 import { coveredModes, PlayDialog } from '../components/PlayDialog';
 import { ErrorFrame, SkeletonRows } from '../components/states';
 import { Link } from '../router/Link';
+import { text } from '../text';
 import './BotsScreen.css';
 
 export function BotsScreen() {
@@ -13,9 +14,8 @@ export function BotsScreen() {
     const [playing, setPlaying] = useState<BotListing | null>(null);
     return (
         <>
-            <h1 className="screen-title">Bots</h1>
+            <h1 className="screen-title">{text.bots.title}</h1>
             <div className="toolbar">
-                <span className="note">Every listed bot, online or not</span>
                 <label className="checkline">
                     <input
                         type="checkbox"
@@ -24,7 +24,7 @@ export function BotsScreen() {
                             setOnlineOnly(event.target.checked);
                         }}
                     />
-                    Online only
+                    {text.bots.onlineOnly}
                 </label>
             </div>
             <Directory key={onlineOnly ? `online` : `all`} onlineOnly={onlineOnly} onPlay={setPlaying} />
@@ -46,7 +46,7 @@ function Directory({ onlineOnly, onPlay }: { onlineOnly: boolean; onPlay: (bot: 
     const { data, error, loading, reload } = useAsync(load);
 
     if (loading && data === null) return <SkeletonRows />;
-    if (error && data === null) return <ErrorFrame sentence="The directory did not load" onRetry={reload} />;
+    if (error && data === null) return <ErrorFrame sentence={text.bots.failed} onRetry={reload} />;
     if (data === null) return null;
     if (data.length === 0 && !onlineOnly) return <NoBotsEmpty />;
 
@@ -56,24 +56,24 @@ function Directory({ onlineOnly, onPlay }: { onlineOnly: boolean; onPlay: (bot: 
                 <table>
                     <thead>
                         <tr>
-                            <th scope="col">Player</th>
+                            <th scope="col">{text.bots.bot}</th>
                             <th scope="col" className="col-optional">
-                                Owner
+                                {text.bots.owner}
                             </th>
                             <th scope="col" className="col-narrow-optional">
-                                State
+                                {text.bots.challenges}
                             </th>
                             <th className="num" scope="col">
-                                Rating
+                                {text.bots.rating}
                             </th>
                             <th scope="col" className="col-optional">
-                                Accepts
+                                {text.bots.accepts}
                             </th>
                             <th scope="col" className="col-optional">
-                                Version
+                                {text.bots.version}
                             </th>
                             <th scope="col">
-                                <span className="sr-only">Play</span>
+                                <span className="sr-only">{text.bots.playColumn}</span>
                             </th>
                         </tr>
                     </thead>
@@ -81,7 +81,7 @@ function Directory({ onlineOnly, onPlay }: { onlineOnly: boolean; onPlay: (bot: 
                         {data.length === 0 ? (
                             <tr>
                                 <td className="table-note" colSpan={7}>
-                                    No bots online right now; the toggle above shows every bot.
+                                    {text.bots.noneOnline}
                                 </td>
                             </tr>
                         ) : (
@@ -93,16 +93,16 @@ function Directory({ onlineOnly, onPlay }: { onlineOnly: boolean; onPlay: (bot: 
             <div className="legend">
                 <span className="player-cell">
                     <PresenceDot online />
-                    Online
+                    {text.bots.online}
                 </span>
                 <span className="player-cell">
                     <PresenceDot online={false} />
-                    Offline
+                    {text.bots.offline}
                 </span>
-                <span>Open = accepting challenges</span>
-                <span>? = provisional rating</span>
+                <span>{text.bots.openKey}</span>
+                <span>{text.bots.provisionalKey}</span>
             </div>
-            {error ? <ErrorFrame sentence="The directory did not load" onRetry={reload} /> : null}
+            {error ? <ErrorFrame sentence={text.bots.failed} onRetry={reload} /> : null}
         </>
     );
 }
@@ -137,7 +137,7 @@ function BotRow({ bot, onPlay }: { bot: BotListing; onPlay: (bot: BotListing) =>
                             onPlay(bot);
                         }}
                     >
-                        Play
+                        {text.bots.play}
                     </button>
                 ) : null}
             </td>
@@ -148,14 +148,11 @@ function BotRow({ bot, onPlay }: { bot: BotListing; onPlay: (bot: BotListing) =>
 function NoBotsEmpty() {
     return (
         <div className="empty">
-            <h2>No bots yet</h2>
-            <p>
-                The ladder is whatever you bring: register a bot, let it dial in,
-                and the first games fill it.
-            </p>
+            <h2>{text.bots.empty.heading}</h2>
+            <p>{text.bots.empty.body}</p>
             <div className="actions">
                 <Link to="/connect" className="btn btn-primary">
-                    Build a bot
+                    {text.bots.empty.build}
                 </Link>
             </div>
         </div>

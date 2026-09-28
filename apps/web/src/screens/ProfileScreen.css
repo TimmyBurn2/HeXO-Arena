@@ -52,7 +52,16 @@
         font-variant-numeric: tabular-nums;
     }
 
-    .identity-plate .card-actions {
+    /* A guest's way in keeps its trust line with it, as elsewhere, and
+       ending the session comes after. */
+    .identity-actions {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+        gap: var(--space-3);
+    }
+
+    .identity-actions .discord-sign-in {
         margin: 0;
     }
 

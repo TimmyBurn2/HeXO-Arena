@@ -10,10 +10,12 @@ import {
     sessionHeartbeatMs,
     sessionTokenTtlMs,
     sideOf,
+    unlimitedWallCapMs,
     wireToInternal,
     type FinishReason,
     type FirstPlayer,
     type GameClock,
+    type GameHeadline,
     type GamePlayer,
     type GamePlayers,
     type GameSnapshot,
@@ -43,7 +45,6 @@ import {
     insertMove,
     recordFinish,
     replayPosition,
-    type GameHeadline,
     type GameRecord,
 } from './game-store';
 import type { PresenceRegistry } from './presence';
@@ -54,7 +55,6 @@ import { randomToken } from './tokens';
 import type { GameWatchers } from './watchers';
 
 export const orphanForfeitMs = 30_000;
-export const unlimitedWallCapMs = 24 * 60 * 60 * 1000;
 
 type Timer = ReturnType<typeof setTimeout>;
 

@@ -317,7 +317,7 @@ describe('ban and unban', () => {
         world.presence.close(botId(world, `beta`));
     });
 
-    it('refuses the banned identity a new session with 403 banned', async () => {
+    it('refuses the banned identity a new session: 403 banned at dev login, home as banned from discord', async () => {
         world.admin({ op: `ban-user`, name: `ann`, reason: `cheating` });
         const devLogin = await world.app.inject({ method: `POST`, url: `/api/dev/login`, payload: { name: `ann` } });
         expect(devLogin.statusCode).toBe(403);
@@ -328,8 +328,8 @@ describe('ban and unban', () => {
             method: `GET`,
             url: `/api/auth/discord/callback?code=abc&state=${encodeURIComponent(state)}`,
         });
-        expect(callback.statusCode).toBe(403);
-        expect(callback.json()).toMatchObject({ code: `banned` });
+        expect(callback.statusCode).toBe(302);
+        expect(callback.headers.location).toBe(`/?signin=banned`);
         expect(callback.headers[`set-cookie`]).toBeUndefined();
     });
 

@@ -11,19 +11,17 @@
            instead of scrolling its panel. */
         grid-template-rows: minmax(0, 1fr);
         background: var(--board-bg);
+        --camera-floor: var(--hud-clear);
+    }
+
+    /* The camera keeps a fixed allowance under the board for the chips,
+       or the result chip's measured reach when that is more. */
+    .board-camera {
+        padding-bottom: max(var(--camera-floor), calc(var(--hud-reach) + var(--space-2)));
     }
 
     .stage[data-pinned] {
         grid-template-columns: minmax(0, 1fr) var(--drawer-w);
-    }
-
-    .stage-message {
-        display: flex;
-        flex-direction: column;
-        gap: var(--space-6);
-        max-width: var(--shell-max);
-        margin: 0 auto;
-        padding: var(--space-4) var(--shell-pad) var(--space-7);
     }
 
     .hud-skeleton {
@@ -60,10 +58,39 @@
         left: var(--space-4);
     }
 
+    /* The chip under the board may hold a result with two long names, so it
+       takes its own width but never more than the stage, and its words wrap. */
     .hud-bottom-center {
         bottom: var(--space-4);
         left: 50%;
         transform: translateX(-50%);
+        width: max-content;
+        max-width: calc(100% - 2 * var(--space-4));
+    }
+
+    .hud-bottom-center .hud-chip {
+        flex-wrap: wrap;
+        justify-content: center;
+    }
+
+    .hud-bottom-center .hud-result,
+    .hud-bottom-center .hud-turn,
+    .hud-bottom-center .hud-hint {
+        white-space: normal;
+        text-wrap: balance;
+        text-align: center;
+        overflow-wrap: anywhere;
+    }
+
+    /* The game screen stacks a result that would meet the seat chip. */
+    .board-host[data-stacked] .hud-bottom-center {
+        bottom: var(--hud-clear);
+    }
+
+    /* The ways on from a result wrap as a pair, never one alone. */
+    .hud-actions {
+        display: inline-flex;
+        gap: var(--space-3);
     }
 
     .stage[data-pinned] .hud-top-right {
@@ -428,16 +455,30 @@
             display: none;
         }
 
-        /* The narrowed board has no room for the turn chip beside your
-           own, so it stacks above it and the camera clears both rows. */
-        .stage[data-open] .hud-bottom-center {
-            left: var(--space-4);
-            bottom: var(--hud-clear);
-            transform: none;
+        /* The turn chip meets the seat chip on one row at the narrow end
+           of this range, and a result beside the open drawer meets it
+           throughout, so here the chip always stacks above the seat chip
+           and the camera clears both rows; beside an open drawer it also
+           moves to the left edge. */
+        .stage {
+            --camera-floor: calc(2 * var(--hud-clear));
         }
 
-        .stage[data-open] .board-camera {
-            padding-bottom: calc(2 * var(--hud-clear));
+        .hud-bottom-center {
+            bottom: var(--hud-clear);
+        }
+
+        .stage[data-open] .hud-bottom-center {
+            left: var(--space-4);
+            transform: none;
+        }
+    }
+
+    /* The drawer floats over the board's right edge here, so the chip
+       under the board keeps as clear of it on both sides. */
+    @media (80rem <= width) {
+        .stage[data-open] .hud-bottom-center {
+            max-width: calc(100% - 2 * (var(--drawer-w) + var(--space-4)));
         }
     }
 
@@ -463,10 +504,11 @@
 
         .hud-bottom-center {
             bottom: calc(var(--sheet-peek-h) + var(--space-2));
+            max-width: calc(100% - 2 * var(--space-2));
         }
 
-        .board-camera {
-            padding-bottom: calc(var(--sheet-peek-h) + var(--hud-clear));
+        .stage {
+            --camera-floor: calc(var(--sheet-peek-h) + var(--hud-clear));
         }
 
         .drawer-slot {
@@ -515,6 +557,12 @@
             min-height: var(--control-md);
         }
 
+        .peek-who {
+            display: inline-flex;
+            align-items: center;
+            gap: var(--space-3);
+        }
+
         .peek-line {
             margin-left: auto;
             color: var(--c-text-dim);
@@ -525,10 +573,29 @@
             white-space: nowrap;
         }
 
+        /* A result that does not fit beside the name takes its own line
+           under it and wraps there, never cut short. */
+        .peek-row:has(.peek-result) {
+            flex-wrap: wrap;
+        }
+
+        .peek-row:has(.peek-result) .hud-name {
+            overflow-wrap: anywhere;
+        }
+
+        .peek-row:has(.peek-result) .badge-bot {
+            flex: none;
+            overflow-wrap: normal;
+        }
+
         .peek-result {
             color: var(--c-text);
             font-family: inherit;
             font-weight: var(--weight-display);
+            white-space: normal;
+            text-wrap: balance;
+            text-align: right;
+            overflow-wrap: anywhere;
         }
 
         .drawer-body {

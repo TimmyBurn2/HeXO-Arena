@@ -6,6 +6,7 @@ import { TopbarPanel, usePanel, type PanelControl } from '../components/TopbarPa
 import { meStore, useMe } from '../me';
 import { Link } from '../router/Link';
 import type { Route } from '../router/route';
+import { text } from '../text';
 import './Identity.css';
 
 // The first control past the head takes focus on open, not the close button.
@@ -56,17 +57,17 @@ export function Identity({ route }: { route: Route }) {
                 className={`identity${route.name === `profile` ? ` active` : ``}`}
                 // the tag reads as its own word to the eye; the name says it
                 // in one phrase
-                aria-label={me.kind === `guest` ? `${me.name}, unrated` : undefined}
+                aria-label={me.kind === `guest` ? text.shell.identity.guestName(me.name) : undefined}
                 aria-haspopup="dialog"
                 aria-expanded={open}
                 aria-controls={open ? `identity-panel` : undefined}
                 onClick={control.toggle}
             >
                 <span className="monogram" aria-hidden="true">
-                    {me.kind === `user` ? me.name.slice(0, 1) : `g`}
+                    {me.kind === `user` ? me.name.slice(0, 1) : text.shell.identity.guestMonogram}
                 </span>
                 <span className="identity-label">{me.name}</span>
-                {me.kind === `guest` ? <span className="tag muted">unrated</span> : null}
+                {me.kind === `guest` ? <span className="tag muted">{text.shell.identity.unrated}</span> : null}
             </button>
             <TopbarPanel
                 id="identity-panel"
@@ -74,7 +75,7 @@ export function Identity({ route }: { route: Route }) {
                 control={control}
                 labelledBy="identity-name"
                 head={<Head me={me} />}
-                closeLabel="Close menu"
+                closeLabel={text.shell.identity.close}
                 initialFocus={firstItem}
             >
                 {me.kind === `user` ? (
@@ -95,11 +96,15 @@ function Head({ me }: { me: UserMe | GuestMe }) {
             </span>
             {me.kind === `user` ? (
                 <span className="identity-head-rating">
-                    <span className="sr-only">, rating </span>
-                    <Rating value={me.rating} provisional={me.provisional} />
+                    {text.shell.identity.rating(
+                        (words) => (
+                            <span className="sr-only">{words}</span>
+                        ),
+                        <Rating value={me.rating} provisional={me.provisional} />,
+                    )}
                 </span>
             ) : (
-                <span className="tag muted">unrated</span>
+                <span className="tag muted">{text.shell.identity.unrated}</span>
             )}
         </p>
     );
@@ -113,13 +118,13 @@ function UserItems({ route, control, onLeave }: { route: Route; control: PanelCo
         <>
             <div className="identity-items">
                 <Link to="/profile" className="identity-row" ariaCurrent={route.name === `profile`} onNavigate={away}>
-                    Profile
+                    {text.shell.identity.profile}
                 </Link>
                 <Link to="/connect" className="identity-row" ariaCurrent={route.name === `connect`} onNavigate={away}>
-                    Build a bot
+                    {text.shell.identity.build}
                 </Link>
             </div>
-            <Leave label="Sign out" failure="Sign-out did not reach the server; you are still signed in" onLeave={onLeave} />
+            <Leave label={text.shell.identity.signOut} failure={text.shell.identity.signOutFailed} onLeave={onLeave} />
         </>
     );
 }
@@ -131,9 +136,9 @@ function GuestItems({ onLeave }: { onLeave: (leaving: boolean) => void }) {
                 <DiscordSignIn />
             </div>
             <Leave
-                label="End guest session"
-                note="Your guest games end with it."
-                failure="The guest session did not end; try again"
+                label={text.shell.identity.endGuest}
+                note={text.shell.identity.endGuestNote}
+                failure={text.shell.identity.endGuestFailed}
                 onLeave={onLeave}
             />
         </>

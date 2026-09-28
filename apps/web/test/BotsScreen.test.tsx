@@ -72,15 +72,15 @@ describe('BotsScreen', () => {
         await screen.findByRole(`table`);
         const prov = document.querySelector(`.prov`) as HTMLElement;
         expect(prov.textContent).toBe(`?`);
-        expect(prov.getAttribute(`title`)).toBe(`Provisional until the rating deviation settles`);
+        expect(prov.getAttribute(`title`)).toBe(`Provisional until the rating settles`);
     });
 
     it('explain both presence and open states in the legend', async () => {
         stubDirectory(directory);
         render(<BotsScreen />);
         await screen.findByRole(`table`);
-        expect(screen.getByText(`Open = accepting challenges`)).toBeTruthy();
-        expect(screen.getByText(`? = provisional rating`)).toBeTruthy();
+        expect(screen.getByText(`open: takes challenges now`)).toBeTruthy();
+        expect(screen.getByText(`?: provisional rating`)).toBeTruthy();
     });
 
     it('switch to the online query when the toggle flips', async () => {
@@ -130,7 +130,7 @@ describe('BotsScreen', () => {
     it('offer a retry when the first load fails', async () => {
         stubDirectory([], 500);
         render(<BotsScreen />);
-        expect(await screen.findByText(`The directory did not load`)).toBeTruthy();
+        expect(await screen.findByText(`The bot list did not load`)).toBeTruthy();
         stubDirectory(directory);
         fireEvent.click(screen.getByRole(`button`, { name: `Try again` }));
         await waitFor(() => {

@@ -42,6 +42,7 @@ describe('ProfileScreen', () => {
         const signIn = await screen.findByRole(`link`, { name: `Sign in with Discord` });
         expect(signIn.getAttribute(`href`)).toBe(`/api/auth/discord/login`);
         expect(signIn.classList.contains(`discord-button`)).toBe(true);
+        expect(screen.getByText(`Discord shares your username only; no email.`)).toBeTruthy();
         expect(screen.getByRole(`link`, { name: `Build a bot` }).getAttribute(`href`)).toBe(`/connect`);
     });
 
@@ -50,13 +51,13 @@ describe('ProfileScreen', () => {
         render(<ProfileScreen />);
         await screen.findByRole(`link`, { name: `Sign in with Discord` });
         const headings = screen.getAllByRole(`heading`).map((heading) => heading.textContent);
-        expect(headings).toEqual([`Profile`, `Identity`]);
+        expect(headings).toEqual([`Profile`]);
         expect(screen.queryAllByRole(`radio`)).toEqual([]);
         expect(screen.queryAllByRole(`switch`)).toEqual([]);
         expect(document.querySelector(`.board-frame`)).toBe(null);
     });
 
-    it('show a user their name, rating, and only their own bots with the free slots', async () => {
+    it('show a user their name, rating, and only their own bots with room for another', async () => {
         serve({ kind: `user`, name: `tom`, rating: 1503, provisional: false });
         render(<ProfileScreen />);
         expect(await screen.findByText(`tom`, { selector: `.identity-name` })).toBeTruthy();
@@ -65,7 +66,8 @@ describe('ProfileScreen', () => {
             expect(document.querySelectorAll(`.bot-card:not(.bot-card-new)`)).toHaveLength(2);
         });
         expect(screen.getByText(`2 of 3`)).toBeTruthy();
-        expect(screen.getByRole(`link`, { name: /Create a bot/ }).getAttribute(`href`)).toBe(`/connect`);
+        expect(screen.getByText(`Delisted bots are hidden here but still count toward your limit of 3 bots.`)).toBeTruthy();
+        expect(screen.getByRole(`link`, { name: `Build a bot` }).getAttribute(`href`)).toBe(`/connect`);
         expect(document.querySelector(`a[href="/bots/hextide"]`)).toBe(null);
     });
 
@@ -101,5 +103,7 @@ describe('ProfileScreen', () => {
         const signIn = await screen.findByRole(`link`, { name: `Sign in with Discord` });
         expect(signIn.getAttribute(`href`)).toBe(`/api/auth/discord/login`);
         expect(signIn.closest(`.identity-plate`)).not.toBe(null);
+        // The trust line sits with the sign-in, as on every other screen.
+        expect(signIn.closest(`.discord-sign-in`)?.textContent).toContain(`Discord shares your username only; no email.`);
     });
 });

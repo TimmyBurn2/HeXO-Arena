@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { GameSnapshot } from '@hexo-arena/contract';
-import { feedOf, lastMoveOf, positionOf, reasonText, resultLine, resultSentence, stonesOf, winLineOf } from '../src/game/snapshot-views';
+import { feedOf, lastMoveOf, positionOf, resultLine, stonesOf, winLineOf } from '../src/game/snapshot-views';
 
 function snapshot(
     cells: readonly { x: number; y: number; side: `x` | `o` }[],
@@ -160,33 +160,21 @@ describe('winLineOf', () => {
     });
 });
 
-describe('the finish vocabulary', () => {
-    it('speaks every reason in plain words', () => {
-        expect(reasonText(`six-in-a-row`)).toBe(`six in a row`);
-        expect(reasonText(`timeout`)).toBe(`on time`);
-        expect(reasonText(`disconnect`)).toBe(`disconnect`);
-        expect(reasonText(`surrender`)).toBe(`resignation`);
-        expect(reasonText(`terminated`)).toBe(`terminated`);
-        expect(reasonText(`aborted`)).toBe(`aborted`);
-    });
-
-    it('say how the game ended and name the side that resigned or dropped', () => {
+describe('the shown result', () => {
+    it('say how the game ended in the contract words, the seated side as you', () => {
         const finished = (winner: `x` | `o` | null, reason: string) =>
-            resultSentence(snapshot(originGame, { status: `finished`, winner, reason }));
+            resultLine(snapshot(originGame, { status: `finished`, winner, reason }));
         expect(finished(`x`, `six-in-a-row`)).toBe(`hextide won with six in a row`);
-        expect(finished(`o`, `timeout`)).toBe(`you won on time`);
-        expect(finished(`x`, `surrender`)).toBe(`hextide won, you resigned`);
-        expect(finished(`o`, `surrender`)).toBe(`you won, hextide resigned`);
-        expect(finished(`o`, `disconnect`)).toBe(`you won, hextide disconnected`);
-        expect(finished(null, `aborted`)).toBe(`nobody won, the game was aborted`);
-        expect(finished(null, `terminated`)).toBe(`nobody won, the game was terminated`);
+        expect(finished(`o`, `timeout`)).toBe(`You won on time`);
+        expect(finished(`x`, `surrender`)).toBe(`hextide won; you resigned`);
+        expect(finished(`o`, `surrender`)).toBe(`You won; hextide resigned`);
+        expect(finished(`o`, `disconnect`)).toBe(`You won; hextide disconnected`);
+        expect(finished(`x`, `terminated`)).toBe(`hextide won; you played an illegal move`);
+        expect(finished(null, `aborted`)).toBe(`No winner; the game was aborted`);
+        expect(finished(null, `terminated`)).toBe(`No winner; the game reached the 24-hour limit`);
     });
 
-    it('capitalize the shown result unless it starts with a name', () => {
-        const aborted = snapshot(originGame, { status: `finished`, winner: null, reason: `aborted` });
-        expect(resultLine(aborted)).toBe(`Nobody won, the game was aborted`);
-        const named = snapshot(originGame, { status: `finished`, winner: `x`, reason: `surrender` });
-        expect(resultLine(named)).toBe(resultSentence(named).replace(/^you /, `You `));
+    it('say nothing while the game runs', () => {
+        expect(resultLine(snapshot(originGame, {}))).toBe(``);
     });
 });
-

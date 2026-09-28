@@ -2,6 +2,7 @@ import {
     boardCellSchema,
     timeControlSchema,
     type FinishReason,
+    type GameHeadline,
     type Side,
     type TimeControl,
 } from '@hexo-arena/contract';
@@ -235,16 +236,6 @@ export function findGame(query: Query, gameId: string): GameRecord | undefined {
     }
     throw new Error(`stored game row seats nobody: ${row.id}`);
 }
-
-/** Who sat where and how a game stands, as anyone may read it. */
-export type GameHeadline =
-    | { readonly status: `live`; readonly names: Record<Side, string>; readonly toMove: Side; readonly timeControl: TimeControl }
-    | {
-          readonly status: `finished`;
-          readonly names: Record<Side, string>;
-          readonly winner: Side | null;
-          readonly reason: FinishReason;
-      };
 
 // Only finished games answer from the log: a live one is the registry's,
 // and an unfinished row without it belongs to an earlier process.

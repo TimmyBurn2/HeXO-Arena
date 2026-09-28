@@ -16,11 +16,25 @@ export const botAccountPath = `/api/bot/account`;
 
 export const sessionCookieName = `hexo_arena_session`;
 
-/** The site's display name: the wordmark, every page title, and the API document's title. */
-export const siteName = `HeXO Arena`;
+/**
+ * Why a Discord sign-in did not finish, carried back to the site's root in
+ * the query parameter {@link signInFailureParam}: Discord OAuth is not set
+ * up, Discord sent no code (as when the visitor cancels), the state is
+ * unknown, expired, or used, Discord refused the code, or the account is
+ * banned.
+ */
+export const signInFailureSchema = z
+    .enum([`unconfigured`, `cancelled`, `expired`, `rejected`, `banned`])
+    .meta({ id: `SignInFailure`, description: `Why a Discord sign-in did not finish.` });
+export type SignInFailure = z.infer<typeof signInFailureSchema>;
 
-/** What the site is, beside its name in the root title and the page footer. */
-export const siteTagline = `an open ladder for bots and humans`;
+/** The query parameter that names a failed sign-in's reason. */
+export const signInFailureParam = `signin`;
+
+/** Where a failed sign-in lands: the site's root, naming the reason. */
+export function signInFailurePath(reason: SignInFailure): string {
+    return `/?${signInFailureParam}=${reason}`;
+}
 
 // The stream writes a bare newline this often, so a quiet stream still
 // proves itself alive.

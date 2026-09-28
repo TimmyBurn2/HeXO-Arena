@@ -4,6 +4,7 @@ import {
     devLoginPath,
     discordCallbackPath,
     discordLoginPath,
+    signInFailurePath,
     healthzPath,
     isReservedName,
     nameKeyOf,
@@ -53,6 +54,9 @@ export interface AppDeps {
     // Stamped on every audit row; one operator today, a named moderator
     // once there is more than one.
     adminActor: string;
+    // The site's public origin, which makes the shell's preview image an
+    // absolute address.
+    publicOrigin: string;
     // The deployed index.html; when set, the root, ladder, bot, and game
     // routes answer with the shell carrying live og meta. Dev leaves it to Vite.
     webIndexPath?: string;
@@ -128,7 +132,7 @@ export async function buildApp(deps: AppDeps): Promise<BuiltApp> {
     registerLeaderboardApi(app, { query });
     registerSessionApi(app, { query, guests, secureCookies: deps.secureCookies });
     if (deps.webIndexPath !== undefined) {
-        registerOgShell(app, { query, presence, games, indexPath: deps.webIndexPath });
+        registerOgShell(app, { query, presence, games, indexPath: deps.webIndexPath, publicOrigin: deps.publicOrigin });
     }
     const admin = createAdminHandler({ query, presence, games, challenges, actor: deps.adminActor });
 
@@ -170,32 +174,25 @@ export async function buildApp(deps: AppDeps): Promise<BuiltApp> {
         // No version, no uptime, nothing else.
         reply.code(gate.closed() ? 503 : 200).send();
     });
+    // A visitor reaches these routes by following links, so every failure
+    // is a redirect home that names its reason, never a JSON body as a page.
     app.get(discordLoginPath, async (_request, reply) => {
-        if (!deps.discord) {
-            return reply.code(503).send({ error: `discord oauth is not configured`, code: `oauth_unconfigured` });
-        }
+        if (!deps.discord) return reply.redirect(signInFailurePath(`unconfigured`));
         return reply.redirect(deps.discord.authorizeUrl(createOAuthState(query)));
     });
 
     app.get(discordCallbackPath, async (request, reply) => {
-        if (!deps.discord) {
-            return reply.code(503).send({ error: `discord oauth is not configured`, code: `oauth_unconfigured` });
-        }
+        if (!deps.discord) return reply.redirect(signInFailurePath(`unconfigured`));
+        // Discord answers a cancel with an error and no code.
         const parsed = callbackQuerySchema.safeParse(request.query);
-        if (!parsed.success) {
-            return reply.code(400).send({ error: `missing or malformed oauth parameters`, code: `bad_state` });
-        }
-        if (!consumeOAuthState(query, parsed.data.state)) {
-            return reply.code(400).send({ error: `unknown, expired, or used state`, code: `bad_state` });
-        }
+        if (!parsed.success) return reply.redirect(signInFailurePath(`cancelled`));
+        if (!consumeOAuthState(query, parsed.data.state)) return reply.redirect(signInFailurePath(`expired`));
         const identity = await deps.discord.exchange(parsed.data.code).catch(() => null);
-        if (!identity) {
-            return reply.code(502).send({ error: `discord rejected the exchange`, code: `discord_error` });
-        }
+        if (!identity) return reply.redirect(signInFailurePath(`rejected`));
         const user =
             findUserByDiscordId(query, identity.id) ??
             createUserWithDerivedName(query, identity.id, identity.username);
-        if (user.banned) return sendBanned(reply);
+        if (user.banned) return reply.redirect(signInFailurePath(`banned`));
         endGuestSession(guests, request);
         const token = createSession(query, user.id);
         setSessionCookie(reply, token, deps.secureCookies, `account`);

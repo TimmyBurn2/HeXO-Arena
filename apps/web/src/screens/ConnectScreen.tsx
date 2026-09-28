@@ -7,6 +7,7 @@ import { DiscordSignIn } from '../components/DiscordButton';
 import { TokenBox } from '../components/TokenBox';
 import { useMe } from '../me';
 import { botApiRepository } from '../site-links';
+import { text } from '../text';
 import { useDocumentMeta } from '../use-document-meta';
 import './ConnectScreen.css';
 
@@ -26,11 +27,8 @@ export function ConnectScreen() {
 
     return (
         <>
-            <h1 className="screen-title">Build a bot</h1>
-            <p className="note">
-                The numbered path from sign-in to a first game; an account owns
-                up to three bots.
-            </p>
+            <h1 className="screen-title">{text.build.title}</h1>
+            <p className="note">{text.build.lead}</p>
             <ol className="steps">
                 <li className={me?.kind === `user` ? `done` : `active`}>
                     <span className="step-n" aria-hidden="true">
@@ -39,17 +37,13 @@ export function ConnectScreen() {
                     <div className="step-body">
                         {me?.kind === `user` ? (
                             <>
-                                <h2 className="step-title">Signed in as {me.name}</h2>
-                                <p>
-                                    Your bots gather in <Link to="/profile">Profile</Link>.
-                                </p>
+                                <h2 className="step-title">{text.build.signedInAs(me.name)}</h2>
+                                <p>{text.build.profileNote((words) => <Link to="/profile">{words}</Link>)}</p>
                             </>
                         ) : (
                             <>
-                                <h2 className="step-title">Sign in</h2>
-                                {me?.kind === `guest` ? (
-                                    <p>You are playing as {me.name}; owning a bot takes an account.</p>
-                                ) : null}
+                                <h2 className="step-title">{text.build.signIn}</h2>
+                                {me?.kind === `guest` ? <p>{text.build.guestNote(me.name)}</p> : null}
                                 <DiscordSignIn />
                             </>
                         )}
@@ -60,7 +54,7 @@ export function ConnectScreen() {
                         2
                     </span>
                     <div className="step-body">
-                        <h2 className="step-title">Create your bot</h2>
+                        <h2 className="step-title">{text.build.create}</h2>
                         <CreateBotForm onCreated={setCreated} />
                     </div>
                 </li>
@@ -69,9 +63,9 @@ export function ConnectScreen() {
                         3
                     </span>
                     <div className="step-body">
-                        <h2 className="step-title">Copy the token</h2>
+                        <h2 className="step-title">{text.build.copyToken}</h2>
                         {created === null ? (
-                            <p>The token appears once, right after creation.</p>
+                            <p>{text.build.tokenLater}</p>
                         ) : (
                             <TokenBox token={created.token} />
                         )}
@@ -82,16 +76,20 @@ export function ConnectScreen() {
                         4
                     </span>
                     <div className="step-body">
-                        <h2 className="step-title">Run the example</h2>
+                        <h2 className="step-title">{text.build.runExample}</h2>
                         <p>
-                            A ready loop against the stream, in python:{` `}
-                            <a href={botApiRepository} rel="noreferrer" target="_blank">
-                                the Hexo-Bot-Api readme
-                            </a>
-                            {` `}and{` `}
-                            <a href={exampleBot} rel="noreferrer" target="_blank">
-                                simple_bot.py
-                            </a>.
+                            {text.build.example(
+                                (words) => (
+                                    <a href={exampleBot} rel="noreferrer" target="_blank">
+                                        {words}
+                                    </a>
+                                ),
+                                (words) => (
+                                    <a href={botApiRepository} rel="noreferrer" target="_blank">
+                                        {words}
+                                    </a>
+                                ),
+                            )}
                         </p>
                     </div>
                 </li>
@@ -100,12 +98,12 @@ export function ConnectScreen() {
                         5
                     </span>
                     <div className="step-body">
-                        <h2 className="step-title">Watch it play</h2>
+                        <h2 className="step-title">{text.build.watch}</h2>
                         {created === null ? (
-                            <p>Your bot appears in the directory once its stream opens.</p>
+                            <p>{text.build.watchLater((words) => <Link to="/bots">{words}</Link>)}</p>
                         ) : (
                             <p>
-                                Your bot lives at <Link to={`/bots/${encodeURIComponent(created.name)}`}>its page</Link>.
+                                {text.build.botPage(<Link to={`/bots/${encodeURIComponent(created.name)}`}>{created.name}</Link>)}
                             </p>
                         )}
                     </div>
@@ -115,12 +113,13 @@ export function ConnectScreen() {
                         6
                     </span>
                     <div className="step-body">
-                        <h2 className="step-title">Read the spec</h2>
+                        <h2 className="step-title">{text.build.readApi}</h2>
                         <p>
-                            Endpoints and events, with examples:{` `}
-                            <a href={botApiRepository} rel="noreferrer" target="_blank">
-                                Hexo-Bot-Api
-                            </a>.
+                            {text.build.api((words) => (
+                                <a href={botApiRepository} rel="noreferrer" target="_blank">
+                                    {words}
+                                </a>
+                            ))}
                         </p>
                     </div>
                 </li>
@@ -136,10 +135,8 @@ function CreateBotForm({ onCreated }: { onCreated: (created: Created) => void })
 
     function liveProblem(value: string): string | null {
         if (value === ``) return null;
-        if (!namePattern.test(value)) {
-            return `Letters first, then letters, digits, - or _; 2 to 30 characters`;
-        }
-        if (isReservedName(value)) return `That name is reserved`;
+        if (!namePattern.test(value)) return text.build.nameRule;
+        if (isReservedName(value)) return text.build.reserved;
         return null;
     }
 
@@ -152,7 +149,7 @@ function CreateBotForm({ onCreated }: { onCreated: (created: Created) => void })
             if (cause instanceof ApiError) {
                 setFailure(createErrorSentence(cause));
             } else {
-                setFailure(`The bot could not be created; try again`);
+                setFailure(text.build.failed);
             }
             setSending(false);
         }
@@ -170,18 +167,20 @@ function CreateBotForm({ onCreated }: { onCreated: (created: Created) => void })
                     if (submittable) void submit();
                 }}
             >
+                <label className="field-label" htmlFor="bot-name">
+                    {text.build.nameLabel}
+                </label>
                 <input
                     id="bot-name"
                     type="text"
                     value={name}
-                    aria-label="bot name"
                     autoComplete="off"
                     onChange={(event) => {
                         setName(event.target.value);
                     }}
                 />
                 <button type="submit" className="btn btn-primary" disabled={!submittable}>
-                    Create bot
+                    {text.build.createBot}
                 </button>
             </form>
             {problem !== null ? (
@@ -201,16 +200,16 @@ function CreateBotForm({ onCreated }: { onCreated: (created: Created) => void })
 function createErrorSentence(error: ApiError): string {
     switch (error.code) {
         case `invalid_name`:
-            return `Letters first, then letters, digits, - or _; 2 to 30 characters`;
+            return text.build.nameRule;
         case `name_reserved`:
-            return `That name is reserved`;
+            return text.build.reserved;
         case `name_taken`:
-            return `That name is taken`;
+            return text.build.taken;
         case `bot_limit`:
-            return `You already hold the bot cap`;
+            return text.build.atCap;
         case `unauthorized`:
-            return `Sign in first; step 1 opens Discord`;
+            return text.build.signInFirst;
         default:
-            return `The bot could not be created; try again`;
+            return text.build.failed;
     }
 }

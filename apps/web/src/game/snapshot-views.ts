@@ -1,7 +1,8 @@
-import type { FinishReason, GameSnapshot, Side } from '@hexo-arena/contract';
+import { resultSentence, type GameSnapshot, type Side } from '@hexo-arena/contract';
 import { winner, type Position, type Rejection, type Stone } from '@hexo-arena/rules';
 import type { BoardStone } from '../board/Board';
 import type { AxialCoord } from '@hexo-arena/contract';
+import { text } from '../text';
 
 /**
  * One feed line: its turn label, the label as assistive tech reads it, and
@@ -60,66 +61,18 @@ export function winLineOf(snapshot: GameSnapshot): AxialCoord[] | null {
     return win === null ? null : [...win.cells];
 }
 
-const reasonWords: Record<FinishReason, string> = {
-    'six-in-a-row': `six in a row`,
-    timeout: `on time`,
-    disconnect: `disconnect`,
-    surrender: `resignation`,
-    terminated: `terminated`,
-    aborted: `aborted`,
-};
-
-/** The reason in plain words, per the closed enum. */
-export function reasonText(reason: FinishReason): string {
-    return reasonWords[reason];
-}
-
 /**
- * The result as one sentence: who won and how, naming the side that
- * resigned or dropped rather than leaving the reason bare.
- */
-export function resultSentence(snapshot: GameSnapshot): string {
-    if (snapshot.status !== `finished`) return ``;
-    const winnerSide = snapshot.winner;
-    const won = winnerSide === null ? `nobody won` : `${nameOf(snapshot, winnerSide)} won`;
-    const loser = winnerSide === null ? null : nameOf(snapshot, winnerSide === `x` ? `o` : `x`);
-    switch (snapshot.reason) {
-        case `six-in-a-row`:
-            return `${won} with six in a row`;
-        case `timeout`:
-            return `${won} on time`;
-        case `surrender`:
-            return loser === null ? `${won}, a side resigned` : `${won}, ${loser} resigned`;
-        case `disconnect`:
-            return loser === null ? `${won}, a side disconnected` : `${won}, ${loser} disconnected`;
-        case `terminated`:
-        case `aborted`:
-            return `${won}, the game was ${reasonText(snapshot.reason)}`;
-        default: {
-            const unknown: never = snapshot.reason;
-            return unknown;
-        }
-    }
-}
-
-/**
- * The result as the screen shows it: capitalized, except when it starts
- * with a player's name, which keeps its own case.
- * Titles and embeds keep the lowercase sentence.
+ * The result as the screen shows it, in the contract's sentence, with the
+ * seated reader's own side read as you.
  */
 export function resultLine(snapshot: GameSnapshot): string {
-    const sentence = resultSentence(snapshot);
-    return /^(?:you|nobody) /.test(sentence) ? sentence.charAt(0).toUpperCase() + sentence.slice(1) : sentence;
-}
-
-/** The seated human reads their own side as "you". */
-export function nameOf(snapshot: GameSnapshot, side: Side): string {
-    return side === snapshot.you ? `you` : snapshot.players[side].name;
+    if (snapshot.status !== `finished`) return ``;
+    return resultSentence(snapshot, { x: snapshot.players.x.name, o: snapshot.players.o.name }, snapshot.you);
 }
 
 /** Both seats by name, x first. */
 export function matchName(snapshot: GameSnapshot): string {
-    return `${snapshot.players.x.name} vs ${snapshot.players.o.name}`;
+    return text.game.vs(snapshot.players.x.name, snapshot.players.o.name);
 }
 
 /** The side across the board. */
@@ -164,8 +117,8 @@ export function feedOf(snapshot: GameSnapshot): FeedLine[] {
 
 // The short label would read as a word, so the spoken form spells it out.
 function openingLabel(lastTurn: number): Pick<FeedLine, `label` | `spoken`> {
-    if (lastTurn === 0) return { label: `op 0`, spoken: `opening, turn 0` };
-    return { label: `op 0-${String(lastTurn)}`, spoken: `opening, turns 0 to ${String(lastTurn)}` };
+    if (lastTurn === 0) return { label: text.drawer.openingLabel, spoken: text.drawer.openingSpoken };
+    return { label: text.drawer.openingRangeLabel(lastTurn), spoken: text.drawer.openingRangeSpoken(lastTurn) };
 }
 
 function sideAt(index: number): Side {
@@ -181,12 +134,12 @@ function coord(cell: AxialCoord): string {
 export function rejectionNote(rejection: Rejection): string {
     switch (rejection.kind) {
         case `game-finished`:
-            return `The game is over`;
+            return text.drawer.gameOver;
         case `cell-occupied`:
-            return `That cell is taken`;
+            return text.drawer.cellTaken;
         case `first-stone-off-origin`:
-            return `The first stone belongs at the origin`;
+            return text.drawer.firstAtOrigin;
         case `outside-placement-radius`:
-            return `Too far from every stone`;
+            return text.drawer.tooFar;
     }
 }

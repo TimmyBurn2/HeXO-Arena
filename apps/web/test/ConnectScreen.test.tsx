@@ -10,7 +10,7 @@ afterEach(() => {
 });
 
 function type(value: string): void {
-    fireEvent.change(screen.getByRole(`textbox`, { name: `bot name` }), { target: { value } });
+    fireEvent.change(screen.getByRole(`textbox`, { name: `Bot name` }), { target: { value } });
 }
 
 describe('ConnectScreen', () => {
@@ -24,7 +24,7 @@ describe('ConnectScreen', () => {
             `Copy the token`,
             `Run the example`,
             `Watch it play`,
-            `Read the spec`,
+            `Read the Bot API`,
         ]) {
             expect(headings).toContain(expected);
         }
@@ -37,14 +37,21 @@ describe('ConnectScreen', () => {
         );
     });
 
+    it('name the bot field with a label on screen', () => {
+        render(<ConnectScreen />);
+        const label = document.querySelector(`label[for="bot-name"]`);
+        expect(label?.textContent).toBe(`Bot name`);
+        expect(screen.getByRole(`textbox`, { name: `Bot name` }).id).toBe(`bot-name`);
+    });
+
     it('validate the name live against the syntax rules', () => {
         render(<ConnectScreen />);
         type(`1badname`);
-        expect(screen.getByText(`Letters first, then letters, digits, - or _; 2 to 30 characters`)).toBeTruthy();
+        expect(screen.getByText(`2 to 30 letters, digits, - or _; start with a letter, end with a letter or digit`)).toBeTruthy();
         type(`admin`);
         expect(screen.getByText(`That name is reserved`)).toBeTruthy();
         type(`sealbot`);
-        expect(screen.queryByText(/Letters first/)).toBe(null);
+        expect(screen.queryByText(/2 to 30 letters/)).toBe(null);
         expect(screen.queryByText(/reserved/)).toBe(null);
     });
 
@@ -72,7 +79,7 @@ describe('ConnectScreen', () => {
         fireEvent.click(screen.getByRole(`button`, { name: `Create bot` }));
         expect(await screen.findByText(/hxo_/)).toBeTruthy();
         expect(screen.getByRole(`button`, { name: `Copy` })).toBeTruthy();
-        expect(screen.getByText(/shows once/)).toBeTruthy();
+        expect(screen.getByText(/shows only once/)).toBeTruthy();
         await waitFor(() => {
             expect(bodies).toEqual([{ name: `sealbot` }]);
         });
@@ -105,7 +112,7 @@ describe('ConnectScreen', () => {
         render(<ConnectScreen />);
         type(`sealbot`);
         fireEvent.click(screen.getByRole(`button`, { name: `Create bot` }));
-        expect(await screen.findByText(`Sign in first; step 1 opens Discord`)).toBeTruthy();
+        expect(await screen.findByText(`Sign in first (step 1)`)).toBeTruthy();
     });
 
     it('mark the sign-in step done for a signed-in user', async () => {
@@ -126,7 +133,7 @@ describe('ConnectScreen', () => {
         meStore.reset();
         meStore.start();
         render(<ConnectScreen />);
-        expect(await screen.findByText(`You are playing as Guest k3f9; owning a bot takes an account.`)).toBeTruthy();
+        expect(await screen.findByText(`You are playing as Guest k3f9; owning a bot needs a Discord sign-in.`)).toBeTruthy();
         meStore.reset();
     });
 });

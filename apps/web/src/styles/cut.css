@@ -23,6 +23,7 @@
     .discord-button::before,
     kbd,
     .clock,
+    .theme-tile,
     input[type='text'] {
         clip-path: var(--cut-sm-path);
     }
@@ -35,6 +36,7 @@
     .empty,
     .advanced,
     .token-box,
+    .credit-rows,
     .skip {
         clip-path: var(--cut-md-path);
     }

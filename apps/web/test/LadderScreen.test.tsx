@@ -43,7 +43,7 @@ describe('LadderScreen', () => {
         expect(document.querySelector(`.rung.r3 .rung-kind`)?.textContent).toBe(`Human`);
     });
 
-    it('count the ranked players and the bots online in one sentence', async () => {
+    it('count the ranked players and the bots online in one sentence, a zero in words', async () => {
         vi.stubGlobal(
             `fetch`,
             vi.fn((url: string) =>
@@ -63,9 +63,20 @@ describe('LadderScreen', () => {
         );
         render(<LadderScreen />);
         await waitFor(() => {
-            expect(document.querySelector(`.pulse`)?.textContent).toBe(`3 ranked players, 2 bots online, 1 taking challenges`);
+            expect(document.querySelector(`.pulse`)?.textContent).toBe(`3 ranked players; 2 bots online, 1 open for challenges`);
         });
         expect(document.querySelector(`.rung.r1 .rung-owner`)?.textContent).toBe(`By tom`);
+        cleanup();
+        vi.stubGlobal(
+            `fetch`,
+            vi.fn((url: string) =>
+                Promise.resolve(new Response(JSON.stringify(url.startsWith(`/api/bots`) ? [] : board))),
+            ),
+        );
+        render(<LadderScreen />);
+        await waitFor(() => {
+            expect(document.querySelector(`.pulse`)?.textContent).toBe(`3 ranked players; no bots online`);
+        });
     });
 
     it('keep the board when the directory does not load', async () => {

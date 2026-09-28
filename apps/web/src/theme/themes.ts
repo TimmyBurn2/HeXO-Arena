@@ -1,6 +1,6 @@
 import { useSyncExternalStore } from 'react';
-import { siteName } from '@hexo-arena/contract';
 import { readStored, writeStored } from '../stored';
+import { text } from '../text';
 
 /**
  * Every theme the site ships, in picker order, with the line crediting
@@ -8,12 +8,12 @@ import { readStored, writeStored } from '../stored';
  * styles/themes, which the vocabulary test holds both ways.
  */
 export const themes = [
-    { id: `ink`, label: `Ink`, credit: siteName },
-    { id: `hds`, label: `HDS`, credit: `hexo.did.science, via MineKing` },
-    { id: `htttx`, label: `HTTTX`, credit: `HeXO Renderer by MineKing` },
-    { id: `tyto`, label: `Tyto`, credit: `Tyto's Strix, via MineKing` },
-    { id: `omok`, label: `Omok`, credit: `HeXO Renderer by MineKing` },
-    { id: `six`, label: `Six`, credit: `playsix by CixMango` },
+    { id: `ink`, label: text.settings.themes.ink.name, credit: text.settings.themes.ink.credit },
+    { id: `hds`, label: text.settings.themes.hds.name, credit: text.settings.themes.hds.credit },
+    { id: `htttx`, label: text.settings.themes.htttx.name, credit: text.settings.themes.htttx.credit },
+    { id: `tyto`, label: text.settings.themes.tyto.name, credit: text.settings.themes.tyto.credit },
+    { id: `omok`, label: text.settings.themes.omok.name, credit: text.settings.themes.omok.credit },
+    { id: `six`, label: text.settings.themes.six.name, credit: text.settings.themes.six.credit },
 ] as const;
 
 export type ThemeId = (typeof themes)[number][`id`];

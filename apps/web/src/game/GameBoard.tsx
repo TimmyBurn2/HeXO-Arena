@@ -4,6 +4,7 @@ import { isWithinPlacementRadius, rejection, type Position } from '@hexo-arena/r
 import { Board, type BoardStone } from '../board/Board';
 import { useBoardSettings } from '../board/board-settings';
 import { cellSize, frontierCells, viewBoxOf } from '../board/geometry';
+import { text } from '../text';
 import { rejectionNote } from './snapshot-views';
 import './GameBoard.css';
 
@@ -38,11 +39,12 @@ function nearBox(stones: readonly AxialCoord[]): { x: number; y: number; w: numb
 
 /**
  * The smallest a cell may render, from the scale sheet, which raises it
- * for coarse pointers so a finger always hits one cell.
+ * for coarse pointers so a finger always hits one cell; a finished board
+ * takes no taps, so it keeps the reading minimum at any pointer.
  */
-function minCellPx(element: HTMLElement): number {
+function minCellPx(element: HTMLElement, finished: boolean): number {
     const style = getComputedStyle(element);
-    const raw = style.getPropertyValue(`--board-cell-min`).trim();
+    const raw = style.getPropertyValue(finished ? `--board-cell-read` : `--board-cell-min`).trim();
     const rootPx = Number.parseFloat(getComputedStyle(document.documentElement).fontSize) || 16;
     const value = Number.parseFloat(raw);
     if (!Number.isFinite(value)) return 0;
@@ -64,6 +66,7 @@ export function GameBoard({
     lastMove,
     winLine,
     yourMove,
+    finished,
     idleLabel,
     onCommit,
     onStatus,
@@ -75,6 +78,7 @@ export function GameBoard({
     lastMove: readonly AxialCoord[];
     winLine: readonly AxialCoord[];
     yourMove: boolean;
+    finished: boolean;
     // What the board's accessible name says whenever it is not your move.
     idleLabel: string;
     onCommit: (cells: readonly [AxialCoord, AxialCoord]) => Promise<boolean>;
@@ -88,7 +92,7 @@ export function GameBoard({
     const cameraRef = useRef<HTMLDivElement>(null);
     const [size, setSize] = useState<{ w: number; h: number } | null>(null);
     const [scale, setScale] = useState<number | undefined>(undefined);
-    const centerOn = useRef<{ cx: number; cy: number } | null>(null);
+    const centerOn = useRef<{ cx: number; cy: number; scale: number } | null>(null);
     const box = useMemo(() => viewBoxOf(frontierCells(stones)), [stones]);
 
     useEffect(() => {
@@ -118,15 +122,15 @@ export function GameBoard({
     // Refit on a new turn or a new viewport: the whole frontier when it
     // fits at the minimum cell size, else the stones and three cells round
     // them, centered once the new size has laid out.
-    // Only the turn count and the viewport refit; a pending mark never
-    // moves the camera under the player's hand.
+    // Only the turn count, the viewport, and the finish refit; a pending
+    // mark never moves the camera under the player's hand.
     useLayoutEffect(() => {
         const camera = cameraRef.current;
         if (camera === null || size === null || size.w === 0 || size.h === 0) return;
         const style = getComputedStyle(camera);
         const w = size.w - Number.parseFloat(style.paddingLeft) - Number.parseFloat(style.paddingRight);
         const h = size.h - Number.parseFloat(style.paddingTop) - Number.parseFloat(style.paddingBottom);
-        const least = minCellPx(camera) / cellWidth;
+        const least = minCellPx(camera, finished) / cellWidth;
         const whole = Math.min(w / box.w, h / box.h);
         if (whole >= least || stones.length === 0) {
             centerOn.current = null;
@@ -134,19 +138,25 @@ export function GameBoard({
             return;
         }
         const near = nearBox(stones);
-        centerOn.current = { cx: near.x + near.w / 2, cy: near.y + near.h / 2 };
-        setScale(Math.max(least, Math.min(w / near.w, h / near.h)));
-    }, [stones.length, size]);
+        const next = Math.max(least, Math.min(w / near.w, h / near.h));
+        centerOn.current = { cx: near.x + near.w / 2, cy: near.y + near.h / 2, scale: next };
+        setScale(next);
+    }, [stones.length, size, finished]);
 
+    // The stones center in the room between the paddings, which differ
+    // above and below, once the refit's scale has laid out: in this same
+    // commit when a new viewport kept the scale, else in the next.
     useLayoutEffect(() => {
         const camera = cameraRef.current;
         const target = centerOn.current;
-        if (camera === null || target === null || scale === undefined) return;
+        if (camera === null || target === null || scale !== target.scale) return;
         const style = getComputedStyle(camera);
-        camera.scrollLeft = Number.parseFloat(style.paddingLeft) + (target.cx - box.x) * scale - camera.clientWidth / 2;
-        camera.scrollTop = Number.parseFloat(style.paddingTop) + (target.cy - box.y) * scale - camera.clientHeight / 2;
+        const w = camera.clientWidth - Number.parseFloat(style.paddingLeft) - Number.parseFloat(style.paddingRight);
+        const h = camera.clientHeight - Number.parseFloat(style.paddingTop) - Number.parseFloat(style.paddingBottom);
+        camera.scrollLeft = (target.cx - box.x) * scale - w / 2;
+        camera.scrollTop = (target.cy - box.y) * scale - h / 2;
         centerOn.current = null;
-    }, [scale, box]);
+    }, [scale, box, size]);
 
     const tryMark = useCallback(
         (cell: AxialCoord) => {
@@ -172,7 +182,7 @@ export function GameBoard({
             setNote(null);
             void onCommit(pair).then((landed) => {
                 setSending(false);
-                if (!landed) setNote(`The move did not land; try again`);
+                if (!landed) setNote(text.drawer.turnFailed);
             });
         },
         [yourMove, sending, pending, position, onCommit],
@@ -217,13 +227,13 @@ export function GameBoard({
                 className="board-control"
                 tabIndex={0}
                 role={yourMove ? `application` : `group`}
-                aria-label={`board, ${yourMove ? `your move: two stones` : idleLabel}`}
+                aria-label={text.drawer.board(yourMove ? text.drawer.boardYourTurn : idleLabel)}
                 onKeyDown={handleKey}
             >
                 <Board
                     stones={stones}
                     settings={settings}
-                    label={`game board, ${String(stones.length)} stones placed`}
+                    label={text.drawer.boardStones(stones.length)}
                     scale={scale}
                     overlays={{
                         ...(pending === null || you === null ? {} : { pending, pendingSide: you }),

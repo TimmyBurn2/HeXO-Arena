@@ -40,3 +40,6 @@ export function useBorrowFrame(): void {
 export function useFrameLent(): boolean {
     return useSyncExternalStore(subscribe, lent, lent);
 }
+
+/** Where a screen sits: inside the site's frame, or alone on the stage. */
+export type Layout = `framed` | `immersive`;

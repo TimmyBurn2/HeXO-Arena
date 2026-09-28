@@ -91,11 +91,14 @@ describe('GameScreen', () => {
         expect(await screen.findByRole(`heading`, { name: `hextide vs you` })).toBeTruthy();
         expect(document.querySelector(`.hud-top-left .hud-name`)?.textContent).toBe(`hextideBOT`);
         expect(document.querySelector(`.hud-bottom-left .hud-name`)?.textContent).toBe(`you`);
-        expect(document.querySelector(`.hud-bottom-center .hud-turn`)?.textContent).toBe(`Your move`);
+        expect(document.querySelector(`.hud-bottom-center .hud-turn`)?.textContent).toBe(`Your turn`);
+        expect(document.querySelector(`.hud-bottom-center .hud-hint`)?.textContent).toBe(`2 stones`);
+        expect(document.querySelector(`.board-control`)?.getAttribute(`aria-label`)).toBe(`Board, your turn: 2 stones`);
         expect(document.querySelector(`.board-control`)?.getAttribute(`tabindex`)).toBe(`0`);
         await waitFor(() => {
-            expect(document.title).toBe(`hextide vs you - HeXO Arena`);
+            expect(document.title).toBe(`hextide vs tom - HeXO Arena`);
         });
+        expect(document.querySelector(`meta[name="description"]`)?.getAttribute(`content`)).toBe(`Live; tom to move; turn clock`);
     });
 
     it('show the shared turn clock on the chip of the side to move alone', async () => {
@@ -124,10 +127,51 @@ describe('GameScreen', () => {
         fireEvent.click(screen.getByRole(`tab`, { name: `Game` }));
         expect(screen.getByRole(`button`, { name: `Resign` })).toBeTruthy();
         const exit = [...document.querySelectorAll(`#drawer-panel-game a`)];
-        expect(exit.map((link) => [link.textContent, link.getAttribute(`href`)])).toEqual([[`Leave to the ladder`, `/`]]);
+        expect(exit.map((link) => [link.textContent, link.getAttribute(`href`)])).toEqual([[`Ladder`, `/`]]);
         expect(document.querySelector(`#drawer-body .drawer-foot`)).toBeTruthy();
         fireEvent.keyDown(screen.getByRole(`tab`, { name: `Game` }), { key: `Escape` });
         expect(document.querySelector(`#drawer-body`)?.hasAttribute(`hidden`)).toBe(true);
+    });
+
+    it('tell a seated player on a running clock that leaving does not resign, and no one else', async () => {
+        const note = `Leaving does not resign; your clock keeps running.`;
+        for (const [snapshot, shown] of [
+            [runningSnapshot, true],
+            [{ ...runningSnapshot, clock: { mode: `unlimited` } } as GameSnapshot, false],
+            [watched(runningSnapshot), false],
+        ] as const) {
+            stubGame(snapshot);
+            render(<GameScreen gameId="g-run" />);
+            await screen.findByRole(`heading`, { level: 1 });
+            await openWithM();
+            fireEvent.click(screen.getByRole(`tab`, { name: `Game` }));
+            expect(screen.queryByText(note) !== null).toBe(shown);
+            cleanup();
+        }
+    });
+
+    it('name the clock in the facts, and leave the row out once the clock is gone', async () => {
+        stubGame(runningSnapshot);
+        render(<GameScreen gameId="g-run" />);
+        await screen.findByRole(`heading`, { level: 1 });
+        await openWithM();
+        fireEvent.click(screen.getByRole(`tab`, { name: `Game` }));
+        expect(screen.getByText(`Turn clock`, { selector: `.facts dd` })).toBeTruthy();
+        cleanup();
+        stubGame(finishedSnapshot);
+        render(<GameScreen gameId="g-end" />);
+        await screen.findByText(`hextide won with six in a row`, { selector: `.hud-result` });
+        await openWithM();
+        fireEvent.click(screen.getByRole(`tab`, { name: `Game` }));
+        expect([...document.querySelectorAll(`.facts dt`)].map((term) => term.textContent)).toEqual([`Opening`, `Your side`, `Result`]);
+    });
+
+    it('offer a retry and the way to the ladder when the game does not load', async () => {
+        stubGame(runningSnapshot, 500);
+        render(<GameScreen gameId="g-run" />);
+        expect(await screen.findByRole(`heading`, { level: 1, name: `The game did not load` })).toBeTruthy();
+        expect(screen.getByRole(`button`, { name: `Try again` })).toBeTruthy();
+        expect(screen.getByRole(`link`, { name: `Ladder` }).getAttribute(`href`)).toBe(`/ladder`);
     });
 
     it('freeze into the finished state with the result, the win line, and the record open', async () => {
@@ -135,8 +179,8 @@ describe('GameScreen', () => {
         render(<GameScreen gameId="g-end" />);
         expect(await screen.findByText(`hextide won with six in a row`, { selector: `.hud-result` })).toBeTruthy();
         expect(document.querySelector(`polyline.win-line`)).toBeTruthy();
-        expect(screen.getByRole(`link`, { name: `Ladder` }).getAttribute(`href`)).toBe(`/ladder`);
-        expect(screen.getByRole(`link`, { name: `Leave to the ladder` }).getAttribute(`href`)).toBe(`/`);
+        // The exit and the result chip both lead to the ladder.
+        expect(screen.getAllByRole(`link`, { name: `Ladder` }).map((link) => link.getAttribute(`href`))).toEqual([`/`, `/ladder`]);
         expect(document.querySelector(`#drawer-body`)?.hasAttribute(`hidden`)).toBe(true);
         expect(document.querySelector(`.board-control`)?.getAttribute(`role`)).toBe(`group`);
         // The phone sheet's peek carries the result only while the open sheet covers the chip.
@@ -145,8 +189,9 @@ describe('GameScreen', () => {
         expect(document.querySelector(`.peek-line`)?.textContent).toBe(`hextide won with six in a row`);
         fireEvent.keyDown(window, { key: `m` });
         await waitFor(() => {
-            expect(document.title).toBe(`hextide won (six in a row) - HeXO Arena`);
+            expect(document.title).toBe(`hextide vs tom - HeXO Arena`);
         });
+        expect(document.querySelector(`meta[name="description"]`)?.getAttribute(`content`)).toBe(`hextide won with six in a row`);
     });
 
     it('show the board keys on the game tab only while the game runs', async () => {
@@ -247,7 +292,7 @@ describe('GameScreen', () => {
         stubGame(runningSnapshot, 404);
         render(<GameScreen gameId="g-x" />);
         expect(await screen.findByRole(`heading`, { level: 1, name: `No such game` })).toBeTruthy();
-        expect(screen.getByText(`That game does not exist.`)).toBeTruthy();
+        expect(screen.getByText(`That game does not exist; guest games are gone once their session ends.`)).toBeTruthy();
         expect(screen.getByRole(`link`, { name: `Ladder` }).getAttribute(`href`)).toBe(`/ladder`);
         await waitFor(() => {
             expect(document.title).toBe(`Not found - HeXO Arena`);
@@ -272,12 +317,12 @@ describe('GameScreen', () => {
         stubEventSource(runningSnapshot);
         render(<GameScreen gameId="g-run" />);
         await screen.findByRole(`heading`, { name: `hextide vs you` });
-        fireEvent.click(screen.getByRole(`button`, { name: `Moves and game` }));
+        fireEvent.click(screen.getByRole(`button`, { name: `Game panel` }));
         fireEvent.click(screen.getByRole(`tab`, { name: `Game` }));
         fireEvent.click(screen.getByRole(`button`, { name: `Resign` }));
-        expect(screen.getByRole(`button`, { name: `Confirm resign` })).toBeTruthy();
+        expect(screen.getByRole(`button`, { name: `Resign and lose` })).toBeTruthy();
         expect(posts).toEqual([]);
-        fireEvent.click(screen.getByRole(`button`, { name: `Confirm resign` }));
+        fireEvent.click(screen.getByRole(`button`, { name: `Resign and lose` }));
         await waitFor(() => {
             expect(posts).toEqual([`/api/games/g-run/resign`]);
         });
@@ -304,8 +349,8 @@ describe('GameScreen', () => {
         await openWithM();
         fireEvent.click(screen.getByRole(`tab`, { name: `Game` }));
         fireEvent.click(screen.getByRole(`button`, { name: `Resign` }));
-        fireEvent.click(screen.getByRole(`button`, { name: `Confirm resign` }));
-        expect(await screen.findByRole(`alert`)).toHaveProperty(`textContent`, `The resign did not land; try again`);
+        fireEvent.click(screen.getByRole(`button`, { name: `Resign and lose` }));
+        expect(await screen.findByRole(`alert`)).toHaveProperty(`textContent`, `The resignation was not sent; try again`);
         expect(screen.getByRole(`button`, { name: `Resign` })).toBeTruthy();
     });
 
@@ -335,7 +380,7 @@ describe('GameScreen', () => {
         stubGame(runningSnapshot);
         render(<GameScreen gameId="g-run" />);
         await screen.findByRole(`heading`, { name: `hextide vs you` });
-        fireEvent.click(screen.getByRole(`button`, { name: `Moves and game` }));
+        fireEvent.click(screen.getByRole(`button`, { name: `Game panel` }));
         expect(document.querySelector(`#drawer-body`)?.hasAttribute(`hidden`)).toBe(false);
         (document.querySelector(`.drawer-tab`) as HTMLElement).focus();
         fireEvent.click(document.querySelector(`.drawer-close`) as HTMLElement);
@@ -350,13 +395,13 @@ describe('GameScreen', () => {
         act(() => {
             FakeEventSource.latest().fail(false);
         });
-        expect(await screen.findByText(`Connection lost, retrying`)).toBeTruthy();
+        expect(await screen.findByText(`Connection lost; reconnecting`)).toBeTruthy();
         expect(document.querySelectorAll(`g.stone`)).toHaveLength(3);
         const resynced = { ...runningSnapshot, board: { cells: finishedCells.slice(0, 5) }, toMove: `o` } as GameSnapshot;
         act(() => {
             FakeEventSource.latest().emit(`snapshot`, resynced);
         });
-        expect(await screen.findByText(`Your move`)).toBeTruthy();
+        expect(await screen.findByText(`Your turn`)).toBeTruthy();
         expect(document.querySelectorAll(`g.stone`)).toHaveLength(5);
     });
 
@@ -368,14 +413,14 @@ describe('GameScreen', () => {
         act(() => {
             FakeEventSource.latest().fail(true);
         });
-        expect(await screen.findByText(`Connection lost, retrying`)).toBeTruthy();
+        expect(await screen.findByText(`Connection lost; reconnecting`)).toBeTruthy();
         const before = FakeEventSource.opened.length;
         await act(async () => {
             await vi.advanceTimersByTimeAsync(2_100);
         });
         expect(FakeEventSource.opened.length).toBe(before + 1);
         await waitFor(() => {
-            expect(screen.queryByText(`Connection lost, retrying`)).toBe(null);
+            expect(screen.queryByText(`Connection lost; reconnecting`)).toBe(null);
         });
         vi.useRealTimers();
     });
@@ -392,7 +437,7 @@ describe('GameScreen', () => {
         );
         stubEventSource(runningSnapshot);
         render(<GameScreen gameId="g-run" />);
-        await screen.findByText(`Your move`);
+        await screen.findByText(`Your turn`);
         const control = document.querySelector(`.board-control`) as HTMLElement;
         fireEvent.keyDown(control, { key: `ArrowRight` });
         fireEvent.keyDown(control, { key: `Enter` });
@@ -408,7 +453,7 @@ describe('GameScreen', () => {
             stream.emit(`turn`, { turn: 3, side: `x`, cells: [{ x: -1, y: 0 }, { x: -2, y: 0 }], toMove: `o`, clock: { mode: `turn`, remainingTurnMs: 45_000 } });
         });
         expect(document.querySelectorAll(`g.stone`)).toHaveLength(7);
-        expect(await screen.findByText(`Your move`)).toBeTruthy();
+        expect(await screen.findByText(`Your turn`)).toBeTruthy();
         act(() => {
             stream.emit(`finish`, { winner: `x`, reason: `timeout`, clock: { mode: `turn`, remainingTurnMs: 0 } });
         });
@@ -429,7 +474,7 @@ describe('GameScreen for a watcher', () => {
         const control = document.querySelector(`.board-control`);
         expect(control?.getAttribute(`role`)).toBe(`group`);
         expect(control?.getAttribute(`tabindex`)).toBe(`0`);
-        expect(control?.getAttribute(`aria-label`)).toBe(`board, watching hextide vs tom, tom to move`);
+        expect(control?.getAttribute(`aria-label`)).toBe(`Board, watching hextide vs tom, tom to move`);
         fireEvent.click(document.querySelector(`polygon.cell`) as Element);
         expect(document.querySelector(`.ring-pending`)).toBe(null);
         await waitFor(() => {
@@ -445,7 +490,7 @@ describe('GameScreen for a watcher', () => {
         fireEvent.click(screen.getByRole(`tab`, { name: `Game` }));
         expect(screen.queryByRole(`button`, { name: `Resign` })).toBe(null);
         expect(document.querySelector(`.game-facts .note`)?.textContent).toBe(`With the board focused, arrows scroll it; m opens this panel.`);
-        expect(screen.getByText(`yes`, { selector: `.facts dd` })).toBeTruthy();
+        expect(screen.getByText(`Yes`, { selector: `.facts dd` })).toBeTruthy();
         expect(document.querySelector(`.peek-row .hud-name`)?.textContent).toBe(`hextideBOT`);
     });
 
@@ -457,7 +502,7 @@ describe('GameScreen for a watcher', () => {
             FakeEventSource.latest().fail(true);
         });
         expect(await screen.findByText(`Many watching; the board catches up shortly`)).toBeTruthy();
-        expect(screen.queryByText(`Connection lost, retrying`)).toBe(null);
+        expect(screen.queryByText(`Connection lost; reconnecting`)).toBe(null);
     });
 
     it('mark a guest seat unrated and the game unrated in the facts', async () => {
@@ -471,7 +516,7 @@ describe('GameScreen for a watcher', () => {
         expect(document.querySelector(`.hud-top-left .tag`)?.textContent).toBe(`unrated`);
         await openWithM();
         fireEvent.click(screen.getByRole(`tab`, { name: `Game` }));
-        expect(screen.getByText(`no, a guest plays`, { selector: `.facts dd` })).toBeTruthy();
+        expect(screen.getByText(`No, a guest is playing`, { selector: `.facts dd` })).toBeTruthy();
     });
 
     it('name the winner in the result, never you', async () => {
@@ -479,7 +524,7 @@ describe('GameScreen for a watcher', () => {
         render(<GameScreen gameId="g-end" />);
         expect(await screen.findByText(`hextide won with six in a row`, { selector: `.hud-result` })).toBeTruthy();
         await waitFor(() => {
-            expect(document.title).toBe(`hextide won (six in a row) - HeXO Arena`);
+            expect(document.title).toBe(`hextide vs tom - HeXO Arena`);
         });
     });
 });

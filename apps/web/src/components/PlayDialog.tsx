@@ -11,6 +11,7 @@ import { Dialog } from './Dialog';
 import { DiscordSignIn } from './DiscordButton';
 import { meStore, useMe } from '../me';
 import { navigate } from '../router/use-route';
+import { text } from '../text';
 import './PlayDialog.css';
 
 export interface PlayableBot {
@@ -26,16 +27,7 @@ const incrementMaxSeconds = 30;
 const defaultMainMinutes = 5;
 const defaultIncrementSeconds = 3;
 
-const errorSentences: Record<string, (name: string) => string> = {
-    human_busy: () => `You already have three live games`,
-    game_cooldown: () => `A moment: one new game per minute`,
-    bot_busy: (name) => `${name} is seated elsewhere`,
-    clock_not_accepted: (name) => `${name} declined that clock`,
-    not_open: (name) => `${name} is not open for challenges right now`,
-    paused: () => `Starting games is paused; live games continue`,
-};
-
-const guestLimitSentence = `Too many guests right now; try in a minute or sign in`;
+const errorSentences: Record<string, (name: string) => string> = text.dialogs.play.errors;
 
 // A refused session is its own failure, since it swaps the start action
 // for the sign-in rather than only saying what went wrong.
@@ -57,6 +49,12 @@ export function coveredModes(accepts: Accepts | undefined): Record<`turn` | `mat
         match: accepts?.match === true,
         unlimited: accepts?.unlimited === true,
     };
+}
+
+// A slider's middle tick names a value the slider can take: the step
+// nearest the midpoint, the lower one on a tie.
+function middleTick(min: number, max: number, step: number): number {
+    return min + Math.ceil((max - min) / 2 / step - 0.5) * step;
 }
 
 function defaultTurnSeconds(window: readonly [number, number]): number {
@@ -104,8 +102,8 @@ export function PlayDialog({ bot, open, onClose }: { bot: PlayableBot; open: boo
                 kind: `message`,
                 text:
                     cause instanceof ApiError && cause.code === `guest_limit`
-                        ? guestLimitSentence
-                        : `The guest session did not start; try again`,
+                        ? text.dialogs.play.guestLimit
+                        : text.dialogs.play.guestFailed,
             });
             setSending(false);
             return;
@@ -136,18 +134,18 @@ export function PlayDialog({ bot, open, onClose }: { bot: PlayableBot; open: boo
                 setFailure({ kind: `sign-in` });
                 void meStore.refresh();
             } else {
-                setFailure({ kind: `message`, text: `The game could not start; try again` });
+                setFailure({ kind: `message`, text: text.dialogs.play.failed });
             }
             setSending(false);
         }
     }
 
     return (
-        <Dialog open={open} onClose={onClose} label={`Play ${bot.name}`}>
-            <h2>Play {bot.name}</h2>
+        <Dialog open={open} onClose={onClose} label={text.dialogs.play.title(bot.name)}>
+            <h2>{text.dialogs.play.heading(bot.name)}</h2>
             <div className="row">
-                <span className="row-label">Clock mode, only what the bot accepts</span>
-                <div className="seg" role="group" aria-label="Clock mode">
+                <span className="row-label">{text.dialogs.play.clock(bot.name)}</span>
+                <div className="seg" role="group" aria-label={text.dialogs.play.clockGroup}>
                     {([`turn`, `match`, `unlimited`] as const).map((candidate) => (
                         <button
                             key={candidate}
@@ -159,7 +157,7 @@ export function PlayDialog({ bot, open, onClose }: { bot: PlayableBot; open: boo
                                 if (covered[candidate]) setMode(candidate);
                             }}
                         >
-                            {candidate === `turn` ? `Turn` : candidate === `match` ? `Match` : `Unlimited`}
+                            {text.dialogs.play[candidate]}
                         </button>
                     ))}
                 </div>
@@ -169,8 +167,8 @@ export function PlayDialog({ bot, open, onClose }: { bot: PlayableBot; open: boo
                 <div className="mode-panel">
                     <div className="slider-row">
                         <div className="slider-head">
-                            <span className="slider-label">Turn clock</span>
-                            <span className="slider-value">{String(turnSeconds)} s</span>
+                            <span className="slider-label">{text.dialogs.play.turnClock}</span>
+                            <span className="slider-value">{text.dialogs.play.seconds(turnSeconds)}</span>
                         </div>
                         <input
                             type="range"
@@ -178,21 +176,19 @@ export function PlayDialog({ bot, open, onClose }: { bot: PlayableBot; open: boo
                             max={turnMax}
                             step={turnStepSeconds}
                             value={turnSeconds}
-                            aria-label="turn clock seconds"
-                            aria-valuetext={`${String(turnSeconds)} seconds`}
+                            aria-label={text.dialogs.play.turnClock}
+                            aria-valuetext={text.dialogs.play.secondsSpoken(turnSeconds)}
                             onChange={(event) => {
                                 setTurnSeconds(Number(event.target.value));
                             }}
                         />
                         <div className="ticks">
-                            <span>{`${String(turnMin)}s`}</span>
-                            <span>{`${String(Math.round((turnMin + turnMax) / 2))}s`}</span>
-                            <span>{`${String(turnMax)}s`}</span>
+                            <span>{text.dialogs.play.secondsTick(turnMin)}</span>
+                            <span>{text.dialogs.play.secondsTick(middleTick(turnMin, turnMax, turnStepSeconds))}</span>
+                            <span>{text.dialogs.play.secondsTick(turnMax)}</span>
                         </div>
                     </div>
-                    <p className="note">
-                        Clamped to the bot's window: {String(turnMin)} to {String(turnMax)} s.
-                    </p>
+                    <p className="note">{text.dialogs.play.accepts(bot.name, turnMin, turnMax)}</p>
                 </div>
             ) : null}
 
@@ -200,8 +196,8 @@ export function PlayDialog({ bot, open, onClose }: { bot: PlayableBot; open: boo
                 <div className="mode-panel">
                     <div className="slider-row">
                         <div className="slider-head">
-                            <span className="slider-label">Main time</span>
-                            <span className="slider-value">{String(mainMinutes)} min</span>
+                            <span className="slider-label">{text.dialogs.play.mainTime}</span>
+                            <span className="slider-value">{text.dialogs.play.minutes(mainMinutes)}</span>
                         </div>
                         <input
                             type="range"
@@ -209,22 +205,22 @@ export function PlayDialog({ bot, open, onClose }: { bot: PlayableBot; open: boo
                             max={mainMaxMinutes}
                             step={1}
                             value={mainMinutes}
-                            aria-label="main time minutes"
-                            aria-valuetext={`${String(mainMinutes)} minutes`}
+                            aria-label={text.dialogs.play.mainTime}
+                            aria-valuetext={text.dialogs.play.minutesSpoken(mainMinutes)}
                             onChange={(event) => {
                                 setMainMinutes(Number(event.target.value));
                             }}
                         />
                         <div className="ticks">
-                            <span>1m</span>
-                            <span>15m</span>
-                            <span>30m</span>
+                            <span>{text.dialogs.play.minutesTick(mainFloorMinutes)}</span>
+                            <span>{text.dialogs.play.minutesTick(middleTick(mainFloorMinutes, mainMaxMinutes, 1))}</span>
+                            <span>{text.dialogs.play.minutesTick(mainMaxMinutes)}</span>
                         </div>
                     </div>
                     <div className="slider-row">
                         <div className="slider-head">
-                            <span className="slider-label">Increment</span>
-                            <span className="slider-value">+{String(incrementSeconds)} s</span>
+                            <span className="slider-label">{text.dialogs.play.increment}</span>
+                            <span className="slider-value">{text.dialogs.play.plusSeconds(incrementSeconds)}</span>
                         </div>
                         <input
                             type="range"
@@ -232,16 +228,16 @@ export function PlayDialog({ bot, open, onClose }: { bot: PlayableBot; open: boo
                             max={incrementMaxSeconds}
                             step={1}
                             value={incrementSeconds}
-                            aria-label="increment seconds"
-                            aria-valuetext={`plus ${String(incrementSeconds)} seconds`}
+                            aria-label={text.dialogs.play.increment}
+                            aria-valuetext={text.dialogs.play.plusSecondsSpoken(incrementSeconds)}
                             onChange={(event) => {
                                 setIncrementSeconds(Number(event.target.value));
                             }}
                         />
                         <div className="ticks">
-                            <span>0s</span>
-                            <span>15s</span>
-                            <span>30s</span>
+                            <span>{text.dialogs.play.secondsTick(0)}</span>
+                            <span>{text.dialogs.play.secondsTick(middleTick(0, incrementMaxSeconds, 1))}</span>
+                            <span>{text.dialogs.play.secondsTick(incrementMaxSeconds)}</span>
                         </div>
                     </div>
                 </div>
@@ -249,15 +245,15 @@ export function PlayDialog({ bot, open, onClose }: { bot: PlayableBot; open: boo
 
             {mode === `unlimited` ? (
                 <div className="mode-panel">
-                    <p className="note">No clocks; the server caps the game at 24 hours.</p>
+                    <p className="note">{text.dialogs.play.unlimitedNote}</p>
                 </div>
             ) : null}
 
             <div className="row">
                 <details className="advanced">
-                    <summary>Advanced session</summary>
+                    <summary>{text.dialogs.play.more}</summary>
                     <fieldset>
-                        <legend>Opening stones, the origin included</legend>
+                        <legend>{text.dialogs.play.openingStones}</legend>
                         <div className="controls">
                             {openingPliesValues.map((count) => (
                                 <span className="opt" key={count}>
@@ -280,22 +276,20 @@ export function PlayDialog({ bot, open, onClose }: { bot: PlayableBot; open: boo
             </div>
 
             <p className="note">
-                {openingPlies === 1
-                    ? `Only the origin stone lands before either side moves; every turn after it places two stones.`
-                    : `The origin and ${String(openingPlies - 1)} random stones land before either side moves; every turn after them places two stones.`}
+                {openingPlies === 1 ? text.dialogs.play.originOnly : text.dialogs.play.randomStones(openingPlies - 1)}
             </p>
             {failure !== null ? (
                 <p className="field-error" role="alert">
-                    {failure.kind === `message` ? failure.text : `Sign in to start a game`}
+                    {failure.kind === `message` ? failure.text : text.dialogs.play.signInToStart}
                 </p>
             ) : null}
-            {guestName === null ? null : <p className="note">You play as {guestName}; guest games are unrated.</p>}
+            {guestName === null ? null : <p className="note">{text.dialogs.play.guestNote(guestName)}</p>}
             {signedOut ? (
                 <>
-                    <p className="note">Play now as a guest, unrated, or sign in to play rated.</p>
+                    <p className="note">{text.dialogs.play.signedOutNote}</p>
                     <p className="card-actions">
                         <button type="button" className="btn btn-primary" disabled={sending} onClick={() => void startAsGuest()}>
-                            Play as guest
+                            {text.dialogs.play.playAsGuest}
                         </button>
                     </p>
                     <DiscordSignIn />
@@ -305,7 +299,7 @@ export function PlayDialog({ bot, open, onClose }: { bot: PlayableBot; open: boo
             ) : (
                 <p>
                     <button type="button" className="btn btn-primary" disabled={sending} onClick={() => void start()}>
-                        Start game
+                        {text.dialogs.play.start}
                     </button>
                 </p>
             )}

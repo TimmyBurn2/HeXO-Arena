@@ -4,6 +4,7 @@ import {
     sessionHeartbeatMs,
     sessionTokenTtlMs,
     sideOf,
+    unlimitedWallCapMs,
     wireToInternal,
     type BwsHeartbeatPacket,
     type BwsMoveRequestPacket,
@@ -23,7 +24,6 @@ import { abortUnfinishedGames, findGame } from '../src/game-store';
 import {
     GameRegistry,
     orphanForfeitMs,
-    unlimitedWallCapMs,
     wirePresence,
     type EngineSocket,
 } from '../src/game-registry';

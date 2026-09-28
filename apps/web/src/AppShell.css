@@ -7,6 +7,22 @@
         padding: var(--space-5) var(--shell-pad) var(--space-8);
     }
 
+    /* A message in place of the game, without the frame; the shell's sheet
+       holds it, since the game's own sheet may be what failed to load. */
+    .stage-message {
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-6);
+        max-width: var(--shell-max);
+        margin: 0 auto;
+        padding: var(--space-4) var(--shell-pad) var(--space-7);
+    }
+
+    /* The failure's sentence breaks evenly, never leaving one word alone. */
+    .route-failure p {
+        text-wrap: balance;
+    }
+
     .skip {
         position: absolute;
         left: -100vw;
@@ -40,6 +56,9 @@
     /* The wordmark never wraps or gives way; who is here yields instead. */
     .brand {
         flex: none;
+        display: inline-flex;
+        align-items: center;
+        gap: var(--space-2);
         font-family: var(--font-display);
         font-weight: 700;
         font-size: var(--text-wordmark);
@@ -49,6 +68,29 @@
 
     .brand:hover {
         color: var(--c-text);
+    }
+
+    /* The mark shows where the row has pixels to spare: past the phone
+       widths, and on the wider phones, whose nav links sit in the tab bar. */
+    .brand-mark {
+        display: none;
+        flex: none;
+        width: var(--mark-size);
+        height: var(--mark-size);
+        fill: currentColor;
+    }
+
+    @media (21rem < width <= 30rem), (40rem < width) {
+        .brand-mark {
+            display: block;
+        }
+    }
+
+    @media (max-width: 30rem) {
+        .brand-mark {
+            width: var(--mark-size-sm);
+            height: var(--mark-size-sm);
+        }
     }
 
     .nav-links {

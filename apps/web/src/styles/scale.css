@@ -88,8 +88,11 @@
         --settings-w: 24rem;
         --identity-menu-w: 16rem;
         --theme-swatch-h: 2.75rem;
-        --credit-swatch-w: 7rem;
+        --credit-who-w: 15rem;
+        --credit-terms-w: 17rem;
         --identity-size: 4rem;
+        --mark-size: 1.5rem;
+        --mark-size-sm: 1.25rem;
         --plate-name-w: 12rem;
         --card-min: 14rem;
         --rung-rank-w: 3.5rem;
@@ -108,6 +111,9 @@
         /* the board's camera keeps this clear above and below for the
            overlays */
         --hud-clear: 4.75rem;
+        /* how far the result chip reaches up the stage, which the game
+           screen measures; nothing until it does */
+        --hud-reach: 0rem;
 
         /* every motion sits in one band, short enough to never delay play */
         --dur-fast: 120ms;
@@ -125,8 +131,10 @@
         --board-win-w: 4px;
         --board-win-casing-w: 8px;
         --board-stone-mark-w: 1.5px;
-        /* a cell never renders smaller than this; a finger needs more */
-        --board-cell-min: 1.75rem;
+        /* a cell never renders smaller than this; a finger needs more,
+           but a finished board takes no taps and keeps the reading one */
+        --board-cell-read: 1.75rem;
+        --board-cell-min: var(--board-cell-read);
         --board-frontier-w: 1.5px;
         --board-frontier-dash: 5 4;
         /* the pending mark previews its stone at this strength */

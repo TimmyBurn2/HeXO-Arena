@@ -55,6 +55,10 @@ export const openingRadius = 2;
 export const openingWindowCells = 6;
 export const openingThreatStones = 4;
 
+// A stone lands within this hex distance of some stone already placed; the
+// rules engine holds the same number, checked equal by its contract tests.
+export const placementRadius = 8;
+
 // A ply is one stone placed and a turn is one player's action, both counted
 // from zero: turn 0 is the origin stone, ply 0, and turn t >= 1 is plies
 // 2t-1 and 2t.

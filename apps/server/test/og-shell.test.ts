@@ -3,10 +3,11 @@ import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { botMeta, gameMeta, ladderMeta, renderShell } from '../src/og-shell';
+import { renderShell } from '../src/og-shell';
 import { createTestApp, FakeStreamSocket, loginAs, mintBot, type TestApp } from './helpers';
 
 const indexPath = join(dirname(fileURLToPath(import.meta.url)), `../../web/index.html`);
+const origin = `https://arena.example`;
 
 function metaOf(html: string): { title: string; description: string; ogTitle: string; ogDescription: string } {
     const pick = (pattern: RegExp): string => pattern.exec(html)?.[1] ?? `missing`;
@@ -20,10 +21,14 @@ function metaOf(html: string): { title: string; description: string; ogTitle: st
 
 describe('renderShell', () => {
     it('sets the title, description, and both og tags, escaped', () => {
-        const html = renderShell(readFileSync(indexPath, `utf8`), {
-            title: `a <b> & "c"`,
-            description: `it's <script>`,
-        });
+        const html = renderShell(
+            readFileSync(indexPath, `utf8`),
+            {
+                title: `a <b> & "c"`,
+                description: `it's <script>`,
+            },
+            origin,
+        );
         expect(metaOf(html)).toEqual({
             title: `a &lt;b&gt; &amp; &quot;c&quot;`,
             description: `it&#39;s &lt;script&gt;`,
@@ -35,42 +40,15 @@ describe('renderShell', () => {
 
     it('refuses a template that lost one of its tags', () => {
         const template = readFileSync(indexPath, `utf8`).replace(/<meta property="og:title"[^>]*>/, ``);
-        expect(() => renderShell(template, { title: `t`, description: `d` })).toThrow(/og:title/);
-    });
-});
-
-describe('shell meta wording', () => {
-    it('counts the roster and names the leader when there is one', () => {
-        expect(ladderMeta(0, 0, undefined).description).toBe(`0 bots listed, 0 online`);
-        expect(ladderMeta(1, 1, { name: `sealbot`, rating: 1712.4 }).description).toBe(
-            `1 bot listed, 1 online; top rated: sealbot (1712)`,
-        );
+        expect(() => renderShell(template, { title: `t`, description: `d` }, origin)).toThrow(/og:title/);
+        const imageless = readFileSync(indexPath, `utf8`).replace(/<meta property="og:image"[^>]*>/, ``);
+        expect(() => renderShell(imageless, { title: `t`, description: `d` }, origin)).toThrow(/og:image/);
     });
 
-    it('describes a bot by owner, rating, presence, and an about excerpt', () => {
-        const meta = botMeta({
-            name: `sealbot`,
-            ownerName: `alice`,
-            rating: 1500,
-            provisional: true,
-            online: false,
-            about: `x`.repeat(130),
-        });
-        expect(meta.title).toBe(`sealbot - HeXO Arena`);
-        expect(meta.description).toBe(`HeXO bot by alice, rated 1500, provisional, offline: ${`x`.repeat(120)}...`);
-    });
-
-    it('describes a live game by mover and clock, a finished one by its result', () => {
-        const names = { x: `alpha`, o: `beta` };
-        expect(
-            gameMeta({ status: `live`, names, toMove: `o`, timeControl: { mode: `match`, mainTimeMs: 300_000, incrementMs: 3_000 } }),
-        ).toEqual({ title: `alpha vs beta - HeXO Arena`, description: `live, beta to move, 5 min + 3 s` });
-        expect(gameMeta({ status: `finished`, names, winner: `x`, reason: `surrender` }).description).toBe(
-            `alpha won by resignation`,
-        );
-        expect(gameMeta({ status: `finished`, names, winner: null, reason: `aborted` }).description).toBe(
-            `nobody won, ended by abort`,
-        );
+    it('points the preview image at the site icon on the public origin, since a preview needs an absolute address', () => {
+        const html = renderShell(readFileSync(indexPath, `utf8`), { title: `t`, description: `d` }, origin);
+        expect(html).toContain(`<meta property="og:image" content="https://arena.example/icon-512.png" />`);
+        expect(html).toContain(`<meta property="og:site_name" content="HeXO Arena" />`);
     });
 });
 
@@ -111,8 +89,16 @@ describe('the og shell routes', () => {
         const response = await shell(`/`);
         expect(response.status).toBe(200);
         expect(response.cacheControl).toBe(`no-cache`);
-        expect(response.meta.ogTitle).toBe(`HeXO Arena - an open ladder for bots and humans`);
+        expect(response.meta.ogTitle).toBe(`HeXO Arena - one ladder for bots and humans`);
         expect(response.meta.ogDescription).toBe(`1 bot listed, 1 online`);
+    });
+
+    it('carries the site icon and name on every shell route, found or not', async () => {
+        for (const url of [`/`, `/ladder`, `/bots/nobody`, `/game/g_nothing`]) {
+            const response = await arena.app.inject({ method: `GET`, url });
+            expect(response.body).toContain(`<meta property="og:image" content="https://arena.example/icon-512.png" />`);
+            expect(response.body).toContain(`<meta property="og:site_name" content="HeXO Arena" />`);
+        }
     });
 
     it('counts the roster on the ladder route under its own title', async () => {
@@ -130,7 +116,9 @@ describe('the og shell routes', () => {
         const listed = await shell(`/bots/SealBot`);
         expect(listed.status).toBe(200);
         expect(listed.meta.ogTitle).toBe(`sealbot - HeXO Arena`);
-        expect(listed.meta.ogDescription).toBe(`HeXO bot by sealbotowner, rated 1500, provisional, online now: plays fast`);
+        expect(listed.meta.ogDescription).toBe(
+            `HeXO bot by sealbotowner, rated 1500 (provisional), online and open for challenges. plays fast`,
+        );
         expect((await shell(`/bots/nobody`)).status).toBe(404);
         expect((await shell(`/bots/-bad-`)).meta.title).toBe(`Not found - HeXO Arena`);
         arena.sqlite.prepare(`update bots set delisted_at = 1 where name = 'sealbot'`).run();
@@ -152,7 +140,7 @@ describe('the og shell routes', () => {
         const live = await shell(`/game/${snapshot.gameId}`);
         expect(live.status).toBe(200);
         expect(live.meta.ogTitle).toMatch(/^(sealbot vs Guest [a-z0-9]{4}|Guest [a-z0-9]{4} vs sealbot) - HeXO Arena$/);
-        expect(live.meta.ogDescription).toMatch(/^live, (sealbot|Guest [a-z0-9]{4}) to move, 30 s per turn$/);
+        expect(live.meta.ogDescription).toMatch(/^Live; (sealbot|Guest [a-z0-9]{4}) to move; turn clock 30 s$/);
         await arena.app.inject({ method: `POST`, url: logoutPath, cookies: { hexo_arena_session: guest } });
         expect((await shell(`/game/${snapshot.gameId}`)).status).toBe(404);
     });
@@ -169,7 +157,7 @@ describe('the og shell routes', () => {
             .run();
         const done = await shell(`/game/g_done`);
         expect(done.meta.ogTitle).toBe(`beta vs alpha - HeXO Arena`);
-        expect(done.meta.ogDescription).toBe(`alpha won by resignation`);
+        expect(done.meta.ogDescription).toBe(`alpha won; beta resigned`);
         expect((await shell(`/game/g_nothing`)).status).toBe(404);
     });
 });

@@ -1,3 +1,5 @@
+import { text } from '../text';
+
 /** Static placeholder rows while the first load runs; nothing animates on load. */
 export function SkeletonRows() {
     return (
@@ -19,7 +21,7 @@ export function ErrorFrame({ sentence, onRetry }: { sentence: string; onRetry: (
             <h2>{sentence}</h2>
             <div className="actions">
                 <button type="button" className="btn btn-ghost" onClick={onRetry}>
-                    Try again
+                    {text.states.tryAgain}
                 </button>
             </div>
         </div>

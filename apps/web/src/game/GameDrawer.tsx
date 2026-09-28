@@ -2,12 +2,13 @@ import { Fragment, useEffect, useRef, useState, type ReactNode } from 'react';
 import { BoardToggles } from '../board/BoardToggles';
 import { SiteLinks } from '../components/SiteLinks';
 import { Link } from '../router/Link';
+import { text } from '../text';
 import type { Drawer, DrawerTab } from './use-drawer';
 import type { FeedLine } from './snapshot-views';
 
 const tabs: readonly { id: DrawerTab; label: string }[] = [
-    { id: `moves`, label: `Moves` },
-    { id: `game`, label: `Game` },
+    { id: `moves`, label: text.drawer.moves },
+    { id: `game`, label: text.drawer.game },
 ];
 
 /**
@@ -17,11 +18,13 @@ const tabs: readonly { id: DrawerTab; label: string }[] = [
  * A right-hand drawer on wide screens, a bottom sheet on phones whose peek
  * keeps the player's own chip in reach.
  */
-export function GameDrawer({ drawer, feed, facts, running, onResign, peek }: {
+export function GameDrawer({ drawer, feed, facts, running, timed, onResign, peek }: {
     drawer: Drawer;
     feed: readonly FeedLine[];
     facts: readonly (readonly [string, string])[];
     running: boolean;
+    // Whether a clock runs down while nobody moves, as unlimited games have none.
+    timed: boolean;
     // Null for a watcher, whose Game tab carries no play keys and no resign.
     onResign: (() => Promise<boolean>) | null;
     peek: ReactNode;
@@ -65,7 +68,7 @@ export function GameDrawer({ drawer, feed, facts, running, onResign, peek }: {
             id="game-drawer"
             className="drawer"
             data-visible={drawer.visible ? `` : undefined}
-            aria-label="Game panel"
+            aria-label={text.drawer.panel}
             onKeyDown={handleKey}
         >
             {/* the whole peek answers a tap; the handle is its labelled button */}
@@ -75,7 +78,7 @@ export function GameDrawer({ drawer, feed, facts, running, onResign, peek }: {
                     className="sheet-handle"
                     aria-expanded={drawer.visible}
                     aria-controls="drawer-body"
-                    aria-label={drawer.visible ? `Close the game panel` : `Open the game panel`}
+                    aria-label={drawer.visible ? text.drawer.close : text.drawer.open}
                     onClick={(event) => {
                         event.stopPropagation();
                         drawer.toggle();
@@ -85,7 +88,7 @@ export function GameDrawer({ drawer, feed, facts, running, onResign, peek }: {
             </div>
             <div className="drawer-body" id="drawer-body" ref={bodyRef} hidden={!drawer.visible}>
                 <div className="drawer-head">
-                    <div className="drawer-tabs" role="tablist" aria-label="Game panel">
+                    <div className="drawer-tabs" role="tablist" aria-label={text.drawer.panel}>
                         {tabs.map((tab) => (
                             <button
                                 key={tab.id}
@@ -113,11 +116,11 @@ export function GameDrawer({ drawer, feed, facts, running, onResign, peek }: {
                                 drawer.pin(!drawer.pinned);
                             }}
                         >
-                            {drawer.pinned ? `Unpin` : `Pin`}
+                            {drawer.pinned ? text.drawer.unpin : text.drawer.pin}
                         </button>
                     ) : null}
                     {drawer.pinned ? null : (
-                        <button type="button" className="drawer-close" aria-label="Close the game panel" onClick={drawer.hide}>
+                        <button type="button" className="drawer-close" aria-label={text.drawer.close} onClick={drawer.hide}>
                             <svg viewBox="0 0 24 24" aria-hidden="true">
                                 <path d="M6 6l12 12M18 6L6 18" />
                             </svg>
@@ -142,7 +145,7 @@ export function GameDrawer({ drawer, feed, facts, running, onResign, peek }: {
                             <MoveFeed feed={feed} visible={drawer.visible} />
                         </>
                     ) : null}
-                    {drawer.tab === `game` ? <GameFacts facts={facts} running={running} onResign={onResign} /> : null}
+                    {drawer.tab === `game` ? <GameFacts facts={facts} running={running} timed={timed} onResign={onResign} /> : null}
                 </div>
                 {/* under either tab, so a standing link is the drawer and one
                     press away from the board */}
@@ -164,7 +167,7 @@ export function FeedLabel({ line }: { line: FeedLine }) {
     return (
         <>
             <span aria-hidden="true">{line.label}</span>
-            <span className="sr-only">{`${line.spoken},`}</span>
+            <span className="sr-only">{text.drawer.spokenLabel(line.spoken)}</span>
         </>
     );
 }
@@ -205,9 +208,14 @@ function MoveFeed({ feed, visible }: { feed: readonly FeedLine[]; visible: boole
     );
 }
 
-function GameFacts({ facts, running, onResign }: {
+function key(name: string) {
+    return <kbd>{name}</kbd>;
+}
+
+function GameFacts({ facts, running, timed, onResign }: {
     facts: readonly (readonly [string, string])[];
     running: boolean;
+    timed: boolean;
     onResign: (() => Promise<boolean>) | null;
 }) {
     const [armed, setArmed] = useState(false);
@@ -238,31 +246,23 @@ function GameFacts({ facts, running, onResign }: {
                     </div>
                 ))}
             </dl>
-            {playing ? (
-                <p className="note">
-                    <kbd>arrows</kbd> <kbd>q</kbd> <kbd>e</kbd> walk the board, <kbd>enter</kbd> marks a
-                    stone and the second mark plays the turn, <kbd>esc</kbd> clears it, <kbd>m</kbd> opens
-                    this panel.
-                </p>
-            ) : null}
-            {onResign === null ? (
-                <p className="note">
-                    With the board focused, <kbd>arrows</kbd> scroll it; <kbd>m</kbd> opens this panel.
-                </p>
-            ) : null}
+            {playing ? <p className="note">{text.drawer.keys(key)}</p> : null}
+            {onResign === null ? <p className="note">{text.drawer.watchKeys(key)}</p> : null}
             <div className="card-actions">
                 <Link to="/" className="btn btn-ghost">
-                    Leave to the ladder
+                    {text.drawer.leave}
                 </Link>
                 {playing ? (
                     <button type="button" className="btn btn-danger" disabled={resigning} onClick={() => void resign()}>
-                        {armed ? `Confirm resign` : `Resign`}
+                        {armed ? text.drawer.confirmResign : text.drawer.resign}
                     </button>
                 ) : null}
             </div>
+            {/* the exit is where a seated player worries about the game */}
+            {playing && timed ? <p className="note">{text.drawer.leaveNote}</p> : null}
             {playing && failed ? (
                 <p className="hud-note" role="alert">
-                    The resign did not land; try again
+                    {text.drawer.resignFailed}
                 </p>
             ) : null}
         </div>

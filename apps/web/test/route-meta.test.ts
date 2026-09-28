@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
+import { siteName } from '@hexo-arena/contract';
 import { describe, expect, it } from 'vitest';
-import { routeMeta, siteMeta } from '../src/route-meta';
+import { rootMeta, routeMeta } from '../src/route-meta';
 
 const routes = [
     { name: `ladder` },
@@ -24,20 +25,25 @@ describe('routeMeta', () => {
     });
 
     it('keep the site title for the root, with the ladder it shows described', () => {
-        expect(siteMeta.title).toBe(`HeXO Arena - an open ladder for bots and humans`);
-        expect(siteMeta.description).toBe(routeMeta({ name: `ladder` }).description);
+        expect(rootMeta.title).toBe(`HeXO Arena - one ladder for bots and humans`);
+        expect(rootMeta.description).toBe(routeMeta({ name: `ladder` }).description);
     });
 
     it('match the static page, which every route not rendered by the server shows first', () => {
         const page = readFileSync(new URL(`../index.html`, import.meta.url), `utf8`);
-        expect(page).toContain(`<title>${siteMeta.title}</title>`);
-        expect(page).toContain(`<meta property="og:title" content="${siteMeta.title}" />`);
-        expect(page).toContain(`<meta name="description" content="${siteMeta.description}" />`);
-        expect(page).toContain(`<meta property="og:description" content="${siteMeta.description}" />`);
+        expect(page).toContain(`<title>${rootMeta.title}</title>`);
+        expect(page).toContain(`<meta property="og:title" content="${rootMeta.title}" />`);
+        expect(page).toContain(`<meta name="description" content="${rootMeta.description}" />`);
+        expect(page).toContain(`<meta property="og:description" content="${rootMeta.description}" />`);
+        expect(page).toContain(`<meta property="og:site_name" content="${siteName}" />`);
     });
 
-    it('carry the bot name into its title', () => {
-        expect(routeMeta({ name: `bot`, bot: `sealbot` }).title).toBe(`sealbot - HeXO Arena`);
+    it('carry the bot name into its title, and describe a page without data by the site', () => {
+        expect(routeMeta({ name: `bot`, bot: `sealbot` })).toEqual({
+            title: `sealbot - HeXO Arena`,
+            description: `Connect a HeXO bot, or play one in the browser`,
+        });
+        expect(routeMeta({ name: `game`, gameId: `g1` }).description).toBe(rootMeta.description);
     });
 
     it('describe each screen in one line', () => {

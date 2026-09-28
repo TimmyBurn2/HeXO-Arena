@@ -3,6 +3,9 @@ import {
     botTokenPattern,
     isReservedName,
     nameKeyOf,
+    nameMaxLength,
+    nameMinLength,
+    namePattern,
     nameSyntaxSchema,
     reservedNames,
 } from '../src';
@@ -29,6 +32,14 @@ describe('name syntax', () => {
         [`\u00e4b`, false],
     ])(`%j is %j under the name rules`, (name, valid) => {
         expect(nameSyntaxSchema.safeParse(name).success).toBe(valid);
+    });
+});
+
+describe('name lengths', () => {
+    it('accept exactly the stated shortest and longest names', () => {
+        const valid = (length: number) => nameSyntaxSchema.safeParse(`a`.repeat(length)).success;
+        expect([nameMinLength - 1, nameMinLength, nameMaxLength, nameMaxLength + 1].map(valid)).toEqual([false, true, true, false]);
+        expect(namePattern.source).toBe(`^[A-Za-z][A-Za-z0-9_-]{0,28}[A-Za-z0-9]$`);
     });
 });
 

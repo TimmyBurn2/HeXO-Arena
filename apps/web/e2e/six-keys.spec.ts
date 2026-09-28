@@ -69,7 +69,7 @@ test('a watcher\'s board takes no marks and sends no move', async ({ page }) => 
     await page.locator(`svg polygon.cell`).first().waitFor();
     const board = page.locator(`.board-control`);
     await expect(board).toHaveAttribute(`role`, `group`);
-    await expect(board).toHaveAttribute(`aria-label`, /^board, watching /);
+    await expect(board).toHaveAttribute(`aria-label`, /^Board, watching /);
     await page.locator(`svg polygon.cell`).first().click({ force: true });
     await page.keyboard.press(`Enter`);
     await expect(page.locator(`.ring-pending`)).toHaveCount(0);

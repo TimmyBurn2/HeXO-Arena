@@ -345,6 +345,13 @@
         flex-wrap: wrap;
     }
 
+    /* A field's visible name takes its own line above the field. */
+    .field-label {
+        flex-basis: 100%;
+        color: var(--c-text-dim);
+        font-size: var(--text-sm);
+    }
+
     .card-actions {
         display: flex;
         gap: var(--space-3);

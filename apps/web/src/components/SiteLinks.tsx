@@ -1,6 +1,7 @@
 import { Link } from '../router/Link';
 import { usePath } from '../router/use-route';
 import { siteLinks, type SiteLink } from '../site-links';
+import { text } from '../text';
 import './SiteLinks.css';
 
 /**
@@ -40,7 +41,7 @@ function NewTabLink({ link }: { link: SiteLink }) {
             href={link.kind === `page` ? link.to : link.href}
             target="_blank"
             rel="noreferrer"
-            aria-label={`${link.label}, opens in a new tab`}
+            aria-label={text.shell.opensInNewTab(link.label)}
         >
             {link.label}
             <svg className="new-tab-mark" viewBox="0 0 24 24" aria-hidden="true">

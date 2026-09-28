@@ -1,6 +1,7 @@
 import { useSyncExternalStore } from 'react';
 import type { Me } from '@hexo-arena/contract';
 import { fetchMe, signOut, startGuest } from './api/client';
+import { text } from './text';
 
 export type MeState = { status: `loading` } | { status: `ready`; me: Me };
 
@@ -72,5 +73,5 @@ export function useMe(): MeState {
 
 /** The name a person reads for themselves: their account name or guest label. */
 export function selfName(state: MeState): string {
-    return state.status === `ready` && state.me !== null ? state.me.name : `you`;
+    return state.status === `ready` && state.me !== null ? state.me.name : text.game.you;
 }

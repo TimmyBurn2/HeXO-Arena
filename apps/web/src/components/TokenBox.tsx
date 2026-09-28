@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { text } from '../text';
 import './TokenBox.css';
 
 /**
@@ -22,12 +23,10 @@ export function TokenBox({ token }: { token: string }) {
             <div className="token-box">
                 <span className="token-value">{token}</span>
                 <button type="button" className="btn btn-ghost btn-sm" onClick={() => void copy()}>
-                    {copied ? `Copied` : `Copy`}
+                    {copied ? text.bot.token.copied : text.bot.token.copy}
                 </button>
             </div>
-            <p className="warn">
-                The token shows once; if it is lost, rotate it from the bot page.
-            </p>
+            <p className="warn">{text.bot.token.once}</p>
         </>
     );
 }

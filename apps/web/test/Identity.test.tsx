@@ -226,7 +226,7 @@ describe('Identity', () => {
         render(<Identity route={bots} />);
         fireEvent.click(await screen.findByRole(`button`, { name: `tom` }));
         fireEvent.click(screen.getByRole(`button`, { name: `Sign out` }));
-        expect((await screen.findByRole(`alert`)).textContent).toBe(`Sign-out did not reach the server; you are still signed in`);
+        expect((await screen.findByRole(`alert`)).textContent).toBe(`Sign-out did not go through; you are still signed in`);
         expect(panel()).not.toBe(null);
         expect(screen.getByRole(`button`, { name: `Sign out` }).hasAttribute(`disabled`)).toBe(false);
     });

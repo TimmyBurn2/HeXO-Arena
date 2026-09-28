@@ -29,6 +29,8 @@ export interface World {
     stall: boolean;
     // Answer every data read with a 500, for error-state captures.
     broken: boolean;
+    // A module path whose download fails, as a missing page chunk does.
+    unloadable: string | null;
 }
 
 export const leaderboard: LeaderboardEntry[] = [
@@ -294,6 +296,7 @@ export function world(overrides: Partial<World> = {}): World {
         paused: false,
         stall: false,
         broken: false,
+        unloadable: null,
         ...overrides,
     };
 }
@@ -368,6 +371,7 @@ function json(route: Route, status: number, body: unknown): Promise<void> {
 /** Serve the world at the network layer for every API call the page makes. */
 export async function serve(page: Page, state: World): Promise<void> {
     await page.addInitScript(installHeldEventSource);
+    await page.route((url) => url.pathname === state.unloadable, (route) => route.abort());
     await page.route((url) => url.pathname === `/healthz`, (route) =>
         route.fulfill({ status: state.paused ? 503 : 200, contentType: `application/json`, body: `{"ok":true}` }),
     );

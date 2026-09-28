@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { routeMeta, siteMeta } from './route-meta';
+import { rootMeta, routeMeta } from './route-meta';
 import type { Route } from './router/route';
 import { usePath } from './router/use-route';
 
@@ -9,7 +9,7 @@ import { usePath } from './router/use-route';
  * Detail screens pass the fetched headline; nothing else overrides.
  */
 export function useDocumentMeta(route: Route, titleOverride?: string, descriptionOverride?: string): void {
-    const base = usePath() === `/` ? siteMeta : routeMeta(route);
+    const base = usePath() === `/` ? rootMeta : routeMeta(route);
     const title = titleOverride ?? base.title;
     const description = descriptionOverride ?? base.description;
 

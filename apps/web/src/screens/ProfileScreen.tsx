@@ -2,12 +2,13 @@ import { useCallback, useState } from 'react';
 import { botCapPerUser, type GuestMe, type UserMe } from '@hexo-arena/contract';
 import { fetchBots } from '../api/client';
 import { useAsync } from '../api/use-async';
-import { DiscordButton } from '../components/DiscordButton';
+import { DiscordSignIn } from '../components/DiscordButton';
 import { BotBadge, OpenTag, PresenceDot, Rating, provisionalNote } from '../components/player';
 import { ErrorFrame, SkeletonRows } from '../components/states';
 import { meStore, useMe } from '../me';
 import { Link } from '../router/Link';
 import { navigate, useRoute } from '../router/use-route';
+import { text } from '../text';
 import { useDocumentMeta } from '../use-document-meta';
 import './ProfileScreen.css';
 
@@ -18,9 +19,7 @@ export function ProfileScreen() {
 
     return (
         <>
-            <h1 className="screen-title">Profile</h1>
-
-            <h2 className="section-title">Identity</h2>
+            <h1 className="screen-title">{text.profile.title}</h1>
             {state.status === `loading` ? (
                 <SkeletonRows />
             ) : state.me === null ? (
@@ -39,11 +38,11 @@ export function ProfileScreen() {
 function SignedOut() {
     return (
         <div className="card">
-            <p className="note">Discord is the only login; sign in to build a bot.</p>
+            <p className="note">{text.profile.signedOut}</p>
+            <DiscordSignIn />
             <p className="card-actions">
-                <DiscordButton />
                 <Link to="/connect" className="btn btn-ghost">
-                    Build a bot
+                    {text.profile.build}
                 </Link>
             </p>
         </div>
@@ -94,10 +93,10 @@ function UserIdentity({ me }: { me: UserMe }) {
                     <span className="identity-number">
                         <Rating value={me.rating} provisional={me.provisional} />
                     </span>
-                    <span className="note">{me.provisional ? provisionalNote : `Rating`}</span>
+                    <span className="note">{me.provisional ? provisionalNote : text.profile.rating}</span>
                 </span>
             </div>
-            <SignOutButton label="Sign out" failure="Sign-out did not reach the server; you are still signed in" />
+            <SignOutButton label={text.profile.signOut} failure={text.profile.signOutFailed} />
         </div>
     );
 }
@@ -106,15 +105,15 @@ function GuestIdentity({ me }: { me: GuestMe }) {
     return (
         <div className="identity-plate">
             <span className="identity-monogram" aria-hidden="true">
-                g
+                {text.profile.guestMonogram}
             </span>
             <div className="identity-main">
                 <span className="identity-name">{me.name}</span>
-                <span className="note">Guest games are unrated and end with the session.</span>
+                <span className="note">{text.profile.guestNote}</span>
             </div>
-            <div className="card-actions">
-                <DiscordButton />
-                <SignOutButton label="End guest session" failure="The guest session did not end; try again" />
+            <div className="identity-actions">
+                <DiscordSignIn />
+                <SignOutButton label={text.profile.endGuest} failure={text.profile.endGuestFailed} />
             </div>
         </div>
     );
@@ -127,16 +126,14 @@ function YourBots({ owner }: { owner: string }) {
     const { data, error, loading, reload } = useAsync(load);
 
     if (loading && data === null) return <SkeletonRows />;
-    if (error && data === null) return <ErrorFrame sentence="Your bots did not load" onRetry={reload} />;
+    if (error && data === null) return <ErrorFrame sentence={text.profile.botsFailed} onRetry={reload} />;
     const mine = (data ?? []).filter((bot) => bot.ownerName === owner);
 
     return (
         <>
             <div className="section-head">
-                <h2 className="section-title">Your bots</h2>
-                <span className="note">
-                    {String(mine.length)} of {String(botCapPerUser)}
-                </span>
+                <h2 className="section-title">{text.profile.yourBots}</h2>
+                <span className="note">{text.profile.botCount(mine.length)}</span>
             </div>
             <div className="bot-cards">
                 {mine.map((bot) => (
@@ -154,14 +151,11 @@ function YourBots({ owner }: { owner: string }) {
                 ))}
                 {mine.length < botCapPerUser ? (
                     <Link to="/connect" className="bot-card bot-card-new">
-                        <span className="bot-card-name">Create a bot</span>
-                        <span className="note">
-                            {String(botCapPerUser - mine.length)} {botCapPerUser - mine.length === 1 ? `slot` : `slots`} free
-                        </span>
+                        <span className="bot-card-name">{text.profile.build}</span>
                     </Link>
                 ) : null}
             </div>
-            <p className="note">Bots the operator has delisted do not show here, and still count toward the cap.</p>
+            <p className="note">{text.profile.delistedNote}</p>
         </>
     );
 }

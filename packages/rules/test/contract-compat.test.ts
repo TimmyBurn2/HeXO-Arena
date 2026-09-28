@@ -8,6 +8,7 @@ import {
     openingRadius as contractOpeningRadius,
     openingThreatStones,
     openingWindowCells,
+    placementRadius as contractPlacementRadius,
     winLineSchema,
 } from '@hexo-arena/contract';
 import type { Coord, Player, Position, Stone, Win } from '../src';
@@ -20,6 +21,7 @@ import {
     openingRadius,
     openingRegion,
     place,
+    placementRadius,
     winner,
 } from '../src';
 
@@ -83,6 +85,10 @@ describe('contract compatibility', () => {
         });
         expect(wire.player).toBe(0);
         expect(wire.cells.map((cell) => cell.x)).toEqual([0, 1, 2, 3, 4, 5]);
+    });
+
+    it('places within the radius the contract states', () => {
+        expect(placementRadius).toBe(contractPlacementRadius);
     });
 
     it('draws on the region radius the contract states', () => {

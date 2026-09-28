@@ -30,6 +30,7 @@ const { app, admin, drain: drainApp } = await buildApp({
     presence: new PresenceRegistry(),
     watchers: new GameWatchers(),
     adminActor: env.ADMIN_ACTOR,
+    publicOrigin: env.PUBLIC_ORIGIN,
     ...(env.WEB_INDEX_PATH !== `` && { webIndexPath: env.WEB_INDEX_PATH }),
 });
 

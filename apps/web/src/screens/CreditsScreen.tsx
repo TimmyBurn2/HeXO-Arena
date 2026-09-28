@@ -1,135 +1,184 @@
-import { siteName } from '@hexo-arena/contract';
+import { useRef, type ReactNode } from 'react';
 import { ThemeSwatch } from '../board/ThemeSwatch';
 import { useRoute } from '../router/use-route';
-import { themes, type ThemeId } from '../theme/themes';
+import { botApiRepository } from '../site-links';
+import { text } from '../text';
+import { themes } from '../theme/themes';
 import { useDocumentMeta } from '../use-document-meta';
 import './CreditsScreen.css';
 
-// What each look takes and from where, typed over the registry so no
-// theme ships without its line here.
-const origins: Readonly<Record<ThemeId, string>> = {
-    ink: `A navy page and board with bone and cinnabar stones.`,
-    hds: `Named for hexo.did.science. Board and stones from HeXO Renderer's HDS theme; the page from the Tailwind palette.`,
-    htttx: `Named for the HTTTX notation. Board and stones from HeXO Renderer's HTTTX theme; the page derived from them.`,
-    tyto: `Board and stones from HeXO Renderer's Tyto theme; the page from the palette of Tyto's Strix observatory.`,
-    omok: `Board and stones from HeXO Renderer's Omok theme; the page is ${siteName}'s own warm brown.`,
-    six: `Board, stones, and page after the default look of playsix.`,
-};
+const credits = text.credits;
 
-interface Source {
+// The terms each credit is used under: the in-page MIT text, a license
+// file, or a plain statement where nothing is licensed.
+type Terms = { kind: `mit`; copyright: string } | { kind: `file`; label: string; href: string; copyright: string } | { kind: `plain`; label: string };
+
+interface Credit {
     name: string;
-    author: string;
-    repository: string;
-    copyright: string;
-    colors: string;
+    href: string;
+    by: string;
+    gives: ReactNode;
+    terms: Terms;
 }
 
-const sources: readonly Source[] = [
-    {
-        name: `HeXO Renderer`,
-        author: `MineKing`,
-        repository: `https://github.com/MineKing9534/HeXO`,
-        copyright: `Copyright (c) 2026 MineKing`,
-        colors: `the boards and stones of HDS, HTTTX, Tyto, and Omok`,
-    },
-    {
-        name: `Strix`,
-        author: `Tyto (SootyOwl)`,
-        repository: `https://github.com/SootyOwl/hexo-strix`,
-        copyright: `Copyright (c) 2026 SootyOwl`,
-        colors: `the Tyto page`,
-    },
-    {
-        name: `playsix`,
-        author: `CixMango`,
-        repository: `https://github.com/CixMango/Six`,
-        copyright: `Copyright (c) 2026 CixMango`,
-        colors: `the Six theme`,
-    },
-    {
-        name: `Tailwind CSS`,
-        author: `Tailwind Labs`,
-        repository: `https://github.com/tailwindlabs/tailwindcss`,
-        copyright: `Copyright (c) Tailwind Labs, Inc.`,
-        colors: `the HDS page, from its color palette`,
-    },
+const rows = credits.rows;
+
+const themeSources: readonly Credit[] = [
+    { ...rows.renderer, href: `https://github.com/MineKing9534/HeXO`, terms: { kind: `mit`, copyright: rows.renderer.copyright } },
+    { ...rows.strix, href: `https://github.com/SootyOwl/hexo-strix`, terms: { kind: `mit`, copyright: rows.strix.copyright } },
+    { ...rows.playsix, href: `https://github.com/CixMango/Six`, terms: { kind: `mit`, copyright: rows.playsix.copyright } },
+    { ...rows.tailwind, href: `https://github.com/tailwindlabs/tailwindcss`, terms: { kind: `mit`, copyright: rows.tailwind.copyright } },
 ];
 
+const font: Credit = {
+    ...rows.chakra,
+    href: `https://github.com/m4rc1e/Chakra-Petch`,
+    terms: { kind: `file`, label: rows.chakra.terms, href: `/fonts/chakra-petch-OFL.txt`, copyright: rows.chakra.copyright },
+};
+
+const protocol: readonly Credit[] = [
+    {
+        ...rows.htttx,
+        href: `https://github.com/hex-tic-tac-toe/htttx-bot-api`,
+        gives: rows.htttx.gives((words) => <a href={botApiRepository}>{words}</a>),
+        terms: { kind: `mit`, copyright: rows.htttx.copyright },
+    },
+    { ...rows.glicko, href: `http://www.glicko.net/glicko.html`, terms: { kind: `plain`, label: rows.glicko.terms } },
+];
+
+const inspiration: readonly Credit[] = [
+    { ...rows.lichess, href: `https://lichess.org`, terms: { kind: `plain`, label: rows.lichess.terms } },
+];
+
+/**
+ * What the site builds on, one row style throughout: what, who, what it
+ * gives here, and the terms; the themes lead as tiles above their sources.
+ */
 export function CreditsScreen() {
     const route = useRoute();
     useDocumentMeta(route);
+    const license = useRef<HTMLDetailsElement>(null);
+
+    // A link to the license text opens it, since a fragment alone would
+    // land on the closed summary.
+    function openLicense() {
+        if (license.current !== null) license.current.open = true;
+    }
 
     return (
         <>
-            <h1 className="screen-title">Credits</h1>
-            <p className="credits-lead">
-                Ink is {siteName}'s own look. The other five themes take their colors from the projects below,
-                credited with thanks.
-            </p>
+            <h1 className="screen-title">{credits.title}</h1>
 
-            <h2 className="section-title">Themes</h2>
-            <ul className="credit-list">
-                {themes.map((theme) => (
-                    <li key={theme.id} className="credit-theme">
-                        <ThemeSwatch theme={theme.id} />
-                        <div>
-                            <h3 className="credit-name">{theme.label}</h3>
-                            <p className="credit-line">{origins[theme.id]}</p>
-                        </div>
-                    </li>
-                ))}
-            </ul>
-
-            <h2 className="section-title">Sources</h2>
-            <ul className="credit-list">
-                {sources.map((source) => (
-                    <li key={source.name}>
-                        <h3 className="credit-name">
-                            <a href={source.repository} rel="noreferrer">
-                                {source.name}
-                            </a>
-                        </h3>
-                        <p className="credit-line">
-                            By {source.author}. Colors for {source.colors}.
-                        </p>
-                        <p className="credit-line">MIT License, {source.copyright}</p>
-                    </li>
-                ))}
-            </ul>
-
-            <h2 className="section-title">Palettes, not code</h2>
-            <p className="credits-prose">
-                Each community theme reuses a color palette and a name, and nothing else: no code, fonts, sounds,
-                images, or logos come from these projects. The colors stay as their sources wrote them; where a
-                theme needed a shade its source lacks, it is derived from the source's own.
-            </p>
-            <details className="credits-license">
-                <summary>The MIT License, under which all four sources are published</summary>
-                <p>
-                    Permission is hereby granted, free of charge, to any person obtaining a copy of this software
-                    and associated documentation files (the "Software"), to deal in the Software without
-                    restriction, including without limitation the rights to use, copy, modify, merge, publish,
-                    distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the
-                    Software is furnished to do so, subject to the following conditions:
+            <section className="credits-section" aria-labelledby="credits-game">
+                <h2 id="credits-game" className="section-title">
+                    {credits.game}
+                </h2>
+                <p className="credits-prose">
+                    {credits.gameAbout(
+                        (words) => (
+                            <strong>{words}</strong>
+                        ),
+                        (words) => <a href="https://hexo.did.science">{words}</a>,
+                    )}
                 </p>
-                <p>
-                    The above copyright notice and this permission notice shall be included in all copies or
-                    substantial portions of the Software.
-                </p>
-                <p>
-                    THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING
-                    BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
-                    NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM,
-                    DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-                    OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
-                </p>
-            </details>
+                <p className="credits-prose">{credits.gameIndependent}</p>
+            </section>
 
-            <h2 className="section-title">Discord</h2>
-            <p className="credits-prose">
-                The Discord symbol on the sign-in button is Discord's own, shown unaltered as Discord's brand
-                guidelines allow. {siteName} is not made by or affiliated with Discord.
-            </p>
+            <section className="credits-section" aria-labelledby="credits-themes">
+                <h2 id="credits-themes" className="section-title">
+                    {credits.themes}
+                </h2>
+                <ul className="theme-row">
+                    {themes.map((theme) => (
+                        <li key={theme.id} className="theme-tile">
+                            <ThemeSwatch theme={theme.id} />
+                            <span className="theme-tile-name">{theme.label}</span>
+                        </li>
+                    ))}
+                </ul>
+                <p className="credits-prose">{credits.themesLead}</p>
+                <CreditRows credits={themeSources} onLicense={openLicense} />
+                <p className="credits-small">{credits.themesSmall}</p>
+                <details className="credits-license" id="mit" ref={license}>
+                    <summary>{credits.mitSummary}</summary>
+                    {credits.mitText.map((paragraph) => (
+                        <p key={paragraph}>{paragraph}</p>
+                    ))}
+                </details>
+            </section>
+
+            <section className="credits-section" aria-labelledby="credits-font">
+                <h2 id="credits-font" className="section-title">
+                    {credits.font}
+                </h2>
+                <CreditRows credits={[font]} onLicense={openLicense} />
+            </section>
+
+            <section className="credits-section" aria-labelledby="credits-protocol">
+                <h2 id="credits-protocol" className="section-title">
+                    {credits.protocol}
+                </h2>
+                <CreditRows credits={protocol} onLicense={openLicense} />
+            </section>
+
+            <section className="credits-section" aria-labelledby="credits-inspiration">
+                <h2 id="credits-inspiration" className="section-title">
+                    {credits.inspiration}
+                </h2>
+                <CreditRows credits={inspiration} onLicense={openLicense} />
+                <p className="credits-small">{credits.inspirationSmall}</p>
+            </section>
+
+            <section className="credits-section" aria-labelledby="credits-discord">
+                <h2 id="credits-discord" className="section-title">
+                    {credits.discord}
+                </h2>
+                <p className="credits-prose">{credits.discordProse}</p>
+            </section>
         </>
     );
+}
+
+function CreditRows({ credits: list, onLicense }: { credits: readonly Credit[]; onLicense: () => void }) {
+    return (
+        <ul className="credit-rows">
+            {list.map((credit) => (
+                <li key={credit.name} className="credit-row">
+                    <div className="credit-who">
+                        <a href={credit.href} rel="noreferrer">
+                            {credit.name}
+                        </a>
+                        <span className="credit-by">{credit.by}</span>
+                    </div>
+                    <p className="credit-for">{credit.gives}</p>
+                    <div className="credit-terms">
+                        <CreditTerms terms={credit.terms} onLicense={onLicense} />
+                    </div>
+                </li>
+            ))}
+        </ul>
+    );
+}
+
+function CreditTerms({ terms, onLicense }: { terms: Terms; onLicense: () => void }) {
+    switch (terms.kind) {
+        case `mit`:
+            return (
+                <>
+                    <a href="#mit" onClick={onLicense}>
+                        {credits.mit}
+                    </a>
+                    <span className="credit-copy">{terms.copyright}</span>
+                </>
+            );
+        case `file`:
+            return (
+                <>
+                    <a href={terms.href}>{terms.label}</a>
+                    <span className="credit-copy">{terms.copyright}</span>
+                </>
+            );
+        case `plain`:
+            return <span className="credit-plain">{terms.label}</span>;
+    }
 }

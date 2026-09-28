@@ -25,21 +25,42 @@ const screens: readonly { name: string; path: string }[] = [
 // The screen matrix jumps from phone to tablet; the band between is where
 // the nav links return beside the gear and who is here, so it is swept
 // closely, from the narrowest phone out to the desktop widths, on every
-// framed screen.
-const widths = [320, 360, 481, 513, 520, 528, 529, 560, 600, 640, 641, 700, 767, 768, 1024, 1280];
+// framed screen, with the edges where the mark comes and goes.
+const widths = [320, 336, 337, 360, 480, 481, 513, 520, 528, 529, 560, 600, 640, 641, 700, 767, 768, 1024, 1280];
 
 async function barFits(page: Page, width: number, signedIn: boolean): Promise<void> {
     const who = signedIn ? page.locator(`header button.identity`) : page.locator(`header`).getByRole(`link`, { name: `Sign in with Discord` });
     const whoBox = await who.boundingBox();
     expect(whoBox === null ? Infinity : whoBox.x + whoBox.width).toBeLessThanOrEqual(width);
-    // The wordmark keeps one line and clears whatever stands to its right.
+    // The wordmark keeps one line and clears whatever stands to its right;
+    // the lines are its text's, since the mark beside it stands taller.
     const brand = await page.locator(`header .brand`).evaluate((element) => {
         const range = document.createRange();
         range.selectNodeContents(element);
-        const rects = [...range.getClientRects()];
-        return { lines: new Set(rects.map((rect) => Math.round(rect.top))).size, right: range.getBoundingClientRect().right };
+        const words = document.createRange();
+        const name = [...element.childNodes].find((node) => node.nodeType === Node.TEXT_NODE);
+        if (name !== undefined) words.selectNodeContents(name);
+        const rects = [...words.getClientRects()];
+        const text = words.getBoundingClientRect();
+        return {
+            lines: new Set(rects.map((rect) => Math.round(rect.top))).size,
+            right: range.getBoundingClientRect().right,
+            left: text.left,
+            middle: text.top + text.height / 2,
+        };
     });
     expect(brand.lines).toBe(1);
+    // The mark shows where the row has room for it: above 40rem, and on
+    // phones from 21rem to 30rem, where the nav links move to the tab bar;
+    // it stands before the name, centered on its line.
+    const shown = width > 640 || (width > 336 && width <= 480);
+    const mark = page.locator(`header .brand-mark`);
+    await expect(mark).toBeVisible({ visible: shown });
+    if (shown) {
+        const box = await mark.boundingBox();
+        expect(box === null ? Infinity : box.x + box.width).toBeLessThanOrEqual(brand.left);
+        expect(Math.abs((box === null ? Infinity : box.y + box.height / 2) - brand.middle)).toBeLessThanOrEqual(1);
+    }
     const beside = page.locator(`.nav-links .nav-link, .nav-right`);
     for (const element of await beside.all()) {
         if (!(await element.isVisible())) continue;

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { ApiError, deleteBot, rotateBotToken } from '../api/client';
 import { navigate } from '../router/use-route';
+import { text } from '../text';
 import { TokenBox } from './TokenBox';
 import './OwnerPanel.css';
 
@@ -13,7 +14,7 @@ export function OwnerPanel({ bot }: { bot: string }) {
     return (
         <section className="owner-panel card" aria-labelledby="owner-title">
             <h2 id="owner-title" className="owner-title">
-                Yours to run
+                {text.bot.owner.title}
             </h2>
             <RotateToken bot={bot} />
             <DeleteBot bot={bot} />
@@ -38,7 +39,7 @@ function RotateToken({ bot }: { bot: string }) {
             setToken((await rotateBotToken(bot)).token);
             setArmed(false);
         } catch {
-            setFailure(`The token did not rotate; the old one still works`);
+            setFailure(text.bot.owner.rotateFailed);
         }
         setSending(false);
     }
@@ -46,14 +47,12 @@ function RotateToken({ bot }: { bot: string }) {
     return (
         <div className="owner-row">
             <div className="owner-text">
-                <h3>Token</h3>
-                <p className="note">
-                    A new token stops the old one at once; the running bot needs the new one to connect again.
-                </p>
+                <h3>{text.bot.owner.token}</h3>
+                <p className="note">{text.bot.owner.tokenNote}</p>
             </div>
             {token === null ? (
                 <button type="button" className="btn btn-ghost" disabled={sending} onClick={() => void rotate()}>
-                    {armed ? `Rotate now; the old token dies` : `Rotate token`}
+                    {armed ? text.bot.owner.rotateArmed : text.bot.owner.rotate}
                 </button>
             ) : (
                 <div className="owner-token">
@@ -84,8 +83,8 @@ function DeleteBot({ bot }: { bot: string }) {
         } catch (cause) {
             setFailure(
                 cause instanceof ApiError && cause.code === `in_game`
-                    ? `${bot} is in a game; finish or resign it first`
-                    : `${bot} was not deleted; try again`,
+                    ? text.bot.owner.inGame(bot)
+                    : text.bot.owner.deleteFailed(bot),
             );
             setSending(false);
         }
@@ -94,10 +93,8 @@ function DeleteBot({ bot }: { bot: string }) {
     return (
         <div className="owner-row">
             <div className="owner-text">
-                <h3>Delete</h3>
-                <p className="note">
-                    Rated games stay in the record under a placeholder name; a bot with none frees its name.
-                </p>
+                <h3>{text.bot.owner.delete}</h3>
+                <p className="note">{text.bot.owner.deleteNote}</p>
             </div>
             <form
                 className="name-field"
@@ -106,18 +103,20 @@ function DeleteBot({ bot }: { bot: string }) {
                     if (confirmed) void remove();
                 }}
             >
+                <label className="field-label" htmlFor="delete-confirm">
+                    {text.bot.owner.confirmName(bot)}
+                </label>
                 <input
+                    id="delete-confirm"
                     type="text"
                     value={typed}
-                    aria-label={`type ${bot} to confirm`}
-                    placeholder={bot}
                     autoComplete="off"
                     onChange={(event) => {
                         setTyped(event.target.value);
                     }}
                 />
                 <button type="submit" className="btn btn-danger" disabled={!confirmed || sending}>
-                    Delete {bot}
+                    {text.bot.owner.deleteBot(bot)}
                 </button>
             </form>
             {failure === null ? null : (

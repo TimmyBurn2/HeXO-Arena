@@ -154,9 +154,8 @@ describe('AppShell', () => {
         vi.stubGlobal(`fetch`, vi.fn(() => Promise.resolve(new Response(null, { status: 503 }))));
         window.history.replaceState(null, ``, `/`);
         render(<AppShell />);
-        await waitFor(() => {
-            expect(screen.getByRole(`status`).textContent).toBe(`Starting games is paused; live games continue`);
-        });
+        const line = await screen.findByText(`Starting games is paused; live games continue`);
+        expect(line.closest(`[role="status"]`)).toBeTruthy();
     });
 
     it('title the document per route', async () => {
@@ -176,8 +175,17 @@ describe('AppShell', () => {
         });
         navigate(`/`);
         await waitFor(() => {
-            expect(document.title).toBe(`HeXO Arena - an open ladder for bots and humans`);
+            expect(document.title).toBe(`HeXO Arena - one ladder for bots and humans`);
         });
+    });
+
+    it('show the mark beside the wordmark without adding to the home link\'s name', () => {
+        stubHealthOk();
+        window.history.replaceState(null, ``, `/ladder`);
+        render(<AppShell />);
+        const home = screen.getByRole(`link`, { name: `HeXO Arena` });
+        expect(home.querySelector(`svg.brand-mark`)?.getAttribute(`aria-hidden`)).toBe(`true`);
+        expect(home.textContent).toBe(`HeXO Arena`);
     });
 
     it('offer a skip link to the main landmark', () => {
@@ -194,13 +202,13 @@ describe('AppShell', () => {
         window.history.replaceState(null, ``, `/`);
         render(<AppShell />);
         await waitFor(() => {
-            expect(document.title).toBe(`HeXO Arena - an open ladder for bots and humans`);
+            expect(document.title).toBe(`HeXO Arena - one ladder for bots and humans`);
         });
         expect(document.querySelector(`meta[property="og:title"]`)?.getAttribute(`content`)).toBe(
-            `HeXO Arena - an open ladder for bots and humans`,
+            `HeXO Arena - one ladder for bots and humans`,
         );
         expect(document.querySelector(`meta[property="og:description"]`)?.getAttribute(`content`)).toBe(
-            `connect a bot or play in the browser; one rating for every player`,
+            `Connect a HeXO bot, or play one in the browser`,
         );
     });
 
@@ -214,7 +222,7 @@ describe('AppShell', () => {
                 expect(document.querySelector(`footer.site-footer`)).toBeTruthy();
             });
             const footer = document.querySelector(`footer.site-footer`) as HTMLElement;
-            expect(footer.querySelector(`.site-tagline`)?.textContent).toBe(`HeXO Arena, an open ladder for bots and humans`);
+            expect(footer.querySelector(`.site-tagline`)?.textContent).toBe(`HeXO Arena, one ladder for bots and humans`);
             expect([...footer.querySelectorAll(`a`)].map((a) => [a.textContent, a.getAttribute(`href`), a.getAttribute(`target`)])).toEqual([
                 [`Credits`, `/credits`, null],
                 [`Bot API`, `https://github.com/TimmyBurn2/Hexo-Bot-Api`, null],
@@ -271,6 +279,50 @@ describe('AppShell', () => {
             expect(screen.getByRole(`heading`, { level: 1, name: `Bots` })).toBeTruthy();
         });
         expect(document.querySelector(`header.topbar`)).toBeTruthy();
+    });
+
+    it('say why a sign-in failed once, then drop the reason from the address', async () => {
+        stubHealthOk();
+        meStore.reset();
+        meStore.start();
+        window.history.replaceState(null, ``, `/?signin=expired&keep=1#top`);
+        render(<AppShell />);
+        const banner = await screen.findByText(`That sign-in expired; sign in again`);
+        expect(banner.closest(`[role="status"]`)).toBeTruthy();
+        expect(window.location.search).toBe(`?keep=1`);
+        expect(window.location.hash).toBe(`#top`);
+        navigate(`/bots`);
+        await waitFor(() => {
+            expect(screen.queryByText(`That sign-in expired; sign in again`)).toBe(null);
+        });
+    });
+
+    it('add a sign-in failure line into a live region already on the page, so it is announced', async () => {
+        stubHealthOk();
+        window.history.replaceState(null, ``, `/?signin=expired`);
+        const added: Node[] = [];
+        const observer = new MutationObserver((records) => {
+            for (const record of records) {
+                if (record.target instanceof Element && record.target.getAttribute(`role`) === `status`) added.push(...record.addedNodes);
+            }
+        });
+        observer.observe(document.body, { childList: true, subtree: true });
+        render(<AppShell />);
+        const line = await screen.findByText(`That sign-in expired; sign in again`);
+        const pending = observer.takeRecords();
+        observer.disconnect();
+        for (const record of pending) {
+            if (record.target instanceof Element && record.target.getAttribute(`role`) === `status`) added.push(...record.addedNodes);
+        }
+        expect(added.some((node) => node.contains(line))).toBe(true);
+    });
+
+    it('ignore a sign-in reason it does not know, and still drop it', () => {
+        stubHealthOk();
+        window.history.replaceState(null, ``, `/?signin=eaten`);
+        render(<AppShell />);
+        expect(document.querySelector(`.site-banner`)).toBe(null);
+        expect(window.location.search).toBe(``);
     });
 
     it('drop the site chrome and the gear on the immersive game route', async () => {

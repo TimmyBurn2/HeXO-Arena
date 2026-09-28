@@ -1,3 +1,5 @@
+import { text } from './text';
+
 /** The Hexo-Bot-Api repository: the bot API's spec, its examples, and the readme. */
 export const botApiRepository = `https://github.com/TimmyBurn2/Hexo-Bot-Api`;
 
@@ -9,6 +11,6 @@ export type SiteLink = { kind: `page`; label: string; to: string } | { kind: `ex
  * in its drawer; a new standing link is one more row.
  */
 export const siteLinks: readonly SiteLink[] = [
-    { kind: `page`, label: `Credits`, to: `/credits` },
-    { kind: `external`, label: `Bot API`, href: botApiRepository },
+    { kind: `page`, label: text.shell.links.credits, to: `/credits` },
+    { kind: `external`, label: text.shell.links.botApi, href: botApiRepository },
 ];

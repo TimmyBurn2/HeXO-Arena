@@ -80,6 +80,7 @@ export async function createTestApp(options?: {
         presence,
         watchers,
         adminActor: `operator`,
+        publicOrigin: `https://arena.example`,
         ...(options?.random !== undefined && { random: options.random }),
         ...(options?.logger !== undefined && { logger: options.logger }),
         ...(options?.webIndexPath !== undefined && { webIndexPath: options.webIndexPath }),

@@ -28,11 +28,11 @@ describe('GET /api/auth/discord/login', () => {
         await app.close();
     });
 
-    it('answers 503 when discord credentials are absent', async () => {
+    it('sends the visitor home with the reason when discord credentials are absent', async () => {
         const { app } = await createTestApp({ discord: null });
         const response = await app.inject({ method: 'GET', url: discordLoginPath });
-        expect(response.statusCode).toBe(503);
-        expect(response.json()).toMatchObject({ code: `oauth_unconfigured` });
+        expect(response.statusCode).toBe(302);
+        expect(response.headers.location).toBe(`/?signin=unconfigured`);
         await app.close();
     });
 });
@@ -75,29 +75,51 @@ describe('GET /api/auth/discord/callback', () => {
         await app.close();
     });
 
-    it('rejects an unknown state', async () => {
+    it('sends an unknown state home as expired, without a session', async () => {
         const { app } = await createTestApp();
         const response = await app.inject({
             method: 'GET',
             url: `${discordCallbackPath}?code=abc&state=never-issued`,
         });
-        expect(response.statusCode).toBe(400);
-        expect(response.json()).toMatchObject({ code: `bad_state` });
+        expect(response.statusCode).toBe(302);
+        expect(response.headers.location).toBe(`/?signin=expired`);
+        expect(response.headers[`set-cookie`]).toBeUndefined();
         await app.close();
     });
 
-    it('rejects a replayed state', async () => {
+    it('sends a replayed state home as expired', async () => {
         const { app } = await createTestApp();
         const state = await loginOnce(app);
         const url = `${discordCallbackPath}?code=abc&state=${encodeURIComponent(state)}`;
         await app.inject({ method: 'GET', url });
         const replay = await app.inject({ method: 'GET', url });
-        expect(replay.statusCode).toBe(400);
-        expect(replay.json()).toMatchObject({ code: `bad_state` });
+        expect(replay.statusCode).toBe(302);
+        expect(replay.headers.location).toBe(`/?signin=expired`);
         await app.close();
     });
 
-    it('answers 502 when discord rejects the exchange', async () => {
+    it('sends a visitor who cancelled at discord home as cancelled', async () => {
+        const { app } = await createTestApp();
+        const state = await loginOnce(app);
+        const response = await app.inject({
+            method: 'GET',
+            url: `${discordCallbackPath}?error=access_denied&state=${encodeURIComponent(state)}`,
+        });
+        expect(response.statusCode).toBe(302);
+        expect(response.headers.location).toBe(`/?signin=cancelled`);
+        expect(response.headers[`set-cookie`]).toBeUndefined();
+        await app.close();
+    });
+
+    it('sends the visitor home with the reason when discord credentials are absent', async () => {
+        const { app } = await createTestApp({ discord: null });
+        const response = await app.inject({ method: 'GET', url: `${discordCallbackPath}?code=abc&state=x` });
+        expect(response.statusCode).toBe(302);
+        expect(response.headers.location).toBe(`/?signin=unconfigured`);
+        await app.close();
+    });
+
+    it('sends the visitor home as rejected when discord refuses the exchange', async () => {
         const { app } = await createTestApp({
             discord: {
                 authorizeUrl: (state: string) => `https://discord.example/authorize?state=${state}`,
@@ -109,8 +131,9 @@ describe('GET /api/auth/discord/callback', () => {
             method: 'GET',
             url: `${discordCallbackPath}?code=abc&state=${encodeURIComponent(state)}`,
         });
-        expect(response.statusCode).toBe(502);
-        expect(response.json()).toMatchObject({ code: `discord_error` });
+        expect(response.statusCode).toBe(302);
+        expect(response.headers.location).toBe(`/?signin=rejected`);
+        expect(response.headers[`set-cookie`]).toBeUndefined();
         await app.close();
     });
 

@@ -1,111 +1,29 @@
 import {
+    botMeta,
+    gameMeta,
+    ladderMeta,
     nameKeyOf,
     nameSyntaxSchema,
-    siteName,
-    siteTagline,
-    type FinishReason,
-    type TimeControl,
+    notFoundMeta,
+    siteMeta,
+    type PageMeta,
+    type Roster,
 } from '@hexo-arena/contract';
 import type { FastifyInstance, FastifyReply } from 'fastify';
 import { readFile } from 'node:fs/promises';
 import { listBots } from './bots';
 import type { Query } from './db';
 import type { GameRegistry } from './game-registry';
-import type { GameHeadline } from './game-store';
 import type { PresenceRegistry } from './presence';
 import { isProvisional } from './rating';
 import { rankablePlayers } from './rating-store';
-
-export interface ShellMeta {
-    readonly title: string;
-    readonly description: string;
-}
 
 export interface OgShellDeps {
     query: Query;
     presence: PresenceRegistry;
     games: GameRegistry;
     indexPath: string;
-}
-
-export const notFoundMeta: ShellMeta = { title: `Not found - ${siteName}`, description: `that page does not exist` };
-
-const aboutExcerptLength = 120;
-
-const reasonNouns: Record<FinishReason, string> = {
-    'six-in-a-row': `six in a row`,
-    timeout: `timeout`,
-    surrender: `resignation`,
-    disconnect: `disconnect`,
-    terminated: `termination`,
-    aborted: `abort`,
-};
-
-function plural(count: number, noun: string): string {
-    return `${String(count)} ${noun}${count === 1 ? `` : `s`}`;
-}
-
-function durationWords(ms: number): string {
-    return ms % 60_000 === 0 ? `${String(ms / 60_000)} min` : `${String(ms / 1000)} s`;
-}
-
-function clockWords(timeControl: TimeControl): string {
-    switch (timeControl.mode) {
-        case `turn`:
-            return `${durationWords(timeControl.turnTimeMs)} per turn`;
-        case `match`:
-            return `${durationWords(timeControl.mainTimeMs)} + ${durationWords(timeControl.incrementMs)}`;
-        case `unlimited`:
-            return `no clock`;
-    }
-}
-
-// The root keeps the site's own title whatever screen it shows.
-const siteTitle = `${siteName} - ${siteTagline}`;
-
-export function ladderMeta(listed: number, online: number, leader: { name: string; rating: number } | undefined): ShellMeta {
-    const board = leader === undefined ? `` : `; top rated: ${leader.name} (${String(Math.round(leader.rating))})`;
-    return {
-        title: `Ladder - ${siteName}`,
-        description: `${plural(listed, `bot`)} listed, ${String(online)} online${board}`,
-    };
-}
-
-export function botMeta(bot: {
-    name: string;
-    ownerName: string;
-    rating: number;
-    provisional: boolean;
-    online: boolean;
-    about?: string;
-}): ShellMeta {
-    const rated = `rated ${String(bot.rating)}${bot.provisional ? `, provisional` : ``}`;
-    const about =
-        bot.about === undefined
-            ? ``
-            : `: ${bot.about.length > aboutExcerptLength ? `${bot.about.slice(0, aboutExcerptLength)}...` : bot.about}`;
-    return {
-        title: `${bot.name} - ${siteName}`,
-        description: `HeXO bot by ${bot.ownerName}, ${rated}, ${bot.online ? `online now` : `offline`}${about}`,
-    };
-}
-
-export function gameMeta(headline: GameHeadline): ShellMeta {
-    const title = `${headline.names.x} vs ${headline.names.o} - ${siteName}`;
-    if (headline.status === `live`) {
-        return {
-            title,
-            description: `live, ${headline.names[headline.toMove]} to move, ${clockWords(headline.timeControl)}`,
-        };
-    }
-    const noun = reasonNouns[headline.reason];
-    return {
-        title,
-        description:
-            headline.winner === null
-                ? `nobody won, ended by ${noun}`
-                : `${headline.names[headline.winner]} won by ${noun}`,
-    };
+    publicOrigin: string;
 }
 
 function escapeHtml(text: string): string {
@@ -125,18 +43,25 @@ function replaceOnce(html: string, pattern: RegExp, replacement: string): string
     return html.replace(pattern, () => replacement);
 }
 
-/** The shell with its title, description, and og tags set from the meta. */
-export function renderShell(template: string, meta: ShellMeta): string {
+/**
+ * The shell with its title, description, and og tags set from the meta,
+ * and its preview image on the public origin, since a preview needs an
+ * absolute address and the page's own is a path.
+ */
+export function renderShell(template: string, meta: PageMeta, publicOrigin: string): string {
     const title = escapeHtml(meta.title);
     const description = escapeHtml(meta.description);
     let html = replaceOnce(template, /<title>[^<]*<\/title>/, `<title>${title}</title>`);
     html = replaceOnce(html, /<meta name="description" content="[^"]*"\s*\/?>/, `<meta name="description" content="${description}" />`);
     html = replaceOnce(html, /<meta property="og:title" content="[^"]*"\s*\/?>/, `<meta property="og:title" content="${title}" />`);
-    return replaceOnce(
+    html = replaceOnce(
         html,
         /<meta property="og:description" content="[^"]*"\s*\/?>/,
         `<meta property="og:description" content="${description}" />`,
     );
+    const image = /<meta property="og:image" content="(\/[^"]*)"\s*\/?>/;
+    const path = image.exec(html)?.[1] ?? ``;
+    return replaceOnce(html, image, `<meta property="og:image" content="${escapeHtml(publicOrigin + path)}" />`);
 }
 
 /**
@@ -145,26 +70,29 @@ export function renderShell(template: string, meta: ShellMeta): string {
  * so a front-end redeploy never meets a shell naming assets it removed.
  */
 export function registerOgShell(app: FastifyInstance, deps: OgShellDeps): void {
-    const { query, presence, games, indexPath } = deps;
+    const { query, presence, games, indexPath, publicOrigin } = deps;
 
-    async function sendShell(reply: FastifyReply, status: 200 | 404, meta: ShellMeta): Promise<FastifyReply> {
+    async function sendShell(reply: FastifyReply, status: 200 | 404, meta: PageMeta): Promise<FastifyReply> {
         const template = await readFile(indexPath, `utf8`);
         return reply
             .code(status)
             .header(`content-type`, `text/html; charset=utf-8`)
             .header(`cache-control`, `no-cache`)
-            .send(renderShell(template, meta));
+            .send(renderShell(template, meta, publicOrigin));
     }
 
-    function currentLadderMeta(): ShellMeta {
+    function roster(): Roster {
         const listed = listBots(query);
-        const online = listed.filter((bot) => presence.isOnline(bot.id)).length;
-        return ladderMeta(listed.length, online, rankablePlayers(query, `all`)[0]);
+        return {
+            listed: listed.length,
+            online: listed.filter((bot) => presence.isOnline(bot.id)).length,
+            leader: rankablePlayers(query, `all`)[0],
+        };
     }
 
-    app.get(`/`, async (_request, reply) => sendShell(reply, 200, { ...currentLadderMeta(), title: siteTitle }));
+    app.get(`/`, async (_request, reply) => sendShell(reply, 200, siteMeta(roster())));
 
-    app.get(`/ladder`, async (_request, reply) => sendShell(reply, 200, currentLadderMeta()));
+    app.get(`/ladder`, async (_request, reply) => sendShell(reply, 200, ladderMeta(roster())));
 
     app.get<{ Params: { name: string } }>(`/bots/:name`, async (request, reply) => {
         const { name } = request.params;
@@ -182,7 +110,8 @@ export function registerOgShell(app: FastifyInstance, deps: OgShellDeps): void {
                 rating: Math.round(bot.rating.rating),
                 provisional: isProvisional(bot.rating),
                 online: presence.isOnline(bot.id),
-                ...(bot.about !== undefined && { about: bot.about }),
+                openForChallenges: presence.isOpenForChallenges(bot.id),
+                about: bot.about,
             }),
         );
     });

@@ -16,7 +16,7 @@
         "e2e": "pnpm --filter @hexo-arena/web e2e",
         "typecheck": "pnpm -r --if-present typecheck",
         "lint": "eslint .",
-        "check": "pnpm typecheck && pnpm lint && node scripts/check-planning-refs.mjs && node scripts/check-ui-literals.mjs && node scripts/check-contrast.mjs",
+        "check": "pnpm typecheck && pnpm lint && node scripts/check-planning-refs.mjs && node scripts/check-ui-literals.mjs && node scripts/check-ui-text.mjs && node scripts/check-contrast.mjs",
         "openapi": "pnpm --filter @hexo-arena/contract generate",
         "spec:export": "pnpm --filter @hexo-arena/contract spec:export"
     },

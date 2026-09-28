@@ -71,6 +71,12 @@ describe('BotScreen', () => {
         expect(repo?.querySelectorAll(`wbr`)).toHaveLength(2);
         const play = screen.getByRole(`button`, { name: `Play sealbot` });
         expect(play.hasAttribute(`disabled`)).toBe(false);
+        await waitFor(() => {
+            expect(document.title).toBe(`sealbot - HeXO Arena`);
+        });
+        expect(document.querySelector(`meta[name="description"]`)?.getAttribute(`content`)).toBe(
+            `HeXO bot by tom, rated 1712, online and open for challenges. A clean-room HeXO engine with a rotation opener.`,
+        );
     });
 
     it('match the name on the case-insensitive fold', async () => {
@@ -91,9 +97,10 @@ describe('BotScreen', () => {
         const bare = { ...sealbot, about: undefined, version: undefined, repoUrl: undefined, accepts: undefined };
         stubDirectory([bare]);
         render(<BotScreen name="sealbot" />);
-        expect(await screen.findByText(`Accepts nothing yet.`)).toBeTruthy();
+        // The card and the reason beside the disabled button say it the same way.
+        await screen.findByText(`Nothing yet`, { selector: `.card .note` });
         expect(document.querySelector(`.btn-primary`)?.hasAttribute(`disabled`)).toBe(true);
-        expect(screen.getByText(`Accepts no clock yet`)).toBeTruthy();
+        expect(screen.getByText(`Accepts nothing yet`, { selector: `.play-reason` })).toBeTruthy();
     });
 
     it('mark provisional ratings', async () => {
@@ -107,6 +114,9 @@ describe('BotScreen', () => {
         render(<BotScreen name="driftwood" />);
         expect(await screen.findByText(`No bot named driftwood`)).toBeTruthy();
         expect(screen.getByRole(`link`, { name: `Browse bots` }).getAttribute(`href`)).toBe(`/bots`);
+        await waitFor(() => {
+            expect(document.title).toBe(`Not found - HeXO Arena`);
+        });
     });
 
     it('open the play dialog from the play button', async () => {
@@ -135,11 +145,11 @@ describe('BotScreen', () => {
         await waitFor(() => {
             expect(meStore.read().status).toBe(`ready`);
         });
-        expect(screen.queryByRole(`heading`, { name: `Yours to run` })).toBe(null);
+        expect(screen.queryByRole(`heading`, { name: `Owner tools` })).toBe(null);
         cleanup();
         serveAs(`tom`, []);
         render(<BotScreen name="sealbot" />);
-        expect(await screen.findByRole(`heading`, { name: `Yours to run` })).toBeTruthy();
+        expect(await screen.findByRole(`heading`, { name: `Owner tools` })).toBeTruthy();
     });
 
     it('rotate the token only on the second click and show the new one once', async () => {
@@ -148,9 +158,17 @@ describe('BotScreen', () => {
         render(<BotScreen name="sealbot" />);
         fireEvent.click(await screen.findByRole(`button`, { name: `Rotate token` }));
         expect(writes).toEqual([]);
-        fireEvent.click(screen.getByRole(`button`, { name: `Rotate now; the old token dies` }));
+        fireEvent.click(screen.getByRole(`button`, { name: `Rotate; the old token stops now` }));
         expect(await screen.findByText(`hxo_${`c`.repeat(43)}`)).toBeTruthy();
         expect(writes).toEqual([{ method: `POST`, url: `/api/bots/sealbot/token` }]);
+    });
+
+    it('name the delete confirmation with a label on screen', async () => {
+        serveAs(`tom`, []);
+        render(<BotScreen name="sealbot" />);
+        const field = await screen.findByRole(`textbox`, { name: `Type sealbot to confirm` });
+        expect(document.querySelector(`label[for="${field.id}"]`)?.textContent).toBe(`Type sealbot to confirm`);
+        expect(field.getAttribute(`aria-label`)).toBe(null);
     });
 
     it('delete only after the name is typed, and explain a seated bot', async () => {
@@ -159,10 +177,10 @@ describe('BotScreen', () => {
         render(<BotScreen name="sealbot" />);
         const remove = await screen.findByRole(`button`, { name: `Delete sealbot` });
         expect(remove.hasAttribute(`disabled`)).toBe(true);
-        fireEvent.change(screen.getByRole(`textbox`, { name: `type sealbot to confirm` }), { target: { value: `sealbot` } });
+        fireEvent.change(screen.getByRole(`textbox`, { name: `Type sealbot to confirm` }), { target: { value: `sealbot` } });
         expect(remove.hasAttribute(`disabled`)).toBe(false);
         fireEvent.click(remove);
-        expect(await screen.findByText(`sealbot is in a game; finish or resign it first`)).toBeTruthy();
+        expect(await screen.findByText(`sealbot is in a game; delete it once the game ends`)).toBeTruthy();
         expect(writes).toEqual([{ method: `DELETE`, url: `/api/bots/sealbot` }]);
     });
 

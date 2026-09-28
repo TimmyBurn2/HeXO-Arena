@@ -25,6 +25,7 @@ describe('GameBoard', () => {
                 lastMove={[]}
                 winLine={[]}
                 yourMove
+                finished={false}
                 idleLabel="game finished"
                 onCommit={async (pair) => {
                     commits.push(pair);
@@ -62,6 +63,7 @@ describe('GameBoard', () => {
                 lastMove={[]}
                 winLine={[]}
                 yourMove
+                finished={false}
                 idleLabel="game finished"
                 onCommit={async (pair) => {
                     commits.push(pair);
@@ -89,6 +91,7 @@ describe('GameBoard', () => {
                 lastMove={[]}
                 winLine={[]}
                 yourMove
+                finished={false}
                 idleLabel="game finished"
                 onCommit={async (pair) => {
                     commits.push(pair);
@@ -120,6 +123,7 @@ describe('GameBoard', () => {
                 lastMove={[]}
                 winLine={[]}
                 yourMove
+                finished={false}
                 idleLabel="game finished"
                 onCommit={async () => {
             await Promise.resolve();
@@ -143,6 +147,7 @@ describe('GameBoard', () => {
                 lastMove={[]}
                 winLine={[]}
                 yourMove={false}
+                finished={false}
                 idleLabel="waiting for hextide"
                 onCommit={async () => {
             await Promise.resolve();
@@ -158,7 +163,27 @@ describe('GameBoard', () => {
         expect(document.querySelector(`polygon.ring-pending`)).toBe(null);
         expect(document.querySelector(`svg[data-marks]`)).toBe(null);
         expect(document.querySelector(`polygon.cell[data-x="10"][data-y="0"]`)).toBe(null);
-        expect(control.getAttribute(`aria-label`)).toBe(`board, waiting for hextide`);
+        expect(control.getAttribute(`aria-label`)).toBe(`Board, waiting for hextide`);
+    });
+
+    it('count one placed stone in the singular', () => {
+        render(
+            <GameBoard
+                stones={[{ x: 0, y: 0, side: `x`, number: 1 }]}
+                position={{ stones: [{ x: 0, y: 0, player: 0 }] }}
+                you="o"
+                lastMove={[]}
+                winLine={[]}
+                yourMove={false}
+                finished={false}
+                idleLabel="waiting for hextide"
+                onCommit={async () => {
+                    await Promise.resolve();
+                    return true;
+                }}
+            />,
+        );
+        expect(document.querySelector(`svg.board-svg`)?.getAttribute(`aria-label`)).toBe(`Game board, 1 stone placed`);
     });
 
     it('stop the keyboard focus at the frontier edge', () => {
@@ -170,6 +195,7 @@ describe('GameBoard', () => {
                 lastMove={[]}
                 winLine={[]}
                 yourMove
+                finished={false}
                 idleLabel="game finished"
                 onCommit={() => Promise.resolve(true)}
             />,
