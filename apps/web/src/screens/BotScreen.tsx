@@ -9,6 +9,7 @@ import { useMe } from '../me';
 import { coveredModes, PlayDialog, turnWindowOf } from '../components/PlayDialog';
 import { ErrorFrame, SkeletonRows } from '../components/states';
 import { Link } from '../router/Link';
+import { botApiRepository } from '../site-links';
 import { useRoute } from '../router/use-route';
 import { text } from '../text';
 import { useDocumentMeta } from '../use-document-meta';
@@ -96,7 +97,15 @@ function BotProfile({ bot }: { bot: BotListing }) {
                         {text.bot.accepts}
                     </h2>
                     {bot.accepts === undefined ? (
-                        <p className="note">{text.bot.acceptsNothing}</p>
+                        <p className="note">
+                            {owned
+                                ? text.bot.acceptsNothingOwner((words) => (
+                                      <a href={botApiRepository} rel="noreferrer" target="_blank">
+                                          {words}
+                                      </a>
+                                  ))
+                                : text.bot.acceptsNothing}
+                        </p>
                     ) : (
                         <dl className="kv">
                             <dt>{text.bot.turnClock}</dt>

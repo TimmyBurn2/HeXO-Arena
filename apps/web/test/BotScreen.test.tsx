@@ -1,8 +1,9 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { meStore } from '../src/me';
 import { BotScreen } from '../src/screens/BotScreen';
+import { botApiRepository } from '../src/site-links';
 
 const sealbot = {
     name: `sealbot`,
@@ -75,7 +76,7 @@ describe('BotScreen', () => {
             expect(document.title).toBe(`sealbot - HeXO Arena`);
         });
         expect(document.querySelector(`meta[name="description"]`)?.getAttribute(`content`)).toBe(
-            `HeXO bot by tom, rated 1712, online and open for challenges. A clean-room HeXO engine with a rotation opener.`,
+            `HeXO bot by tom, rated 1712, online and open for challenges. A clean-room HeXO engine with a rotation opener`,
         );
     });
 
@@ -101,6 +102,22 @@ describe('BotScreen', () => {
         await screen.findByText(`Nothing yet`, { selector: `.card .note` });
         expect(document.querySelector(`.btn-primary`)?.hasAttribute(`disabled`)).toBe(true);
         expect(screen.getByText(`Accepts nothing yet`, { selector: `.play-reason` })).toBeTruthy();
+    });
+
+    it('show the owner of a bot that accepts nothing where that is set', async () => {
+        const bare = { ...sealbot, accepts: undefined };
+        vi.stubGlobal(
+            `fetch`,
+            vi.fn((url: string) =>
+                Promise.resolve(new Response(JSON.stringify(url === `/api/me` ? { kind: `user`, name: `tom`, rating: 1503, provisional: false } : [bare]))),
+            ),
+        );
+        meStore.reset();
+        meStore.start();
+        render(<BotScreen name="sealbot" />);
+        const note = await screen.findByText(/^Nothing yet; your bot lists/u, { selector: `.card .note` });
+        expect(note.textContent).toBe(`Nothing yet; your bot lists the clocks it accepts through the Bot API.`);
+        expect(within(note).getByRole(`link`, { name: `Bot API` }).getAttribute(`href`)).toBe(botApiRepository);
     });
 
     it('mark provisional ratings', async () => {

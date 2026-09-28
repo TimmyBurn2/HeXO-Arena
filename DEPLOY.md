@@ -5,7 +5,7 @@ pulled image plus Caddy.
 
 | service | role |
 |---|---|
-| `app` | the server and the og shell for `/`, `/ladder`, `/bots/*`, `/game/*`; on an internal network with no route out |
+| `app` | the server and the og shell for every page of the site; on an internal network with no route out |
 | `egress` | CONNECT-only forward proxy; the app's only way out, to `discord.com:443` alone |
 | `web` | one-shot copy of the static site into the volume Caddy serves |
 | `caddy` | TLS, the static site, and the proxy to the API and the shell routes |
@@ -21,8 +21,12 @@ tagged `sha-<commit>` and `latest`.
   compose file are silently ignored.
 - The rootless user may bind 80 and 443:
   `net.ipv4.ip_unprivileged_port_start=80` in the host sysctl.
-- Pull access to the GHCR package: public, or `docker login ghcr.io` with a
-  token holding `read:packages`.
+- Pull access to the GHCR package, which stays private: `docker login ghcr.io`
+  with a token holding `read:packages`. A public image would hand out the
+  GPL-licensed programs of its Debian base, and with them the duty to offer
+  their source. The package's page on GitHub, under the owner's Packages
+  tab, shows its visibility beside its name, and its Package settings
+  change it under Danger Zone; check it after CI's first push.
 - A Discord application whose OAuth redirect is
   `https://<domain>/api/auth/discord/callback`.
 
@@ -48,10 +52,11 @@ project and prefixes the volume names (`hexo-arena_data`, `hexo-arena_backup`).
 
 ```
 ~/hexo-arena/
-  compose.yml       copy of docker/prod/compose.yml
-  Caddyfile         copy of docker/prod/Caddyfile
-  .env              compose interpolation, 0600
-  hexo-arena.env    app settings and secrets, 0600
+  compose.yml         copy of docker/prod/compose.yml
+  Caddyfile           copy of docker/prod/Caddyfile
+  .env                compose interpolation, 0600
+  hexo-arena.env      app settings and secrets, 0600
+  legal-details.json  the operator's legal details, 0644
 ```
 
 `.env`:
@@ -81,6 +86,40 @@ Never set `DEV_LOGIN` or `DEV_FAST_STOP`: in production any value refuses the bo
 ```sh
 chmod 0600 .env hexo-arena.env
 ```
+
+### Legal details
+
+`legal-details.json` holds what the imprint and the privacy policy name:
+
+- the operator: name, postal address lines, a contact email a person reads,
+  and optionally a Discord handle;
+- the host: name, address lines, and where the server stands;
+- the supervisory authority: name, address lines, and web address;
+- optionally the provider of the contact mailbox: name and address lines.
+
+Start from `apps/server/legal-details.example.json` in the repository and
+replace every `<...>` value.
+The file never enters the repository; `.gitignore` and `.dockerignore`
+exclude its name.
+
+The compose file mounts it read-only at `/etc/hexo-arena/legal-details.json`,
+where the image's `LEGAL_DETAILS_PATH` points, and does not start the app
+without it.
+Caddy mounts the same file at the same path and answers the details read
+from it while the app is down or restarting, so the legal pages keep naming
+the operator.
+A production boot refuses a file it cannot read, one that does not match the
+schema, and one where any value still holds `<` or `>`; the log names the key,
+never the value.
+Every value shows on the public legal pages, so the file holds no secret, and
+the app's and Caddy's uids must read it:
+
+```sh
+chmod 0644 legal-details.json
+```
+
+The app reads the file once at boot; after an edit, `docker compose restart app`.
+Caddy reads it on each request it answers, so it needs no restart.
 
 ## Deploy
 
@@ -123,11 +162,30 @@ The app writes `VACUUM INTO` snapshots nightly at `BACKUP_HOUR_UTC` into the
 `BACKUP_KEEP`.
 Never copy the live database file: a WAL database copied mid-write tears.
 
-Copy the backups off the box regularly:
+The privacy policy promises that deleted data leaves every backup within
+14 days, so keep `BACKUP_KEEP` at 14 or less.
+The app prunes only when it writes the next backup; while it is stopped,
+delete snapshots older than 14 days by hand:
 
 ```sh
-docker compose cp app:/backup ./backup-copy
+docker compose run --rm --no-deps app find /backup -name 'hexo-arena-*.sqlite' -mtime +13 -delete
 ```
+
+Copies off the box are encrypted, hold one night's snapshot each, and are kept
+14 days at most.
+For example, with an age key whose private half stays off the box:
+
+```sh
+latest=$(docker compose exec -T app sh -c 'ls /backup/hexo-arena-*.sqlite | tail -n 1')
+docker compose cp "app:$latest" ./latest.sqlite
+age -r <age public key> -o "$(basename "$latest").age" latest.sqlite
+rm latest.sqlite
+# move the .age file off the box, then there:
+find <off-box directory> -name 'hexo-arena-*.sqlite.age' -mtime +13 -delete
+```
+
+Host backup tools and the provider's server snapshots are copies too: exclude
+the Docker volumes from them, or keep what holds the volumes 14 days at most.
 
 ### Restore
 
@@ -143,7 +201,9 @@ docker compose start app
 docker compose exec app hexo-arena-admin status
 ```
 
-To restore a copy kept off the box, first place it with
+To restore a copy kept off the box, first decrypt it
+(`age -d -i <age key file> -o hexo-arena-YYYY-MM-DD.sqlite hexo-arena-YYYY-MM-DD.sqlite.age`),
+then place the snapshot with
 `docker compose cp ./hexo-arena-YYYY-MM-DD.sqlite app:/backup/`.
 The boot aborts, unrated, any game the snapshot caught live.
 The pause flag is part of the snapshot, so check `status`.
@@ -288,6 +348,11 @@ TLS and proxying:
 - [ ] `curl -s https://<domain>/bots/<bot name> | grep og:description`
   shows the bot's owner and rating; with the app stopped the same URL still
   answers the static shell.
+- [ ] `https://<domain>/legal/imprint` shows the operator's name, address, and
+  email, and `https://<domain>/legal/privacy` the host, server location, and
+  authority, with no `<` placeholder anywhere.
+- [ ] With the app stopped, `curl -s -o /dev/null -w '%{http_code}' https://<domain>/api/legal`
+  still prints `200`, and the imprint still names the operator.
 
 Drain and backup:
 

@@ -31,7 +31,7 @@ describe('ConnectScreen', () => {
         const signIn = screen.getByRole(`link`, { name: `Sign in with Discord` });
         expect(signIn.getAttribute(`href`)).toBe(`/api/auth/discord/login`);
         expect(signIn.classList.contains(`discord-button`)).toBe(true);
-        expect(screen.getByText(`Discord shares your username only; no email.`)).toBeTruthy();
+        expect(screen.getByText((_content, element) => element?.matches(`.discord-sign-in .note`) === true && element.textContent === `By signing in you accept the Terms. HeXO Arena keeps only your Discord user ID and a public name made from your username, never your email; see\u00a0Privacy.`)).toBeTruthy();
         expect(screen.getByRole(`link`, { name: /simple_bot\.py/ }).getAttribute(`href`)).toContain(
             `github.com/TimmyBurn2/Hexo-Bot-Api`,
         );

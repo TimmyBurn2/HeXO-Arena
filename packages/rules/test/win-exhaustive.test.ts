@@ -1,3 +1,4 @@
+import { isDeepStrictEqual } from 'node:util';
 import { describe, expect, it } from 'vitest';
 import type { Coord, Player, Stone } from '../src';
 import { winner } from '../src';
@@ -116,7 +117,11 @@ describe('win detection, exhaustive per axis', () => {
                         }
                     }
                     const got = winner({ stones: [...others, last] });
-                    expect(got).toEqual(expectedWinner(cells, states, lastIdx));
+                    const expected = expectedWinner(cells, states, lastIdx);
+                    // An expect costs four times the engine call over some
+                    // 100,000 cases, so it runs only where the plain
+                    // comparison disagrees, and then fails with its diff.
+                    if (!isDeepStrictEqual(got, expected)) expect(got).toEqual(expected);
                 }
             }
         });

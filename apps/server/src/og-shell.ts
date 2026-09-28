@@ -1,10 +1,17 @@
 import {
     botMeta,
+    botsMeta,
+    connectMeta,
+    creditsMeta,
     gameMeta,
     ladderMeta,
+    legalPageMeta,
+    legalPagePath,
+    legalPages,
     nameKeyOf,
     nameSyntaxSchema,
     notFoundMeta,
+    profileMeta,
     siteMeta,
     type PageMeta,
     type Roster,
@@ -64,10 +71,27 @@ export function renderShell(template: string, meta: PageMeta, publicOrigin: stri
     return replaceOnce(html, image, `<meta property="og:image" content="${escapeHtml(publicOrigin + path)}" />`);
 }
 
+// Pages whose meta needs no data, each at its own path.
+const fixedPages: readonly (readonly [string, PageMeta])[] = [
+    [`/bots`, botsMeta],
+    [`/connect`, connectMeta],
+    [`/profile`, profileMeta],
+    [`/credits`, creditsMeta],
+    ...legalPages.map((page) => [legalPagePath(page), legalPageMeta[page]] as const),
+];
+
 /**
- * Serves the SPA shell for the routes a pasted link previews, with meta
- * from live data. The template is read per request from the deployed site,
- * so a front-end redeploy never meets a shell naming assets it removed.
+ * Every route the shell answers, in the order the proxy lists them: every
+ * page of the site, so a pasted link to any of them previews with an
+ * absolute image.
+ */
+export const shellRoutes: readonly string[] = [`/`, `/ladder`, `/bots/:name`, `/game/:gameId`, ...fixedPages.map(([path]) => path)];
+
+/**
+ * Serves the SPA shell for every page of the site, with meta from live
+ * data where a page has any. The template is read per request from the
+ * deployed site, so a front-end redeploy never meets a shell naming assets
+ * it removed.
  */
 export function registerOgShell(app: FastifyInstance, deps: OgShellDeps): void {
     const { query, presence, games, indexPath, publicOrigin } = deps;
@@ -93,6 +117,10 @@ export function registerOgShell(app: FastifyInstance, deps: OgShellDeps): void {
     app.get(`/`, async (_request, reply) => sendShell(reply, 200, siteMeta(roster())));
 
     app.get(`/ladder`, async (_request, reply) => sendShell(reply, 200, ladderMeta(roster())));
+
+    for (const [path, meta] of fixedPages) {
+        app.get(path, async (_request, reply) => sendShell(reply, 200, meta));
+    }
 
     app.get<{ Params: { name: string } }>(`/bots/:name`, async (request, reply) => {
         const { name } = request.params;

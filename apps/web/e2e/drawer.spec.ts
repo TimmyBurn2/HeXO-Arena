@@ -79,6 +79,11 @@ for (const who of [{ name: `seated`, me: undefined }, { name: `watching`, me: nu
         await expect(page.getByRole(`tab`)).toHaveText([`Moves`, `Game`]);
         const numbers = page.getByRole(`switch`, { name: `Stone numbers` });
         await expect(numbers).toBeVisible();
+        // The sheet rises by a transform, which leaves fractions in a box
+        // read mid-way, so the row is measured once the sheet is up.
+        await page.locator(`#drawer-body`).evaluate(async (body) => {
+            await Promise.all(body.getAnimations({ subtree: true }).map(async (animation) => animation.finished));
+        });
         const row = await page.locator(`.moves-head .checkline`).first().boundingBox();
         expect(row === null ? 0 : row.height).toBeGreaterThanOrEqual(44);
         await page.locator(`.moves-head .checkline`).first().click();
@@ -91,13 +96,39 @@ for (const who of [{ name: `seated`, me: undefined }, { name: `watching`, me: nu
     });
 }
 
+// Large text on a short phone fills the sheet with its head and foot, yet
+// every standing and legal link can still be brought into view.
+test('every link of the sheet foot comes into view on a 320 by 568 phone at 175 and 200% text', async ({ page }) => {
+    await page.setViewportSize({ width: 320, height: 568 });
+    await serve(page, world());
+    await page.goto(`/game/long`);
+    await page.locator(`svg polygon.cell`).first().waitFor();
+    const devtools = await page.context().newCDPSession(page);
+    await page.locator(`.sheet-handle`).click();
+    await expect(page.locator(`#drawer-body`)).toHaveCSS(`overflow-y`, `auto`);
+    for (const size of [28, 32]) {
+        await devtools.send(`Page.setFontSizes`, { fontSizes: { standard: size } });
+        for (const link of await page.locator(`#drawer-body .drawer-foot a`).all()) {
+            // As the keyboard reaches it: focus scrolls the sheet to it.
+            await link.focus();
+            await expect(link).toBeInViewport({ ratio: 1 });
+            const ring = await link.evaluate((element) => {
+                const style = getComputedStyle(element);
+                const reach = parseFloat(style.outlineWidth) + parseFloat(style.outlineOffset);
+                return element.getBoundingClientRect().bottom + reach;
+            });
+            expect(ring).toBeLessThanOrEqual(568);
+        }
+    }
+});
+
 // Any standing link is two presses from the board: open the drawer, pick
 // the link, which opens beside the game rather than over it.
 for (const layout of [
     { name: `a drawer`, width: 1280, height: 900, open: `#drawer-toggle` },
     { name: `a phone sheet at half`, width: 390, height: 844, open: `.sheet-handle` },
 ]) {
-    test(`the standing links sit two presses from the board in ${layout.name}, under either tab`, async ({ page, context }) => {
+    test(`the standing and legal links sit two presses from the board in ${layout.name}, under either tab`, async ({ page, context }) => {
         await page.setViewportSize({ width: layout.width, height: layout.height });
         await serve(page, world());
         await page.goto(`/game/long`);
@@ -106,10 +137,34 @@ for (const layout of [
         const foot = page.locator(`#drawer-body .drawer-foot`);
         for (const tab of [`Moves`, `Game`]) {
             await page.getByRole(`tab`, { name: tab }).click();
-            for (const name of [`Credits, opens in a new tab`, `Bot API, opens in a new tab`]) {
+            for (const name of [
+                `Credits, opens in a new tab`,
+                `Bot API, opens in a new tab`,
+                `Impressum / Legal notice, opens in a new tab`,
+                `Privacy, opens in a new tab`,
+                `Terms, opens in a new tab`,
+                `Licenses, opens in a new tab`,
+            ]) {
                 await expect(foot.getByRole(`link`, { name })).toBeInViewport({ ratio: 1 });
             }
         }
+        // The legal links are small print, two to a row.
+        const legal = await foot.locator(`.legal-links a`).evaluateAll((links) =>
+            links.map((link) => {
+                const style = getComputedStyle(link);
+                const probe = document.createElement(`span`);
+                probe.style.color = `var(--c-text-dim)`;
+                link.after(probe);
+                const dim = getComputedStyle(probe).color;
+                probe.remove();
+                const box = link.getBoundingClientRect();
+                return { dim: style.color === dim, weight: style.fontWeight, left: Math.round(box.left), top: Math.round(box.top) };
+            }),
+        );
+        expect(legal.every((link) => link.dim && link.weight === `400`)).toBe(true);
+        expect(legal.map((link) => link.left)).toEqual(legal.map((_link, index) => legal[index % 2]?.left));
+        expect(legal.map((link) => link.top)).toEqual(legal.map((_link, index) => legal[index - (index % 2)]?.top));
+        expect(legal[2]?.top).toBeGreaterThan(legal[0]?.top ?? Infinity);
         // The new tab has no mocked world; its reads stop at the browser.
         await context.route((url) => url.pathname.startsWith(`/api/`) || url.pathname === `/healthz`, (route) => route.abort());
         const opened = context.waitForEvent(`page`);
@@ -117,6 +172,30 @@ for (const layout of [
         const credits = await opened;
         await credits.waitForLoadState();
         expect(new URL(credits.url()).pathname).toBe(`/credits`);
+        const openedNotice = context.waitForEvent(`page`);
+        await foot.getByRole(`link`, { name: `Impressum / Legal notice, opens in a new tab` }).click();
+        const notice = await openedNotice;
+        await notice.waitForLoadState();
+        expect(new URL(notice.url()).pathname).toBe(`/legal/imprint`);
         expect(new URL(page.url()).pathname).toBe(`/game/long`);
     });
 }
+
+// Large text on a narrow phone leaves no room for two legal labels side by
+// side, so they stand one to a row and none runs past the window.
+test('the drawer foot keeps every link inside a 320 px phone at 175 and 200% text', async ({ page }) => {
+    await page.setViewportSize({ width: 320, height: 640 });
+    await serve(page, world());
+    await page.goto(`/game/long`);
+    await page.locator(`svg polygon.cell`).first().waitFor();
+    const devtools = await page.context().newCDPSession(page);
+    for (const size of [28, 32]) {
+        await devtools.send(`Page.setFontSizes`, { fontSizes: { standard: size } });
+        if ((await page.locator(`#drawer-body:not([hidden])`).count()) === 0) await page.locator(`.sheet-handle`).click();
+        const foot = page.locator(`#drawer-body .drawer-foot`);
+        await foot.waitFor();
+        const rights = await foot.locator(`a`).evaluateAll((links) => links.map((link) => link.getBoundingClientRect().right));
+        expect(rights.length).toBe(6);
+        for (const right of rights) expect(right).toBeLessThanOrEqual(320);
+    }
+});

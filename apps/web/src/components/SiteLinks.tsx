@@ -1,18 +1,18 @@
 import { Link } from '../router/Link';
 import { usePath } from '../router/use-route';
-import { siteLinks, type SiteLink } from '../site-links';
+import type { SiteLink } from '../site-links';
 import { text } from '../text';
 import './SiteLinks.css';
 
 /**
- * The site's standing links as a list.
+ * One group of the site's standing links as a list.
  * From a game each opens in a new tab and its name says so, so a seated
  * player never leaves a running clock.
  */
-export function SiteLinks({ open }: { open: `here` | `new-tab` }) {
+export function SiteLinks({ links, open, className }: { links: readonly SiteLink[]; open: `here` | `new-tab`; className?: string }) {
     return (
-        <ul className="site-links">
-            {siteLinks.map((link) => (
+        <ul className={className === undefined ? `site-links` : `site-links ${className}`}>
+            {links.map((link) => (
                 <li key={link.label}>{open === `here` ? <HereLink link={link} /> : <NewTabLink link={link} />}</li>
             ))}
         </ul>

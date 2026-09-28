@@ -1,5 +1,12 @@
 HeXO Arena
 
+HeXO Arena's own code is published under the MIT License in LICENSE. The
+Chakra Petch font in apps/web/public/fonts is licensed under the SIL Open
+Font License 1.1 instead, as its entry below says.
+
+HeXO Arena builds on the works below; the MIT License text of the
+MIT-licensed ones closes this file.
+
 Five of HeXO Arena's board themes take their color palettes, and only their
 palettes, from the MIT-licensed projects below. No code, fonts, sounds,
 images, or logos are copied from them.
@@ -20,7 +27,30 @@ Tailwind CSS, for the HDS page's color palette
 https://github.com/tailwindlabs/tailwindcss
 Copyright (c) Tailwind Labs, Inc.
 
-Each is published under the MIT License:
+The engine session every bot speaks follows the htttx bot protocol; the
+contract mirrors its schemas' field names and bounds, and the Bot API copies
+its schema block verbatim. It is published under the MIT License.
+htttx-bot-api
+https://github.com/hex-tic-tac-toe/htttx-bot-api
+Copyright (c) 2026 hex-tic-tac-toe
+
+The rating system is Glicko-2, the published method of Mark Glickman.
+https://www.glicko.net/glicko/glicko2.pdf
+
+How the site works, the rating settings, and the name rule take ideas and
+parameter values from lichess; no code is copied from it.
+https://lichess.org
+
+The wordmark font is a subset of Chakra Petch, published under the SIL Open
+Font License 1.1 and outside this repository's license; the license text is
+apps/web/public/fonts/chakra-petch-OFL.txt.
+https://github.com/m4rc1e/Chakra-Petch
+Copyright 2018 The Chakra Petch Project Authors
+
+The Discord symbol on the sign-in button belongs to Discord and is shown
+unaltered under Discord's brand guidelines.
+
+The MIT License, under which the MIT-licensed works above are published:
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -39,6 +69,3 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
-
-The Discord symbol on the sign-in button belongs to Discord and is shown
-unaltered under Discord's brand guidelines.

@@ -135,12 +135,20 @@ local `pnpm dev`.
 | `recompute-ratings [--exclude <gameId\|name>]...` | re-fold every rating from the game log; excluded games are voided for good |
 
 Every mutation takes `--reason` and writes an audit row. Deleting a bot,
-by its owner or through `delete-user`, keeps a bot with rated games under a
-placeholder with its name still reserved, and deletes a bot without them
-outright, freeing the name.
+by its owner or through `delete-user`, keeps a bot that has a game with a
+winner under a placeholder with its name still reserved, and deletes a bot
+without one outright, freeing the name.
 
 ## Rules
 
-HeXO is GPLv3; no HeXO code is copied into this repo. Game rules are
-re-implemented clean-room and differentially tested against HeXO as the
-oracle. License for this repo is decided at publication.
+HeXO is GPLv3; no HeXO code is copied into this repository. HeXO's rules
+are reimplemented independently. Behavior was derived from HeXO's rules, its
+observed behavior, and reading its source for reference, and is checked
+against a local HeXO checkout used only as a test oracle.
+
+HeXO Arena is not affiliated with the HeXO project.
+
+## License
+
+MIT, in `LICENSE`. The Chakra Petch font is under the SIL Open Font License
+1.1; third-party notices are in `NOTICE`.

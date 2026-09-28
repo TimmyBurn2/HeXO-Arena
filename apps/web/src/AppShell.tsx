@@ -38,6 +38,10 @@ const CreditsScreen = lazy(async () => {
     const module = await loadScreen(async () => import(`./screens/CreditsScreen`));
     return { default: module.CreditsScreen };
 });
+const LegalScreen = lazy(async () => {
+    const module = await loadScreen(async () => import(`./screens/LegalScreen`));
+    return { default: module.LegalScreen };
+});
 const GameScreen = lazy(async () => {
     const module = await loadScreen(async () => import(`./screens/GameScreen`));
     return { default: module.GameScreen };
@@ -196,6 +200,8 @@ function RouteView({ route }: { route: Route }) {
             return <ProfileScreen />;
         case `credits`:
             return <CreditsScreen />;
+        case `legal`:
+            return <LegalScreen page={route.page} />;
         case `game`:
             return <GameScreen gameId={route.gameId} />;
         case `not-found`:

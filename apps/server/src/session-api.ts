@@ -4,6 +4,7 @@ import {
     logoutPath,
     mePath,
     sessionCookieName,
+    sessionMaxAgeSeconds,
     type GuestMe,
     type Me,
 } from '@hexo-arena/contract';
@@ -12,7 +13,7 @@ import type { Query } from './db';
 import type { Person } from './game-registry';
 import type { GuestSessions } from './guests';
 import { streamPlayerOf } from './rating-store';
-import { deleteSession, findSessionUser, sessionCookieMaxAge } from './sessions';
+import { deleteSession, findSessionUser } from './sessions';
 
 export interface SessionApiDeps {
     query: Query;
@@ -30,7 +31,7 @@ export function setSessionCookie(reply: FastifyReply, token: string, secure: boo
         httpOnly: true,
         sameSite: `lax`,
         secure,
-        ...(life === `account` && { maxAge: sessionCookieMaxAge }),
+        ...(life === `account` && { maxAge: sessionMaxAgeSeconds }),
     });
 }
 

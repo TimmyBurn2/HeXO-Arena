@@ -74,19 +74,17 @@ for (const width of [320, 360, 390]) {
     }
 }
 
+// Each result is a test of its own: every one needs a page load, and seven
+// loads in one test outlast the test budget on a loaded machine.
 for (const width of [320, 344, 390]) {
     for (const [who, players, me] of seats) {
-        test(`the raised sheet shows the whole result at ${String(width)} px, ${who}`, async ({ page }) => {
-            await page.setViewportSize({ width, height: 800 });
-            const finished = world().games.finished;
-            if (finished === undefined) throw new Error(`no finished game in the world`);
-            await serveGames(
-                page,
-                Object.fromEntries(results.map(([winner, reason], index) => [`r${String(index)}`, { ...finished, gameId: `r${String(index)}`, players, winner, reason }])),
-                me,
-            );
-            for (let id = 0; id < results.length; id += 1) {
-                await page.goto(`/game/r${String(id)}`);
+        for (const [winner, reason] of results) {
+            test(`the raised sheet shows the whole result at ${String(width)} px, ${who}, ${reason}, ${winner === null ? `no winner` : `${winner} won`}`, async ({ page }) => {
+                await page.setViewportSize({ width, height: 800 });
+                const finished = world().games.finished;
+                if (finished?.status !== `finished`) throw new Error(`no finished game in the world`);
+                await serveGames(page, { result: { ...finished, gameId: `result`, players, winner, reason } }, me);
+                await page.goto(`/game/result`);
                 const sentence = await page.locator(`.hud-bottom-center .hud-result`).innerText();
                 await page.locator(`.hud-bottom-center`).getByRole(`button`, { name: `Moves` }).click();
                 const peek = page.locator(`.peek-result`);
@@ -147,7 +145,7 @@ for (const width of [320, 344, 390]) {
                     });
                     expect(lines).toBe(1);
                 }
-            }
-        });
+            });
+        }
     }
 }

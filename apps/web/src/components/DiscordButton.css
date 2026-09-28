@@ -16,6 +16,15 @@
         color: var(--c-on-discord);
     }
 
+    /* The top bar's button wears the link's face and nothing of its own. */
+    button.discord-button {
+        padding: 0;
+        border: none;
+        background: none;
+        font-family: inherit;
+        cursor: pointer;
+    }
+
     .discord-face {
         display: inline-flex;
         align-items: center;
@@ -26,7 +35,8 @@
         transition: background var(--dur-fast) var(--ease);
     }
 
-    .discord-button:hover .discord-face {
+    .discord-button:hover .discord-face,
+    .discord-button[aria-expanded='true'] .discord-face {
         background: var(--c-discord-hover);
     }
 
@@ -53,6 +63,19 @@
         visibility: visible;
     }
 
+    /* Forced colors paint the face and the ring away, so focus shows as a
+       system outline and the symbol takes the link's text color. */
+    @media (forced-colors: active) {
+        .discord-button:focus-visible {
+            outline: var(--focus-w) solid Highlight;
+            outline-offset: var(--focus-w);
+        }
+
+        .discord-symbol {
+            fill: currentColor;
+        }
+    }
+
     .discord-sign-in {
         display: flex;
         flex-wrap: wrap;
@@ -61,7 +84,10 @@
         margin: var(--space-4) 0;
     }
 
+    /* Beside the button on a wide row, the notice still wraps at a reading
+       length. */
     .discord-sign-in .note {
+        max-width: var(--measure);
         margin: 0;
     }
 }

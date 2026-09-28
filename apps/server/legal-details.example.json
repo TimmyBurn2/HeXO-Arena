@@ -1,0 +1,22 @@
+{
+    "operator": {
+        "name": "<operator name>",
+        "addressLines": ["<street and number>", "<postcode and city>", "<country>"],
+        "email": "<contact>@<domain>",
+        "discord": "<discord handle>"
+    },
+    "host": {
+        "name": "<hosting company>",
+        "addressLines": ["<street and number>", "<postcode and city>", "<country>"],
+        "serverLocation": "<city and country of the server>"
+    },
+    "supervisoryAuthority": {
+        "name": "<data protection authority>",
+        "addressLines": ["<street and number>", "<postcode and city>", "<country>"],
+        "url": "https://<authority-domain>/"
+    },
+    "mailProvider": {
+        "name": "<mail provider>",
+        "addressLines": ["<street and number>", "<postcode and city>", "<country>"]
+    }
+}

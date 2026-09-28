@@ -146,10 +146,30 @@ export function ladderMeta(roster?: Roster): PageMeta {
 /** The bot list's meta. */
 export const botsMeta: PageMeta = { title: pageTitle(`Bots`), description: `Every bot on ${siteName}, online or not` };
 
+/** The way to build a bot, from sign-in to a connected bot. */
+export const connectMeta: PageMeta = { title: pageTitle(`Build a bot`), description: `Sign in, create a bot, and connect it to the ladder` };
+
+/** Who is signed in: their rating and their bots. */
+export const profileMeta: PageMeta = { title: pageTitle(`Profile`), description: `Your rating and your bots` };
+
+/** What the site builds on. */
+export const creditsMeta: PageMeta = { title: pageTitle(`Credits`), description: `The game, themes, font, and projects ${siteName} builds on` };
+
 /** A page that does not exist, a hidden bot, or a game that is gone. */
 export const notFoundMeta: PageMeta = { title: pageTitle(`Not found`), description: `That page does not exist` };
 
 const aboutExcerptLength = 120;
+
+// The about text on one line, cut at a word within the limit; it ends on
+// its last word, its own question or exclamation mark, or the cut's
+// ellipsis, never on the owner's trailing period, comma, or space.
+function aboutExcerpt(about: string): string {
+    const line = about.replace(/\s+/gu, ` `).trim();
+    if (line.length <= aboutExcerptLength) return line.replace(/[\s.,;:]+$/u, ``);
+    const space = line.lastIndexOf(` `, aboutExcerptLength);
+    const cut = space > 0 ? line.slice(0, space) : line.slice(0, aboutExcerptLength);
+    return `${cut.replace(/[\s.,;:!?-]+$/u, ``)}...`;
+}
 
 /** What a bot's preview says: its owner when known, rating, presence, and the start of its about text. */
 export function botMeta(bot: {
@@ -168,10 +188,8 @@ export function botMeta(bot: {
         : bot.openForChallenges
           ? `online and open for challenges`
           : `online, closed for challenges`;
-    const about =
-        bot.about === undefined || bot.about === ``
-            ? ``
-            : `. ${bot.about.length > aboutExcerptLength ? `${bot.about.slice(0, aboutExcerptLength)}...` : bot.about}`;
+    const excerpt = bot.about === undefined ? `` : aboutExcerpt(bot.about);
+    const about = excerpt === `` ? `` : `. ${excerpt}`;
     return { title: pageTitle(bot.name), description: `HeXO bot${owner}, ${rated}, ${state}${about}` };
 }
 

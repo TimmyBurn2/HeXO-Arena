@@ -1,6 +1,7 @@
 /**
- * The site's mark in the text color: a plate cut at the cell's slope, with
- * three stones and their win line cut out of it, so the page shows through.
+ * The site's mark: a plate cut at the cell's slope, with three stones and
+ * their win line cut out of it, so the page shows through.
+ * The sheet that places it picks its fill.
  */
 export function Mark() {
     return (

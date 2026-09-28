@@ -195,4 +195,27 @@ describe(`measureStep`, () => {
         assert.equal(result.passedBy, null);
         assert.ok(result.paths[0].value < 1);
     });
+
+    // A field or a chip in a panel or a sheet sits on the overlay, so a
+    // theme that draws input in the overlay's own color hides it there.
+    it(`fails a field drawn in the overlay's own color`, () => {
+        const result = step(`input above overlay`, `--c-bg-input: #1e293b; --c-bg-overlay: #1e293b;`);
+        assert.equal(result.passedBy, null);
+        close(result.paths[0].value, 1);
+    });
+
+    it(`holds a field a step above the overlay`, () => {
+        assert.equal(steps.find((entry) => entry[0] === `input above overlay`)?.[3], 1.05);
+        assert.equal(step(`input above overlay`, `--c-bg-input: #263349; --c-bg-overlay: #1e293b;`).passedBy, `step`);
+    });
+});
+
+describe(`the mark`, () => {
+    // The home link's mark is brass at rest and brighter under the pointer,
+    // both straight on the page, so the gate holds both against it.
+    it(`is gated on the page at rest and hovered`, () => {
+        const against = (fg) => pairs.find(([, pairFg, bg]) => pairFg === fg && bg === `--c-bg`);
+        assert.equal(against(`--c-accent-solid`)?.[3], 3);
+        assert.equal(against(`--c-accent-solid-hover`)?.[3], 3);
+    });
 });

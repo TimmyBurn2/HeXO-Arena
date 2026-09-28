@@ -8,15 +8,29 @@
         list-style: none;
     }
 
+    /* A label that wraps, as the legal notice's can at large text, does
+       so in even lines, never leaving one word alone. */
     .site-links a {
         display: inline-flex;
         align-items: center;
         gap: var(--space-half);
         min-height: var(--control-sm);
         font-weight: var(--weight-strong);
+        text-wrap: balance;
     }
 
     .site-links a[aria-current='page'] {
+        color: var(--c-text);
+    }
+
+    /* The legal links read as small print wherever they stand. */
+    .site-links.legal-links a {
+        color: var(--c-text-dim);
+        font-weight: var(--weight-regular);
+    }
+
+    .site-links.legal-links a:hover,
+    .site-links.legal-links a[aria-current='page'] {
         color: var(--c-text);
     }
 

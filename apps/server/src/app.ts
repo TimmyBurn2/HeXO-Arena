@@ -9,6 +9,7 @@ import {
     isReservedName,
     nameKeyOf,
     nameSyntaxSchema,
+    type LegalDetails,
 } from '@hexo-arena/contract';
 import websocketPlugin from '@fastify/websocket';
 import cookiePlugin from '@fastify/cookie';
@@ -26,6 +27,7 @@ import { abortUnfinishedGames } from './game-store';
 import { engineFrameLimitBytes, engineSocketRoute, registerGameApi } from './game-api';
 import { GameRegistry, wirePresence } from './game-registry';
 import { registerLeaderboardApi } from './leaderboard-api';
+import { registerLegalApi } from './legal';
 import type { DiscordOAuth } from './discord';
 import { drain } from './drain';
 import { deleteBotByPolicy, ownedBotId } from './moderation';
@@ -57,6 +59,9 @@ export interface AppDeps {
     // The site's public origin, which makes the shell's preview image an
     // absolute address.
     publicOrigin: string;
+    // The operator's legal details for the legal pages; only development
+    // runs without them.
+    legalDetails: LegalDetails | null;
     // The deployed index.html; when set, the root, ladder, bot, and game
     // routes answer with the shell carrying live og meta. Dev leaves it to Vite.
     webIndexPath?: string;
@@ -130,6 +135,7 @@ export async function buildApp(deps: AppDeps): Promise<BuiltApp> {
     registerChallengeApi(app, { query, presence, games, challenges, gate });
     registerGameApi(app, { query, presence, games, watchers, gate, guests });
     registerLeaderboardApi(app, { query });
+    registerLegalApi(app, deps.legalDetails);
     registerSessionApi(app, { query, guests, secureCookies: deps.secureCookies });
     if (deps.webIndexPath !== undefined) {
         registerOgShell(app, { query, presence, games, indexPath: deps.webIndexPath, publicOrigin: deps.publicOrigin });

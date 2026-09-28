@@ -2,6 +2,7 @@ import { Fragment, useEffect, useRef, useState, type ReactNode } from 'react';
 import { BoardToggles } from '../board/BoardToggles';
 import { SiteLinks } from '../components/SiteLinks';
 import { Link } from '../router/Link';
+import { legalLinks, siteLinks } from '../site-links';
 import { text } from '../text';
 import type { Drawer, DrawerTab } from './use-drawer';
 import type { FeedLine } from './snapshot-views';
@@ -150,7 +151,8 @@ export function GameDrawer({ drawer, feed, facts, running, timed, onResign, peek
                 {/* under either tab, so a standing link is the drawer and one
                     press away from the board */}
                 <div className="drawer-foot">
-                    <SiteLinks open="new-tab" />
+                    <SiteLinks links={siteLinks} open="new-tab" />
+                    <SiteLinks links={legalLinks} open="new-tab" className="legal-links" />
                 </div>
             </div>
         </aside>

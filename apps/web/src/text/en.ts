@@ -42,10 +42,17 @@ export const en = {
         links: {
             credits: `Credits`,
             botApi: `Bot API`,
+            imprint: `Impressum / Legal notice`,
+            privacy: `Privacy`,
+            terms: `Terms`,
+            licenses: `Licenses`,
         },
         opensInNewTab: (label: string) => `${label}, opens in a new tab`,
         signIn: (provider: Slot): ReactNode => rich`Sign in${provider(` with Discord`)}`,
-        signInTrust: `Discord shares your username only; no email.`,
+        // A no-break space holds "see Privacy." together, so the notice
+        // never ends on a word alone at any width or text size.
+        signInNotice: (terms: Slot, privacy: Slot): ReactNode =>
+            rich`By signing in you accept the ${terms(`Terms`)}. ${siteName} keeps only your Discord user ID and a public name made from your username, never your email; see\u00a0${privacy(`Privacy`)}.`,
         signInFailed: {
             unconfigured: `Sign-in is not set up on this server`,
             cancelled: `Sign-in was cancelled or incomplete; sign in again`,
@@ -58,6 +65,8 @@ export const en = {
             guestMonogram: `g`,
             unrated: `unrated`,
             close: `Close menu`,
+            signIn: `Sign in`,
+            closeSignIn: `Close sign-in`,
             rating: (spoken: Slot, value: ReactNode): ReactNode => rich`${spoken(`, rating `)}${value}`,
             profile: `Profile`,
             build: `Build a bot`,
@@ -120,7 +129,7 @@ export const en = {
         },
         live: {
             title: `Live games`,
-            failed: `Live games did not load; trying again shortly.`,
+            failed: `Live games did not load; trying again shortly`,
             none: `No live games right now.`,
             watch: `Watch `,
             vs: `vs`,
@@ -164,6 +173,7 @@ export const en = {
         watchVs: (name: ReactNode): ReactNode => rich`Watch vs ${name}`,
         accepts: `Accepts`,
         acceptsNothing: `Nothing yet`,
+        acceptsNothingOwner: (botApi: Slot): ReactNode => rich`Nothing yet; your bot lists the clocks it accepts through the ${botApi(`Bot API`)}.`,
         turnClock: `Turn clock`,
         turnWindow: (min: number, max: number) => `${String(min)} to ${String(max)} s`,
         matchClock: `Match clock`,
@@ -244,7 +254,7 @@ export const en = {
         title: `Credits`,
         game: `The game`,
         gameAbout: (name: Slot, site: Slot): ReactNode =>
-            rich`${name(`HeXO`)} is the game played here: 2 stones a turn, six in a row wins. People play it at ${site(`hexo.did.science`)}, a site made by WolverinDEV.`,
+            rich`${name(`HeXO`)} is the game played here: each turn places 2 stones, and 6 in a row wins. People play it at ${site(`hexo.did.science`)}, a site made by WolverinDEV.`,
         gameIndependent: `${siteName} implements the rules independently and is not affiliated with the HeXO project.`,
         themes: `Themes`,
         themesLead: `Ink is ${siteName}'s own. The other themes take their colors, and only their colors, from these projects:`,
@@ -254,6 +264,9 @@ export const en = {
         inspiration: `Inspiration`,
         inspirationSmall: `No code or design comes from it.`,
         discord: `Discord`,
+        licenses: `Licenses`,
+        licensesProse: (file: Slot): ReactNode =>
+            rich`The open-source code your browser receives, such as React and zod, and the font are listed with their license texts under ${file(`Licenses`)}.`,
         discordProse: `Sign-in uses Discord. The Discord symbol on the sign-in button is shown unaltered under Discord's brand guidelines. Discord is a trademark of Discord Inc.; ${siteName} is not affiliated with Discord.`,
         mit: `MIT License`,
         mitSummary: `The MIT License`,
@@ -433,12 +446,6 @@ export const en = {
         routeFailedLadder: `Ladder`,
     },
     meta: {
-        build: `Build a bot`,
-        buildDescription: `Sign in, create a bot, and connect it to the ladder`,
-        profile: `Profile`,
-        profileDescription: `Your rating and your bots`,
-        credits: `Credits`,
-        creditsDescription: `The game, themes, font, and projects ${siteName} builds on`,
         game: `Game`,
     },
 };

@@ -284,12 +284,14 @@
         gap: var(--space-3);
     }
 
+    /* A heading that wraps does so in even lines, never leaving one word alone. */
     .empty h2,
     .empty h1 {
         color: var(--c-text);
         font-size: var(--text-xl);
         font-weight: var(--weight-display);
         margin: 0;
+        text-wrap: balance;
     }
 
     .empty p {

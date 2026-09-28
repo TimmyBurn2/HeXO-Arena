@@ -1,9 +1,22 @@
-import { botAccountPath, gamesPath, gameSnapshotSchema, guestPath, logoutPath } from '@hexo-arena/contract';
+import {
+    botAccountPath,
+    botsMeta,
+    connectMeta,
+    creditsMeta,
+    gamesPath,
+    gameSnapshotSchema,
+    guestPath,
+    legalPageMeta,
+    legalPagePath,
+    legalPages,
+    logoutPath,
+    profileMeta,
+} from '@hexo-arena/contract';
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { renderShell } from '../src/og-shell';
+import { renderShell, shellRoutes } from '../src/og-shell';
 import { createTestApp, FakeStreamSocket, loginAs, mintBot, type TestApp } from './helpers';
 
 const indexPath = join(dirname(fileURLToPath(import.meta.url)), `../../web/index.html`);
@@ -93,11 +106,28 @@ describe('the og shell routes', () => {
         expect(response.meta.ogDescription).toBe(`1 bot listed, 1 online`);
     });
 
-    it('carries the site icon and name on every shell route, found or not', async () => {
-        for (const url of [`/`, `/ladder`, `/bots/nobody`, `/game/g_nothing`]) {
+    it('carries the site icon at its size and the site name on every shell route, found or not', async () => {
+        for (const url of [`/`, `/ladder`, `/bots`, `/bots/nobody`, `/game/g_nothing`, `/connect`, `/profile`, `/credits`, ...legalPages.map(legalPagePath)]) {
             const response = await arena.app.inject({ method: `GET`, url });
             expect(response.body).toContain(`<meta property="og:image" content="https://arena.example/icon-512.png" />`);
+            expect(response.body).toContain(`<meta property="og:image:width" content="512" />`);
+            expect(response.body).toContain(`<meta property="og:image:height" content="512" />`);
             expect(response.body).toContain(`<meta property="og:site_name" content="HeXO Arena" />`);
+        }
+    });
+
+    it('titles the bot list, the pages without data, and the legal pages as the site does', async () => {
+        const pages = [
+            [`/bots`, botsMeta],
+            [`/connect`, connectMeta],
+            [`/profile`, profileMeta],
+            [`/credits`, creditsMeta],
+            ...legalPages.map((page) => [legalPagePath(page), legalPageMeta[page]] as const),
+        ] as const;
+        for (const [url, meta] of pages) {
+            const response = await shell(url);
+            expect(response.status).toBe(200);
+            expect(response.meta).toEqual({ title: meta.title, description: meta.description, ogTitle: meta.title, ogDescription: meta.description });
         }
     });
 
@@ -159,6 +189,19 @@ describe('the og shell routes', () => {
         expect(done.meta.ogTitle).toBe(`beta vs alpha - HeXO Arena`);
         expect(done.meta.ogDescription).toBe(`alpha won; beta resigned`);
         expect((await shell(`/game/g_nothing`)).status).toBe(404);
+    });
+});
+
+describe('the proxy in front of the shell', () => {
+    // Caddy sends the shell routes to the app, and serves the static page
+    // on them while the app is down; a route missing from either list
+    // previews with a relative image.
+    it('sends exactly the shell routes to the app, and serves them the static page while it is down', () => {
+        const caddyfile = readFileSync(join(dirname(fileURLToPath(import.meta.url)), `../../../docker/prod/Caddyfile`), `utf8`);
+        const list = (name: string) => new RegExp(`@${name} path ([^\\n]+)`).exec(caddyfile)?.[1]?.trim().split(/\s+/u);
+        const expected = shellRoutes.map((route) => route.replace(/:\w+/gu, `*`));
+        expect(list(`shell`)).toEqual(expected);
+        expect(list(`shellDown`)).toEqual(expected);
     });
 });
 

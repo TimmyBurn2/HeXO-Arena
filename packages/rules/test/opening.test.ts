@@ -125,22 +125,33 @@ describe('opening balance', () => {
     });
 });
 
+// The first property a drawn opening breaks, or null.
+// Checked in plain code, since an expect per stone costs four times the
+// draw itself and ten thousand draws must fit the default test budget.
+function drawFault(opening: Position, plies: number): string | null {
+    if (opening.stones.length !== plies) return `${String(opening.stones.length)} stones`;
+    const [first] = opening.stones;
+    if (first?.x !== origin.x || first.y !== origin.y || first.player !== origin.player) return `no origin first`;
+    for (const [ply, stone] of opening.stones.entries()) {
+        if (stone.player !== ownerOfPly(ply)) return `ply ${String(ply)} owned by player ${String(stone.player)}`;
+        if (hexDistance(stone, origin) > 2) return `ply ${String(ply)} past distance 2`;
+    }
+    if (new Set(opening.stones.map(key)).size !== plies) return `a cell taken twice`;
+    if (!isBalancedOpening(opening)) return `unbalanced`;
+    return null;
+}
+
 describe('opening draw', () => {
     it('draws every length as that many stones in ply order, owned by ply, within distance 2, and balanced', () => {
         const rng = createRng(0x0bee);
+        const faults: string[] = [];
         for (const plies of [1, 3, 5, 7, 9]) {
             for (let draw = 0; draw < 2000; draw += 1) {
-                const opening = drawOpening(plies, (bound) => rng.int(bound));
-                expect(opening.stones).toHaveLength(plies);
-                expect(opening.stones[0]).toEqual(origin);
-                opening.stones.forEach((stone, ply) => {
-                    expect(stone.player).toBe(ownerOfPly(ply));
-                    expect(hexDistance(stone, origin)).toBeLessThanOrEqual(2);
-                });
-                expect(new Set(opening.stones.map(key)).size).toBe(plies);
-                expect(isBalancedOpening(opening)).toBe(true);
+                const fault = drawFault(drawOpening(plies, (bound) => rng.int(bound)), plies);
+                if (fault !== null) faults.push(`${String(plies)} plies, draw ${String(draw)}: ${fault}`);
             }
         }
+        expect(faults).toEqual([]);
     });
 
     it('draws the origin alone at one ply without consulting the source', () => {
@@ -236,9 +247,11 @@ describe('opening space', () => {
         expect(countRejected(5)).toEqual({ positions: 18_360, rejected: 0 });
     });
 
+    // Half a second on an idle machine; the budget leaves a loaded one
+    // twenty times that, since the count is the whole space.
     it('rejects 546 of the 278,460 openings of seven plies', () => {
         expect(countRejected(7)).toEqual({ positions: 278_460, rejected: 546 });
-    });
+    }, 10_000);
 
     // About ten seconds; set OPENING_NINE_PLY=1 to run it.
     it.skipIf(process.env[`OPENING_NINE_PLY`] === undefined)(

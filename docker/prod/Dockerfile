@@ -45,7 +45,8 @@ ENV NODE_ENV=production \
     PORT=3000 \
     DATABASE_PATH=/data/hexo-arena.sqlite \
     ADMIN_SOCKET_PATH=/run/hexo-arena/admin.sock \
-    BACKUP_DIR=/backup
+    BACKUP_DIR=/backup \
+    LEGAL_DETAILS_PATH=/etc/hexo-arena/legal-details.json
 
 USER hexo-arena
 

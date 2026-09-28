@@ -24,13 +24,23 @@ describe('CreditsScreen', () => {
             `Protocol and ratings`,
             `Inspiration`,
             `Discord`,
+            `Licenses`,
         ]);
+    });
+
+    it('point to the third-party licenses the build ships, under the name the footer gives them', () => {
+        render(<CreditsScreen />);
+        const link = screen.getByRole(`link`, { name: `Licenses` });
+        expect(link.getAttribute(`href`)).toBe(`/third-party-licenses.txt`);
+        expect(link.closest(`p`)?.textContent).toBe(
+            `The open-source code your browser receives, such as React and zod, and the font are listed with their license texts under Licenses.`,
+        );
     });
 
     it('credit the game where it is played, its maker as that site names it, and say the rules are its own', () => {
         render(<CreditsScreen />);
         expect(document.body.textContent).toContain(
-            `HeXO is the game played here: 2 stones a turn, six in a row wins. People play it at hexo.did.science, a site made by WolverinDEV.`,
+            `HeXO is the game played here: each turn places 2 stones, and 6 in a row wins. People play it at hexo.did.science, a site made by WolverinDEV.`,
         );
         expect(screen.getByRole(`link`, { name: `hexo.did.science` }).getAttribute(`href`)).toBe(`https://hexo.did.science`);
         expect(screen.getByText(`HeXO Arena implements the rules independently and is not affiliated with the HeXO project.`)).toBeTruthy();
@@ -82,15 +92,15 @@ describe('CreditsScreen', () => {
         expect(protocol.getByRole(`link`, { name: `Bot API` })).toBeTruthy();
         expect(protocol.getByText(`Copyright (c) 2026 hex-tic-tac-toe`)).toBeTruthy();
         expect(within(row(`Glicko-2`)).getByText(`Published method`)).toBeTruthy();
+        expect(screen.getByRole(`link`, { name: `Glicko-2` }).getAttribute(`href`)).toBe(`https://www.glicko.net/glicko.html`);
         expect(within(row(`lichess`)).getByText(`Ideas and values only`)).toBeTruthy();
         expect(screen.queryByText(/RPS Strategy/)).toBe(null);
     });
 
-    it('credit the Discord symbol, name the mark, and leave out a licenses file that does not exist yet', () => {
+    it('credit the Discord symbol and name the mark', () => {
         render(<CreditsScreen />);
         expect(document.body.textContent).toContain(
             `Discord is a trademark of Discord Inc.; HeXO Arena is not affiliated with Discord.`,
         );
-        expect(screen.queryByText(/Third-party licenses/)).toBe(null);
     });
 });

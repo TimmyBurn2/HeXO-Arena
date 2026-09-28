@@ -58,7 +58,8 @@ export const themeVocabulary = [
     `--board-win-casing`,
 ] as const;
 
-const storageKey = `hexo-arena.theme.v1`;
+/** Where this browser keeps the chosen theme, as the privacy policy names it. */
+export const themeStorageKey = `hexo-arena.theme.v1`;
 
 /** The stored choice, or the default. */
 export function parseTheme(stored: string | null): ThemeId {
@@ -69,7 +70,7 @@ let current: ThemeId | null = null;
 const listeners = new Set<() => void>();
 
 function read(): ThemeId {
-    current ??= parseTheme(readStored(storageKey));
+    current ??= parseTheme(readStored(themeStorageKey));
     return current;
 }
 
@@ -86,7 +87,7 @@ function subscribe(listener: () => void): () => void {
 
 function choose(theme: ThemeId): void {
     current = theme;
-    writeStored(storageKey, theme);
+    writeStored(themeStorageKey, theme);
     apply(theme);
     for (const listener of listeners) listener();
 }

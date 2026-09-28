@@ -1,4 +1,16 @@
-import { botsMeta, ladderMeta, notFoundMeta, pageTitle, siteDescription, siteMeta, type PageMeta } from '@hexo-arena/contract';
+import {
+    botsMeta,
+    connectMeta,
+    creditsMeta,
+    ladderMeta,
+    legalPageMeta,
+    notFoundMeta,
+    pageTitle,
+    profileMeta,
+    siteDescription,
+    siteMeta,
+    type PageMeta,
+} from '@hexo-arena/contract';
 import type { Route } from './router/route';
 import { text } from './text';
 
@@ -22,11 +34,13 @@ export function routeMeta(route: Route): PageMeta {
         case `bot`:
             return { title: pageTitle(route.bot), description: siteDescription };
         case `connect`:
-            return { title: pageTitle(text.meta.build), description: text.meta.buildDescription };
+            return connectMeta;
         case `profile`:
-            return { title: pageTitle(text.meta.profile), description: text.meta.profileDescription };
+            return profileMeta;
         case `credits`:
-            return { title: pageTitle(text.meta.credits), description: text.meta.creditsDescription };
+            return creditsMeta;
+        case `legal`:
+            return legalPageMeta[route.page];
         case `game`:
             return { title: pageTitle(text.meta.game), description: siteDescription };
         case `not-found`:

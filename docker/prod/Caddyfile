@@ -17,9 +17,9 @@
 		reverse_proxy app:3000
 	}
 
-	# The routes a pasted link previews get their shell from the app, with
-	# og meta from live data.
-	@shell path / /ladder /bots/* /game/*
+	# Every page of the site gets its shell from the app, with og meta from
+	# live data and an absolute preview image.
+	@shell path / /ladder /bots/* /game/* /bots /connect /profile /credits /legal/imprint /legal/privacy /legal/terms
 	handle @shell {
 		reverse_proxy app:3000
 	}
@@ -27,11 +27,23 @@
 	# An app that is down or restarting still leaves these routes the
 	# static shell, so the site stays usable through a deploy.
 	handle_errors 502 503 504 {
-		@shellDown path / /ladder /bots/* /game/*
+		@shellDown path / /ladder /bots/* /game/* /bots /connect /profile /credits /legal/imprint /legal/privacy /legal/terms
 		handle @shellDown {
 			root * /srv/web
 			rewrite * /index.html
 			file_server
+		}
+
+		# The legal pages name the operator from the details read, so the
+		# file the app reads answers it in the app's place; an error route
+		# writes the error's status unless told otherwise.
+		@legalDown path /api/legal
+		handle @legalDown {
+			root * /etc/hexo-arena
+			rewrite * /legal-details.json
+			file_server {
+				status 200
+			}
 		}
 	}
 

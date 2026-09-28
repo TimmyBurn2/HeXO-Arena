@@ -28,6 +28,15 @@ describe('parseRoute', () => {
         expect(parseRoute(`/bots/`)).toEqual({ name: `bots` });
     });
 
+    it('route the three legal pages under /legal', () => {
+        expect(parseRoute(`/legal/imprint`)).toEqual({ name: `legal`, page: `imprint` });
+        expect(parseRoute(`/legal/privacy/`)).toEqual({ name: `legal`, page: `privacy` });
+        expect(parseRoute(`/legal/terms`)).toEqual({ name: `legal`, page: `terms` });
+        expect(parseRoute(`/legal`)).toEqual({ name: `not-found` });
+        expect(parseRoute(`/legal/licenses`)).toEqual({ name: `not-found` });
+        expect(parseRoute(`/legal/terms/x`)).toEqual({ name: `not-found` });
+    });
+
     it('fall through to not-found for anything else', () => {
         expect(parseRoute(`/nope`)).toEqual({ name: `not-found` });
         expect(parseRoute(`/bots/a/b`)).toEqual({ name: `not-found` });
@@ -45,6 +54,7 @@ describe('routePath', () => {
         expect(routePath({ name: `profile` })).toBe(`/profile`);
         expect(routePath({ name: `credits` })).toBe(`/credits`);
         expect(routePath({ name: `game`, gameId: `g1` })).toBe(`/game/g1`);
+        expect(routePath({ name: `legal`, page: `privacy` })).toBe(`/legal/privacy`);
     });
 
     it('round-trips through parseRoute', () => {
@@ -56,6 +66,9 @@ describe('routePath', () => {
             { name: `profile` },
             { name: `credits` },
             { name: `game`, gameId: `g1` },
+            { name: `legal`, page: `imprint` },
+            { name: `legal`, page: `privacy` },
+            { name: `legal`, page: `terms` },
         ] as const;
         for (const route of routes) {
             expect(parseRoute(routePath(route))).toEqual(route);

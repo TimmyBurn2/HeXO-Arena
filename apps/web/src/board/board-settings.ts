@@ -11,7 +11,8 @@ export const defaultBoardSettings: BoardSettings = {
     glare: true,
 };
 
-const storageKey = `hexo-arena.board-rendering.v1`;
+/** Where this browser keeps the board settings, as the privacy policy names it. */
+export const boardSettingsStorageKey = `hexo-arena.board-rendering.v1`;
 
 /**
  * The stored settings are our own earlier writes behind a versioned key,
@@ -38,7 +39,7 @@ const listeners = new Set<() => void>();
 
 function read(): BoardSettings {
     if (current === null) {
-        current = parseBoardSettings(readStored(storageKey));
+        current = parseBoardSettings(readStored(boardSettingsStorageKey));
     }
     return current;
 }
@@ -58,7 +59,7 @@ function subscribe(listener: () => void): () => void {
 
 function update(changes: Partial<BoardSettings>): void {
     current = { ...read(), ...changes };
-    writeStored(storageKey, JSON.stringify(current));
+    writeStored(boardSettingsStorageKey, JSON.stringify(current));
     apply(current);
     for (const listener of listeners) listener();
 }

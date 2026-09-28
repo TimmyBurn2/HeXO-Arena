@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import type { GuestMe, UserMe } from '@hexo-arena/contract';
-import { DiscordButton, DiscordSignIn } from '../components/DiscordButton';
+import { DiscordPanelButton, DiscordSignIn } from '../components/DiscordButton';
 import { Rating } from '../components/player';
 import { TopbarPanel, usePanel, type PanelControl } from '../components/TopbarPanel';
 import { meStore, useMe } from '../me';
@@ -13,28 +13,28 @@ import './Identity.css';
 const firstItem = `.identity-items a, .identity-items button`;
 
 /**
- * Who is here, at the top bar's right edge: signed out, the way in;
- * signed in or as a guest, a button that opens where to go and how to
- * leave, as a popover or, on phones, a sheet.
+ * Who is here, at the top bar's right edge: signed out, the way in with
+ * the notice it needs; signed in or as a guest, where to go and how to
+ * leave; each a button opening a popover or, on phones, a sheet.
  */
 export function Identity({ route }: { route: Route }) {
     const state = useMe();
     const control = usePanel(`identity`);
-    const signIn = useRef<HTMLAnchorElement>(null);
     const leftHere = useRef(false);
 
     // A session that ends takes the panel with it; ended from the panel,
-    // focus goes on to the sign-in link that takes the button's place.
+    // focus goes on to the sign-in button that takes the button's place.
     const signedOut = state.status === `ready` && state.me === null;
     const close = control.close;
+    const button = control.button;
     useEffect(() => {
         if (!signedOut) return;
         close(false);
         if (leftHere.current) {
             leftHere.current = false;
-            signIn.current?.focus();
+            button.current?.focus();
         }
-    }, [signedOut, close]);
+    }, [signedOut, close, button]);
 
     function markLeaving(leaving: boolean) {
         leftHere.current = leaving;
@@ -44,11 +44,38 @@ export function Identity({ route }: { route: Route }) {
         return <span className="identity" aria-hidden="true" />;
     }
     const me = state.me;
+    const open = control.mode !== `closed`;
     if (me === null) {
-        return <DiscordButton ref={signIn} />;
+        return (
+            <>
+                <DiscordPanelButton ref={control.button} open={open} onClick={control.toggle} />
+                <TopbarPanel
+                    id="identity-panel"
+                    className="identity-panel"
+                    control={control}
+                    labelledBy="identity-name"
+                    head={
+                        <p className="identity-head">
+                            <span id="identity-name" className="identity-head-name">
+                                {text.shell.identity.signIn}
+                            </span>
+                        </p>
+                    }
+                    closeLabel={text.shell.identity.closeSignIn}
+                    initialFocus={firstItem}
+                >
+                    <div className="identity-items identity-join">
+                        <DiscordSignIn
+                            onNavigate={() => {
+                                control.close(false);
+                            }}
+                        />
+                    </div>
+                </TopbarPanel>
+            </>
+        );
     }
 
-    const open = control.mode !== `closed`;
     return (
         <>
             <button
@@ -81,7 +108,7 @@ export function Identity({ route }: { route: Route }) {
                 {me.kind === `user` ? (
                     <UserItems route={route} control={control} onLeave={markLeaving} />
                 ) : (
-                    <GuestItems onLeave={markLeaving} />
+                    <GuestItems control={control} onLeave={markLeaving} />
                 )}
             </TopbarPanel>
         </>
@@ -129,11 +156,15 @@ function UserItems({ route, control, onLeave }: { route: Route; control: PanelCo
     );
 }
 
-function GuestItems({ onLeave }: { onLeave: (leaving: boolean) => void }) {
+function GuestItems({ control, onLeave }: { control: PanelControl; onLeave: (leaving: boolean) => void }) {
     return (
         <>
             <div className="identity-items identity-join">
-                <DiscordSignIn />
+                <DiscordSignIn
+                    onNavigate={() => {
+                        control.close(false);
+                    }}
+                />
             </div>
             <Leave
                 label={text.shell.identity.endGuest}

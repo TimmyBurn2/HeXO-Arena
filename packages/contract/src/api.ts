@@ -16,6 +16,9 @@ export const botAccountPath = `/api/bot/account`;
 
 export const sessionCookieName = `hexo_arena_session`;
 
+/** How long an account's session, and its cookie, last after sign-in. */
+export const sessionMaxAgeSeconds = 30 * 24 * 60 * 60;
+
 /**
  * Why a Discord sign-in did not finish, carried back to the site's root in
  * the query parameter {@link signInFailureParam}: Discord OAuth is not set

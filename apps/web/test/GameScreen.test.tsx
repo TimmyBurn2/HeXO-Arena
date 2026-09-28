@@ -224,7 +224,7 @@ describe('GameScreen', () => {
         expect(document.querySelector(`.peek-line`)?.textContent).toBe(`hextide won with six in a row`);
     });
 
-    it('foot the drawer under either tab with the standing links, each opening a new tab', async () => {
+    it('foot the drawer under either tab with the standing links, then the legal ones, each opening a new tab', async () => {
         stubGame(runningSnapshot);
         render(<GameScreen gameId="g-run" />);
         await screen.findByRole(`heading`, { name: `hextide vs you` });
@@ -235,6 +235,10 @@ describe('GameScreen', () => {
             expect(links.map((link) => [link.getAttribute(`aria-label`), link.getAttribute(`href`), link.getAttribute(`target`)])).toEqual([
                 [`Credits, opens in a new tab`, `/credits`, `_blank`],
                 [`Bot API, opens in a new tab`, `https://github.com/TimmyBurn2/Hexo-Bot-Api`, `_blank`],
+                [`Impressum / Legal notice, opens in a new tab`, `/legal/imprint`, `_blank`],
+                [`Privacy, opens in a new tab`, `/legal/privacy`, `_blank`],
+                [`Terms, opens in a new tab`, `/legal/terms`, `_blank`],
+                [`Licenses, opens in a new tab`, `/third-party-licenses.txt`, `_blank`],
             ]);
             expect(links.every((link) => link.getAttribute(`rel`) === `noreferrer`)).toBe(true);
         }

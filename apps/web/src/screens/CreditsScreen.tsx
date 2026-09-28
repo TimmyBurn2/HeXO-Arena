@@ -1,7 +1,7 @@
 import { useRef, type ReactNode } from 'react';
 import { ThemeSwatch } from '../board/ThemeSwatch';
 import { useRoute } from '../router/use-route';
-import { botApiRepository } from '../site-links';
+import { botApiRepository, thirdPartyLicensesPath } from '../site-links';
 import { text } from '../text';
 import { themes } from '../theme/themes';
 import { useDocumentMeta } from '../use-document-meta';
@@ -43,7 +43,7 @@ const protocol: readonly Credit[] = [
         gives: rows.htttx.gives((words) => <a href={botApiRepository}>{words}</a>),
         terms: { kind: `mit`, copyright: rows.htttx.copyright },
     },
-    { ...rows.glicko, href: `http://www.glicko.net/glicko.html`, terms: { kind: `plain`, label: rows.glicko.terms } },
+    { ...rows.glicko, href: `https://www.glicko.net/glicko.html`, terms: { kind: `plain`, label: rows.glicko.terms } },
 ];
 
 const inspiration: readonly Credit[] = [
@@ -134,6 +134,13 @@ export function CreditsScreen() {
                     {credits.discord}
                 </h2>
                 <p className="credits-prose">{credits.discordProse}</p>
+            </section>
+
+            <section className="credits-section" aria-labelledby="credits-licenses">
+                <h2 id="credits-licenses" className="section-title">
+                    {credits.licenses}
+                </h2>
+                <p className="credits-prose">{credits.licensesProse((words) => <a href={thirdPartyLicensesPath}>{words}</a>)}</p>
             </section>
         </>
     );

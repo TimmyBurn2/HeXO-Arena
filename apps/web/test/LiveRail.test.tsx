@@ -63,6 +63,15 @@ describe('LiveRail', () => {
         expect(await screen.findByText(`No live games right now.`)).toBeTruthy();
     });
 
+    it('say in one line without a period that the list did not load', async () => {
+        vi.stubGlobal(
+            `fetch`,
+            vi.fn(() => Promise.resolve(new Response(`{}`, { status: 500 }))),
+        );
+        render(<LiveRail />);
+        expect(await screen.findByText(`Live games did not load; trying again shortly`)).toBeTruthy();
+    });
+
     it('reread the list on its beat', async () => {
         vi.useFakeTimers({ shouldAdvanceTime: true });
         let live: LiveGameEntry[] = [];

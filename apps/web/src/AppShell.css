@@ -80,6 +80,21 @@
         fill: currentColor;
     }
 
+    /* The lockup is a link, so its mark takes the brass and brightens
+       under the pointer as the brass buttons do; a mark outside the home
+       link keeps the text color. Forced colors leave an svg's fill alone,
+       so there the mark keeps the link's own color, hovered or not. */
+    @media (forced-colors: none) {
+        .brand .brand-mark {
+            fill: var(--c-accent-solid);
+            transition: fill var(--dur-fast) var(--ease);
+        }
+
+        .brand:hover .brand-mark {
+            fill: var(--c-accent-solid-hover);
+        }
+    }
+
     @media (21rem < width <= 30rem), (40rem < width) {
         .brand-mark {
             display: block;

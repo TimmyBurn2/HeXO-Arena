@@ -22,7 +22,8 @@ export interface Drawer {
     pin: (pinned: boolean) => void;
 }
 
-const pinKey = `hexo-arena.drawer-pinned.v1`;
+/** Where this browser keeps whether the game panel stays pinned, as the privacy policy names it. */
+export const drawerPinnedStorageKey = `hexo-arena.drawer-pinned.v1`;
 const wideQuery = `(min-width: 80rem)`;
 
 function subscribeWide(listener: () => void): () => void {
@@ -44,7 +45,7 @@ function readWide(): boolean {
  */
 export function useDrawer(): Drawer {
     const [open, setOpen] = useState(false);
-    const [pinned, setPinned] = useState(() => readStored(pinKey) === `1`);
+    const [pinned, setPinned] = useState(() => readStored(drawerPinnedStorageKey) === `1`);
     const [tab, setTab] = useState<DrawerTab>(`moves`);
     const [openedBy, setOpenedBy] = useState<Opener>(`hand`);
     const wide = useSyncExternalStore(
@@ -68,7 +69,7 @@ export function useDrawer(): Drawer {
     }, []);
     const pin = useCallback((next: boolean) => {
         setPinned(next);
-        writeStored(pinKey, next ? `1` : `0`);
+        writeStored(drawerPinnedStorageKey, next ? `1` : `0`);
         if (!next) setOpen(false);
     }, []);
 

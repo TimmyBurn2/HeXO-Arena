@@ -46,11 +46,27 @@ afterEach(() => {
 });
 
 describe('Identity', () => {
-    it('offer the discord sign-in and no menu when nobody is signed in', async () => {
+    it('open the discord sign-in with its notice from the sign-in button when nobody is signed in', async () => {
         serve(null);
         render(<Identity route={bots} />);
-        expect((await screen.findByRole(`link`, { name: `Sign in with Discord` })).getAttribute(`href`)).toBe(`/api/auth/discord/login`);
-        expect(screen.queryByRole(`button`)).toBe(null);
+        const button = await screen.findByRole(`button`, { name: `Sign in with Discord` });
+        expect(button.getAttribute(`aria-haspopup`)).toBe(`dialog`);
+        expect(button.getAttribute(`aria-expanded`)).toBe(`false`);
+        expect(screen.queryByRole(`link`)).toBe(null);
+        fireEvent.click(button);
+        expect(button.getAttribute(`aria-expanded`)).toBe(`true`);
+        expect(button.getAttribute(`aria-controls`)).toBe(`identity-panel`);
+        const signIn = screen.getByRole(`link`, { name: `Sign in with Discord` });
+        expect(signIn.getAttribute(`href`)).toBe(`/api/auth/discord/login`);
+        expect(screen.getByRole(`dialog`, { name: `Sign in` }).contains(signIn)).toBe(true);
+        expect(document.activeElement).toBe(signIn);
+        expect(panel()?.querySelector(`.discord-sign-in .note`)?.textContent).toBe(
+            `By signing in you accept the Terms. HeXO Arena keeps only your Discord user ID and a public name made from your username, never your email; see\u00a0Privacy.`,
+        );
+        expect(screen.getByRole(`button`, { name: `Close sign-in` })).toBeTruthy();
+        fireEvent.click(screen.getByRole(`link`, { name: `Privacy` }));
+        expect(panel()).toBe(null);
+        expect(window.location.pathname).toBe(`/legal/privacy`);
     });
 
     it('open a popover from the signed-in name with the rating, where to go, and sign-out', async () => {
@@ -104,10 +120,20 @@ describe('Identity', () => {
         const signIn = screen.getByRole(`link`, { name: `Sign in with Discord` });
         expect(panel()?.contains(signIn)).toBe(true);
         expect(document.activeElement).toBe(signIn);
-        expect(panel()?.querySelector(`.discord-sign-in .note`)?.textContent).toBe(`Discord shares your username only; no email.`);
+        expect(panel()?.querySelector(`.discord-sign-in .note`)?.textContent).toBe(`By signing in you accept the Terms. HeXO Arena keeps only your Discord user ID and a public name made from your username, never your email; see\u00a0Privacy.`);
         const end = screen.getByRole(`button`, { name: `End guest session` });
         expect(document.getElementById(end.getAttribute(`aria-describedby`) ?? ``)?.textContent).toBe(`Your guest games end with it.`);
         expect(signIn.compareDocumentPosition(end) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    });
+
+    it('shut the guest menu when the notice leads to the terms', async () => {
+        serve({ kind: `guest`, name: `Guest k3f9` });
+        render(<Identity route={bots} />);
+        fireEvent.click(await screen.findByRole(`button`, { name: `Guest k3f9, unrated` }));
+        fireEvent.click(screen.getByRole(`link`, { name: `Terms` }));
+        expect(panel()).toBe(null);
+        expect(window.location.pathname).toBe(`/legal/terms`);
+        window.history.pushState(null, ``, `/`);
     });
 
     it('close on Esc and the close button, handing focus back to the button', async () => {
@@ -196,7 +222,7 @@ describe('Identity', () => {
         render(<Identity route={bots} />);
         fireEvent.click(await screen.findByRole(`button`, { name: `tom` }));
         fireEvent.click(screen.getByRole(`button`, { name: `Sign out` }));
-        const signIn = await screen.findByRole(`link`, { name: `Sign in with Discord` });
+        const signIn = await screen.findByRole(`button`, { name: `Sign in with Discord` });
         expect(posts).toEqual([`/api/auth/logout`]);
         expect(panel()).toBe(null);
         await waitFor(() => {
@@ -214,7 +240,7 @@ describe('Identity', () => {
         await waitFor(() => {
             expect(panel()).toBe(null);
         });
-        const signIn = screen.getByRole(`link`, { name: `Sign in with Discord` });
+        const signIn = screen.getByRole(`button`, { name: `Sign in with Discord` });
         expect(posts).toEqual([`/api/auth/logout`]);
         await waitFor(() => {
             expect(document.activeElement).toBe(signIn);

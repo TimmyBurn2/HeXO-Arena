@@ -26,6 +26,9 @@ const envShape = z.object({
     ADMIN_ACTOR: z.string().min(1).max(64).default(`operator`),
     // Empty leaves the og shell routes off; Vite serves the page in dev.
     WEB_INDEX_PATH: z.string().default(``),
+    // The operator's legal details, a JSON file no commit carries; empty
+    // leaves the legal pages without them, which only development allows.
+    LEGAL_DETAILS_PATH: z.string().default(``),
     // Empty leaves nightly backups off, which suits a bare `pnpm dev`.
     BACKUP_DIR: z.string().default(``),
     BACKUP_KEEP: z.coerce.number().int().min(1).max(365).default(14),
@@ -47,6 +50,12 @@ const envSchema = envShape
     .refine((env) => env.NODE_ENV !== `production` || env.DEV_FAST_STOP === ``, {
         message: `DEV_FAST_STOP must be unset when NODE_ENV is production`,
         path: [`DEV_FAST_STOP`],
+    })
+    // The imprint must name the operator, so production never serves the
+    // site without the details.
+    .refine((env) => env.NODE_ENV !== `production` || env.LEGAL_DETAILS_PATH !== ``, {
+        message: `LEGAL_DETAILS_PATH must name the legal details file when NODE_ENV is production`,
+        path: [`LEGAL_DETAILS_PATH`],
     })
     .transform(({ DEV_LOGIN, DEV_FAST_STOP, ...env }) => ({
         ...env,

@@ -152,6 +152,8 @@ export const pairs = [
     [`focus on base`, `--c-focus`, `--c-bg`, 3],
     [`focus on overlay`, `--c-focus`, `--c-bg-overlay`, 3],
     [`accent solid on base`, `--c-accent-solid`, `--c-bg`, 3],
+    // The mark in the home link brightens to it under the pointer.
+    [`accent solid hover on base`, `--c-accent-solid-hover`, `--c-bg`, 3],
     [`accent solid on raised`, `--c-accent-solid`, `--c-bg-raised`, 3],
     [`accent solid on overlay`, `--c-accent-solid`, `--c-bg-overlay`, 3],
     [`good solid on base`, `--c-good-solid`, `--c-bg`, 3],
@@ -241,6 +243,8 @@ export const steps = [
     [`hover above overlay`, `--c-bg-hover`, `--c-bg-overlay`, 1.05],
     [`active above hover`, `--c-bg-active`, `--c-bg-hover`, 1.05],
     [`input above base`, `--c-bg-input`, `--c-bg`, 1.1],
+    // Fields and chips also sit in panels and sheets, on the overlay.
+    [`input above overlay`, `--c-bg-input`, `--c-bg-overlay`, 1.05],
 ];
 
 /**

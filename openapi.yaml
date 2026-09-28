@@ -859,6 +859,111 @@ components:
         - kind
         - rating
       type: object
+    LegalDetails:
+      additionalProperties: false
+      description: The operator, the host with the server's location, the supervisory authority, and an
+        optional mail provider.
+      properties:
+        host:
+          additionalProperties: false
+          properties:
+            addressLines:
+              items:
+                maxLength: 200
+                minLength: 1
+                type: string
+              maxItems: 6
+              minItems: 1
+              type: array
+            name:
+              maxLength: 200
+              minLength: 1
+              type: string
+            serverLocation:
+              maxLength: 200
+              minLength: 1
+              type: string
+          required:
+            - name
+            - addressLines
+            - serverLocation
+          type: object
+        mailProvider:
+          additionalProperties: false
+          properties:
+            addressLines:
+              items:
+                maxLength: 200
+                minLength: 1
+                type: string
+              maxItems: 6
+              minItems: 1
+              type: array
+            name:
+              maxLength: 200
+              minLength: 1
+              type: string
+          required:
+            - name
+            - addressLines
+          type: object
+        operator:
+          additionalProperties: false
+          properties:
+            addressLines:
+              items:
+                maxLength: 200
+                minLength: 1
+                type: string
+              maxItems: 6
+              minItems: 1
+              type: array
+            discord:
+              maxLength: 64
+              minLength: 1
+              type: string
+            email:
+              maxLength: 254
+              pattern: ^[^\s@]+@[^\s@]+$
+              type: string
+            name:
+              maxLength: 200
+              minLength: 1
+              type: string
+          required:
+            - name
+            - addressLines
+            - email
+          type: object
+        supervisoryAuthority:
+          additionalProperties: false
+          properties:
+            addressLines:
+              items:
+                maxLength: 200
+                minLength: 1
+                type: string
+              maxItems: 6
+              minItems: 1
+              type: array
+            name:
+              maxLength: 200
+              minLength: 1
+              type: string
+            url:
+              maxLength: 2048
+              pattern: ^https:\/\/\S+$
+              type: string
+          required:
+            - name
+            - addressLines
+            - url
+          type: object
+      required:
+        - operator
+        - host
+        - supervisoryAuthority
+      type: object
     LiveGameEntry:
       description: A game in progress; a game with a guest seat is unrated.
       properties:
@@ -1163,7 +1268,7 @@ components:
       type: apiKey
 info:
   title: HeXO Arena
-  version: 0.20.0
+  version: 0.21.0
 openapi: 3.0.3
 paths:
   /api/auth/discord/callback:
@@ -1907,6 +2012,25 @@ paths:
       summary: List rankable players by rating.
       tags:
         - Directory
+  /api/legal:
+    get:
+      description: The values the imprint and privacy pages show, read once at start from a file the
+        deployment provides. A production server refuses to start without that file, so only a
+        development server answers 404.
+      operationId: getLegalDetails
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LegalDetails"
+          description: Operator, host, supervisory authority, and mail provider.
+        "404":
+          $ref: "#/components/responses/NotFound"
+      security: []
+      summary: The operator's legal details.
+      tags:
+        - Site
   /api/me:
     get:
       description: Reads the session cookie alone; without a live session the answer is null, never 401.

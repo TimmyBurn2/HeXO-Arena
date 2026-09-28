@@ -10,6 +10,7 @@ services:
             DATABASE_PATH: /data/hexo-arena.sqlite
             DEV_LOGIN: '1'
             ADMIN_SOCKET_PATH: /run/hexo-arena/admin.sock
+            LEGAL_DETAILS_PATH: legal-details.example.json
         # The admin socket lives on a private tmpfs owned by the app uid
         # (node, 1000); it dies with the container, so no stale socket
         # survives a restart.

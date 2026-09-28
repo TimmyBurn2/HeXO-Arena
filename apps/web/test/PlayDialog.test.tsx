@@ -206,7 +206,7 @@ describe('PlayDialog', () => {
         const signIn = screen.getByRole(`link`, { name: `Sign in with Discord` });
         expect(signIn.getAttribute(`href`)).toBe(`/api/auth/discord/login`);
         expect(signIn.classList.contains(`discord-button`)).toBe(true);
-        expect(screen.getByText(`Discord shares your username only; no email.`)).toBeTruthy();
+        expect(screen.getByText((_content, element) => element?.matches(`.discord-sign-in .note`) === true && element.textContent === `By signing in you accept the Terms. HeXO Arena keeps only your Discord user ID and a public name made from your username, never your email; see\u00a0Privacy.`)).toBeTruthy();
         expect(screen.queryByRole(`button`, { name: `Start game` })).toBe(null);
     });
 
@@ -284,7 +284,7 @@ describe('PlayDialog', () => {
         meStore.start();
         renderDialog(fullAccepts);
         expect((await screen.findByRole(`link`, { name: `Sign in with Discord` })).classList.contains(`discord-button`)).toBe(true);
-        expect(screen.getByText(`Discord shares your username only; no email.`)).toBeTruthy();
+        expect(screen.getByText((_content, element) => element?.matches(`.discord-sign-in .note`) === true && element.textContent === `By signing in you accept the Terms. HeXO Arena keeps only your Discord user ID and a public name made from your username, never your email; see\u00a0Privacy.`)).toBeTruthy();
         fireEvent.click(screen.getByRole(`button`, { name: `Play as guest` }));
         expect(await screen.findByText(`The guest limit is full; try again in a minute, or sign in`)).toBeTruthy();
         expect(screen.getByRole(`link`, { name: `Sign in with Discord` })).toBeTruthy();

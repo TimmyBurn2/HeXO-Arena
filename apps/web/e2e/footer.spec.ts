@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
 import { looks, wear } from './matrix';
 import { serve, world } from './mock-api';
 
@@ -102,4 +102,141 @@ test('the footer tagline never ends on a lone word from 320 to 1280 px at 100, 1
         }
     }
     expect(lone).toEqual([]);
+});
+
+type Edges = { left: number; right: number; top: number; bottom: number };
+
+// The footer as the checks read it: its content box, the tagline, and each
+// group of links with every link's box and the words on its last line.
+async function footerLayout(page: Page) {
+    return page.locator(`footer.site-footer .site-footer-inner`).evaluate((inner) => {
+        const edges = (box: DOMRect): Edges => ({ left: box.left, right: box.right, top: box.top, bottom: box.bottom });
+        const style = getComputedStyle(inner);
+        const box = inner.getBoundingClientRect();
+        // A word broken across lines ends on the line of its last piece.
+        const lastLine = (node: Node | null) => {
+            if (node === null) return { lines: 0, words: 0 };
+            const words: number[] = [];
+            let at = 0;
+            for (const word of (node.textContent ?? ``).split(` `)) {
+                const range = document.createRange();
+                range.setStart(node, at);
+                range.setEnd(node, at + word.length);
+                words.push(Math.round(range.getBoundingClientRect().bottom));
+                at += word.length + 1;
+            }
+            const bottom = Math.max(...words);
+            return { lines: new Set(words).size, words: words.filter((entry) => entry === bottom).length };
+        };
+        return {
+            content: { left: box.left + parseFloat(style.paddingLeft), right: box.right - parseFloat(style.paddingRight) },
+            tagline: edges((inner.querySelector(`.site-tagline`) ?? inner).getBoundingClientRect()),
+            groups: [...inner.querySelectorAll(`ul`)].map((group) => ({
+                box: edges(group.getBoundingClientRect()),
+                links: [...group.querySelectorAll(`a`)].map((link) => ({
+                    label: link.textContent,
+                    href: link.getAttribute(`href`),
+                    box: edges(link.getBoundingClientRect()),
+                    last: lastLine([...link.childNodes].find((node) => node.nodeType === Node.TEXT_NODE) ?? null),
+                })),
+            })),
+            // The top bar's own overflow at large text is not the footer's.
+            overflow: inner.scrollWidth - inner.clientWidth,
+        };
+    });
+}
+
+const legalLinks = [
+    [`Impressum / Legal notice`, `/legal/imprint`],
+    [`Privacy`, `/legal/privacy`],
+    [`Terms`, `/legal/terms`],
+    [`Licenses`, `/third-party-licenses.txt`],
+];
+
+const framedScreens = [`/`, `/ladder`, `/bots`, `/bots/sealbot`, `/connect`, `/profile`, `/credits`, `/legal/imprint`, `/legal/privacy`, `/legal/terms`, `/nowhere`, `/game/nope`];
+
+// The legal links are the footer's last group: at the bottom right where
+// the footer is a row, at its end where it stacks, signed in or out.
+for (const [visitor, me] of [
+    [`signed out`, null],
+    [`signed in`, { kind: `user`, name: `tom`, rating: 1503, provisional: false }],
+    [`a guest`, { kind: `guest`, name: `Guest k3f9` }],
+] as const) {
+    for (const path of framedScreens) {
+        test(`the legal links close the footer of ${path} for ${visitor} at 1280, 768, and 390 px`, async ({ page }) => {
+            const look = looks[0];
+            if (look === undefined) throw new Error(`no look registered`);
+            await wear(page, look);
+            await serve(page, world({ me }));
+            await page.setViewportSize({ width: 1280, height: 900 });
+            await page.goto(path);
+            await page.locator(`h1`).first().waitFor();
+            for (const width of [1280, 768, 390]) {
+                await page.setViewportSize({ width, height: 900 });
+                const footer = await footerLayout(page);
+                const legal = footer.groups.at(-1);
+                expect(legal?.links.map((link) => [link.label, link.href])).toEqual(legalLinks);
+                for (const group of footer.groups.slice(0, -1)) expect(legal?.box.top ?? 0).toBeGreaterThanOrEqual(group.box.bottom - 0.5);
+                expect(legal?.box.bottom ?? 0).toBeGreaterThanOrEqual(footer.tagline.bottom - 0.5);
+                if (width >= 640) expect(Math.abs((legal?.box.right ?? 0) - footer.content.right)).toBeLessThanOrEqual(0.5);
+                else expect(Math.abs((legal?.box.left ?? 0) - footer.content.left)).toBeLessThanOrEqual(0.5);
+                for (const link of legal?.links ?? []) await expect(page.locator(`footer.site-footer`).getByRole(`link`, { name: link.label })).toBeVisible();
+                // Small print: the dim text, regular weight, unless it is the page shown.
+                const print = await page.locator(`footer.site-footer .legal-links a:not([aria-current])`).evaluateAll((links) =>
+                    links.map((link) => {
+                        const probe = document.createElement(`span`);
+                        probe.style.color = `var(--c-text-dim)`;
+                        link.after(probe);
+                        const dim = getComputedStyle(probe).color;
+                        probe.remove();
+                        return getComputedStyle(link).color === dim && getComputedStyle(link).fontWeight === `400`;
+                    }),
+                );
+                expect(print.every(Boolean)).toBe(true);
+            }
+        });
+    }
+}
+
+// Scaled-up text on any window width keeps each link inside its own group,
+// the groups on lines of their own, and no label ending on one word alone;
+// the footer never runs past the window.
+test('the footer keeps its groups apart and leaves no lone word from 320 to 1280 px at 100, 150, and 200% text', async ({ page }) => {
+    const look = looks[0];
+    if (look === undefined) throw new Error(`no look registered`);
+    await wear(page, look);
+    await serve(page, world({ me: null }));
+    await page.setViewportSize({ width: 1280, height: 700 });
+    await page.goto(`/nowhere`);
+    await page.locator(`h1`).waitFor();
+    const devtools = await page.context().newCDPSession(page);
+    const faults: string[] = [];
+    for (const size of [16, 24, 32]) {
+        await devtools.send(`Page.setFontSizes`, { fontSizes: { standard: size } });
+        for (const width of [...Array.from({ length: 97 }, (_, index) => 320 + index * 10), 481]) {
+            await page.setViewportSize({ width, height: 700 });
+            const footer = await footerLayout(page);
+            const at = `${String(size)} px text at ${String(width)} px`;
+            for (const [index, group] of footer.groups.entries()) {
+                for (const link of group.links) {
+                    const box = link.box;
+                    if (box.left < group.box.left - 0.5 || box.right > group.box.right + 0.5 || box.top < group.box.top - 0.5 || box.bottom > group.box.bottom + 0.5) {
+                        faults.push(`${at}: ${link.label} outside its group`);
+                    }
+                    if (link.last.lines > 1 && link.last.words < 2) faults.push(`${at}: ${link.label} ends on a lone word`);
+                    if (box.right > width) faults.push(`${at}: ${link.label} past the window`);
+                }
+                // A group that wraps shares its links out evenly: never one
+                // link alone on a line while another line holds three.
+                const lines = new Map<number, number>();
+                for (const link of group.links) lines.set(Math.round(link.box.top), (lines.get(Math.round(link.box.top)) ?? 0) + 1);
+                const perLine = [...lines.values()];
+                if (perLine.length > 1 && Math.min(...perLine) === 1 && Math.max(...perLine) >= 3) faults.push(`${at}: group ${String(index)} leaves a link alone`);
+                const next = footer.groups[index + 1];
+                if (next !== undefined && next.box.top < group.box.bottom - 0.5) faults.push(`${at}: groups ${String(index)} and ${String(index + 1)} share a line`);
+            }
+            if (footer.overflow > 0 || footer.tagline.right > width) faults.push(`${at}: the footer runs past the window`);
+        }
+    }
+    expect(faults).toEqual([]);
 });

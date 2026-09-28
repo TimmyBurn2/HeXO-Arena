@@ -42,7 +42,7 @@ describe('ProfileScreen', () => {
         const signIn = await screen.findByRole(`link`, { name: `Sign in with Discord` });
         expect(signIn.getAttribute(`href`)).toBe(`/api/auth/discord/login`);
         expect(signIn.classList.contains(`discord-button`)).toBe(true);
-        expect(screen.getByText(`Discord shares your username only; no email.`)).toBeTruthy();
+        expect(screen.getByText((_content, element) => element?.matches(`.discord-sign-in .note`) === true && element.textContent === `By signing in you accept the Terms. HeXO Arena keeps only your Discord user ID and a public name made from your username, never your email; see\u00a0Privacy.`)).toBeTruthy();
         expect(screen.getByRole(`link`, { name: `Build a bot` }).getAttribute(`href`)).toBe(`/connect`);
     });
 
@@ -104,6 +104,6 @@ describe('ProfileScreen', () => {
         expect(signIn.getAttribute(`href`)).toBe(`/api/auth/discord/login`);
         expect(signIn.closest(`.identity-plate`)).not.toBe(null);
         // The trust line sits with the sign-in, as on every other screen.
-        expect(signIn.closest(`.discord-sign-in`)?.textContent).toContain(`Discord shares your username only; no email.`);
+        expect(signIn.closest(`.discord-sign-in`)?.textContent).toContain(`By signing in you accept the Terms. HeXO Arena keeps only your Discord user ID and a public name made from your username, never your email; see\u00a0Privacy.`);
     });
 });

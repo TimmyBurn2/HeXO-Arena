@@ -5,11 +5,15 @@ import { openDatabase, runMigrations } from './db';
 import { parseEnv } from './env';
 import { createDiscordOAuth } from './discord';
 import { drainGraceMs } from './drain';
+import { readLegalDetails } from './legal';
 import { PresenceRegistry } from './presence';
 import { handleStopSignals } from './signals';
 import { GameWatchers } from './watchers';
 
 const env = parseEnv(process.env);
+// Read once, before anything binds: a production boot without filled-in
+// details ends here, loudly.
+const legalDetails = env.LEGAL_DETAILS_PATH === `` ? null : readLegalDetails(env.LEGAL_DETAILS_PATH, env.NODE_ENV === `production`);
 const db = openDatabase(env.DATABASE_PATH);
 runMigrations(db);
 
@@ -31,6 +35,7 @@ const { app, admin, drain: drainApp } = await buildApp({
     watchers: new GameWatchers(),
     adminActor: env.ADMIN_ACTOR,
     publicOrigin: env.PUBLIC_ORIGIN,
+    legalDetails,
     ...(env.WEB_INDEX_PATH !== `` && { webIndexPath: env.WEB_INDEX_PATH }),
 });
 

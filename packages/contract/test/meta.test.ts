@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 import {
     botMeta,
     botsMeta,
+    connectMeta,
+    creditsMeta,
     clockText,
     durationText,
     finishReasonLabels,
@@ -10,6 +12,7 @@ import {
     notFoundMeta,
     pageTitle,
     plural,
+    profileMeta,
     resultSentence,
     siteMeta,
 } from '../src';
@@ -23,6 +26,12 @@ describe('page meta', () => {
         expect(botsMeta).toEqual({ title: `Bots - HeXO Arena`, description: `Every bot on HeXO Arena, online or not` });
         expect(pageTitle(`Credits`)).toBe(`Credits - HeXO Arena`);
         expect(notFoundMeta).toEqual({ title: `Not found - HeXO Arena`, description: `That page does not exist` });
+    });
+
+    it('titles and describes the pages without data of their own, for the site and its previews alike', () => {
+        expect(connectMeta).toEqual({ title: `Build a bot - HeXO Arena`, description: `Sign in, create a bot, and connect it to the ladder` });
+        expect(profileMeta).toEqual({ title: `Profile - HeXO Arena`, description: `Your rating and your bots` });
+        expect(creditsMeta).toEqual({ title: `Credits - HeXO Arena`, description: `The game, themes, font, and projects HeXO Arena builds on` });
     });
 
     it('describes the root and the ladder by the roster when it is known, and by the site otherwise', () => {
@@ -45,6 +54,17 @@ describe('page meta', () => {
         expect(botMeta({ ...bot, ownerName: null, online: true, about: `plays fast` }).description).toBe(
             `HeXO bot, rated 1500 (provisional), online, closed for challenges. plays fast`,
         );
+    });
+
+    it('cuts a long about at a word and ends every about on its last word or the cut', () => {
+        const bot = { name: `sealbot`, ownerName: null, rating: 1500, provisional: false, online: false, openForChallenges: false };
+        const lead = `HeXO bot, rated 1500, offline. `;
+        const long = `${`word `.repeat(23)}wordy tail, and more after it`;
+        expect(botMeta({ ...bot, about: long }).description).toBe(`${lead}${`word `.repeat(23)}wordy...`);
+        expect(botMeta({ ...bot, about: `${`word `.repeat(23)}endsat, then more` }).description).toBe(`${lead}${`word `.repeat(22)}word...`);
+        expect(botMeta({ ...bot, about: `Plays fast.  ` }).description).toBe(`${lead}Plays fast`);
+        expect(botMeta({ ...bot, about: `Plays fast,\nthinks slow.` }).description).toBe(`${lead}Plays fast, thinks slow`);
+        expect(botMeta({ ...bot, about: `Beat me?` }).description).toBe(`${lead}Beat me?`);
     });
 
     it('titles a game by both names and describes it live by mover and clock, finished by its result', () => {

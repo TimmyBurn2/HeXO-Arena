@@ -34,7 +34,7 @@ describe('AppShell', () => {
         meStore.start();
         render(<AppShell />);
         await waitFor(() => {
-            expect(topbar().querySelector(`.nav-right a.discord-button`)?.textContent).toBe(`Sign in with Discord`);
+            expect(topbar().querySelector(`.nav-right button.discord-button`)?.textContent).toBe(`Sign in with Discord`);
         });
     });
 
@@ -70,7 +70,7 @@ describe('AppShell', () => {
         for (const path of [`/`, `/ladder`, `/bots`, `/bots/sealbot`, `/connect`, `/profile`, `/nowhere`]) {
             navigate(path);
             await waitFor(() => {
-                expect(topbar().querySelector(`.nav-right a.discord-button`)).toBeTruthy();
+                expect(topbar().querySelector(`.nav-right button.discord-button`)).toBeTruthy();
             });
             const right = [...topbar().querySelectorAll(`.nav-right > *`)];
             expect(right.map((element) => element.getAttribute(`aria-label`) ?? element.className)).toEqual([
@@ -212,11 +212,11 @@ describe('AppShell', () => {
         );
     });
 
-    it('close every framed screen with the tagline and the standing links, and the game with none', async () => {
+    it('close every framed screen with the tagline, the standing links, and the legal links last, and the game with none', async () => {
         stubHealthOk();
         stubEventSource(null);
         render(<AppShell />);
-        for (const path of [`/`, `/ladder`, `/bots`, `/bots/sealbot`, `/connect`, `/profile`, `/credits`, `/nowhere`]) {
+        for (const path of [`/`, `/ladder`, `/bots`, `/bots/sealbot`, `/connect`, `/profile`, `/credits`, `/legal/imprint`, `/legal/privacy`, `/legal/terms`, `/nowhere`]) {
             navigate(path);
             await waitFor(() => {
                 expect(document.querySelector(`footer.site-footer`)).toBeTruthy();
@@ -226,7 +226,12 @@ describe('AppShell', () => {
             expect([...footer.querySelectorAll(`a`)].map((a) => [a.textContent, a.getAttribute(`href`), a.getAttribute(`target`)])).toEqual([
                 [`Credits`, `/credits`, null],
                 [`Bot API`, `https://github.com/TimmyBurn2/Hexo-Bot-Api`, null],
+                [`Impressum / Legal notice`, `/legal/imprint`, null],
+                [`Privacy`, `/legal/privacy`, null],
+                [`Terms`, `/legal/terms`, null],
+                [`Licenses`, `/third-party-licenses.txt`, null],
             ]);
+            expect([...footer.querySelectorAll(`ul`)].at(-1)?.textContent).toBe(`Impressum / Legal noticePrivacyTermsLicenses`);
         }
         navigate(`/credits`);
         await waitFor(() => {

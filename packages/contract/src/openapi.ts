@@ -63,6 +63,8 @@ import {
     humanMoveRequestSchema,
     leaderboardEntrySchema,
     leaderboardPath,
+    legalDetailsPath,
+    legalDetailsSchema,
     liveGameEntrySchema,
     liveGameListCap,
     notFoundErrorCodes,
@@ -204,6 +206,23 @@ function registerSiteSurface(registry: OpenAPIRegistry, shared: SharedComponents
         responses: {
             200: { description: 'The process is up and serving.' },
             503: { description: 'The process is up and paused.' },
+        },
+    });
+
+    registry.registerPath({
+        method: 'get',
+        path: legalDetailsPath,
+        summary: `The operator's legal details.`,
+        operationId: 'getLegalDetails',
+        tags: ['Site'],
+        security: [],
+        description: `The values the imprint and privacy pages show, read once at start from a file the deployment provides. A production server refuses to start without that file, so only a development server answers 404.`,
+        responses: {
+            200: {
+                description: `Operator, host, supervisory authority, and mail provider.`,
+                content: { 'application/json': { schema: legalDetailsSchema } },
+            },
+            404: shared.notFound,
         },
     });
 

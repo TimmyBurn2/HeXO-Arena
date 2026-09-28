@@ -11,6 +11,9 @@ const routes = [
     { name: `profile` },
     { name: `credits` },
     { name: `game`, gameId: `g1` },
+    { name: `legal`, page: `imprint` },
+    { name: `legal`, page: `privacy` },
+    { name: `legal`, page: `terms` },
     { name: `not-found` },
 ] as const;
 
@@ -21,6 +24,9 @@ describe('routeMeta', () => {
         expect(routeMeta({ name: `connect` }).title).toBe(`Build a bot - HeXO Arena`);
         expect(routeMeta({ name: `profile` }).title).toBe(`Profile - HeXO Arena`);
         expect(routeMeta({ name: `credits` }).title).toBe(`Credits - HeXO Arena`);
+        expect(routeMeta({ name: `legal`, page: `imprint` }).title).toBe(`Impressum / Legal notice - HeXO Arena`);
+        expect(routeMeta({ name: `legal`, page: `privacy` }).title).toBe(`Privacy policy - HeXO Arena`);
+        expect(routeMeta({ name: `legal`, page: `terms` }).title).toBe(`Terms of use - HeXO Arena`);
         for (const route of routes) expect(routeMeta(route).title).toMatch(/^\S.* - HeXO Arena$/);
     });
 

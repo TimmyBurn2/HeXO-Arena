@@ -72,8 +72,11 @@ Every task ends green: type-check, lint, tests.
 
 - Spec-first: `packages/contract` zod is the source of truth; `openapi.yaml` is
   generated and diffed in CI.
-- No HeXO code may be copied into this repo. GPLv3, clean-room rules
-  (SPEC.md section 11).
+- No HeXO code may be copied, translated, or ported into this repo (HeXO is
+  GPLv3). The rules are reimplemented independently: behavior comes from
+  HeXO's rules, its observed behavior, and reading its source for reference,
+  checked against a local HeXO checkout used only as a test oracle (SPEC.md
+  section 11).
 - The server executes no engine code and makes no outbound calls except Discord
   OAuth.
 - Never weaken: the egress allowlist, token hashing, one-stream-per-bot, the

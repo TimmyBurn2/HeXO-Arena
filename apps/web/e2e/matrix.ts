@@ -110,6 +110,18 @@ export const shots: readonly Shot[] = [
         viewports: panelViewports,
     },
     { name: `menu-guest`, path: `/connect`, world: guest, ready: `h1`, framed: true, after: openIdentity, viewports: panelViewports },
+    {
+        name: `menu-sign-in`,
+        path: `/bots`,
+        world: signedOut,
+        ready: `table`,
+        framed: true,
+        after: async (page) => {
+            await page.locator(`header`).getByRole(`button`, { name: `Sign in with Discord` }).click();
+            await page.locator(`dialog.identity-panel[open]`).waitFor();
+        },
+        viewports: panelViewports,
+    },
     { name: `signin-expired`, path: `/?signin=expired`, world: signedOut, ready: `.site-banner`, framed: true },
     { name: `signin-banned`, path: `/?signin=banned`, world: signedOut, ready: `.site-banner`, framed: true },
     { name: `ladder-loading`, path: `/`, world: world({ stall: true }), ready: `.skeleton`, framed: true },
@@ -294,6 +306,11 @@ export const shots: readonly Shot[] = [
     },
     { name: `not-found`, path: `/nowhere`, world: world(), ready: `h1`, framed: true },
     { name: `credits`, path: `/credits`, world: world(), ready: `h1`, framed: true, board: true },
+    { name: `legal-imprint`, path: `/legal/imprint`, world: signedOut, ready: `section`, framed: true },
+    { name: `legal-privacy`, path: `/legal/privacy`, world: signedOut, ready: `section`, framed: true },
+    { name: `legal-terms`, path: `/legal/terms`, world: guest, ready: `section`, framed: true },
+    { name: `legal-loading`, path: `/legal/privacy`, world: world({ stall: true }), ready: `.skeleton`, framed: true },
+    { name: `legal-error`, path: `/legal/privacy`, world: world({ legal: null }), ready: `.empty`, framed: true },
 ];
 
 /** Seed the look's storage before any app script runs. */

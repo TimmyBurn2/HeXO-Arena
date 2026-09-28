@@ -311,11 +311,29 @@
         padding: var(--space-4);
     }
 
+    /* The standing links, then the legal ones, each group its own row. */
     .drawer-foot {
         flex: none;
+        display: grid;
         padding: var(--space-1) var(--space-4);
         box-shadow: inset var(--border-w) 0 0 var(--c-border), inset 0 var(--border-w) 0 var(--c-border);
         font-size: var(--text-sm);
+    }
+
+    /* Four legal links stand two to a row, so none is left on a line of
+       its own at any drawer width. */
+    .drawer-foot .legal-links {
+        display: grid;
+        grid-template-columns: repeat(2, auto);
+        justify-content: start;
+    }
+
+    /* Where two labels no longer fit side by side, as with large text on
+       a phone, they stand one to a row. */
+    @media (width < 12rem) {
+        .drawer-foot .legal-links {
+            grid-template-columns: auto;
+        }
     }
 
     /* The feed scrolls under its header, so the panel's top padding
@@ -598,9 +616,13 @@
             overflow-wrap: anywhere;
         }
 
+        /* Large text on a short phone can fill the sheet with its head and
+           foot alone; the sheet's body then scrolls, so every foot link stays
+           reachable, while the panel keeps its own scroll. */
         .drawer-body {
             height: auto;
             max-height: 55dvh;
+            overflow-y: auto;
             box-shadow: none;
             background: transparent;
         }
@@ -614,9 +636,11 @@
             box-shadow: inset 0 var(--border-w) 0 var(--c-border);
         }
 
-        /* A finger needs the full target on the sheet. */
+        /* A finger needs the full target on the sheet, and a link that
+           focus scrolls into view keeps its whole focus ring in the window. */
         .drawer-foot .site-links a {
             min-height: var(--control-lg);
+            scroll-margin-block: var(--space-2);
         }
 
         /* A finger needs the full target on the sheet. */

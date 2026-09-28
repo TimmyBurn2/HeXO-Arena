@@ -10,7 +10,18 @@ describe('the committed env example', () => {
         expect(Object.keys(example).sort()).toEqual([...envKeys].sort());
     });
 
-    it('is the schema defaults with the dev login and the fast stop on', () => {
-        expect(parseEnv(example)).toEqual(parseEnv({ DEV_LOGIN: `1`, DEV_FAST_STOP: `1` }));
+    it('is the schema defaults with the dev login, the fast stop, and the placeholder legal details on', () => {
+        expect(parseEnv(example)).toEqual(parseEnv({ DEV_LOGIN: `1`, DEV_FAST_STOP: `1`, LEGAL_DETAILS_PATH: `legal-details.example.json` }));
+    });
+});
+
+describe('LEGAL_DETAILS_PATH', () => {
+    it('may stay unset outside production', () => {
+        expect(parseEnv({}).LEGAL_DETAILS_PATH).toBe(``);
+    });
+
+    it('unset in production refuses to parse', () => {
+        expect(() => parseEnv({ NODE_ENV: `production` })).toThrow(/LEGAL_DETAILS_PATH/);
+        expect(parseEnv({ NODE_ENV: `production`, LEGAL_DETAILS_PATH: `/etc/legal.json` }).LEGAL_DETAILS_PATH).toBe(`/etc/legal.json`);
     });
 });

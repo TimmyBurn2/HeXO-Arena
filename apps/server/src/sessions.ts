@@ -1,12 +1,10 @@
 import { and, eq, gt, isNull, lt } from 'drizzle-orm';
 import { randomUUID } from 'node:crypto';
-import { sessionCookieName } from '@hexo-arena/contract';
+import { sessionCookieName, sessionMaxAgeSeconds } from '@hexo-arena/contract';
 import type { FastifyRequest } from 'fastify';
 import { nowSeconds, type Query } from './db';
 import { sessions, users } from './db/schema';
 import { randomToken, sha256Hex } from './tokens';
-
-export const sessionCookieMaxAge = 30 * 24 * 60 * 60;
 
 export function createSession(query: Query, userId: string): string {
     const token = randomToken(32);
@@ -20,7 +18,7 @@ export function createSession(query: Query, userId: string): string {
             tokenHash: sha256Hex(token),
             userId,
             createdAt: now,
-            expiresAt: now + sessionCookieMaxAge,
+            expiresAt: now + sessionMaxAgeSeconds,
         })
         .run();
     return token;

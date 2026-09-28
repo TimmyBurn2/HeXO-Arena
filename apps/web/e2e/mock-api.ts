@@ -3,11 +3,13 @@ import {
     botListingSchema,
     gameSnapshotSchema,
     leaderboardEntrySchema,
+    legalDetailsSchema,
     liveGameEntrySchema,
     meSchema,
     type BotListing,
     type GameSnapshot,
     type LeaderboardEntry,
+    type LegalDetails,
     type LiveGameEntry,
     type Me,
     type Side,
@@ -31,7 +33,21 @@ export interface World {
     broken: boolean;
     // A module path whose download fails, as a missing page chunk does.
     unloadable: string | null;
+    // The deployment's legal details; null answers not found.
+    legal: LegalDetails | null;
 }
+
+// Invented values: no real operator, host, or authority belongs in a fixture.
+export const legalDetails: LegalDetails = {
+    operator: { name: `Ada Beispiel`, addressLines: [`Musterweg 7`, `12345 Beispielstadt`, `Germany`], email: `contact@arena.example`, discord: `ada_b` },
+    host: { name: `Example Hosting GmbH`, addressLines: [`Serverstrasse 1`, `54321 Rechenburg`, `Germany`], serverLocation: `Rechenburg, Germany` },
+    supervisoryAuthority: {
+        name: `Example State Data Protection Authority`,
+        addressLines: [`Aufsichtsplatz 2`, `11111 Landeshausen`, `Germany`],
+        url: `https://authority.example/`,
+    },
+    mailProvider: { name: `Example Mail AG`, addressLines: [`Postfach 3`, `22222 Briefstadt`, `Germany`] },
+};
 
 export const leaderboard: LeaderboardEntry[] = [
     { rank: 1, name: `sealbot`, kind: `bot`, rating: 1712 },
@@ -297,6 +313,7 @@ export function world(overrides: Partial<World> = {}): World {
         stall: false,
         broken: false,
         unloadable: null,
+        legal: legalDetails,
         ...overrides,
     };
 }
@@ -401,6 +418,11 @@ export async function serve(page: Page, state: World): Promise<void> {
         if (path === `/api/auth/guest` && method === `POST`) {
             state.me = { kind: `guest`, name: `Guest k3f9` };
             await json(route, 201, state.me);
+            return;
+        }
+        if (path === `/api/legal` && method === `GET`) {
+            if (state.legal === null) await json(route, 404, { error: `no legal details on this server`, code: `not_found` });
+            else await json(route, 200, legalDetailsSchema.parse(state.legal));
             return;
         }
         if (path === `/api/leaderboard` && method === `GET`) {
