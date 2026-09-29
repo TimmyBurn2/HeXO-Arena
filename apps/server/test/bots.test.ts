@@ -151,8 +151,8 @@ describe('GET /api/bots', () => {
         const response = await app.inject({ method: 'GET', url: botsPath });
         expect(response.statusCode).toBe(200);
         expect(response.json()).toEqual([
-            { name: `alpha`, ownerName: `Ann`, online: false, openForChallenges: false, rating: 1500, provisional: true },
-            { name: `Beta`, ownerName: `Zed`, online: false, openForChallenges: false, rating: 1500, provisional: true },
+            { name: `alpha`, ownerName: `Ann`, online: false, openForChallenges: false, rating: 1500, provisional: true, liveGames: 0 },
+            { name: `Beta`, ownerName: `Zed`, online: false, openForChallenges: false, rating: 1500, provisional: true, liveGames: 0 },
         ]);
         await app.close();
     });
@@ -203,8 +203,8 @@ describe('GET /api/bots', () => {
         presence.attach(live.id, new FakeStreamSocket(), true);
         const response = await app.inject({ method: 'GET', url: botsPath });
         expect(response.json()).toEqual([
-            { name: `Idle`, ownerName: `owner`, online: false, openForChallenges: false, rating: 1500, provisional: true },
-            { name: `Live`, ownerName: `owner`, online: true, openForChallenges: true, rating: 1500, provisional: true },
+            { name: `Idle`, ownerName: `owner`, online: false, openForChallenges: false, rating: 1500, provisional: true, liveGames: 0 },
+            { name: `Live`, ownerName: `owner`, online: true, openForChallenges: true, rating: 1500, provisional: true, liveGames: 0 },
         ]);
         await app.close();
     });
@@ -225,7 +225,7 @@ describe('GET /api/bots', () => {
         socket.emitClose();
         const response = await app.inject({ method: 'GET', url: botsPath });
         expect(response.json()).toEqual([
-            { name: `Dropped`, ownerName: `owner`, online: false, openForChallenges: false, rating: 1500, provisional: true },
+            { name: `Dropped`, ownerName: `owner`, online: false, openForChallenges: false, rating: 1500, provisional: true, liveGames: 0 },
         ]);
         await app.close();
     });
@@ -251,7 +251,7 @@ describe('GET /api/bots', () => {
         presence.attach(live.id, new FakeStreamSocket(), false);
         const narrowed = await app.inject({ method: 'GET', url: `${botsPath}?online=1` });
         expect(narrowed.json()).toEqual([
-            { name: `Live`, ownerName: `owner`, online: true, openForChallenges: false, rating: 1500, provisional: true },
+            { name: `Live`, ownerName: `owner`, online: true, openForChallenges: false, rating: 1500, provisional: true, liveGames: 0 },
         ]);
         const rejected = await app.inject({ method: 'GET', url: `${botsPath}?online=0` });
         expect(rejected.statusCode).toBe(400);

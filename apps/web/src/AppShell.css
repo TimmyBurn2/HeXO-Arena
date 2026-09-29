@@ -70,8 +70,9 @@
         color: var(--c-text);
     }
 
-    /* The mark shows where the row has pixels to spare: past the phone
-       widths, and on the wider phones, whose nav links sit in the tab bar. */
+    /* The mark shows where the row has pixels to spare: past the band
+       where the nav links share the row, and on the wider phones, whose
+       nav links sit in the tab bar. */
     .brand-mark {
         display: none;
         flex: none;
@@ -95,13 +96,13 @@
         }
     }
 
-    @media (21rem < width <= 30rem), (40rem < width) {
+    @media (21rem < width <= 37rem), (44rem < width) {
         .brand-mark {
             display: block;
         }
     }
 
-    @media (max-width: 30rem) {
+    @media (max-width: 37rem) {
         .brand-mark {
             width: var(--mark-size-sm);
             height: var(--mark-size-sm);
@@ -182,10 +183,10 @@
         box-shadow: inset 0 var(--focus-w) 0 0 var(--c-accent);
     }
 
-    /* Below the desktop row the wordmark steps down a size, so the
-       signed-out bar keeps one line at the band's narrow end and on the
-       narrowest phones. */
-    @media (max-width: 40rem) {
+    /* Below the desktop row the wordmark steps down a size, so the bar
+       keeps one line where the nav links share it and on the narrowest
+       phones. */
+    @media (max-width: 44rem) {
         .brand {
             font-size: var(--text-lg);
         }
@@ -193,8 +194,10 @@
 
     /* Where the nav links share the row with the gear and who is here, the
        row tightens, and the wordmark keeps more room to its right than the
-       labels keep between them, so it stands apart from the first label. */
-    @media (30rem < width <= 40rem) {
+       labels keep between them, so it stands apart from the first label.
+       Below this band the four labels no longer fit beside a sign-in, so
+       they move to the tab bar. */
+    @media (37rem < width <= 44rem) {
         .topbar-inner {
             gap: var(--space-2);
         }
@@ -208,27 +211,7 @@
         }
     }
 
-    /* Near the band's narrow end the sign-in button takes the pixels of
-       that margin, with a few to spare for wider system faces. */
-    @media (30rem < width <= 33rem) {
-        .topbar-inner:has(> .nav-right > .discord-button) .brand {
-            margin-inline-end: 0;
-        }
-    }
-
-    /* At the band's narrow end the sign-in button leaves the three labels
-       a few pixels short, so the signed-out bar closes them up there only. */
-    @media (30rem < width <= 32rem) {
-        .topbar-inner:has(> .nav-right > .discord-button) .nav-links {
-            gap: 0;
-        }
-
-        .topbar-inner:has(> .nav-right > .discord-button) .nav-link {
-            padding: 0 var(--space-1);
-        }
-    }
-
-    @media (max-width: 30rem) {
+    @media (max-width: 37rem) {
         body {
             padding-bottom: calc(var(--header-h) + env(safe-area-inset-bottom));
         }

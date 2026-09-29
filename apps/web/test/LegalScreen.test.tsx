@@ -1,9 +1,17 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
-import { guestIdleSeconds, sessionCookieName, sessionMaxAgeSeconds, type LegalDetails } from '@hexo-arena/contract';
+import {
+    guestIdleSeconds,
+    sessionCookieName,
+    sessionMaxAgeSeconds,
+    signupCookieName,
+    signupMaxAgeSeconds,
+    type LegalDetails,
+} from '@hexo-arena/contract';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { boardSettingsStorageKey } from '../src/board/board-settings';
 import { drawerPinnedStorageKey } from '../src/game/use-drawer';
+import { playStorageKey } from '../src/play/setup';
 import { LegalScreen } from '../src/screens/LegalScreen';
 import { themeStorageKey } from '../src/theme/themes';
 
@@ -76,7 +84,7 @@ describe('LegalScreen', () => {
         expect(text).toContain(`Example Hosting GmbH, Serverstrasse 1, 54321 Rechenburg, hosts the server under a data processing agreement (Art. 28 GDPR); the server stands in Rechenburg, Germany.`);
         expect(text).toContain(`Example Mail AG, Postfach 3, 22222 Briefstadt, hosts the contact mailbox.`);
         expect(text).toContain(`Example Authority, Aufsichtsplatz 2, 11111 Landeshausen, https://authority.example/.`);
-        expect(text).toContain(`You must be at least 16 to create an account. If you are under 18, you need permission from a parent or guardian.`);
+        expect(text).toContain(`You must be at least 16 to create an account or play as a guest. If you are under 18, you need permission from a parent or guardian.`);
         const summary = section(`In short`);
         expect(within(summary).getByRole(`link`, { name: `Deleting your account` }).getAttribute(`href`)).toBe(`#deletion`);
         expect(screen.getByRole(`link`, { name: `https://authority.example/` }).getAttribute(`href`)).toBe(`https://authority.example/`);
@@ -88,15 +96,40 @@ describe('LegalScreen', () => {
     it('state the cookie, its lifetime, the storage keys, and the guest idle window as the code sets them', async () => {
         serve(ok(details));
         render(<LegalScreen page="privacy" />);
-        await screen.findByRole(`heading`, { name: `Cookie and browser storage` });
-        const storage = section(`Cookie and browser storage`).textContent;
+        await screen.findByRole(`heading`, { name: `Cookies and browser storage` });
+        const storage = section(`Cookies and browser storage`).textContent;
         expect(storage).toContain(`The cookie ${sessionCookieName}, set when you sign in`);
         expect(storage).toContain(`It lasts ${String(sessionMaxAgeSeconds / 86_400)} days after sign-in`);
-        expect(storage).toContain(`under ${themeStorageKey}, ${boardSettingsStorageKey}, and ${drawerPinnedStorageKey}:`);
+        expect(storage).toContain(`under ${themeStorageKey}, ${boardSettingsStorageKey}, ${drawerPinnedStorageKey}, and ${playStorageKey}:`);
         expect(section(`Retention at a glance`).textContent).toContain(`Sessions: ${String(sessionMaxAgeSeconds / 86_400)} days.`);
         expect(section(`Playing as a guest`).textContent).toContain(
             `when you end it or sign in with Discord, when the server restarts, or after ${String(guestIdleSeconds / 3_600)} hours without a request while no game runs.`,
         );
+    });
+
+    it('state what a sign-in keeps from Discord, for how long, and the first sign-in held until the name is chosen', async () => {
+        serve(ok(details));
+        render(<LegalScreen page="privacy" />);
+        await screen.findByRole(`heading`, { name: `Signing in with Discord` });
+        const minutes = String(signupMaxAgeSeconds / 60);
+        const days = String(sessionMaxAgeSeconds / 86_400);
+        expect(section(`In short`).textContent).toContain(
+            `You sign in with Discord. HeXO Arena keeps your Discord user ID and the public name you confirm when you create your account, and your Discord username and display name while you are signed in; it never receives your email address or password.`,
+        );
+        const signIn = section(`Signing in with Discord`).textContent;
+        expect(signIn).toContain(`HeXO Arena keeps the user ID, username, and display name; everything else, the avatar included, is discarded at once.`);
+        expect(signIn).toContain(
+            `On your first sign-in these are held for up to ${minutes} minutes while you choose your public name, and deleted if you do not create the account. Afterwards your username and display name are kept with each sign-in session and shown only to you, until you sign out or the session ends after ${days} days; each sign-in updates them.`,
+        );
+        expect(section(`Your account and public name`).textContent).toContain(
+            `You choose your public name when you create your account; the site suggests one made from your Discord username.`,
+        );
+        expect(section(`Cookies and browser storage`).textContent).toContain(
+            `The cookie ${signupCookieName}, set when a first sign-in comes back from Discord: a random reference to the unfinished sign-up, first-party and not readable by scripts; it lasts ${minutes} minutes, or until you create the account or cancel.`,
+        );
+        const retention = section(`Retention at a glance`).textContent;
+        expect(retention).toContain(`Unfinished sign-ups: ${minutes} minutes.`);
+        expect(retention).toContain(`Your Discord username and display name: with the session, ${days} days at most.`);
     });
 
     it('state deletion by email and the moderation records as they are today', async () => {
@@ -126,6 +159,21 @@ describe('LegalScreen', () => {
         expect(screen.getByRole(`navigation`, { name: `On this page` })).toBeTruthy();
         expect(section(`Accounts`).textContent).toContain(`You must be at least 16; under 18 you need permission from a parent or guardian.`);
         expect(section(`Moderation`).textContent).toContain(`abort games or take them out of the ratings`);
+    });
+
+    it('hold guests to the terms, say what a guest session is, and let a guest stop before changes apply', async () => {
+        serve(ok(details));
+        render(<LegalScreen page="terms" />);
+        await screen.findByRole(`heading`, { name: `Guests` });
+        const headings = screen.getAllByRole(`heading`, { level: 2 }).map((heading) => heading.textContent);
+        expect(headings.indexOf(`Guests`)).toBe(headings.indexOf(`Accounts`) + 1);
+        const guests = section(`Guests`);
+        expect(guests.textContent).toBe(
+            `GuestsYou can play without an account, as a guest. These terms apply to guests as they do to accounts, the age rule included. Guest games are unrated and are gone when the guest session ends; see Playing as a guest in the Privacy policy. The operator may end a guest session and its games at any time, for example to protect the service.`,
+        );
+        expect(within(guests).getByRole(`link`, { name: `Playing as a guest` }).getAttribute(`href`)).toBe(`/legal/privacy#guests`);
+        expect(section(`Moderation`).textContent).toContain(`and ban or delete accounts or end guest sessions when these terms or the law are broken`);
+        expect(section(`Changes`).textContent).toContain(`If you disagree, you can have your account deleted, or stop playing as a guest, before they take effect.`);
     });
 
     it('show the error frame with a retry when the details fail, and no text with gaps', async () => {

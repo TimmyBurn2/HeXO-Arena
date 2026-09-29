@@ -15,6 +15,12 @@ describe('parseRoute', () => {
         expect(parseRoute(`/credits`)).toEqual({ name: `credits` });
     });
 
+    it('route the first sign-in to its own page', () => {
+        expect(parseRoute(`/welcome`)).toEqual({ name: `welcome` });
+        expect(routePath({ name: `welcome` })).toBe(`/welcome`);
+        expect(parseRoute(`/welcome/x`)).toEqual({ name: `not-found` });
+    });
+
     it('carry the bot name and game id', () => {
         expect(parseRoute(`/bots/sealbot`)).toEqual({ name: `bot`, bot: `sealbot` });
         expect(parseRoute(`/game/g-123`)).toEqual({ name: `game`, gameId: `g-123` });

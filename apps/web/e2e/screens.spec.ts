@@ -25,7 +25,7 @@ for (const look of looks) {
                     path: `e2e/shots/${shot.name}--${look.name}--${viewport.name}.png`,
                 });
 
-                const axe = await new AxeBuilder({ page }).withRules([`color-contrast`, `empty-table-header`, `link-in-text-block`]).analyze();
+                const axe = await new AxeBuilder({ page }).withRules([`color-contrast`, `empty-table-header`, `heading-order`, `link-in-text-block`]).analyze();
                 expect(axe.violations.flatMap((violation) => violation.nodes.map((node) => node.target))).toEqual([]);
 
                 if (shot.framed) {

@@ -4,7 +4,7 @@ import type { Me } from '@hexo-arena/contract';
 import { looks, wear } from './matrix';
 import { serve, world } from './mock-api';
 
-const tom: Me = { kind: `user`, name: `tom`, rating: 1503, provisional: false };
+const tom: Me = { kind: `user`, name: `tom`, rating: 1503, provisional: false, discord: null };
 const guest: Me = { kind: `guest`, name: `Guest k3f9` };
 
 async function visit(page: Page, width: number, me: Me, height = 900): Promise<void> {
@@ -127,7 +127,7 @@ test('signing out from the menu leaves the sign-in in its place with focus', asy
     await visit(page, 1280, tom);
     await who(page).click();
     await menu(page).getByRole(`button`, { name: `Sign out` }).click();
-    const signIn = page.locator(`header`).getByRole(`button`, { name: `Sign in with Discord` });
+    const signIn = page.locator(`header`).getByRole(`link`, { name: `Sign in with Discord` });
     await expect(signIn).toBeFocused();
     await expect(page.locator(`dialog[open]`)).toHaveCount(0);
 });
@@ -137,36 +137,89 @@ test('a guest ends the session from the menu', async ({ page }) => {
     await page.getByRole(`button`, { name: `Guest k3f9, unrated` }).click();
     await expect(menu(page).getByRole(`link`, { name: `Sign in with Discord` })).toBeFocused();
     await menu(page).getByRole(`button`, { name: `End guest session` }).click();
-    await expect(page.locator(`header`).getByRole(`button`, { name: `Sign in with Discord` })).toBeFocused();
+    await expect(page.locator(`header`).getByRole(`link`, { name: `Sign in with Discord` })).toBeFocused();
 });
 
-test('signed out, the sign-in opens a panel with the Discord link and its notice, focus on the link', async ({ page }) => {
+test('signed out, the top bar links straight to Discord, returning to the page it is on', async ({ page }) => {
     await visit(page, 1280, null);
-    await page.locator(`header`).getByRole(`button`, { name: `Sign in with Discord` }).click();
-    const panel = page.getByRole(`dialog`, { name: `Sign in` });
-    await expect(panel.getByRole(`link`, { name: `Sign in with Discord` })).toBeFocused();
-    await expect(panel.getByRole(`link`, { name: `Sign in with Discord` })).toHaveAttribute(`href`, `/api/auth/discord/login`);
-    await expect(panel.getByRole(`link`, { name: `Terms` })).toBeVisible();
-    await page.keyboard.press(`Escape`);
-    await expect(panel).toHaveCount(0);
-    await expect(page.locator(`header`).getByRole(`button`, { name: `Sign in with Discord` })).toBeFocused();
+    const signIn = page.locator(`header`).getByRole(`link`, { name: `Sign in with Discord` });
+    await expect(signIn).toHaveAttribute(`href`, /^\/api\/auth\/discord\/login\?next=%2F/u);
+    const href = await signIn.getAttribute(`href`);
+    const next = new URL(href ?? ``, `https://arena.example`).searchParams.get(`next`);
+    expect(next).toBe(new URL(page.url()).pathname);
+    await expect(page.locator(`dialog`)).toHaveCount(0);
 });
 
 // Every open panel, in both forms, holds to every axe rule.
 for (const [name, me, open] of [
     [`identity`, tom, `identity`],
     [`guest`, guest, `identity`],
-    [`sign-in`, null, `sign-in`],
     [`settings`, tom, `settings`],
 ] as const) {
     for (const width of [390, 1280]) {
         test(`the open ${name} panel passes axe at ${String(width)} px`, async ({ page }) => {
             await visit(page, width, me);
-            await (open === `settings` ? gear(page) : open === `sign-in` ? page.locator(`header`).getByRole(`button`, { name: `Sign in with Discord` }) : who(page)).click();
+            await (open === `settings` ? gear(page) : who(page)).click();
             await page.locator(`dialog[open]`).waitFor();
             await page.waitForTimeout(250);
             const axe = await new AxeBuilder({ page }).analyze();
             expect(axe.violations.map((violation) => `${violation.id}: ${violation.nodes.map((node) => node.target.join(` `)).join(`, `)}`)).toEqual([]);
         });
     }
+}
+
+// The panel is where a person reads their whole name and the Discord
+// account behind the session, however long both are.
+for (const width of [1280, 390, 320]) {
+    test(`a 30-character name and 32-character Discord names show whole in the menu at ${String(width)} px`, async ({ page }) => {
+        await visit(page, width, {
+            kind: `user`,
+            name: `sealbot-owner-with-a-long-name`,
+            rating: 1503,
+            provisional: false,
+            discord: { username: `owner.of.sealbot.and.two.more.xy`, displayName: `The Owner Of Sealbot And Two Mor` },
+        });
+        await who(page).click();
+        await menu(page).waitFor();
+        const cut = await menu(page).evaluate((dialog) =>
+            [...dialog.querySelectorAll(`.identity-head-name, .discord-line`)].map((element) => ({
+                text: element.textContent,
+                hidden: element.scrollWidth > element.clientWidth || element.getBoundingClientRect().right > dialog.getBoundingClientRect().right,
+            })),
+        );
+        expect(cut).toEqual([
+            { text: `sealbot-owner-with-a-long-name`, hidden: false },
+            { text: `Discord: The Owner Of Sealbot And Two Mor (@owner.of.sealbot.and.two.more.xy)`, hidden: false },
+        ]);
+    });
+}
+
+// An ordinary name keeps one line in the menu's head,
+// beside the pattern and with the rating under it.
+for (const [name, width] of [[`quietowner12`, 1280], [`quietowner12`, 768], [`quietowner-longer-21`, 390]] as const) {
+    test(`the ${String(name.length)}-character name ${name} takes one line in the menu at ${String(width)} px`, async ({ page }) => {
+        await visit(page, width, { kind: `user`, name, rating: 1420, provisional: true, discord: null });
+        await who(page).click();
+        await menu(page).waitFor();
+        const head = await menu(page).evaluate((dialog) => {
+            const element = dialog.querySelector(`.identity-head-name`);
+            const rating = dialog.querySelector(`.identity-head-rating`);
+            const mark = dialog.querySelector(`.identity-head-mark`);
+            if (element === null || rating === null || mark === null) return null;
+            const range = document.createRange();
+            range.selectNodeContents(element);
+            const name = element.getBoundingClientRect();
+            const under = rating.getBoundingClientRect();
+            const plate = mark.getBoundingClientRect();
+            return {
+                lines: new Set([...range.getClientRects()].map((rect) => Math.round(rect.top))).size,
+                ratingUnder: under.top >= name.bottom - 1 && Math.abs(under.left - name.left) <= 1,
+                // The pattern stands centered on the name and the rating together.
+                offCenter: Math.abs(plate.top + plate.height / 2 - (name.top + under.bottom) / 2),
+            };
+        });
+        expect(head?.lines).toBe(1);
+        expect(head?.ratingUnder).toBe(true);
+        expect(head?.offCenter).toBeLessThanOrEqual(1);
+    });
 }

@@ -12,6 +12,7 @@ const sealbot = {
     openForChallenges: true,
     rating: 1712,
     provisional: false,
+    liveGames: 0,
     about: `A clean-room HeXO engine with a rotation opener.`,
     version: `0.3.1`,
     repoUrl: `https://github.com/tom/sealbot`,
@@ -49,7 +50,7 @@ function serveAs(name: string, writes: { method: string; url: string }[], delete
                 }
                 return Promise.resolve(new Response(JSON.stringify({ name: `sealbot`, token: `hxo_${`c`.repeat(43)}` })));
             }
-            const body = url === `/api/me` ? { kind: `user`, name, rating: 1503, provisional: false } : [sealbot];
+            const body = url === `/api/me` ? { kind: `user`, name, rating: 1503, provisional: false, discord: null } : [sealbot];
             return Promise.resolve(new Response(JSON.stringify(body)));
         }),
     );
@@ -58,7 +59,7 @@ function serveAs(name: string, writes: { method: string; url: string }[], delete
 }
 
 describe('BotScreen', () => {
-    it('show the declaration, accepts table, and a working play button', async () => {
+    it('show the declaration, accepts table, and Play linking to the Play page', async () => {
         stubDirectory([sealbot]);
         render(<BotScreen name="sealbot" />);
         expect(await screen.findByRole(`heading`, { name: `sealbot` })).toBeTruthy();
@@ -70,8 +71,7 @@ describe('BotScreen', () => {
         const repo = document.querySelector(`a[href="https://github.com/tom/sealbot"]`);
         expect(repo?.textContent).toBe(`github.com/tom/sealbot`);
         expect(repo?.querySelectorAll(`wbr`)).toHaveLength(2);
-        const play = screen.getByRole(`button`, { name: `Play sealbot` });
-        expect(play.hasAttribute(`disabled`)).toBe(false);
+        expect(screen.getByRole(`link`, { name: `Play sealbot` }).getAttribute(`href`)).toBe(`/play?bot=sealbot`);
         await waitFor(() => {
             expect(document.title).toBe(`sealbot - HeXO Arena`);
         });
@@ -94,6 +94,14 @@ describe('BotScreen', () => {
         expect(screen.getByText(`Closed for challenges`)).toBeTruthy();
     });
 
+    it('disable play with the reason when the bot is at its game cap', async () => {
+        stubDirectory([{ ...sealbot, liveGames: 4 }]);
+        render(<BotScreen name="sealbot" />);
+        expect((await screen.findByRole(`button`, { name: `Play sealbot` })).hasAttribute(`disabled`)).toBe(true);
+        expect(screen.queryByRole(`link`, { name: `Play sealbot` })).toBe(null);
+        expect(screen.getByText(`In 4 games; try again shortly`, { selector: `.play-reason` })).toBeTruthy();
+    });
+
     it('explain an absent declaration and disable play', async () => {
         const bare = { ...sealbot, about: undefined, version: undefined, repoUrl: undefined, accepts: undefined };
         stubDirectory([bare]);
@@ -109,7 +117,7 @@ describe('BotScreen', () => {
         vi.stubGlobal(
             `fetch`,
             vi.fn((url: string) =>
-                Promise.resolve(new Response(JSON.stringify(url === `/api/me` ? { kind: `user`, name: `tom`, rating: 1503, provisional: false } : [bare]))),
+                Promise.resolve(new Response(JSON.stringify(url === `/api/me` ? { kind: `user`, name: `tom`, rating: 1503, provisional: false, discord: null } : [bare]))),
             ),
         );
         meStore.reset();
@@ -136,12 +144,13 @@ describe('BotScreen', () => {
         });
     });
 
-    it('open the play dialog from the play button', async () => {
+    it('go to the Play page with the bot named from Play', async () => {
         stubDirectory([sealbot]);
+        window.history.replaceState(null, ``, `/bots/sealbot`);
         render(<BotScreen name="sealbot" />);
-        fireEvent.click(await screen.findByRole(`button`, { name: `Play sealbot` }));
-        expect(await screen.findByRole(`dialog`)).toBeTruthy();
-        expect(screen.getByRole(`button`, { name: `Start game` })).toBeTruthy();
+        fireEvent.click(await screen.findByRole(`link`, { name: `Play sealbot` }));
+        expect(window.location.pathname + window.location.search).toBe(`/play?bot=sealbot`);
+        window.history.replaceState(null, ``, `/`);
     });
 
     it('offer a retry when the directory fails', async () => {

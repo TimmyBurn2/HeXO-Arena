@@ -1,9 +1,9 @@
 import { z } from 'zod';
+import { botConcurrentGameCap } from './games';
 import { provisionalSchema, ratingSchema } from './leaderboard';
 import { nameSyntaxSchema } from './names';
+import { discordNamesSchema, nextPathSchema } from './sign-in';
 
-export const discordLoginPath = `/api/auth/discord/login`;
-export const discordCallbackPath = `/api/auth/discord/callback`;
 export const devLoginPath = `/api/dev/login`;
 export const logoutPath = `/api/auth/logout`;
 export const guestPath = `/api/auth/guest`;
@@ -18,26 +18,6 @@ export const sessionCookieName = `hexo_arena_session`;
 
 /** How long an account's session, and its cookie, last after sign-in. */
 export const sessionMaxAgeSeconds = 30 * 24 * 60 * 60;
-
-/**
- * Why a Discord sign-in did not finish, carried back to the site's root in
- * the query parameter {@link signInFailureParam}: Discord OAuth is not set
- * up, Discord sent no code (as when the visitor cancels), the state is
- * unknown, expired, or used, Discord refused the code, or the account is
- * banned.
- */
-export const signInFailureSchema = z
-    .enum([`unconfigured`, `cancelled`, `expired`, `rejected`, `banned`])
-    .meta({ id: `SignInFailure`, description: `Why a Discord sign-in did not finish.` });
-export type SignInFailure = z.infer<typeof signInFailureSchema>;
-
-/** The query parameter that names a failed sign-in's reason. */
-export const signInFailureParam = `signin`;
-
-/** Where a failed sign-in lands: the site's root, naming the reason. */
-export function signInFailurePath(reason: SignInFailure): string {
-    return `/?${signInFailureParam}=${reason}`;
-}
 
 // The stream writes a bare newline this often, so a quiet stream still
 // proves itself alive.
@@ -57,16 +37,18 @@ export const guestMeSchema = z
 export type GuestMe = z.infer<typeof guestMeSchema>;
 
 // Who the session cookie names: a user by their global name with their
-// current rating, an anonymous guest by its label (guests are never
-// rated), or no one.
+// current rating and the Discord account they signed in with, which only
+// this read carries; an anonymous guest by its label (guests are never
+// rated); or no one.
 export const userMeSchema = z
     .object({
         kind: z.literal(`user`),
         name: z.string(),
         rating: ratingSchema,
         provisional: provisionalSchema,
+        discord: discordNamesSchema.nullable(),
     })
-    .meta({ id: `User` });
+    .meta({ id: `User`, description: `discord is null for a session made without Discord.` });
 export type UserMe = z.infer<typeof userMeSchema>;
 
 export const meSchema = z.discriminatedUnion(`kind`, [userMeSchema, guestMeSchema]).nullable();
@@ -88,7 +70,15 @@ export const guestIdleSeconds = 24 * 60 * 60;
 export const botCapPerUser = 3;
 
 export const createBotRequestSchema = z.object({ name: nameSyntaxSchema });
-export const devLoginRequestSchema = z.object({ name: nameSyntaxSchema });
+
+// The dev login signs a chosen name in at once, or, given a Discord account
+// instead, returns as a Discord sign-in does: a known account is signed in
+// and sent to `next`, an unknown one sent on to choose its name.
+export const devLoginRequestSchema = z.union([
+    z.object({ name: nameSyntaxSchema }),
+    z.object({ discord: discordNamesSchema, next: nextPathSchema.optional() }),
+]);
+export type DevLoginRequest = z.infer<typeof devLoginRequestSchema>;
 
 // The literal `1` is the only legal value; absence means false.
 export const botStreamQuerySchema = z.object({ open: z.literal(`1`).optional() });
@@ -145,6 +135,12 @@ export const botListingSchema = z
         openForChallenges: z.boolean().meta({ description: `True while the bot holds its stream open with open=1.` }),
         rating: ratingSchema,
         provisional: provisionalSchema,
+        liveGames: z
+            .number()
+            .int()
+            .min(0)
+            .max(botConcurrentGameCap)
+            .meta({ description: `The games the bot is playing now; at ${String(botConcurrentGameCap)} it takes no new one.` }),
         about: botAboutSchema.optional(),
         version: botVersionSchema.optional(),
         repoUrl: botRepoUrlSchema.optional(),

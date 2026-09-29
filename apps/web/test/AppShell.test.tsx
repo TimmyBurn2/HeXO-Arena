@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { AppShell } from '../src/AppShell';
 import { meStore } from '../src/me';
@@ -34,7 +34,7 @@ describe('AppShell', () => {
         meStore.start();
         render(<AppShell />);
         await waitFor(() => {
-            expect(topbar().querySelector(`.nav-right button.discord-button`)?.textContent).toBe(`Sign in with Discord`);
+            expect(topbar().querySelector(`.nav-right a.discord-button`)?.textContent).toBe(`Sign in with Discord`);
         });
     });
 
@@ -43,7 +43,7 @@ describe('AppShell', () => {
             `fetch`,
             vi.fn((url: string) =>
                 Promise.resolve(
-                    new Response(url === `/api/me` ? JSON.stringify({ kind: `user`, name: `tom`, rating: 1503, provisional: false }) : null, {
+                    new Response(url === `/api/me` ? JSON.stringify({ kind: `user`, name: `tom`, rating: 1503, provisional: false, discord: null }) : null, {
                         status: 200,
                     }),
                 ),
@@ -57,7 +57,8 @@ describe('AppShell', () => {
             if (!(button instanceof HTMLElement)) throw new Error(`no identity button yet`);
             return button;
         });
-        expect(who.textContent).toBe(`ttom`);
+        expect(who.textContent).toBe(`tom`);
+        expect(who.querySelector(`.monogram svg.sigil`)).toBeTruthy();
         fireEvent.click(who);
         expect(document.querySelector(`#identity-panel .identity-row`)?.getAttribute(`href`)).toBe(`/profile`);
     });
@@ -70,7 +71,7 @@ describe('AppShell', () => {
         for (const path of [`/`, `/ladder`, `/bots`, `/bots/sealbot`, `/connect`, `/profile`, `/nowhere`]) {
             navigate(path);
             await waitFor(() => {
-                expect(topbar().querySelector(`.nav-right button.discord-button`)).toBeTruthy();
+                expect(topbar().querySelector(`.nav-right a.discord-button`)).toBeTruthy();
             });
             const right = [...topbar().querySelectorAll(`.nav-right > *`)];
             expect(right.map((element) => element.getAttribute(`aria-label`) ?? element.className)).toEqual([
@@ -80,12 +81,13 @@ describe('AppShell', () => {
         }
     });
 
-    it('render the ladder with its nav item active on the landing route and on /ladder', async () => {
+    it('render the ladder with its nav item active on the landing route and on /ladder, Play leading the nav', async () => {
         stubHealthOk();
         window.history.replaceState(null, ``, `/`);
         render(<AppShell />);
-        expect(topbar().querySelector(`.nav-links .nav-link`)?.textContent).toBe(`Ladder`);
-        expect(topbar().querySelectorAll(`.nav-links .nav-link`).length).toBe(3);
+        expect(topbar().querySelector(`.nav-links .nav-link`)?.textContent).toBe(`Play`);
+        expect(topLink(`Play`).getAttribute(`href`)).toBe(`/play`);
+        expect(topbar().querySelectorAll(`.nav-links .nav-link`).length).toBe(4);
         expect(topLink(`Ladder`).getAttribute(`href`)).toBe(`/ladder`);
         expect(topLink(`HeXO Arena`).getAttribute(`href`)).toBe(`/`);
 
@@ -119,8 +121,8 @@ describe('AppShell', () => {
         render(<AppShell />);
         const tabbar = document.querySelector(`nav.tabbar`) as HTMLElement;
         const labels = (root: Element) => [...root.querySelectorAll(`a`)].map((a) => a.textContent);
-        expect(labels(tabbar)).toEqual([`Ladder`, `Bots`, `Build a bot`]);
-        expect(labels(topbar().querySelector(`nav.nav-links`) as HTMLElement)).toEqual([`Ladder`, `Bots`, `Build a bot`]);
+        expect(labels(tabbar)).toEqual([`Play`, `Ladder`, `Bots`, `Build a bot`]);
+        expect(labels(topbar().querySelector(`nav.nav-links`) as HTMLElement)).toEqual([`Play`, `Ladder`, `Bots`, `Build a bot`]);
         expect(document.querySelector(`a[href="/profile"]`)).toBe(null);
         await waitFor(() => {
             expect(tabbar.querySelector(`a[aria-current="page"]`)?.textContent).toBe(`Bots`);
@@ -138,6 +140,21 @@ describe('AppShell', () => {
         await waitFor(() => {
             expect(screen.getByRole(`heading`, { name: `Bots` })).toBeTruthy();
         });
+    });
+
+    it('move focus to the content on a route change, unless the navigation names a control for the screen', async () => {
+        stubHealthOk();
+        meStore.reset();
+        meStore.start();
+        render(<AppShell />);
+        navigate(`/credits`);
+        await waitFor(() => {
+            expect(document.activeElement?.id).toBe(`main`);
+        });
+        screen.getByRole(`link`, { name: `Skip to content` }).focus();
+        navigate(`/connect`, { landing: `bot-name` });
+        await screen.findByRole(`heading`, { name: `Build a bot` });
+        expect(document.activeElement?.id).not.toBe(`main`);
     });
 
     it('render the 404 screen with a way back', async () => {
@@ -320,6 +337,29 @@ describe('AppShell', () => {
             if (record.target instanceof Element && record.target.getAttribute(`role`) === `status`) added.push(...record.addedNodes);
         }
         expect(added.some((node) => node.contains(line))).toBe(true);
+    });
+
+    it('say a cancel at Discord on the page the sign-in started from', async () => {
+        stubHealthOk();
+        meStore.reset();
+        meStore.start();
+        window.history.replaceState(null, ``, `/credits?signin=cancelled`);
+        render(<AppShell />);
+        expect(await screen.findByText(`You cancelled the sign-in at Discord; nothing was kept`)).toBeTruthy();
+        expect(window.location.pathname + window.location.search).toBe(`/credits`);
+    });
+
+    it('point a banned account to the operator in the legal notice, the link underlined as running text', async () => {
+        stubHealthOk();
+        meStore.reset();
+        meStore.start();
+        window.history.replaceState(null, ``, `/connect?signin=banned`);
+        render(<AppShell />);
+        const line = await screen.findByText(/^This Discord account is banned from HeXO Arena/u);
+        expect(line.textContent).toBe(`This Discord account is banned from HeXO Arena; the operator's contact is in the Legal notice`);
+        const link = within(line).getByRole(`link`, { name: `Legal notice` });
+        expect(link.getAttribute(`href`)).toBe(`/legal/imprint`);
+        expect(link.matches(`p a:not([class])`)).toBe(true);
     });
 
     it('ignore a sign-in reason it does not know, and still drop it', () => {

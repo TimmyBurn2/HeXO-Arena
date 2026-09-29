@@ -12,20 +12,36 @@ export interface UserRow {
     banned: boolean;
 }
 
-// Discord usernames may hold characters the name charset rejects; the
-// derived base strips them, trims to a legal start and end, and falls back
-// to a fixed stem so the claim loop always has something to suffix.
+// Discord usernames may hold characters the name charset rejects. A dot
+// joins words there, so it becomes a hyphen rather than fusing them; the
+// rest is stripped, trimmed to a legal start and end, and a fixed stem
+// stands in when too little is left, so the suffixes always have a base.
 export function nameBaseFromDiscordUsername(username: string): string {
-    const stripped = username.toLowerCase().replace(/[^a-z0-9_-]/g, ``);
-    const lettersFirst = stripped.replace(/^[^a-z]+/g, ``);
-    const trimmed = lettersFirst.replace(/[^a-z0-9]+$/g, ``);
-    return trimmed.length >= 2 ? trimmed.slice(0, 30) : `user`;
+    const stripped = username.toLowerCase().replaceAll(`.`, `-`).replace(/[^a-z0-9_-]/g, ``);
+    const trimmed = stripped.replace(/^[^a-z]+/g, ``).slice(0, 30).replace(/[^a-z0-9]+$/g, ``);
+    return trimmed.length >= 2 ? trimmed : `user`;
 }
 
 function suffixedCandidate(base: string, attempt: number): string {
     if (attempt === 0) return base;
     const suffix = `-${attempt.toString()}`;
     return `${base.slice(0, 30 - suffix.length)}${suffix}`;
+}
+
+/**
+ * The name a first sign-in suggests: the Discord username as a legal name,
+ * suffixed until no player holds its fold. Nothing is claimed, so the name
+ * is free when read and checked again when the account is created.
+ */
+export function suggestedName(query: Query, username: string): string {
+    const base = nameBaseFromDiscordUsername(username);
+    for (let attempt = 0; attempt < 1000; attempt++) {
+        const candidate = suffixedCandidate(base, attempt);
+        if (!nameSyntaxSchema.safeParse(candidate).success || isReservedName(candidate)) continue;
+        const held = query.select().from(nameReservations).where(eq(nameReservations.nameKey, nameKeyOf(candidate))).get();
+        if (held === undefined) return candidate;
+    }
+    throw new Error(`no free name for base ${base}`);
 }
 
 export function findUserByDiscordId(query: Query, discordId: string): UserRow | undefined {
@@ -45,47 +61,8 @@ export function findUserByDiscordId(query: Query, discordId: string): UserRow | 
     return { ...user, banned: bannedAt !== null };
 }
 
-export function createUserWithDerivedName(
-    query: Query,
-    discordId: string,
-    username: string,
-): UserRow {
-    const base = nameBaseFromDiscordUsername(username);
-    return query.transaction((tx) => {
-        for (let attempt = 0; attempt < 1000; attempt++) {
-            const candidate = suffixedCandidate(base, attempt);
-            if (!nameSyntaxSchema.safeParse(candidate).success) continue;
-            if (isReservedName(candidate)) continue;
-            const claimed = tx
-                .insert(nameReservations)
-                .values({ nameKey: nameKeyOf(candidate) })
-                .onConflictDoNothing()
-                .run().changes;
-            if (claimed !== 1) continue;
-            const row = tx
-                .insert(users)
-                .values({
-                    id: randomUUID(),
-                    discordId,
-                    name: candidate,
-                    nameKey: nameKeyOf(candidate),
-                    createdAt: nowSeconds(),
-                })
-                .returning({
-                    id: users.id,
-                    discordId: users.discordId,
-                    name: users.name,
-                    nameKey: users.nameKey,
-                })
-                .get();
-            return { ...row, banned: false };
-        }
-        throw new Error(`no free name for base ${base}`);
-    });
-}
-
-// The dev login path: the name is chosen, not derived, so a taken fold is
-// an honest rejection instead of a suffix.
+// The name is chosen, not derived, so a taken fold is an honest rejection
+// instead of a suffix.
 export function createUserWithExactName(
     query: Query,
     discordId: string,

@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { shots, wear } from './matrix';
+import { shots, wear, type Shot } from './matrix';
 import { serve } from './mock-api';
 
 // Every computed duration on every element: zero, or inside the motion
@@ -23,8 +23,16 @@ async function durations(page: Page): Promise<number[]> {
     });
 }
 
+// A shot with widths of its own, such as a phone's sheet, is opened at the
+// first of them, where its controls exist.
+async function size(page: Page, shot: Shot): Promise<void> {
+    const viewport = shot.viewports?.[0];
+    if (viewport !== undefined) await page.setViewportSize({ width: viewport.width, height: viewport.height });
+}
+
 for (const shot of shots) {
     test(`${shot.name} moves only inside the motion band`, async ({ page }) => {
+        await size(page, shot);
         await wear(page, { name: shot.name, storage: shot.storage ?? {} });
         await serve(page, structuredClone(shot.world));
         await page.goto(shot.path);
@@ -36,6 +44,7 @@ for (const shot of shots) {
 
     test(`${shot.name} holds still under reduced motion`, async ({ page }) => {
         await page.emulateMedia({ reducedMotion: `reduce` });
+        await size(page, shot);
         await serve(page, structuredClone(shot.world));
         await page.goto(shot.path);
         await page.locator(shot.ready).first().waitFor();

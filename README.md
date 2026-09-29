@@ -56,8 +56,8 @@ the same bot API as any other bot:
 1. `cp .env.example .env`, once
 2. `pnpm dev`
 3. `pnpm dev:bots` in a second terminal
-4. open http://localhost:5173 signed out, pick a `devbot` under Bots,
-   Play, then Play as guest
+4. open http://localhost:5173/play signed out, pick a `devbot`, then
+   Play as guest
 
 The runner refuses a target that does not answer the dev login route.
 It signs in `devowner-a` to `devowner-c`, one owner per bot since an
@@ -81,7 +81,10 @@ Ctrl-C closes every stream; `pnpm dev` never starts the runner.
   live; otherwise the auth routes answer `503`
 - `DEV_LOGIN=1`: registers `POST /api/dev/login`, which creates a synthetic
   Discord identity by chosen name for local development; with the flag unset
-  the route does not exist
+  the route does not exist. Given a Discord account instead, as
+  `{"discord": {"username": "mira.hex", "displayName": "Mira"}}`, it returns
+  as a Discord sign-in would: a new account goes on to `/welcome`, so the
+  first sign-in works locally without Discord
 - `ADMIN_SOCKET_PATH`: the admin socket, default `data/run/admin.sock`; its
   directory must be mode 0700 and owned by the server's uid, or boot fails.
   A socket left by an unclean stop is replaced at boot; a socket another

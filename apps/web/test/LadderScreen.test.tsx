@@ -52,8 +52,8 @@ describe('LadderScreen', () => {
                         JSON.stringify(
                             url.startsWith(`/api/bots`)
                                 ? [
-                                      { name: `sealbot`, ownerName: `tom`, online: true, openForChallenges: true, rating: 1712, provisional: false },
-                                      { name: `hextide`, ownerName: `ana`, online: true, openForChallenges: false, rating: 1690, provisional: false },
+                                      { name: `sealbot`, ownerName: `tom`, online: true, openForChallenges: true, rating: 1712, provisional: false, liveGames: 0 },
+                                      { name: `hextide`, ownerName: `ana`, online: true, openForChallenges: false, rating: 1690, provisional: false, liveGames: 0 },
                                   ]
                                 : board,
                         ),
@@ -133,7 +133,7 @@ describe('LadderScreen', () => {
             vi.fn((url: string) =>
                 Promise.resolve(
                     new Response(
-                        JSON.stringify(url === `/api/me` ? { kind: `user`, name: `tom`, rating: 1503, provisional: false } : board),
+                        JSON.stringify(url === `/api/me` ? { kind: `user`, name: `tom`, rating: 1503, provisional: false, discord: null } : board),
                     ),
                 ),
             ),

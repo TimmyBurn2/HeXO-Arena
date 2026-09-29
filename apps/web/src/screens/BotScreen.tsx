@@ -1,4 +1,4 @@
-import { Fragment, useCallback, useState } from 'react';
+import { Fragment, useCallback } from 'react';
 import { botMeta, nameKeyOf, notFoundMeta, type BotListing, type LiveGameEntry } from '@hexo-arena/contract';
 import { fetchBots } from '../api/client';
 import { useAsync } from '../api/use-async';
@@ -6,7 +6,8 @@ import { useLiveGames } from '../api/use-live-games';
 import { OwnerPanel } from '../components/OwnerPanel';
 import { BotBadge, OpenTag, PresenceDot, Rating } from '../components/player';
 import { useMe } from '../me';
-import { coveredModes, PlayDialog, turnWindowOf } from '../components/PlayDialog';
+import { turnWindowOf } from '../play/accepts';
+import { playBotPath, readinessOf } from '../play/setup';
 import { ErrorFrame, SkeletonRows } from '../components/states';
 import { Link } from '../router/Link';
 import { botApiRepository } from '../site-links';
@@ -48,18 +49,15 @@ function MissingBot({ name }: { name: string }) {
 }
 
 function BotProfile({ bot }: { bot: BotListing }) {
-    const [dialogOpen, setDialogOpen] = useState(false);
     const me = useMe();
     const owned = me.status === `ready` && me.me?.kind === `user` && me.me.name === bot.ownerName;
-    const accepts = bot.accepts;
-    const covered = coveredModes(accepts);
-    const anyClock = covered.turn || covered.match || covered.unlimited;
-    const playPossible = bot.online && bot.openForChallenges && anyClock;
-    const blockedReason = !bot.online
-        ? text.bot.offlineReason
-        : !bot.openForChallenges
-          ? text.bot.closedReason
-          : text.bot.noClockReason;
+    const readiness = readinessOf(bot);
+    const blockedReasons = {
+        busy: text.play.busy,
+        offline: text.bot.offlineReason,
+        closed: text.bot.closedReason,
+        nothing: text.bot.noClockReason,
+    };
 
     return (
         <>
@@ -150,28 +148,20 @@ function BotProfile({ bot }: { bot: BotListing }) {
             </div>
 
             <p className="play-row">
-                <button
-                    type="button"
-                    className="btn btn-primary"
-                    disabled={!playPossible}
-                    onClick={() => {
-                        setDialogOpen(true);
-                    }}
-                >
-                    {text.bot.play(bot.name)}
-                </button>
-                {playPossible ? null : <span className="note play-reason">{blockedReason}</span>}
+                {readiness === `ready` ? (
+                    <Link to={playBotPath(bot.name)} className="btn btn-primary">
+                        {text.bot.play(bot.name)}
+                    </Link>
+                ) : (
+                    <>
+                        <button type="button" className="btn btn-primary" disabled>
+                            {text.bot.play(bot.name)}
+                        </button>
+                        <span className="note play-reason">{blockedReasons[readiness]}</span>
+                    </>
+                )}
             </p>
             {owned ? <OwnerPanel bot={bot.name} /> : null}
-            {playPossible && accepts !== undefined ? (
-                <PlayDialog
-                    bot={{ name: bot.name, accepts }}
-                    open={dialogOpen}
-                    onClose={() => {
-                        setDialogOpen(false);
-                    }}
-                />
-            ) : null}
         </>
     );
 }

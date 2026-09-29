@@ -10,6 +10,7 @@ import {
     challengeAcceptPath,
     challengeCancelPath,
     challengeDeclinePath,
+    botConcurrentGameCap,
     defaultOpeningPlies,
     discordCallbackPath,
     discordLoginPath,
@@ -21,6 +22,8 @@ import {
     healthzPath,
     leaderboardPath,
     legalDetailsPath,
+    mePath,
+    signupPath,
 } from '../src';
 import { buildOpenApiDocument } from '../src/openapi';
 
@@ -178,10 +181,44 @@ describe('openapi document', () => {
         expect(document.paths[leaderboardPath]?.get).toBeDefined();
     });
 
-    it('documents the discord oauth routes', () => {
+    it('documents the discord oauth routes, the login taking where to return', () => {
         const document = buildOpenApiDocument();
         expect(document.paths[discordLoginPath]?.get).toBeDefined();
         expect(document.paths[discordCallbackPath]?.get).toBeDefined();
+        const parameters = dig(document, `paths`, discordLoginPath, `get`, `parameters`);
+        expect(Array.isArray(parameters) ? parameters.map((parameter: unknown) => dig(parameter, `name`)) : []).toEqual([`next`]);
+    });
+
+    it('documents the first sign-in behind its own cookie: read, create, and cancel', () => {
+        const document = buildOpenApiDocument();
+        for (const method of [`get`, `post`, `delete`]) {
+            expect(dig(document, `paths`, signupPath, method, `security`)).toContainEqual({ signupCookie: [] });
+        }
+        const created = dig(document, `paths`, signupPath, `post`, `responses`);
+        expect(Object.keys(created ?? {}).sort()).toEqual([`201`, `400`, `409`, `410`, `429`]);
+        expect(dig(document, `components`, `securitySchemes`, `signupCookie`, `name`)).toBe(`hexo_arena_signup`);
+    });
+
+    // The Discord account behind a session is the person's own: it may
+    // appear only in the reads that answer the person themselves.
+    it('carries the Discord names only in the session read and the sign-up read', () => {
+        const document = buildOpenApiDocument();
+        const holders: string[] = [];
+        const schemas = dig(document, `components`, `schemas`);
+        for (const [name, schema] of Object.entries(schemas ?? {})) {
+            visitObjects(schema, (node) => {
+                if (Reflect.get(node, `$ref`) === `#/components/schemas/DiscordNames`) holders.push(name);
+            });
+        }
+        expect([...new Set(holders)].sort()).toEqual([`Signup`, `User`]);
+        const readers: string[] = [];
+        for (const [path, item] of Object.entries(document.paths)) {
+            visitObjects(item, (node) => {
+                const ref: unknown = Reflect.get(node, `$ref`);
+                if (ref === `#/components/schemas/User` || ref === `#/components/schemas/Signup`) readers.push(path);
+            });
+        }
+        expect([...new Set(readers)].sort()).toEqual([mePath, signupPath]);
     });
 
     it('keeps the dev login route out of the public contract', () => {
@@ -216,6 +253,20 @@ describe('openapi document', () => {
         expect(dig(document, `paths`, gamePath, `get`, `responses`, `401`)).toBeUndefined();
         expect(dig(document, `paths`, gameMovePath, `post`, `security`)).toEqual([{ sessionCookie: [] }]);
         expect(dig(document, `paths`, gameResignPath, `post`, `security`)).toEqual([{ sessionCookie: [] }]);
+    });
+
+    it('tells a caller inside the creation cooldown how long to wait', () => {
+        const document = buildOpenApiDocument();
+        const header = dig(document, `paths`, gamesPath, `post`, `responses`, `400`, `headers`, `Retry-After`);
+        expect(dig(header, `schema`)).toEqual({ type: `integer`, minimum: 1 });
+        expect(String(dig(header, `description`))).toContain(`game_cooldown`);
+    });
+
+    it('counts the live games of each listed bot up to its cap', () => {
+        const document = buildOpenApiDocument();
+        const live = dig(document, `components`, `schemas`, `BotListing`, `properties`, `liveGames`);
+        expect(live).toMatchObject({ type: `integer`, minimum: 0, maximum: botConcurrentGameCap });
+        expect(dig(document, `components`, `schemas`, `BotListing`, `required`)).toContain(`liveGames`);
     });
 
     it('documents the live game list open to anyone as named entries', () => {

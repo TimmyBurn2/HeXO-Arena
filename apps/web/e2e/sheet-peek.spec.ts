@@ -7,7 +7,7 @@ import { serve, world } from './mock-api';
 // reach; while the raised sheet covers the result chip, the peek states
 // the result instead, whole, however long the names.
 const bot = (name: string, rating: number) => ({ name, rating, provisional: false, kind: `bot` as const });
-const tom = { kind: `user`, name: `tom`, rating: 1503, provisional: false } as const;
+const tom = { kind: `user`, name: `tom`, rating: 1503, provisional: false, discord: null } as const;
 const long = { x: bot(`abcdefghijklmnopqrstuvwxyz1234`, 1500), o: bot(`W`.repeat(30), 1388) };
 const seats: readonly (readonly [string, GameSnapshot[`players`], Me])[] = [
     [`watching 9-letter names`, { x: bot(`driftwood`, 1388), o: bot(`quietlake`, 1461) }, null],

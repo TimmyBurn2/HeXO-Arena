@@ -1,10 +1,6 @@
 import {
     botsPath,
     createBotRequestSchema,
-    devLoginPath,
-    discordCallbackPath,
-    discordLoginPath,
-    signInFailurePath,
     healthzPath,
     isReservedName,
     nameKeyOf,
@@ -13,8 +9,7 @@ import {
 } from '@hexo-arena/contract';
 import websocketPlugin from '@fastify/websocket';
 import cookiePlugin from '@fastify/cookie';
-import { z } from 'zod';
-import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest } from 'fastify';
+import Fastify, { type FastifyInstance, type FastifyRequest } from 'fastify';
 import { createAdminHandler } from './admin-ops';
 import type { AdminHandler } from './admin-socket';
 import { createBot, rotateBotToken } from './bots';
@@ -22,7 +17,7 @@ import { registerBotApi } from './bot-api';
 import { registerChallengeApi } from './challenge-api';
 import { ChallengeRegistry, challengeTtlSeconds } from './challenge-registry';
 import { expireStaleChallenges } from './challenge-store';
-import { createQuery, type Sqlite } from './db';
+import { createQuery, type Query, type Sqlite } from './db';
 import { abortUnfinishedGames } from './game-store';
 import { engineFrameLimitBytes, engineSocketRoute, registerGameApi } from './game-api';
 import { GameRegistry, wirePresence } from './game-registry';
@@ -31,20 +26,16 @@ import { registerLegalApi } from './legal';
 import type { DiscordOAuth } from './discord';
 import { drain } from './drain';
 import { deleteBotByPolicy, ownedBotId } from './moderation';
-import { consumeOAuthState, createOAuthState } from './oauth-state';
 import type { PresenceRegistry } from './presence';
 import { GuestSessions } from './guests';
 import { registerOgShell } from './og-shell';
 import { loggingOptions, type LogTarget } from './request-log';
-import { endGuestSession, registerSessionApi, setSessionCookie } from './session-api';
-import { createSession, sessionUser } from './sessions';
+import { registerSessionApi } from './session-api';
+import { sessionUser, sweepSessions } from './sessions';
+import { registerSignInApi } from './sign-in-api';
+import { sweepSignups } from './signups';
 import { beginGeneration, StartGate } from './site-state';
 import type { GameWatchers } from './watchers';
-import {
-    createUserWithDerivedName,
-    createUserWithExactName,
-    findUserByDiscordId,
-} from './users';
 
 export interface AppDeps {
     sqlite: Sqlite;
@@ -75,12 +66,15 @@ export interface BuiltApp {
     drain: (graceMs: number) => Promise<number>;
 }
 
-const callbackQuerySchema = z.object({
-    code: z.string().min(1),
-    state: z.string().min(1),
-});
+// Expired sign-ups and sessions, with the Discord names they hold,
+// leave at boot and on this beat,
+// so none outlives its stated time by more than a minute.
+const sweepMs = 60_000;
 
-const devLoginRequestSchema = z.object({ name: nameSyntaxSchema });
+function sweepExpired(query: Query): void {
+    sweepSignups(query);
+    sweepSessions(query);
+}
 
 export async function buildApp(deps: AppDeps): Promise<BuiltApp> {
     const app = Fastify(loggingOptions(deps.logger));
@@ -90,6 +84,11 @@ export async function buildApp(deps: AppDeps): Promise<BuiltApp> {
     const generation = beginGeneration(query);
     abortUnfinishedGames(query);
     expireStaleChallenges(query, challengeTtlSeconds);
+    sweepExpired(query);
+    const sweep = setInterval(() => {
+        sweepExpired(query);
+    }, sweepMs);
+    sweep.unref();
     await app.register(cookiePlugin);
     await app.register(websocketPlugin, { options: { maxPayload: engineFrameLimitBytes } });
     // The plugin accepts an upgrade on any route, then logs the raw url as it
@@ -128,51 +127,21 @@ export async function buildApp(deps: AppDeps): Promise<BuiltApp> {
         done();
     });
     app.addHook(`onClose`, () => {
+        clearInterval(sweep);
         challenges.stop();
         games.stop();
     });
-    registerBotApi(app, { query, presence, gate });
+    registerBotApi(app, { query, presence, gate, games });
     registerChallengeApi(app, { query, presence, games, challenges, gate });
     registerGameApi(app, { query, presence, games, watchers, gate, guests });
     registerLeaderboardApi(app, { query });
     registerLegalApi(app, deps.legalDetails);
     registerSessionApi(app, { query, guests, secureCookies: deps.secureCookies });
+    registerSignInApi(app, { query, guests, discord: deps.discord, secureCookies: deps.secureCookies, devLogin: deps.devLogin });
     if (deps.webIndexPath !== undefined) {
         registerOgShell(app, { query, presence, games, indexPath: deps.webIndexPath, publicOrigin: deps.publicOrigin });
     }
     const admin = createAdminHandler({ query, presence, games, challenges, actor: deps.adminActor });
-
-    if (deps.devLogin) {
-        app.post(devLoginPath, async (request, reply) => {
-            const parsed = devLoginRequestSchema.safeParse(request.body);
-            if (!parsed.success) {
-                return reply
-                    .code(400)
-                    .send({ error: `the name fails the syntax rules`, code: `invalid_name` });
-            }
-            if (isReservedName(parsed.data.name)) {
-                return reply
-                    .code(400)
-                    .send({ error: `the name is reserved`, code: `name_reserved` });
-            }
-            // The synthetic discord id keys on the fold, so logging in
-            // twice with the same name resumes the same identity.
-            const discordId = `dev:${nameKeyOf(parsed.data.name)}`;
-            const user =
-                findUserByDiscordId(query, discordId) ??
-                createUserWithExactName(query, discordId, parsed.data.name);
-            if (user === `name_taken`) {
-                return reply
-                    .code(409)
-                    .send({ error: `the name fold is already taken`, code: `name_taken` });
-            }
-            if (user.banned) return sendBanned(reply);
-            endGuestSession(guests, request);
-            const token = createSession(query, user.id);
-            setSessionCookie(reply, token, deps.secureCookies, `account`);
-            return reply.code(200).send({ name: user.name });
-        });
-    }
 
     app.get(healthzPath, async (_request, reply) => {
         // One bit: up and serving, or up and refusing new starts, which
@@ -180,31 +149,6 @@ export async function buildApp(deps: AppDeps): Promise<BuiltApp> {
         // No version, no uptime, nothing else.
         reply.code(gate.closed() ? 503 : 200).send();
     });
-    // A visitor reaches these routes by following links, so every failure
-    // is a redirect home that names its reason, never a JSON body as a page.
-    app.get(discordLoginPath, async (_request, reply) => {
-        if (!deps.discord) return reply.redirect(signInFailurePath(`unconfigured`));
-        return reply.redirect(deps.discord.authorizeUrl(createOAuthState(query)));
-    });
-
-    app.get(discordCallbackPath, async (request, reply) => {
-        if (!deps.discord) return reply.redirect(signInFailurePath(`unconfigured`));
-        // Discord answers a cancel with an error and no code.
-        const parsed = callbackQuerySchema.safeParse(request.query);
-        if (!parsed.success) return reply.redirect(signInFailurePath(`cancelled`));
-        if (!consumeOAuthState(query, parsed.data.state)) return reply.redirect(signInFailurePath(`expired`));
-        const identity = await deps.discord.exchange(parsed.data.code).catch(() => null);
-        if (!identity) return reply.redirect(signInFailurePath(`rejected`));
-        const user =
-            findUserByDiscordId(query, identity.id) ??
-            createUserWithDerivedName(query, identity.id, identity.username);
-        if (user.banned) return reply.redirect(signInFailurePath(`banned`));
-        endGuestSession(guests, request);
-        const token = createSession(query, user.id);
-        setSessionCookie(reply, token, deps.secureCookies, `account`);
-        return reply.redirect(`/`);
-    });
-
     app.post(botsPath, async (request, reply) => {
         const user = sessionUser(query, request);
         if (!user) {
@@ -273,9 +217,4 @@ export async function buildApp(deps: AppDeps): Promise<BuiltApp> {
     });
 
     return { app, admin, drain: (graceMs) => drain({ query, gate, games, generation }, graceMs) };
-}
-
-// A banned identity gets the defined refusal instead of a session.
-function sendBanned(reply: FastifyReply): FastifyReply {
-    return reply.code(403).send({ error: `the account is banned`, code: `banned` });
 }

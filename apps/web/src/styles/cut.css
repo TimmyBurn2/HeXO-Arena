@@ -34,7 +34,6 @@
     .seg,
     .table-wrap,
     .empty,
-    .advanced,
     .token-box,
     .credit-rows,
     .skip {
@@ -42,18 +41,15 @@
     }
 
     /* Small marks are whole cells: a checkbox, gray when off and the
-       accent when on, the slider thumb, and the step numbers. */
+       accent when on, and the step numbers. */
     input[type='checkbox'],
     .monogram,
     .identity-monogram,
+    .sigil-plate,
+    .from-discord-plate,
     .swatch,
     .pip,
-    input[type='range']::-webkit-slider-thumb,
     .steps .step-n {
-        clip-path: var(--hex-path);
-    }
-
-    input[type='range']::-moz-range-thumb {
         clip-path: var(--hex-path);
     }
 
@@ -63,18 +59,36 @@
         outline-offset: var(--focus-w);
     }
 
-    .dialog-panel {
-        clip-path: var(--cut-lg-path);
-    }
-
     .rung,
     .rung-skeleton,
     .live-game,
     .bot-plate,
     .bot-card,
     .identity-plate,
+    .welcome-card,
+    .roster,
+    .play-setup,
     .hud-chip {
         clip-path: var(--cut-md-path);
+    }
+
+    .clock-tile,
+    .roster-row,
+    .stepper button,
+    .opening-preview {
+        clip-path: var(--cut-sm-path);
+    }
+
+    /* The cut clips a ring drawn outside, so a picked tile or row shows
+       focus inside its edge. */
+    .clock-tile:has(input:focus-visible),
+    .roster-row:has(input:focus-visible) {
+        outline: var(--focus-w) solid var(--c-focus);
+        outline-offset: calc(-3 * var(--focus-w));
+    }
+
+    .play-sheet[data-mode='sheet'] .topbar-panel-body {
+        clip-path: none;
     }
 
     .hud-exit,
@@ -119,6 +133,7 @@
     .topbar-panel-close:focus-visible,
     .pill:focus-visible,
     .seg-btn:focus-visible,
+    .stepper button:focus-visible,
     .nav-link:focus-visible,
     .identity:focus-visible,
     .identity-row:focus-visible,

@@ -1,7 +1,19 @@
-import { guestIdleSeconds, legalPageNames, sessionCookieName, sessionMaxAgeSeconds, siteName, type LegalDetails } from '@hexo-arena/contract';
+import {
+    guardianPermissionAge,
+    guestIdleSeconds,
+    legalPageNames,
+    minimumAge,
+    sessionCookieName,
+    sessionMaxAgeSeconds,
+    signupCookieName,
+    signupMaxAgeSeconds,
+    siteName,
+    type LegalDetails,
+} from '@hexo-arena/contract';
 import type { ReactNode } from 'react';
 import { boardSettingsStorageKey } from '../board/board-settings';
 import { drawerPinnedStorageKey } from '../game/use-drawer';
+import { playStorageKey } from '../play/setup';
 import { botApiRepository } from '../site-links';
 import { themeStorageKey } from '../theme/themes';
 import type { LegalBlock, LegalLinks, LegalTexts } from './legal';
@@ -10,12 +22,9 @@ import { rich } from './rich';
 // Every sentence states what the site does today; a page changes with the
 // code it describes, and the date with it.
 
-// The age rule both the terms and the privacy policy state.
-const minimumAge = 16;
-const permissionUntil = 18;
-
 const sessionDays = sessionMaxAgeSeconds / 86_400;
 const guestIdleHours = guestIdleSeconds / 3_600;
+const signupMinutes = signupMaxAgeSeconds / 60;
 
 const text = (words: ReactNode): LegalBlock => ({ kind: `text`, text: words });
 const list = (...items: ReactNode[]): LegalBlock => ({ kind: `list`, items });
@@ -82,7 +91,7 @@ function privacy(details: LegalDetails, links: LegalLinks) {
                 blocks: [
                     list(
                         `No ads, no analytics, no tracking, nothing sold. Every file, the font included, comes from this server.`,
-                        `You sign in with Discord. ${siteName} keeps your Discord user ID and a public name made from your Discord username; it never receives your email address or password.`,
+                        `You sign in with Discord. ${siteName} keeps your Discord user ID and the public name you confirm when you create your account, and your Discord username and display name while you are signed in; it never receives your email address or password.`,
                         `${siteName} is a public arena: names, bots, games, and ratings are visible to everyone, and anyone can watch live games.`,
                         rich`You can have your account deleted at any time; see ${see(`deletion`, `Deleting your account`)}.`,
                     ),
@@ -106,7 +115,10 @@ function privacy(details: LegalDetails, links: LegalLinks) {
                         rich`The sign-in button takes you to Discord. What happens there is governed by ${links.external(`https://discord.com/privacy`, `Discord's privacy policy`)}.`,
                     ),
                     text(
-                        `${siteName} asks Discord only for the identify permission. Discord then sends your Discord user ID, your username, and a few profile fields such as display name, avatar, and locale. ${siteName} stores only the user ID and a public name made once from your username; everything else is discarded at once.`,
+                        `${siteName} asks Discord only for the identify permission. Discord then sends your Discord user ID, your username, and a few profile fields such as display name, avatar, and locale. ${siteName} keeps the user ID, username, and display name; everything else, the avatar included, is discarded at once.`,
+                    ),
+                    text(
+                        `On your first sign-in these are held for up to ${String(signupMinutes)} minutes while you choose your public name, and deleted if you do not create the account. Afterwards your username and display name are kept with each sign-in session and shown only to you, until you sign out or the session ends after ${String(sessionDays)} days; each sign-in updates them.`,
                     ),
                     text(`Discord (in the EEA, Discord Netherlands BV) is a separate controller and does not act for ${siteName}.`),
                     text(`Legal basis: Art. 6(1)(b) GDPR. The data comes from Discord (Art. 14(2)(f) GDPR).`),
@@ -117,7 +129,7 @@ function privacy(details: LegalDetails, links: LegalLinks) {
                 heading: `Your account and public name`,
                 blocks: [
                     text(
-                        `Your public name shows on the ladder, in your games, on your bots' pages, and in link previews. It is fixed when your account is created and does not follow later changes on Discord.`,
+                        `You choose your public name when you create your account; the site suggests one made from your Discord username. It shows on the ladder, in your games, on your bots' pages, and in link previews. It is fixed once the account is created and does not follow later changes on Discord.`,
                     ),
                     text(`Legal basis: Art. 6(1)(b) GDPR, and Art. 6(1)(f) GDPR for showing results in a public competition, which is the purpose of the site.`),
                 ],
@@ -154,11 +166,12 @@ function privacy(details: LegalDetails, links: LegalLinks) {
             },
             {
                 id: `storage`,
-                heading: `Cookie and browser storage`,
+                heading: `Cookies and browser storage`,
                 blocks: [
                     list(
                         `The cookie ${sessionCookieName}, set when you sign in or start playing as a guest: a random session reference, first-party and not readable by scripts. It lasts ${String(sessionDays)} days after sign-in, or until you close the browser for a guest.`,
-                        `Browser storage (localStorage) under ${themeStorageKey}, ${boardSettingsStorageKey}, and ${drawerPinnedStorageKey}: your theme, your board settings, and whether the game panel stays pinned. It is written only when you change a setting and is never sent to the server.`,
+                        `The cookie ${signupCookieName}, set when a first sign-in comes back from Discord: a random reference to the unfinished sign-up, first-party and not readable by scripts; it lasts ${String(signupMinutes)} minutes, or until you create the account or cancel.`,
+                        `Browser storage (localStorage) under ${themeStorageKey}, ${boardSettingsStorageKey}, ${drawerPinnedStorageKey}, and ${playStorageKey}: your theme, your board settings, whether the game panel stays pinned, and the opponent and clock of the last game you started. It is written only when you change a setting or start a game and is never sent to the server.`,
                     ),
                     text(
                         `These are strictly necessary for functions you ask for (sec. 25(2) no. 2 TDDDG), so no consent is needed and there is no cookie banner. You can delete them at any time in your browser settings.`,
@@ -228,6 +241,8 @@ function privacy(details: LegalDetails, links: LegalLinks) {
                     list(
                         `Account and bots: until deletion.`,
                         `Sessions: ${String(sessionDays)} days.`,
+                        `Unfinished sign-ups: ${String(signupMinutes)} minutes.`,
+                        `Your Discord username and display name: with the session, ${String(sessionDays)} days at most.`,
                         `Guest data: in memory only.`,
                         `Games: kept as the public record, under a placeholder after account deletion.`,
                         `Moderation records: no set end yet.`,
@@ -272,7 +287,7 @@ function privacy(details: LegalDetails, links: LegalLinks) {
                 heading: `Age`,
                 blocks: [
                     text(
-                        `You must be at least ${String(minimumAge)} to create an account. If you are under ${String(permissionUntil)}, you need permission from a parent or guardian.`,
+                        `You must be at least ${String(minimumAge)} to create an account or play as a guest. If you are under ${String(guardianPermissionAge)}, you need permission from a parent or guardian.`,
                     ),
                 ],
             },
@@ -303,7 +318,16 @@ function terms(details: LegalDetails, links: LegalLinks) {
                 heading: `Accounts`,
                 blocks: [
                     text(
-                        `You sign in with Discord. You must be at least ${String(minimumAge)}; under ${String(permissionUntil)} you need permission from a parent or guardian. One person, one account. Keep your bot tokens secret; you are responsible for what your bots do.`,
+                        `You sign in with Discord. You must be at least ${String(minimumAge)}; under ${String(guardianPermissionAge)} you need permission from a parent or guardian. One person, one account. Keep your bot tokens secret; you are responsible for what your bots do.`,
+                    ),
+                ],
+            },
+            {
+                id: `guests`,
+                heading: `Guests`,
+                blocks: [
+                    text(
+                        rich`You can play without an account, as a guest. These terms apply to guests as they do to accounts, the age rule included. Guest games are unrated and are gone when the guest session ends; see ${links.page(`privacy`, `Playing as a guest`, `guests`)} in the Privacy policy. The operator may end a guest session and its games at any time, for example to protect the service.`,
                     ),
                 ],
             },
@@ -338,7 +362,7 @@ function terms(details: LegalDetails, links: LegalLinks) {
                 heading: `Moderation`,
                 blocks: [
                     text(
-                        `The operator may delist bots, revoke their tokens, abort games or take them out of the ratings, and ban or delete accounts when these terms or the law are broken, or to protect the service. Decisions are made by a person, not automatically. You are told the reason unless that is impossible, and you can contest a decision by email; it is then reviewed.`,
+                        `The operator may delist bots, revoke their tokens, abort games or take them out of the ratings, and ban or delete accounts or end guest sessions when these terms or the law are broken, or to protect the service. Decisions are made by a person, not automatically. You are told the reason unless that is impossible, and you can contest a decision by email; it is then reviewed.`,
                     ),
                 ],
             },
@@ -379,7 +403,7 @@ function terms(details: LegalDetails, links: LegalLinks) {
                 heading: `Changes`,
                 blocks: [
                     text(
-                        `Changes take effect 30 days after they are published on this page, whose date shows the current version. If you disagree, you can have your account deleted before they take effect.`,
+                        `Changes take effect 30 days after they are published on this page, whose date shows the current version. If you disagree, you can have your account deleted, or stop playing as a guest, before they take effect.`,
                     ),
                 ],
             },
@@ -396,7 +420,7 @@ function terms(details: LegalDetails, links: LegalLinks) {
 export const legalEn: LegalTexts = {
     names: legalPageNames,
     pages: { imprint, privacy, terms },
-    updated: `Last updated 28 September 2026`,
+    updated: `Last updated 29 September 2026`,
     onThisPage: `On this page`,
     failed: `The legal details did not load`,
 };

@@ -46,31 +46,57 @@ afterEach(() => {
 });
 
 describe('Identity', () => {
-    it('open the discord sign-in with its notice from the sign-in button when nobody is signed in', async () => {
+    it('go straight to Discord from the sign-in link when nobody is signed in, returning to this page', async () => {
         serve(null);
+        window.history.replaceState(null, ``, `/bots?online=1`);
         render(<Identity route={bots} />);
-        const button = await screen.findByRole(`button`, { name: `Sign in with Discord` });
-        expect(button.getAttribute(`aria-haspopup`)).toBe(`dialog`);
-        expect(button.getAttribute(`aria-expanded`)).toBe(`false`);
-        expect(screen.queryByRole(`link`)).toBe(null);
-        fireEvent.click(button);
-        expect(button.getAttribute(`aria-expanded`)).toBe(`true`);
-        expect(button.getAttribute(`aria-controls`)).toBe(`identity-panel`);
-        const signIn = screen.getByRole(`link`, { name: `Sign in with Discord` });
-        expect(signIn.getAttribute(`href`)).toBe(`/api/auth/discord/login`);
-        expect(screen.getByRole(`dialog`, { name: `Sign in` }).contains(signIn)).toBe(true);
-        expect(document.activeElement).toBe(signIn);
-        expect(panel()?.querySelector(`.discord-sign-in .note`)?.textContent).toBe(
-            `By signing in you accept the Terms. HeXO Arena keeps only your Discord user ID and a public name made from your username, never your email; see\u00a0Privacy.`,
-        );
-        expect(screen.getByRole(`button`, { name: `Close sign-in` })).toBeTruthy();
-        fireEvent.click(screen.getByRole(`link`, { name: `Privacy` }));
+        const signIn = await screen.findByRole(`link`, { name: `Sign in with Discord` });
+        expect(signIn.getAttribute(`href`)).toBe(`/api/auth/discord/login?next=%2Fbots%3Fonline%3D1`);
+        expect(screen.queryByRole(`button`)).toBe(null);
         expect(panel()).toBe(null);
-        expect(window.location.pathname).toBe(`/legal/privacy`);
+    });
+
+    it('read the page again as the link leaves, since a page may rewrite its query in place', async () => {
+        serve(null);
+        window.history.replaceState(null, ``, `/bots`);
+        render(<Identity route={bots} />);
+        const signIn = await screen.findByRole(`link`, { name: `Sign in with Discord` });
+        window.history.replaceState(null, ``, `/bots?online=1`);
+        signIn.addEventListener(`click`, (event) => {
+            event.preventDefault();
+        });
+        fireEvent.click(signIn);
+        expect(signIn.getAttribute(`href`)).toBe(`/api/auth/discord/login?next=%2Fbots%3Fonline%3D1`);
+    });
+
+    it('return to the root from a page a sign-in cannot return to', async () => {
+        serve(null);
+        window.history.replaceState(null, ``, `/nowhere`);
+        render(<Identity route={{ name: `not-found` }} />);
+        expect((await screen.findByRole(`link`, { name: `Sign in with Discord` })).getAttribute(`href`)).toBe(`/api/auth/discord/login?next=%2F`);
+    });
+
+    it('leave the sign-in out of the guest menu on the first sign-in page', async () => {
+        serve({ kind: `guest`, name: `Guest k3f9` });
+        render(<Identity route={{ name: `welcome` }} />);
+        fireEvent.click(await screen.findByRole(`button`, { name: `Guest k3f9, unrated` }));
+        expect(panel()?.querySelector(`.discord-sign-in`)).toBe(null);
+        expect(screen.getByRole(`button`, { name: `End guest session` })).toBeTruthy();
+        expect(document.activeElement).toBe(screen.getByRole(`button`, { name: `Close menu` }));
+    });
+
+    it('offer no second sign-in on the first sign-in page itself', async () => {
+        serve(null);
+        window.history.replaceState(null, ``, `/welcome`);
+        const { container } = render(<Identity route={{ name: `welcome` }} />);
+        await waitFor(() => {
+            expect(container.querySelector(`.identity`)).toBe(null);
+        });
+        expect(screen.queryByRole(`link`)).toBe(null);
     });
 
     it('open a popover from the signed-in name with the rating, where to go, and sign-out', async () => {
-        serve({ kind: `user`, name: `tom`, rating: 1503, provisional: false });
+        serve({ kind: `user`, name: `tom`, rating: 1503, provisional: false, discord: null });
         render(<Identity route={bots} />);
         const button = await screen.findByRole(`button`, { name: `tom` });
         expect(button.getAttribute(`aria-expanded`)).toBe(`false`);
@@ -93,8 +119,41 @@ describe('Identity', () => {
         expect(document.activeElement).toBe(screen.getByRole(`link`, { name: `Profile` }));
     });
 
+    it('show the person the Discord account the session came from, first in the panel, the pattern beside the name', async () => {
+        serve({ kind: `user`, name: `mira-hex`, rating: 1000, provisional: true, discord: { username: `mira.hex`, displayName: `Mira` } });
+        render(<Identity route={bots} />);
+        const button = await screen.findByRole(`button`, { name: `mira-hex` });
+        expect(button.querySelector(`.monogram.sigil-plate svg.sigil`)).toBeTruthy();
+        fireEvent.click(button);
+        const line = document.querySelector(`#identity-panel .discord-line`);
+        expect(line?.textContent).toBe(`Discord: Mira (@mira.hex)`);
+        expect(line?.nextElementSibling?.classList.contains(`identity-items`)).toBe(true);
+        expect(document.querySelector(`.identity-head .identity-head-mark svg.sigil`)).toBeTruthy();
+        expect(screen.getByRole(`dialog`, { name: `mira-hex` })).toBeTruthy();
+        cleanup();
+        serve({ kind: `user`, name: `mira-hex`, rating: 1000, provisional: true, discord: { username: `mira.hex`, displayName: null } });
+        render(<Identity route={bots} />);
+        fireEvent.click(await screen.findByRole(`button`, { name: `mira-hex` }));
+        expect(document.querySelector(`#identity-panel .discord-line`)?.textContent).toBe(`Discord: @mira.hex`);
+        cleanup();
+        serve({ kind: `user`, name: `tom`, rating: 1503, provisional: false, discord: null });
+        render(<Identity route={bots} />);
+        fireEvent.click(await screen.findByRole(`button`, { name: `tom` }));
+        expect(document.querySelector(`.discord-line`)).toBe(null);
+    });
+
+    it('draw a guest as the empty rosette', async () => {
+        serve({ kind: `guest`, name: `Guest k3f9` });
+        render(<Identity route={bots} />);
+        const button = await screen.findByRole(`button`, { name: `Guest k3f9, unrated` });
+        expect(button.querySelector(`svg.sigil-guest`)).toBeTruthy();
+        expect(button.textContent).toBe(`Guest k3f9unrated`);
+        fireEvent.click(button);
+        expect(document.querySelector(`.identity-head svg`)).toBe(null);
+    });
+
     it('show a provisional rating as the dim trailing question', async () => {
-        serve({ kind: `user`, name: `quietowner`, rating: 1420, provisional: true });
+        serve({ kind: `user`, name: `quietowner`, rating: 1420, provisional: true, discord: null });
         render(<Identity route={bots} />);
         fireEvent.click(await screen.findByRole(`button`, { name: `quietowner` }));
         const rating = document.querySelector(`.identity-head-rating`);
@@ -103,7 +162,7 @@ describe('Identity', () => {
     });
 
     it('mark the page the panel links to as current', async () => {
-        serve({ kind: `user`, name: `tom`, rating: 1503, provisional: false });
+        serve({ kind: `user`, name: `tom`, rating: 1503, provisional: false, discord: null });
         render(<Identity route={{ name: `profile` }} />);
         const button = await screen.findByRole(`button`, { name: `tom` });
         expect(button.classList.contains(`active`)).toBe(true);
@@ -120,24 +179,26 @@ describe('Identity', () => {
         const signIn = screen.getByRole(`link`, { name: `Sign in with Discord` });
         expect(panel()?.contains(signIn)).toBe(true);
         expect(document.activeElement).toBe(signIn);
-        expect(panel()?.querySelector(`.discord-sign-in .note`)?.textContent).toBe(`By signing in you accept the Terms. HeXO Arena keeps only your Discord user ID and a public name made from your username, never your email; see\u00a0Privacy.`);
+        expect(panel()?.querySelector(`.discord-sign-in .note`)?.textContent).toBe(
+            `Signing in ends this guest session and its games. Your email stays with Discord; see\u00a0Privacy.`,
+        );
         const end = screen.getByRole(`button`, { name: `End guest session` });
         expect(document.getElementById(end.getAttribute(`aria-describedby`) ?? ``)?.textContent).toBe(`Your guest games end with it.`);
         expect(signIn.compareDocumentPosition(end) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     });
 
-    it('shut the guest menu when the notice leads to the terms', async () => {
+    it('shut the guest menu when the trust line leads to the privacy policy', async () => {
         serve({ kind: `guest`, name: `Guest k3f9` });
         render(<Identity route={bots} />);
         fireEvent.click(await screen.findByRole(`button`, { name: `Guest k3f9, unrated` }));
-        fireEvent.click(screen.getByRole(`link`, { name: `Terms` }));
+        fireEvent.click(screen.getByRole(`link`, { name: `Privacy` }));
         expect(panel()).toBe(null);
-        expect(window.location.pathname).toBe(`/legal/terms`);
+        expect(window.location.pathname).toBe(`/legal/privacy`);
         window.history.pushState(null, ``, `/`);
     });
 
     it('close on Esc and the close button, handing focus back to the button', async () => {
-        serve({ kind: `user`, name: `tom`, rating: 1503, provisional: false });
+        serve({ kind: `user`, name: `tom`, rating: 1503, provisional: false, discord: null });
         render(<Identity route={bots} />);
         const button = await screen.findByRole(`button`, { name: `tom` });
         fireEvent.click(button);
@@ -154,7 +215,7 @@ describe('Identity', () => {
     });
 
     it('close when focus moves back past its button, leaving focus where it went', async () => {
-        serve({ kind: `user`, name: `tom`, rating: 1503, provisional: false });
+        serve({ kind: `user`, name: `tom`, rating: 1503, provisional: false, discord: null });
         render(
             <>
                 <a href="/bots">before</a>
@@ -176,7 +237,7 @@ describe('Identity', () => {
     });
 
     it('close on a link, leaving focus to the next screen', async () => {
-        serve({ kind: `user`, name: `tom`, rating: 1503, provisional: false });
+        serve({ kind: `user`, name: `tom`, rating: 1503, provisional: false, discord: null });
         render(<Identity route={bots} />);
         const button = await screen.findByRole(`button`, { name: `tom` });
         fireEvent.click(button);
@@ -188,14 +249,14 @@ describe('Identity', () => {
 
     it('open as a modal sheet below the phone breakpoint', async () => {
         stubPhone();
-        serve({ kind: `user`, name: `tom`, rating: 1503, provisional: false });
+        serve({ kind: `user`, name: `tom`, rating: 1503, provisional: false, discord: null });
         render(<Identity route={bots} />);
         fireEvent.click(await screen.findByRole(`button`, { name: `tom` }));
         expect(panel()?.dataset.mode).toBe(`sheet`);
     });
 
     it('keep at most one of settings and who is here open', async () => {
-        serve({ kind: `user`, name: `tom`, rating: 1503, provisional: false });
+        serve({ kind: `user`, name: `tom`, rating: 1503, provisional: false, discord: null });
         render(
             <>
                 <Settings />
@@ -218,11 +279,11 @@ describe('Identity', () => {
 
     it('sign out from the panel and put focus on the sign-in that takes its place', async () => {
         const posts: string[] = [];
-        serve({ kind: `user`, name: `tom`, rating: 1503, provisional: false }, posts);
+        serve({ kind: `user`, name: `tom`, rating: 1503, provisional: false, discord: null }, posts);
         render(<Identity route={bots} />);
         fireEvent.click(await screen.findByRole(`button`, { name: `tom` }));
         fireEvent.click(screen.getByRole(`button`, { name: `Sign out` }));
-        const signIn = await screen.findByRole(`button`, { name: `Sign in with Discord` });
+        const signIn = await screen.findByRole(`link`, { name: `Sign in with Discord` });
         expect(posts).toEqual([`/api/auth/logout`]);
         expect(panel()).toBe(null);
         await waitFor(() => {
@@ -240,7 +301,7 @@ describe('Identity', () => {
         await waitFor(() => {
             expect(panel()).toBe(null);
         });
-        const signIn = screen.getByRole(`button`, { name: `Sign in with Discord` });
+        const signIn = screen.getByRole(`link`, { name: `Sign in with Discord` });
         expect(posts).toEqual([`/api/auth/logout`]);
         await waitFor(() => {
             expect(document.activeElement).toBe(signIn);
@@ -248,7 +309,7 @@ describe('Identity', () => {
     });
 
     it('say so and keep the panel when sign-out does not land', async () => {
-        serve({ kind: `user`, name: `tom`, rating: 1503, provisional: false }, [], 500);
+        serve({ kind: `user`, name: `tom`, rating: 1503, provisional: false, discord: null }, [], 500);
         render(<Identity route={bots} />);
         fireEvent.click(await screen.findByRole(`button`, { name: `tom` }));
         fireEvent.click(screen.getByRole(`button`, { name: `Sign out` }));

@@ -6,9 +6,11 @@ import {
     legalPageMeta,
     notFoundMeta,
     pageTitle,
+    playMeta,
     profileMeta,
     siteDescription,
     siteMeta,
+    welcomeMeta,
     type PageMeta,
 } from '@hexo-arena/contract';
 import type { Route } from './router/route';
@@ -27,6 +29,8 @@ export const rootMeta: PageMeta = siteMeta();
  */
 export function routeMeta(route: Route): PageMeta {
     switch (route.name) {
+        case `play`:
+            return playMeta();
         case `ladder`:
             return ladderMeta();
         case `bots`:
@@ -39,6 +43,8 @@ export function routeMeta(route: Route): PageMeta {
             return profileMeta;
         case `credits`:
             return creditsMeta;
+        case `welcome`:
+            return welcomeMeta;
         case `legal`:
             return legalPageMeta[route.page];
         case `game`:

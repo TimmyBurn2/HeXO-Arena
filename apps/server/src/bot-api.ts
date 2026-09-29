@@ -15,6 +15,7 @@ import type { BotPrincipal } from './bot-auth';
 import { authenticateBot } from './bot-auth';
 import { listBots, readBotDeclaration, updateBotDeclaration, type BotDeclaration } from './bots';
 import { type Query } from './db';
+import type { GameRegistry } from './game-registry';
 import type { PresenceRegistry } from './presence';
 import { isProvisional } from './rating';
 import { streamPlayerOf } from './rating-store';
@@ -24,6 +25,9 @@ export interface BotApiDeps {
     query: Query;
     presence: PresenceRegistry;
     gate: StartGate;
+    // The directory shows each bot's live games,
+    // so a page can tell a busy bot before a start fails.
+    games: Pick<GameRegistry, `activeGameCount`>;
 }
 
 // Sends the failure itself and yields null, so handlers stay flat.
@@ -41,7 +45,7 @@ export function requireBot(query: Query, request: FastifyRequest, reply: Fastify
 }
 
 export function registerBotApi(app: FastifyInstance, deps: BotApiDeps): void {
-    const { query, presence, gate } = deps;
+    const { query, presence, gate, games } = deps;
 
     app.get(botStreamPath, async (request, reply) => {
         const bot = requireBot(query, request, reply);
@@ -76,6 +80,7 @@ export function registerBotApi(app: FastifyInstance, deps: BotApiDeps): void {
                 openForChallenges: presence.isOpenForChallenges(row.id),
                 rating: Math.round(row.rating.rating),
                 provisional: isProvisional(row.rating),
+                liveGames: games.activeGameCount(row.id),
                 ...(row.about !== undefined && { about: row.about }),
                 ...(row.version !== undefined && { version: row.version }),
                 ...(row.repoUrl !== undefined && { repoUrl: row.repoUrl }),

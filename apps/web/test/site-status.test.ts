@@ -11,6 +11,29 @@ describe('siteStatusStore', () => {
         vi.unstubAllGlobals();
     });
 
+    it('share one probe between callers that ask while it runs', async () => {
+        const answer: { send: (() => void) | null } = { send: null };
+        const health = vi.fn(
+            () =>
+                new Promise<Response>((resolve) => {
+                    answer.send = () => {
+                        resolve(new Response(null, { status: 503 }));
+                    };
+                }),
+        );
+        vi.stubGlobal(`fetch`, health);
+        const first = siteStatusStore.probe();
+        const second = siteStatusStore.probe();
+        expect(health).toHaveBeenCalledTimes(1);
+        answer.send?.();
+        await second;
+        expect(siteStatusStore.read()).toBe(`paused`);
+        await first;
+        stubHealth(200);
+        await siteStatusStore.probe();
+        expect(siteStatusStore.read()).toBe(`up`);
+    });
+
     it('reads up while health answers ok', async () => {
         stubHealth(200);
         siteStatusStore.start();

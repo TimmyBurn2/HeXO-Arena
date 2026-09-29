@@ -24,7 +24,7 @@ const results = [
 ] as const;
 const seats = [
     [`watching`, null],
-    [`seated`, { kind: `user`, name: `tom`, rating: 1503, provisional: false }],
+    [`seated`, { kind: `user`, name: `tom`, rating: 1503, provisional: false, discord: null }],
 ] as const;
 
 async function showResults(page: Page, players: GameSnapshot[`players`], me: Me, fixture = `finished`): Promise<number> {

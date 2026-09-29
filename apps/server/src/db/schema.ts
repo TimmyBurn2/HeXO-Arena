@@ -1,5 +1,6 @@
 import { check, index, integer, primaryKey, real, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core';
 import { sql } from 'drizzle-orm';
+import { discordNameMaxLength, nextPathMaxLength, signupAttemptCap } from '@hexo-arena/contract';
 // One global namespace shared by users and bots: a SQLite unique index
 // cannot span two tables, so the fold key is reserved here first and both
 // tables reference it.
@@ -22,6 +23,12 @@ export const users = sqliteTable(`users`, {
     createdAt: integer(`created_at`).notNull(),
 });
 
+// Bounds from the contract, written into the checks as literals.
+const nameMax = sql.raw(String(discordNameMaxLength));
+const nextMax = sql.raw(String(nextPathMaxLength));
+
+// The Discord names ride on the session, not the user: they are shown to
+// the person alone, refreshed by each sign-in, and gone with the session.
 export const sessions = sqliteTable(
     `sessions`,
     {
@@ -31,17 +38,63 @@ export const sessions = sqliteTable(
             .notNull()
             .references(() => users.id, { onDelete: `cascade` }),
         createdAt: integer(`created_at`).notNull(),
-        expiresAt: integer(`expires_at`).notNull()},
-    (table) => [index(`sessions_user_id_idx`).on(table.userId)],
+        expiresAt: integer(`expires_at`).notNull(),
+        discordUsername: text(`discord_username`),
+        discordDisplayName: text(`discord_display_name`),
+    },
+    (table) => [
+        index(`sessions_user_id_idx`).on(table.userId),
+        check(
+            `sessions_discord_username_check`,
+            sql`${table.discordUsername} is null or length(${table.discordUsername}) between 1 and ${nameMax}`,
+        ),
+        check(
+            `sessions_discord_display_name_check`,
+            sql`${table.discordDisplayName} is null or (${table.discordUsername} is not null and length(${table.discordDisplayName}) between 1 and ${nameMax})`,
+        ),
+    ],
 );
 
 // Single-use CSRF binding for the OAuth redirect; state and nonce travel
-// as one parameter because Discord echoes only state.
-export const authStates = sqliteTable(`auth_states`, {
-    state: text(`state`).primaryKey(),
-    nonce: text(`nonce`).notNull(),
-    expiresAt: integer(`expires_at`).notNull(),
-});
+// as one parameter because Discord echoes only state, and the row keeps
+// the path the sign-in returns to.
+export const authStates = sqliteTable(
+    `auth_states`,
+    {
+        state: text(`state`).primaryKey(),
+        nonce: text(`nonce`).notNull(),
+        expiresAt: integer(`expires_at`).notNull(),
+        next: text(`next`).notNull().default(`/`),
+    },
+    (table) => [check(`auth_states_next_check`, sql`length(${table.next}) between 1 and ${nextMax} and substr(${table.next}, 1, 1) = '/'`)],
+);
+
+// A first sign-in waiting for its public name: the Discord account and the
+// return path, behind the hash of the signup cookie, until the account is
+// created, the sign-up is dropped, or it expires. One per Discord account,
+// so a newer sign-in replaces an older one.
+export const pendingSignups = sqliteTable(
+    `pending_signups`,
+    {
+        tokenHash: text(`token_hash`).primaryKey(),
+        discordId: text(`discord_id`).notNull().unique(),
+        discordUsername: text(`discord_username`).notNull(),
+        discordDisplayName: text(`discord_display_name`),
+        next: text(`next`).notNull(),
+        attempts: integer(`attempts`).notNull().default(0),
+        expiresAt: integer(`expires_at`).notNull(),
+    },
+    (table) => [
+        check(`pending_signups_discord_id_check`, sql`length(${table.discordId}) between 1 and 64`),
+        check(`pending_signups_discord_username_check`, sql`length(${table.discordUsername}) between 1 and ${nameMax}`),
+        check(
+            `pending_signups_discord_display_name_check`,
+            sql`${table.discordDisplayName} is null or length(${table.discordDisplayName}) between 1 and ${nameMax}`,
+        ),
+        check(`pending_signups_next_check`, sql`length(${table.next}) between 1 and ${nextMax} and substr(${table.next}, 1, 1) = '/'`),
+        check(`pending_signups_attempts_check`, sql`${table.attempts} between 0 and ${sql.raw(String(signupAttemptCap))}`),
+    ],
+);
 
 // The scope column exists from day one so adding scopes later is not a
 // breaking change; v0 mints `bot:play` only.

@@ -1,9 +1,10 @@
 import { useCallback, useState } from 'react';
-import { botCapPerUser, type GuestMe, type UserMe } from '@hexo-arena/contract';
+import { botCapPerUser, nameKeyOf, type GuestMe, type UserMe } from '@hexo-arena/contract';
 import { fetchBots } from '../api/client';
 import { useAsync } from '../api/use-async';
 import { DiscordSignIn } from '../components/DiscordButton';
 import { BotBadge, OpenTag, PresenceDot, Rating, provisionalNote } from '../components/player';
+import { Sigil } from '../components/Sigil';
 import { ErrorFrame, SkeletonRows } from '../components/states';
 import { meStore, useMe } from '../me';
 import { Link } from '../router/Link';
@@ -84,8 +85,8 @@ function SignOutButton({ label, failure }: { label: string; failure: string }) {
 function UserIdentity({ me }: { me: UserMe }) {
     return (
         <div className="identity-plate">
-            <span className="identity-monogram" aria-hidden="true">
-                {me.name.slice(0, 1)}
+            <span className="identity-monogram sigil-plate" aria-hidden="true">
+                <Sigil nameKey={nameKeyOf(me.name)} />
             </span>
             <div className="identity-main">
                 <span className="identity-name">{me.name}</span>
@@ -95,6 +96,7 @@ function UserIdentity({ me }: { me: UserMe }) {
                     </span>
                     <span className="note">{me.provisional ? provisionalNote : text.profile.rating}</span>
                 </span>
+                {me.discord === null ? null : <span className="note identity-discord">{text.profile.discord(me.discord)}</span>}
             </div>
             <SignOutButton label={text.profile.signOut} failure={text.profile.signOutFailed} />
         </div>
@@ -104,15 +106,15 @@ function UserIdentity({ me }: { me: UserMe }) {
 function GuestIdentity({ me }: { me: GuestMe }) {
     return (
         <div className="identity-plate">
-            <span className="identity-monogram" aria-hidden="true">
-                {text.profile.guestMonogram}
+            <span className="identity-monogram sigil-plate" aria-hidden="true">
+                <Sigil nameKey={null} />
             </span>
             <div className="identity-main">
                 <span className="identity-name">{me.name}</span>
                 <span className="note">{text.profile.guestNote}</span>
             </div>
             <div className="identity-actions">
-                <DiscordSignIn />
+                <DiscordSignIn guest />
                 <SignOutButton label={text.profile.endGuest} failure={text.profile.endGuestFailed} />
             </div>
         </div>

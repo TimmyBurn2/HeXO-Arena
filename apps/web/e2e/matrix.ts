@@ -1,6 +1,6 @@
 import type { Page } from '@playwright/test';
 import { themes } from '../src/theme/themes';
-import { liveGames, world, type World } from './mock-api';
+import { liveGames, playBots, signup, world, type World } from './mock-api';
 
 /** A named look the whole site can wear. */
 export interface Look {
@@ -58,6 +58,44 @@ export interface Shot {
 }
 
 const signedOut = world({ me: null });
+const playing = (overrides: Partial<World> = {}) => world({ bots: playBots, ...overrides });
+const phones: readonly Viewport[] = [
+    { name: `phone`, width: 390, height: 844 },
+    { name: `narrow`, width: 360, height: 740 },
+];
+
+// A start the mock refuses, pressed, its line shown.
+function refusedStart(name: string, status: number, code: string, path = `/play?bot=devbot-c`, retryAfter?: number): Shot {
+    return {
+        name,
+        path,
+        world: playing({ start: retryAfter === undefined ? { status, code } : { status, code, retryAfter } }),
+        ready: `.play-setup`,
+        framed: true,
+        after: async (page) => {
+            await page.getByRole(`button`, { name: `Start game` }).click();
+            await page.locator(`.start-lines p`).first().waitFor();
+        },
+    };
+}
+// Every name at its longest: a 30-character public name and 32-character
+// Discord names.
+const longNamed: World[`me`] = {
+    kind: `user`,
+    name: `sealbot-owner-with-a-long-name`,
+    rating: 1503,
+    provisional: false,
+    discord: { username: `owner.of.sealbot.and.two.more.xy`, displayName: `The Owner Of Sealbot And Two Mor` },
+};
+const welcoming = (overrides: Partial<World> = {}) => world({ me: null, signup, ...overrides });
+
+async function typeName(page: Page, name: string): Promise<void> {
+    await page.getByRole(`textbox`, { name: `Public name` }).fill(name);
+}
+
+async function createAccount(page: Page): Promise<void> {
+    await page.getByRole(`button`, { name: `Create account` }).click();
+}
 const guest = world({ me: { kind: `guest`, name: `Guest k3f9` } });
 
 async function openSettings(page: Page): Promise<void> {
@@ -103,27 +141,17 @@ export const shots: readonly Shot[] = [
     {
         name: `menu-identity-provisional`,
         path: `/profile`,
-        world: world({ me: { kind: `user`, name: `quietowner`, rating: 1420, provisional: true } }),
+        world: world({ me: { kind: `user`, name: `quietowner`, rating: 1420, provisional: true, discord: null } }),
         ready: `h1`,
         framed: true,
         after: openIdentity,
         viewports: panelViewports,
     },
     { name: `menu-guest`, path: `/connect`, world: guest, ready: `h1`, framed: true, after: openIdentity, viewports: panelViewports },
-    {
-        name: `menu-sign-in`,
-        path: `/bots`,
-        world: signedOut,
-        ready: `table`,
-        framed: true,
-        after: async (page) => {
-            await page.locator(`header`).getByRole(`button`, { name: `Sign in with Discord` }).click();
-            await page.locator(`dialog.identity-panel[open]`).waitFor();
-        },
-        viewports: panelViewports,
-    },
-    { name: `signin-expired`, path: `/?signin=expired`, world: signedOut, ready: `.site-banner`, framed: true },
-    { name: `signin-banned`, path: `/?signin=banned`, world: signedOut, ready: `.site-banner`, framed: true },
+    { name: `signin-expired`, path: `/?signin=expired`, world: signedOut, ready: `.live-game`, framed: true },
+    { name: `signin-banned`, path: `/?signin=banned`, world: signedOut, ready: `.live-game`, framed: true },
+    { name: `signin-cancelled`, path: `/connect?signin=cancelled`, world: signedOut, ready: `.site-banner`, framed: true },
+    { name: `signin-rejected`, path: `/bots?signin=rejected`, world: signedOut, ready: `table`, framed: true },
     { name: `ladder-loading`, path: `/`, world: world({ stall: true }), ready: `.skeleton`, framed: true },
     { name: `ladder-error`, path: `/`, world: world({ broken: true }), ready: `.empty`, framed: true },
     { name: `bots`, path: `/bots`, world: world(), ready: `table`, framed: true },
@@ -132,36 +160,30 @@ export const shots: readonly Shot[] = [
     {
         name: `bot-visitor`,
         path: `/bots/sealbot`,
-        world: world({ me: { kind: `user`, name: `ana`, rating: 1402, provisional: false } }),
+        world: world({ me: { kind: `user`, name: `ana`, rating: 1402, provisional: false, discord: null } }),
         ready: `h1`,
         framed: true,
     },
     {
-        name: `play-dialog`,
+        name: `bot-busy`,
         path: `/bots/sealbot`,
-        world: world(),
-        ready: `h1`,
+        world: playing(),
+        ready: `.play-reason`,
         framed: true,
-        after: async (page) => {
-            await page.getByRole(`button`, { name: /^Play sealbot/ }).click();
-            await page.locator(`dialog[open]`).waitFor();
-        },
     },
-    {
-        name: `play-dialog-signed-out`,
-        path: `/bots/sealbot`,
-        world: signedOut,
-        ready: `h1`,
-        framed: true,
-        after: async (page) => {
-            await page.getByRole(`button`, { name: /^Play sealbot/ }).click();
-            await page.locator(`dialog[open]`).waitFor();
-        },
-    },
+    { name: `bots-play`, path: `/bots`, world: playing(), ready: `tbody tr`, framed: true },
     { name: `build`, path: `/connect`, world: world(), ready: `h1`, framed: true },
     { name: `build-signed-out`, path: `/connect`, world: signedOut, ready: `h1`, framed: true },
     { name: `profile`, path: `/profile`, world: world(), ready: `h1`, framed: true },
     { name: `profile-guest`, path: `/profile`, world: guest, ready: `h1`, framed: true },
+    {
+        name: `profile-long-names`,
+        path: `/profile`,
+        world: world({ me: longNamed }),
+        ready: `.identity-discord`,
+        framed: true,
+    },
+    { name: `menu-identity-long-names`, path: `/bots`, world: world({ me: longNamed }), ready: `table`, framed: true, after: openIdentity, viewports: panelViewports },
     { name: `profile-signed-out`, path: `/profile`, world: signedOut, ready: `h1`, framed: true },
     { name: `game-your-move`, path: `/game/running`, world: world(), ready: `svg polygon.cell`, framed: false, board: true },
     { name: `game-waiting`, path: `/game/waiting`, world: world(), ready: `svg polygon.cell`, framed: false, board: true },
@@ -305,7 +327,162 @@ export const shots: readonly Shot[] = [
         framed: false,
     },
     { name: `not-found`, path: `/nowhere`, world: world(), ready: `h1`, framed: true },
+    { name: `play`, path: `/play`, world: playing(), ready: `.play-setup`, framed: true },
+    { name: `play-signed-out`, path: `/play`, world: playing({ me: null }), ready: `.play-setup`, framed: true },
+    { name: `play-guest`, path: `/play`, world: playing({ me: { kind: `guest`, name: `Guest k3f9` } }), ready: `.play-setup`, framed: true },
+    { name: `play-named`, path: `/play?bot=devbot-c`, world: playing(), ready: `.play-setup`, framed: true },
+    { name: `play-named-closed`, path: `/play?bot=pebble`, world: playing(), ready: `.play-setup`, framed: true },
+    { name: `play-named-busy`, path: `/play?bot=sealbot`, world: playing(), ready: `.play-setup`, framed: true },
+    { name: `play-limited`, path: `/play?bot=quietlake`, world: playing(), ready: `.play-setup`, framed: true },
+    {
+        name: `play-custom-turn`,
+        path: `/play?bot=devbot-c`,
+        world: playing(),
+        ready: `.play-setup`,
+        framed: true,
+        after: async (page) => {
+            await page.getByRole(`button`, { name: `Custom clock` }).click();
+            await page.locator(`.stepper`).first().waitFor();
+        },
+    },
+    { name: `play-custom-match`, path: `/play?bot=devbot-c&clock=match-7-4`, world: playing(), ready: `.stepper`, framed: true },
+    {
+        name: `play-opening`,
+        path: `/play?bot=devbot-c`,
+        world: playing(),
+        ready: `.play-setup`,
+        framed: true,
+        board: true,
+        after: async (page) => {
+            await page.locator(`.opening summary`).click();
+            await page.locator(`.opening-preview`).waitFor();
+        },
+    },
+    {
+        name: `play-sheet`,
+        path: `/play?bot=quietlake`,
+        world: playing(),
+        ready: `.play-setup`,
+        framed: true,
+        viewports: phones,
+        after: async (page) => {
+            await page.getByRole(`button`, { name: `Change opponent` }).click();
+            await page.locator(`dialog.play-sheet[open]`).waitFor();
+        },
+    },
+    {
+        name: `play-none`,
+        path: `/play`,
+        world: playing({ bots: playBots.map((bot) => ({ ...bot, openForChallenges: false })) }),
+        ready: `.empty`,
+        framed: true,
+    },
+    { name: `play-empty`, path: `/play`, world: playing({ bots: [] }), ready: `.empty`, framed: true },
+    { name: `play-error`, path: `/play`, world: playing({ broken: true }), ready: `.empty`, framed: true },
+    { name: `play-loading`, path: `/play`, world: playing({ stall: true }), ready: `.skeleton`, framed: true },
+    { name: `play-paused`, path: `/play?bot=devbot-c`, world: playing({ paused: true }), ready: `.play-setup`, framed: true },
+    { name: `play-paused-signed-out`, path: `/play?bot=devbot-c`, world: playing({ paused: true, me: null }), ready: `.play-setup`, framed: true },
+    refusedStart(`play-cooldown`, 400, `game_cooldown`, `/play?bot=devbot-c`, 42),
+    refusedStart(`play-human-busy`, 400, `human_busy`),
+    refusedStart(`play-bot-busy`, 400, `bot_busy`),
+    refusedStart(`play-clock-not-accepted`, 400, `clock_not_accepted`),
+    refusedStart(`play-not-open`, 400, `not_open`),
+    refusedStart(`play-delisted`, 403, `delisted`),
+    refusedStart(`play-not-found`, 404, `not_found`),
+    refusedStart(`play-failed`, 500, `internal`),
+    {
+        name: `play-stale`,
+        path: `/play?bot=devbot-c`,
+        world: playing({ start: { status: 401, code: `unauthorized` } }),
+        ready: `.play-setup`,
+        framed: true,
+        after: async (page) => {
+            await page.getByRole(`button`, { name: `Start game` }).click();
+            await page.locator(`.start-area .warn`).waitFor();
+        },
+    },
+    {
+        name: `play-guest-limit`,
+        path: `/play?bot=devbot-c`,
+        world: playing({ me: null, guestLimit: true }),
+        ready: `.play-setup`,
+        framed: true,
+        after: async (page) => {
+            await page.getByRole(`button`, { name: `Play as guest` }).click();
+            await page.locator(`.start-lines p`).first().waitFor();
+        },
+    },
     { name: `credits`, path: `/credits`, world: world(), ready: `h1`, framed: true, board: true },
+    { name: `welcome`, path: `/welcome`, world: welcoming(), ready: `.field-ok`, framed: true },
+    {
+        name: `welcome-no-display-name`,
+        path: `/welcome`,
+        world: welcoming({ signup: { ...signup, discord: { username: `mira.hex`, displayName: null } } }),
+        ready: `.field-ok`,
+        framed: true,
+    },
+    {
+        name: `welcome-guest`,
+        path: `/welcome`,
+        world: welcoming({ me: { kind: `guest`, name: `Guest k3f9` } }),
+        ready: `.field-ok`,
+        framed: true,
+    },
+    {
+        name: `welcome-invalid`,
+        path: `/welcome`,
+        world: welcoming(),
+        ready: `.field-ok`,
+        framed: true,
+        after: async (page) => {
+            await typeName(page, `mira.hex`);
+        },
+    },
+    {
+        name: `welcome-reserved`,
+        path: `/welcome`,
+        world: welcoming(),
+        ready: `.field-ok`,
+        framed: true,
+        after: async (page) => {
+            await typeName(page, `admin`);
+        },
+    },
+    {
+        name: `welcome-taken`,
+        path: `/welcome`,
+        world: welcoming({ create: `name_taken` }),
+        ready: `.field-ok`,
+        framed: true,
+        after: async (page) => {
+            await createAccount(page);
+            await page.getByText(`That name is taken`).waitFor();
+        },
+    },
+    {
+        name: `welcome-failed`,
+        path: `/welcome`,
+        world: welcoming({ create: `failed` }),
+        ready: `.field-ok`,
+        framed: true,
+        after: async (page) => {
+            await createAccount(page);
+            await page.getByText(`The account was not created; try again`).waitFor();
+        },
+    },
+    { name: `welcome-expired`, path: `/welcome`, world: welcoming({ signup: null }), ready: `.welcome-ended`, framed: true },
+    { name: `welcome-signed-in`, path: `/welcome`, world: world({ signup: null }), ready: `.identity-plate`, framed: true },
+    {
+        name: `welcome-limit`,
+        path: `/welcome`,
+        world: welcoming({ create: `signup_limit` }),
+        ready: `.field-ok`,
+        framed: true,
+        after: async (page) => {
+            await createAccount(page);
+            await page.locator(`.welcome-ended`).waitFor();
+        },
+    },
     { name: `legal-imprint`, path: `/legal/imprint`, world: signedOut, ready: `section`, framed: true },
     { name: `legal-privacy`, path: `/legal/privacy`, world: signedOut, ready: `section`, framed: true },
     { name: `legal-terms`, path: `/legal/terms`, world: guest, ready: `section`, framed: true },

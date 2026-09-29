@@ -53,6 +53,12 @@ export const legalDetailsSchema = z
     });
 export type LegalDetails = z.infer<typeof legalDetailsSchema>;
 
+/** The youngest age at which a person may have an account. */
+export const minimumAge = 16;
+
+/** Below this age a person needs a parent's or guardian's permission. */
+export const guardianPermissionAge = 18;
+
 /** The legal pages every framed screen and the game link to. */
 export const legalPages = [`imprint`, `privacy`, `terms`] as const;
 export type LegalPage = (typeof legalPages)[number];

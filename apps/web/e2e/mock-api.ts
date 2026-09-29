@@ -6,6 +6,7 @@ import {
     legalDetailsSchema,
     liveGameEntrySchema,
     meSchema,
+    signupSchema,
     type BotListing,
     type GameSnapshot,
     type LeaderboardEntry,
@@ -13,6 +14,7 @@ import {
     type LiveGameEntry,
     type Me,
     type Side,
+    type Signup,
 } from '@hexo-arena/contract';
 
 /**
@@ -35,7 +37,32 @@ export interface World {
     unloadable: string | null;
     // The deployment's legal details; null answers not found.
     legal: LegalDetails | null;
+    // The first sign-in waiting for its name; null answers it as expired.
+    signup: Signup | null;
+    // How Create account answers: the account, or a refusal by its code.
+    create: `created` | `name_taken` | `signup_limit` | `failed`;
+    // How a game start answers: the running game, or a refusal.
+    start: `created` | { status: number; code: string; retryAfter?: number };
+    // Whether minting a guest session finds the guest limit full.
+    guestLimit: boolean;
 }
+
+// Every state a bot in the Play roster can be in:
+// ready at several ratings and clocks, busy at its game cap,
+// one taking turn clocks of 10 to 60 s only, one closed, one offline.
+const full = { turnMs: [5000, 300000], match: true, unlimited: true };
+export const playBots: BotListing[] = [
+    { name: `sealbot`, ownerName: `bruno`, online: true, openForChallenges: true, rating: 1712, provisional: false, liveGames: 4, accepts: { turnMs: [5000, 60000], match: true, unlimited: false } },
+    { name: `hextide`, ownerName: `ana`, online: true, openForChallenges: true, rating: 1690, provisional: false, liveGames: 1, accepts: { turnMs: [5000, 60000], match: true, unlimited: false } },
+    { name: `devbot-b`, ownerName: `devowner-b`, online: true, openForChallenges: true, rating: 1538, provisional: false, liveGames: 0, accepts: full },
+    { name: `devbot-a`, ownerName: `devowner-a`, online: true, openForChallenges: true, rating: 1520, provisional: false, liveGames: 2, accepts: full },
+    { name: `devbot-c`, ownerName: `devowner-c`, online: true, openForChallenges: true, rating: 1514, provisional: false, liveGames: 0, accepts: full },
+    { name: `quietlake`, ownerName: `dmitri`, online: true, openForChallenges: true, rating: 1420, provisional: true, liveGames: 0, accepts: { turnMs: [10000, 60000], match: false, unlimited: false } },
+    { name: `pebble`, ownerName: `ana`, online: true, openForChallenges: false, rating: 1388, provisional: true, liveGames: 0, accepts: { turnMs: [5000, 30000], match: false, unlimited: true } },
+    { name: `lantern`, ownerName: `ana`, online: false, openForChallenges: false, rating: 1500, provisional: true, liveGames: 0 },
+];
+
+export const signup: Signup = { discord: { username: `mira.hex`, displayName: `Mira` }, suggestedName: `mira-hex`, next: `/connect` };
 
 // Invented values: no real operator, host, or authority belongs in a fixture.
 export const legalDetails: LegalDetails = {
@@ -66,6 +93,7 @@ export const bots: BotListing[] = [
         openForChallenges: true,
         rating: 1712,
         provisional: false,
+        liveGames: 0,
         about: `A clean-room HeXO engine with a rotation opener.`,
         version: `0.3.1`,
         repoUrl: `https://github.com/tom/sealbot`,
@@ -78,6 +106,7 @@ export const bots: BotListing[] = [
         openForChallenges: false,
         rating: 1690,
         provisional: false,
+        liveGames: 0,
         version: `2.0.0`,
         accepts: { turnMs: null, match: true, unlimited: true },
     },
@@ -88,6 +117,7 @@ export const bots: BotListing[] = [
         openForChallenges: false,
         rating: 1461,
         provisional: true,
+        liveGames: 0,
     },
 ];
 
@@ -304,7 +334,7 @@ export const games: Record<string, GameSnapshot> = {
 
 export function world(overrides: Partial<World> = {}): World {
     return {
-        me: { kind: `user`, name: `tom`, rating: 1503, provisional: false },
+        me: { kind: `user`, name: `tom`, rating: 1503, provisional: false, discord: { username: `tom.hex`, displayName: `Tom` } },
         leaderboard,
         bots,
         games: structuredClone(games),
@@ -314,6 +344,10 @@ export function world(overrides: Partial<World> = {}): World {
         broken: false,
         unloadable: null,
         legal: legalDetails,
+        signup: null,
+        create: `created`,
+        start: `created`,
+        guestLimit: false,
         ...overrides,
     };
 }
@@ -416,8 +450,38 @@ export async function serve(page: Page, state: World): Promise<void> {
             return;
         }
         if (path === `/api/auth/guest` && method === `POST`) {
+            if (state.guestLimit) {
+                await route.fulfill({
+                    status: 429,
+                    contentType: `application/json`,
+                    headers: { 'retry-after': `60` },
+                    body: JSON.stringify({ error: `the guest cap is full`, code: `guest_limit` }),
+                });
+                return;
+            }
             state.me = { kind: `guest`, name: `Guest k3f9` };
             await json(route, 201, state.me);
+            return;
+        }
+        if (path === `/api/signup`) {
+            const held = state.signup;
+            if (method === `DELETE`) {
+                state.signup = null;
+                await route.fulfill({ status: 204 });
+            } else if (held === null) {
+                await json(route, 410, { error: `no sign-up waits for this cookie`, code: `signup_expired` });
+            } else if (method === `GET`) {
+                await json(route, 200, signupSchema.parse(held));
+            } else if (state.create === `created`) {
+                const body = request.postDataJSON() as { name: string };
+                state.signup = null;
+                state.me = { kind: `user`, name: body.name, rating: 1000, provisional: true, discord: held.discord };
+                await json(route, 201, { name: body.name });
+            } else if (state.create === `failed`) {
+                await json(route, 500, { error: `boom`, code: `internal` });
+            } else {
+                await json(route, state.create === `name_taken` ? 409 : 429, { error: `no`, code: state.create });
+            }
             return;
         }
         if (path === `/api/legal` && method === `GET`) {
@@ -484,6 +548,18 @@ export async function serve(page: Page, state: World): Promise<void> {
             return;
         }
         if (path === `/api/games` && method === `POST`) {
+            const start = state.start;
+            if (start !== `created`) {
+                // A refused session reads as signed out from then on.
+                if (start.status === 401) state.me = null;
+                await route.fulfill({
+                    status: start.status,
+                    contentType: `application/json`,
+                    headers: start.retryAfter === undefined ? {} : { 'retry-after': String(start.retryAfter) },
+                    body: JSON.stringify({ error: `refused`, code: start.code }),
+                });
+                return;
+            }
             if (state.games.running !== undefined) await json(route, 201, viewOf(state.games.running, state.me));
             return;
         }

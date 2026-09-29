@@ -1,12 +1,12 @@
 import { expect, test, type Page } from '@playwright/test';
 import type { Me } from '@hexo-arena/contract';
 import { looks, wear } from './matrix';
-import { serve, world } from './mock-api';
+import { playBots, serve, world } from './mock-api';
 
 const guest: Me = { kind: `guest`, name: `Guest k3f9` };
 
-// How many lines the notice runs to and how many words its last one holds;
-// a word runs across the notice's text nodes, as "Privacy" and its period do.
+// How many lines a note runs to and how many words its last one holds; a
+// word runs across the note's text nodes, as "Privacy" and its period do.
 function lastLine(element: Element): { lines: number; words: number } {
     const chars: { node: Node; offset: number }[] = [];
     const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT);
@@ -27,28 +27,12 @@ function lastLine(element: Element): { lines: number; words: number } {
     return { lines: new Set(bottoms).size, words: bottoms.filter((entry) => entry === bottom).length };
 }
 
-// Every place a visitor decides whether to sign in carries the notice
+// Every place a visitor decides whether to sign in carries the trust line
 // right beside its Discord button: on the button's line, or just under it.
 const places: readonly { name: string; path: string; me: Me; open?: (page: Page) => Promise<void> }[] = [
     { name: `build a bot, signed out`, path: `/connect`, me: null },
     { name: `profile, signed out`, path: `/profile`, me: null },
     { name: `profile, as a guest`, path: `/profile`, me: guest },
-    {
-        name: `the play dialog, signed out`,
-        path: `/bots/sealbot`,
-        me: null,
-        open: async (page) => {
-            await page.getByRole(`button`, { name: /^Play sealbot/u }).click();
-        },
-    },
-    {
-        name: `the top bar's sign-in panel`,
-        path: `/ladder`,
-        me: null,
-        open: async (page) => {
-            await page.locator(`header`).getByRole(`button`, { name: `Sign in with Discord` }).click();
-        },
-    },
     {
         name: `the guest menu`,
         path: `/ladder`,
@@ -61,7 +45,7 @@ const places: readonly { name: string; path: string; me: Me; open?: (page: Page)
 
 for (const place of places) {
     for (const width of [1280, 390, 320]) {
-        test(`the sign-in notice stands beside the Discord button in ${place.name} at ${String(width)} px`, async ({ page }) => {
+        test(`the trust line stands beside the Discord button in ${place.name} at ${String(width)} px`, async ({ page }) => {
             await page.setViewportSize({ width, height: 900 });
             const look = looks[0];
             if (look === undefined) throw new Error(`no look registered`);
@@ -81,9 +65,10 @@ for (const place of places) {
                 const button = await pair.locator(`a.discord-button`).boundingBox();
                 const note = pair.locator(`.note`);
                 await expect(note).toHaveText(
-                    `By signing in you accept the Terms. HeXO Arena keeps only your Discord user ID and a public name made from your username, never your email; see\u00a0Privacy.`,
+                    place.me?.kind === `guest`
+                        ? `Signing in ends this guest session and its games. Your email stays with Discord; see\u00a0Privacy.`
+                        : `Your email stays with Discord, and a first sign-in asks for your public name; see\u00a0Privacy.`,
                 );
-                await expect(note.getByRole(`link`, { name: `Terms` })).toHaveAttribute(`href`, `/legal/terms`);
                 await expect(note.getByRole(`link`, { name: `Privacy` })).toHaveAttribute(`href`, `/legal/privacy`);
                 // The last line holds at least two words, links included.
                 const last = await note.evaluate(lastLine);
@@ -98,11 +83,11 @@ for (const place of places) {
     }
 }
 
-// Resized from 320 to 1280 px, and to 200% text, the notice never ends on a
-// word alone, wherever it stands in the page; a panel keeps the form it
+// Resized from 320 to 1280 px, and to 200% text, the trust line never ends
+// on a word alone, wherever it stands in the page; a panel keeps the form it
 // opened in, so the sweep covers the page places.
-for (const place of places.filter((entry) => entry.name !== `the top bar's sign-in panel` && entry.name !== `the guest menu`)) {
-    test(`the sign-in notice in ${place.name} never ends on a lone word from 320 to 1280 px`, async ({ page }) => {
+for (const place of places.filter((entry) => entry.name !== `the guest menu`)) {
+    test(`the trust line in ${place.name} never ends on a lone word from 320 to 1280 px`, async ({ page }) => {
         await page.setViewportSize({ width: 1280, height: 900 });
         const look = looks[0];
         if (look === undefined) throw new Error(`no look registered`);
@@ -124,3 +109,52 @@ for (const place of places.filter((entry) => entry.name !== `the top bar's sign-
         expect(lone).toEqual([]);
     });
 }
+
+// Signed out, the Play start area offers a guest game and a sign-in side
+// by side, with one notice under both that covers either choice.
+async function openPlay(page: Page, width: number): Promise<void> {
+    await page.setViewportSize({ width, height: 900 });
+    const look = looks[0];
+    if (look === undefined) throw new Error(`no look registered`);
+    await wear(page, look);
+    await serve(page, world({ me: null, bots: playBots }));
+    await page.goto(`/play?bot=devbot-c`);
+    await page.locator(`.start-notice`).waitFor();
+}
+
+for (const width of [1280, 390, 320]) {
+    test(`one notice stands under both Play start buttons at ${String(width)} px`, async ({ page }) => {
+        await openPlay(page, width);
+        const note = page.locator(`.start-notice`);
+        await expect(note).toHaveText(
+            `By playing as a guest you accept the Terms, including the minimum age of 16. Your email stays with Discord, and a first sign-in asks for your public name; see\u00a0Privacy.`,
+        );
+        await expect(note.getByRole(`link`, { name: `Terms` })).toHaveAttribute(`href`, `/legal/terms`);
+        await expect(note.getByRole(`link`, { name: `Privacy` })).toHaveAttribute(`href`, `/legal/privacy`);
+        const last = await note.evaluate(lastLine);
+        if (last.lines > 1) expect(last.words).toBeGreaterThan(1);
+        const guest = await page.getByRole(`button`, { name: `Play as guest` }).boundingBox();
+        const discord = await page.locator(`.start-area a.discord-button`).boundingBox();
+        const box = await note.boundingBox();
+        if (guest === null || discord === null || box === null) throw new Error(`the start area is not laid out`);
+        const bottom = Math.max(guest.y + guest.height, discord.y + discord.height);
+        expect(box.y).toBeGreaterThanOrEqual(bottom - 0.5);
+        expect(box.y).toBeLessThanOrEqual(bottom + 16);
+        expect(Math.abs(box.x - Math.min(guest.x, discord.x))).toBeLessThanOrEqual(1);
+    });
+}
+
+test('the Play notice never ends on a lone word from 320 to 1280 px', async ({ page }) => {
+    await openPlay(page, 1280);
+    const devtools = await page.context().newCDPSession(page);
+    const lone: string[] = [];
+    for (const size of [16, 32]) {
+        await devtools.send(`Page.setFontSizes`, { fontSizes: { standard: size } });
+        for (let width = 320; width <= 1280; width += 10) {
+            await page.setViewportSize({ width, height: 900 });
+            const last = await page.locator(`.start-notice`).evaluate(lastLine);
+            if (last.lines > 1 && last.words < 2) lone.push(`${String(size)} px text at ${String(width)} px`);
+        }
+    }
+    expect(lone).toEqual([]);
+});

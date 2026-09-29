@@ -152,6 +152,17 @@ export const connectMeta: PageMeta = { title: pageTitle(`Build a bot`), descript
 /** Who is signed in: their rating and their bots. */
 export const profileMeta: PageMeta = { title: pageTitle(`Profile`), description: `Your rating and your bots` };
 
+/** Where a person picks a bot and a clock and starts a game, the bot named when the link names one. */
+export function playMeta(bot?: string): PageMeta {
+    return {
+        title: pageTitle(bot === undefined ? `Play` : `Play ${bot}`),
+        description: `Pick a bot and a clock, and play HeXO in the browser`,
+    };
+}
+
+/** The first sign-in's page, where a person chooses their public name. */
+export const welcomeMeta: PageMeta = { title: pageTitle(`Create your account`), description: `Choose the public name for your ${siteName} account` };
+
 /** What the site builds on. */
 export const creditsMeta: PageMeta = { title: pageTitle(`Credits`), description: `The game, themes, font, and projects ${siteName} builds on` };
 

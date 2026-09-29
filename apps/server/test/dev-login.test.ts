@@ -1,9 +1,9 @@
-import { devLoginPath } from '@hexo-arena/contract';
+import { devLoginPath, mePath, meSchema, signupPath, signupSchema } from '@hexo-arena/contract';
 import { describe, expect, it } from 'vitest';
 import { parseEnv } from '../src/env';
 import { createQuery } from '../src/db';
 import { users } from '../src/db/schema';
-import { createTestApp, fakeDiscord } from './helpers';
+import { createTestApp, fakeDiscord, signUpWithDiscord } from './helpers';
 
 describe('DEV_LOGIN env flag', () => {
     it.each([
@@ -70,12 +70,50 @@ describe('POST /api/dev/login', () => {
     it('rejects a fold collision with an existing user', async () => {
         const fake = fakeDiscord({ id: `1`, username: `ada` });
         const { app } = await createTestApp({ discord: fake.oauth });
-        const state = await app.inject({ method: 'GET', url: `/api/auth/discord/login` });
-        const stateParam = new URL(state.headers.location ?? ``).searchParams.get(`state`) ?? ``;
-        await app.inject({ method: 'GET', url: `/api/auth/discord/callback?code=x&state=${encodeURIComponent(stateParam)}` });
+        await signUpWithDiscord(app, `ada`);
         const collision = await app.inject({ method: 'POST', url: devLoginPath, payload: { name: `Ada` } });
         expect(collision.statusCode).toBe(409);
         expect(collision.json()).toMatchObject({ code: `name_taken` });
+        await app.close();
+    });
+
+    it('keeps no Discord names on a session made by name', async () => {
+        const { app } = await createTestApp();
+        const response = await app.inject({ method: 'POST', url: devLoginPath, payload: { name: `ada` } });
+        const session = response.cookies.find((entry) => entry.name === `hexo_arena_session`)?.value ?? ``;
+        expect(meSchema.parse((await app.inject({ method: 'GET', url: mePath, cookies: { hexo_arena_session: session } })).json())).toMatchObject({ discord: null });
+        await app.close();
+    });
+
+    it('holds a first sign-in for a Discord account it does not know, as the callback does', async () => {
+        const { app, sqlite } = await createTestApp();
+        const response = await app.inject({
+            method: 'POST',
+            url: devLoginPath,
+            payload: { discord: { username: `mira.hex`, displayName: `Mira` }, next: `/connect` },
+        });
+        expect(response.statusCode).toBe(302);
+        expect(response.headers.location).toBe(`/welcome`);
+        const signup = response.cookies.find((entry) => entry.name === `hexo_arena_signup`)?.value ?? ``;
+        const read = await app.inject({ method: 'GET', url: signupPath, cookies: { hexo_arena_signup: signup } });
+        expect(signupSchema.parse(read.json())).toEqual({ discord: { username: `mira.hex`, displayName: `Mira` }, suggestedName: `mira-hex`, next: `/connect` });
+        expect(createQuery(sqlite).select().from(users).all()).toHaveLength(0);
+        await app.close();
+    });
+
+    it('signs a known Discord account in and returns to where it started', async () => {
+        const { app } = await createTestApp();
+        await app.inject({ method: 'POST', url: devLoginPath, payload: { name: `ada` } });
+        const response = await app.inject({
+            method: 'POST',
+            url: devLoginPath,
+            payload: { discord: { username: `ada`, displayName: null }, next: `/bots` },
+        });
+        expect(response.statusCode).toBe(302);
+        expect(response.headers.location).toBe(`/bots`);
+        const session = response.cookies.find((entry) => entry.name === `hexo_arena_session`)?.value ?? ``;
+        const me = meSchema.parse((await app.inject({ method: 'GET', url: mePath, cookies: { hexo_arena_session: session } })).json());
+        expect(me).toMatchObject({ name: `ada`, discord: { username: `ada`, displayName: null } });
         await app.close();
     });
 

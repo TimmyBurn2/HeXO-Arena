@@ -6,6 +6,9 @@ export const leaderboardPath = `/api/leaderboard`;
 // provisional above it.
 export const rankableDeviation = 75;
 
+/** The rating a human starts at, before any rated game. */
+export const humanSeedRating = 1000;
+
 // Named, so every rating in the document points at one definition.
 export const ratingSchema = z
     .number()

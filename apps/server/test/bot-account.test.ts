@@ -200,6 +200,7 @@ describe('PATCH /api/bot/account', () => {
                 openForChallenges: false,
                 rating: 1500,
                 provisional: true,
+                liveGames: 0,
                 about: `look at me`,
                 version: `9.9.9`,
                 repoUrl: `https://example.com/visible`,
@@ -215,7 +216,7 @@ describe('PATCH /api/bot/account', () => {
         await mintBotToken(app, owner, `Quiet`);
         const response = await app.inject({ method: 'GET', url: botsPath });
         expect(response.json()).toEqual([
-            { name: `Quiet`, ownerName: `owner`, online: false, openForChallenges: false, rating: 1500, provisional: true },
+            { name: `Quiet`, ownerName: `owner`, online: false, openForChallenges: false, rating: 1500, provisional: true, liveGames: 0 },
         ]);
         await app.close();
     });

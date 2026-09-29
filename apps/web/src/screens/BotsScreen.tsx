@@ -3,7 +3,7 @@ import type { BotListing } from '@hexo-arena/contract';
 import { fetchBots } from '../api/client';
 import { useAsync } from '../api/use-async';
 import { BotBadge, PresenceDot, OpenTag, PlayerName, Rating, summarizeAccepts } from '../components/player';
-import { coveredModes, PlayDialog } from '../components/PlayDialog';
+import { playBotPath, readinessOf } from '../play/setup';
 import { ErrorFrame, SkeletonRows } from '../components/states';
 import { Link } from '../router/Link';
 import { text } from '../text';
@@ -11,7 +11,6 @@ import './BotsScreen.css';
 
 export function BotsScreen() {
     const [onlineOnly, setOnlineOnly] = useState(false);
-    const [playing, setPlaying] = useState<BotListing | null>(null);
     return (
         <>
             <h1 className="screen-title">{text.bots.title}</h1>
@@ -27,21 +26,12 @@ export function BotsScreen() {
                     {text.bots.onlineOnly}
                 </label>
             </div>
-            <Directory key={onlineOnly ? `online` : `all`} onlineOnly={onlineOnly} onPlay={setPlaying} />
-            {playing !== null ? (
-                <PlayDialog
-                    bot={{ name: playing.name, accepts: playing.accepts }}
-                    open
-                    onClose={() => {
-                        setPlaying(null);
-                    }}
-                />
-            ) : null}
+            <Directory key={onlineOnly ? `online` : `all`} onlineOnly={onlineOnly} />
         </>
     );
 }
 
-function Directory({ onlineOnly, onPlay }: { onlineOnly: boolean; onPlay: (bot: BotListing) => void }) {
+function Directory({ onlineOnly }: { onlineOnly: boolean }) {
     const load = useCallback(async () => fetchBots(onlineOnly), [onlineOnly]);
     const { data, error, loading, reload } = useAsync(load);
 
@@ -85,7 +75,7 @@ function Directory({ onlineOnly, onPlay }: { onlineOnly: boolean; onPlay: (bot: 
                                 </td>
                             </tr>
                         ) : (
-                            data.map((bot) => <BotRow bot={bot} key={bot.name} onPlay={onPlay} />)
+                            data.map((bot) => <BotRow bot={bot} key={bot.name} />)
                         )}
                     </tbody>
                 </table>
@@ -107,9 +97,7 @@ function Directory({ onlineOnly, onPlay }: { onlineOnly: boolean; onPlay: (bot: 
     );
 }
 
-function BotRow({ bot, onPlay }: { bot: BotListing; onPlay: (bot: BotListing) => void }) {
-    const covered = coveredModes(bot.accepts);
-    const playable = bot.online && bot.openForChallenges && (covered.turn || covered.match || covered.unlimited);
+function BotRow({ bot }: { bot: BotListing }) {
     return (
         <tr>
             <td>
@@ -129,16 +117,12 @@ function BotRow({ bot, onPlay }: { bot: BotListing; onPlay: (bot: BotListing) =>
             <td className="col-optional">{summarizeAccepts(bot.accepts)}</td>
             <td className="col-optional">{bot.version ?? ``}</td>
             <td>
-                {playable ? (
-                    <button
-                        type="button"
-                        className="btn btn-primary btn-sm"
-                        onClick={() => {
-                            onPlay(bot);
-                        }}
-                    >
+                {readinessOf(bot) === `ready` ? (
+                    <Link to={playBotPath(bot.name)} className="btn btn-primary btn-sm" ariaLabel={text.bots.playBot(bot.name)}>
                         {text.bots.play}
-                    </button>
+                    </Link>
+                ) : readinessOf(bot) === `busy` ? (
+                    <span className="note">{text.bots.busy}</span>
                 ) : null}
             </td>
         </tr>

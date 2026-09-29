@@ -186,3 +186,31 @@ describe('the admin tables', () => {
         sqlite.close();
     });
 });
+
+describe('the sign-up migration', () => {
+    let sqlite: Sqlite;
+    let folder: string;
+
+    afterEach(() => {
+        sqlite.close();
+        rmSync(folder, { recursive: true, force: true });
+    });
+
+    it('keeps every session and state, sessions without Discord names and states returning to the root', () => {
+        sqlite = openDatabase(`:memory:`);
+        folder = migrationsUpTo(10);
+        migrate(drizzle(sqlite), { migrationsFolder: folder });
+        sqlite.exec(`
+            insert into name_reservations (name_key) values ('owner');
+            insert into users (id, discord_id, name, name_key, created_at) values ('u1', 'd1', 'owner', 'owner', 1);
+            insert into sessions (id, token_hash, user_id, created_at, expires_at) values ('s1', 'h1', 'u1', 1, 99);
+            insert into auth_states (state, nonce, expires_at) values ('st', 'nc', 99);
+        `);
+        runMigrations(sqlite);
+        expect(sqlite.prepare(`select id, discord_username as username, discord_display_name as display from sessions`).all()).toEqual([
+            { id: `s1`, username: null, display: null },
+        ]);
+        expect(sqlite.prepare(`select state, next from auth_states`).all()).toEqual([{ state: `st`, next: `/` }]);
+        expect(sqlite.prepare(`select count(*) as n from pending_signups`).get()).toEqual({ n: 0 });
+    });
+});

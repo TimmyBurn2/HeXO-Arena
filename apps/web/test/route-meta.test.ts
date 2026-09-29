@@ -10,6 +10,7 @@ const routes = [
     { name: `connect` },
     { name: `profile` },
     { name: `credits` },
+    { name: `welcome` },
     { name: `game`, gameId: `g1` },
     { name: `legal`, page: `imprint` },
     { name: `legal`, page: `privacy` },
@@ -24,6 +25,7 @@ describe('routeMeta', () => {
         expect(routeMeta({ name: `connect` }).title).toBe(`Build a bot - HeXO Arena`);
         expect(routeMeta({ name: `profile` }).title).toBe(`Profile - HeXO Arena`);
         expect(routeMeta({ name: `credits` }).title).toBe(`Credits - HeXO Arena`);
+        expect(routeMeta({ name: `welcome` }).title).toBe(`Create your account - HeXO Arena`);
         expect(routeMeta({ name: `legal`, page: `imprint` }).title).toBe(`Impressum / Legal notice - HeXO Arena`);
         expect(routeMeta({ name: `legal`, page: `privacy` }).title).toBe(`Privacy policy - HeXO Arena`);
         expect(routeMeta({ name: `legal`, page: `terms` }).title).toBe(`Terms of use - HeXO Arena`);

@@ -50,7 +50,7 @@
         text-wrap: balance;
     }
 
-    /* A finger needs the full target where the tab strip takes over. */
+    /* A finger needs the full target on a phone. */
     @media (max-width: 30rem) {
         .site-footer .site-links a {
             min-height: var(--control-lg);

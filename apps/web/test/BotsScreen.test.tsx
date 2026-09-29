@@ -11,6 +11,7 @@ const directory = [
         openForChallenges: true,
         rating: 1712,
         provisional: false,
+        liveGames: 0,
         about: undefined,
         version: `0.3.1`,
         repoUrl: undefined,
@@ -23,6 +24,7 @@ const directory = [
         openForChallenges: false,
         rating: 1690,
         provisional: true,
+        liveGames: 0,
         accepts: { turnMs: null, match: true, unlimited: true },
     },
 ];
@@ -102,13 +104,16 @@ describe('BotsScreen', () => {
         expect(screen.getByRole(`table`)).toBeTruthy();
     });
 
-    it('open the play dialog from a playable row', async () => {
-        stubDirectory(directory);
+    it('link a ready row to the Play page with its bot, and give a busy row its reason instead', async () => {
+        stubDirectory([...directory, { ...directory[0], name: `devbot-a`, liveGames: 4 }]);
         render(<BotsScreen />);
-        const playButtons = await screen.findAllByRole(`button`, { name: `Play` });
-        fireEvent.click(playButtons[0] as HTMLElement);
-        expect(await screen.findByRole(`dialog`)).toBeTruthy();
-        expect(screen.getByRole(`button`, { name: `Start game` })).toBeTruthy();
+        const play = await screen.findByRole(`link`, { name: `Play sealbot` });
+        expect(play.textContent).toBe(`Play`);
+        expect(play.getAttribute(`href`)).toBe(`/play?bot=sealbot`);
+        expect(screen.queryByRole(`link`, { name: `Play devbot-a` })).toBe(null);
+        expect(screen.getAllByRole(`link`, { name: /^Play/u })).toHaveLength(1);
+        const busy = screen.getByText(`devbot-a`).closest(`tr`);
+        expect(busy?.lastElementChild?.textContent).toBe(`In 4 games`);
     });
 
     it('leave rows without coverage actionless', async () => {

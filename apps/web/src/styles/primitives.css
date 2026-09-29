@@ -164,10 +164,21 @@
     }
 
     .btn[disabled],
-    .btn[disabled]:hover {
+    .btn[disabled]:hover,
+    .btn[aria-disabled='true'],
+    .btn[aria-disabled='true']:hover {
         background: var(--c-bg-hover);
         color: var(--c-text-dim);
         cursor: not-allowed;
+    }
+
+    /* Forced colors gray a disabled button on their own;
+       one that stays focusable while it cannot act is grayed the same way. */
+    @media (forced-colors: active) {
+        .btn[aria-disabled='true'],
+        .btn[aria-disabled='true']:hover {
+            color: GrayText;
+        }
     }
 
     .toolbar {
@@ -321,6 +332,12 @@
 
     .field-error {
         color: var(--c-bad);
+        font-size: var(--text-sm);
+        margin: var(--space-1) 0 0;
+    }
+
+    .field-ok {
+        color: var(--c-good);
         font-size: var(--text-sm);
         margin: var(--space-1) 0 0;
     }

@@ -6,20 +6,20 @@ import { pausedRetryAfterSeconds, healthzPath } from '@hexo-arena/contract';
 export type SiteStatus = `up` | `paused`;
 
 let current: SiteStatus = `up`;
-let probing = false;
+// One probe at a time; a caller during it waits for the same answer.
+let running: Promise<void> | null = null;
 const listeners = new Set<() => void>();
 
 function probe(): Promise<void> {
-    if (probing) return Promise.resolve();
-    probing = true;
-    return probeHealth()
+    running ??= probeHealth()
         .catch(() => {
             // A network miss keeps the last known status; blanking the site
             // to an error state on a flaky link is worse than a stale bit.
         })
-        .then(() => {
-            probing = false;
+        .finally(() => {
+            running = null;
         });
+    return running;
 }
 
 async function probeHealth(): Promise<void> {
@@ -62,6 +62,8 @@ export const siteStatusStore = {
     read,
     subscribe,
     start,
+    /** Ask again now, as when a refusal says the site paused between probes. */
+    probe,
 };
 
 let timer: ReturnType<typeof setInterval> | null = null;

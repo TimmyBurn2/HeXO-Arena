@@ -1,9 +1,10 @@
-import { discordCallbackPath, discordLoginPath, healthzPath } from '@hexo-arena/contract';
+import { discordCallbackPath, discordLoginHref, discordLoginPath, guestPath, healthzPath, mePath, meSchema } from '@hexo-arena/contract';
 import type { FastifyInstance } from 'fastify';
 import { describe, expect, it } from 'vitest';
 import { createQuery } from '../src/db';
-import { users } from '../src/db/schema';
-import { createTestApp, fakeDiscord } from './helpers';
+import { pendingSignups, sessions, users } from '../src/db/schema';
+import { createDiscordOAuth } from '../src/discord';
+import { createTestApp, fakeDiscord, signUpWithDiscord } from './helpers';
 
 describe('GET /healthz', () => {
     it('answers 200 with no body', async () => {
@@ -16,7 +17,7 @@ describe('GET /healthz', () => {
 });
 
 describe('GET /api/auth/discord/login', () => {
-    it('redirects to discord with a fresh state and nonce', async () => {
+    it('redirects to discord with a fresh state and nonce, creating nothing', async () => {
         const { app, sqlite } = await createTestApp();
         const response = await app.inject({ method: 'GET', url: discordLoginPath });
         expect(response.statusCode).toBe(302);
@@ -28,175 +29,205 @@ describe('GET /api/auth/discord/login', () => {
         await app.close();
     });
 
-    it('sends the visitor home with the reason when discord credentials are absent', async () => {
+    it('sends the visitor back where they started with the reason when discord credentials are absent', async () => {
         const { app } = await createTestApp({ discord: null });
-        const response = await app.inject({ method: 'GET', url: discordLoginPath });
-        expect(response.statusCode).toBe(302);
-        expect(response.headers.location).toBe(`/?signin=unconfigured`);
+        const home = await app.inject({ method: 'GET', url: discordLoginPath });
+        expect(home.statusCode).toBe(302);
+        expect(home.headers.location).toBe(`/?signin=unconfigured`);
+        const back = await app.inject({ method: 'GET', url: discordLoginHref(`/bots?online=1`) });
+        expect(back.headers.location).toBe(`/bots?online=1&signin=unconfigured`);
         await app.close();
+    });
+
+    it.each([`//evil.example/`, `/\\evil.example`, `https://evil.example/`, `/api/me`, `/welcome`])(
+        'reads the return path %j as the root',
+        async (next) => {
+            const { app } = await createTestApp({ discord: null });
+            const response = await app.inject({ method: 'GET', url: `${discordLoginPath}?next=${encodeURIComponent(next)}` });
+            expect(response.headers.location).toBe(`/?signin=unconfigured`);
+            await app.close();
+        },
+    );
+
+    it('asks Discord for the identify scope alone, and to skip its screen for an app already allowed', () => {
+        const oauth = createDiscordOAuth({ clientId: `c1`, clientSecret: `s1`, redirectUri: `https://arena.example/api/auth/discord/callback` });
+        const url = new URL(oauth.authorizeUrl(`st.nc`));
+        expect(url.origin + url.pathname).toBe(`https://discord.com/oauth2/authorize`);
+        expect(Object.fromEntries(url.searchParams)).toEqual({
+            client_id: `c1`,
+            response_type: `code`,
+            scope: `identify`,
+            redirect_uri: `https://arena.example/api/auth/discord/callback`,
+            state: `st.nc`,
+            prompt: `none`,
+        });
     });
 });
 
-async function loginOnce(app: FastifyInstance): Promise<string> {
-    const response = await app.inject({ method: 'GET', url: discordLoginPath });
+async function loginOnce(app: FastifyInstance, next?: string): Promise<string> {
+    const response = await app.inject({ method: 'GET', url: next === undefined ? discordLoginPath : discordLoginHref(next) });
     const location = new URL(response.headers.location ?? ``);
     return location.searchParams.get(`state`) ?? ``;
 }
 
-describe('GET /api/auth/discord/callback', () => {
-    it('creates the user, sets a lax httpOnly cookie, and redirects home', async () => {
+function callback(app: FastifyInstance, query: string, cookies?: Record<string, string>) {
+    return app.inject({ method: 'GET', url: `${discordCallbackPath}?${query}`, ...(cookies === undefined ? {} : { cookies }) });
+}
+
+describe('GET /api/auth/discord/callback, a first sign-in', () => {
+    it('creates nothing yet: it holds the sign-up behind a lax httpOnly cookie and asks for the name', async () => {
         const { app, sqlite } = await createTestApp();
-        const state = await loginOnce(app);
-        const response = await app.inject({
-            method: 'GET',
-            url: `${discordCallbackPath}?code=abc&state=${encodeURIComponent(state)}`,
-        });
+        const response = await callback(app, `code=abc&state=${encodeURIComponent(await loginOnce(app, `/connect`))}`);
         expect(response.statusCode).toBe(302);
-        expect(response.headers.location).toBe(`/`);
-        const cookie = response.headers[`set-cookie`] ?? ``;
-        expect(cookie).toContain(`HttpOnly`);
-        expect(cookie).toContain(`SameSite=Lax`);
-        expect(cookie).toContain(`Path=/`);
-        expect(cookie).not.toContain(`Secure`);
-        const rows = createQuery(sqlite).select().from(users).all();
-        expect(rows).toHaveLength(1);
-        expect(rows[0]?.name).toBe(`tester`);
+        expect(response.headers.location).toBe(`/welcome`);
+        const cookie = response.cookies.find((entry) => entry.name === `hexo_arena_signup`);
+        expect(cookie).toMatchObject({ httpOnly: true, sameSite: `Lax`, path: `/api/signup`, maxAge: 900 });
+        expect(cookie?.secure).toBeUndefined();
+        expect(response.cookies.find((entry) => entry.name === `hexo_arena_session`)).toBeUndefined();
+        const query = createQuery(sqlite);
+        expect(query.select().from(users).all()).toHaveLength(0);
+        expect(query.select({ next: pendingSignups.next }).from(pendingSignups).all()).toEqual([{ next: `/connect` }]);
         await app.close();
     });
 
-    it('marks the cookie Secure when the public origin is https', async () => {
+    it('marks the sign-up cookie Secure when the public origin is https', async () => {
         const { app } = await createTestApp({ secureCookies: true });
-        const state = await loginOnce(app);
-        const response = await app.inject({
-            method: 'GET',
-            url: `${discordCallbackPath}?code=abc&state=${encodeURIComponent(state)}`,
-        });
-        expect(response.headers[`set-cookie`]).toContain(`Secure`);
+        const response = await callback(app, `code=abc&state=${encodeURIComponent(await loginOnce(app))}`);
+        expect(response.cookies.find((entry) => entry.name === `hexo_arena_signup`)?.secure).toBe(true);
         await app.close();
     });
 
-    it('sends an unknown state home as expired, without a session', async () => {
+    it('keeps one sign-up per Discord account, the newest', async () => {
+        const { app, sqlite } = await createTestApp();
+        await callback(app, `code=abc&state=${encodeURIComponent(await loginOnce(app, `/ladder`))}`);
+        await callback(app, `code=def&state=${encodeURIComponent(await loginOnce(app, `/credits`))}`);
+        expect(createQuery(sqlite).select({ next: pendingSignups.next }).from(pendingSignups).all()).toEqual([{ next: `/credits` }]);
+        await app.close();
+    });
+});
+
+describe('GET /api/auth/discord/callback, a known account', () => {
+    it('sets a lax httpOnly session cookie and returns to where the sign-in started', async () => {
         const { app } = await createTestApp();
-        const response = await app.inject({
-            method: 'GET',
-            url: `${discordCallbackPath}?code=abc&state=never-issued`,
-        });
+        await signUpWithDiscord(app, `tester`);
+        const response = await callback(app, `code=abc&state=${encodeURIComponent(await loginOnce(app, `/bots/devbot-c?online=1`))}`);
+        expect(response.statusCode).toBe(302);
+        expect(response.headers.location).toBe(`/bots/devbot-c?online=1`);
+        const cookie = response.cookies.find((entry) => entry.name === `hexo_arena_session`);
+        expect(cookie).toMatchObject({ httpOnly: true, sameSite: `Lax`, path: `/` });
+        expect(cookie?.secure).toBeUndefined();
+        await app.close();
+    });
+
+    it('marks the session cookie Secure when the public origin is https', async () => {
+        const { app } = await createTestApp({ secureCookies: true });
+        await signUpWithDiscord(app, `tester`);
+        const response = await callback(app, `code=abc&state=${encodeURIComponent(await loginOnce(app))}`);
+        expect(response.cookies.find((entry) => entry.name === `hexo_arena_session`)?.secure).toBe(true);
+        await app.close();
+    });
+
+    it('keeps the public name when Discord renames the account, and shows the new Discord names to the person', async () => {
+        const fake = fakeDiscord({ id: `77`, username: `mira.hex`, displayName: `Mira` });
+        const { app, sqlite } = await createTestApp({ discord: fake.oauth });
+        await signUpWithDiscord(app, `mira-hex`);
+        fake.identity.names = { username: `mira.renamed`, displayName: null };
+        const response = await callback(app, `code=def&state=${encodeURIComponent(await loginOnce(app))}`);
+        const session = response.cookies.find((entry) => entry.name === `hexo_arena_session`)?.value ?? ``;
+        const me = meSchema.parse((await app.inject({ method: 'GET', url: mePath, cookies: { hexo_arena_session: session } })).json());
+        expect(me).toMatchObject({ kind: `user`, name: `mira-hex`, discord: { username: `mira.renamed`, displayName: null } });
+        expect(createQuery(sqlite).select({ name: users.name }).from(users).all()).toEqual([{ name: `mira-hex` }]);
+        await app.close();
+    });
+
+    it('ends the guest session the browser held, with its games', async () => {
+        const { app } = await createTestApp();
+        await signUpWithDiscord(app, `tester`);
+        const guest = (await app.inject({ method: 'POST', url: guestPath })).cookies.find((entry) => entry.name === `hexo_arena_session`)?.value ?? ``;
+        await callback(app, `code=abc&state=${encodeURIComponent(await loginOnce(app))}`, { hexo_arena_session: guest });
+        expect((await app.inject({ method: 'GET', url: mePath, cookies: { hexo_arena_session: guest } })).json()).toBeNull();
+        await app.close();
+    });
+
+    it('turns a banned account away before anything else, at the page it started from', async () => {
+        const { app, sqlite } = await createTestApp();
+        await signUpWithDiscord(app, `tester`);
+        createQuery(sqlite).update(users).set({ bannedAt: 1 }).run();
+        const guest = (await app.inject({ method: 'POST', url: guestPath })).cookies.find((entry) => entry.name === `hexo_arena_session`)?.value ?? ``;
+        const before = createQuery(sqlite).select().from(sessions).all().length;
+        const response = await callback(app, `code=abc&state=${encodeURIComponent(await loginOnce(app, `/connect`))}`, { hexo_arena_session: guest });
+        expect(response.headers.location).toBe(`/connect?signin=banned`);
+        expect(response.headers[`set-cookie`]).toBeUndefined();
+        expect(createQuery(sqlite).select().from(sessions).all()).toHaveLength(before);
+        expect(createQuery(sqlite).select().from(pendingSignups).all()).toHaveLength(0);
+        expect((await app.inject({ method: 'GET', url: mePath, cookies: { hexo_arena_session: guest } })).json()).toMatchObject({ kind: `guest` });
+        await app.close();
+    });
+});
+
+describe('GET /api/auth/discord/callback, a sign-in that does not finish', () => {
+    it('reads an unknown state as expired, at the root', async () => {
+        const { app } = await createTestApp();
+        const response = await callback(app, `code=abc&state=never-issued`);
         expect(response.statusCode).toBe(302);
         expect(response.headers.location).toBe(`/?signin=expired`);
         expect(response.headers[`set-cookie`]).toBeUndefined();
         await app.close();
     });
 
-    it('sends a replayed state home as expired', async () => {
+    it('reads a replayed state as expired', async () => {
         const { app } = await createTestApp();
-        const state = await loginOnce(app);
-        const url = `${discordCallbackPath}?code=abc&state=${encodeURIComponent(state)}`;
-        await app.inject({ method: 'GET', url });
-        const replay = await app.inject({ method: 'GET', url });
-        expect(replay.statusCode).toBe(302);
+        const query = `code=abc&state=${encodeURIComponent(await loginOnce(app, `/connect`))}`;
+        await callback(app, query);
+        const replay = await callback(app, query);
         expect(replay.headers.location).toBe(`/?signin=expired`);
         await app.close();
     });
 
-    it('sends a visitor who cancelled at discord home as cancelled', async () => {
-        const { app } = await createTestApp();
-        const state = await loginOnce(app);
-        const response = await app.inject({
-            method: 'GET',
-            url: `${discordCallbackPath}?error=access_denied&state=${encodeURIComponent(state)}`,
-        });
+    it('reads access_denied as a cancel at the page it started from, keeping nothing', async () => {
+        const { app, sqlite } = await createTestApp();
+        const response = await callback(app, `error=access_denied&state=${encodeURIComponent(await loginOnce(app, `/profile`))}`);
         expect(response.statusCode).toBe(302);
-        expect(response.headers.location).toBe(`/?signin=cancelled`);
+        expect(response.headers.location).toBe(`/profile?signin=cancelled`);
         expect(response.headers[`set-cookie`]).toBeUndefined();
+        expect(createQuery(sqlite).select().from(pendingSignups).all()).toHaveLength(0);
+        await app.close();
+    });
+
+    it('reads a cancel with a stale state as a cancel at the root', async () => {
+        const { app } = await createTestApp();
+        const response = await callback(app, `error=access_denied&state=never-issued`);
+        expect(response.headers.location).toBe(`/?signin=cancelled`);
+        await app.close();
+    });
+
+    it.each([`error=server_error`, `error=invalid_scope&error_description=nope`, ``])('reads %j with a good state as rejected', async (extra) => {
+        const { app } = await createTestApp();
+        const state = `state=${encodeURIComponent(await loginOnce(app, `/ladder`))}`;
+        const response = await callback(app, extra === `` ? state : `${extra}&${state}`);
+        expect(response.headers.location).toBe(`/ladder?signin=rejected`);
         await app.close();
     });
 
     it('sends the visitor home with the reason when discord credentials are absent', async () => {
         const { app } = await createTestApp({ discord: null });
-        const response = await app.inject({ method: 'GET', url: `${discordCallbackPath}?code=abc&state=x` });
+        const response = await callback(app, `code=abc&state=x`);
         expect(response.statusCode).toBe(302);
         expect(response.headers.location).toBe(`/?signin=unconfigured`);
         await app.close();
     });
 
-    it('sends the visitor home as rejected when discord refuses the exchange', async () => {
+    it('reads a refused exchange as rejected, at the page it started from', async () => {
         const { app } = await createTestApp({
             discord: {
                 authorizeUrl: (state: string) => `https://discord.example/authorize?state=${state}`,
                 exchange: () => Promise.reject(new Error(`upstream down`)),
             },
         });
-        const state = await loginOnce(app);
-        const response = await app.inject({
-            method: 'GET',
-            url: `${discordCallbackPath}?code=abc&state=${encodeURIComponent(state)}`,
-        });
+        const response = await callback(app, `code=abc&state=${encodeURIComponent(await loginOnce(app, `/credits`))}`);
         expect(response.statusCode).toBe(302);
-        expect(response.headers.location).toBe(`/?signin=rejected`);
+        expect(response.headers.location).toBe(`/credits?signin=rejected`);
         expect(response.headers[`set-cookie`]).toBeUndefined();
-        await app.close();
-    });
-
-    it('reuses the existing user and keeps its name when discord renames it', async () => {
-        const fake = fakeDiscord({ id: `77`, username: `tester` });
-        const { app, sqlite } = await createTestApp({ discord: fake.oauth });
-        const first = await app.inject({
-            method: 'GET',
-            url: `${discordCallbackPath}?code=abc&state=${encodeURIComponent(await loginOnce(app))}`,
-        });
-        expect(first.statusCode).toBe(302);
-        fake.identity.username = `renamed`;
-        const second = await app.inject({
-            method: 'GET',
-            url: `${discordCallbackPath}?code=def&state=${encodeURIComponent(await loginOnce(app))}`,
-        });
-        expect(second.statusCode).toBe(302);
-        const rows = createQuery(sqlite).select().from(users).all();
-        expect(rows).toHaveLength(1);
-        expect(rows[0]?.name).toBe(`tester`);
-        await app.close();
-    });
-
-    it.each([
-        [`some.user`, `someuser`],
-        [`1bob`, `bob`],
-        [`bob-`, `bob`],
-        [`a`, `user`],
-        [`admin`, `admin-1`],
-        [`\u00c4l\u00e4`, `user`],
-        [`x`.repeat(35), `x`.repeat(30)],
-    ])('derives the name %j as %s', async (username, expected) => {
-        const fake = fakeDiscord({ id: `id-${username}`, username });
-        const { app, sqlite } = await createTestApp({ discord: fake.oauth });
-        const response = await app.inject({
-            method: 'GET',
-            url: `${discordCallbackPath}?code=abc&state=${encodeURIComponent(await loginOnce(app))}`,
-        });
-        expect(response.statusCode).toBe(302);
-        const rows = createQuery(sqlite).select().from(users).all();
-        expect(rows).toHaveLength(1);
-        expect(rows[0]?.name).toBe(expected);
-        await app.close();
-    });
-
-    it('suffixes deterministically when two discords want the same name', async () => {
-        const first = fakeDiscord({ id: `1`, username: `tester` });
-        const { app, sqlite } = await createTestApp({ discord: first.oauth });
-        await app.inject({
-            method: 'GET',
-            url: `${discordCallbackPath}?code=abc&state=${encodeURIComponent(await loginOnce(app))}`,
-        });
-        first.identity.id = `2`;
-        await app.inject({
-            method: 'GET',
-            url: `${discordCallbackPath}?code=def&state=${encodeURIComponent(await loginOnce(app))}`,
-        });
-        const names = createQuery(sqlite)
-            .select({ name: users.name })
-            .from(users)
-            .all()
-            .map((row) => row.name);
-        expect(names).toEqual([`tester`, `tester-1`]);
         await app.close();
     });
 });

@@ -163,9 +163,9 @@ describe('request logging', () => {
         world.sqlite.close();
     });
 
-    it('keeps the oauth code and state out of every line, whatever the callback answers', async () => {
+    it('keeps the oauth code, the state, and the return path out of every line, whatever the callback answers', async () => {
         await request(port, `GET`, `${discordCallbackPath}?code=codemarker&state=statemarker`, {});
-        const login = await request(port, `GET`, discordLoginPath, {});
+        const login = await request(port, `GET`, `${discordLoginPath}?next=${encodeURIComponent(`/bots/nextmarker`)}`, {});
         const issued = new URL(login.location ?? ``).searchParams.get(`state`) ?? ``;
         expect(issued).not.toBe(``);
         const signedIn = await request(port, `GET`, `${discordCallbackPath}?code=codemarker&state=${issued}`, {});
@@ -176,6 +176,7 @@ describe('request logging', () => {
         expect(logs).not.toContain(`codemarker`);
         expect(logs).not.toContain(`statemarker`);
         expect(logs).not.toContain(issued);
+        expect(logs).not.toContain(`nextmarker`);
     });
 
     it('logs a bot request by its route pattern, never by the name', async () => {

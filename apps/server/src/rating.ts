@@ -1,7 +1,6 @@
-import { rankableDeviation, type Side } from '@hexo-arena/contract';
+import { humanSeedRating, rankableDeviation, type Side } from '@hexo-arena/contract';
 import { glicko2Update, type Glicko2Rating } from './glicko2';
 
-export const humanSeedRating = 1000;
 export const botSeedRating = 1500;
 export const seedDeviation = 500;
 export const seedVolatility = 0.09;

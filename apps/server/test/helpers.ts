@@ -1,4 +1,4 @@
-import { botWithTokenSchema, botsPath, devLoginPath, type LegalDetails } from '@hexo-arena/contract';
+import { botWithTokenSchema, botsPath, devLoginPath, discordCallbackPath, discordLoginPath, signupPath, type LegalDetails } from '@hexo-arena/contract';
 import { buildApp, type BuiltApp } from '../src/app';
 import { openDatabase, runMigrations, type Sqlite } from '../src/db';
 import type { DiscordIdentity, DiscordOAuth } from '../src/discord';
@@ -11,8 +11,10 @@ export interface FakeDiscord {
     identity: DiscordIdentity;
 }
 
-export function fakeDiscord(initial: DiscordIdentity): FakeDiscord {
-    const identity = { ...initial };
+// A Discord that confirms every code as one account, which a test may
+// change between sign-ins.
+export function fakeDiscord(initial: { id: string; username: string; displayName?: string | null }): FakeDiscord {
+    const identity: DiscordIdentity = { id: initial.id, names: { username: initial.username, displayName: initial.displayName ?? null } };
     return {
         identity,
         oauth: {
@@ -88,6 +90,22 @@ export async function createTestApp(options?: {
         ...(options?.webIndexPath !== undefined && { webIndexPath: options.webIndexPath }),
     });
     return { sqlite, app, admin, drain, presence, watchers };
+}
+
+/**
+ * A first sign-in through the app's Discord, finished under `name`: the
+ * session cookie's value.
+ */
+export async function signUpWithDiscord(app: TestApp[`app`], name: string): Promise<string> {
+    const login = await app.inject({ method: `GET`, url: discordLoginPath });
+    const state = new URL(login.headers.location ?? ``).searchParams.get(`state`) ?? ``;
+    const back = await app.inject({ method: `GET`, url: `${discordCallbackPath}?code=c&state=${encodeURIComponent(state)}` });
+    const signup = back.cookies.find((entry) => entry.name === `hexo_arena_signup`)?.value;
+    if (signup === undefined) throw new Error(`the callback held no sign-up: ${String(back.headers.location)}`);
+    const created = await app.inject({ method: `POST`, url: signupPath, payload: { name }, cookies: { hexo_arena_signup: signup } });
+    const session = created.cookies.find((entry) => entry.name === `hexo_arena_session`)?.value;
+    if (created.statusCode !== 201 || session === undefined) throw new Error(`the sign-up failed: ${created.body}`);
+    return session;
 }
 
 // The session cookie value of a dev login, for inject's cookies option.

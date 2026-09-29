@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
-import type { GuestMe, UserMe } from '@hexo-arena/contract';
-import { DiscordPanelButton, DiscordSignIn } from '../components/DiscordButton';
+import { nameKeyOf, type GuestMe, type UserMe } from '@hexo-arena/contract';
+import { DiscordButton, DiscordSignIn } from '../components/DiscordButton';
 import { Rating } from '../components/player';
+import { Sigil } from '../components/Sigil';
 import { TopbarPanel, usePanel, type PanelControl } from '../components/TopbarPanel';
 import { meStore, useMe } from '../me';
 import { Link } from '../router/Link';
@@ -13,28 +14,29 @@ import './Identity.css';
 const firstItem = `.identity-items a, .identity-items button`;
 
 /**
- * Who is here, at the top bar's right edge: signed out, the way in with
- * the notice it needs; signed in or as a guest, where to go and how to
- * leave; each a button opening a popover or, on phones, a sheet.
+ * Who is here, at the top bar's right edge: signed out, the Discord link
+ * itself, one click from anywhere and back; signed in or as a guest, a
+ * button opening a popover or, on phones, a sheet with where to go and how
+ * to leave.
  */
 export function Identity({ route }: { route: Route }) {
     const state = useMe();
     const control = usePanel(`identity`);
     const leftHere = useRef(false);
+    const signIn = useRef<HTMLAnchorElement>(null);
 
     // A session that ends takes the panel with it; ended from the panel,
-    // focus goes on to the sign-in button that takes the button's place.
+    // focus goes on to the sign-in link that takes the button's place.
     const signedOut = state.status === `ready` && state.me === null;
     const close = control.close;
-    const button = control.button;
     useEffect(() => {
         if (!signedOut) return;
         close(false);
         if (leftHere.current) {
             leftHere.current = false;
-            button.current?.focus();
+            signIn.current?.focus();
         }
-    }, [signedOut, close, button]);
+    }, [signedOut, close]);
 
     function markLeaving(leaving: boolean) {
         leftHere.current = leaving;
@@ -45,36 +47,9 @@ export function Identity({ route }: { route: Route }) {
     }
     const me = state.me;
     const open = control.mode !== `closed`;
-    if (me === null) {
-        return (
-            <>
-                <DiscordPanelButton ref={control.button} open={open} onClick={control.toggle} />
-                <TopbarPanel
-                    id="identity-panel"
-                    className="identity-panel"
-                    control={control}
-                    labelledBy="identity-name"
-                    head={
-                        <p className="identity-head">
-                            <span id="identity-name" className="identity-head-name">
-                                {text.shell.identity.signIn}
-                            </span>
-                        </p>
-                    }
-                    closeLabel={text.shell.identity.closeSignIn}
-                    initialFocus={firstItem}
-                >
-                    <div className="identity-items identity-join">
-                        <DiscordSignIn
-                            onNavigate={() => {
-                                control.close(false);
-                            }}
-                        />
-                    </div>
-                </TopbarPanel>
-            </>
-        );
-    }
+    // The first sign-in's page is itself the way in; a second sign-in there
+    // would start over and lose where the first one returns to.
+    if (me === null) return route.name === `welcome` ? null : <DiscordButton ref={signIn} />;
 
     return (
         <>
@@ -90,8 +65,8 @@ export function Identity({ route }: { route: Route }) {
                 aria-controls={open ? `identity-panel` : undefined}
                 onClick={control.toggle}
             >
-                <span className="monogram" aria-hidden="true">
-                    {me.kind === `user` ? me.name.slice(0, 1) : text.shell.identity.guestMonogram}
+                <span className="monogram sigil-plate" aria-hidden="true">
+                    <Sigil nameKey={me.kind === `user` ? nameKeyOf(me.name) : null} />
                 </span>
                 <span className="identity-label">{me.name}</span>
                 {me.kind === `guest` ? <span className="tag muted">{text.shell.identity.unrated}</span> : null}
@@ -103,21 +78,30 @@ export function Identity({ route }: { route: Route }) {
                 labelledBy="identity-name"
                 head={<Head me={me} />}
                 closeLabel={text.shell.identity.close}
-                initialFocus={firstItem}
+                // With only the way out in the panel,
+                // focus waits on the close button rather than on ending the session.
+                initialFocus={me.kind === `guest` && route.name === `welcome` ? `.topbar-panel-close` : firstItem}
             >
                 {me.kind === `user` ? (
-                    <UserItems route={route} control={control} onLeave={markLeaving} />
+                    <UserItems me={me} route={route} control={control} onLeave={markLeaving} />
                 ) : (
-                    <GuestItems control={control} onLeave={markLeaving} />
+                    <GuestItems route={route} control={control} onLeave={markLeaving} />
                 )}
             </TopbarPanel>
         </>
     );
 }
 
+// An account's pattern beside its name and rating; a guest's label with
+// its unrated tag, which leave the narrow head no room for the rosette.
 function Head({ me }: { me: UserMe | GuestMe }) {
     return (
         <p className="identity-head">
+            {me.kind === `user` ? (
+                <span className="identity-head-mark sigil-plate" aria-hidden="true">
+                    <Sigil nameKey={nameKeyOf(me.name)} />
+                </span>
+            ) : null}
             <span id="identity-name" className="identity-head-name">
                 {me.name}
             </span>
@@ -137,12 +121,15 @@ function Head({ me }: { me: UserMe | GuestMe }) {
     );
 }
 
-function UserItems({ route, control, onLeave }: { route: Route; control: PanelControl; onLeave: (leaving: boolean) => void }) {
+// The Discord account the session came from leads the panel's body, for
+// the person alone.
+function UserItems({ me, route, control, onLeave }: { me: UserMe; route: Route; control: PanelControl; onLeave: (leaving: boolean) => void }) {
     function away() {
         control.close(false);
     }
     return (
         <>
+            {me.discord === null ? null : <p className="discord-line">{text.shell.identity.discord(me.discord)}</p>}
             <div className="identity-items">
                 <Link to="/profile" className="identity-row" ariaCurrent={route.name === `profile`} onNavigate={away}>
                     {text.shell.identity.profile}
@@ -156,16 +143,21 @@ function UserItems({ route, control, onLeave }: { route: Route; control: PanelCo
     );
 }
 
-function GuestItems({ control, onLeave }: { control: PanelControl; onLeave: (leaving: boolean) => void }) {
+// On the first sign-in's page the guest is already signing in,
+// and a second sign-in would start over, so the menu holds only the way out.
+function GuestItems({ route, control, onLeave }: { route: Route; control: PanelControl; onLeave: (leaving: boolean) => void }) {
     return (
         <>
-            <div className="identity-items identity-join">
-                <DiscordSignIn
-                    onNavigate={() => {
-                        control.close(false);
-                    }}
-                />
-            </div>
+            {route.name === `welcome` ? null : (
+                <div className="identity-items identity-join">
+                    <DiscordSignIn
+                        guest
+                        onNavigate={() => {
+                            control.close(false);
+                        }}
+                    />
+                </div>
+            )}
             <Leave
                 label={text.shell.identity.endGuest}
                 note={text.shell.identity.endGuestNote}

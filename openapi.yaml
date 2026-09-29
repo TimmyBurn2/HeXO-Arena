@@ -223,6 +223,11 @@ components:
           type: string
         accepts:
           $ref: "#/components/schemas/Accepts"
+        liveGames:
+          description: The games the bot is playing now; at 4 it takes no new one.
+          maximum: 4
+          minimum: 0
+          type: integer
         name:
           type: string
         online:
@@ -256,6 +261,7 @@ components:
         - openForChallenges
         - rating
         - provisional
+        - liveGames
       type: object
     BotNameError:
       properties:
@@ -420,6 +426,22 @@ components:
       required:
         - error
         - code
+      type: object
+    DiscordNames:
+      description: The Discord account behind a session, shown only to its owner.
+      properties:
+        displayName:
+          maxLength: 32
+          minLength: 1
+          nullable: true
+          type: string
+        username:
+          maxLength: 32
+          minLength: 1
+          type: string
+      required:
+        - username
+        - displayName
       type: object
     EngineSession:
       properties:
@@ -1050,6 +1072,11 @@ components:
         - error
         - code
       type: object
+    NextPath:
+      description: A path on this site, with its query, where a sign-in returns.
+      maxLength: 256
+      pattern: ^\/[A-Za-z0-9\-._~!$&'()*+,;=:@%/?]*$
+      type: string
     NotFoundError:
       properties:
         code:
@@ -1152,6 +1179,84 @@ components:
         - error
         - code
       type: object
+    Signup:
+      properties:
+        discord:
+          $ref: "#/components/schemas/DiscordNames"
+        next:
+          $ref: "#/components/schemas/NextPath"
+        suggestedName:
+          pattern: ^[A-Za-z][A-Za-z0-9_-]{0,28}[A-Za-z0-9]$
+          type: string
+      required:
+        - discord
+        - suggestedName
+        - next
+      type: object
+    SignupCreated:
+      properties:
+        name:
+          type: string
+      required:
+        - name
+      type: object
+    SignupExpiredError:
+      properties:
+        code:
+          enum:
+            - signup_expired
+          type: string
+        error:
+          type: string
+      required:
+        - error
+        - code
+      type: object
+    SignupLimitError:
+      properties:
+        code:
+          enum:
+            - signup_limit
+          type: string
+        error:
+          type: string
+      required:
+        - error
+        - code
+      type: object
+    SignupNameError:
+      properties:
+        code:
+          enum:
+            - invalid_name
+            - name_reserved
+          type: string
+        error:
+          type: string
+      required:
+        - error
+        - code
+      type: object
+    SignupRequest:
+      properties:
+        name:
+          pattern: ^[A-Za-z][A-Za-z0-9_-]{0,28}[A-Za-z0-9]$
+          type: string
+      required:
+        - name
+      type: object
+    SignupTakenError:
+      properties:
+        code:
+          enum:
+            - name_taken
+          type: string
+        error:
+          type: string
+      required:
+        - error
+        - code
+      type: object
     StreamEvent:
       discriminator:
         mapping:
@@ -1221,7 +1326,12 @@ components:
         - code
       type: object
     User:
+      description: discord is null for a session made without Discord.
       properties:
+        discord:
+          allOf:
+            - $ref: "#/components/schemas/DiscordNames"
+            - nullable: true
         kind:
           enum:
             - user
@@ -1237,6 +1347,7 @@ components:
         - name
         - rating
         - provisional
+        - discord
       type: object
     WatcherLimitError:
       properties:
@@ -1262,40 +1373,60 @@ components:
       scheme: bearer
       type: http
     sessionCookie:
-      description: An HttpOnly session cookie, set by the Discord OAuth callback or the guest route.
+      description: An HttpOnly session cookie, set by a Discord sign-in, a created account, or the guest route.
       in: cookie
       name: hexo_arena_session
       type: apiKey
+    signupCookie:
+      description: An HttpOnly cookie for a first sign-in waiting for its public name, set by the Discord
+        OAuth callback for 15 minutes.
+      in: cookie
+      name: hexo_arena_signup
+      type: apiKey
 info:
   title: HeXO Arena
-  version: 0.21.0
+  version: 0.23.0
 openapi: 3.0.3
 paths:
   /api/auth/discord/callback:
     get:
-      description: "Requests the identify scope only: the Discord id and username. A failed sign-in
-        creates no session."
+      description: "Requests the identify scope only and keeps the Discord id, username, and display name.
+        A known account is signed in unless it is banned. An unknown account creates nothing: the
+        callback holds a sign-up for 15 minutes behind the signup cookie and sends the visitor to
+        /welcome to choose a public name. A failed sign-in creates no session."
       operationId: discordCallback
       responses:
         "302":
-          description: A redirect to /, with the session cookie set, or on failure with signin naming a
-            SignInFailure.
+          description: A redirect to the return path with the session cookie set, to /welcome with the signup
+            cookie set, or on failure to the return path with signin naming a SignInFailure;
+            error=access_denied from Discord reads as cancelled.
           headers:
             Location:
-              description: /, or /?signin= and the reason.
+              description: The return path, /welcome, or the return path with signin= and the reason.
               schema:
                 type: string
-      summary: "Finish Discord OAuth: create the session."
+      summary: "Finish Discord OAuth: sign in, or hold a first sign-in."
       tags:
         - Auth
   /api/auth/discord/login:
     get:
-      description: Each redirect carries a fresh state and nonce, valid once at the callback.
+      description: Each redirect carries a fresh state and nonce, valid once at the callback, and asks
+        Discord to skip its screen for an app the account already allowed. The state keeps the
+        return path.
       operationId: discordLogin
+      parameters:
+        - description: "Where the sign-in returns: a path on this site with its query, at most 256 characters.
+            Missing or invalid, the sign-in returns to /."
+          in: query
+          name: next
+          required: false
+          schema:
+            maxLength: 256
+            type: string
       responses:
         "302":
-          description: Redirect to Discord's authorize endpoint, or to / with signin=unconfigured when Discord
-            OAuth is not set up.
+          description: Redirect to Discord's authorize endpoint, or to the return path with
+            signin=unconfigured when Discord OAuth is not set up.
       summary: "Start Discord OAuth: redirect to the authorize endpoint."
       tags:
         - Auth
@@ -1838,6 +1969,12 @@ paths:
           description: Validation failed (bad_request), the caller is at its live-game cap (human_busy) or
             inside the creation cooldown (game_cooldown), or the bot is not open (not_open),
             excludes the clock (clock_not_accepted), or is at its game cap (bot_busy).
+          headers:
+            Retry-After:
+              description: "With game_cooldown only: seconds until the caller may start another game."
+              schema:
+                minimum: 1
+                type: integer
         "401":
           $ref: "#/components/responses/Unauthorized"
         "403":
@@ -2049,6 +2186,89 @@ paths:
         - sessionCookie: []
         - {}
       summary: Who the session names.
+      tags:
+        - Auth
+  /api/signup:
+    delete:
+      description: "Idempotent: deletes whatever the cookie holds and clears the cookie."
+      operationId: cancelSignup
+      responses:
+        "204":
+          description: Nothing of the sign-up is kept.
+      security:
+        - signupCookie: []
+        - {}
+      summary: Drop the first sign-in without creating the account.
+      tags:
+        - Auth
+    get:
+      description: The Discord account the sign-in came from, names up to 32 characters, a name made from
+        its username that is free at the time of the read, and where the sign-in returns once the
+        account exists.
+      operationId: getSignup
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Signup"
+          description: The waiting sign-up.
+        "410":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SignupExpiredError"
+          description: "No sign-up waits for this cookie: it expired, was used, or never existed."
+      security:
+        - signupCookie: []
+      summary: Read the first sign-in waiting for its public name.
+      tags:
+        - Auth
+    post:
+      description: Creates the account and its session, ends whatever session the browser held, a guest's
+        with its games, and clears the signup cookie. The name shares one global namespace with bots
+        and never changes. A sign-up takes at most 10 names; past that it ends.
+      operationId: createAccount
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SignupRequest"
+        required: true
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SignupCreated"
+          description: The account exists; the session cookie is set.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SignupNameError"
+          description: The chosen public name fails the name syntax or is reserved.
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SignupTakenError"
+          description: Another user or a bot holds the chosen name's fold.
+        "410":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SignupExpiredError"
+          description: No sign-up waits for this cookie.
+        "429":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SignupLimitError"
+          description: The sign-up tried 10 names and has ended; signing in again starts a new one.
+      security:
+        - signupCookie: []
+      summary: Create the account under the chosen public name.
       tags:
         - Auth
   /healthz:

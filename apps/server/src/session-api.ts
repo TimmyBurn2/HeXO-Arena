@@ -48,28 +48,23 @@ export function sessionPerson(query: Query, guests: GuestSessions, request: Fast
     return user === null ? null : { kind: `user`, id: user.id, name: user.name };
 }
 
-/**
- * A new sign-in replaces whatever guest session the browser held, and the
- * guest's games end with it.
- */
-export function endGuestSession(guests: GuestSessions, request: FastifyRequest): void {
-    const token = request.cookies[sessionCookieName];
-    if (token !== undefined) guests.end(token);
-}
-
-function meOf(query: Query, person: Person | null): Me {
-    if (person === null) return null;
-    if (person.kind === `guest`) return { kind: `guest`, name: person.name };
-    const { rating, provisional } = streamPlayerOf(query, { kind: `human`, id: person.id }, person.name);
-    return { kind: `user`, name: person.name, rating, provisional };
+// The Discord names come from the session row, so only the cookie's owner
+// ever reads them.
+function meOf(query: Query, guests: GuestSessions, token: string | undefined): Me {
+    if (token === undefined) return null;
+    const guest = guests.find(token);
+    if (guest !== null) return { kind: `guest`, name: guest.name };
+    const user = findSessionUser(query, token);
+    if (user === null) return null;
+    const { rating, provisional } = streamPlayerOf(query, { kind: `human`, id: user.id }, user.name);
+    return { kind: `user`, name: user.name, rating, provisional, discord: user.discord };
 }
 
 export function registerSessionApi(app: FastifyInstance, deps: SessionApiDeps): void {
     const { query, guests, secureCookies } = deps;
 
     app.get(mePath, async (request, reply) => {
-        const person = sessionPerson(query, guests, request);
-        return reply.code(200).send(meOf(query, person));
+        return reply.code(200).send(meOf(query, guests, request.cookies[sessionCookieName]));
     });
 
     app.post(logoutPath, async (request, reply) => {

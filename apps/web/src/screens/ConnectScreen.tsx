@@ -1,8 +1,8 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState, type Ref } from 'react';
 import { namePattern, isReservedName } from '@hexo-arena/contract';
 import { ApiError, createBot } from '../api/client';
 import { Link } from '../router/Link';
-import { useRoute } from '../router/use-route';
+import { landed, landingOf, useRoute } from '../router/use-route';
 import { DiscordSignIn } from '../components/DiscordButton';
 import { TokenBox } from '../components/TokenBox';
 import { useMe } from '../me';
@@ -24,6 +24,15 @@ export function ConnectScreen() {
     const [created, setCreated] = useState<Created | null>(null);
     const state = useMe();
     const me = state.status === `ready` ? state.me : null;
+    const botName = useRef<HTMLInputElement>(null);
+    const signedIn = me?.kind === `user`;
+
+    // An account made on the way here goes straight to its bot's name.
+    useEffect(() => {
+        if (!signedIn || landingOf() !== `bot-name`) return;
+        botName.current?.focus();
+        landed();
+    }, [signedIn]);
 
     return (
         <>
@@ -44,7 +53,7 @@ export function ConnectScreen() {
                             <>
                                 <h2 className="step-title">{text.build.signIn}</h2>
                                 {me?.kind === `guest` ? <p>{text.build.guestNote(me.name)}</p> : null}
-                                <DiscordSignIn />
+                                <DiscordSignIn guest={me?.kind === `guest`} />
                             </>
                         )}
                     </div>
@@ -55,7 +64,7 @@ export function ConnectScreen() {
                     </span>
                     <div className="step-body">
                         <h2 className="step-title">{text.build.create}</h2>
-                        <CreateBotForm onCreated={setCreated} />
+                        <CreateBotForm ref={botName} onCreated={setCreated} />
                     </div>
                 </li>
                 <li className={created === null ? `` : `active`}>
@@ -128,7 +137,7 @@ export function ConnectScreen() {
     );
 }
 
-function CreateBotForm({ onCreated }: { onCreated: (created: Created) => void }) {
+function CreateBotForm({ ref, onCreated }: { ref: Ref<HTMLInputElement>; onCreated: (created: Created) => void }) {
     const [name, setName] = useState(``);
     const [failure, setFailure] = useState<string | null>(null);
     const [sending, setSending] = useState(false);
@@ -171,6 +180,7 @@ function CreateBotForm({ onCreated }: { onCreated: (created: Created) => void })
                     {text.build.nameLabel}
                 </label>
                 <input
+                    ref={ref}
                     id="bot-name"
                     type="text"
                     value={name}

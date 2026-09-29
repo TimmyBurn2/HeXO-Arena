@@ -3,6 +3,8 @@ import {
     botsMeta,
     connectMeta,
     creditsMeta,
+    welcomeMeta,
+    welcomePath,
     gameMeta,
     ladderMeta,
     legalPageMeta,
@@ -11,6 +13,7 @@ import {
     nameKeyOf,
     nameSyntaxSchema,
     notFoundMeta,
+    playMeta,
     profileMeta,
     siteMeta,
     type PageMeta,
@@ -77,6 +80,7 @@ const fixedPages: readonly (readonly [string, PageMeta])[] = [
     [`/connect`, connectMeta],
     [`/profile`, profileMeta],
     [`/credits`, creditsMeta],
+    [welcomePath, welcomeMeta],
     ...legalPages.map((page) => [legalPagePath(page), legalPageMeta[page]] as const),
 ];
 
@@ -85,7 +89,7 @@ const fixedPages: readonly (readonly [string, PageMeta])[] = [
  * page of the site, so a pasted link to any of them previews with an
  * absolute image.
  */
-export const shellRoutes: readonly string[] = [`/`, `/ladder`, `/bots/:name`, `/game/:gameId`, ...fixedPages.map(([path]) => path)];
+export const shellRoutes: readonly string[] = [`/`, `/play`, `/ladder`, `/bots/:name`, `/game/:gameId`, ...fixedPages.map(([path]) => path)];
 
 /**
  * Serves the SPA shell for every page of the site, with meta from live
@@ -117,6 +121,15 @@ export function registerOgShell(app: FastifyInstance, deps: OgShellDeps): void {
     app.get(`/`, async (_request, reply) => sendShell(reply, 200, siteMeta(roster())));
 
     app.get(`/ladder`, async (_request, reply) => sendShell(reply, 200, ladderMeta(roster())));
+
+    // A link to Play with a bot previews with the bot's name when the
+    // directory lists it; the query is read, never logged.
+    app.get<{ Querystring: { bot?: unknown } }>(`/play`, async (request, reply) => {
+        const named = request.query.bot;
+        const key = typeof named === `string` && nameSyntaxSchema.safeParse(named).success ? nameKeyOf(named) : null;
+        const bot = key === null ? undefined : listBots(query).find((row) => nameKeyOf(row.name) === key);
+        return sendShell(reply, 200, playMeta(bot?.name));
+    });
 
     for (const [path, meta] of fixedPages) {
         app.get(path, async (_request, reply) => sendShell(reply, 200, meta));

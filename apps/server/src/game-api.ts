@@ -100,6 +100,8 @@ export function registerGameApi(app: FastifyInstance, deps: GameApiDeps): void {
         }
         const lastCreated = lastGameCreatedAt(deps, person);
         if (lastCreated !== null && nowSeconds() - lastCreated < humanGameCooldownSeconds) {
+            // The wait left, so a page can count it down instead of trying again.
+            reply.header(`retry-after`, String(Math.max(1, humanGameCooldownSeconds - (nowSeconds() - lastCreated))));
             return reply.code(400).send({
                 error: `a moment must pass between game creations`,
                 code: `game_cooldown`,

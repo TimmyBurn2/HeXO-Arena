@@ -159,7 +159,7 @@ const framedScreens = [`/`, `/ladder`, `/bots`, `/bots/sealbot`, `/connect`, `/p
 // the footer is a row, at its end where it stacks, signed in or out.
 for (const [visitor, me] of [
     [`signed out`, null],
-    [`signed in`, { kind: `user`, name: `tom`, rating: 1503, provisional: false }],
+    [`signed in`, { kind: `user`, name: `tom`, rating: 1503, provisional: false, discord: null }],
     [`a guest`, { kind: `guest`, name: `Guest k3f9` }],
 ] as const) {
     for (const path of framedScreens) {

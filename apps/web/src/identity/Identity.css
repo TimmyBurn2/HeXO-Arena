@@ -43,15 +43,8 @@
     }
 
     .monogram {
-        display: grid;
-        place-items: center;
         width: var(--control-sm);
         height: var(--control-sm);
-        background: var(--c-accent-bg);
-        color: var(--c-accent);
-        font-size: var(--text-sm);
-        font-weight: var(--weight-display);
-        text-transform: uppercase;
     }
 
     .identity-panel {
@@ -68,10 +61,34 @@
         font-weight: var(--weight-strong);
     }
 
+    /* An account's head stacks its rating under its name beside the pattern,
+       which leaves the name the panel's width to show whole. */
+    .identity-head:has(.identity-head-mark) {
+        display: grid;
+        grid-template-columns: auto minmax(0, 1fr);
+        gap: 0 var(--space-3);
+        align-items: center;
+    }
+
+    .identity-head-mark {
+        grid-row: span 2;
+        width: var(--control-md);
+        height: var(--control-md);
+    }
+
+    /* The Discord account behind the session, for the person alone. */
+    .discord-line {
+        margin: var(--space-1) 0 0;
+        color: var(--c-text-dim);
+        font-size: var(--text-xs);
+        overflow-wrap: anywhere;
+    }
+
+    /* The panel is the place to read a whole name,
+       so a long one wraps here where the bar's button cuts it. */
     .identity-head-name {
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
+        min-width: 0;
+        overflow-wrap: anywhere;
     }
 
     .identity-head-rating {
@@ -150,10 +167,10 @@
         min-height: var(--control-lg);
     }
 
-    /* The nav links return at the phone breakpoint and share the row
-       with the gear and who is here, so who is here folds into the
-       monogram; the words stay in the button's name. */
-    @media (max-width: 40rem) {
+    /* Until the row can hold a guest's name and tag beside the four nav
+       labels, who is here folds into the monogram; the words stay in the
+       button's name. */
+    @media (max-width: 47.25rem) {
         .identity-label,
         .identity .tag {
             position: absolute;

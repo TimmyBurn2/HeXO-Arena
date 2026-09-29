@@ -107,7 +107,7 @@ describe('the og shell routes', () => {
     });
 
     it('carries the site icon at its size and the site name on every shell route, found or not', async () => {
-        for (const url of [`/`, `/ladder`, `/bots`, `/bots/nobody`, `/game/g_nothing`, `/connect`, `/profile`, `/credits`, ...legalPages.map(legalPagePath)]) {
+        for (const url of [`/`, `/play`, `/play?bot=nobody`, `/ladder`, `/bots`, `/bots/nobody`, `/game/g_nothing`, `/connect`, `/profile`, `/credits`, `/welcome`, ...legalPages.map(legalPagePath)]) {
             const response = await arena.app.inject({ method: `GET`, url });
             expect(response.body).toContain(`<meta property="og:image" content="https://arena.example/icon-512.png" />`);
             expect(response.body).toContain(`<meta property="og:image:width" content="512" />`);
@@ -129,6 +129,25 @@ describe('the og shell routes', () => {
             expect(response.status).toBe(200);
             expect(response.meta).toEqual({ title: meta.title, description: meta.description, ogTitle: meta.title, ogDescription: meta.description });
         }
+    });
+
+    it('titles Play with the bot a link names when the directory lists it, and plainly otherwise', async () => {
+        await openBot(`sealbot`);
+        const named = await shell(`/play?bot=SealBot`);
+        expect(named.status).toBe(200);
+        expect(named.meta).toEqual({
+            title: `Play sealbot - HeXO Arena`,
+            description: `Pick a bot and a clock, and play HeXO in the browser`,
+            ogTitle: `Play sealbot - HeXO Arena`,
+            ogDescription: `Pick a bot and a clock, and play HeXO in the browser`,
+        });
+        for (const url of [`/play`, `/play?bot=nobody`, `/play?bot=-bad-`, `/play?bot=a&bot=b`]) {
+            const plain = await shell(url);
+            expect(plain.status).toBe(200);
+            expect(plain.meta.title).toBe(`Play - HeXO Arena`);
+        }
+        arena.sqlite.prepare(`update bots set delisted_at = 1 where name = 'sealbot'`).run();
+        expect((await shell(`/play?bot=sealbot`)).meta.title).toBe(`Play - HeXO Arena`);
     });
 
     it('counts the roster on the ladder route under its own title', async () => {

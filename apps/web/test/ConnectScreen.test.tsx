@@ -7,6 +7,7 @@ import { ConnectScreen } from '../src/screens/ConnectScreen';
 afterEach(() => {
     cleanup();
     vi.unstubAllGlobals();
+    window.history.replaceState(null, ``, `/`);
 });
 
 function type(value: string): void {
@@ -15,6 +16,7 @@ function type(value: string): void {
 
 describe('ConnectScreen', () => {
     it('walk the six numbered steps with their links', () => {
+        window.history.replaceState(null, ``, `/connect`);
         render(<ConnectScreen />);
         const headings = screen.getAllByRole(`heading`).map((heading) => heading.textContent);
         for (const expected of [
@@ -29,9 +31,9 @@ describe('ConnectScreen', () => {
             expect(headings).toContain(expected);
         }
         const signIn = screen.getByRole(`link`, { name: `Sign in with Discord` });
-        expect(signIn.getAttribute(`href`)).toBe(`/api/auth/discord/login`);
+        expect(signIn.getAttribute(`href`)).toBe(`/api/auth/discord/login?next=%2Fconnect`);
         expect(signIn.classList.contains(`discord-button`)).toBe(true);
-        expect(screen.getByText((_content, element) => element?.matches(`.discord-sign-in .note`) === true && element.textContent === `By signing in you accept the Terms. HeXO Arena keeps only your Discord user ID and a public name made from your username, never your email; see\u00a0Privacy.`)).toBeTruthy();
+        expect(screen.getByText((_content, element) => element?.matches(`.discord-sign-in .note`) === true && element.textContent === `Your email stays with Discord, and a first sign-in asks for your public name; see\u00a0Privacy.`)).toBeTruthy();
         expect(screen.getByRole(`link`, { name: /simple_bot\.py/ }).getAttribute(`href`)).toContain(
             `github.com/TimmyBurn2/Hexo-Bot-Api`,
         );
@@ -118,7 +120,7 @@ describe('ConnectScreen', () => {
     it('mark the sign-in step done for a signed-in user', async () => {
         vi.stubGlobal(
             `fetch`,
-            vi.fn(() => Promise.resolve(new Response(JSON.stringify({ kind: `user`, name: `tom`, rating: 1503, provisional: false })))),
+            vi.fn(() => Promise.resolve(new Response(JSON.stringify({ kind: `user`, name: `tom`, rating: 1503, provisional: false, discord: null })))),
         );
         meStore.reset();
         meStore.start();
@@ -128,12 +130,33 @@ describe('ConnectScreen', () => {
         meStore.reset();
     });
 
+    it('take focus to the bot name when an account was just made on the way here, once', async () => {
+        vi.stubGlobal(
+            `fetch`,
+            vi.fn(() => Promise.resolve(new Response(JSON.stringify({ kind: `user`, name: `tom`, rating: 1000, provisional: true, discord: null })))),
+        );
+        window.history.pushState({ landing: `bot-name` }, ``, `/connect`);
+        meStore.reset();
+        meStore.start();
+        render(<ConnectScreen />);
+        await screen.findByRole(`heading`, { name: `Signed in as tom` });
+        await waitFor(() => {
+            expect(document.activeElement).toBe(screen.getByRole(`textbox`, { name: `Bot name` }));
+        });
+        expect(window.history.state).toBe(null);
+        meStore.reset();
+        window.history.pushState(null, ``, `/`);
+    });
+
     it('tell a guest that owning a bot takes an account', async () => {
         vi.stubGlobal(`fetch`, vi.fn(() => Promise.resolve(new Response(JSON.stringify({ kind: `guest`, name: `Guest k3f9` })))));
         meStore.reset();
         meStore.start();
         render(<ConnectScreen />);
         expect(await screen.findByText(`You are playing as Guest k3f9; owning a bot needs a Discord sign-in.`)).toBeTruthy();
+        expect(document.querySelector(`.discord-sign-in .note`)?.textContent).toBe(
+            `Signing in ends this guest session and its games. Your email stays with Discord; see\u00a0Privacy.`,
+        );
         meStore.reset();
     });
 });

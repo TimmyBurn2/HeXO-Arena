@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect, useRef, useState, useSyncExternalStore } from 'react';
-import { signInFailureParam, signInFailureSchema, siteName, type SignInFailure } from '@hexo-arena/contract';
+import { legalPagePath, signInFailureParam, signInFailureSchema, siteName, type SignInFailure } from '@hexo-arena/contract';
 import { Mark } from './components/Mark';
 import { SiteFooter } from './components/SiteFooter';
 import { useFrameLent, type Layout } from './frame';
@@ -7,13 +7,17 @@ import { Identity } from './identity/Identity';
 import { Link } from './router/Link';
 import { loadScreen, RouteBoundary } from './RouteBoundary';
 import { routePath, type Route } from './router/route';
-import { subscribe, useRoute } from './router/use-route';
+import { landingOf, subscribe, useRoute } from './router/use-route';
 import { Settings } from './settings/Settings';
 import { siteStatusStore } from './site-status';
 import { text } from './text';
 import { useDocumentMeta } from './use-document-meta';
 import './AppShell.css';
 
+const PlayScreen = lazy(async () => {
+    const module = await loadScreen(async () => import(`./screens/PlayScreen`));
+    return { default: module.PlayScreen };
+});
 const LadderScreen = lazy(async () => {
     const module = await loadScreen(async () => import(`./screens/LadderScreen`));
     return { default: module.LadderScreen };
@@ -37,6 +41,10 @@ const ProfileScreen = lazy(async () => {
 const CreditsScreen = lazy(async () => {
     const module = await loadScreen(async () => import(`./screens/CreditsScreen`));
     return { default: module.CreditsScreen };
+});
+const WelcomeScreen = lazy(async () => {
+    const module = await loadScreen(async () => import(`./screens/WelcomeScreen`));
+    return { default: module.WelcomeScreen };
 });
 const LegalScreen = lazy(async () => {
     const module = await loadScreen(async () => import(`./screens/LegalScreen`));
@@ -62,6 +70,7 @@ interface NavEntry {
 // The main nav as one table for the bar and the phone tabs: a new page
 // adds a row, and its flag says whether it takes a phone tab too.
 const nav: readonly NavEntry[] = [
+    { route: { name: `play` }, label: text.shell.nav.play, screens: [`play`], phoneTab: true },
     { route: { name: `ladder` }, label: text.shell.nav.ladder, screens: [`ladder`], phoneTab: true },
     { route: { name: `bots` }, label: text.shell.nav.bots, screens: [`bots`, `bot`], phoneTab: true },
     { route: { name: `connect` }, label: text.shell.nav.build, screens: [`connect`], phoneTab: true },
@@ -108,12 +117,14 @@ export function AppShell() {
     }, []);
 
     // Route changes move focus to the content, so keyboard and
-    // screen-reader users land on the new screen, not the top of the page.
+    // screen-reader users land on the new screen, not the top of the page,
+    // unless the navigation asked the screen to focus a control of its own.
     useEffect(() => {
         if (firstRender.current) {
             firstRender.current = false;
             return;
         }
+        if (landingOf() !== null) return;
         mainRef.current?.focus({ preventScroll: true });
     }, [route]);
 
@@ -155,7 +166,9 @@ export function AppShell() {
             <div role="status">
                 {framed && signInFailure !== null ? (
                     <div className="site-banner">
-                        <div className="site-banner-inner">{text.shell.signInFailed[signInFailure]}</div>
+                        <p className="site-banner-inner">
+                            {text.shell.signInFailed[signInFailure]((words) => <Link to={legalPagePath(`imprint`)}>{words}</Link>)}
+                        </p>
                     </div>
                 ) : null}
             </div>
@@ -188,6 +201,8 @@ function layoutOf(route: Route): Layout {
 
 function RouteView({ route }: { route: Route }) {
     switch (route.name) {
+        case `play`:
+            return <PlayScreen />;
         case `ladder`:
             return <LadderScreen />;
         case `bots`:
@@ -200,6 +215,8 @@ function RouteView({ route }: { route: Route }) {
             return <ProfileScreen />;
         case `credits`:
             return <CreditsScreen />;
+        case `welcome`:
+            return <WelcomeScreen />;
         case `legal`:
             return <LegalScreen page={route.page} />;
         case `game`:

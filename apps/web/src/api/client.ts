@@ -13,6 +13,10 @@ import {
     logoutPath,
     mePath,
     meSchema,
+    signupCreatedSchema,
+    signupPath,
+    signupRequestSchema,
+    signupSchema,
     humanMoveRequestSchema,
     leaderboardEntrySchema,
     leaderboardPath,
@@ -29,6 +33,7 @@ import {
     type LegalDetails,
     type LiveGameEntry,
     type Me,
+    type Signup,
 } from '@hexo-arena/contract';
 import type { ZodType } from 'zod';
 
@@ -36,13 +41,15 @@ export type LeaderboardKind = `all` | `bots` | `humans`;
 
 /**
  * A failed call: status 0 carries a network or parse break, anything else
- * the server's answer with its stable code when the body had one.
+ * the server's answer with its stable code when the body had one, and the
+ * seconds its Retry-After asks for when it sent one.
  */
 export class ApiError extends Error {
     constructor(
         readonly status: number,
         readonly code: string | null,
         message: string,
+        readonly retryAfter: number | null = null,
     ) {
         super(message);
     }
@@ -67,7 +74,8 @@ async function failureOf(response: Response): Promise<ApiError> {
         typeof body === `object` && body !== null && `code` in body && typeof body.code === `string`
             ? body.code
             : null;
-    return new ApiError(response.status, code, `the server answered ${String(response.status)}`);
+    const wait = Number(response.headers.get(`retry-after`));
+    return new ApiError(response.status, code, `the server answered ${String(response.status)}`, Number.isInteger(wait) && wait > 0 ? wait : null);
 }
 
 async function sendJson<T>(url: string, method: string, body: unknown, schema: ZodType<T>): Promise<T> {
@@ -113,6 +121,21 @@ export function signOut(): Promise<void> {
 /** Start an anonymous, unrated session, or rejoin the one this browser holds. */
 export function startGuest(): Promise<GuestMe> {
     return sendJson(guestPath, `POST`, {}, guestMeSchema);
+}
+
+/** The first sign-in waiting for its public name; a gone one answers 410. */
+export function fetchSignup(): Promise<Signup> {
+    return getJson(signupPath, signupSchema);
+}
+
+/** Create the account under the chosen name; the session cookie comes with the answer. */
+export async function createAccount(name: string): Promise<void> {
+    await sendJson(signupPath, `POST`, signupRequestSchema.parse({ name }), signupCreatedSchema);
+}
+
+/** Drop the first sign-in; nothing of it is kept. */
+export function cancelSignup(): Promise<void> {
+    return sendEmpty(signupPath, `DELETE`);
 }
 
 /** Mint a new token for an owned bot; the old one dies and the new one shows once. */

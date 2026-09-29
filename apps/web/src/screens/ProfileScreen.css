@@ -10,16 +10,8 @@
     }
 
     .identity-monogram {
-        display: grid;
-        place-items: center;
-        flex: none;
         width: var(--identity-size);
         height: var(--identity-size);
-        background: var(--c-accent-bg);
-        color: var(--c-accent);
-        font-size: var(--text-2xl);
-        font-weight: var(--weight-display);
-        text-transform: uppercase;
     }
 
     /* The name keeps a column of its own; the plate's actions wrap below
@@ -36,6 +28,11 @@
         font-size: var(--text-2xl);
         font-weight: var(--weight-display);
         letter-spacing: var(--tracking-display);
+        overflow-wrap: anywhere;
+    }
+
+    /* A Discord username runs to 32 characters with no space to break at. */
+    .identity-discord {
         overflow-wrap: anywhere;
     }
 

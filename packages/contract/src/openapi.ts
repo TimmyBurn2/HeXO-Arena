@@ -36,6 +36,7 @@ import {
     createGameRequestSchema,
     discordCallbackPath,
     discordLoginPath,
+    discordNameMaxLength,
     gameCreateErrorCodes,
     gameEventSchema,
     gameEventsPath,
@@ -60,6 +61,9 @@ import {
     logoutPath,
     mePath,
     meSchema,
+    nextParam,
+    nextPathMaxLength,
+    nextPathSchema,
     humanMoveRequestSchema,
     leaderboardEntrySchema,
     leaderboardPath,
@@ -77,6 +81,17 @@ import {
     sessionHeartbeatMs,
     signInFailureParam,
     signInFailureSchema,
+    signupAttemptCap,
+    signupCookieName,
+    signupCreatedSchema,
+    signupExpiredErrorCodes,
+    signupLimitErrorCodes,
+    signupMaxAgeSeconds,
+    signupNameErrorCodes,
+    signupPath,
+    signupRequestSchema,
+    signupSchema,
+    signupTakenErrorCodes,
     siteName,
     siteWatcherCap,
     streamEventSchema,
@@ -84,6 +99,7 @@ import {
     unauthorizedErrorCodes,
     watcherLimitErrorCodes,
     watcherRetryAfterSeconds,
+    welcomePath,
 } from './index';
 
 const seconds = (ms: number) => String(ms / 1000);
@@ -99,6 +115,10 @@ const signedInError = errorBodySchema(guestConflictErrorCodes).meta({ id: `Signe
 const guestLimitError = errorBodySchema(guestLimitErrorCodes).meta({ id: `GuestLimitError` });
 const watcherLimitError = errorBodySchema(watcherLimitErrorCodes).meta({ id: `WatcherLimitError` });
 const botNameError = errorBodySchema([`invalid_name`, `name_reserved`]).meta({ id: `BotNameError` });
+const signupNameError = errorBodySchema(signupNameErrorCodes).meta({ id: `SignupNameError` });
+const signupTakenError = errorBodySchema(signupTakenErrorCodes).meta({ id: `SignupTakenError` });
+const signupExpiredError = errorBodySchema(signupExpiredErrorCodes).meta({ id: `SignupExpiredError` });
+const signupLimitError = errorBodySchema(signupLimitErrorCodes).meta({ id: `SignupLimitError` });
 const botLimitError = errorBodySchema([`bot_limit`]).meta({ id: `BotLimitError` });
 const nameTakenError = errorBodySchema([`name_taken`]).meta({ id: `NameTakenError` });
 const inGameError = errorBodySchema(botDeleteConflictErrorCodes).meta({ id: `InGameError` });
@@ -192,7 +212,13 @@ function registerSiteSurface(registry: OpenAPIRegistry, shared: SharedComponents
         type: 'apiKey',
         in: 'cookie',
         name: sessionCookieName,
-        description: `An HttpOnly session cookie, set by the Discord OAuth callback or the guest route.`,
+        description: `An HttpOnly session cookie, set by a Discord sign-in, a created account, or the guest route.`,
+    });
+    registry.registerComponent('securitySchemes', 'signupCookie', {
+        type: 'apiKey',
+        in: 'cookie',
+        name: signupCookieName,
+        description: `An HttpOnly cookie for a first sign-in waiting for its public name, set by the Discord OAuth callback for ${String(signupMaxAgeSeconds / 60)} minutes.`,
     });
     // Named where the callback's redirect describes it, so the reasons are listed.
     shared.referenced.push({ type: 'schema', schema: signInFailureSchema });
@@ -232,10 +258,19 @@ function registerSiteSurface(registry: OpenAPIRegistry, shared: SharedComponents
         summary: 'Start Discord OAuth: redirect to the authorize endpoint.',
         operationId: 'discordLogin',
         tags: ['Auth'],
-        description: `Each redirect carries a fresh state and nonce, valid once at the callback.`,
+        description: `Each redirect carries a fresh state and nonce, valid once at the callback, and asks Discord to skip its screen for an app the account already allowed. The state keeps the return path.`,
+        parameters: [
+            {
+                name: nextParam,
+                in: 'query',
+                required: false,
+                description: `Where the sign-in returns: a path on this site with its query, at most ${String(nextPathMaxLength)} characters. Missing or invalid, the sign-in returns to /.`,
+                schema: { type: 'string', maxLength: nextPathMaxLength },
+            },
+        ],
         responses: {
             302: {
-                description: `Redirect to Discord's authorize endpoint, or to / with ${signInFailureParam}=unconfigured when Discord OAuth is not set up.`,
+                description: `Redirect to Discord's authorize endpoint, or to the return path with ${signInFailureParam}=unconfigured when Discord OAuth is not set up.`,
             },
         },
     });
@@ -243,20 +278,91 @@ function registerSiteSurface(registry: OpenAPIRegistry, shared: SharedComponents
     registry.registerPath({
         method: 'get',
         path: discordCallbackPath,
-        summary: 'Finish Discord OAuth: create the session.',
+        summary: 'Finish Discord OAuth: sign in, or hold a first sign-in.',
         operationId: 'discordCallback',
         tags: ['Auth'],
-        description: `Requests the identify scope only: the Discord id and username. A failed sign-in creates no session.`,
+        description: `Requests the identify scope only and keeps the Discord id, username, and display name. A known account is signed in unless it is banned. An unknown account creates nothing: the callback holds a sign-up for ${String(signupMaxAgeSeconds / 60)} minutes behind the signup cookie and sends the visitor to ${welcomePath} to choose a public name. A failed sign-in creates no session.`,
         responses: {
             302: {
-                description: `A redirect to /, with the session cookie set, or on failure with ${signInFailureParam} naming a SignInFailure.`,
+                description: `A redirect to the return path with the session cookie set, to ${welcomePath} with the signup cookie set, or on failure to the return path with ${signInFailureParam} naming a SignInFailure; error=access_denied from Discord reads as cancelled.`,
                 headers: {
                     Location: {
-                        description: `/, or /?${signInFailureParam}= and the reason.`,
+                        description: `The return path, ${welcomePath}, or the return path with ${signInFailureParam}= and the reason.`,
                         schema: { type: 'string' },
                     },
                 },
             },
+        },
+    });
+
+    // Named here, since only the sign-up's own schemas reference it.
+    shared.referenced.push({ type: 'schema', schema: nextPathSchema });
+
+    registry.registerPath({
+        method: 'get',
+        path: signupPath,
+        summary: 'Read the first sign-in waiting for its public name.',
+        operationId: 'getSignup',
+        tags: ['Auth'],
+        security: [{ signupCookie: [] }],
+        description: `The Discord account the sign-in came from, names up to ${String(discordNameMaxLength)} characters, a name made from its username that is free at the time of the read, and where the sign-in returns once the account exists.`,
+        responses: {
+            200: {
+                description: `The waiting sign-up.`,
+                content: { 'application/json': { schema: signupSchema } },
+            },
+            410: {
+                description: `No sign-up waits for this cookie: it expired, was used, or never existed.`,
+                content: { 'application/json': { schema: signupExpiredError } },
+            },
+        },
+    });
+
+    registry.registerPath({
+        method: 'post',
+        path: signupPath,
+        summary: 'Create the account under the chosen public name.',
+        operationId: 'createAccount',
+        tags: ['Auth'],
+        security: [{ signupCookie: [] }],
+        description: `Creates the account and its session, ends whatever session the browser held, a guest's with its games, and clears the signup cookie. The name shares one global namespace with bots and never changes. A sign-up takes at most ${String(signupAttemptCap)} names; past that it ends.`,
+        request: {
+            body: { required: true, content: { 'application/json': { schema: signupRequestSchema } } },
+        },
+        responses: {
+            201: {
+                description: `The account exists; the session cookie is set.`,
+                content: { 'application/json': { schema: signupCreatedSchema } },
+            },
+            400: {
+                description: `The chosen public name fails the name syntax or is reserved.`,
+                content: { 'application/json': { schema: signupNameError } },
+            },
+            409: {
+                description: `Another user or a bot holds the chosen name's fold.`,
+                content: { 'application/json': { schema: signupTakenError } },
+            },
+            410: {
+                description: `No sign-up waits for this cookie.`,
+                content: { 'application/json': { schema: signupExpiredError } },
+            },
+            429: {
+                description: `The sign-up tried ${String(signupAttemptCap)} names and has ended; signing in again starts a new one.`,
+                content: { 'application/json': { schema: signupLimitError } },
+            },
+        },
+    });
+
+    registry.registerPath({
+        method: 'delete',
+        path: signupPath,
+        summary: 'Drop the first sign-in without creating the account.',
+        operationId: 'cancelSignup',
+        tags: ['Auth'],
+        security: [{ signupCookie: [] }, {}],
+        description: `Idempotent: deletes whatever the cookie holds and clears the cookie.`,
+        responses: {
+            204: { description: 'Nothing of the sign-up is kept.' },
         },
     });
 
@@ -437,6 +543,12 @@ function registerSiteSurface(registry: OpenAPIRegistry, shared: SharedComponents
             },
             400: {
                 description: `Validation failed (bad_request), the caller is at its live-game cap (human_busy) or inside the creation cooldown (game_cooldown), or the bot is not open (not_open), excludes the clock (clock_not_accepted), or is at its game cap (bot_busy).`,
+                headers: {
+                    'Retry-After': {
+                        description: `With game_cooldown only: seconds until the caller may start another game.`,
+                        schema: { type: 'integer', minimum: 1 },
+                    },
+                },
                 content: {
                     'application/json': {
                         schema: gameCreateError,

@@ -42,6 +42,7 @@ interface HttpResult {
     status: number;
     text: string;
     setCookie: string[];
+    retryAfter: string | undefined;
 }
 
 // ws delivers whole frames as buffers under the payload cap; the concat
@@ -85,6 +86,7 @@ function request(
                     status: response.statusCode ?? 0,
                     text,
                     setCookie: response.headers[`set-cookie`] ?? [],
+                    retryAfter: response.headers[`retry-after`],
                 });
             });
         });
@@ -702,7 +704,9 @@ describe('a guest plays a connected bot', () => {
     it('wins a decided game that leaves no row, no move, and no rating delta behind', async () => {
         const guest = await arena.guest();
         const before = await arena.directoryEntry(`opponentbot`);
+        expect(before?.liveGames).toBe(0);
         const { gameId } = await startGame(arena, guest);
+        expect((await arena.directoryEntry(`opponentbot`))?.liveGames).toBe(1);
         const start = await gameStartOn(bot.stream);
         expect(start.rated).toBe(false);
         expect(start.opponent.name).toMatch(/^Guest [a-z0-9]{4}$/);
@@ -739,6 +743,7 @@ describe('a guest plays a connected bot', () => {
         expect(recomputeRatings(arena.query)).toBe(0);
         expect(arena.count(`ratings`)).toBe(0);
         const after = await arena.directoryEntry(`opponentbot`);
+        expect(after?.liveGames).toBe(0);
         expect(after?.rating).toBe(before?.rating);
         expect(after?.provisional).toBe(before?.provisional);
 
@@ -759,6 +764,7 @@ describe('a guest plays a connected bot', () => {
         const immediate = await arena.createGame(guest, { bot: `opponentbot`, timeControl: turnControl });
         expect(immediate.status).toBe(400);
         expect(json(immediate)).toMatchObject({ code: `game_cooldown` });
+        expect(immediate.retryAfter).toBe(`60`);
         await startGame(arena, await arena.guest());
     });
 
@@ -858,6 +864,7 @@ describe('game creation gates', () => {
         });
         expect(immediate.status).toBe(400);
         expect(json(immediate)).toMatchObject({ code: `game_cooldown` });
+        expect(immediate.retryAfter).toBe(`60`);
         await vi.advanceTimersByTimeAsync(30_000);
         const cooling = await arena.createGame(bot.cookie, {
             bot: `opponentbot`,
@@ -865,6 +872,7 @@ describe('game creation gates', () => {
         });
         expect(cooling.status).toBe(400);
         expect(json(cooling)).toMatchObject({ code: `game_cooldown` });
+        expect(cooling.retryAfter).toBe(`30`);
         await vi.advanceTimersByTimeAsync(30_000);
         const after = await arena.createGame(bot.cookie, {
             bot: `opponentbot`,

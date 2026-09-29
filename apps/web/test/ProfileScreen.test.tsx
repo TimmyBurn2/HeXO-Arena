@@ -6,9 +6,9 @@ import { ProfileScreen } from '../src/screens/ProfileScreen';
 import { meStore } from '../src/me';
 
 const roster = [
-    { name: `sealbot`, ownerName: `tom`, online: true, openForChallenges: true, rating: 1712, provisional: false },
-    { name: `quietlake`, ownerName: `tom`, online: false, openForChallenges: false, rating: 1461, provisional: true },
-    { name: `hextide`, ownerName: `ana`, online: true, openForChallenges: false, rating: 1690, provisional: false },
+    { name: `sealbot`, ownerName: `tom`, online: true, openForChallenges: true, rating: 1712, provisional: false, liveGames: 0 },
+    { name: `quietlake`, ownerName: `tom`, online: false, openForChallenges: false, rating: 1461, provisional: true, liveGames: 0 },
+    { name: `hextide`, ownerName: `ana`, online: true, openForChallenges: false, rating: 1690, provisional: false, liveGames: 0 },
 ];
 
 function serve(me: Me, posts: string[] = []): void {
@@ -33,16 +33,18 @@ afterEach(() => {
     cleanup();
     vi.unstubAllGlobals();
     meStore.reset();
+    window.history.replaceState(null, ``, `/`);
 });
 
 describe('ProfileScreen', () => {
     it('offer the discord sign-in and the way to build a bot when signed out', async () => {
         serve(null);
+        window.history.replaceState(null, ``, `/profile`);
         render(<ProfileScreen />);
         const signIn = await screen.findByRole(`link`, { name: `Sign in with Discord` });
-        expect(signIn.getAttribute(`href`)).toBe(`/api/auth/discord/login`);
+        expect(signIn.getAttribute(`href`)).toBe(`/api/auth/discord/login?next=%2Fprofile`);
         expect(signIn.classList.contains(`discord-button`)).toBe(true);
-        expect(screen.getByText((_content, element) => element?.matches(`.discord-sign-in .note`) === true && element.textContent === `By signing in you accept the Terms. HeXO Arena keeps only your Discord user ID and a public name made from your username, never your email; see\u00a0Privacy.`)).toBeTruthy();
+        expect(screen.getByText((_content, element) => element?.matches(`.discord-sign-in .note`) === true && element.textContent === `Your email stays with Discord, and a first sign-in asks for your public name; see\u00a0Privacy.`)).toBeTruthy();
         expect(screen.getByRole(`link`, { name: `Build a bot` }).getAttribute(`href`)).toBe(`/connect`);
     });
 
@@ -58,7 +60,7 @@ describe('ProfileScreen', () => {
     });
 
     it('show a user their name, rating, and only their own bots with room for another', async () => {
-        serve({ kind: `user`, name: `tom`, rating: 1503, provisional: false });
+        serve({ kind: `user`, name: `tom`, rating: 1503, provisional: false, discord: null });
         render(<ProfileScreen />);
         expect(await screen.findByText(`tom`, { selector: `.identity-name` })).toBeTruthy();
         expect(document.querySelector(`.identity-number`)?.textContent).toBe(`1503`);
@@ -71,9 +73,25 @@ describe('ProfileScreen', () => {
         expect(document.querySelector(`a[href="/bots/hextide"]`)).toBe(null);
     });
 
+    it('show the person their pattern and the Discord account they signed in with', async () => {
+        serve({ kind: `user`, name: `mira-hex`, rating: 1000, provisional: true, discord: { username: `mira.hex`, displayName: `Mira` } });
+        render(<ProfileScreen />);
+        expect(await screen.findByText(`Signed in with Discord as Mira (@mira.hex)`)).toBeTruthy();
+        expect(document.querySelector(`.identity-plate .sigil-plate svg.sigil`)).toBeTruthy();
+        cleanup();
+        serve({ kind: `user`, name: `mira-hex`, rating: 1000, provisional: true, discord: { username: `mira.hex`, displayName: null } });
+        render(<ProfileScreen />);
+        expect(await screen.findByText(`Signed in with Discord as @mira.hex`)).toBeTruthy();
+        cleanup();
+        serve({ kind: `user`, name: `tom`, rating: 1503, provisional: false, discord: null });
+        render(<ProfileScreen />);
+        await screen.findByText(`tom`, { selector: `.identity-name` });
+        expect(screen.queryByText(/^Signed in with Discord/u)).toBe(null);
+    });
+
     it('sign a user out and forget them', async () => {
         const posts: string[] = [];
-        serve({ kind: `user`, name: `tom`, rating: 1503, provisional: false }, posts);
+        serve({ kind: `user`, name: `tom`, rating: 1503, provisional: false, discord: null }, posts);
         render(<ProfileScreen />);
         fireEvent.click(await screen.findByRole(`button`, { name: `Sign out` }));
         await waitFor(() => {
@@ -99,11 +117,14 @@ describe('ProfileScreen', () => {
 
     it('offer a guest the discord sign-in on their card', async () => {
         serve({ kind: `guest`, name: `Guest k3f9` });
+        window.history.replaceState(null, ``, `/profile`);
         render(<ProfileScreen />);
         const signIn = await screen.findByRole(`link`, { name: `Sign in with Discord` });
-        expect(signIn.getAttribute(`href`)).toBe(`/api/auth/discord/login`);
+        expect(signIn.getAttribute(`href`)).toBe(`/api/auth/discord/login?next=%2Fprofile`);
         expect(signIn.closest(`.identity-plate`)).not.toBe(null);
-        // The trust line sits with the sign-in, as on every other screen.
-        expect(signIn.closest(`.discord-sign-in`)?.textContent).toContain(`By signing in you accept the Terms. HeXO Arena keeps only your Discord user ID and a public name made from your username, never your email; see\u00a0Privacy.`);
+        // The guest's line sits with the sign-in, as in the guest menu.
+        expect(signIn.closest(`.discord-sign-in`)?.textContent).toContain(
+            `Signing in ends this guest session and its games. Your email stays with Discord; see\u00a0Privacy.`,
+        );
     });
 });

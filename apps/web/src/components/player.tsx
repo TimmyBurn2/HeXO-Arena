@@ -2,7 +2,7 @@ import type { ReactNode } from 'react';
 import type { Accepts, Side } from '@hexo-arena/contract';
 import { Link } from '../router/Link';
 import { text } from '../text';
-import { turnWindowOf } from './PlayDialog';
+import { turnWindowOf } from '../play/accepts';
 import './player.css';
 
 /** The bot marker every bot name carries, wherever a name renders. */
