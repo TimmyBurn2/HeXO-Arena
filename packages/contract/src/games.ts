@@ -31,6 +31,10 @@ export const unlimitedWallCapMs = 24 * 60 * 60 * 1000;
 // The live list is a glance, not an archive: this many games, newest first.
 export const liveGameListCap = 12;
 
+// Every reader within this window gets the one body serialized for it,
+// so a crowd of pollers costs one serialization a window.
+export const liveGameListMemoMs = 1_000;
+
 export const createGameRequestSchema = z.object({
     bot: nameSyntaxSchema,
     timeControl: timeControlSchema,
@@ -75,6 +79,7 @@ const snapshotBase = {
     you: sideSchema.optional(),
     openingPlies: openingPliesSchema,
     board: gameBoardSchema,
+    timeControl: timeControlSchema,
 };
 
 export const gameSnapshotSchema = z
@@ -111,9 +116,13 @@ export const liveGameEntrySchema = z
         timeControl: timeControlSchema,
         toMove: sideSchema,
         rated: z.boolean(),
-        plies: z.number().int().min(1).meta({ description: `Stones on the board, the opening included.` }),
+        cells: z.array(gameCellSchema).min(1).meta({ description: `Every stone in ply order, the opening included.` }),
+        clock: gameClockSchema,
     })
-    .meta({ id: `LiveGameEntry`, description: `A game in progress; a game with a guest seat is unrated.` });
+    .meta({
+        id: `LiveGameEntry`,
+        description: `A game in progress, its board and clock as its snapshot states them; a game with a guest seat is unrated.`,
+    });
 export type LiveGameEntry = z.infer<typeof liveGameEntrySchema>;
 
 // Exactly two placements per turn, always; the first stone ever placed is
@@ -123,16 +132,11 @@ export const humanMoveRequestSchema = z.object({
 });
 export type HumanMoveRequest = z.infer<typeof humanMoveRequestSchema>;
 
-// Caller-side bounds on the human: the live-game cap and the creation
-// cooldown, so a browser cannot farm the create route.
-// Bot-side gates follow.
-export const gameCreateErrorCodes = [
-    `human_busy`,
-    `game_cooldown`,
-    `not_open`,
-    `clock_not_accepted`,
-    `bot_busy`,
-] as const;
+// Caller-side bounds on the human: the live-game cap, then bot-side gates.
+export const gameCreateErrorCodes = [`human_busy`, `not_open`, `clock_not_accepted`, `bot_busy`] as const;
+
+// The creation cooldown, so a browser cannot farm the create route; waiting lifts it, so it answers 429.
+export const gameCooldownErrorCodes = [`game_cooldown`] as const;
 // A delisted bot takes no new games from humans either.
 export const gameCreateForbiddenErrorCodes = [`delisted`] as const;
 export const gameMoveErrorCodes = [

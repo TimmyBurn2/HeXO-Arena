@@ -96,10 +96,14 @@
         flex-wrap: wrap;
     }
 
+    /* A name stays whole beside its badge and breaks only when wider than the rung. */
     .rung-name .player-name {
+        flex: none;
+        max-width: 100%;
+        min-width: 0;
         font-weight: var(--weight-display);
         letter-spacing: var(--tracking-display);
-        overflow-wrap: anywhere;
+        overflow-wrap: break-word;
     }
 
     .rung-name .badge-bot {
@@ -172,6 +176,20 @@
 
         .rung-owner {
             display: none;
+        }
+    }
+
+    /* Large text on a narrow window stacks each rung, rank over name over rating,
+       so the name has the rung's whole width,
+       and the top rung steps down a size. */
+    @media (max-width: 19.5rem) {
+        .rung {
+            grid-template-columns: minmax(0, 1fr);
+            row-gap: var(--space-1);
+        }
+
+        .rung.r1 {
+            font-size: var(--text-lg);
         }
     }
 }

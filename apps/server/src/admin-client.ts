@@ -84,6 +84,8 @@ function formatStatus(status: AdminStatus): string {
         `paused        ${status.paused ? `yes` : `no`}`,
         `live streams  ${String(status.liveStreams)}`,
         `active games  ${String(status.activeGames)}`,
+        `client keys   ${String(status.clientKeys)}`,
+        `keyless       ${String(status.keylessRequests)}`,
         `recent admin actions:`,
     ];
     if (status.recentActions.length === 0) lines.push(`  none`);

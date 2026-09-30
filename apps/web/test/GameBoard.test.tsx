@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { GameBoard } from '../src/game/GameBoard';
+import { GameBoard, type TurnStatus } from '../src/game/GameBoard';
 
 const cells = [
     { x: 0, y: 0, side: `x` as const },
@@ -30,7 +30,7 @@ describe('GameBoard', () => {
                 onCommit={async (pair) => {
                     commits.push(pair);
                     await Promise.resolve();
-                    return true;
+                    return { kind: `sent` as const };
                 }}
             />,
         );
@@ -68,7 +68,7 @@ describe('GameBoard', () => {
                 onCommit={async (pair) => {
                     commits.push(pair);
                     await Promise.resolve();
-                    return true;
+                    return { kind: `sent` as const };
                 }}
                 onStatus={(status) => {
                     notes.push(status.note);
@@ -79,6 +79,56 @@ describe('GameBoard', () => {
         expect(notes.at(-1)).toBe(`That cell is taken`);
         expect(document.querySelector(`polygon.ring-pending`)).toBe(null);
         expect(commits).toEqual([]);
+    });
+
+    it('hold a rate-limited turn for its wait, still saying at once why a cell is refused', async () => {
+        vi.useFakeTimers({ toFake: [`setInterval`, `clearInterval`, `Date`] });
+        try {
+            const statuses: TurnStatus[] = [];
+            const answers = [{ kind: `limited` as const, seconds: 3 }, { kind: `failed` as const }];
+            let commits = 0;
+            render(
+                <GameBoard
+                    stones={cells.map((cell, index) => ({ ...cell, number: index + 1 }))}
+                    position={{ stones: cells.map((cell) => ({ ...cell, player: cell.side === `x` ? 0 : 1 })) }}
+                    you="x"
+                    lastMove={[]}
+                    winLine={[]}
+                    yourMove
+                    finished={false}
+                    idleLabel="game finished"
+                    onCommit={() => {
+                        commits += 1;
+                        return Promise.resolve(answers.shift() ?? { kind: `failed` as const });
+                    }}
+                    onStatus={(status) => {
+                        statuses.push(status);
+                    }}
+                />,
+            );
+            const cellAt = (x: number, y: number) => document.querySelector(`polygon.cell[data-x="${String(x)}"][data-y="${String(y)}"]`) as SVGElement;
+            fireEvent.click(cellAt(1, 1));
+            fireEvent.click(cellAt(-1, 2));
+            await act(async () => {});
+            expect(statuses.at(-1)?.wait).toMatchObject({ seconds: 3, left: 3 });
+            fireEvent.click(cellAt(0, 0));
+            expect(statuses.at(-1)?.note).toBe(`That cell is taken`);
+            fireEvent.click(cellAt(1, 1));
+            fireEvent.click(cellAt(-1, 2));
+            expect(commits).toBe(1);
+            expect(statuses.at(-1)?.placed).toBe(1);
+            await act(async () => {});
+            act(() => {
+                vi.advanceTimersByTime(3_000);
+            });
+            expect(statuses.at(-1)).toMatchObject({ note: null, wait: null });
+            fireEvent.click(cellAt(-1, 2));
+            await act(async () => {});
+            expect(statuses.at(-1)).toMatchObject({ note: `Your turn was not sent; try again`, wait: null });
+            expect(commits).toBe(2);
+        } finally {
+            vi.useRealTimers();
+        }
     });
 
     it('move the focus with all six keys and mark with enter', async () => {
@@ -96,7 +146,7 @@ describe('GameBoard', () => {
                 onCommit={async (pair) => {
                     commits.push(pair);
                     await Promise.resolve();
-                    return true;
+                    return { kind: `sent` as const };
                 }}
             />,
         );
@@ -127,7 +177,7 @@ describe('GameBoard', () => {
                 idleLabel="game finished"
                 onCommit={async () => {
             await Promise.resolve();
-            return true;
+            return { kind: `sent` as const };
         }}
             />,
         );
@@ -151,7 +201,7 @@ describe('GameBoard', () => {
                 idleLabel="waiting for hextide"
                 onCommit={async () => {
             await Promise.resolve();
-            return true;
+            return { kind: `sent` as const };
         }}
             />,
         );
@@ -179,7 +229,7 @@ describe('GameBoard', () => {
                 idleLabel="waiting for hextide"
                 onCommit={async () => {
                     await Promise.resolve();
-                    return true;
+                    return { kind: `sent` as const };
                 }}
             />,
         );
@@ -197,7 +247,7 @@ describe('GameBoard', () => {
                 yourMove
                 finished={false}
                 idleLabel="game finished"
-                onCommit={() => Promise.resolve(true)}
+                onCommit={() => Promise.resolve({ kind: `sent` as const })}
             />,
         );
         const control = document.querySelector(`.board-control`) as HTMLElement;

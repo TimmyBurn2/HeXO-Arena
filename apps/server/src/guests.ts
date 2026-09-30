@@ -1,9 +1,7 @@
-import { guestIdleSeconds } from '@hexo-arena/contract';
+import { guestIdleSeconds, guestSessionCap } from '@hexo-arena/contract';
 import { randomInt } from 'node:crypto';
 import { nowSeconds } from './db';
 import { randomToken, sha256Hex } from './tokens';
-
-export const guestSessionCap = 500;
 
 const labelAlphabet = `abcdefghijklmnopqrstuvwxyz0123456789`;
 

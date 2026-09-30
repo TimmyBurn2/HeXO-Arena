@@ -1,6 +1,7 @@
 import {
     boardCellSchema,
     timeControlSchema,
+    turnsOnBoard,
     type FinishReason,
     type GameHeadline,
     type Side,
@@ -8,7 +9,7 @@ import {
 } from '@hexo-arena/contract';
 import { and, count, desc, eq, gte, isNull, or, sql } from 'drizzle-orm';
 import { randomUUID } from 'node:crypto';
-import { emptyPosition, place, type Coord, type Position } from '@hexo-arena/rules';
+import { replay, type Coord, type Position } from '@hexo-arena/rules';
 import { nowSeconds, type Query } from './db';
 import { alias } from 'drizzle-orm/sqlite-core';
 import { bots, games, moves, users } from './db/schema';
@@ -250,6 +251,8 @@ export function findFinishedHeadline(query: Query, gameId: string): GameHeadline
             challengerSide: games.challengerSide,
             winner: games.winner,
             finishReason: games.finishReason,
+            openingCells: games.openingCells,
+            moves: sql<number>`(SELECT count(*) FROM ${moves} WHERE ${moves.gameId} = ${games.id})`,
         })
         .from(games)
         .leftJoin(users, eq(games.userId, users.id))
@@ -274,6 +277,7 @@ export function findFinishedHeadline(query: Query, gameId: string): GameHeadline
         names,
         winner: (row.winner as Side | null) ?? null,
         reason: row.finishReason as FinishReason,
+        turns: turnsOnBoard(boardCellSchema.array().parse(JSON.parse(row.openingCells)).length) + row.moves,
     };
 }
 
@@ -344,24 +348,13 @@ export function findMoves(query: Query, gameId: string): StoredMove[] {
         }));
 }
 
-// Rebuilding a position replays the stored log through the same engine that
-// vetted every entry, so a snapshot never depends on live state. A winning
-// placement ends the replay: the game ended the instant the line completed,
+// Rebuilding a position replays the stored log,
+// so a snapshot never depends on live state.
+// A winning placement ends the replay:
+// the game ended the instant the line completed,
 // so the second cell of that move was never applied.
 export function replayPosition(query: Query, record: GameRecord): Position {
-    let position = emptyPosition;
-    for (const cell of record.opening) {
-        const placed = place(position, cell);
-        if (!placed.ok) throw new Error(`stored opening cell is illegal: ${record.id}`);
-        position = placed.position;
-    }
-    for (const move of findMoves(query, record.id)) {
-        for (const cell of move.cells) {
-            const placed = place(position, cell);
-            if (!placed.ok) throw new Error(`stored move is illegal: ${record.id}`);
-            position = placed.position;
-            if (placed.win !== null) return position;
-        }
-    }
-    return position;
+    const replayed = replay([...record.opening, ...findMoves(query, record.id).flatMap((move) => move.cells)]);
+    if (!replayed.ok) throw new Error(`stored cell is illegal: ${record.id}`);
+    return replayed.position;
 }

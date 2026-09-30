@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import type { BotListing } from '@hexo-arena/contract';
 import { fetchBots } from '../api/client';
 import { useAsync } from '../api/use-async';
@@ -11,9 +11,18 @@ import './BotsScreen.css';
 
 export function BotsScreen() {
     const [onlineOnly, setOnlineOnly] = useState(false);
+    // Day one's empty state leads with Build a bot itself, so the head leaves it out then.
+    const [dayOne, setDayOne] = useState(false);
     return (
         <>
-            <h1 className="screen-title">{text.bots.title}</h1>
+            <div className="bots-head">
+                <h1 className="screen-title">{text.bots.title}</h1>
+                {dayOne ? null : (
+                    <Link to="/connect" className="btn btn-ghost">
+                        {text.bots.build}
+                    </Link>
+                )}
+            </div>
             <div className="toolbar">
                 <label className="checkline">
                     <input
@@ -26,19 +35,23 @@ export function BotsScreen() {
                     {text.bots.onlineOnly}
                 </label>
             </div>
-            <Directory key={onlineOnly ? `online` : `all`} onlineOnly={onlineOnly} />
+            <Directory key={onlineOnly ? `online` : `all`} onlineOnly={onlineOnly} onDayOne={setDayOne} />
         </>
     );
 }
 
-function Directory({ onlineOnly }: { onlineOnly: boolean }) {
+function Directory({ onlineOnly, onDayOne }: { onlineOnly: boolean; onDayOne: (dayOne: boolean) => void }) {
     const load = useCallback(async () => fetchBots(onlineOnly), [onlineOnly]);
-    const { data, error, loading, reload } = useAsync(load);
+    const { data, error, limited, loading, reload } = useAsync(load);
+    const dayOne = data !== null && data.length === 0 && !onlineOnly;
+    useEffect(() => {
+        onDayOne(dayOne);
+    }, [dayOne, onDayOne]);
 
     if (loading && data === null) return <SkeletonRows />;
-    if (error && data === null) return <ErrorFrame sentence={text.bots.failed} onRetry={reload} />;
+    if (error && data === null) return <ErrorFrame sentence={text.bots.failed} onRetry={reload} wait={limited} />;
     if (data === null) return null;
-    if (data.length === 0 && !onlineOnly) return <NoBotsEmpty />;
+    if (dayOne) return <NoBotsEmpty />;
 
     return (
         <>
@@ -92,7 +105,7 @@ function Directory({ onlineOnly }: { onlineOnly: boolean }) {
                 <span>{text.bots.openKey}</span>
                 <span>{text.bots.provisionalKey}</span>
             </div>
-            {error ? <ErrorFrame sentence={text.bots.failed} onRetry={reload} /> : null}
+            {error ? <ErrorFrame sentence={text.bots.failed} onRetry={reload} wait={limited} /> : null}
         </>
     );
 }

@@ -55,6 +55,11 @@ export class ApiError extends Error {
     }
 }
 
+/** The seconds a rate-limited refusal asks to wait, or null for any other failure. */
+export function limitedFor(cause: unknown): number | null {
+    return cause instanceof ApiError && cause.code === `rate_limited` ? cause.retryAfter : null;
+}
+
 async function getJson<T>(url: string, schema: ZodType<T>): Promise<T> {
     let response: Response;
     try {

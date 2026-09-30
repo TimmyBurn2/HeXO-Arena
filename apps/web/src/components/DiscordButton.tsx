@@ -12,7 +12,7 @@ function DiscordFace() {
     return (
         <span className="discord-face">
             <DiscordSymbol />
-            <span>{text.shell.signIn((words) => <span className="sr-only">{words}</span>)}</span>
+            <span className="discord-label">{text.shell.signIn((words) => <span className="sr-only">{words}</span>)}</span>
         </span>
     );
 }

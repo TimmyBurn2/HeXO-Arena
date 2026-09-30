@@ -230,9 +230,10 @@
 
     .clock-foot {
         display: flex;
+        flex-wrap: wrap;
         align-items: baseline;
         justify-content: space-between;
-        gap: var(--space-3);
+        gap: var(--space-2) var(--space-3);
     }
 
     .clock-foot .note {
@@ -563,8 +564,10 @@
         .bot-choice-side {
             display: flex;
             flex: none;
+            flex-wrap: wrap;
             align-items: center;
-            gap: var(--space-3);
+            max-width: 100%;
+            gap: var(--space-2) var(--space-3);
         }
     }
 
@@ -616,6 +619,20 @@
         .play-setup {
             gap: var(--space-4);
             padding: var(--space-4);
+        }
+    }
+
+    /* Large text on a narrow window leaves three presets a row too little room for their labels,
+       and, at its narrowest, two. */
+    @media (max-width: 19.5rem) {
+        .clock-grid {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+    }
+
+    @media (max-width: 13rem) {
+        .clock-grid {
+            grid-template-columns: minmax(0, 1fr);
         }
     }
 }

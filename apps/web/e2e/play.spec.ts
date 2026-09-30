@@ -181,7 +181,7 @@ test('the second click of a double click never follows the Discord link that too
 
 test('a cooldown counts down on the start and lets go at zero', async ({ page }) => {
     await page.clock.install();
-    await open(page, `/play?bot=devbot-c`, { start: { status: 400, code: `game_cooldown`, retryAfter: 3 } });
+    await open(page, `/play?bot=devbot-c`, { start: { status: 429, code: `game_cooldown`, retryAfter: 3 } });
     const start = page.getByRole(`button`, { name: `Start game` });
     await start.click();
     await expect(page.locator(`.start-lines`)).toContainText(`try again in 3 s`);

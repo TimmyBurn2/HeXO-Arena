@@ -1,4 +1,4 @@
-import { gameWatcherCap, siteWatcherCap, streamKeepaliveMs, type GameEvent } from '@hexo-arena/contract';
+import { gameWatcherCap, siteWatcherCap, streamBacklogLimitBytes, streamKeepaliveMs, type GameEvent } from '@hexo-arena/contract';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { frameOf, GameWatchers } from '../src/watchers';
 import { FakeStreamSocket } from './helpers';
@@ -17,6 +17,7 @@ function snapshotEvent(gameId: string): GameEvent {
             },
             openingPlies: 1,
             board: { cells: [{ x: 0, y: 0, side: `x` }] },
+            timeControl: { mode: `unlimited` },
             toMove: `o`,
             clock: { mode: `unlimited` },
         },
@@ -120,5 +121,18 @@ describe('GameWatchers', () => {
         expect(watchers.unseatedCount()).toBe(0);
         vi.advanceTimersByTime(streamKeepaliveMs);
         expect(sockets.every((socket) => socket.writes.length === 1)).toBe(true);
+    });
+
+    it('end a watcher whose reader stopped reading once its unsent events pass the backlog limit', () => {
+        const watchers = new GameWatchers();
+        const slow = new FakeStreamSocket();
+        const reading = new FakeStreamSocket();
+        watchers.attach(`g1`, slow, false, snapshotEvent(`g1`));
+        watchers.attach(`g1`, reading, false, snapshotEvent(`g1`));
+        slow.writableLength = streamBacklogLimitBytes + 1;
+        watchers.publish(`g1`, finish);
+        expect(slow.ended).toBe(true);
+        expect(reading.ended).toBe(false);
+        expect(watchers.unseatedCount(`g1`)).toBe(1);
     });
 });

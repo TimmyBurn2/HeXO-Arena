@@ -53,7 +53,7 @@ export function LadderScreen() {
 
 function Standings({ kind, onRows }: { kind: LeaderboardKind; onRows: (empty: boolean) => void }) {
     const load = useCallback(async () => fetchLeaderboard(kind), [kind]);
-    const { data, error, loading, reload } = useAsync(load);
+    const { data, error, limited, loading, reload } = useAsync(load);
     const me = useMe();
     const loadBots = useCallback(async () => fetchBots(false), []);
     const roster = useAsync(loadBots).data;
@@ -65,7 +65,7 @@ function Standings({ kind, onRows }: { kind: LeaderboardKind; onRows: (empty: bo
     }, [data, error, onRows]);
 
     if (loading && data === null) return <LadderSkeleton />;
-    if (error && data === null) return <ErrorFrame sentence={text.ladder.failed} onRetry={reload} />;
+    if (error && data === null) return <ErrorFrame sentence={text.ladder.failed} onRetry={reload} wait={limited} />;
     if (data === null) return null;
     if (data.length === 0) return <DayOneEmpty />;
 
@@ -109,7 +109,7 @@ function Standings({ kind, onRows }: { kind: LeaderboardKind; onRows: (empty: bo
                 </table>
             </div>
             <p className="note">{text.ladder.note}</p>
-            {error ? <ErrorFrame sentence={text.ladder.failed} onRetry={reload} /> : null}
+            {error ? <ErrorFrame sentence={text.ladder.failed} onRetry={reload} wait={limited} /> : null}
         </>
     );
 }

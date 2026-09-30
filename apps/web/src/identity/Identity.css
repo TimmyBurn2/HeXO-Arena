@@ -167,10 +167,10 @@
         min-height: var(--control-lg);
     }
 
-    /* Until the row can hold a guest's name and tag beside the four nav
-       labels, who is here folds into the monogram; the words stay in the
-       button's name. */
-    @media (max-width: 47.25rem) {
+    /* Until the row can hold a guest's name and tag beside the five nav labels,
+       who is here folds into the monogram;
+       the words stay in the button's name. */
+    @media (max-width: 53rem) {
         .identity-label,
         .identity .tag {
             position: absolute;

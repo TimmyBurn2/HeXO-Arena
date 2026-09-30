@@ -1,9 +1,9 @@
+import { orphanForfeitMs } from '@hexo-arena/contract';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createTestApp, FakeStreamSocket, loginAs, mintBot, type TestApp } from './helpers';
 import { findBot } from '../src/bots';
 import { createQuery } from '../src/db';
 import { drainGraceMs } from '../src/drain';
-import { orphanForfeitMs } from '../src/game-registry';
 import { readRating } from '../src/rating-store';
 
 interface World {

@@ -81,6 +81,14 @@ describe('bot api export', () => {
         for (const path of sitePaths) expect(rendered).not.toContain(path);
     });
 
+    it(`states only the rates a bot meets, none of the website's`, () => {
+        const limited = String(dig(document, `components`, `responses`, `RateLimited`, `description`));
+        expect(limited).toContain(`network address`);
+        expect(limited).toContain(`bot`);
+        expect(limited).toContain(`game seat`);
+        for (const word of [`user`, `guest`, `account`]) expect(limited).not.toContain(word);
+    });
+
     it('names no deployment, since its one server is the relative root', () => {
         expect(dig(document, `servers`)).toMatchObject([{ url: `/` }]);
     });

@@ -2,6 +2,7 @@ import type { ReactNode } from 'react';
 import type { Accepts, Side } from '@hexo-arena/contract';
 import { Link } from '../router/Link';
 import { text } from '../text';
+import { cellPoints, cellSize, hexPoints } from '../board/geometry';
 import { turnWindowOf } from '../play/accepts';
 import './player.css';
 
@@ -10,9 +11,28 @@ export function BotBadge() {
     return <span className="badge-bot">{text.player.botBadge}</span>;
 }
 
-/** A side's stone as a small cell, tying a name to the board without a legend. */
+const cellWidthHalf = (Math.sqrt(3) * cellSize) / 2;
+
+// At a swatch's size a board-scale stone would hide its cell,
+// and the cell is the ground the stone is measured against,
+// so the stone leaves a band of it.
+const swatchStoneScale = 0.7;
+
+// A cell's box, so the swatch's hexagon fills it edge to edge.
+const swatchBox = `${String(-cellWidthHalf)} ${String(-cellSize)} ${String(2 * cellWidthHalf)} ${String(2 * cellSize)}`;
+
+/**
+ * A side's stone on a board cell, tying a name to the board without a legend;
+ * drawn as the board draws it, rim included,
+ * so the stone reads on its own ground whatever surface the swatch sits on.
+ */
 export function Swatch({ side }: { side: Side }) {
-    return <span className={`swatch swatch-${side}`} aria-hidden="true" />;
+    return (
+        <svg className="swatch" viewBox={swatchBox} aria-hidden="true">
+            <polygon className="swatch-cell" points={cellPoints()} />
+            <polygon className={`swatch-stone swatch-stone-${side}`} points={hexPoints(cellSize * swatchStoneScale)} />
+        </svg>
+    );
 }
 
 /** Presence is the stream: filled green online, hollow gray offline. */

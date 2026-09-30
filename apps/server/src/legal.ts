@@ -55,7 +55,7 @@ export function placeholderPaths(value: unknown, at = ``): string[] {
 
 /** The public read of the details; a server started without them answers not found. */
 export function registerLegalApi(app: FastifyInstance, details: LegalDetails | null): void {
-    app.get(legalDetailsPath, async (_request, reply) => {
+    app.get(legalDetailsPath, { config: { limit: `public` } }, async (_request, reply) => {
         if (details === null) return reply.code(404).send({ error: `no legal details on this server`, code: `not_found` });
         return details;
     });

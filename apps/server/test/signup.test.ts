@@ -152,7 +152,7 @@ describe(`POST ${signupPath}`, () => {
             expect((await create(world, signup, `Admin`)).statusCode).toBe(400);
         }
         const limited = await create(world, signup, `mira`);
-        expect(limited.statusCode).toBe(429);
+        expect(limited.statusCode).toBe(410);
         expect(limited.json()).toMatchObject({ code: `signup_limit` });
         expect((await read(world, signup)).statusCode).toBe(410);
         expect(createQuery(world.sqlite).select().from(users).all()).toHaveLength(0);

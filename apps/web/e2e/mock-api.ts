@@ -45,6 +45,8 @@ export interface World {
     start: `created` | { status: number; code: string; retryAfter?: number };
     // Whether minting a guest session finds the guest limit full.
     guestLimit: boolean;
+    // Every data read, or every write, refused as rate-limited, with the wait its limit names.
+    limited: `reads` | `writes` | null;
 }
 
 // Every state a bot in the Play roster can be in:
@@ -138,6 +140,55 @@ const clocks = [
     { mode: `unlimited` },
 ] as const;
 
+// The side of each ply: x holds the origin, then the sides alternate in pairs.
+function sideOfPly(ply: number): Side {
+    return ply === 0 || Math.floor((ply - 1) / 2) % 2 === 1 ? `x` : `o`;
+}
+
+const nearSteps = [
+    { x: 1, y: 0 },
+    { x: -1, y: 0 },
+    { x: 0, y: 1 },
+    { x: 0, y: -1 },
+    { x: 1, y: -1 },
+    { x: -1, y: 1 },
+    { x: 2, y: -1 },
+    { x: -2, y: 1 },
+    { x: 1, y: 1 },
+    { x: -1, y: -1 },
+];
+
+/**
+ * A game's stones as play leaves them, clustered near the stones before;
+ * the same seed always draws the same board.
+ */
+export function playedCells(count: number, seed: number): LiveGameEntry[`cells`] {
+    let state = seed * 7919 + 17;
+    const next = () => {
+        state = (state * 1_103_515_245 + 12_345) % 2_147_483_648;
+        return state / 2_147_483_648;
+    };
+    const cells: LiveGameEntry[`cells`] = [{ x: 0, y: 0, side: `x` }];
+    const taken = new Set([`0,0`]);
+    while (cells.length < count) {
+        const from = cells[Math.floor(next() * cells.length)] ?? { x: 0, y: 0 };
+        const step = nearSteps[Math.floor(next() * nearSteps.length)] ?? { x: 1, y: 0 };
+        const cell = { x: from.x + step.x, y: from.y + step.y };
+        const key = `${String(cell.x)},${String(cell.y)}`;
+        if (taken.has(key)) continue;
+        taken.add(key);
+        cells.push({ ...cell, side: sideOfPly(cells.length) });
+    }
+    return cells;
+}
+
+// The clock a live game shows for its time control, part spent.
+function runningClock(timeControl: (typeof clocks)[number], index: number): LiveGameEntry[`clock`] {
+    if (timeControl.mode === `turn`) return { mode: `turn`, remainingTurnMs: 24_000 - 1_000 * index };
+    if (timeControl.mode === `match`) return { mode: `match`, remainingMainMs: { x: 241_000 - 3_000 * index, o: 263_000 - 2_000 * index } };
+    return { mode: `unlimited` };
+}
+
 // A full list: the cap's worth of games, mixing bot pairs, users, and
 // guests, with no bot past its four live games.
 export const liveGames: LiveGameEntry[] = (
@@ -155,14 +206,19 @@ export const liveGames: LiveGameEntry[] = (
         [seat.tom, seat.ember],
         [seat.hextide, seat.quietlake],
     ] as const
-).map(([x, o], index) => ({
-    gameId: index === 0 ? `guest` : `live-${String(index)}`,
-    players: { x, o },
-    timeControl: clocks[index % clocks.length] ?? { mode: `unlimited` },
-    toMove: index % 2 === 0 ? `o` : `x`,
-    rated: x.kind !== `guest` && o.kind !== `guest`,
-    plies: 5 + 2 * index,
-}));
+).map(([x, o], index) => {
+    const timeControl = clocks[index % clocks.length] ?? clocks[2];
+    const cells = playedCells(9 + 4 * index, index + 1);
+    return {
+        gameId: index === 0 ? `guest` : `live-${String(index)}`,
+        players: { x, o },
+        timeControl,
+        toMove: sideOfPly(cells.length),
+        rated: x.kind !== `guest` && o.kind !== `guest`,
+        cells,
+        clock: runningClock(timeControl, index),
+    };
+});
 
 const midCells: GameSnapshot[`board`][`cells`] = [
     { x: 0, y: 0, side: `x` },
@@ -236,6 +292,7 @@ export const games: Record<string, GameSnapshot> = {
         players: facing(`sealbot`, 1712),
         openingPlies: 5,
         board: { cells: longCells },
+        timeControl: { mode: `turn`, turnTimeMs: 30_000 },
         status: `in-progress`,
         toMove: `x`,
         clock: { mode: `turn`, remainingTurnMs: 21_000 },
@@ -245,6 +302,7 @@ export const games: Record<string, GameSnapshot> = {
         players: facing(`sealbot`, 1712),
         openingPlies: 5,
         board: { cells: midCells },
+        timeControl: { mode: `match`, mainTimeMs: 300_000, incrementMs: 2_000 },
         status: `in-progress`,
         toMove: `x`,
         clock: { mode: `match`, remainingMainMs: { x: 227_000, o: 252_000 } },
@@ -254,6 +312,7 @@ export const games: Record<string, GameSnapshot> = {
         players: facing(`sealbot`, 1712),
         openingPlies: 5,
         board: { cells: midCells.slice(0, 9) },
+        timeControl: { mode: `match`, mainTimeMs: 300_000, incrementMs: 2_000 },
         status: `in-progress`,
         toMove: `o`,
         clock: { mode: `match`, remainingMainMs: { x: 227_000, o: 252_000 } },
@@ -263,6 +322,7 @@ export const games: Record<string, GameSnapshot> = {
         players: facing(`sealbot`, 1712),
         openingPlies: 5,
         board: { cells: midCells },
+        timeControl: { mode: `turn`, turnTimeMs: 30_000 },
         status: `in-progress`,
         toMove: `x`,
         clock: { mode: `turn`, remainingTurnMs: 8_000 },
@@ -272,6 +332,7 @@ export const games: Record<string, GameSnapshot> = {
         players: facing(`hextide`, 1690),
         openingPlies: 1,
         board: { cells: originCells },
+        timeControl: { mode: `turn`, turnTimeMs: 30_000 },
         status: `finished`,
         winner: `x`,
         reason: `six-in-a-row`,
@@ -281,6 +342,7 @@ export const games: Record<string, GameSnapshot> = {
         players: facing(`hextide`, 1690),
         openingPlies: 1,
         board: { cells: originCells.slice(0, 7) },
+        timeControl: { mode: `turn`, turnTimeMs: 30_000 },
         status: `in-progress`,
         toMove: `x`,
         clock: { mode: `turn`, remainingTurnMs: 21_000 },
@@ -290,6 +352,7 @@ export const games: Record<string, GameSnapshot> = {
         players: facing(`sealbot`, 1712),
         openingPlies: 9,
         board: { cells: midCells },
+        timeControl: { mode: `match`, mainTimeMs: 300_000, incrementMs: 2_000 },
         status: `in-progress`,
         toMove: `x`,
         clock: { mode: `match`, remainingMainMs: { x: 227_000, o: 252_000 } },
@@ -299,6 +362,7 @@ export const games: Record<string, GameSnapshot> = {
         players: facing(`sealbot`, 1712),
         openingPlies: 5,
         board: { cells: midCells },
+        timeControl: { mode: `turn`, turnTimeMs: 30_000 },
         status: `finished`,
         winner: `o`,
         reason: `surrender`,
@@ -311,6 +375,7 @@ export const games: Record<string, GameSnapshot> = {
         },
         openingPlies: 5,
         board: { cells: midCells.slice(0, 9) },
+        timeControl: { mode: `turn`, turnTimeMs: 30_000 },
         status: `in-progress`,
         toMove: `o`,
         clock: { mode: `turn`, remainingTurnMs: 38_000 },
@@ -326,6 +391,7 @@ export const games: Record<string, GameSnapshot> = {
                 { x: 3, y: -1, side: `x` },
             ],
         },
+        timeControl: { mode: `turn`, turnTimeMs: 30_000 },
         status: `finished`,
         winner: `x`,
         reason: `timeout`,
@@ -348,6 +414,7 @@ export function world(overrides: Partial<World> = {}): World {
         create: `created`,
         start: `created`,
         guestLimit: false,
+        limited: null,
         ...overrides,
     };
 }
@@ -440,6 +507,17 @@ export async function serve(page: Page, state: World): Promise<void> {
             return;
         }
 
+        if (state.limited !== null && (method === `GET`) === (state.limited === `reads`) && path !== `/api/me`) {
+            await route.fulfill({
+                status: 429,
+                contentType: `application/json`,
+                // A guest session refills one every twenty minutes, the rest within a minute.
+                headers: { 'retry-after': path === `/api/auth/guest` ? `1140` : `42` },
+                body: JSON.stringify({ error: `rate limit exceeded`, code: `rate_limited` }),
+            });
+            return;
+        }
+
         if (path === `/api/me` && method === `GET`) {
             await json(route, 200, meSchema.parse(state.me));
             return;
@@ -480,7 +558,7 @@ export async function serve(page: Page, state: World): Promise<void> {
             } else if (state.create === `failed`) {
                 await json(route, 500, { error: `boom`, code: `internal` });
             } else {
-                await json(route, state.create === `name_taken` ? 409 : 429, { error: `no`, code: state.create });
+                await json(route, state.create === `name_taken` ? 409 : 410, { error: `no`, code: state.create });
             }
             return;
         }
@@ -534,6 +612,7 @@ export async function serve(page: Page, state: World): Promise<void> {
                     players: snapshot.players,
                     openingPlies: snapshot.openingPlies,
                     board: snapshot.board,
+                    timeControl: snapshot.timeControl,
                     status: `finished`,
                     winner: seatOf(snapshot, state.me) === `x` ? `o` : `x`,
                     reason: `surrender`,

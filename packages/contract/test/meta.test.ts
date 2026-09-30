@@ -8,13 +8,16 @@ import {
     durationText,
     finishReasonLabels,
     gameMeta,
+    gameTurnCap,
     ladderMeta,
+    liveGamesMeta,
     notFoundMeta,
     pageTitle,
     plural,
     profileMeta,
     resultSentence,
     siteMeta,
+    turnsOnBoard,
 } from '../src';
 
 const names = { x: `alpha`, o: `beta` };
@@ -30,6 +33,7 @@ describe('page meta', () => {
 
     it('titles and describes the pages without data of their own, for the site and its previews alike', () => {
         expect(connectMeta).toEqual({ title: `Build a bot - HeXO Arena`, description: `Sign in, create a bot, and connect it to the ladder` });
+        expect(liveGamesMeta).toEqual({ title: `Live games - HeXO Arena`, description: `Every game in progress on HeXO Arena, bots and humans alike` });
         expect(profileMeta).toEqual({ title: `Profile - HeXO Arena`, description: `Your rating and your bots` });
         expect(creditsMeta).toEqual({ title: `Credits - HeXO Arena`, description: `The game, themes, font, and projects HeXO Arena builds on` });
     });
@@ -72,30 +76,42 @@ describe('page meta', () => {
             title: `alpha vs beta - HeXO Arena`,
             description: `Live; beta to move; match clock 5 min + 3 s`,
         });
-        expect(gameMeta({ status: `live`, names, toMove: `x`, timeControl: `turn` }).description).toBe(`Live; alpha to move; turn clock`);
-        expect(gameMeta({ status: `finished`, names, winner: `x`, reason: `surrender` }).description).toBe(`alpha won; beta resigned`);
+        expect(gameMeta({ status: `live`, names, toMove: `x`, timeControl: { mode: `turn`, turnTimeMs: 20_000 } }).description).toBe(`Live; alpha to move; turn clock 20 s`);
+        expect(gameMeta({ status: `finished`, names, winner: `x`, reason: `surrender`, turns: 30 }).description).toBe(`alpha won; beta resigned`);
+    });
+});
+
+describe('turnsOnBoard', () => {
+    it('counts the origin as no turn, two stones a turn, and a turn cut short by a win as one', () => {
+        expect(turnsOnBoard(1)).toBe(0);
+        expect(turnsOnBoard(3)).toBe(1);
+        expect(turnsOnBoard(12)).toBe(6);
+        expect(turnsOnBoard(13)).toBe(6);
     });
 });
 
 describe('resultSentence', () => {
     it('names the winner and how, in the contract words', () => {
-        const said = (winner: `x` | `o` | null, reason: Parameters<typeof resultSentence>[0][`reason`]) => resultSentence({ winner, reason }, names);
+        const said = (winner: `x` | `o` | null, reason: Parameters<typeof resultSentence>[0][`reason`]) => resultSentence({ winner, reason, turns: 30 }, names);
         expect(said(`x`, `six-in-a-row`)).toBe(`alpha won with six in a row`);
         expect(said(`o`, `timeout`)).toBe(`beta won on time`);
         expect(said(`x`, `surrender`)).toBe(`alpha won; beta resigned`);
         expect(said(`o`, `disconnect`)).toBe(`beta won; alpha disconnected`);
         expect(said(`x`, `terminated`)).toBe(`alpha won; beta played an illegal move`);
         expect(said(null, `terminated`)).toBe(`No winner; the game reached the 24-hour limit`);
+        expect(resultSentence({ winner: null, reason: `terminated`, turns: gameTurnCap }, names)).toBe(
+            `No winner; the game reached the ${String(gameTurnCap)}-turn limit`,
+        );
         expect(said(null, `aborted`)).toBe(`No winner; the game was aborted`);
     });
 
     it('reads the reader own side as you, capitalized only where it opens the sentence', () => {
-        expect(resultSentence({ winner: `x`, reason: `six-in-a-row` }, names, `x`)).toBe(`You won with six in a row`);
-        expect(resultSentence({ winner: `o`, reason: `surrender` }, names, `x`)).toBe(`beta won; you resigned`);
+        expect(resultSentence({ winner: `x`, reason: `six-in-a-row`, turns: 30 }, names, `x`)).toBe(`You won with six in a row`);
+        expect(resultSentence({ winner: `o`, reason: `surrender`, turns: 30 }, names, `x`)).toBe(`beta won; you resigned`);
     });
 
     it('keeps a player name as written, even one that reads as a word', () => {
-        expect(resultSentence({ winner: `x`, reason: `timeout` }, { x: `nobody`, o: `you` })).toBe(`nobody won on time`);
+        expect(resultSentence({ winner: `x`, reason: `timeout`, turns: 30 }, { x: `nobody`, o: `you` })).toBe(`nobody won on time`);
     });
 });
 

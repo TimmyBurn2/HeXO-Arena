@@ -1,5 +1,5 @@
 import { guestPath, liveGameEntrySchema, liveGameListCap, sessionCookieName, type LiveGameEntry } from '@hexo-arena/contract';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { findBot } from '../src/bots';
 import { createQuery } from '../src/db';
 import { createTestApp, FakeStreamSocket, loginAs, mintBot, type TestApp } from './helpers';
@@ -53,14 +53,74 @@ describe('GET /api/games', () => {
         await world.app.close();
     });
 
-    it('answers without a session, newest first, with seats, clock, turn, and plies', async () => {
+    it('answers without a session, newest first, with seats, stones, clock, and turn', async () => {
         const first = await start(await loginAs(world.app, `firstplayer`), `listbot-a`);
-        const second = await start(await guest(), `listbot-b`);
+        const player = await guest();
+        const second = await start(player, `listbot-b`);
         const entries = await list();
         expect(entries.map((entry) => entry.gameId)).toEqual([second, first]);
         const [newest] = entries;
-        expect(newest).toMatchObject({ timeControl: { mode: `unlimited` }, plies: 5 });
+        expect(newest).toMatchObject({ timeControl: { mode: `unlimited` }, clock: { mode: `unlimited` } });
         expect([newest?.players.x.name, newest?.players.o.name]).toContain(`listbot-b`);
+        const snapshot = await world.app.inject({ method: `GET`, url: `/api/games/${second}`, cookies: { [sessionCookieName]: player } });
+        const board = snapshot.json<{ board: { cells: unknown[] } }>().board.cells;
+        expect(newest?.cells).toEqual(board);
+        expect(newest?.cells).toHaveLength(5);
+        expect(newest?.cells[0]).toEqual({ x: 0, y: 0, side: `x` });
+    });
+
+    it('states a clock that runs as the snapshot states it', async () => {
+        const token = await mintBot(world.app, await loginAs(world.app, `clockowner`), `clockbot`);
+        await world.app.inject({
+            method: `PATCH`,
+            url: `/api/bot/account`,
+            headers: { authorization: `Bearer ${token}` },
+            payload: { accepts: { turnMs: null, match: true, unlimited: false } },
+        });
+        const bot = findBot(createQuery(world.sqlite), `clockbot`);
+        if (bot === undefined) throw new Error(`no bot`);
+        world.presence.attach(bot.id, new FakeStreamSocket(), true);
+        vi.useFakeTimers({ toFake: [`Date`] });
+        try {
+            const player = await guest();
+            const created = await world.app.inject({
+                method: `POST`,
+                url: `/api/games`,
+                cookies: { [sessionCookieName]: player },
+                payload: { bot: `clockbot`, timeControl: { mode: `match`, mainTimeMs: 300_000, incrementMs: 3_000 } },
+            });
+            expect(created.statusCode).toBe(201);
+            const gameId = created.json<{ gameId: string }>().gameId;
+            vi.advanceTimersByTime(4_000);
+            const snapshot = await world.app.inject({ method: `GET`, url: `/api/games/${gameId}`, cookies: { [sessionCookieName]: player } });
+            const [entry] = await list();
+            expect(entry?.clock).toEqual(snapshot.json<{ clock: unknown }>().clock);
+            expect(entry?.clock).toMatchObject({ mode: `match` });
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+
+    it('serves every caller the same body within a second, then the list as it stands', async () => {
+        vi.useFakeTimers({ toFake: [`Date`] });
+        try {
+            const first = await start(await guest(), `listbot-a`);
+            const before = await world.app.inject({ method: `GET`, url: `/api/games` });
+            const second = await start(await guest(), `listbot-b`);
+            vi.advanceTimersByTime(999);
+            const within = await world.app.inject({ method: `GET`, url: `/api/games`, cookies: { [sessionCookieName]: await guest() } });
+            expect(within.body).toBe(before.body);
+            expect(within.headers[`content-type`]).toMatch(/^application\/json/u);
+            expect(liveGameEntrySchema.array().parse(within.json()).map((entry) => entry.gameId)).toEqual([first]);
+            vi.advanceTimersByTime(1);
+            expect((await list()).map((entry) => entry.gameId)).toEqual([second, first]);
+            // A clock stepped back starts a new window rather than holding the old body.
+            const third = await start(await guest(), `listbot-c`);
+            vi.setSystemTime(Date.now() - 60_000);
+            expect((await list()).map((entry) => entry.gameId)).toEqual([third, second, first]);
+        } finally {
+            vi.useRealTimers();
+        }
     });
 
     it('lists a guest game as unrated with the guest seat unrated too, and a user game as rated', async () => {

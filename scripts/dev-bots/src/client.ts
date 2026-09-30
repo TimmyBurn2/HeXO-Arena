@@ -17,11 +17,15 @@ import { z } from 'zod';
 
 const errorCodeSchema = z.object({ code: z.string() });
 
-/** A call the target refused, with the contract error code when the body named one. */
+/**
+ * A call the target refused, with the contract error code when the body named one,
+ * and the seconds to wait when the answer named them.
+ */
 export class ApiError extends Error {
     constructor(
         readonly status: number,
         readonly code: string | null,
+        readonly retryAfter: number | null,
         message: string,
     ) {
         super(message);
@@ -32,7 +36,9 @@ async function refusal(response: Response, what: string): Promise<ApiError> {
     const body: unknown = await response.json().catch(() => null);
     const parsed = errorCodeSchema.safeParse(body);
     const code = parsed.success ? parsed.data.code : null;
-    return new ApiError(response.status, code, `${what} answered ${String(response.status)}${code === null ? `` : ` ${code}`}`);
+    const wait = Number(response.headers.get(`retry-after`));
+    const retryAfter = Number.isInteger(wait) && wait > 0 ? wait : null;
+    return new ApiError(response.status, code, retryAfter, `${what} answered ${String(response.status)}${code === null ? `` : ` ${code}`}`);
 }
 
 function bearer(token: string): Record<string, string> {

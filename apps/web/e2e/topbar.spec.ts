@@ -13,6 +13,7 @@ const visitors: readonly { name: string; me: Me }[] = [
 const screens: readonly { name: string; path: string }[] = [
     { name: `the root`, path: `/` },
     { name: `play`, path: `/play` },
+    { name: `live games`, path: `/games/live` },
     { name: `the ladder`, path: `/ladder` },
     { name: `bots`, path: `/bots` },
     { name: `a bot page`, path: `/bots/sealbot` },
@@ -27,11 +28,12 @@ const screens: readonly { name: string; path: string }[] = [
 // the nav links return beside the gear and who is here, so it is swept
 // closely, from the narrowest phone out to the desktop widths, on every
 // framed screen, with the edges where the mark comes and goes.
-const widths = [320, 336, 337, 360, 480, 481, 520, 560, 592, 593, 600, 640, 641, 700, 704, 705, 756, 757, 768, 1024, 1280];
+const widths = [320, 336, 337, 360, 480, 481, 560, 600, 640, 656, 657, 700, 740, 768, 769, 800, 848, 849, 1024, 1280];
 
-// The nav links sit in the tab bar up to 37rem and share the bar, drawn
-// tighter, up to 44rem; who is here folds to its monogram up to 756 px.
-const band = { from: 592, to: 704, fold: 756 };
+// The nav links sit in the tab bar up to 41rem,
+// and share the bar, drawn tighter, up to 48rem;
+// who is here folds to its monogram up to 53rem.
+const band = { from: 656, to: 768, fold: 848 };
 
 type Box = { x: number; y: number; width: number; height: number };
 
@@ -126,7 +128,7 @@ async function barFits(page: Page, width: number, signedIn: boolean, longName: b
     expect(gear === null ? 0 : Math.round(gear.width)).toBe(gear === null ? -1 : Math.round(gear.height));
     // Each nav label keeps one line and clears the gear, and the labels
     // stand in the bar exactly past the band's narrow end.
-    expect(bar.links.length).toBe(width > band.from ? 4 : 0);
+    expect(bar.links.length).toBe(width > band.from ? 5 : 0);
     for (const link of bar.links) {
         expect(link.box === null ? Infinity : link.box.x + link.box.width).toBeLessThanOrEqual(gear === null ? 0 : gear.x);
         expect(link.lines).toBe(1);
@@ -195,7 +197,7 @@ test('on a phone the tabs are the nav entries and Profile opens from the monogra
     await serve(page, world());
     await page.goto(`/ladder`);
     await page.locator(`h1`).waitFor();
-    await expect(page.locator(`nav.tabbar a`)).toHaveText([`Play`, `Ladder`, `Bots`, `Build a bot`]);
+    await expect(page.locator(`nav.tabbar a`)).toHaveText([`Play`, `Games`, `Ladder`, `Bots`]);
     await expect(page.locator(`nav.tabbar a[aria-current="page"]`)).toHaveText(`Ladder`);
     await page.locator(`header button.identity`).click();
     await page.locator(`dialog.identity-panel`).getByRole(`link`, { name: `Profile` }).click();

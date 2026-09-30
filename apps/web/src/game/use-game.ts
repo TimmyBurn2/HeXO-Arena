@@ -8,11 +8,12 @@ import {
     type GameSnapshot,
 } from '@hexo-arena/contract';
 import type { ZodType } from 'zod';
-import { ApiError, fetchGameSnapshot, gameEventsUrl, playHumanMove, resignGame } from '../api/client';
+import { ApiError, fetchGameSnapshot, gameEventsUrl, limitedFor, playHumanMove, resignGame } from '../api/client';
 import { applyFinish, applyTurn, laterOf } from './live';
 
 // A refused or broken stream reopens after this, doubling per failure up
-// to the watcher Retry-After, since EventSource never says which it was.
+// to the watcher Retry-After, since EventSource never says which it was;
+// a rate-limited read holds it for the wait that read names, when longer.
 const reopenMs = 2_000;
 const reopenCapMs = watcherRetryAfterSeconds * 1000;
 
@@ -25,15 +26,28 @@ const reopenCapMs = watcherRetryAfterSeconds * 1000;
  */
 export type GameLink = `up` | `lost` | `refused`;
 
+/** A rate-limited read's wait; each refusal is its own object, so a repeat of the same wait still restarts a countdown. */
+export interface Refusal {
+    readonly seconds: number;
+}
+
 export type GameLoad =
     | { state: `loading` }
     | { state: `missing` }
-    | { state: `error`; retry: () => void }
+    | { state: `error`; retry: () => void; wait: Refusal | null }
     | { state: `ready`; snapshot: GameSnapshot; send: GameSend; link: GameLink };
 
+/** How a seated player's action ended: applied, refused with a wait to honor, or failed otherwise. */
+export type Sent = { kind: `sent` } | { kind: `limited`; seconds: number } | { kind: `failed` };
+
 export interface GameSend {
-    playMove: (cells: readonly [AxialCoord, AxialCoord]) => Promise<boolean>;
-    resign: () => Promise<boolean>;
+    playMove: (cells: readonly [AxialCoord, AxialCoord]) => Promise<Sent>;
+    resign: () => Promise<Sent>;
+}
+
+function unsent(cause: unknown): Sent {
+    const seconds = limitedFor(cause);
+    return seconds === null ? { kind: `failed` } : { kind: `limited`, seconds };
 }
 
 function parsed<T>(schema: ZodType<T>, message: Event): T | null {
@@ -56,6 +70,8 @@ export function useGame(gameId: string): GameLoad {
     const [missing, setMissing] = useState(false);
     const [link, setLink] = useState<GameLink>(`up`);
     const [attempt, setAttempt] = useState(0);
+    // The wait a rate-limited read named, while the game has not loaded.
+    const [limited, setLimited] = useState<Refusal | null>(null);
     const held = useRef<GameSnapshot | null>(null);
 
     useEffect(() => {
@@ -67,6 +83,7 @@ export function useGame(gameId: string): GameLoad {
         setSnapshot(null);
         setMissing(false);
         setLink(`up`);
+        setLimited(null);
 
         function commit(next: GameSnapshot) {
             held.current = next;
@@ -120,6 +137,7 @@ export function useGame(gameId: string): GameLoad {
         }
 
         async function recover() {
+            let wait = backoff;
             try {
                 const next = await fetchGameSnapshot(gameId);
                 if (cancelled) return;
@@ -135,8 +153,11 @@ export function useGame(gameId: string): GameLoad {
                     setMissing(true);
                     return;
                 }
+                const seconds = limitedFor(cause);
+                setLimited(seconds === null ? null : { seconds });
+                wait = Math.max(backoff, (seconds ?? 0) * 1000);
             }
-            timer = setTimeout(open, backoff);
+            timer = setTimeout(open, wait);
             backoff = Math.min(backoff * 2, reopenCapMs);
         }
 
@@ -155,9 +176,9 @@ export function useGame(gameId: string): GameLoad {
                     const next = laterOf(held.current, await playHumanMove(gameId, cells));
                     held.current = next;
                     setSnapshot(next);
-                    return true;
-                } catch {
-                    return false;
+                    return { kind: `sent` };
+                } catch (cause) {
+                    return unsent(cause);
                 }
             },
             resign: async () => {
@@ -165,9 +186,9 @@ export function useGame(gameId: string): GameLoad {
                     const next = laterOf(held.current, await resignGame(gameId));
                     held.current = next;
                     setSnapshot(next);
-                    return true;
-                } catch {
-                    return false;
+                    return { kind: `sent` };
+                } catch (cause) {
+                    return unsent(cause);
                 }
             },
         }),
@@ -182,6 +203,7 @@ export function useGame(gameId: string): GameLoad {
                 retry: () => {
                     setAttempt((current) => current + 1);
                 },
+                wait: limited,
             };
         }
         return { state: `loading` };

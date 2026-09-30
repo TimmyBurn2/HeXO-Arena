@@ -1,0 +1,15 @@
+@layer components {
+    .mini-board .board-frame {
+        padding: 0;
+    }
+
+    .mini-board .board-svg {
+        aspect-ratio: 4 / 3;
+    }
+
+    /* A mini draws a turn's rings at the width a full board does,
+       however small the frame scales it. */
+    .mini-board .last-ring {
+        vector-effect: non-scaling-stroke;
+    }
+}

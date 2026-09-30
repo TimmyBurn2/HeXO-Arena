@@ -10,6 +10,12 @@ import {
     sessionHeartbeatMs,
     sessionTokenTtlMs,
     sideOf,
+    turnsOnBoard,
+    engineStrayFrameCap,
+    gameTurnCap,
+    guestSessionCap,
+    orphanForfeitMs,
+    streamBacklogLimitBytes,
     unlimitedWallCapMs,
     wireToInternal,
     type FinishReason,
@@ -54,13 +60,12 @@ import { isCurrentGeneration } from './site-state';
 import { randomToken } from './tokens';
 import type { GameWatchers } from './watchers';
 
-export const orphanForfeitMs = 30_000;
-
 type Timer = ReturnType<typeof setTimeout>;
 
 // The subset of the ws socket the game layer needs, so the engine session
 // is unit-testable against a plain fake.
 export interface EngineSocket {
+    readonly bufferedAmount: number;
     send(text: string): void;
     close(code?: number, reason?: string): void;
     onceClose(listener: () => void): void;
@@ -74,6 +79,8 @@ interface Session {
     readonly socket: EngineSocket;
     readonly heartbeat: ReturnType<typeof setInterval>;
     delivered: number;
+    // Frames that answered no outstanding request.
+    strays: number;
 }
 
 interface SessionToken {
@@ -334,14 +341,28 @@ function moveErrorCode(rejection: Rejection): MoveErrorCode {
     }
 }
 
+/** Finished boards the registry keeps replayed, least recently read dropped first. */
+export const finishedBoardMemoCap = 256;
+
+/**
+ * Finished games a guest can still read, its oldest dropped first;
+ * the site keeps as many for every guest it can hold.
+ */
+export const finishedGuestGamesPerGuest = 10;
+
 export class GameRegistry {
     readonly #games = new Map<string, LiveGame>();
-    // Finished guest games answer from here while their guest session
-    // lives; the session's end forgets them.
+    // A finished board never changes, so a read replays it once;
+    // the names beside it are read fresh, so renames and deletions show.
+    readonly #finishedBoards = new Map<string, ReturnType<typeof boardCells>>();
+    // Finished guest games answer from here while their guest session lives,
+    // up to their bound; the session's end forgets them.
     readonly #finishedGuestGames = new Map<
         string,
         { guestId: string; guestSide: Side; snapshot: GameSnapshot; headline: GameHeadline }
     >();
+    // Each guest's finished games, oldest first.
+    readonly #guestGameIds = new Map<string, string[]>();
     readonly #query: Query;
     readonly #presence: PresenceRegistry;
     readonly #watchers: GameWatchers;
@@ -516,6 +537,11 @@ export class GameRegistry {
         return this.#finishedGuestGames.get(gameId)?.headline ?? findFinishedHeadline(this.#query, gameId) ?? null;
     }
 
+    /** Whether the game is live in this process, so its read costs no replay. */
+    isLive(gameId: string): boolean {
+        return this.#games.has(gameId);
+    }
+
     /** Live games, newest first: the map keeps creation order. */
     liveGames(limit: number): LiveGameEntry[] {
         return [...this.#games.values()]
@@ -527,7 +553,8 @@ export class GameRegistry {
                 timeControl: game.timeControl,
                 toMove: sideToMove(game),
                 rated: !isGuestGame(game),
-                plies: game.position.stones.length,
+                cells: boardCells(game.position),
+                clock: liveClockView(game),
             }));
     }
 
@@ -559,7 +586,8 @@ export class GameRegistry {
             ...(you !== undefined && { you }),
             // The stored opening holds every opening stone, the origin included.
             openingPlies: openingPliesSchema.parse(record.opening.length),
-            board: { cells: boardCells(replayPosition(this.#query, record)) },
+            board: { cells: this.#finishedBoard(record) },
+            timeControl: record.timeControl,
             winner: record.winner,
             reason: record.finishReason,
         };
@@ -645,7 +673,8 @@ export class GameRegistry {
             // bws obliges an idle bot that hears it is waited on to hang up,
             // so waiting is true only for the seat holding the request.
             heartbeat: setInterval(() => {
-                socket.send(
+                this.#sendFrame(
+                    seat,
                     JSON.stringify(
                         bwsHeartbeatPacketSchema.parse({
                             type: `heartbeat`,
@@ -655,6 +684,7 @@ export class GameRegistry {
                 );
             }, sessionHeartbeatMs),
             delivered: 0,
+            strays: 0,
         };
         seat.session = session;
         socket.onceClose(() => {
@@ -662,7 +692,8 @@ export class GameRegistry {
             seat.session = null;
             clearInterval(session.heartbeat);
         });
-        socket.send(
+        this.#sendFrame(
+            seat,
             JSON.stringify(
                 bwsSetupPacketSchema.parse({
                     type: `setup`,
@@ -673,7 +704,7 @@ export class GameRegistry {
         // The outstanding request belongs to whoever holds the turn, so a
         // bot attaching off-turn receives only the setup.
         if (holdsRequest(game, side)) {
-            this.#sendMoveRequest(game, session);
+            this.#sendMoveRequest(game, seat);
         }
         return { game, side };
     }
@@ -681,7 +712,19 @@ export class GameRegistry {
     sessionMessage(side: Side, game: LiveGame, text: string): void {
         if (this.#games.get(game.id) !== game) return;
         const seat = game.seats[side];
-        if (seat.kind !== `bot`) return;
+        if (seat.kind !== `bot` || seat.session === null) return;
+        const session = seat.session;
+        // A frame that answers no outstanding request is dropped, and counted,
+        // so a flood of them ends the session instead of going on unseen;
+        // off turn it is counted before it is parsed.
+        const stray = () => {
+            session.strays += 1;
+            if (session.strays > engineStrayFrameCap) this.#closeSession(seat, 1008, `rate limit exceeded`);
+        };
+        if (!holdsRequest(game, side)) {
+            stray();
+            return;
+        }
         let parsed: unknown;
         try {
             parsed = JSON.parse(text);
@@ -696,7 +739,10 @@ export class GameRegistry {
         }
         // Answer matching: only the outstanding request counts, so stale
         // and mismatched answers drop instead of applying.
-        if (game.pending === null || packet.data.request_id !== game.pending) return;
+        if (packet.data.request_id !== game.pending) {
+            stray();
+            return;
+        }
         const cells = packet.data.move.pieces.map((piece) => wireToInternal(piece)) as [Coord, Coord];
         const applied = applyTurn(game.position, cells);
         if (!applied.ok) {
@@ -715,18 +761,20 @@ export class GameRegistry {
         applied: { position: Position; win: Win | null },
     ): void {
         const placedBefore = game.position.stones.length;
+        // A turn starts on an odd ply, 2t - 1,
+        // and a win on its first stone leaves the second unplaced,
+        // so the position holds exactly what landed.
+        const turn = (placedBefore + 1) / 2;
         game.pending = null;
         game.position = applied.position;
         game.turnLog = [...game.turnLog, { side, cells }];
         if (!isGuestGame(game)) insertMove(this.#query, { gameId: game.id, seq: game.nextSeq, side, cells });
         game.nextSeq += 1;
         if (applied.win === null) this.#advanceClock(game, side);
-        // A turn starts on an odd ply, 2t - 1, and a win on its first stone
-        // leaves the second unplaced, so the position holds exactly what landed.
         this.#watchers.publish(game.id, {
             event: `turn`,
             data: {
-                turn: (placedBefore + 1) / 2,
+                turn,
                 side,
                 cells: applied.position.stones.slice(placedBefore).map((stone) => ({ x: stone.x, y: stone.y })),
                 toMove: opponentOf(side),
@@ -735,6 +783,12 @@ export class GameRegistry {
         });
         if (applied.win !== null) {
             this.#finish(game, sideOf(applied.win.player), `six-in-a-row`);
+            return;
+        }
+        // Every read, replay, and move request grows with the game,
+        // so no game outlasts the cap.
+        if (turn >= gameTurnCap) {
+            this.#finish(game, null, `terminated`);
             return;
         }
         this.#requestBotMove(game);
@@ -747,23 +801,36 @@ export class GameRegistry {
         if (seat.kind !== `bot`) return;
         game.requestCounter += 1;
         game.pending = game.requestCounter;
-        if (seat.session !== null) this.#sendMoveRequest(game, seat.session);
+        this.#sendMoveRequest(game, seat);
     }
 
-    #sendMoveRequest(game: LiveGame, session: Session): void {
+    #sendMoveRequest(game: LiveGame, seat: BotSeat): void {
+        const session = seat.session;
+        if (session === null) return;
         const limit = moveTimeLimit(game);
-        session.socket.send(
+        const delivered = session.delivered;
+        session.delivered = game.turnLog.length;
+        this.#sendFrame(
+            seat,
             JSON.stringify(
                 bwsMoveRequestPacketSchema.parse({
                     type: `move_request`,
                     side: sideToMove(game),
-                    previous: toWireMoves(game.turnLog.slice(session.delivered)),
+                    previous: toWireMoves(game.turnLog.slice(delivered)),
                     ...(limit !== undefined && { move_time_limit: limit }),
                     request_id: game.pending,
                 }),
             ),
         );
-        session.delivered = game.turnLog.length;
+    }
+
+    // A bot that stopped reading would otherwise hold in memory every frame sent it,
+    // so past the backlog limit its session closes and it redials.
+    #sendFrame(seat: BotSeat, text: string): void {
+        const session = seat.session;
+        if (session === null) return;
+        session.socket.send(text);
+        if (session.socket.bufferedAmount > streamBacklogLimitBytes) this.#closeSession(seat, 1008, `not reading`);
     }
 
     #armClock(game: LiveGame, clock: Clock): void {
@@ -832,9 +899,8 @@ export class GameRegistry {
     // unrated as they always were, and the finished ones are forgotten.
     endGuest(guestId: string): void {
         this.abortForPerson({ kind: `guest`, id: guestId });
-        for (const [gameId, finished] of [...this.#finishedGuestGames]) {
-            if (finished.guestId === guestId) this.#finishedGuestGames.delete(gameId);
-        }
+        for (const gameId of this.#guestGameIds.get(guestId) ?? []) this.#finishedGuestGames.delete(gameId);
+        this.#guestGameIds.delete(guestId);
     }
 
     abortForBot(botId: string): number {
@@ -905,6 +971,7 @@ export class GameRegistry {
         }
         this.#games.clear();
         this.#finishedGuestGames.clear();
+        this.#guestGameIds.clear();
     }
 
     replayForBot(botId: string): StreamEvent[] {
@@ -981,8 +1048,9 @@ export class GameRegistry {
                 guestId: human.seat.person.id,
                 guestSide: human.side,
                 snapshot: { ...this.#publicView(game), status: `finished`, winner, reason },
-                headline: { status: `finished`, names: seatNames(game), winner, reason },
+                headline: { status: `finished`, names: seatNames(game), winner, reason, turns: turnsOnBoard(game.position.stones.length) },
             });
+            this.#boundFinishedGuestGames(human.seat.person.id, game.id);
         } else {
             recordFinish(this.#query, game.id, { winner, reason });
         }
@@ -1011,6 +1079,44 @@ export class GameRegistry {
         session.socket.close(code, reason);
     }
 
+    // A guest session lives as long as it is used,
+    // so its finished games are held to a count,
+    // and all of them to that count for every guest the site holds;
+    // the map keeps finishing order, so the first entries are the oldest.
+    #boundFinishedGuestGames(guestId: string, gameId: string): void {
+        const own = this.#guestGameIds.get(guestId) ?? [];
+        own.push(gameId);
+        this.#guestGameIds.set(guestId, own);
+        if (own.length > finishedGuestGamesPerGuest) this.#forgetOldestGuestGame(guestId);
+        const oldest = this.#finishedGuestGames.values().next();
+        if (this.#finishedGuestGames.size > guestSessionCap * finishedGuestGamesPerGuest && oldest.done !== true) {
+            this.#forgetOldestGuestGame(oldest.value.guestId);
+        }
+    }
+
+    #forgetOldestGuestGame(guestId: string): void {
+        const own = this.#guestGameIds.get(guestId) ?? [];
+        const gameId = own.shift();
+        if (gameId !== undefined) this.#finishedGuestGames.delete(gameId);
+        if (own.length === 0) this.#guestGameIds.delete(guestId);
+    }
+
+    #finishedBoard(record: GameRecord): ReturnType<typeof boardCells> {
+        const memo = this.#finishedBoards.get(record.id);
+        if (memo !== undefined) {
+            this.#finishedBoards.delete(record.id);
+            this.#finishedBoards.set(record.id, memo);
+            return memo;
+        }
+        const cells = boardCells(replayPosition(this.#query, record));
+        this.#finishedBoards.set(record.id, cells);
+        for (const oldest of this.#finishedBoards.keys()) {
+            if (this.#finishedBoards.size <= finishedBoardMemoCap) break;
+            this.#finishedBoards.delete(oldest);
+        }
+        return cells;
+    }
+
     #liveSnapshot(game: LiveGame, viewer: PersonRef | null): GameSnapshot {
         const human = humanSide(game);
         const seated = human !== null && viewer !== null && samePerson(human.seat.person, viewer);
@@ -1029,6 +1135,7 @@ export class GameRegistry {
             players: this.#playersOf(game),
             openingPlies: game.openingPlies,
             board: { cells: boardCells(game.position) },
+            timeControl: game.timeControl,
         };
     }
 

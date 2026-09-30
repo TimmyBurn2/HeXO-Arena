@@ -9,6 +9,7 @@ import {
     legalPageMeta,
     legalPagePath,
     legalPages,
+    liveGamesMeta,
     logoutPath,
     profileMeta,
 } from '@hexo-arena/contract';
@@ -107,7 +108,7 @@ describe('the og shell routes', () => {
     });
 
     it('carries the site icon at its size and the site name on every shell route, found or not', async () => {
-        for (const url of [`/`, `/play`, `/play?bot=nobody`, `/ladder`, `/bots`, `/bots/nobody`, `/game/g_nothing`, `/connect`, `/profile`, `/credits`, `/welcome`, ...legalPages.map(legalPagePath)]) {
+        for (const url of [`/`, `/play`, `/play?bot=nobody`, `/ladder`, `/bots`, `/bots/nobody`, `/game/g_nothing`, `/games/live`, `/connect`, `/profile`, `/credits`, `/welcome`, ...legalPages.map(legalPagePath)]) {
             const response = await arena.app.inject({ method: `GET`, url });
             expect(response.body).toContain(`<meta property="og:image" content="https://arena.example/icon-512.png" />`);
             expect(response.body).toContain(`<meta property="og:image:width" content="512" />`);
@@ -119,6 +120,7 @@ describe('the og shell routes', () => {
     it('titles the bot list, the pages without data, and the legal pages as the site does', async () => {
         const pages = [
             [`/bots`, botsMeta],
+            [`/games/live`, liveGamesMeta],
             [`/connect`, connectMeta],
             [`/profile`, profileMeta],
             [`/credits`, creditsMeta],

@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { LiveGameEntry } from '@hexo-arena/contract';
 import { liveRefreshMs } from '../src/api/use-live-games';
@@ -15,7 +15,12 @@ const guestGame: LiveGameEntry = {
     timeControl: { mode: `turn`, turnTimeMs: 30_000 },
     toMove: `o`,
     rated: false,
-    plies: 7,
+    cells: [
+        { x: 0, y: 0, side: `x` },
+        { x: 1, y: -1, side: `o` },
+        { x: 0, y: 1, side: `o` },
+    ],
+    clock: { mode: `turn`, remainingTurnMs: 21_000 },
 };
 
 const botGame: LiveGameEntry = {
@@ -27,7 +32,12 @@ const botGame: LiveGameEntry = {
     timeControl: { mode: `match`, mainTimeMs: 300_000, incrementMs: 2_000 },
     toMove: `x`,
     rated: true,
-    plies: 12,
+    cells: [
+        { x: 0, y: 0, side: `x` },
+        { x: -1, y: 1, side: `o` },
+        { x: 1, y: 0, side: `o` },
+    ],
+    clock: { mode: `match`, remainingMainMs: { x: 241_000, o: 263_000 } },
 };
 
 // Every read answers by path: the live list, the board, or an empty roster.
@@ -51,10 +61,17 @@ describe('LiveRail', () => {
     it('link each live game with both seats, its clock, whose turn, and an unrated tag for a guest game', async () => {
         stubReads(() => [guestGame, botGame]);
         render(<LiveRail />);
-        const links = await screen.findAllByRole(`link`);
+        await screen.findByRole(`list`);
+        const links = within(screen.getByRole(`list`)).getAllByRole(`link`);
         expect(links.map((link) => link.getAttribute(`href`))).toEqual([`/game/g-guest`, `/game/g-bots`]);
         expect(links[0]?.textContent).toBe(`Watch sealbotBOTvsGuest k3f9unratedturn clock 30 sGuest k3f9 to move`);
         expect(links[1]?.textContent).toBe(`Watch hextideBOTvssealbotBOTmatch clock 5 min + 2 shextide to move`);
+    });
+
+    it('lead to every live game from its head', async () => {
+        stubReads(() => [guestGame]);
+        render(<LiveRail />);
+        expect((await screen.findByRole(`link`, { name: `All live games` })).getAttribute(`href`)).toBe(`/games/live`);
     });
 
     it('say so in one quiet line when nothing is live', async () => {
@@ -82,7 +99,7 @@ describe('LiveRail', () => {
         await act(async () => {
             await vi.advanceTimersByTimeAsync(liveRefreshMs);
         });
-        expect(await screen.findByRole(`link`)).toBeTruthy();
+        expect(await screen.findByRole(`link`, { name: /^Watch hextide/u })).toBeTruthy();
     });
 });
 

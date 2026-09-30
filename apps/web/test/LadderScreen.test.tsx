@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { meStore } from '../src/me';
 import { LadderScreen } from '../src/screens/LadderScreen';
@@ -125,6 +125,48 @@ describe('LadderScreen', () => {
         await waitFor(() => {
             expect(screen.getByRole(`table`)).toBeTruthy();
         });
+    });
+
+    it('hold the retry of a rate-limited load for its wait, counting it down', async () => {
+        vi.useFakeTimers({ toFake: [`setInterval`, `clearInterval`, `Date`] });
+        try {
+            vi.stubGlobal(
+                `fetch`,
+                vi.fn(() =>
+                    Promise.resolve(new Response(JSON.stringify({ error: `slow down`, code: `rate_limited` }), { status: 429, headers: { 'retry-after': `2` } })),
+                ),
+            );
+            render(<LadderScreen />);
+            expect(await screen.findByText(`The ladder did not load`)).toBeTruthy();
+            const retry = screen.getByRole(`button`, { name: `Try again` });
+            const shown = () => document.querySelector(`.empty [aria-hidden="true"]`)?.textContent;
+            await waitFor(() => {
+                expect(shown()).toBe(`Too many tries; try again in 2 s`);
+            });
+            const reads = () => vi.mocked(fetch).mock.calls.filter(([url]) => typeof url === `string` && url.startsWith(`/api/leaderboard`)).length;
+            const before = reads();
+            fireEvent.click(retry);
+            await act(async () => {});
+            expect(reads()).toBe(before);
+            expect(document.querySelector(`.empty [role="status"] .sr-only`)?.textContent).toBe(`Too many tries; try again in 2 s`);
+            expect(retry.getAttribute(`aria-disabled`)).toBe(`true`);
+            await act(async () => {});
+            act(() => {
+                vi.advanceTimersByTime(1000);
+            });
+            expect(shown()).toBe(`Too many tries; try again in 1 s`);
+            act(() => {
+                vi.advanceTimersByTime(1000);
+            });
+            expect(screen.queryByText(/try again in/u)).toBe(null);
+            expect(retry.getAttribute(`aria-disabled`)).toBe(null);
+            fireEvent.click(retry);
+            await waitFor(() => {
+                expect(reads()).toBe(before + 1);
+            });
+        } finally {
+            vi.useRealTimers();
+        }
     });
 
     it('tint the signed-in player\'s own row', async () => {

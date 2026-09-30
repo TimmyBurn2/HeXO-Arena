@@ -8,6 +8,7 @@ import {
     hexCenter,
     ringPoints,
     stoneRadius,
+    stonesFrame,
     viewBoxOf,
 } from '../src/board/geometry';
 
@@ -113,5 +114,33 @@ describe('viewBoxOf', () => {
 describe('stoneRadius', () => {
     it('fall back to the sheet scale when no sheet is loaded', () => {
         expect(stoneRadius()).toBeCloseTo(28 * 0.82);
+    });
+});
+
+describe('stonesFrame', () => {
+    const cellWidth = Math.sqrt(3) * 28;
+
+    it('frame every stone with at least a cell to spare, at the aspect asked for', () => {
+        const stones = [origin, { x: 6, y: -1 }, { x: -2, y: 3 }];
+        const frame = stonesFrame(stones, 4 / 3);
+        expect(frame.w / frame.h).toBeCloseTo(4 / 3);
+        for (const stone of stones) {
+            const { cx, cy } = hexCenter(stone);
+            expect(cx - frame.x).toBeGreaterThanOrEqual(cellWidth);
+            expect(frame.x + frame.w - cx).toBeGreaterThanOrEqual(cellWidth);
+            expect(cy - frame.y).toBeGreaterThanOrEqual(28);
+            expect(frame.y + frame.h - cy).toBeGreaterThanOrEqual(28);
+        }
+    });
+
+    it('keep a few stones at a readable size, centered, rather than filling the frame with them', () => {
+        const frame = stonesFrame([origin], 4 / 3);
+        expect(frame.w).toBeGreaterThanOrEqual(9 * cellWidth);
+        expect(frame.x + frame.w / 2).toBeCloseTo(0);
+        expect(frame.y + frame.h / 2).toBeCloseTo(0);
+    });
+
+    it('frame the origin when there is no stone yet', () => {
+        expect(stonesFrame([], 4 / 3)).toEqual(stonesFrame([origin], 4 / 3));
     });
 });

@@ -4,6 +4,7 @@ import {
     guestRetryAfterSeconds,
     humanConcurrentGameCap,
     humanGameCooldownSeconds,
+    liveGameListCap,
     minimumAge,
     nameMaxLength,
     nameMinLength,
@@ -22,6 +23,8 @@ const wallCapHours = unlimitedWallCapMs / 3_600_000;
 // A wait in whole minutes, as a rate and as a delay: "a minute" for one.
 const perMinutes = (minutes: number) => (minutes === 1 ? `a minute` : `every ${String(minutes)} minutes`);
 const inMinutes = (minutes: number) => (minutes === 1 ? `a minute` : `${String(minutes)} minutes`);
+// A wait the server named, in seconds under a minute and whole minutes, rounded up, past it.
+const inWait = (seconds: number) => (seconds < 60 ? `${String(seconds)} s` : inMinutes(Math.ceil(seconds / 60)));
 
 /**
  * The words the web app shows, in English, grouped by screen and area.
@@ -37,12 +40,14 @@ export const en = {
         mainNav: `Main`,
         nav: {
             play: `Play`,
+            games: `Games`,
             ladder: `Ladder`,
             bots: `Bots`,
             build: `Build a bot`,
         },
         paused: `Starting games is paused; live games continue`,
         links: {
+            build: `Build a bot`,
             credits: `Credits`,
             botApi: `Bot API`,
             imprint: `Impressum / Legal notice`,
@@ -64,6 +69,7 @@ export const en = {
             expired: () => `That sign-in expired; sign in again`,
             rejected: () => `Discord did not confirm the sign-in; try again`,
             banned: (imprint: Slot): ReactNode => rich`This Discord account is banned from ${siteName}; the operator's contact is in the ${imprint(`Legal notice`)}`,
+            busy: () => `Sign-in is busy right now; try again in a minute`,
         } satisfies Record<SignInFailure, (imprint: Slot) => ReactNode>,
         identity: {
             guestName: (name: string) => `${name}, unrated`,
@@ -133,6 +139,7 @@ export const en = {
         },
         live: {
             title: `Live games`,
+            all: `All live games`,
             failed: `Live games did not load; trying again shortly`,
             none: `No live games right now.`,
             watch: `Watch `,
@@ -143,6 +150,7 @@ export const en = {
     },
     bots: {
         title: `Bots`,
+        build: `Build a bot`,
         onlineOnly: `Online only`,
         failed: `The bot list did not load`,
         bot: `Bot`,
@@ -166,6 +174,21 @@ export const en = {
             build: `Build a bot`,
         },
     },
+    live: {
+        title: `Live games`,
+        board: (x: string, o: string, toMove: string) => `Board, ${x} vs ${o}, ${toMove} to move`,
+        // The list stops at its cap, so a full list says it holds the newest.
+        count: (count: number) =>
+            count === liveGameListCap ? `The ${String(count)} newest live games` : `${String(count)} live ${plural(count, `game`, `games`)}`,
+        failed: `Live games did not load`,
+        refreshFailed: `Live games did not refresh; trying again shortly`,
+        empty: {
+            heading: `No live games right now`,
+            body: `Every game shows here while it is played; start one against a bot, or build a bot of your own.`,
+            play: `Play a bot`,
+            build: `Build a bot`,
+        },
+    },
     bot: {
         failed: `The bot did not load`,
         missing: (name: ReactNode): ReactNode => rich`No bot named ${name}`,
@@ -176,7 +199,6 @@ export const en = {
         offline: `Offline`,
         by: (owner: ReactNode): ReactNode => rich`By ${owner}`,
         playingNow: `Playing now`,
-        watchVs: (name: ReactNode): ReactNode => rich`Watch vs ${name}`,
         accepts: `Accepts`,
         acceptsNothing: `Nothing yet`,
         acceptsNothingOwner: (botApi: Slot): ReactNode => rich`Nothing yet; your bot lists the clocks it accepts through the ${botApi(`Bot API`)}.`,
@@ -346,6 +368,7 @@ export const en = {
         },
         cooldown: (seconds: number) => `1 new game ${perMinutes(humanGameCooldownSeconds / 60)}; try again in ${String(seconds)} s`,
         guestLimit: `The guest limit is full; try again in ${inMinutes(guestRetryAfterSeconds / 60)}, or sign in`,
+        guestLimited: (seconds: number) => `Too many guest sessions from this network; try again in ${inWait(seconds)}, or sign in`,
         guestFailed: `The guest session did not start; try again`,
         failed: `The game did not start; try again`,
         listFailed: `The bot list did not load`,
@@ -518,6 +541,7 @@ export const en = {
     states: {
         loading: `Loading`,
         tryAgain: `Try again`,
+        tooMany: (seconds: number) => `Too many tries; try again in ${inWait(seconds)}`,
         notFoundHeading: `Not found`,
         notFoundSentence: `That page does not exist.`,
         notFoundLadder: `Ladder`,

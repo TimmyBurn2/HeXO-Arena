@@ -30,6 +30,10 @@ const BotScreen = lazy(async () => {
     const module = await loadScreen(async () => import(`./screens/BotScreen`));
     return { default: module.BotScreen };
 });
+const LiveGamesScreen = lazy(async () => {
+    const module = await loadScreen(async () => import(`./screens/LiveGamesScreen`));
+    return { default: module.LiveGamesScreen };
+});
 const ConnectScreen = lazy(async () => {
     const module = await loadScreen(async () => import(`./screens/ConnectScreen`));
     return { default: module.ConnectScreen };
@@ -71,9 +75,10 @@ interface NavEntry {
 // adds a row, and its flag says whether it takes a phone tab too.
 const nav: readonly NavEntry[] = [
     { route: { name: `play` }, label: text.shell.nav.play, screens: [`play`], phoneTab: true },
+    { route: { name: `live-games` }, label: text.shell.nav.games, screens: [`live-games`], phoneTab: true },
     { route: { name: `ladder` }, label: text.shell.nav.ladder, screens: [`ladder`], phoneTab: true },
     { route: { name: `bots` }, label: text.shell.nav.bots, screens: [`bots`, `bot`], phoneTab: true },
-    { route: { name: `connect` }, label: text.shell.nav.build, screens: [`connect`], phoneTab: true },
+    { route: { name: `connect` }, label: text.shell.nav.build, screens: [`connect`], phoneTab: false },
 ];
 
 // The reason a sign-in failed, as the server's redirect names it; any
@@ -209,6 +214,8 @@ function RouteView({ route }: { route: Route }) {
             return <BotsScreen />;
         case `bot`:
             return <BotScreen name={route.bot} />;
+        case `live-games`:
+            return <LiveGamesScreen />;
         case `connect`:
             return <ConnectScreen />;
         case `profile`:

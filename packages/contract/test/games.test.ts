@@ -81,6 +81,7 @@ describe('gameSnapshotSchema', () => {
             players,
             openingPlies: 1,
             board: { cells: [{ x: 0, y: 0, side: `x` }] },
+            timeControl: { mode: `unlimited` },
             toMove: `o`,
             clock: { mode: `unlimited` },
         });
@@ -92,6 +93,7 @@ describe('gameSnapshotSchema', () => {
             players,
             openingPlies: 1,
             board: { cells: [{ x: 0, y: 0, side: `x` }] },
+            timeControl: { mode: `unlimited` },
             winner: null,
             reason: `aborted`,
         });
@@ -106,6 +108,7 @@ describe('gameSnapshotSchema', () => {
             status: `in-progress`,
             openingPlies: 1,
             board: { cells: [{ x: 0, y: 0, side: `x` }] },
+            timeControl: { mode: `unlimited` },
             toMove: `o`,
             clock: { mode: `unlimited` },
         };
@@ -113,6 +116,27 @@ describe('gameSnapshotSchema', () => {
         const unknownKind = { ...players, o: { ...players.o, kind: `robot` } };
         expect(gameSnapshotSchema.safeParse({ ...base, players: unknownKind }).success).toBe(false);
         expect(gameSnapshotSchema.safeParse({ ...base, opponent: players.o }).success).toBe(false);
+    });
+
+    it('names the clock with its amounts, live and finished alike', () => {
+        const match = { mode: `match`, mainTimeMs: 300_000, incrementMs: 3_000 };
+        const live = {
+            gameId: `g1`,
+            status: `in-progress`,
+            players,
+            openingPlies: 1,
+            board: { cells: [{ x: 0, y: 0, side: `x` }] },
+            timeControl: match,
+            toMove: `o`,
+            clock: { mode: `match`, remainingMainMs: { x: 300_000, o: 298_000 } },
+        };
+        expect(gameSnapshotSchema.parse(live).timeControl).toEqual(match);
+        const { timeControl: _live, ...liveWithout } = live;
+        expect(gameSnapshotSchema.safeParse(liveWithout).success).toBe(false);
+        const finished = { gameId: `g1`, status: `finished`, players, openingPlies: 1, board: live.board, timeControl: turnControl, winner: `x`, reason: `six-in-a-row` };
+        expect(gameSnapshotSchema.parse(finished).timeControl).toEqual(turnControl);
+        const { timeControl: _finished, ...finishedWithout } = finished;
+        expect(gameSnapshotSchema.safeParse(finishedWithout).success).toBe(false);
     });
 });
 
@@ -130,17 +154,29 @@ describe('humanMoveRequestSchema', () => {
 });
 
 describe('liveGameEntrySchema', () => {
-    it('lists a guest game as unrated with its plies and players', () => {
-        const entry = {
-            gameId: `g1`,
-            players,
-            timeControl: { mode: `turn`, turnTimeMs: 30_000 },
-            toMove: `o`,
-            rated: false,
-            plies: 5,
-        };
+    const entry = {
+        gameId: `g1`,
+        players,
+        timeControl: turnControl,
+        toMove: `o`,
+        rated: false,
+        cells: [
+            { x: 0, y: 0, side: `x` },
+            { x: 1, y: 0, side: `o` },
+            { x: 0, y: 1, side: `o` },
+        ],
+        clock: { mode: `turn`, remainingTurnMs: 12_000 },
+    };
+
+    it('lists a guest game as unrated with its players, every stone in ply order, and its clock', () => {
         expect(liveGameEntrySchema.parse(entry)).toEqual(entry);
-        expect(liveGameEntrySchema.safeParse({ ...entry, plies: 0 }).success).toBe(false);
         expect(liveGameListCap).toBe(12);
+    });
+
+    it('wants the origin at least and a clock, and carries no ply count', () => {
+        expect(liveGameEntrySchema.safeParse({ ...entry, cells: [] }).success).toBe(false);
+        const { clock: _clock, ...clockless } = entry;
+        expect(liveGameEntrySchema.safeParse(clockless).success).toBe(false);
+        expect(liveGameEntrySchema.parse({ ...entry, plies: 3 })).not.toHaveProperty(`plies`);
     });
 });

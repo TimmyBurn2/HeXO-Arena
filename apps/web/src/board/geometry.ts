@@ -154,3 +154,40 @@ export function viewBoxOf(cells: readonly AxialCoord[]): { x: number; y: number;
         h: maxY - minY + 2 * viewBoxPad,
     };
 }
+
+/** An svg frame in user units. */
+export interface Frame {
+    x: number;
+    y: number;
+    w: number;
+    h: number;
+}
+
+// A cell spans this many units across its flats, and a row this many down.
+const cellAcross = Math.sqrt(3) * cellSize;
+const rowDown = 1.5 * cellSize;
+
+// Room round the outermost stones, and the fewest cells a frame spans,
+// so an early game shows stones at a size a glance can read,
+// not one stone filling the frame.
+const framePadCells = 1.5;
+const frameMinCells = 9;
+
+/**
+ * The fit-to-stones camera: the stones' extent with room round it,
+ * at least a few cells across,
+ * widened or heightened about its center to the aspect asked for.
+ * Before any stone it frames the origin.
+ */
+export function stonesFrame(stones: readonly AxialCoord[], aspect: number): Frame {
+    const centers = (stones.length === 0 ? [{ x: 0, y: 0 }] : stones).map(hexCenter);
+    const minX = Math.min(...centers.map((center) => center.cx));
+    const maxX = Math.max(...centers.map((center) => center.cx));
+    const minY = Math.min(...centers.map((center) => center.cy));
+    const maxY = Math.max(...centers.map((center) => center.cy));
+    let w = Math.max(maxX - minX + 2 * framePadCells * cellAcross, frameMinCells * cellAcross);
+    let h = maxY - minY + 2 * framePadCells * rowDown;
+    if (w / h < aspect) w = h * aspect;
+    else h = w / aspect;
+    return { x: (minX + maxX) / 2 - w / 2, y: (minY + maxY) / 2 - h / 2, w, h };
+}

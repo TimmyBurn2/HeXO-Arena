@@ -36,6 +36,7 @@ const { app, admin, drain: drainApp } = await buildApp({
     adminActor: env.ADMIN_ACTOR,
     publicOrigin: env.PUBLIC_ORIGIN,
     legalDetails,
+    trustedProxy: env.TRUSTED_PROXY,
     ...(env.WEB_INDEX_PATH !== `` && { webIndexPath: env.WEB_INDEX_PATH }),
 });
 

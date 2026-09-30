@@ -152,10 +152,28 @@ export const shots: readonly Shot[] = [
     { name: `signin-banned`, path: `/?signin=banned`, world: signedOut, ready: `.live-game`, framed: true },
     { name: `signin-cancelled`, path: `/connect?signin=cancelled`, world: signedOut, ready: `.site-banner`, framed: true },
     { name: `signin-rejected`, path: `/bots?signin=rejected`, world: signedOut, ready: `table`, framed: true },
+    { name: `signin-busy`, path: `/play?signin=busy`, world: playing({ me: null }), ready: `.site-banner`, framed: true },
     { name: `ladder-loading`, path: `/`, world: world({ stall: true }), ready: `.skeleton`, framed: true },
     { name: `ladder-error`, path: `/`, world: world({ broken: true }), ready: `.empty`, framed: true },
+    { name: `ladder-rate-limited`, path: `/`, world: world({ limited: `reads` }), ready: `.empty .note`, framed: true },
     { name: `bots`, path: `/bots`, world: world(), ready: `table`, framed: true },
-    { name: `bot-owner`, path: `/bots/sealbot`, world: world(), ready: `.bot-live`, framed: true },
+    { name: `bot-owner`, path: `/bots/sealbot`, world: world(), ready: `.bot-live`, framed: true, board: true },
+    {
+        name: `bot-playing-many`,
+        path: `/bots/sealbot`,
+        world: world({ live: liveGames }),
+        ready: `.bot-live`,
+        framed: true,
+        board: true,
+        after: async (page) => {
+            await page.locator(`.bot-live`).scrollIntoViewIfNeeded();
+        },
+    },
+    { name: `live-games`, path: `/games/live`, world: world({ live: liveGames }), ready: `.live-card`, framed: true, board: true },
+    { name: `live-games-few`, path: `/games/live`, world: world({ live: liveGames.slice(0, 3) }), ready: `.live-card`, framed: true, board: true },
+    { name: `live-games-empty`, path: `/games/live`, world: world({ live: [] }), ready: `.empty`, framed: true, board: true },
+    { name: `live-games-loading`, path: `/games/live`, world: world({ stall: true }), ready: `.skeleton`, framed: true },
+    { name: `live-games-error`, path: `/games/live`, world: world({ broken: true }), ready: `.empty`, framed: true },
     { name: `bot-live-none`, path: `/bots/sealbot`, world: world({ live: [] }), ready: `h1`, framed: true },
     {
         name: `bot-visitor`,
@@ -174,6 +192,32 @@ export const shots: readonly Shot[] = [
     { name: `bots-play`, path: `/bots`, world: playing(), ready: `tbody tr`, framed: true },
     { name: `build`, path: `/connect`, world: world(), ready: `h1`, framed: true },
     { name: `build-signed-out`, path: `/connect`, world: signedOut, ready: `h1`, framed: true },
+    {
+        name: `build-rate-limited`,
+        path: `/connect`,
+        world: world({ limited: `writes` }),
+        ready: `h1`,
+        framed: true,
+        after: async (page) => {
+            await page.getByRole(`textbox`, { name: `Bot name` }).fill(`sealbot-two`);
+            await page.getByRole(`button`, { name: `Create bot` }).click();
+            await page.locator(`.field-error`).waitFor();
+            await page.locator(`.field-error`).scrollIntoViewIfNeeded();
+        },
+    },
+    {
+        name: `bot-owner-rate-limited`,
+        path: `/bots/sealbot`,
+        world: world({ limited: `writes` }),
+        ready: `.owner-panel`,
+        framed: true,
+        after: async (page) => {
+            await page.getByRole(`button`, { name: `Rotate token` }).click();
+            await page.getByRole(`button`, { name: `Rotate; the old token stops now` }).click();
+            await page.locator(`.owner-row .field-error`).waitFor();
+            await page.locator(`.owner-panel`).scrollIntoViewIfNeeded();
+        },
+    },
     { name: `profile`, path: `/profile`, world: world(), ready: `h1`, framed: true },
     { name: `profile-guest`, path: `/profile`, world: guest, ready: `h1`, framed: true },
     {
@@ -197,6 +241,37 @@ export const shots: readonly Shot[] = [
         framed: false,
         storage: { 'hexo-arena.board-rendering.v1': `{"numbers":true}` },
         board: true,
+    },
+    { name: `game-rate-limited`, path: `/game/running`, world: world({ limited: `reads` }), ready: `.stage-message .note`, framed: false },
+    {
+        name: `game-turn-rate-limited`,
+        path: `/game/running`,
+        world: world({ limited: `writes` }),
+        ready: `svg polygon.cell`,
+        framed: false,
+        after: async (page) => {
+            await page.getByRole(`application`).focus();
+            await page.keyboard.press(`ArrowRight`);
+            await page.keyboard.press(`Enter`);
+            await page.keyboard.press(`ArrowRight`);
+            await page.keyboard.press(`Enter`);
+            await page.getByText(/Too many tries/u).first().waitFor();
+        },
+    },
+    {
+        name: `game-resign-rate-limited`,
+        path: `/game/running`,
+        world: world({ limited: `writes` }),
+        ready: `svg polygon.cell`,
+        framed: false,
+        after: async (page) => {
+            await page.keyboard.press(`m`);
+            await page.locator(`#drawer-body:not([hidden])`).waitFor();
+            await page.getByRole(`tab`, { name: `Game` }).click();
+            await page.getByRole(`button`, { name: `Resign` }).click();
+            await page.getByRole(`button`, { name: `Resign and lose` }).click();
+            await page.locator(`.hud-note[role="alert"]`).waitFor();
+        },
     },
     {
         name: `game-drawer`,
@@ -382,7 +457,19 @@ export const shots: readonly Shot[] = [
     { name: `play-loading`, path: `/play`, world: playing({ stall: true }), ready: `.skeleton`, framed: true },
     { name: `play-paused`, path: `/play?bot=devbot-c`, world: playing({ paused: true }), ready: `.play-setup`, framed: true },
     { name: `play-paused-signed-out`, path: `/play?bot=devbot-c`, world: playing({ paused: true, me: null }), ready: `.play-setup`, framed: true },
-    refusedStart(`play-cooldown`, 400, `game_cooldown`, `/play?bot=devbot-c`, 42),
+    refusedStart(`play-cooldown`, 429, `game_cooldown`, `/play?bot=devbot-c`, 42),
+    refusedStart(`play-rate-limited`, 429, `rate_limited`, `/play?bot=devbot-c`, 42),
+    {
+        name: `play-guest-rate-limited`,
+        path: `/play?bot=devbot-c`,
+        world: playing({ me: null, limited: `writes` }),
+        ready: `.play-setup`,
+        framed: true,
+        after: async (page) => {
+            await page.getByRole(`button`, { name: `Play as guest` }).click();
+            await page.locator(`.start-lines p`).first().waitFor();
+        },
+    },
     refusedStart(`play-human-busy`, 400, `human_busy`),
     refusedStart(`play-bot-busy`, 400, `bot_busy`),
     refusedStart(`play-clock-not-accepted`, 400, `clock_not_accepted`),
@@ -457,6 +544,17 @@ export const shots: readonly Shot[] = [
         after: async (page) => {
             await createAccount(page);
             await page.getByText(`That name is taken`).waitFor();
+        },
+    },
+    {
+        name: `welcome-rate-limited`,
+        path: `/welcome`,
+        world: welcoming({ limited: `writes` }),
+        ready: `.field-ok`,
+        framed: true,
+        after: async (page) => {
+            await createAccount(page);
+            await page.getByText(/Too many tries/u).first().waitFor();
         },
     },
     {

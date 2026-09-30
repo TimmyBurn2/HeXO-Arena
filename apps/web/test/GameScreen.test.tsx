@@ -38,6 +38,7 @@ const runningSnapshot = {
             { x: 0, y: 1, side: `o` as const },
         ],
     },
+    timeControl: { mode: `turn`, turnTimeMs: 50_000 },
     status: `in-progress`,
     toMove: `o`,
     clock: { mode: `turn`, remainingTurnMs: 47_000 },
@@ -49,6 +50,7 @@ const finishedSnapshot = {
     players,
     openingPlies: 3,
     board: { cells: finishedCells },
+    timeControl: { mode: `turn`, turnTimeMs: 50_000 },
     status: `finished`,
     winner: `x`,
     reason: `six-in-a-row`,
@@ -98,7 +100,7 @@ describe('GameScreen', () => {
         await waitFor(() => {
             expect(document.title).toBe(`hextide vs tom - HeXO Arena`);
         });
-        expect(document.querySelector(`meta[name="description"]`)?.getAttribute(`content`)).toBe(`Live; tom to move; turn clock`);
+        expect(document.querySelector(`meta[name="description"]`)?.getAttribute(`content`)).toBe(`Live; tom to move; turn clock 50 s`);
     });
 
     it('show the shared turn clock on the chip of the side to move alone', async () => {
@@ -174,6 +176,127 @@ describe('GameScreen', () => {
         expect(screen.getByRole(`link`, { name: `Ladder` }).getAttribute(`href`)).toBe(`/ladder`);
     });
 
+    it('hold the retry of a game whose read was rate-limited for its wait', async () => {
+        vi.stubGlobal(
+            `fetch`,
+            vi.fn(() =>
+                Promise.resolve(new Response(JSON.stringify({ error: `slow down`, code: `rate_limited` }), { status: 429, headers: { 'retry-after': `5` } })),
+            ),
+        );
+        stubEventSource(null);
+        render(<GameScreen gameId="g-run" />);
+        expect(await screen.findByRole(`heading`, { level: 1, name: `The game did not load` })).toBeTruthy();
+        await waitFor(() => {
+            expect(document.querySelector(`.stage-message .sr-only`)?.textContent).toBe(`Too many tries; try again in 5 s`);
+        });
+        expect(screen.getByRole(`button`, { name: `Try again` }).getAttribute(`aria-disabled`)).toBe(`true`);
+    });
+
+    it('open nothing on a held Try again, and count down again when the reopen after the wait is refused too', async () => {
+        vi.stubGlobal(
+            `fetch`,
+            vi.fn(() =>
+                Promise.resolve(new Response(JSON.stringify({ error: `slow down`, code: `rate_limited` }), { status: 429, headers: { 'retry-after': `5` } })),
+            ),
+        );
+        stubEventSource(null);
+        vi.useFakeTimers({ shouldAdvanceTime: true });
+        try {
+            render(<GameScreen gameId="g-run" />);
+            const spoken = () => document.querySelector(`.stage-message .sr-only`)?.textContent;
+            await waitFor(() => {
+                expect(spoken()).toBe(`Too many tries; try again in 5 s`);
+            });
+            const opened = FakeEventSource.opened.length;
+            fireEvent.click(screen.getByRole(`button`, { name: `Try again` }));
+            await act(async () => {
+                await vi.advanceTimersByTimeAsync(1_000);
+            });
+            expect(FakeEventSource.opened.length).toBe(opened);
+            await act(async () => {
+                await vi.advanceTimersByTimeAsync(4_500);
+            });
+            expect(FakeEventSource.opened.length).toBe(opened + 1);
+            await waitFor(() => {
+                expect(spoken()).toBe(`Too many tries; try again in 5 s`);
+            });
+            expect(screen.getByRole(`button`, { name: `Try again` }).getAttribute(`aria-disabled`)).toBe(`true`);
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+
+    it(`try again at once when Try again is pressed after the wait, before the stage's own reopen`, async () => {
+        vi.stubGlobal(
+            `fetch`,
+            vi.fn(() =>
+                Promise.resolve(new Response(JSON.stringify({ error: `slow down`, code: `rate_limited` }), { status: 429, headers: { 'retry-after': `1` } })),
+            ),
+        );
+        stubEventSource(null);
+        vi.useFakeTimers({ shouldAdvanceTime: true });
+        try {
+            render(<GameScreen gameId="g-run" />);
+            await waitFor(() => {
+                expect(document.querySelector(`.stage-message .sr-only`)?.textContent).toBe(`Too many tries; try again in 1 s`);
+            });
+            const opened = FakeEventSource.opened.length;
+            await act(async () => {
+                await vi.advanceTimersByTimeAsync(1_200);
+            });
+            fireEvent.click(screen.getByRole(`button`, { name: `Try again` }));
+            await act(async () => {});
+            expect(FakeEventSource.opened.length).toBe(opened + 1);
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+
+    it('count the wait of a rate-limited turn down in its note, then give the hint back', async () => {
+        vi.stubGlobal(
+            `fetch`,
+            vi.fn((_url: string, init?: RequestInit) =>
+                Promise.resolve(
+                    init?.method === `POST`
+                        ? new Response(JSON.stringify({ error: `slow down`, code: `rate_limited` }), { status: 429, headers: { 'retry-after': `3` } })
+                        : new Response(JSON.stringify(runningSnapshot), { status: 200 }),
+                ),
+            ),
+        );
+        stubEventSource(runningSnapshot);
+        vi.useFakeTimers({ toFake: [`setInterval`, `clearInterval`, `Date`] });
+        try {
+            render(<GameScreen gameId="g-run" />);
+            await screen.findByText(`Your turn`);
+            const control = document.querySelector(`.board-control`) as HTMLElement;
+            fireEvent.keyDown(control, { key: `ArrowRight` });
+            fireEvent.keyDown(control, { key: `Enter` });
+            fireEvent.keyDown(control, { key: `ArrowRight` });
+            fireEvent.keyDown(control, { key: `Enter` });
+            const shown = () => document.querySelector(`.hud-note [aria-hidden="true"]`)?.textContent;
+            await waitFor(() => {
+                expect(shown()).toBe(`Too many tries; try again in 3 s`);
+            });
+            expect(document.querySelector(`.hud-note .sr-only`)?.textContent).toBe(`Too many tries; try again in 3 s`);
+            await act(async () => {});
+            act(() => {
+                vi.advanceTimersByTime(1_000);
+            });
+            expect(shown()).toBe(`Too many tries; try again in 2 s`);
+            fireEvent.click(document.querySelector(`polygon.cell[data-x="0"][data-y="0"]`) as SVGElement);
+            expect(document.querySelector(`.hud-note`)?.textContent).toBe(`That cell is taken`);
+            fireEvent.keyDown(control, { key: `Escape` });
+            // The wait comes back saying the time it has left, not the time it began with.
+            expect(document.querySelector(`.hud-note .sr-only`)?.textContent).toBe(`Too many tries; try again in 2 s`);
+            act(() => {
+                vi.advanceTimersByTime(2_000);
+            });
+            expect(document.querySelector(`.hud-note`)).toBe(null);
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+
     it('freeze into the finished state with the result, the win line, and the record open', async () => {
         stubGame(finishedSnapshot);
         render(<GameScreen gameId="g-end" />);
@@ -233,6 +356,7 @@ describe('GameScreen', () => {
             fireEvent.click(screen.getByRole(`tab`, { name: tab }));
             const links = [...document.querySelectorAll(`#drawer-body .drawer-foot a`)];
             expect(links.map((link) => [link.getAttribute(`aria-label`), link.getAttribute(`href`), link.getAttribute(`target`)])).toEqual([
+                [`Build a bot, opens in a new tab`, `/connect`, `_blank`],
                 [`Credits, opens in a new tab`, `/credits`, `_blank`],
                 [`Bot API, opens in a new tab`, `https://github.com/TimmyBurn2/Hexo-Bot-Api`, `_blank`],
                 [`Impressum / Legal notice, opens in a new tab`, `/legal/imprint`, `_blank`],
@@ -358,6 +482,84 @@ describe('GameScreen', () => {
         expect(screen.getByRole(`button`, { name: `Resign` })).toBeTruthy();
     });
 
+    it('hold Resign while its request runs, keeping it focusable and sending once', async () => {
+        const held: { answer: (() => void) | null } = { answer: null };
+        const posts: string[] = [];
+        vi.stubGlobal(
+            `fetch`,
+            vi.fn((url: string, init?: RequestInit) => {
+                if (init?.method !== `POST`) return Promise.resolve(new Response(JSON.stringify(runningSnapshot), { status: 200 }));
+                posts.push(url);
+                return new Promise<Response>((resolve) => {
+                    held.answer = () => {
+                        resolve(new Response(`{}`, { status: 502 }));
+                    };
+                });
+            }),
+        );
+        stubEventSource(runningSnapshot);
+        render(<GameScreen gameId="g-run" />);
+        await screen.findByRole(`heading`, { name: `hextide vs you` });
+        await openWithM();
+        fireEvent.click(screen.getByRole(`tab`, { name: `Game` }));
+        fireEvent.click(screen.getByRole(`button`, { name: `Resign` }));
+        const confirm = screen.getByRole(`button`, { name: `Resign and lose` });
+        fireEvent.click(confirm);
+        await waitFor(() => {
+            expect(confirm.getAttribute(`aria-disabled`)).toBe(`true`);
+        });
+        expect(confirm.hasAttribute(`disabled`)).toBe(false);
+        fireEvent.click(confirm);
+        expect(posts).toHaveLength(1);
+        act(() => {
+            held.answer?.();
+        });
+        expect(await screen.findByRole(`alert`)).toHaveProperty(`textContent`, `The resignation was not sent; try again`);
+        expect(posts).toHaveLength(1);
+    });
+
+    it('say the wait when a resign is rate-limited', async () => {
+        vi.stubGlobal(
+            `fetch`,
+            vi.fn((_url: string, init?: RequestInit) =>
+                Promise.resolve(
+                    init?.method === `POST`
+                        ? new Response(JSON.stringify({ error: `slow down`, code: `rate_limited` }), { status: 429, headers: { 'retry-after': `3` } })
+                        : new Response(JSON.stringify(runningSnapshot), { status: 200 }),
+                ),
+            ),
+        );
+        stubEventSource(runningSnapshot);
+        render(<GameScreen gameId="g-run" />);
+        await screen.findByRole(`heading`, { name: `hextide vs you` });
+        await openWithM();
+        fireEvent.click(screen.getByRole(`tab`, { name: `Game` }));
+        fireEvent.click(screen.getByRole(`button`, { name: `Resign` }));
+        fireEvent.click(screen.getByRole(`button`, { name: `Resign and lose` }));
+        await waitFor(() => {
+            expect(document.querySelector(`#drawer-body [role="alert"] .sr-only`)?.textContent).toBe(`Too many tries; try again in 3 s`);
+        });
+        const resign = screen.getByRole(`button`, { name: `Resign` });
+        expect(resign.getAttribute(`aria-disabled`)).toBe(`true`);
+        expect(resign.hasAttribute(`disabled`)).toBe(false);
+        fireEvent.click(resign);
+        expect(screen.queryByRole(`button`, { name: `Resign and lose` })).toBe(null);
+        const shown = () => document.querySelector(`#drawer-body [role="alert"] [aria-hidden="true"]`)?.textContent;
+        await waitFor(
+            () => {
+                expect(shown()).toBe(`Too many tries; try again in 2 s`);
+            },
+            { timeout: 2_000 },
+        );
+        await waitFor(
+            () => {
+                expect(document.querySelector(`#drawer-body [role="alert"]`)).toBe(null);
+            },
+            { timeout: 3_000 },
+        );
+        expect(resign.getAttribute(`aria-disabled`)).toBe(null);
+    });
+
     it('name the player in their own chip and mark a guest unrated', async () => {
         vi.stubGlobal(
             `fetch`,
@@ -426,6 +628,32 @@ describe('GameScreen', () => {
         await waitFor(() => {
             expect(screen.queryByText(`Connection lost; reconnecting`)).toBe(null);
         });
+        vi.useRealTimers();
+    });
+
+    it('wait out the wait a rate-limited read names before reopening the stream', async () => {
+        vi.stubGlobal(
+            `fetch`,
+            vi.fn(() =>
+                Promise.resolve(new Response(JSON.stringify({ error: `slow down`, code: `rate_limited` }), { status: 429, headers: { 'retry-after': `5` } })),
+            ),
+        );
+        stubEventSource(runningSnapshot);
+        vi.useFakeTimers({ shouldAdvanceTime: true });
+        render(<GameScreen gameId="g-run" />);
+        await screen.findByRole(`heading`, { name: `hextide vs you` });
+        act(() => {
+            FakeEventSource.latest().fail(true);
+        });
+        const before = FakeEventSource.opened.length;
+        await act(async () => {
+            await vi.advanceTimersByTimeAsync(4_900);
+        });
+        expect(FakeEventSource.opened.length).toBe(before);
+        await act(async () => {
+            await vi.advanceTimersByTimeAsync(200);
+        });
+        expect(FakeEventSource.opened.length).toBe(before + 1);
         vi.useRealTimers();
     });
 

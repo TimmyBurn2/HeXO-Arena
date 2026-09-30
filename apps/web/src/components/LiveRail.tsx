@@ -14,9 +14,12 @@ export function LiveRail({ onlyWhenLive = false }: { onlyWhenLive?: boolean }) {
     if (onlyWhenLive && (data === null || data.length === 0)) return null;
     return (
         <section className="live-rail" aria-labelledby="live-title">
-            <h2 id="live-title" className="section-title">
-                {text.ladder.live.title}
-            </h2>
+            <div className="live-rail-head">
+                <h2 id="live-title" className="section-title">
+                    {text.ladder.live.title}
+                </h2>
+                <Link to="/games/live">{text.ladder.live.all}</Link>
+            </div>
             {data === null ? (
                 error ? (
                     <p className="note">{text.ladder.live.failed}</p>
@@ -61,8 +64,10 @@ function LiveGameLink({ entry }: { entry: LiveGameEntry }) {
 function LiveSeat({ side, player }: { side: Side; player: GamePlayer }) {
     return (
         <span className="live-seat">
-            <Swatch side={side} />
-            <span className="live-name">{player.name}</span>
+            <span className="live-seat-who">
+                <Swatch side={side} />
+                <span className="live-name">{player.name}</span>
+            </span>
             {player.kind === `bot` ? <BotBadge /> : null}
         </span>
     );

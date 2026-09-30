@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { BotsScreen } from '../src/screens/BotsScreen';
 
@@ -49,6 +49,14 @@ afterEach(() => {
 });
 
 describe('BotsScreen', () => {
+    it('lead with a way to build a bot beside the title', async () => {
+        stubDirectory(directory);
+        render(<BotsScreen />);
+        const head = screen.getByRole(`heading`, { level: 1, name: `Bots` }).parentElement as HTMLElement;
+        expect(within(head).getByRole(`link`, { name: `Build a bot` }).getAttribute(`href`)).toBe(`/connect`);
+        await screen.findByRole(`table`);
+    });
+
     it('list every bot with owner, state, rating, and accepts', async () => {
         stubDirectory(directory);
         render(<BotsScreen />);
@@ -129,7 +137,19 @@ describe('BotsScreen', () => {
         stubDirectory([]);
         render(<BotsScreen />);
         expect(await screen.findByText(`No bots yet`)).toBeTruthy();
+        await waitFor(() => {
+            expect(screen.getAllByRole(`link`, { name: `Build a bot` })).toHaveLength(1);
+        });
         expect(screen.getByRole(`link`, { name: `Build a bot` }).getAttribute(`href`)).toBe(`/connect`);
+    });
+
+    it('hold the retry of a rate-limited list for its wait', async () => {
+        vi.stubGlobal(`fetch`, vi.fn(() => Promise.resolve(new Response(JSON.stringify({ error: `slow down`, code: `rate_limited` }), { status: 429, headers: { 'retry-after': `8` } }))));
+        render(<BotsScreen />);
+        expect(await screen.findByText(`The bot list did not load`)).toBeTruthy();
+        await waitFor(() => {
+            expect(document.querySelector(`.empty .sr-only`)?.textContent).toBe(`Too many tries; try again in 8 s`);
+        });
     });
 
     it('offer a retry when the first load fails', async () => {

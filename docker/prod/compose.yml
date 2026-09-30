@@ -28,6 +28,9 @@ services:
             # Read per request, so a front-end redeploy reaches the og
             # shell without restarting the app.
             WEB_INDEX_PATH: /srv/web/index.html
+            # Caddy's fixed address below,
+            # the one peer whose forwarded client address the rate limits read.
+            TRUSTED_PROXY: 172.29.64.10
         mem_limit: 512m
         cpus: 1.0
         pids_limit: 256
@@ -110,7 +113,10 @@ services:
               read_only: true
               bind:
                   create_host_path: false
-        networks: [internal, edge]
+        networks:
+            internal:
+                ipv4_address: 172.29.64.10
+            edge: {}
         depends_on:
             app:
                 condition: service_started
@@ -119,8 +125,14 @@ services:
 
 networks:
     # No gateway: members reach each other and nothing else.
+    # A fixed subnet gives Caddy a fixed address;
+    # the others draw from the upper half, clear of it.
     internal:
         internal: true
+        ipam:
+            config:
+                - subnet: 172.29.64.0/24
+                  ip_range: 172.29.64.128/25
     edge: {}
 
 volumes:

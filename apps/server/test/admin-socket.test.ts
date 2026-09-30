@@ -33,7 +33,7 @@ function parseLine(received: string): AdminResponse {
 
 const statusAnswer: AdminResponse = {
     kind: `status`,
-    status: { uptimeSeconds: 1, paused: false, liveStreams: 0, activeGames: 0, recentActions: [] },
+    status: { uptimeSeconds: 1, paused: false, liveStreams: 0, activeGames: 0, clientKeys: 0, keylessRequests: 0, recentActions: [] },
 };
 
 describe('the admin socket', () => {

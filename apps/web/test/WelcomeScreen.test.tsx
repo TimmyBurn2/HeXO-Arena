@@ -195,6 +195,21 @@ describe('WelcomeScreen', () => {
         expect(screen.getByRole(`button`, { name: `Create account` }).getAttribute(`aria-disabled`)).toBe(`false`);
     });
 
+    it('hold Create account for the wait a rate-limited creation names, focus kept on the button', async () => {
+        serve(ok, () => new Response(JSON.stringify({ error: `slow down`, code: `rate_limited` }), { status: 429, headers: { 'retry-after': `9` } }));
+        meStore.start();
+        render(<WelcomeScreen />);
+        await screen.findByText(`mira-hex is free`);
+        const create = screen.getByRole(`button`, { name: `Create account` });
+        create.focus();
+        fireEvent.click(create);
+        await waitFor(() => {
+            expect(document.querySelector(`[role="status"] .sr-only`)?.textContent).toBe(`Too many tries; try again in 9 s`);
+        });
+        expect(document.activeElement).toBe(create);
+        expect(create.getAttribute(`aria-disabled`)).toBe(`true`);
+    });
+
     it('send an expired sign-in back to Discord once it knows nobody is signed in', async () => {
         serve(refused(410, `signup_expired`));
         render(<WelcomeScreen />);
@@ -277,7 +292,7 @@ describe('WelcomeScreen', () => {
     it('end a sign-in that expires or tries too many names on Create account, saying so where focus was', async () => {
         for (const [status, code, sentence] of [
             [410, `signup_expired`, `That sign-in expired; sign in again`],
-            [429, `signup_limit`, `That sign-in tried too many names; sign in again`],
+            [410, `signup_limit`, `That sign-in tried too many names; sign in again`],
         ] as const) {
             serve(ok, refused(status, code));
             meStore.start();
@@ -298,7 +313,7 @@ describe('WelcomeScreen', () => {
     });
 
     it('give a guest whose sign-up ended the guest line with the way back in', async () => {
-        serve(ok, refused(429, `signup_limit`), { kind: `guest`, name: `Guest k3f9` });
+        serve(ok, refused(410, `signup_limit`), { kind: `guest`, name: `Guest k3f9` });
         meStore.start();
         render(<WelcomeScreen />);
         await screen.findByText(`Creating your account ends this guest session and its games.`);

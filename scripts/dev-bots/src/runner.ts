@@ -55,7 +55,7 @@ function message(error: unknown): string {
 }
 
 function isDailyCap(error: unknown): boolean {
-    return error instanceof ApiError && (error.code === `daily_pair_cap` || error.code === `daily_bot_cap`);
+    return error instanceof ApiError && (error.code === `daily_pair_cap` || error.code === `daily_bot_cap` || error.code === `daily_challenge_cap`);
 }
 
 // Kept so a developer can drive a dev bot by hand; the file sits in the
@@ -194,6 +194,11 @@ export async function startDevBots(options: DevBotsOptions): Promise<DevBots> {
                 if (failure === null) continue;
                 if (!down) log(`${bot.name} is offline: ${message(failure)}; retrying every ${String(streamRetryMs / 1000)} s`);
                 down = true;
+                // A refused open names its wait, and a sooner retry would only be refused again.
+                if (failure instanceof ApiError && failure.retryAfter !== null) {
+                    await sleep(failure.retryAfter * 1000, undefined, { signal: controller.signal }).catch(() => undefined);
+                    continue;
+                }
             }
             await sleep(streamRetryMs, undefined, { signal: controller.signal }).catch(() => undefined);
         }
@@ -202,10 +207,13 @@ export async function startDevBots(options: DevBotsOptions): Promise<DevBots> {
     const pairs = bots.flatMap((first, index) => bots.slice(index + 1).map((second) => [first, second] as const));
     const cappedOn = new Map<string, string>();
     let next = 0;
+    // A rate limit's refusal names its wait, which every challenge sits out.
+    let restUntil = 0;
 
     // One challenge per tick, rotating over the pairs; a pair a daily cap
     // refused rests until the UTC day turns, as the server counts.
     async function challengeOnce(): Promise<void> {
+        if (Date.now() < restUntil) return;
         const today = new Date().toISOString().slice(0, 10);
         for (let tried = 0; tried < pairs.length; tried += 1) {
             const pair = pairs[next % pairs.length];
@@ -221,6 +229,11 @@ export async function startDevBots(options: DevBotsOptions): Promise<DevBots> {
                     cappedOn.set(key, today);
                     log(`${key} reached a daily cap and rest until 00:00 UTC`);
                     continue;
+                }
+                if (error instanceof ApiError && error.status === 429 && error.retryAfter !== null) {
+                    restUntil = Date.now() + error.retryAfter * 1000;
+                    log(`challenges rest ${String(error.retryAfter)} s: ${message(error)}`);
+                    return;
                 }
                 log(`${from.name} could not challenge ${to.name}: ${message(error)}`);
             }

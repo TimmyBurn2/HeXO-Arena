@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { GameSnapshot } from '@hexo-arena/contract';
+import { gameTurnCap, type GameSnapshot } from '@hexo-arena/contract';
 import { feedOf, lastMoveOf, positionOf, resultLine, stonesOf, winLineOf } from '../src/game/snapshot-views';
 
 function snapshot(
@@ -15,6 +15,7 @@ function snapshot(
         },
         openingPlies: 3,
         board: { cells },
+        timeControl: { mode: `unlimited` },
     };
     const merged = { status: `in-progress`, toMove: `o`, clock: { mode: `unlimited` }, ...base, ...extra };
     // merged carries the discriminated union members by construction
@@ -172,6 +173,13 @@ describe('the shown result', () => {
         expect(finished(`x`, `terminated`)).toBe(`hextide won; you played an illegal move`);
         expect(finished(null, `aborted`)).toBe(`No winner; the game was aborted`);
         expect(finished(null, `terminated`)).toBe(`No winner; the game reached the 24-hour limit`);
+    });
+
+    it(`name the turn limit for a game that ended with no winner at ${String(gameTurnCap)} turns`, () => {
+        const cells = Array.from({ length: 1 + 2 * gameTurnCap }, (_, index) => ({ x: index, y: 0, side: index % 4 < 2 ? (`x` as const) : (`o` as const) }));
+        expect(resultLine(snapshot(cells, { status: `finished`, winner: null, reason: `terminated` }))).toBe(
+            `No winner; the game reached the ${String(gameTurnCap)}-turn limit`,
+        );
     });
 
     it('say nothing while the game runs', () => {

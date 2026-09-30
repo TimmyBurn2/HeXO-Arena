@@ -19,11 +19,15 @@ import {
     gamePath,
     gameResignPath,
     gamesPath,
+    engineStrayFrameCap,
+    gameTurnCap,
     healthzPath,
     leaderboardPath,
     legalDetailsPath,
     mePath,
+    serverLineLimitBytes,
     signupPath,
+    streamBacklogLimitBytes,
 } from '../src';
 import { buildOpenApiDocument } from '../src/openapi';
 
@@ -89,6 +93,27 @@ function arrayOfUnknown(value: unknown): unknown[] {
 }
 
 describe('openapi document', () => {
+    it('lets every operation that takes a body answer 413 payload_too_large', () => {
+        const operations = operationsIn(root).filter(([, operation]) => dig(operation, `requestBody`) !== undefined);
+        expect(operations.length).toBeGreaterThan(5);
+        for (const [name, operation] of operations) {
+            const codes = arrayOfUnknown(dig(operation, `responses`, `413`, `content`, `application/json`, `schema`, `properties`, `code`, `enum`));
+            expect(codes, name).toEqual([`payload_too_large`]);
+        }
+    });
+
+    it('lets every operation answer 429 rate_limited with its Retry-After', () => {
+        const operations = operationsIn(root);
+        expect(operations.length).toBeGreaterThan(20);
+        for (const [name, operation] of operations) {
+            const limited = dig(operation, `responses`, `429`);
+            expect(limited, name).toBeDefined();
+            expect(dig(limited, `headers`, `Retry-After`), name).toBeDefined();
+            const codes = arrayOfUnknown(dig(limited, `content`, `application/json`, `schema`, `properties`, `code`, `enum`));
+            expect(codes, name).toContain(`rate_limited`);
+        }
+    });
+
     it('resolves every $ref to a component the document defines', () => {
         const document = buildOpenApiDocument();
         const refs: string[] = [];
@@ -195,7 +220,7 @@ describe('openapi document', () => {
             expect(dig(document, `paths`, signupPath, method, `security`)).toContainEqual({ signupCookie: [] });
         }
         const created = dig(document, `paths`, signupPath, `post`, `responses`);
-        expect(Object.keys(created ?? {}).sort()).toEqual([`201`, `400`, `409`, `410`, `429`]);
+        expect(Object.keys(created ?? {}).sort()).toEqual([`201`, `400`, `409`, `410`, `413`, `429`]);
         expect(dig(document, `components`, `securitySchemes`, `signupCookie`, `name`)).toBe(`hexo_arena_signup`);
     });
 
@@ -255,11 +280,36 @@ describe('openapi document', () => {
         expect(dig(document, `paths`, gameResignPath, `post`, `security`)).toEqual([{ sessionCookie: [] }]);
     });
 
-    it('tells a caller inside the creation cooldown how long to wait', () => {
+    it('answers a quota with 429 and its wait: the creation cooldown and the challenge caps a day, and a spent sign-up with 410', () => {
         const document = buildOpenApiDocument();
-        const header = dig(document, `paths`, gamesPath, `post`, `responses`, `400`, `headers`, `Retry-After`);
-        expect(dig(header, `schema`)).toEqual({ type: `integer`, minimum: 1 });
-        expect(String(dig(header, `description`))).toContain(`game_cooldown`);
+        const cooldown = dig(document, `paths`, gamesPath, `post`, `responses`, `429`);
+        expect(dig(cooldown, `headers`, `Retry-After`)).toBeDefined();
+        expect(arrayOfUnknown(dig(cooldown, `content`, `application/json`, `schema`, `properties`, `code`, `enum`))).toEqual([`game_cooldown`, `rate_limited`]);
+        expect(arrayOfUnknown(dig(document, `paths`, gamesPath, `post`, `responses`, `400`, `content`, `application/json`, `schema`, `properties`, `code`, `enum`))).not.toContain(`game_cooldown`);
+        const daily = dig(document, `paths`, botChallengePath, `post`, `responses`, `429`);
+        expect(dig(daily, `headers`, `Retry-After`)).toBeDefined();
+        expect(arrayOfUnknown(dig(daily, `content`, `application/json`, `schema`, `properties`, `code`, `enum`))).toEqual([
+            `daily_challenge_cap`,
+            `daily_pair_cap`,
+            `daily_bot_cap`,
+            `rate_limited`,
+        ]);
+        expect(arrayOfUnknown(dig(document, `paths`, botChallengePath, `post`, `responses`, `400`, `content`, `application/json`, `schema`, `properties`, `code`, `enum`))).toContain(`challenge_pending`);
+        expect(arrayOfUnknown(dig(document, `paths`, signupPath, `post`, `responses`, `410`, `content`, `application/json`, `schema`, `properties`, `code`, `enum`))).toEqual([`signup_expired`, `signup_limit`]);
+    });
+
+    it('states the line, backlog, and turn bounds where a reader meets them', () => {
+        const document = buildOpenApiDocument();
+        const description = (...path: string[]) => String(dig(document, ...path, `description`));
+        const stream = description(`paths`, botStreamPath, `get`, `responses`, `200`);
+        expect(stream).toContain(`${String(serverLineLimitBytes / 1024)} KiB`);
+        expect(stream).toContain(`${String(streamBacklogLimitBytes / 1024)} KiB`);
+        const engine = description(`paths`, botGameSocketPath, `get`, `responses`, `101`);
+        expect(engine).toContain(`${String(serverLineLimitBytes / 1024)} KiB`);
+        expect(engine).toContain(`${String(streamBacklogLimitBytes / 1024)} KiB`);
+        expect(engine).toContain(`1008 after more than ${String(engineStrayFrameCap)} frames that answer no outstanding request, a malformed frame, or a protocol violation`);
+        expect(description(`paths`, gameEventsPath, `get`, `responses`, `200`)).toContain(`${String(streamBacklogLimitBytes / 1024)} KiB`);
+        expect(description(`components`, `schemas`, `FinishReason`)).toContain(`${String(gameTurnCap)} turns`);
     });
 
     it('counts the live games of each listed bot up to its cap', () => {

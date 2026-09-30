@@ -68,7 +68,7 @@ describe('AppShell', () => {
         meStore.reset();
         meStore.start();
         render(<AppShell />);
-        for (const path of [`/`, `/ladder`, `/bots`, `/bots/sealbot`, `/connect`, `/profile`, `/nowhere`]) {
+        for (const path of [`/`, `/ladder`, `/games/live`, `/bots`, `/bots/sealbot`, `/connect`, `/profile`, `/nowhere`]) {
             navigate(path);
             await waitFor(() => {
                 expect(topbar().querySelector(`.nav-right a.discord-button`)).toBeTruthy();
@@ -87,7 +87,7 @@ describe('AppShell', () => {
         render(<AppShell />);
         expect(topbar().querySelector(`.nav-links .nav-link`)?.textContent).toBe(`Play`);
         expect(topLink(`Play`).getAttribute(`href`)).toBe(`/play`);
-        expect(topbar().querySelectorAll(`.nav-links .nav-link`).length).toBe(4);
+        expect(topbar().querySelectorAll(`.nav-links .nav-link`).length).toBe(5);
         expect(topLink(`Ladder`).getAttribute(`href`)).toBe(`/ladder`);
         expect(topLink(`HeXO Arena`).getAttribute(`href`)).toBe(`/`);
 
@@ -113,6 +113,12 @@ describe('AppShell', () => {
             expect(topLink(`Build a bot`).getAttribute(`aria-current`)).toBe(`page`);
         });
         expect(topLink(`Bots`).getAttribute(`aria-current`)).toBe(null);
+        navigate(`/games/live`);
+        await waitFor(() => {
+            expect(topLink(`Games`).getAttribute(`aria-current`)).toBe(`page`);
+        });
+        expect(topLink(`Games`).getAttribute(`href`)).toBe(`/games/live`);
+        expect(topbar().querySelectorAll(`[aria-current="page"]`)).toHaveLength(1);
     });
 
     it('give the phone tabs the entries of the nav, with profile left to who is here', async () => {
@@ -121,8 +127,8 @@ describe('AppShell', () => {
         render(<AppShell />);
         const tabbar = document.querySelector(`nav.tabbar`) as HTMLElement;
         const labels = (root: Element) => [...root.querySelectorAll(`a`)].map((a) => a.textContent);
-        expect(labels(tabbar)).toEqual([`Play`, `Ladder`, `Bots`, `Build a bot`]);
-        expect(labels(topbar().querySelector(`nav.nav-links`) as HTMLElement)).toEqual([`Play`, `Ladder`, `Bots`, `Build a bot`]);
+        expect(labels(tabbar)).toEqual([`Play`, `Games`, `Ladder`, `Bots`]);
+        expect(labels(topbar().querySelector(`nav.nav-links`) as HTMLElement)).toEqual([`Play`, `Games`, `Ladder`, `Bots`, `Build a bot`]);
         expect(document.querySelector(`a[href="/profile"]`)).toBe(null);
         await waitFor(() => {
             expect(tabbar.querySelector(`a[aria-current="page"]`)?.textContent).toBe(`Bots`);
@@ -241,6 +247,7 @@ describe('AppShell', () => {
             const footer = document.querySelector(`footer.site-footer`) as HTMLElement;
             expect(footer.querySelector(`.site-tagline`)?.textContent).toBe(`HeXO Arena, one ladder for bots and humans`);
             expect([...footer.querySelectorAll(`a`)].map((a) => [a.textContent, a.getAttribute(`href`), a.getAttribute(`target`)])).toEqual([
+                [`Build a bot`, `/connect`, null],
                 [`Credits`, `/credits`, null],
                 [`Bot API`, `https://github.com/TimmyBurn2/Hexo-Bot-Api`, null],
                 [`Impressum / Legal notice`, `/legal/imprint`, null],
@@ -317,6 +324,14 @@ describe('AppShell', () => {
         await waitFor(() => {
             expect(screen.queryByText(`That sign-in expired; sign in again`)).toBe(null);
         });
+    });
+
+    it('say a sign-in turned back as busy was not started, and to try again in a minute', async () => {
+        stubHealthOk();
+        window.history.replaceState(null, ``, `/play?signin=busy`);
+        render(<AppShell />);
+        expect(await screen.findByText(`Sign-in is busy right now; try again in a minute`)).toBeTruthy();
+        expect(window.location.search).toBe(``);
     });
 
     it('add a sign-in failure line into a live region already on the page, so it is announced', async () => {

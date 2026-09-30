@@ -44,6 +44,8 @@ describe('formatAdminResponse', () => {
                 paused: true,
                 liveStreams: 3,
                 activeGames: 1,
+                clientKeys: 12,
+                keylessRequests: 5,
                 recentActions: [{ actor: `operator`, action: `pause`, target: null, reason: `incident`, at: 0 }],
             },
         });
@@ -53,6 +55,8 @@ describe('formatAdminResponse', () => {
                 `paused        yes`,
                 `live streams  3`,
                 `active games  1`,
+                `client keys   12`,
+                `keyless       5`,
                 `recent admin actions:`,
                 `  1970-01-01T00:00:00.000Z  operator  pause  -  incident`,
             ].join(`\n`),

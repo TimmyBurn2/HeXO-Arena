@@ -31,6 +31,26 @@ import {
     challengeForbiddenErrorCodes,
     challengeSchema,
     challengeTtlMs,
+    clientRequestLimit,
+    challengeDailyCap,
+    challengePairPendingCap,
+    challengeQuotaErrorCodes,
+    gameCooldownErrorCodes,
+    archiveReadGlobalLimit,
+    archiveReadLimit,
+    clientWatcherCap,
+    guestMintLimit,
+    guestSessionCap,
+    seatWatcherCap,
+    signInStartLimit,
+    signInStateCap,
+    botManagementLimit,
+    engineDialLimit,
+    engineFrameLimitBytes,
+    engineStrayFrameCap,
+    orphanForfeitMs,
+    principalRequestLimit,
+    streamOpenLimit,
     createBotRequestSchema,
     createChallengeRequestSchema,
     createGameRequestSchema,
@@ -71,12 +91,19 @@ import {
     legalDetailsSchema,
     liveGameEntrySchema,
     liveGameListCap,
+    liveGameListMemoMs,
     notFoundErrorCodes,
     okSchema,
     pairDailyCap,
     pausedErrorCodes,
     pausedRetryAfterSeconds,
+    payloadTooLargeErrorCodes,
+    publicRequestLimit,
+    rateLimitedErrorCodes,
+    rateText,
     rankableDeviation,
+    requestBodyLimitBytes,
+    serverLineLimitBytes,
     sessionCookieName,
     sessionHeartbeatMs,
     signInFailureParam,
@@ -94,6 +121,7 @@ import {
     signupTakenErrorCodes,
     siteName,
     siteWatcherCap,
+    streamBacklogLimitBytes,
     streamEventSchema,
     streamKeepaliveMs,
     unauthorizedErrorCodes,
@@ -103,6 +131,7 @@ import {
 } from './index';
 
 const seconds = (ms: number) => String(ms / 1000);
+const kib = (bytes: number) => String(bytes / 1024);
 
 // Every other component is named by .meta({ id }) where its schema is
 // defined, so each use renders as a $ref to one definition.
@@ -112,16 +141,20 @@ const notFoundError = errorBodySchema(notFoundErrorCodes).meta({ id: `NotFoundEr
 const bannedError = errorBodySchema(botForbiddenErrorCodes).meta({ id: `BannedError` });
 const pausedError = errorBodySchema(pausedErrorCodes).meta({ id: `PausedError` });
 const signedInError = errorBodySchema(guestConflictErrorCodes).meta({ id: `SignedInError` });
-const guestLimitError = errorBodySchema(guestLimitErrorCodes).meta({ id: `GuestLimitError` });
-const watcherLimitError = errorBodySchema(watcherLimitErrorCodes).meta({ id: `WatcherLimitError` });
+const rateLimitedError = errorBodySchema(rateLimitedErrorCodes).meta({ id: `RateLimitedError` });
+const payloadTooLargeError = errorBodySchema(payloadTooLargeErrorCodes).meta({ id: `PayloadTooLargeError` });
+const guestLimitError = errorBodySchema([...guestLimitErrorCodes, ...rateLimitedErrorCodes]).meta({ id: `GuestLimitError` });
+const watcherLimitError = errorBodySchema([...watcherLimitErrorCodes, ...rateLimitedErrorCodes]).meta({ id: `WatcherLimitError` });
 const botNameError = errorBodySchema([`invalid_name`, `name_reserved`]).meta({ id: `BotNameError` });
 const signupNameError = errorBodySchema(signupNameErrorCodes).meta({ id: `SignupNameError` });
 const signupTakenError = errorBodySchema(signupTakenErrorCodes).meta({ id: `SignupTakenError` });
 const signupExpiredError = errorBodySchema(signupExpiredErrorCodes).meta({ id: `SignupExpiredError` });
-const signupLimitError = errorBodySchema(signupLimitErrorCodes).meta({ id: `SignupLimitError` });
 const botLimitError = errorBodySchema([`bot_limit`]).meta({ id: `BotLimitError` });
 const nameTakenError = errorBodySchema([`name_taken`]).meta({ id: `NameTakenError` });
 const inGameError = errorBodySchema(botDeleteConflictErrorCodes).meta({ id: `InGameError` });
+const gameCooldownError = errorBodySchema([...gameCooldownErrorCodes, ...rateLimitedErrorCodes]).meta({ id: `GameCooldownError` });
+const challengeQuotaError = errorBodySchema([...challengeQuotaErrorCodes, ...rateLimitedErrorCodes]).meta({ id: `ChallengeQuotaError` });
+const signupEndedError = errorBodySchema([...signupExpiredErrorCodes, ...signupLimitErrorCodes]).meta({ id: `SignupEndedError` });
 const gameCreateError = errorBodySchema([...badRequestErrorCodes, ...gameCreateErrorCodes]).meta({
     id: `GameCreateError`,
 });
@@ -140,7 +173,8 @@ const challengeAcceptError = errorBodySchema([...badRequestErrorCodes, ...challe
 
 // A raw component cannot hold a zod schema, so it points at a named one;
 // each such schema also goes to the generator, or its $ref would dangle.
-function registerSharedComponents(registry: OpenAPIRegistry) {
+// The bot document states only what a bot meets; the site's own rates stay in the site's.
+function registerSharedComponents(registry: OpenAPIRegistry, surface: `site` | `bot`) {
     const referenced: { type: 'schema'; schema: ZodType }[] = [];
     const json = (schema: ZodType) => {
         const id = schema.meta()?.id;
@@ -180,6 +214,24 @@ function registerSharedComponents(registry: OpenAPIRegistry) {
             description: `The site is paused: nothing new starts, while open streams and live games run on. Retry after ${String(pausedRetryAfterSeconds)} s.`,
             headers: { 'Retry-After': retryAfter },
             content: json(pausedError),
+        }).ref,
+        rateLimited: registry.registerComponent('responses', 'RateLimited', {
+            description:
+                surface === `site`
+                    ? `Too many requests (rate_limited): one client, by network address, makes ${rateText(clientRequestLimit)}; operations needing no credential take ${rateText(publicRequestLimit)} from all callers together; each bot, user, guest, or game seat makes ${rateText(principalRequestLimit)} with its credential, and an account changes its bots ${rateText(botManagementLimit)}. Retry after Retry-After.`
+                    : `Too many requests (rate_limited): one client, by network address, makes ${rateText(clientRequestLimit)}; operations needing no credential take ${rateText(publicRequestLimit)} from all callers together; each bot or game seat makes ${rateText(principalRequestLimit)} with its credential. Retry after Retry-After.`,
+            headers: { 'Retry-After': retryAfter },
+            content: json(rateLimitedError),
+        }).ref,
+        payloadTooLarge: response(
+            `PayloadTooLarge`,
+            `The body is larger than ${kib(requestBodyLimitBytes)} KiB (payload_too_large).`,
+            payloadTooLargeError,
+        ),
+        archiveLimited: registry.registerComponent('responses', 'ArchiveLimited', {
+            description: `A finished game is read at most ${rateText(archiveReadLimit)} per client, and ${rateText(archiveReadGlobalLimit)} across callers (rate_limited); or too many requests. Retry after Retry-After.`,
+            headers: { 'Retry-After': retryAfter },
+            content: json(rateLimitedError),
         }).ref,
         gameId: registry.registerComponent('parameters', 'GameId', {
             name: 'gameId',
@@ -270,7 +322,7 @@ function registerSiteSurface(registry: OpenAPIRegistry, shared: SharedComponents
         ],
         responses: {
             302: {
-                description: `Redirect to Discord's authorize endpoint, or to the return path with ${signInFailureParam}=unconfigured when Discord OAuth is not set up.`,
+                description: `Redirect to Discord's authorize endpoint; or to the return path with ${signInFailureParam}=unconfigured when Discord OAuth is not set up, or with ${signInFailureParam}=busy past ${rateText(signInStartLimit)} per client or with ${String(signInStateCap)} sign-ins waiting on Discord.`,
             },
         },
     });
@@ -343,12 +395,8 @@ function registerSiteSurface(registry: OpenAPIRegistry, shared: SharedComponents
                 content: { 'application/json': { schema: signupTakenError } },
             },
             410: {
-                description: `No sign-up waits for this cookie.`,
-                content: { 'application/json': { schema: signupExpiredError } },
-            },
-            429: {
-                description: `The sign-up tried ${String(signupAttemptCap)} names and has ended; signing in again starts a new one.`,
-                content: { 'application/json': { schema: signupLimitError } },
+                description: `No sign-up waits for this cookie (signup_expired), or it tried ${String(signupAttemptCap)} names and has ended (signup_limit); signing in again starts a new one.`,
+                content: { 'application/json': { schema: signupEndedError } },
             },
         },
     });
@@ -417,7 +465,7 @@ function registerSiteSurface(registry: OpenAPIRegistry, shared: SharedComponents
                 content: { 'application/json': { schema: signedInError } },
             },
             429: {
-                description: `The global guest cap is full; retry after ${String(guestRetryAfterSeconds)} s.`,
+                description: `The global cap of ${String(guestSessionCap)} guest sessions is full (guest_limit), retry after ${String(guestRetryAfterSeconds)} s; or one client started ${rateText(guestMintLimit)} (rate_limited), or too many requests.`,
                 headers: { 'Retry-After': shared.retryAfter },
                 content: { 'application/json': { schema: guestLimitError } },
             },
@@ -542,13 +590,7 @@ function registerSiteSurface(registry: OpenAPIRegistry, shared: SharedComponents
                 content: { 'application/json': { schema: gameSnapshotSchema } },
             },
             400: {
-                description: `Validation failed (bad_request), the caller is at its live-game cap (human_busy) or inside the creation cooldown (game_cooldown), or the bot is not open (not_open), excludes the clock (clock_not_accepted), or is at its game cap (bot_busy).`,
-                headers: {
-                    'Retry-After': {
-                        description: `With game_cooldown only: seconds until the caller may start another game.`,
-                        schema: { type: 'integer', minimum: 1 },
-                    },
-                },
+                description: `Validation failed (bad_request), the caller is at its live-game cap (human_busy), or the bot is not open (not_open), excludes the clock (clock_not_accepted), or is at its game cap (bot_busy).`,
                 content: {
                     'application/json': {
                         schema: gameCreateError,
@@ -557,6 +599,11 @@ function registerSiteSurface(registry: OpenAPIRegistry, shared: SharedComponents
             },
             401: shared.unauthorized,
             403: shared.delisted,
+            429: {
+                description: `The caller is inside the creation cooldown (game_cooldown), and Retry-After says how long it has left; or too many requests (rate_limited).`,
+                headers: { 'Retry-After': shared.retryAfter },
+                content: { 'application/json': { schema: gameCooldownError } },
+            },
             503: shared.paused,
         },
     });
@@ -568,7 +615,7 @@ function registerSiteSurface(registry: OpenAPIRegistry, shared: SharedComponents
         operationId: 'listLiveGames',
         tags: ['Games'],
         security: [],
-        description: `Games in progress, newest first, at most ${String(liveGameListCap)}, without pagination. Guest games are listed; finished games never are.`,
+        description: `Games in progress, newest first, at most ${String(liveGameListCap)}, without pagination. Guest games are listed; finished games never are. The list is read at most once every ${seconds(liveGameListMemoMs)} s, and every caller in that time gets the same body.`,
         responses: {
             200: {
                 description: `The live games.`,
@@ -592,6 +639,7 @@ function registerSiteSurface(registry: OpenAPIRegistry, shared: SharedComponents
                 content: { 'application/json': { schema: gameSnapshotSchema } },
             },
             404: shared.notFound,
+            429: shared.archiveLimited,
         },
     });
 
@@ -606,12 +654,12 @@ function registerSiteSurface(registry: OpenAPIRegistry, shared: SharedComponents
         parameters: [shared.gameId],
         responses: {
             200: {
-                description: `The event stream.`,
+                description: `The event stream; the server ends one that leaves more than ${kib(streamBacklogLimitBytes)} KiB unread.`,
                 content: { 'text/event-stream': { schema: gameEventSchema } },
             },
             404: shared.notFound,
             429: {
-                description: `Watchers without a seat are capped at ${String(gameWatcherCap)} per game and ${String(siteWatcherCap)} in total; retry after ${String(watcherRetryAfterSeconds)} s. A seated caller is never refused.`,
+                description: `Watchers without a seat are capped at ${String(gameWatcherCap)} per game, ${String(siteWatcherCap)} in total, and ${String(clientWatcherCap)} per client, and a seat holds at most ${String(seatWatcherCap)} streams of its own game (watcher_limit), retry after ${String(watcherRetryAfterSeconds)} s; or a finished game read too often, as on getGameSnapshot, or too many requests (rate_limited).`,
                 headers: { 'Retry-After': shared.retryAfter },
                 content: { 'application/json': { schema: watcherLimitError } },
             },
@@ -724,7 +772,7 @@ function registerBotSurface(registry: OpenAPIRegistry, shared: SharedComponents)
         ],
         responses: {
             200: {
-                description: `The event stream, as NDJSON.`,
+                description: `The event stream, as NDJSON; no line is longer than ${kib(serverLineLimitBytes)} KiB. The server ends a stream that leaves more than ${kib(streamBacklogLimitBytes)} KiB unread. A bot whose stream stays closed for ${seconds(orphanForfeitMs)} s forfeits its live games.`,
                 content: {
                     'application/x-ndjson': { schema: streamEventSchema },
                 },
@@ -732,6 +780,11 @@ function registerBotSurface(registry: OpenAPIRegistry, shared: SharedComponents)
             400: shared.badRequest,
             401: shared.botUnauthorized,
             403: shared.banned,
+            429: {
+                description: `A bot opens at most ${rateText(streamOpenLimit)} (rate_limited), or too many requests; a refused open leaves the open stream alone. Retry after Retry-After.`,
+                headers: { 'Retry-After': shared.retryAfter },
+                content: { 'application/json': { schema: rateLimitedError } },
+            },
             503: shared.paused,
         },
     });
@@ -805,10 +858,17 @@ function registerBotSurface(registry: OpenAPIRegistry, shared: SharedComponents)
             },
         ],
         responses: {
-            101: { description: 'Switching protocols; the engine session is open.' },
+            101: {
+                description: `Switching protocols; the engine session is open. No frame the server sends is larger than ${kib(serverLineLimitBytes)} KiB. It closes with 1008 after more than ${String(engineStrayFrameCap)} frames that answer no outstanding request, a malformed frame, or a protocol violation, with 1008 when more than ${kib(streamBacklogLimitBytes)} KiB sent to it go unread, and with 1009 for a frame over ${kib(engineFrameLimitBytes)} KiB. A close forfeits nothing: the clock runs, and the bot may dial again while its game token lives.`,
+            },
             404: {
                 description: `Unknown game, or a game token that is expired or rotated.`,
                 content: { 'application/json': { schema: notFoundError } },
+            },
+            429: {
+                description: `A seat dials at most ${rateText(engineDialLimit)} (rate_limited), or too many requests; refused before the upgrade, so an open session stays. Retry after Retry-After.`,
+                headers: { 'Retry-After': shared.retryAfter },
+                content: { 'application/json': { schema: rateLimitedError } },
             },
         },
     });
@@ -843,7 +903,7 @@ function registerBotSurface(registry: OpenAPIRegistry, shared: SharedComponents)
         operationId: 'createChallenge',
         tags: ['Challenge'],
         security: [{ bearerAuth: [] }],
-        description: `The target must hold its stream open with open=1 and accept the clock. A bot plays at most ${String(botConcurrentGameCap)} games at once. Per UTC day, a bot plays at most ${String(botDailyCap)} bot-vs-bot games, and a pair ${String(pairDailyCap)}. The target holds at most ${String(challengeInboxCap)} pending challenges. A challenge expires after ${seconds(challengeTtlMs)} s. Resending a requestId answers 200 with the stored challenge.`,
+        description: `The target must hold its stream open with open=1 and accept the clock. A bot plays at most ${String(botConcurrentGameCap)} games at once. The target holds at most ${String(challengeInboxCap)} pending challenges, ${String(challengePairPendingCap)} from each challenger. A challenge expires after ${seconds(challengeTtlMs)} s. Resending a requestId answers 200 with the stored challenge.`,
         parameters: [
             {
                 name: 'name',
@@ -866,12 +926,17 @@ function registerBotSurface(registry: OpenAPIRegistry, shared: SharedComponents)
                 content: { 'application/json': { schema: challengeSchema } },
             },
             400: {
-                description: `Validation failed (bad_request), the target is not open (not_open) or excludes the clock (clock_not_accepted), a side is at its game cap (bot_busy), the target's inbox is full (inbox_full), or the pair (daily_pair_cap) or a bot (daily_bot_cap) is at its daily cap.`,
+                description: `Validation failed (bad_request), the target is not open (not_open) or excludes the clock (clock_not_accepted), a side is at its game cap (bot_busy), the target's inbox is full (inbox_full), or the challenger already has a challenge pending with the target (challenge_pending).`,
                 content: {
                     'application/json': {
                         schema: challengeCreateError,
                     },
                 },
+            },
+            429: {
+                description: `Per UTC day a bot sends at most ${String(challengeDailyCap)} challenges (daily_challenge_cap) and plays at most ${String(botDailyCap)} bot-vs-bot games (daily_bot_cap), and a pair ${String(pairDailyCap)} (daily_pair_cap), with Retry-After running to 00:00 UTC; or too many requests (rate_limited).`,
+                headers: { 'Retry-After': shared.retryAfter },
+                content: { 'application/json': { schema: challengeQuotaError } },
             },
             401: shared.botUnauthorized,
             403: {
@@ -957,14 +1022,28 @@ function registerBotSurface(registry: OpenAPIRegistry, shared: SharedComponents)
     });
 }
 
+// Any request may meet a rate limit,
+// so an operation without a 429 of its own takes the shared one;
+// one with named codes lists rate_limited beside them.
+// Any body may pass the size limit.
+function limitEveryOperation(registry: OpenAPIRegistry, shared: SharedComponents): void {
+    for (const definition of registry.definitions) {
+        if (definition.type !== `route`) continue;
+        const { request, responses } = definition.route;
+        if (!(`429` in responses)) responses[429] = shared.rateLimited;
+        if (request?.body !== undefined) responses[413] = shared.payloadTooLarge;
+    }
+}
+
 /**
  * The definitions behind the bot surface alone: every operation a bot token or
  * game token secures, plus the public bot directory.
  */
 export function botSurfaceDefinitions() {
     const registry = new OpenAPIRegistry();
-    const shared = registerSharedComponents(registry);
+    const shared = registerSharedComponents(registry, `bot`);
     registerBotSurface(registry, shared);
+    limitEveryOperation(registry, shared);
     return [...registry.definitions, ...shared.referenced];
 }
 
@@ -980,9 +1059,10 @@ export function renderOpenApiYaml(document: unknown) {
 
 export function buildOpenApiDocument() {
     const registry = new OpenAPIRegistry();
-    const shared = registerSharedComponents(registry);
+    const shared = registerSharedComponents(registry, `site`);
     registerSiteSurface(registry, shared);
     registerBotSurface(registry, shared);
+    limitEveryOperation(registry, shared);
     const generator = new OpenApiGeneratorV3([...registry.definitions, ...shared.referenced]);
     return generator.generateDocument({
         openapi: '3.0.3',

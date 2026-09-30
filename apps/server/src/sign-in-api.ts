@@ -9,6 +9,7 @@ import {
     nextPathOf,
     sessionCookieName,
     signInFailurePath,
+    signInStateCap,
     signupCookieName,
     signupMaxAgeSeconds,
     signupPath,
@@ -21,7 +22,8 @@ import { z } from 'zod';
 import type { Query } from './db';
 import { discordNamesOf, type DiscordIdentity, type DiscordOAuth } from './discord';
 import type { GuestSessions } from './guests';
-import { consumeOAuthState, createOAuthState } from './oauth-state';
+import { consumeOAuthState, createOAuthState, outstandingOAuthStates } from './oauth-state';
+import type { ClientLimits } from './request-limits';
 import { setSessionCookie } from './session-api';
 import { createSession, deleteSession } from './sessions';
 import { dropSignup, findSignup, holdSignup, spendSignupAttempt } from './signups';
@@ -33,6 +35,7 @@ export interface SignInApiDeps {
     discord: DiscordOAuth | null;
     secureCookies: boolean;
     devLogin: boolean;
+    limits: ClientLimits;
 }
 
 // Discord answers with a code, or with an error such as access_denied for
@@ -83,13 +86,18 @@ export function registerSignInApi(app: FastifyInstance, deps: SignInApiDeps): vo
     // A visitor reaches these routes by following links, so every failure
     // is a redirect to the page the sign-in started from, naming its
     // reason, never a JSON body as a page.
-    app.get(discordLoginPath, async (request, reply) => {
+    app.get(discordLoginPath, { config: { limit: `public` } }, async (request, reply) => {
         const next = nextPathOf((request.query as Record<string, unknown>)[nextParam]);
         if (!deps.discord) return reply.redirect(signInFailurePath(`unconfigured`, next));
+        // Each start writes a state row and arms calls to Discord from the box's one address,
+        // so one client's starts and all the waiting ones are bounded.
+        if (deps.limits.wait(`signInStart`, request) !== null || outstandingOAuthStates(query) >= signInStateCap) {
+            return reply.redirect(signInFailurePath(`busy`, next));
+        }
         return reply.redirect(deps.discord.authorizeUrl(createOAuthState(query, next)));
     });
 
-    app.get(discordCallbackPath, async (request, reply) => {
+    app.get(discordCallbackPath, { config: { limit: `public` } }, async (request, reply) => {
         const parsed = callbackQuerySchema.safeParse(request.query);
         const { code, state, error } = parsed.success ? parsed.data : {};
         const issued = state === undefined ? null : consumeOAuthState(query, state);
@@ -103,7 +111,7 @@ export function registerSignInApi(app: FastifyInstance, deps: SignInApiDeps): vo
         return finishSignIn(deps, identity, next, request, reply);
     });
 
-    app.get(signupPath, async (request, reply) => {
+    app.get(signupPath, { config: { limit: `public` } }, async (request, reply) => {
         const token = request.cookies[signupCookieName];
         const signup = token === undefined ? null : findSignup(query, token);
         if (signup === null) return reply.code(410).send({ error: `no sign-up waits for this cookie`, code: `signup_expired` });
@@ -111,7 +119,7 @@ export function registerSignInApi(app: FastifyInstance, deps: SignInApiDeps): vo
         return reply.code(200).send(body);
     });
 
-    app.post(signupPath, async (request, reply) => {
+    app.post(signupPath, { config: { limit: `public` } }, async (request, reply) => {
         const token = request.cookies[signupCookieName];
         const signup = token === undefined ? null : findSignup(query, token);
         if (token === undefined || signup === null) {
@@ -120,7 +128,8 @@ export function registerSignInApi(app: FastifyInstance, deps: SignInApiDeps): vo
         }
         if (!spendSignupAttempt(query, token)) {
             clearSignupCookie(reply, secureCookies);
-            return reply.code(429).send({ error: `the sign-up tried too many names`, code: `signup_limit` });
+            // Waiting revives nothing: the sign-up is spent, as an expired one is.
+            return reply.code(410).send({ error: `the sign-up tried too many names`, code: `signup_limit` });
         }
         const parsed = signupRequestSchema.safeParse(request.body);
         if (!parsed.success) return reply.code(400).send({ error: `the name fails the syntax rules`, code: `invalid_name` });
@@ -142,7 +151,7 @@ export function registerSignInApi(app: FastifyInstance, deps: SignInApiDeps): vo
         return reply.code(201).send({ name: user.name });
     });
 
-    app.delete(signupPath, async (request, reply) => {
+    app.delete(signupPath, { config: { limit: `public` } }, async (request, reply) => {
         const token = request.cookies[signupCookieName];
         if (token !== undefined) dropSignup(query, token);
         clearSignupCookie(reply, secureCookies);
@@ -150,7 +159,7 @@ export function registerSignInApi(app: FastifyInstance, deps: SignInApiDeps): vo
     });
 
     if (deps.devLogin) {
-        app.post(devLoginPath, async (request, reply) => {
+        app.post(devLoginPath, { config: { limit: `public` } }, async (request, reply) => {
             const parsed = devLoginRequestSchema.safeParse(request.body);
             if (!parsed.success) {
                 return reply.code(400).send({ error: `the name fails the syntax rules`, code: `invalid_name` });

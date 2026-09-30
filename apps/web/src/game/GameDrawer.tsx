@@ -6,6 +6,8 @@ import { legalLinks, siteLinks } from '../site-links';
 import { text } from '../text';
 import type { Drawer, DrawerTab } from './use-drawer';
 import type { FeedLine } from './snapshot-views';
+import type { Sent } from './use-game';
+import { useWait, WaitText } from '../components/wait';
 
 const tabs: readonly { id: DrawerTab; label: string }[] = [
     { id: `moves`, label: text.drawer.moves },
@@ -27,7 +29,7 @@ export function GameDrawer({ drawer, feed, facts, running, timed, onResign, peek
     // Whether a clock runs down while nobody moves, as unlimited games have none.
     timed: boolean;
     // Null for a watcher, whose Game tab carries no play keys and no resign.
-    onResign: (() => Promise<boolean>) | null;
+    onResign: (() => Promise<Sent>) | null;
     peek: ReactNode;
 }) {
     const bodyRef = useRef<HTMLDivElement>(null);
@@ -218,11 +220,18 @@ function GameFacts({ facts, running, timed, onResign }: {
     facts: readonly (readonly [string, string])[];
     running: boolean;
     timed: boolean;
-    onResign: (() => Promise<boolean>) | null;
+    onResign: (() => Promise<Sent>) | null;
 }) {
     const [armed, setArmed] = useState(false);
     const [resigning, setResigning] = useState(false);
-    const [failed, setFailed] = useState(false);
+    const [failure, setFailure] = useState<string | null>(null);
+    const limited = useWait();
+    const waiting = limited.wait !== null;
+    const failureRef = useRef<HTMLParagraphElement>(null);
+    // On a phone the panel ends above the line, so the line is brought into view.
+    useEffect(() => {
+        if (failure !== null || waiting) failureRef.current?.scrollIntoView({ block: `nearest` });
+    }, [failure, waiting]);
 
     const playing = running && onResign !== null;
 
@@ -233,7 +242,9 @@ function GameFacts({ facts, running, timed, onResign }: {
             return;
         }
         setResigning(true);
-        setFailed(!(await onResign()));
+        const sent = await onResign();
+        setFailure(sent.kind === `failed` ? text.drawer.resignFailed : null);
+        if (sent.kind === `limited`) limited.start(sent.seconds);
         setResigning(false);
         setArmed(false);
     }
@@ -255,18 +266,26 @@ function GameFacts({ facts, running, timed, onResign }: {
                     {text.drawer.leave}
                 </Link>
                 {playing ? (
-                    <button type="button" className="btn btn-danger" disabled={resigning} onClick={() => void resign()}>
+                    // Held, not disabled, through the request and the wait, so focus stays on it.
+                    <button
+                        type="button"
+                        className="btn btn-danger"
+                        aria-disabled={resigning || waiting ? `true` : undefined}
+                        onClick={() => {
+                            if (!resigning && !waiting) void resign();
+                        }}
+                    >
                         {armed ? text.drawer.confirmResign : text.drawer.resign}
                     </button>
                 ) : null}
             </div>
-            {/* the exit is where a seated player worries about the game */}
-            {playing && timed ? <p className="note">{text.drawer.leaveNote}</p> : null}
-            {playing && failed ? (
-                <p className="hud-note" role="alert">
-                    {text.drawer.resignFailed}
+            {playing && (failure !== null || limited.wait !== null) ? (
+                <p ref={failureRef} className="hud-note" role="alert">
+                    {limited.wait === null ? failure : <WaitText wait={limited.wait} line={text.states.tooMany} />}
                 </p>
             ) : null}
+            {/* the exit is where a seated player worries about the game */}
+            {playing && timed ? <p className="note">{text.drawer.leaveNote}</p> : null}
         </div>
     );
 }

@@ -1,15 +1,17 @@
 import {
     botsPath,
+    engineFrameLimitBytes,
     createBotRequestSchema,
     healthzPath,
     isReservedName,
     nameKeyOf,
     nameSyntaxSchema,
+    requestBodyLimitBytes,
     type LegalDetails,
 } from '@hexo-arena/contract';
 import websocketPlugin from '@fastify/websocket';
 import cookiePlugin from '@fastify/cookie';
-import Fastify, { type FastifyInstance, type FastifyRequest } from 'fastify';
+import Fastify, { errorCodes, type FastifyInstance, type FastifyRequest } from 'fastify';
 import { createAdminHandler } from './admin-ops';
 import type { AdminHandler } from './admin-socket';
 import { createBot, rotateBotToken } from './bots';
@@ -19,7 +21,7 @@ import { ChallengeRegistry, challengeTtlSeconds } from './challenge-registry';
 import { expireStaleChallenges } from './challenge-store';
 import { createQuery, type Query, type Sqlite } from './db';
 import { abortUnfinishedGames } from './game-store';
-import { engineFrameLimitBytes, engineSocketRoute, registerGameApi } from './game-api';
+import { engineSocketRoute, registerGameApi } from './game-api';
 import { GameRegistry, wirePresence } from './game-registry';
 import { registerLeaderboardApi } from './leaderboard-api';
 import { registerLegalApi } from './legal';
@@ -29,6 +31,7 @@ import { deleteBotByPolicy, ownedBotId } from './moderation';
 import type { PresenceRegistry } from './presence';
 import { GuestSessions } from './guests';
 import { registerOgShell } from './og-shell';
+import { defaultLimits, RequestLimits, type LimitTable } from './request-limits';
 import { loggingOptions, type LogTarget } from './request-log';
 import { registerSessionApi } from './session-api';
 import { sessionUser, sweepSessions } from './sessions';
@@ -58,10 +61,17 @@ export interface AppDeps {
     webIndexPath?: string;
     random?: () => number;
     logger?: LogTarget;
+    // Caddy's address on the internal network, whose forwarded client address counts;
+    // null trusts no forwarded address.
+    trustedProxy?: string | null;
+    // The clock the limits count by, and their numbers; tests move and shrink them.
+    now?: () => number;
+    limits?: LimitTable;
 }
 
 export interface BuiltApp {
     app: FastifyInstance;
+    limits: RequestLimits;
     admin: AdminHandler;
     drain: (graceMs: number) => Promise<number>;
 }
@@ -77,7 +87,16 @@ function sweepExpired(query: Query): void {
 }
 
 export async function buildApp(deps: AppDeps): Promise<BuiltApp> {
-    const app = Fastify(loggingOptions(deps.logger));
+    const app = Fastify({ ...loggingOptions(deps.logger), bodyLimit: requestBodyLimitBytes });
+    // Every other error keeps the default answer.
+    app.setErrorHandler((error, _request, reply) => {
+        if (!(error instanceof errorCodes.FST_ERR_CTP_BODY_TOO_LARGE)) throw error;
+        return reply.code(413).send({ error: `request body too large`, code: `payload_too_large` });
+    });
+    // Registered first, so every route after it must name its limit,
+    // and every request spends its tokens before any other hook runs.
+    const limits = new RequestLimits({ table: deps.limits ?? defaultLimits, now: deps.now ?? Date.now, trustedProxy: deps.trustedProxy ?? null });
+    limits.register(app);
     const query = createQuery(deps.sqlite);
     // A process serves only games it created: whatever an earlier process
     // left unfinished is closed here, before any route can reach it.
@@ -87,9 +106,11 @@ export async function buildApp(deps: AppDeps): Promise<BuiltApp> {
     sweepExpired(query);
     const sweep = setInterval(() => {
         sweepExpired(query);
+        limits.sweep();
     }, sweepMs);
     sweep.unref();
     await app.register(cookiePlugin);
+    // One move_response is a few hundred bytes; anything bigger is a broken or hostile client.
     await app.register(websocketPlugin, { options: { maxPayload: engineFrameLimitBytes } });
     // The plugin accepts an upgrade on any route, then logs the raw url as it
     // closes one no socket handler serves; refused here, the upgrade never
@@ -131,29 +152,30 @@ export async function buildApp(deps: AppDeps): Promise<BuiltApp> {
         challenges.stop();
         games.stop();
     });
-    registerBotApi(app, { query, presence, gate, games });
-    registerChallengeApi(app, { query, presence, games, challenges, gate });
-    registerGameApi(app, { query, presence, games, watchers, gate, guests });
+    registerBotApi(app, { query, presence, gate, games, limits });
+    registerChallengeApi(app, { query, presence, games, challenges, gate, limits });
+    registerGameApi(app, { query, presence, games, watchers, gate, guests, limits });
     registerLeaderboardApi(app, { query });
     registerLegalApi(app, deps.legalDetails);
-    registerSessionApi(app, { query, guests, secureCookies: deps.secureCookies });
-    registerSignInApi(app, { query, guests, discord: deps.discord, secureCookies: deps.secureCookies, devLogin: deps.devLogin });
+    registerSessionApi(app, { query, guests, secureCookies: deps.secureCookies, limits });
+    registerSignInApi(app, { query, guests, discord: deps.discord, secureCookies: deps.secureCookies, devLogin: deps.devLogin, limits });
     if (deps.webIndexPath !== undefined) {
         registerOgShell(app, { query, presence, games, indexPath: deps.webIndexPath, publicOrigin: deps.publicOrigin });
     }
-    const admin = createAdminHandler({ query, presence, games, challenges, actor: deps.adminActor });
+    const admin = createAdminHandler({ query, presence, games, challenges, limits, actor: deps.adminActor });
 
-    app.get(healthzPath, async (_request, reply) => {
+    app.get(healthzPath, { config: { limit: `public` } }, async (_request, reply) => {
         // One bit: up and serving, or up and refusing new starts, which
         // uptime monitors read as the pause signal.
         // No version, no uptime, nothing else.
         reply.code(gate.closed() ? 503 : 200).send();
     });
-    app.post(botsPath, async (request, reply) => {
+    app.post(botsPath, { config: { limit: `botManagement` } }, async (request, reply) => {
         const user = sessionUser(query, request);
         if (!user) {
             return reply.code(401).send({ error: `no session`, code: `unauthorized` });
         }
+        if (limits.refuse(reply, `botManagement`, `user:${user.id}`)) return reply;
         const parsed = createBotRequestSchema.safeParse(request.body);
         if (!parsed.success) {
             return reply
@@ -178,11 +200,12 @@ export async function buildApp(deps: AppDeps): Promise<BuiltApp> {
         return reply.code(201).send({ name: result.name, token: result.token });
     });
 
-    app.delete(`/api/bots/:name`, async (request: FastifyRequest<{ Params: { name: string } }>, reply) => {
+    app.delete(`/api/bots/:name`, { config: { limit: `botManagement` } }, async (request: FastifyRequest<{ Params: { name: string } }>, reply) => {
         const user = sessionUser(query, request);
         if (!user) {
             return reply.code(401).send({ error: `no session`, code: `unauthorized` });
         }
+        if (limits.refuse(reply, `botManagement`, `user:${user.id}`)) return reply;
         const name = request.params.name;
         if (!nameSyntaxSchema.safeParse(name).success) {
             return reply.code(404).send({ error: `no such bot`, code: `not_found` });
@@ -200,11 +223,12 @@ export async function buildApp(deps: AppDeps): Promise<BuiltApp> {
         return reply.code(204).send();
     });
 
-    app.post(`/api/bots/:name/token`, async (request: FastifyRequest<{ Params: { name: string } }>, reply) => {
+    app.post(`/api/bots/:name/token`, { config: { limit: `botManagement` } }, async (request: FastifyRequest<{ Params: { name: string } }>, reply) => {
         const user = sessionUser(query, request);
         if (!user) {
             return reply.code(401).send({ error: `no session`, code: `unauthorized` });
         }
+        if (limits.refuse(reply, `botManagement`, `user:${user.id}`)) return reply;
         const name = request.params.name;
         if (!nameSyntaxSchema.safeParse(name).success) {
             return reply.code(404).send({ error: `no such bot`, code: `not_found` });
@@ -216,5 +240,5 @@ export async function buildApp(deps: AppDeps): Promise<BuiltApp> {
         return reply.code(200).send(rotated);
     });
 
-    return { app, admin, drain: (graceMs) => drain({ query, gate, games, generation }, graceMs) };
+    return { app, admin, limits, drain: (graceMs) => drain({ query, gate, games, generation }, graceMs) };
 }

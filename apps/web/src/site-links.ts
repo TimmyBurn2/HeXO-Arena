@@ -12,6 +12,7 @@ export type SiteLink = { kind: `page`; label: string; to: string } | { kind: `ex
  * in its drawer; a new standing link is one more row.
  */
 export const siteLinks: readonly SiteLink[] = [
+    { kind: `page`, label: text.shell.links.build, to: `/connect` },
     { kind: `page`, label: text.shell.links.credits, to: `/credits` },
     { kind: `external`, label: text.shell.links.botApi, href: botApiRepository },
 ];

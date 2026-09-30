@@ -125,10 +125,10 @@ function GuestIdentity({ me }: { me: GuestMe }) {
 // delisted is absent there, so it is absent here too, and the note says so.
 function YourBots({ owner }: { owner: string }) {
     const load = useCallback(async () => fetchBots(false), []);
-    const { data, error, loading, reload } = useAsync(load);
+    const { data, error, limited, loading, reload } = useAsync(load);
 
     if (loading && data === null) return <SkeletonRows />;
-    if (error && data === null) return <ErrorFrame sentence={text.profile.botsFailed} onRetry={reload} />;
+    if (error && data === null) return <ErrorFrame sentence={text.profile.botsFailed} onRetry={reload} wait={limited} />;
     const mine = (data ?? []).filter((bot) => bot.ownerName === owner);
 
     return (

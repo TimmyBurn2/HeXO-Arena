@@ -15,6 +15,14 @@ describe('parseRoute', () => {
         expect(parseRoute(`/credits`)).toEqual({ name: `credits` });
     });
 
+    it('route the live games under /games, and nothing else there yet', () => {
+        expect(parseRoute(`/games/live`)).toEqual({ name: `live-games` });
+        expect(parseRoute(`/games/live/`)).toEqual({ name: `live-games` });
+        expect(routePath({ name: `live-games` })).toBe(`/games/live`);
+        expect(parseRoute(`/games`)).toEqual({ name: `not-found` });
+        expect(parseRoute(`/games/finished`)).toEqual({ name: `not-found` });
+    });
+
     it('route the first sign-in to its own page', () => {
         expect(parseRoute(`/welcome`)).toEqual({ name: `welcome` });
         expect(routePath({ name: `welcome` })).toBe(`/welcome`);
@@ -68,6 +76,7 @@ describe('routePath', () => {
             { name: `ladder` },
             { name: `bots` },
             { name: `bot`, bot: `sealbot` },
+            { name: `live-games` },
             { name: `connect` },
             { name: `profile` },
             { name: `credits` },

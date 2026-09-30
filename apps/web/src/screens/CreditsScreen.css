@@ -133,6 +133,8 @@
         cursor: pointer;
     }
 
+    /* Three and three while the names fit, then two and one a row as
+       large text leaves each tile less room than its longest name. */
     @media (max-width: 40rem) {
         .theme-row {
             grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -140,6 +142,18 @@
         }
 
         .credit-row {
+            grid-template-columns: minmax(0, 1fr);
+        }
+    }
+
+    @media (max-width: 17.5rem) {
+        .theme-row {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+    }
+
+    @media (max-width: 13rem) {
+        .theme-row {
             grid-template-columns: minmax(0, 1fr);
         }
     }

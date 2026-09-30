@@ -47,7 +47,6 @@
     .identity-monogram,
     .sigil-plate,
     .from-discord-plate,
-    .swatch,
     .pip,
     .steps .step-n {
         clip-path: var(--hex-path);
@@ -62,6 +61,7 @@
     .rung,
     .rung-skeleton,
     .live-game,
+    .live-card,
     .bot-plate,
     .bot-card,
     .identity-plate,
@@ -119,9 +119,17 @@
         clip-path: var(--cut-md-path);
     }
 
-    /* On the game stage the board is the screen, not a surface on it. */
-    .board-camera .board-frame {
+    /* On the game stage the board is the screen, not a surface on it,
+       and a mini is the top of the card that cuts it. */
+    .board-camera .board-frame,
+    .mini-board .board-frame {
         clip-path: none;
+    }
+
+    /* The card is the link's target, so the card shows its focus. */
+    .live-card:has(.live-card-link:focus-visible) {
+        outline: var(--focus-w) solid var(--c-focus);
+        outline-offset: calc(-1 * var(--focus-w));
     }
 
     .btn:focus-visible,

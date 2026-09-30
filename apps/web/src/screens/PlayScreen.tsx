@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState, useSyncExternalStore } from 'react';
 import { nameKeyOf, playMeta, type BotListing, type OpeningPlies, type TimeControl } from '@hexo-arena/contract';
-import { fetchBots } from '../api/client';
+import { fetchBots, limitedFor } from '../api/client';
 import { liveRefreshMs } from '../api/use-live-games';
 import { BotBadge, Rating } from '../components/player';
 import { ErrorFrame, SkeletonRows } from '../components/states';
@@ -25,13 +25,15 @@ function useBotList() {
     const [bots, setBots] = useState<BotListing[] | null>(null);
     const [reads, setReads] = useState(0);
     const [failed, setFailed] = useState(false);
+    const [limited, setLimited] = useState<number | null>(null);
     const reload = useCallback(async () => {
         try {
             setBots(await fetchBots(false));
             setReads((count) => count + 1);
             setFailed(false);
-        } catch {
+        } catch (cause) {
             setFailed(true);
+            setLimited(limitedFor(cause));
         }
     }, []);
     useEffect(() => {
@@ -48,7 +50,7 @@ function useBotList() {
             document.removeEventListener(`visibilitychange`, onVisible);
         };
     }, [reload]);
-    return { bots, reads, failed, reload };
+    return { bots, reads, failed, limited, reload };
 }
 
 function readAsked() {
@@ -110,7 +112,8 @@ export function PlayScreen() {
     // Until the person picks, the page stays on the bot it opened on,
     // so a list read after a refusal never swaps the card under the line that explains it.
     // A bot picked or opened on that leaves the list gives way, once, to a new preselect the page then stays on,
-    // and its name stays in a line.
+    // and its name stays in a line;
+    // listed again before the person picks, it takes the card back.
     const rating = me.status === `ready` && me.me?.kind === `user` ? me.me.rating : null;
     const fallback =
         ready && pickedBot === null && openedBot === null ? preselect(bots, picked === null && lost === null ? asked.bot : null, played.opponent, rating) : null;
@@ -124,6 +127,9 @@ export function PlayScreen() {
         } else if (picked === null && opened !== null && find(opened) === null) {
             setLost(opened);
             setOpened(null);
+        } else if (picked === null && lost !== null && find(lost) !== null) {
+            setOpened(lost);
+            setLost(null);
         } else if (picked === null && opened === null && fallback !== null) {
             setOpened(fallback.name);
         }
@@ -161,7 +167,7 @@ export function PlayScreen() {
         return (
             <>
                 <h1 className="screen-title">{text.play.title}</h1>
-                {list.failed && bots === null ? <ErrorFrame sentence={text.play.listFailed} onRetry={() => void list.reload()} /> : <SkeletonRows />}
+                {list.failed && bots === null ? <ErrorFrame sentence={text.play.listFailed} onRetry={() => void list.reload()} wait={list.limited} /> : <SkeletonRows />}
             </>
         );
     }

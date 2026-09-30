@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { meStore } from '../src/me';
 import { ConnectScreen } from '../src/screens/ConnectScreen';
@@ -100,6 +100,42 @@ describe('ConnectScreen', () => {
         type(`sealbot`);
         fireEvent.click(screen.getByRole(`button`, { name: `Create bot` }));
         expect(await screen.findByText(`That name is taken`)).toBeTruthy();
+    });
+
+    it('hold Create bot for the wait a rate-limited creation names, counting it down', async () => {
+        vi.useFakeTimers({ toFake: [`setInterval`, `clearInterval`, `Date`] });
+        try {
+            vi.stubGlobal(
+                `fetch`,
+                vi.fn(() =>
+                    Promise.resolve(
+                        new Response(JSON.stringify({ error: `slow down`, code: `rate_limited` }), { status: 429, headers: { 'retry-after': `2` } }),
+                    ),
+                ),
+            );
+            render(<ConnectScreen />);
+            type(`sealbot`);
+            const create = screen.getByRole(`button`, { name: `Create bot` });
+            fireEvent.click(create);
+            const shown = () => document.querySelector(`.field-error [aria-hidden="true"]`)?.textContent;
+            await waitFor(() => {
+                expect(shown()).toBe(`Too many tries; try again in 2 s`);
+            });
+            expect(document.querySelector(`.field-error .sr-only`)?.textContent).toBe(`Too many tries; try again in 2 s`);
+            expect(create.hasAttribute(`disabled`)).toBe(true);
+            await act(async () => {});
+            act(() => {
+                vi.advanceTimersByTime(1000);
+            });
+            expect(shown()).toBe(`Too many tries; try again in 1 s`);
+            act(() => {
+                vi.advanceTimersByTime(1000);
+            });
+            expect(screen.queryByText(/try again in/u)).toBe(null);
+            expect(create.hasAttribute(`disabled`)).toBe(false);
+        } finally {
+            vi.useRealTimers();
+        }
     });
 
     it('point a signed-out creator at step one', async () => {

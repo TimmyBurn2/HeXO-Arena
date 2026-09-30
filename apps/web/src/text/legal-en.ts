@@ -102,7 +102,7 @@ function privacy(details: LegalDetails, links: LegalLinks) {
                 heading: `Visiting the site`,
                 blocks: [
                     text(
-                        `When you open a page, your browser sends the server your IP address and technical data such as the page's address, the time, and the browser type. The server needs these to deliver the page and to protect the service. The web server keeps no access log. The application log records the route called, the status, and errors, without IP addresses or names, and is rotated by size.`,
+                        `When you open a page, your browser sends the server your IP address and technical data such as the page's address, the time, and the browser type. The server needs these to deliver the page and to protect the service. To stop any one visitor from flooding the site, the server counts requests under a keyed hash of your IP address (for IPv6, of its first half). The hash and its counts stay in the server's memory for an hour at most after your last request, or while you watch a game; they are never written to disk or to a log, and the key behind the hash is random and replaced every day. The web server keeps no access log. The application log records the route called, the status, and errors, without IP addresses or names, and is rotated by size.`,
                     ),
                     text(`Legal basis: Art. 6(1)(f) GDPR; the legitimate interest is delivering the site and keeping it secure.`),
                 ],
@@ -244,6 +244,7 @@ function privacy(details: LegalDetails, links: LegalLinks) {
                         `Unfinished sign-ups: ${String(signupMinutes)} minutes.`,
                         `Your Discord username and display name: with the session, ${String(sessionDays)} days at most.`,
                         `Guest data: in memory only.`,
+                        `Request counters against flooding: in memory, an hour at most.`,
                         `Games: kept as the public record, under a placeholder after account deletion.`,
                         `Moderation records: no set end yet.`,
                         `Backups: 14 days.`,

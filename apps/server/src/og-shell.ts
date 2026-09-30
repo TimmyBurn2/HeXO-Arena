@@ -10,6 +10,7 @@ import {
     legalPageMeta,
     legalPagePath,
     legalPages,
+    liveGamesMeta,
     nameKeyOf,
     nameSyntaxSchema,
     notFoundMeta,
@@ -77,6 +78,7 @@ export function renderShell(template: string, meta: PageMeta, publicOrigin: stri
 // Pages whose meta needs no data, each at its own path.
 const fixedPages: readonly (readonly [string, PageMeta])[] = [
     [`/bots`, botsMeta],
+    [`/games/live`, liveGamesMeta],
     [`/connect`, connectMeta],
     [`/profile`, profileMeta],
     [`/credits`, creditsMeta],
@@ -118,13 +120,13 @@ export function registerOgShell(app: FastifyInstance, deps: OgShellDeps): void {
         };
     }
 
-    app.get(`/`, async (_request, reply) => sendShell(reply, 200, siteMeta(roster())));
+    app.get(`/`, { config: { limit: `shell` } }, async (_request, reply) => sendShell(reply, 200, siteMeta(roster())));
 
-    app.get(`/ladder`, async (_request, reply) => sendShell(reply, 200, ladderMeta(roster())));
+    app.get(`/ladder`, { config: { limit: `shell` } }, async (_request, reply) => sendShell(reply, 200, ladderMeta(roster())));
 
     // A link to Play with a bot previews with the bot's name when the
     // directory lists it; the query is read, never logged.
-    app.get<{ Querystring: { bot?: unknown } }>(`/play`, async (request, reply) => {
+    app.get<{ Querystring: { bot?: unknown } }>(`/play`, { config: { limit: `shell` } }, async (request, reply) => {
         const named = request.query.bot;
         const key = typeof named === `string` && nameSyntaxSchema.safeParse(named).success ? nameKeyOf(named) : null;
         const bot = key === null ? undefined : listBots(query).find((row) => nameKeyOf(row.name) === key);
@@ -132,10 +134,10 @@ export function registerOgShell(app: FastifyInstance, deps: OgShellDeps): void {
     });
 
     for (const [path, meta] of fixedPages) {
-        app.get(path, async (_request, reply) => sendShell(reply, 200, meta));
+        app.get(path, { config: { limit: `shell` } }, async (_request, reply) => sendShell(reply, 200, meta));
     }
 
-    app.get<{ Params: { name: string } }>(`/bots/:name`, async (request, reply) => {
+    app.get<{ Params: { name: string } }>(`/bots/:name`, { config: { limit: `shell` } }, async (request, reply) => {
         const { name } = request.params;
         const key = nameSyntaxSchema.safeParse(name).success ? nameKeyOf(name) : null;
         // The directory's own filter decides visibility, so a hidden bot
@@ -157,7 +159,7 @@ export function registerOgShell(app: FastifyInstance, deps: OgShellDeps): void {
         );
     });
 
-    app.get<{ Params: { gameId: string } }>(`/game/:gameId`, async (request, reply) => {
+    app.get<{ Params: { gameId: string } }>(`/game/:gameId`, { config: { limit: `shell` } }, async (request, reply) => {
         const { gameId } = request.params;
         const headline = games.headline(gameId);
         return headline === null ? sendShell(reply, 404, notFoundMeta) : sendShell(reply, 200, gameMeta(headline));

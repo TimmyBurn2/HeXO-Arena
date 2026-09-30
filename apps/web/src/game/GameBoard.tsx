@@ -6,6 +6,8 @@ import { useBoardSettings } from '../board/board-settings';
 import { cellSize, frontierCells, viewBoxOf } from '../board/geometry';
 import { text } from '../text';
 import { rejectionNote } from './snapshot-views';
+import type { Sent } from './use-game';
+import { useWait, type Wait } from '../components/wait';
 import './GameBoard.css';
 
 const sixKeys: Record<string, AxialCoord> = {
@@ -21,6 +23,7 @@ const sixKeys: Record<string, AxialCoord> = {
 export interface TurnStatus {
     placed: 0 | 1;
     note: string | null;
+    wait: Wait | null;
 }
 
 // A cell spans this many svg units edge to edge across its flats.
@@ -81,13 +84,16 @@ export function GameBoard({
     finished: boolean;
     // What the board's accessible name says whenever it is not your move.
     idleLabel: string;
-    onCommit: (cells: readonly [AxialCoord, AxialCoord]) => Promise<boolean>;
+    onCommit: (cells: readonly [AxialCoord, AxialCoord]) => Promise<Sent>;
     onStatus?: ((status: TurnStatus) => void) | undefined;
 }) {
     const [settings] = useBoardSettings();
     const [focus, setFocus] = useState<AxialCoord>(() => stones.at(-1) ?? { x: 0, y: 0 });
     const [pending, setPending] = useState<AxialCoord | null>(null);
     const [note, setNote] = useState<string | null>(null);
+    const limited = useWait();
+    const { start: startWait, clear: clearWait } = limited;
+    const waiting = limited.wait !== null;
     const [sending, setSending] = useState(false);
     const cameraRef = useRef<HTMLDivElement>(null);
     const [size, setSize] = useState<{ w: number; h: number } | null>(null);
@@ -96,16 +102,17 @@ export function GameBoard({
     const box = useMemo(() => viewBoxOf(frontierCells(stones)), [stones]);
 
     useEffect(() => {
-        onStatus?.({ placed: pending === null ? 0 : 1, note });
-    }, [pending, note, onStatus]);
+        onStatus?.({ placed: pending === null ? 0 : 1, note, wait: limited.wait });
+    }, [pending, note, limited.wait, onStatus]);
 
     // The opponent's move or the finish leaves the board static.
     useEffect(() => {
         if (!yourMove) {
             setPending(null);
             setNote(null);
+            clearWait();
         }
-    }, [yourMove]);
+    }, [yourMove, clearWait]);
 
     useEffect(() => {
         const camera = cameraRef.current;
@@ -176,16 +183,21 @@ export function GameBoard({
                 setNote(null);
                 return;
             }
+            // A turn sent during its wait is only refused again,
+            // so the first stone stays marked until the wait ends.
+            if (waiting) return;
             const pair: readonly [AxialCoord, AxialCoord] = [pending, cell];
             setSending(true);
             setPending(null);
             setNote(null);
-            void onCommit(pair).then((landed) => {
+            void onCommit(pair).then((sent) => {
                 setSending(false);
-                if (!landed) setNote(text.drawer.turnFailed);
+                if (sent.kind === `limited`) startWait(sent.seconds);
+                else clearWait();
+                if (sent.kind === `failed`) setNote(text.drawer.turnFailed);
             });
         },
-        [yourMove, sending, pending, position, onCommit],
+        [yourMove, sending, pending, position, waiting, onCommit, startWait, clearWait],
     );
 
     function handleKey(event: React.KeyboardEvent<HTMLDivElement>) {

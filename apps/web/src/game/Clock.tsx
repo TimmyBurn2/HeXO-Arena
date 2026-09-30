@@ -4,21 +4,25 @@ import './Clock.css';
 /**
  * A clock that ticks down from the snapshot's reading; the interval is
  * scoped here, so the board and feed never re-render on a tick.
+ * `since`, in epoch milliseconds, is when the reading was taken,
+ * for a clock that appears after its reading;
+ * absent, the reading is fresh.
  */
-export function Clock({ remainingMs, running }: { remainingMs: number; running: boolean }) {
-    const [elapsed, setElapsed] = useState(0);
+export function Clock({ remainingMs, running, since }: { remainingMs: number; running: boolean; since?: number }) {
+    const [elapsed, setElapsed] = useState(() => (running && since !== undefined ? Math.max(0, Date.now() - since) : 0));
 
     useEffect(() => {
-        setElapsed(0);
+        const aged = since === undefined ? 0 : Math.max(0, Date.now() - since);
+        setElapsed(running ? aged : 0);
         if (!running) return;
-        const startedAt = performance.now();
+        const startedAt = performance.now() - aged;
         const timer = setInterval(() => {
             setElapsed(performance.now() - startedAt);
         }, 100);
         return () => {
             clearInterval(timer);
         };
-    }, [remainingMs, running]);
+    }, [remainingMs, running, since]);
 
     const ms = Math.max(0, remainingMs - elapsed);
     const seconds = Math.floor(ms / 1000);

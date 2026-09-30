@@ -1,9 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { limitedFor } from './client';
 
 export interface AsyncView<T> {
     data: T | null;
     loading: boolean;
     error: boolean;
+    // The seconds a rate-limited failure asks to wait before the retry.
+    limited: number | null;
     reload: () => void;
 }
 
@@ -16,6 +19,7 @@ export function useAsync<T>(load: () => Promise<T>): AsyncView<T> {
     const [data, setData] = useState<T | null>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(false);
+    const [limited, setLimited] = useState<number | null>(null);
     const [attempt, setAttempt] = useState(0);
     const hadData = useRef(false);
 
@@ -30,9 +34,10 @@ export function useAsync<T>(load: () => Promise<T>): AsyncView<T> {
                 setData(value);
                 setLoading(false);
             })
-            .catch(() => {
+            .catch((cause: unknown) => {
                 if (cancelled) return;
                 setError(true);
+                setLimited(limitedFor(cause));
                 setLoading(false);
             });
         return () => {
@@ -44,5 +49,5 @@ export function useAsync<T>(load: () => Promise<T>): AsyncView<T> {
         setAttempt((current) => current + 1);
     }, []);
 
-    return { data, error, loading, reload };
+    return { data, error, limited, loading, reload };
 }

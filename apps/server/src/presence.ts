@@ -1,4 +1,4 @@
-import { streamKeepaliveMs, type StreamEvent } from '@hexo-arena/contract';
+import { streamBacklogLimitBytes, streamKeepaliveMs, type StreamEvent } from '@hexo-arena/contract';
 
 // Presence is the connection: the registry holds one live stream per bot and
 // nothing else, so online and open-for-challenges can never go stale.
@@ -15,6 +15,7 @@ export type PresenceWatcher = (botId: string, online: boolean) => void;
 // The subset of http.ServerResponse the registry needs; narrowing to it
 // keeps the registry unit-testable against a plain fake.
 export interface StreamSocket {
+    readonly writableLength: number;
     write(chunk: string): void;
     end(): void;
     once(event: `close`, listener: () => void): void;
@@ -45,7 +46,7 @@ export class PresenceRegistry {
     attach(botId: string, socket: StreamSocket, openForChallenges: boolean): void {
         this.close(botId);
         const keepalive = setInterval(() => {
-            socket.write(`\n`);
+            this.#write(botId, `\n`);
         }, streamKeepaliveMs);
         const entry: Entry = { socket, openForChallenges, keepalive };
         this.#entries.set(botId, entry);
@@ -95,6 +96,15 @@ export class PresenceRegistry {
     // A game event for a bot that is not connected is simply missed; the
     // replay on its next attach covers recovery.
     send(botId: string, event: StreamEvent): void {
-        this.#entries.get(botId)?.socket.write(toLine(event));
+        this.#write(botId, toLine(event));
+    }
+
+    // A reader that stopped would otherwise hold in memory every line sent it,
+    // so past the backlog limit its stream ends and it redials.
+    #write(botId: string, chunk: string): void {
+        const entry = this.#entries.get(botId);
+        if (entry === undefined) return;
+        entry.socket.write(chunk);
+        if (entry.socket.writableLength > streamBacklogLimitBytes) this.close(botId);
     }
 }

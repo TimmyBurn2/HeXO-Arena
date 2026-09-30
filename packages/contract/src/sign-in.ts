@@ -57,7 +57,7 @@ export function discordLoginHref(next: string): string {
  * account is banned.
  */
 export const signInFailureSchema = z
-    .enum([`unconfigured`, `cancelled`, `expired`, `rejected`, `banned`])
+    .enum([`unconfigured`, `cancelled`, `expired`, `rejected`, `banned`, `busy`])
     .meta({ id: `SignInFailure`, description: `Why a Discord sign-in did not finish.` });
 export type SignInFailure = z.infer<typeof signInFailureSchema>;
 

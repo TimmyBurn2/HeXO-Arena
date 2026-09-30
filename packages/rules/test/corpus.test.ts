@@ -9,6 +9,7 @@ import {
     place,
     type Player,
     playerToMove,
+    replay,
     winner,
 } from '../src';
 
@@ -111,6 +112,24 @@ describe('differential corpus', () => {
                 if (!result.ok) {
                     expect(result.rejection.kind).toBe(probe.rejects);
                 }
+            }
+        }
+    });
+
+    it('replays every oracle trace in one pass to the same board, outcome and refusals', () => {
+        const corpus = loadCorpus();
+        for (const trace of corpus.traces) {
+            const moves = trace.moves.map((move) => ({ x: move.x, y: move.y }));
+            const replayed = replay(moves);
+            if (!replayed.ok) throw new Error(`corpus move rejected: ${replayed.rejection.kind}`);
+            expect(cellIds(replayed.position.stones)).toEqual(cellIds(trace.finalStones.map((stone) => ({ x: stone.x, y: stone.y, player: stone.p }))));
+            expect(replayed.win?.player ?? null).toBe(trace.outcome.winner);
+            expect(replayed.win?.cells ?? null).toEqual(trace.outcome.line);
+            for (const probe of trace.probes) {
+                const probed = replay([...moves, { x: probe.x, y: probe.y }]);
+                // A won game ends the replay at its last move, so the probe is never placed.
+                if (probe.rejects === `game-finished`) expect(probed).toEqual(replayed);
+                else expect(probed).toEqual({ ok: false, index: moves.length, rejection: { kind: probe.rejects } });
             }
         }
     });

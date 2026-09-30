@@ -2,8 +2,9 @@ import { Fragment, useCallback } from 'react';
 import { botMeta, nameKeyOf, notFoundMeta, type BotListing, type LiveGameEntry } from '@hexo-arena/contract';
 import { fetchBots } from '../api/client';
 import { useAsync } from '../api/use-async';
-import { useLiveGames } from '../api/use-live-games';
 import { OwnerPanel } from '../components/OwnerPanel';
+import { LiveGameGrid } from '../live/LiveGameCard';
+import { useLiveReplay } from '../live/use-live-replay';
 import { BotBadge, OpenTag, PresenceDot, Rating } from '../components/player';
 import { useMe } from '../me';
 import { turnWindowOf } from '../play/accepts';
@@ -19,7 +20,7 @@ import './BotScreen.css';
 export function BotScreen({ name }: { name: string }) {
     const route = useRoute();
     const load = useCallback(async () => fetchBots(false), []);
-    const { data, error, loading, reload } = useAsync(load);
+    const { data, error, limited, loading, reload } = useAsync(load);
     const bot = data?.find((entry) => nameKeyOf(entry.name) === nameKeyOf(name));
 
     // A bot the list does not hold reads as any missing page, as the
@@ -28,7 +29,14 @@ export function BotScreen({ name }: { name: string }) {
     useDocumentMeta(route, meta?.title, meta?.description);
 
     if (loading && data === null) return <SkeletonRows />;
-    if (error && data === null) return <ErrorFrame sentence={text.bot.failed} onRetry={reload} />;
+    if (error && data === null) {
+        return (
+            <>
+                <h1 className="screen-title">{name}</h1>
+                <ErrorFrame sentence={text.bot.failed} onRetry={reload} wait={limited} />
+            </>
+        );
+    }
     if (data !== null && bot === undefined) return <MissingBot name={name} />;
     if (bot === undefined) return null;
 
@@ -84,8 +92,6 @@ function BotProfile({ bot }: { bot: BotListing }) {
                     </div>
                 </header>
             </div>
-
-            <LiveLinks bot={bot.name} />
 
             {bot.about !== undefined ? <p className="about">{bot.about}</p> : null}
 
@@ -161,6 +167,7 @@ function BotProfile({ bot }: { bot: BotListing }) {
                     </>
                 )}
             </p>
+            <PlayingNow bot={bot.name} />
             {owned ? <OwnerPanel bot={bot.name} /> : null}
         </>
     );
@@ -172,24 +179,18 @@ function playing(entry: LiveGameEntry, bot: string): boolean {
     return [entry.players.x, entry.players.o].some((player) => player.kind === `bot` && player.name === bot);
 }
 
-// Every game the bot plays right now, from the same list the ladder rail
-// reads, so the page needs no read of its own.
-function LiveLinks({ bot }: { bot: string }) {
-    const games = (useLiveGames().data ?? []).filter((entry) => playing(entry, bot));
+// Every game the bot plays right now, as boards, from the list the live
+// pages read.
+function PlayingNow({ bot }: { bot: string }) {
+    const games = (useLiveReplay().games ?? []).filter((game) => playing(game.entry, bot));
     if (games.length === 0) return null;
     return (
-        <p className="bot-live">
-            <span className="dot" aria-hidden="true" />
-            <span>{text.bot.playingNow}</span>
-            {games.map((entry) => {
-                const opponent = entry.players.x.name === bot ? entry.players.o : entry.players.x;
-                return (
-                    <Link key={entry.gameId} to={`/game/${encodeURIComponent(entry.gameId)}`} className="btn btn-ghost btn-sm">
-                        {text.bot.watchVs(opponent.name)}
-                    </Link>
-                );
-            })}
-        </p>
+        <section className="bot-live" aria-labelledby="playing-title">
+            <h2 id="playing-title" className="section-title">
+                {text.bot.playingNow}
+            </h2>
+            <LiveGameGrid games={games} level={3} />
+        </section>
     );
 }
 

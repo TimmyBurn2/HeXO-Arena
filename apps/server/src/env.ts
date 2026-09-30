@@ -1,3 +1,4 @@
+import { isIP } from 'node:net';
 import { z } from 'zod';
 
 const envShape = z.object({
@@ -33,6 +34,14 @@ const envShape = z.object({
     BACKUP_DIR: z.string().default(``),
     BACKUP_KEEP: z.coerce.number().int().min(1).max(365).default(14),
     BACKUP_HOUR_UTC: z.coerce.number().int().min(0).max(23).default(3),
+    // Caddy's fixed address on the internal network:
+    // from this peer alone the last X-Forwarded-For address is the visitor's,
+    // which the rate limits key by;
+    // empty trusts no forwarded address.
+    TRUSTED_PROXY: z
+        .string()
+        .default(``)
+        .refine((value) => value === `` || isIP(value) !== 0, { message: `TRUSTED_PROXY must be an IP address` }),
 });
 
 /** Every variable the server reads; `.env.example` lists exactly these. */
@@ -57,10 +66,17 @@ const envSchema = envShape
         message: `LEGAL_DETAILS_PATH must name the legal details file when NODE_ENV is production`,
         path: [`LEGAL_DETAILS_PATH`],
     })
-    .transform(({ DEV_LOGIN, DEV_FAST_STOP, ...env }) => ({
+    // Without the proxy's address every visitor is one keyless caller,
+    // so production refuses to run with only the global limits by mistake.
+    .refine((env) => env.NODE_ENV !== `production` || env.TRUSTED_PROXY !== ``, {
+        message: `TRUSTED_PROXY must name the proxy's address when NODE_ENV is production`,
+        path: [`TRUSTED_PROXY`],
+    })
+    .transform(({ DEV_LOGIN, DEV_FAST_STOP, TRUSTED_PROXY, ...env }) => ({
         ...env,
         DEV_LOGIN: DEV_LOGIN === `1`,
         DEV_FAST_STOP: DEV_FAST_STOP === `1`,
+        TRUSTED_PROXY: TRUSTED_PROXY === `` ? null : TRUSTED_PROXY,
     }));
 
 export type Env = z.infer<typeof envSchema>;

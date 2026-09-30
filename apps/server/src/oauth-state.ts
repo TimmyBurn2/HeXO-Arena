@@ -1,4 +1,4 @@
-import { eq, lt } from 'drizzle-orm';
+import { count, eq, gte, lt } from 'drizzle-orm';
 import { nowSeconds, type Query } from './db';
 import { authStates } from './db/schema';
 import { randomToken } from './tokens';
@@ -18,6 +18,11 @@ export function createOAuthState(query: Query, next: string): string {
         .values({ state, nonce, expiresAt: now + stateTtlSeconds, next })
         .run();
     return `${state}.${nonce}`;
+}
+
+/** Sign-ins started and not yet back from Discord, whose states have not expired. */
+export function outstandingOAuthStates(query: Query): number {
+    return query.select({ n: count() }).from(authStates).where(gte(authStates.expiresAt, nowSeconds())).get()?.n ?? 0;
 }
 
 /** The return path of a state issued here, once; null for one unknown, used, or expired. */

@@ -16,6 +16,7 @@ const running: GameSnapshot = {
             { x: 0, y: 1, side: `o` },
         ],
     },
+    timeControl: { mode: `turn`, turnTimeMs: 30_000 },
     status: `in-progress`,
     toMove: `x`,
     clock: { mode: `turn`, remainingTurnMs: 30_000 },

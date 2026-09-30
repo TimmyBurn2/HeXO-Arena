@@ -1,4 +1,4 @@
-import { streamKeepaliveMs, type StreamEvent } from '@hexo-arena/contract';
+import { streamBacklogLimitBytes, streamKeepaliveMs, type StreamEvent } from '@hexo-arena/contract';
 import { describe, expect, it, vi } from 'vitest';
 import { PresenceRegistry } from '../src/presence';
 import { FakeStreamSocket } from './helpers';
@@ -155,5 +155,24 @@ describe('PresenceRegistry open declaration', () => {
         registry.attach(`bot`, new FakeStreamSocket(), false);
         expect(registry.isOnline(`bot`)).toBe(true);
         expect(registry.isOpenForChallenges(`bot`)).toBe(false);
+    });
+});
+
+describe('PresenceRegistry backlog', () => {
+    it('end a stream whose reader stopped reading once its unsent lines pass the backlog limit', () => {
+        const registry = new PresenceRegistry();
+        const offline: string[] = [];
+        registry.watch = (botId, online) => {
+            if (!online) offline.push(botId);
+        };
+        const socket = new FakeStreamSocket();
+        registry.attach(`bot`, socket, true);
+        registry.send(`bot`, gameStart(`g1`));
+        expect(socket.ended).toBe(false);
+        socket.writableLength = streamBacklogLimitBytes + 1;
+        registry.send(`bot`, gameStart(`g2`));
+        expect(socket.ended).toBe(true);
+        expect(registry.isOnline(`bot`)).toBe(false);
+        expect(offline).toEqual([`bot`]);
     });
 });

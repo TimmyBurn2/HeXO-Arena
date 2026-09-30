@@ -2,6 +2,7 @@ import { botWithTokenSchema, botsPath, devLoginPath, discordCallbackPath, discor
 import { buildApp, type BuiltApp } from '../src/app';
 import { openDatabase, runMigrations, type Sqlite } from '../src/db';
 import type { DiscordIdentity, DiscordOAuth } from '../src/discord';
+import { defaultLimits, type LimitTable } from '../src/request-limits';
 import { PresenceRegistry, type StreamSocket } from '../src/presence';
 import type { LogTarget } from '../src/request-log';
 import { GameWatchers } from '../src/watchers';
@@ -29,6 +30,8 @@ export function fakeDiscord(initial: { id: string; username: string; displayName
 export class FakeStreamSocket implements StreamSocket {
     readonly writes: string[] = [];
     ended = false;
+    // What the peer has not read yet; a test raises it to play a reader that stopped.
+    writableLength = 0;
     #closeListeners: (() => void)[] = [];
 
     write(chunk: string): void {
@@ -55,9 +58,16 @@ export interface TestApp {
     app: BuiltApp[`app`];
     admin: BuiltApp[`admin`];
     drain: BuiltApp[`drain`];
+    limits: BuiltApp[`limits`];
     presence: PresenceRegistry;
     watchers: GameWatchers;
 }
+
+/**
+ * The contract's limits with a ceiling no test reaches,
+ * for tests that make hundreds of requests to reach some other cap.
+ */
+export const roomyLimits: LimitTable = { ...defaultLimits, public: { burst: 100_000, refillMs: 1 } };
 
 export async function createTestApp(options?: {
     sqlite?: Sqlite;
@@ -69,13 +79,16 @@ export async function createTestApp(options?: {
     logger?: LogTarget;
     webIndexPath?: string;
     legalDetails?: LegalDetails;
+    trustedProxy?: string;
+    now?: () => number;
+    limits?: LimitTable;
 }): Promise<TestApp> {
     const discord = options?.discord === undefined ? fakeDiscord({ id: `1`, username: `tester` }).oauth : options.discord;
     const sqlite = options?.sqlite ?? openDatabase(`:memory:`);
     runMigrations(sqlite);
     const presence = options?.presence ?? new PresenceRegistry();
     const watchers = new GameWatchers();
-    const { app, admin, drain } = await buildApp({
+    const { app, admin, drain, limits } = await buildApp({
         sqlite,
         discord,
         secureCookies: options?.secureCookies ?? false,
@@ -88,8 +101,11 @@ export async function createTestApp(options?: {
         ...(options?.random !== undefined && { random: options.random }),
         ...(options?.logger !== undefined && { logger: options.logger }),
         ...(options?.webIndexPath !== undefined && { webIndexPath: options.webIndexPath }),
+        ...(options?.trustedProxy !== undefined && { trustedProxy: options.trustedProxy }),
+        ...(options?.now !== undefined && { now: options.now }),
+        ...(options?.limits !== undefined && { limits: options.limits }),
     });
-    return { sqlite, app, admin, drain, presence, watchers };
+    return { sqlite, app, admin, drain, limits, presence, watchers };
 }
 
 /**

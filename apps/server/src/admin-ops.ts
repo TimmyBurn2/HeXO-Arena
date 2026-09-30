@@ -20,6 +20,7 @@ import type { Query } from './db';
 import type { GameRegistry } from './game-registry';
 import { findGame } from './game-store';
 import type { PresenceRegistry } from './presence';
+import type { RequestLimits } from './request-limits';
 import { isPaused, setPaused } from './site-state';
 
 export interface AdminDeps {
@@ -27,6 +28,7 @@ export interface AdminDeps {
     presence: PresenceRegistry;
     games: GameRegistry;
     challenges: ChallengeRegistry;
+    limits: Pick<RequestLimits, `clientCount` | `keys`>;
     actor: string;
 }
 
@@ -38,6 +40,8 @@ function statusOf(deps: AdminDeps): AdminStatus {
         paused: isPaused(deps.query),
         liveStreams: deps.presence.streamCount(),
         activeGames: deps.games.liveGameCount(),
+        clientKeys: deps.limits.clientCount,
+        keylessRequests: deps.limits.keys.keyless,
         recentActions: recentAdminActions(deps.query, recentActionCount),
     };
 }

@@ -7,7 +7,7 @@ import {
     type OpeningPlies,
     type TimeControl,
 } from '@hexo-arena/contract';
-import { and, eq, lt, sql } from 'drizzle-orm';
+import { and, eq, gte, lt, sql } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/sqlite-core';
 import { randomUUID } from 'node:crypto';
 import { nowSeconds, type Query } from './db';
@@ -140,6 +140,16 @@ export function findChallengeByRequest(
         )
         .get();
     return row === undefined ? undefined : toRecord(row);
+}
+
+/** Challenges a bot sent since a moment, taken or not. */
+export function countChallengesSince(query: Query, challengerBotId: string, sinceSeconds: number): number {
+    const [row] = query
+        .select({ n: sql<number>`count(*)` })
+        .from(challenges)
+        .where(and(eq(challenges.challengerBotId, challengerBotId), gte(challenges.createdAt, sinceSeconds)))
+        .all();
+    return row?.n ?? 0;
 }
 
 export function countPendingForDest(query: Query, destBotId: string): number {

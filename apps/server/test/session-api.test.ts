@@ -3,6 +3,7 @@ import {
     guestIdleSeconds,
     guestMeSchema,
     guestPath,
+    guestSessionCap,
     logoutPath,
     mePath,
     meSchema,
@@ -10,8 +11,7 @@ import {
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createQuery } from '../src/db';
 import { sessions } from '../src/db/schema';
-import { guestSessionCap } from '../src/guests';
-import { createTestApp, loginAs, type TestApp } from './helpers';
+import { createTestApp, loginAs, roomyLimits, type TestApp } from './helpers';
 
 async function mintGuest(arena: TestApp): Promise<{ session: string; name: string }> {
     const response = await arena.app.inject({ method: `POST`, url: guestPath });
@@ -118,7 +118,7 @@ describe('POST /api/auth/guest', () => {
     });
 
     it('answers 429 with retry-after once the global cap is full', async () => {
-        const arena = await createTestApp();
+        const arena = await createTestApp({ limits: roomyLimits });
         for (let minted = 0; minted < guestSessionCap; minted += 1) await mintGuest(arena);
         const response = await arena.app.inject({ method: `POST`, url: guestPath });
         expect(response.statusCode).toBe(429);

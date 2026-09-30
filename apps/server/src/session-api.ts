@@ -12,6 +12,7 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import type { Query } from './db';
 import type { Person } from './game-registry';
 import type { GuestSessions } from './guests';
+import { refuseRate, type ClientLimits } from './request-limits';
 import { streamPlayerOf } from './rating-store';
 import { deleteSession, findSessionUser } from './sessions';
 
@@ -19,6 +20,7 @@ export interface SessionApiDeps {
     query: Query;
     guests: GuestSessions;
     secureCookies: boolean;
+    limits: ClientLimits;
 }
 
 // An account session outlives the browser; a guest session ends with it,
@@ -61,13 +63,13 @@ function meOf(query: Query, guests: GuestSessions, token: string | undefined): M
 }
 
 export function registerSessionApi(app: FastifyInstance, deps: SessionApiDeps): void {
-    const { query, guests, secureCookies } = deps;
+    const { query, guests, secureCookies, limits } = deps;
 
-    app.get(mePath, async (request, reply) => {
+    app.get(mePath, { config: { limit: `public` } }, async (request, reply) => {
         return reply.code(200).send(meOf(query, guests, request.cookies[sessionCookieName]));
     });
 
-    app.post(logoutPath, async (request, reply) => {
+    app.post(logoutPath, { config: { limit: `public` } }, async (request, reply) => {
         const token = request.cookies[sessionCookieName];
         if (token !== undefined) {
             guests.end(token);
@@ -77,7 +79,7 @@ export function registerSessionApi(app: FastifyInstance, deps: SessionApiDeps): 
         return reply.code(204).send();
     });
 
-    app.post(guestPath, async (request, reply) => {
+    app.post(guestPath, { config: { limit: `public` } }, async (request, reply) => {
         const person = sessionPerson(query, guests, request);
         if (person?.kind === `user`) {
             return reply.code(409).send({ error: `a user is signed in`, code: `signed_in` });
@@ -86,6 +88,9 @@ export function registerSessionApi(app: FastifyInstance, deps: SessionApiDeps): 
             const same: GuestMe = { kind: `guest`, name: person.name };
             return reply.code(200).send(same);
         }
+        // One client could otherwise fill the cap every visitor shares.
+        const wait = limits.wait(`guestMint`, request);
+        if (wait !== null) return refuseRate(reply, wait);
         const minted = guests.mint();
         if (minted === null) {
             reply.header(`retry-after`, String(guestRetryAfterSeconds));

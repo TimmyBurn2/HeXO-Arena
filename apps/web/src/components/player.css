@@ -73,11 +73,22 @@
         height: var(--swatch-size);
     }
 
-    .swatch-x {
-        background: var(--board-stone-x);
+    .swatch-cell {
+        fill: var(--board-cell);
     }
 
-    .swatch-o {
-        background: var(--board-stone-o);
+    /* The rim keeps a board's width at the swatch's size. */
+    .swatch-stone {
+        stroke: var(--stone-rim);
+        stroke-width: var(--stone-rim-w);
+        vector-effect: non-scaling-stroke;
+    }
+
+    .swatch-stone-x {
+        fill: var(--board-stone-x);
+    }
+
+    .swatch-stone-o {
+        fill: var(--board-stone-o);
     }
 }

@@ -62,6 +62,11 @@ export const adminStatusSchema = z.object({
     paused: z.boolean(),
     liveStreams: z.number().int().min(0),
     activeGames: z.number().int().min(0),
+    // Client keys the rate limits hold, and requests since start that carried no public address:
+    // after a deploy, visits from two networks should make two keys,
+    // or the forwarded address is not reaching the app.
+    clientKeys: z.number().int().min(0),
+    keylessRequests: z.number().int().min(0),
     recentActions: z.array(adminActionSchema).max(10),
 });
 export type AdminStatus = z.infer<typeof adminStatusSchema>;

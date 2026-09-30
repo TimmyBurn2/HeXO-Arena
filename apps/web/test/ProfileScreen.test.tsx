@@ -73,6 +73,26 @@ describe('ProfileScreen', () => {
         expect(document.querySelector(`a[href="/bots/hextide"]`)).toBe(null);
     });
 
+    it('hold the retry of rate-limited bots for their wait', async () => {
+        vi.stubGlobal(
+            `fetch`,
+            vi.fn((url: string) =>
+                Promise.resolve(
+                    url === `/api/me`
+                        ? new Response(JSON.stringify({ kind: `user`, name: `tom`, rating: 1503, provisional: false, discord: null }))
+                        : new Response(JSON.stringify({ error: `slow down`, code: `rate_limited` }), { status: 429, headers: { 'retry-after': `8` } }),
+                ),
+            ),
+        );
+        meStore.reset();
+        meStore.start();
+        render(<ProfileScreen />);
+        expect(await screen.findByText(`Your bots did not load`)).toBeTruthy();
+        await waitFor(() => {
+            expect(document.querySelector(`.empty .sr-only`)?.textContent).toBe(`Too many tries; try again in 8 s`);
+        });
+    });
+
     it('show the person their pattern and the Discord account they signed in with', async () => {
         serve({ kind: `user`, name: `mira-hex`, rating: 1000, provisional: true, discord: { username: `mira.hex`, displayName: `Mira` } });
         render(<ProfileScreen />);

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { clockText, gameMeta, type GameHeadline, type GameSnapshot } from '@hexo-arena/contract';
+import { clockText, gameMeta, turnsOnBoard, type GameHeadline, type GameSnapshot } from '@hexo-arena/contract';
 import { BotBadge, Swatch } from '../components/player';
+import { useWait, WaitText } from '../components/wait';
 import { Link } from '../router/Link';
 import { useBorrowFrame } from '../frame';
 import { routeMeta } from '../route-meta';
@@ -12,7 +13,7 @@ import { FeedLabel, GameDrawer } from '../game/GameDrawer';
 import { clockOf, Pips, SeatChip, TurnChip, YouChip } from '../game/GameHud';
 import { useDrawer } from '../game/use-drawer';
 import { selfName, useMe } from '../me';
-import { useGame, type GameLink, type GameSend } from '../game/use-game';
+import { useGame, type GameLink, type GameSend, type Refusal } from '../game/use-game';
 import { feedOf, matchName, otherSide, positionOf, resultLine, stonesOf, winLineOf } from '../game/snapshot-views';
 import { NotFoundScreen } from './NotFoundScreen';
 import './GameScreen.css';
@@ -22,18 +23,32 @@ export function GameScreen({ gameId }: { gameId: string }) {
 
     if (game.state === `loading`) return <LoadingStage />;
     if (game.state === `missing`) return <MissingGame />;
-    if (game.state === `error`) return <FailedStage retry={game.retry} />;
+    if (game.state === `error`) return <FailedStage retry={game.retry} wait={game.wait} />;
     return <GameView snapshot={game.snapshot} send={game.send} link={game.link} />;
 }
 
 // The stage has no nav, so a game that did not load also offers the way out.
-function FailedStage({ retry }: { retry: () => void }) {
+function FailedStage({ retry, wait }: { retry: () => void; wait: Refusal | null }) {
+    const limited = useWait();
+    const { start } = limited;
+    useEffect(() => {
+        if (wait !== null) start(wait.seconds);
+    }, [wait, start]);
+    const holding = limited.wait !== null;
     return (
         <div className="stage-message">
             <div className="empty">
                 <h1>{text.game.failed}</h1>
+                <div role="status">{limited.wait === null ? null : <p className="note"><WaitText wait={limited.wait} line={text.states.tooMany} /></p>}</div>
                 <div className="actions">
-                    <button type="button" className="btn btn-primary" onClick={retry}>
+                    <button
+                        type="button"
+                        className="btn btn-primary"
+                        aria-disabled={holding ? `true` : undefined}
+                        onClick={() => {
+                            if (!holding) retry();
+                        }}
+                    >
                         {text.states.tryAgain}
                     </button>
                     <Link to="/ladder" className="btn btn-ghost">
@@ -69,7 +84,7 @@ function MissingGame() {
     return <NotFoundScreen heading={text.game.missingHeading} sentence={text.game.missingSentence} />;
 }
 
-const idleStatus: TurnStatus = { placed: 0, note: null };
+const idleStatus: TurnStatus = { placed: 0, note: null, wait: null };
 
 // A result wraps to as many rows as its names need, so under a finished
 // game the game screen measures its chip: one that would come nearer the
@@ -323,6 +338,6 @@ function idleLabelOf(snapshot: GameSnapshot): string {
 function headlineOf(snapshot: GameSnapshot): GameHeadline {
     const names = { x: snapshot.players.x.name, o: snapshot.players.o.name };
     return snapshot.status === `finished`
-        ? { status: `finished`, names, winner: snapshot.winner, reason: snapshot.reason }
-        : { status: `live`, names, toMove: snapshot.toMove, timeControl: snapshot.clock.mode };
+        ? { status: `finished`, names, winner: snapshot.winner, reason: snapshot.reason, turns: turnsOnBoard(snapshot.board.cells.length) }
+        : { status: `live`, names, toMove: snapshot.toMove, timeControl: snapshot.timeControl };
 }

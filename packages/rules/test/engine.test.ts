@@ -10,7 +10,8 @@ import {
     type Position,
     type RejectionKind,
     rejection,
-
+    replay,
+    type Replay,
     winner,
     type Win,
 } from '../src';
@@ -318,5 +319,63 @@ describe('purity', () => {
             expect(seen.has(key)).toBe(false);
             seen.add(key);
         }
+    });
+});
+
+describe('replay', () => {
+    // What placing each cell in turn reaches: the position at the win or the end,
+    // or the first refusal and where it came.
+    function placeEach(cells: readonly Coord[]): Replay {
+        let position = emptyPosition;
+        for (const [index, cell] of cells.entries()) {
+            const placed = place(position, cell);
+            if (!placed.ok) return { ok: false, index, rejection: placed.rejection };
+            position = placed.position;
+            if (placed.win !== null) return { ok: true, position, win: placed.win };
+        }
+        return { ok: true, position, win: null };
+    }
+
+    // Mostly cells near the last stone, now and then one taken or far off,
+    // so games win, run long, and meet every refusal.
+    function drawCells(rng: Rng, count: number): Coord[] {
+        const cells: Coord[] = [{ x: 0, y: 0 }];
+        while (cells.length < count) {
+            const roll = rng.next();
+            const last = cells[cells.length - 1] ?? { x: 0, y: 0 };
+            if (roll < 0.02) cells.push(rng.pick(cells));
+            else if (roll < 0.04) cells.push({ x: last.x + 9 + rng.int(4), y: last.y });
+            else cells.push({ x: last.x + rng.int(9) - 4, y: last.y + rng.int(9) - 4 });
+        }
+        return cells;
+    }
+
+    // Each side builds its own row, gaps now and then, so one of them wins.
+    function rowCells(rng: Rng, count: number): Coord[] {
+        const cells: Coord[] = [{ x: 0, y: 0 }];
+        const reach = [1, 1];
+        while (cells.length < count) {
+            const side = Math.floor((cells.length - 1) / 2) % 2;
+            const at = reach[side] ?? 1;
+            reach[side] = at + (rng.next() < 0.2 ? 2 : 1);
+            cells.push({ x: at, y: side === 0 ? 3 : 0 });
+        }
+        return cells;
+    }
+
+    it('reach what placing each cell in turn reaches, win, refusal, and all', () => {
+        const rng = createRng(65);
+        const outcomes = new Set<string>();
+        for (let game = 0; game < 400; game += 1) {
+            const cells = (game % 4 === 0 ? rowCells : drawCells)(rng, 1 + rng.int(120));
+            const expected = placeEach(cells);
+            expect(replay(cells), `game ${String(game)}`).toEqual(expected);
+            outcomes.add(expected.ok ? (expected.win === null ? `open` : `won`) : expected.rejection.kind);
+        }
+        expect([...outcomes].sort()).toEqual([`cell-occupied`, `open`, `outside-placement-radius`, `won`]);
+    });
+
+    it('refuse a first stone off the origin', () => {
+        expect(replay([{ x: 1, y: 0 }])).toEqual({ ok: false, index: 0, rejection: { kind: `first-stone-off-origin` } });
     });
 });

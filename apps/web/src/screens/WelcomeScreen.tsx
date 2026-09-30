@@ -1,6 +1,7 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import { isReservedName, legalPagePath, nameKeyOf, namePattern, type Me, type Signup } from '@hexo-arena/contract';
-import { ApiError, cancelSignup, createAccount, fetchSignup } from '../api/client';
+import { ApiError, cancelSignup, createAccount, fetchSignup, limitedFor } from '../api/client';
+import { useWait, WaitText } from '../components/wait';
 import { DiscordSignIn } from '../components/DiscordButton';
 import { DiscordSymbol } from '../components/DiscordSymbol';
 import { Sigil } from '../components/Sigil';
@@ -138,6 +139,7 @@ function SignupCard({ signup, held, onEnded }: { signup: Signup; held: Me; onEnd
     const [name, setName] = useState(signup.suggestedName);
     const [refusal, setRefusal] = useState<Refusal | null>(null);
     const [sending, setSending] = useState(false);
+    const limited = useWait();
     const field = useRef<HTMLInputElement>(null);
     const ids = useId();
     const statusId = `${ids}-status`;
@@ -149,7 +151,7 @@ function SignupCard({ signup, held, onEnded }: { signup: Signup; held: Me; onEnd
     const reserved = !invalid && name !== `` && isReservedName(name);
     const taken = refusal?.kind === `taken` && refusal.name === name;
     const free = name === signup.suggestedName && !taken;
-    const submittable = name !== `` && !invalid && !reserved && !taken && !sending;
+    const submittable = name !== `` && !invalid && !reserved && !taken && !sending && limited.wait === null;
 
     // The page leaves the history, so Back never returns to a spent sign-up;
     // Build a bot takes the new account to its bot's name.
@@ -177,7 +179,10 @@ function SignupCard({ signup, held, onEnded }: { signup: Signup; held: Me; onEnd
                 return;
             }
             setSending(false);
-            if (cause instanceof ApiError && cause.code === `signup_limit`) {
+            const wait = limitedFor(cause);
+            if (wait !== null) {
+                limited.start(wait);
+            } else if (cause instanceof ApiError && cause.code === `signup_limit`) {
                 onEnded(text.welcome.limit);
             } else if (cause instanceof ApiError && cause.code === `name_taken`) {
                 setRefusal({ kind: `taken`, name });
@@ -249,6 +254,10 @@ function SignupCard({ signup, held, onEnded }: { signup: Signup; held: Me; onEnd
                         <p className="field-error">{text.build.reserved}</p>
                     ) : taken ? (
                         <p className="field-error">{text.build.taken}</p>
+                    ) : limited.wait !== null ? (
+                        <p className="field-error">
+                            <WaitText wait={limited.wait} line={text.states.tooMany} />
+                        </p>
                     ) : refusal?.kind === `failed` ? (
                         <p className="field-error">{text.welcome.createFailed}</p>
                     ) : free && !invalid ? (

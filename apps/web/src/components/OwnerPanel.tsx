@@ -1,8 +1,9 @@
 import { useState } from 'react';
-import { ApiError, deleteBot, rotateBotToken } from '../api/client';
+import { ApiError, deleteBot, limitedFor, rotateBotToken } from '../api/client';
 import { navigate } from '../router/use-route';
 import { text } from '../text';
 import { TokenBox } from './TokenBox';
+import { useWait, WaitText, type Wait } from './wait';
 import './OwnerPanel.css';
 
 /**
@@ -27,6 +28,7 @@ function RotateToken({ bot }: { bot: string }) {
     const [token, setToken] = useState<string | null>(null);
     const [failure, setFailure] = useState<string | null>(null);
     const [sending, setSending] = useState(false);
+    const limited = useWait();
 
     async function rotate() {
         if (!armed) {
@@ -38,8 +40,10 @@ function RotateToken({ bot }: { bot: string }) {
         try {
             setToken((await rotateBotToken(bot)).token);
             setArmed(false);
-        } catch {
-            setFailure(text.bot.owner.rotateFailed);
+        } catch (cause) {
+            const wait = limitedFor(cause);
+            if (wait === null) setFailure(text.bot.owner.rotateFailed);
+            else limited.start(wait);
         }
         setSending(false);
     }
@@ -51,7 +55,7 @@ function RotateToken({ bot }: { bot: string }) {
                 <p className="note">{text.bot.owner.tokenNote}</p>
             </div>
             {token === null ? (
-                <button type="button" className="btn btn-ghost" disabled={sending} onClick={() => void rotate()}>
+                <button type="button" className="btn btn-ghost" disabled={sending || limited.wait !== null} onClick={() => void rotate()}>
                     {armed ? text.bot.owner.rotateArmed : text.bot.owner.rotate}
                 </button>
             ) : (
@@ -59,11 +63,7 @@ function RotateToken({ bot }: { bot: string }) {
                     <TokenBox token={token} />
                 </div>
             )}
-            {failure === null ? null : (
-                <p className="field-error" role="alert">
-                    {failure}
-                </p>
-            )}
+            <Failure failure={failure} wait={limited.wait} />
         </div>
     );
 }
@@ -72,6 +72,7 @@ function DeleteBot({ bot }: { bot: string }) {
     const [typed, setTyped] = useState(``);
     const [failure, setFailure] = useState<string | null>(null);
     const [sending, setSending] = useState(false);
+    const limited = useWait();
     const confirmed = typed === bot;
 
     async function remove() {
@@ -81,11 +82,16 @@ function DeleteBot({ bot }: { bot: string }) {
             await deleteBot(bot);
             navigate(`/profile`);
         } catch (cause) {
-            setFailure(
-                cause instanceof ApiError && cause.code === `in_game`
-                    ? text.bot.owner.inGame(bot)
-                    : text.bot.owner.deleteFailed(bot),
-            );
+            const wait = limitedFor(cause);
+            if (wait !== null) {
+                limited.start(wait);
+            } else {
+                setFailure(
+                    cause instanceof ApiError && cause.code === `in_game`
+                        ? text.bot.owner.inGame(bot)
+                        : text.bot.owner.deleteFailed(bot),
+                );
+            }
             setSending(false);
         }
     }
@@ -115,15 +121,26 @@ function DeleteBot({ bot }: { bot: string }) {
                         setTyped(event.target.value);
                     }}
                 />
-                <button type="submit" className="btn btn-danger" disabled={!confirmed || sending}>
+                <button type="submit" className="btn btn-danger" disabled={!confirmed || sending || limited.wait !== null}>
                     {text.bot.owner.deleteBot(bot)}
                 </button>
             </form>
-            {failure === null ? null : (
-                <p className="field-error" role="alert">
-                    {failure}
-                </p>
-            )}
+            <Failure failure={failure} wait={limited.wait} />
         </div>
+    );
+}
+
+function Failure({ failure, wait }: { failure: string | null; wait: Wait | null }) {
+    if (wait !== null) {
+        return (
+            <p className="field-error" role="alert">
+                <WaitText wait={wait} line={text.states.tooMany} />
+            </p>
+        );
+    }
+    return failure === null ? null : (
+        <p className="field-error" role="alert">
+            {failure}
+        </p>
     );
 }

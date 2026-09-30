@@ -1,9 +1,13 @@
 import {
     gameEventSchema,
+    gameTurnCap,
+    guestSessionCap,
     internalToWire,
+    orphanForfeitMs,
     sessionHeartbeatMs,
     sessionTokenTtlMs,
     sideOf,
+    streamBacklogLimitBytes,
     unlimitedWallCapMs,
     wireToInternal,
     type BwsHeartbeatPacket,
@@ -16,14 +20,17 @@ import {
     type StreamEvent,
 } from '@hexo-arena/contract';
 import { hexDistance, openingRegion, type Coord } from '@hexo-arena/rules';
+import { eq } from 'drizzle-orm';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createQuery, openDatabase, runMigrations, type Sqlite } from '../src/db';
+import { moves } from '../src/db/schema';
 import { createBot, findBot } from '../src/bots';
 import { createUserWithExactName } from '../src/users';
 import { abortUnfinishedGames, findGame } from '../src/game-store';
 import {
+    finishedBoardMemoCap,
+    finishedGuestGamesPerGuest,
     GameRegistry,
-    orphanForfeitMs,
     wirePresence,
     type EngineSocket,
 } from '../src/game-registry';
@@ -59,14 +66,18 @@ const humanCircles = () => 0.9;
 class FakeEngineSocket implements EngineSocket {
     readonly sent: string[] = [];
     closed = false;
+    closedWith: { code: number | undefined; reason: string | undefined } | null = null;
+    // Nothing is ever flushed, so a test sets the backlog it wants.
+    bufferedAmount = 0;
     #closeListeners: (() => void)[] = [];
 
     send(text: string): void {
         this.sent.push(text);
     }
 
-    close(): void {
+    close(code?: number, reason?: string): void {
         this.closed = true;
+        this.closedWith = { code, reason };
     }
 
     onceClose(listener: () => void): void {
@@ -539,6 +550,62 @@ describe('engine session', () => {
         expect(world.games.snapshotFor(gameId, user)?.status).toBe(`in-progress`);
     });
 
+    it('closes a session that stopped reading with 1008 once its unsent frames pass the backlog limit, forfeiting nothing', () => {
+        connect();
+        socket.bufferedAmount = streamBacklogLimitBytes;
+        vi.advanceTimersByTime(sessionHeartbeatMs);
+        expect(socket.closed).toBe(false);
+        socket.bufferedAmount = streamBacklogLimitBytes + 1;
+        vi.advanceTimersByTime(sessionHeartbeatMs);
+        expect(socket.closedWith).toEqual({ code: 1008, reason: `not reading` });
+        expect(world.games.snapshotFor(gameId, user)?.status).toBe(`in-progress`);
+    });
+
+    // This many games or turns take seconds on a loaded machine.
+    it(`ends the game at turn ${String(gameTurnCap)} with no winner and rates nobody`, () => {
+        connect();
+        const ratings = () => {
+            const query = createQuery(world.sqlite);
+            return [readRating(query, { kind: `human`, id: user.id }), readRating(query, { kind: `bot`, id: bot.id })];
+        };
+        const before = ratings();
+        // Colored by floor((x + 2y) / 2) mod 2,
+        // each axis runs in pairs or alternates,
+        // so neither side ever holds six in a row;
+        // rows swept outward from x = 0, starting clear of the opening,
+        // keep every cell within reach of a stone already placed.
+        const cells: [Coord[], Coord[]] = [[], []];
+        for (let y = 5; y < 45; y += 1) {
+            for (let step = 0; step < 30; step += 1) {
+                const x = step % 2 === 0 ? step / 2 : -(step + 1) / 2;
+                cells[Math.floor((x + 2 * y) / 2) & 1]?.push({ x, y });
+            }
+        }
+        const take = (side: Side): [Coord, Coord] => {
+            const own = cells[side === `x` ? 0 : 1];
+            const first = own.shift();
+            const second = own.shift();
+            if (first === undefined || second === undefined) throw new Error(`out of cells`);
+            return [first, second];
+        };
+        const play = () => {
+            const snapshot = world.games.snapshotFor(gameId, user);
+            if (snapshot?.status !== `in-progress`) throw new Error(`the game is over`);
+            const pieces = take(snapshot.toMove);
+            if (snapshot.toMove === snapshot.you) {
+                const moved = world.games.humanMove(gameId, user, pieces);
+                if (moved.kind !== `moved`) throw new Error(`human move rejected`);
+            } else {
+                answerBot({ side: snapshot.toMove, pieces: [internalToWire(pieces[0]), internalToWire(pieces[1])] });
+            }
+        };
+        for (let turn = 2; turn < gameTurnCap; turn += 1) play();
+        expect(world.games.snapshotFor(gameId, user)?.status).toBe(`in-progress`);
+        play();
+        expect(latestEvent(world, `gameFinish`)).toEqual({ type: `gameFinish`, gameId, winner: null, reason: `terminated` });
+        expect(ratings()).toEqual(before);
+    }, 30_000);
+
     it('replaces a stale session when a fresh connection dials in', () => {
         connect();
         const stale = socket;
@@ -780,6 +847,46 @@ describe('persistence', () => {
         ]);
         expect(replay).toMatchObject({ kind: `rejected`, code: `game_over` });
     });
+
+    // This many games or turns take seconds on a loaded machine.
+    it(`keeps the boards of the last ${String(finishedBoardMemoCap)} finished games read, replaying older ones`, () => {
+        const finished = (move: boolean) => {
+            const created = world.games.createGame({ person: user, bot, timeControl: unlimitedControl, openingPlies: 1 });
+            if (move) world.games.humanMove(created.gameId, user, [{ x: 3, y: 0 }, { x: 4, y: 0 }]);
+            world.games.humanResign(created.gameId, user);
+            return created.gameId;
+        };
+        const stones = (gameId: string) => world.games.snapshotFor(gameId, null)?.board.cells.length;
+        const kept = finished(true);
+        expect(stones(kept)).toBe(3);
+        // Deleting the stored turns tells a remembered board from a replayed one.
+        createQuery(world.sqlite).delete(moves).where(eq(moves.gameId, kept)).run();
+        expect(stones(kept)).toBe(3);
+        for (let index = 0; index < finishedBoardMemoCap; index += 1) stones(finished(false));
+        expect(stones(kept)).toBe(1);
+    }, 30_000);
+
+    // This many games or turns take seconds on a loaded machine.
+    it(`keeps the last ${String(finishedGuestGamesPerGuest)} finished games of each guest, and ${String(finishedGuestGamesPerGuest)} for each guest the site holds`, () => {
+        const finished = (guest: number) => {
+            const person = { kind: `guest` as const, id: `guest-${String(guest)}`, name: `Guest ${String(guest)}` };
+            const created = world.games.createGame({ person, bot, timeControl: unlimitedControl, openingPlies: 1 });
+            world.games.humanResign(created.gameId, person);
+            return created.gameId;
+        };
+        const first = finished(0);
+        const own = Array.from({ length: finishedGuestGamesPerGuest }, () => finished(0));
+        expect(world.games.snapshotFor(first, null)).toBe(null);
+        expect(own.every((gameId) => world.games.snapshotFor(gameId, null) !== null)).toBe(true);
+        // Every other guest the site can hold fills its own share, pushing out the oldest games held.
+        for (let guest = 1; guest < guestSessionCap; guest += 1) {
+            for (let game = 0; game < finishedGuestGamesPerGuest; game += 1) finished(guest);
+        }
+        expect(world.games.snapshotFor(own[0] ?? ``, null)).not.toBe(null);
+        finished(guestSessionCap);
+        expect(world.games.snapshotFor(own[0] ?? ``, null)).toBe(null);
+        expect(world.games.snapshotFor(own[1] ?? ``, null)).not.toBe(null);
+    }, 30_000);
 
     it('rates both sides when a game ends with a winner', () => {
         const created = world.games.createGame({

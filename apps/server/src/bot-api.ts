@@ -17,6 +17,7 @@ import { listBots, readBotDeclaration, updateBotDeclaration, type BotDeclaration
 import { type Query } from './db';
 import type { GameRegistry } from './game-registry';
 import type { PresenceRegistry } from './presence';
+import type { CredentialLimits } from './request-limits';
 import { isProvisional } from './rating';
 import { streamPlayerOf } from './rating-store';
 import type { StartGate } from './site-state';
@@ -28,6 +29,7 @@ export interface BotApiDeps {
     // The directory shows each bot's live games,
     // so a page can tell a busy bot before a start fails.
     games: Pick<GameRegistry, `activeGameCount`>;
+    limits: CredentialLimits;
 }
 
 // Sends the failure itself and yields null, so handlers stay flat.
@@ -45,11 +47,13 @@ export function requireBot(query: Query, request: FastifyRequest, reply: Fastify
 }
 
 export function registerBotApi(app: FastifyInstance, deps: BotApiDeps): void {
-    const { query, presence, gate, games } = deps;
+    const { query, presence, gate, games, limits } = deps;
 
-    app.get(botStreamPath, async (request, reply) => {
+    app.get(botStreamPath, { config: { limit: `stream` } }, async (request, reply) => {
         const bot = requireBot(query, request, reply);
         if (!bot) return reply;
+        // A refused open leaves the stream the bot holds untouched.
+        if (limits.refuse(reply, `streamOpen`, `bot:${bot.id}`)) return reply;
         const parsed = botStreamQuerySchema.safeParse(request.query);
         if (!parsed.success) {
             return reply.code(400).send({ error: `the open parameter must be exactly 1`, code: `bad_request` });
@@ -65,7 +69,7 @@ export function registerBotApi(app: FastifyInstance, deps: BotApiDeps): void {
         presence.attach(bot.id, reply.raw, parsed.data.open === `1`);
     });
 
-    app.get(botsPath, async (request, reply) => {
+    app.get(botsPath, { config: { limit: `public` } }, async (request, reply) => {
         const parsed = botDirectoryQuerySchema.safeParse(request.query);
         if (!parsed.success) {
             return reply.code(400).send({ error: `the online parameter must be exactly 1`, code: `bad_request` });
@@ -95,18 +99,20 @@ export function registerBotApi(app: FastifyInstance, deps: BotApiDeps): void {
             ...declaration,
         });
 
-    app.get(botAccountPath, async (request, reply) => {
+    app.get(botAccountPath, { config: { limit: `principal` } }, async (request, reply) => {
         const bot = requireBot(query, request, reply);
         if (!bot) return reply;
+        if (limits.refuse(reply, `principal`, `bot:${bot.id}`)) return reply;
         const declaration = readBotDeclaration(query, bot.id);
         // The id came from a token the lookup just resolved.
         if (declaration === undefined) throw new Error(`bot row vanished while reading: ${bot.id}`);
         return reply.code(200).send(accountOf(bot.id, declaration));
     });
 
-    app.patch(botAccountPath, async (request, reply) => {
+    app.patch(botAccountPath, { config: { limit: `principal` } }, async (request, reply) => {
         const bot = requireBot(query, request, reply);
         if (!bot) return reply;
+        if (limits.refuse(reply, `principal`, `bot:${bot.id}`)) return reply;
         const parsed = accountDeclarationSchema.safeParse(request.body);
         if (!parsed.success) {
             return reply.code(400).send({ error: `the declaration fails validation`, code: `bad_request` });

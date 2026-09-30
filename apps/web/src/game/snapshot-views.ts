@@ -1,4 +1,4 @@
-import { resultSentence, type GameSnapshot, type Side } from '@hexo-arena/contract';
+import { resultSentence, turnsOnBoard, type GameSnapshot, type Side } from '@hexo-arena/contract';
 import { winner, type Position, type Rejection, type Stone } from '@hexo-arena/rules';
 import type { BoardStone } from '../board/Board';
 import type { AxialCoord } from '@hexo-arena/contract';
@@ -67,7 +67,11 @@ export function winLineOf(snapshot: GameSnapshot): AxialCoord[] | null {
  */
 export function resultLine(snapshot: GameSnapshot): string {
     if (snapshot.status !== `finished`) return ``;
-    return resultSentence(snapshot, { x: snapshot.players.x.name, o: snapshot.players.o.name }, snapshot.you);
+    return resultSentence(
+        { ...snapshot, turns: turnsOnBoard(snapshot.board.cells.length) },
+        { x: snapshot.players.x.name, o: snapshot.players.o.name },
+        snapshot.you,
+    );
 }
 
 /** Both seats by name, x first. */

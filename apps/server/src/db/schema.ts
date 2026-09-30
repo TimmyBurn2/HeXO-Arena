@@ -254,7 +254,8 @@ export const challenges = sqliteTable(
     },
     (table) => [
         uniqueIndex(`challenges_challenger_request_idx`).on(table.challengerBotId, table.requestKey),
-        index(`challenges_challenger_bot_id_idx`).on(table.challengerBotId),
+        // Leads with the foreign key, and serves the count of a bot's challenges a day.
+        index(`challenges_challenger_created_idx`).on(table.challengerBotId, table.createdAt),
         index(`challenges_dest_bot_id_idx`).on(table.destBotId),
         index(`challenges_game_id_idx`).on(table.gameId),
         check(

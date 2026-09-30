@@ -127,6 +127,68 @@ export function place(position: Position, candidate: Coord): Placement {
     return { ok: true, position: { stones }, win: findWin(stones, stone) };
 }
 
+/**
+ * A run of placements replayed at once:
+ * the position it reaches and the win that ended it,
+ * or the first illegal placement, by index, and why.
+ */
+export type Replay =
+    | { readonly ok: true; readonly position: Position; readonly win: Win | null }
+    | { readonly ok: false; readonly index: number; readonly rejection: Rejection };
+
+// Every offset within placementRadius,
+// so a radius check looks up a fixed number of cells however many stones the board holds.
+const radiusOffsets: readonly Coord[] = (() => {
+    const offsets: Coord[] = [];
+    for (let x = -placementRadius; x <= placementRadius; x += 1) {
+        for (let y = -placementRadius; y <= placementRadius; y += 1) {
+            if (hexDistance({ x, y }, { x: 0, y: 0 }) <= placementRadius) offsets.push({ x, y });
+        }
+    }
+    return offsets;
+})();
+
+/**
+ * Place each cell in turn, as place() would,
+ * stopping at the placement that wins or at the first one refused;
+ * cells after either are not placed.
+ * Each placement costs the same however long the game,
+ * where place() rescans every stone,
+ * so a stored game replays in linear time.
+ */
+export function replay(cells: Iterable<Coord>): Replay {
+    const stones: Stone[] = [];
+    const owners = new Map<string, Player>();
+    let index = 0;
+    for (const cell of cells) {
+        const why = replayRejection(owners, stones.length, cell);
+        if (why !== null) {
+            return { ok: false, index, rejection: why };
+        }
+        const stone: Stone = { x: cell.x, y: cell.y, player: playerAtMoveCount(stones.length) };
+        stones.push(stone);
+        owners.set(cellKey(stone.x, stone.y), stone.player);
+        const win = winThrough((x, y) => owners.get(cellKey(x, y)) === stone.player, stone);
+        if (win !== null) {
+            return { ok: true, position: { stones }, win };
+        }
+        index += 1;
+    }
+    return { ok: true, position: { stones }, win: null };
+}
+
+// rejection() for a board that has not been won, read from its owner map.
+function replayRejection(owners: ReadonlyMap<string, Player>, placed: number, candidate: Coord): Rejection | null {
+    if (owners.has(cellKey(candidate.x, candidate.y))) {
+        return { kind: `cell-occupied` };
+    }
+    if (placed === 0) {
+        return candidate.x !== 0 || candidate.y !== 0 ? { kind: `first-stone-off-origin` } : null;
+    }
+    const near = radiusOffsets.some((offset) => owners.has(cellKey(candidate.x + offset.x, candidate.y + offset.y)));
+    return near ? null : { kind: `outside-placement-radius` };
+}
+
 // Turn 0 places the origin alone and every later turn places two stones,
 // so parity falls out of the stone count alone.
 function playerAtMoveCount(count: number): Player {
@@ -162,9 +224,14 @@ function findWin(stones: readonly Stone[], last: Stone): Win | null {
             owned.add(cellKey(stone.x, stone.y));
         }
     }
+    return winThrough((x, y) => owned.has(cellKey(x, y)), last);
+}
+
+// The win through the last stone, given which cells its player owns.
+function winThrough(owns: (x: number, y: number) => boolean, last: Stone): Win | null {
     for (const axis of lineAxes) {
-        const backward = walk(owned, last, -axis.x, -axis.y);
-        const forward = walk(owned, last, axis.x, axis.y);
+        const backward = walk(owns, last, -axis.x, -axis.y);
+        const forward = walk(owns, last, axis.x, axis.y);
         const runLength = backward + 1 + forward;
         if (runLength >= winningLineLength) {
             return {
@@ -180,11 +247,11 @@ function cellKey(x: number, y: number): string {
     return `${String(x)},${String(y)}`;
 }
 
-function walk(owned: ReadonlySet<string>, from: Coord, dx: number, dy: number): number {
+function walk(owns: (x: number, y: number) => boolean, from: Coord, dx: number, dy: number): number {
     let x = from.x + dx;
     let y = from.y + dy;
     let steps = 0;
-    while (owned.has(cellKey(x, y))) {
+    while (owns(x, y)) {
         steps += 1;
         x += dx;
         y += dy;

@@ -3,6 +3,7 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
 import { Board, type BoardStone } from '../src/board/Board';
 import { defaultBoardSettings } from '../src/board/board-settings';
+import { hexCenter, stonesFrame } from '../src/board/geometry';
 import { midGameStones } from './mid-game';
 
 const stones: readonly BoardStone[] = midGameStones;
@@ -185,5 +186,26 @@ describe('Board', () => {
             />,
         );
         expect(frame.querySelector(`polygon.ghost`)?.getAttribute(`class`)).toContain(`b-o`);
+    });
+
+    it('show only the cells a given frame holds, under that frame', () => {
+        const frame = stonesFrame(stones, 4 / 3);
+        const whole = frameOf(<Board stones={stones} settings={defaultBoardSettings} label="whole board" />);
+        const all = whole.querySelectorAll(`polygon.cell`).length;
+        cleanup();
+        const framed = frameOf(<Board stones={stones} settings={defaultBoardSettings} label="framed board" frame={frame} />);
+        const svg = framed.querySelector(`svg`);
+        expect(svg?.getAttribute(`viewBox`)).toBe(`${frame.x.toFixed(2)} ${frame.y.toFixed(2)} ${frame.w.toFixed(2)} ${frame.h.toFixed(2)}`);
+        const cells = [...framed.querySelectorAll(`polygon.cell`)];
+        expect(cells.length).toBeLessThan(all);
+        for (const cell of cells) {
+            const { cx, cy } = hexCenter({ x: Number(cell.getAttribute(`data-x`)), y: Number(cell.getAttribute(`data-y`)) });
+            expect(cx).toBeGreaterThan(frame.x - 28);
+            expect(cx).toBeLessThan(frame.x + frame.w + 28);
+            expect(cy).toBeGreaterThan(frame.y - 28);
+            expect(cy).toBeLessThan(frame.y + frame.h + 28);
+        }
+        expect(framed.querySelectorAll(`g.stone`).length).toBe(stones.length);
+        expect(framed.querySelector(`path.frontier`)).toBe(null);
     });
 });

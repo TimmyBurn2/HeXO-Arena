@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { htttxMoveRequestSchema, htttxSideSchema } from './htttx';
 import { provisionalSchema, ratingSchema } from './leaderboard';
+import { gameTurnCap } from './limits';
 
 // One line of the bot event stream, discriminated by `type`; the set of
 // kinds is closed, so an unknown discriminator is a hard parse failure.
@@ -11,7 +12,10 @@ export type Side = z.infer<typeof sideSchema>;
 
 export const finishReasonSchema = z
     .enum([`aborted`, `disconnect`, `surrender`, `timeout`, `terminated`, `six-in-a-row`])
-    .meta({ id: `FinishReason` });
+    .meta({
+        id: `FinishReason`,
+        description: `How a game ended. A game is terminated when a side plays an illegal move, which loses, or with no winner when it reaches ${String(gameTurnCap)} turns or an unlimited game reaches its wall-time cap.`,
+    });
 export type FinishReason = z.infer<typeof finishReasonSchema>;
 
 // The floors are contract promises a bot can rely on when choosing what to

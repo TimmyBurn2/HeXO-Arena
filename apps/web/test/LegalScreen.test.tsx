@@ -107,6 +107,17 @@ describe('LegalScreen', () => {
         );
     });
 
+    it('state the request counters against flooding: a keyed hash of the address, in memory, an hour at most', async () => {
+        serve(ok(details));
+        render(<LegalScreen page="privacy" />);
+        await screen.findByRole(`heading`, { name: `Visiting the site` });
+        expect(section(`Visiting the site`).textContent).toContain(
+            `To stop any one visitor from flooding the site, the server counts requests under a keyed hash of your IP address (for IPv6, of its first half).`,
+        );
+        expect(section(`Visiting the site`).textContent).toContain(`never written to disk or to a log, and the key behind the hash is random and replaced every day.`);
+        expect(section(`Retention at a glance`).textContent).toContain(`Request counters against flooding: in memory, an hour at most.`);
+    });
+
     it('state what a sign-in keeps from Discord, for how long, and the first sign-in held until the name is chosen', async () => {
         serve(ok(details));
         render(<LegalScreen page="privacy" />);

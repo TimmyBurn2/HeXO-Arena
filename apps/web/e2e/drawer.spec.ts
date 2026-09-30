@@ -195,7 +195,36 @@ test('the drawer foot keeps every link inside a 320 px phone at 175 and 200% tex
         const foot = page.locator(`#drawer-body .drawer-foot`);
         await foot.waitFor();
         const rights = await foot.locator(`a`).evaluateAll((links) => links.map((link) => link.getBoundingClientRect().right));
-        expect(rights.length).toBe(6);
+        expect(rights.length).toBe(7);
         for (const right of rights) expect(right).toBeLessThanOrEqual(320);
     }
 });
+
+// A refused resignation says so where the reader is looking, at every width.
+for (const [width, height] of [[390, 844], [360, 740], [1280, 900]] as const) {
+    test(`a refused resignation shows its line inside the drawer at ${String(width)} px`, async ({ page }) => {
+        await page.setViewportSize({ width, height });
+        await serve(page, world({ limited: `writes` }));
+        await page.goto(`/game/running`);
+        await page.locator(`svg polygon.cell`).first().waitFor();
+        await page.keyboard.press(`m`);
+        await page.getByRole(`tab`, { name: `Game` }).click();
+        await page.getByRole(`button`, { name: `Resign` }).click();
+        await page.getByRole(`button`, { name: `Resign and lose` }).click();
+        const alert = page.locator(`#drawer-body [role="alert"]`);
+        await expect(alert.locator(`.sr-only`)).toHaveText(`Too many tries; try again in 42 s`);
+        // The button keeps focus through the refusal and the wait, so the keyboard stays where it was;
+        // it is read once the refusal is shown, and again later, so a late blur cannot pass unseen.
+        const resign = page.getByRole(`button`, { name: `Resign` });
+        await expect(resign).toBeFocused();
+        await page.waitForTimeout(2_000);
+        await expect(resign).toBeFocused();
+        await expect
+            .poll(async () => {
+                const line = await alert.boundingBox();
+                const panel = await page.locator(`.drawer-panel`).boundingBox();
+                return line !== null && panel !== null && line.y >= panel.y && line.y + line.height <= panel.y + panel.height;
+            })
+            .toBe(true);
+    });
+}

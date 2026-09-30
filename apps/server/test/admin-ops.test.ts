@@ -1,8 +1,8 @@
+import { orphanForfeitMs } from '@hexo-arena/contract';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createTestApp, fakeDiscord, FakeStreamSocket, loginAs, mintBot, type TestApp } from './helpers';
 import { findBot } from '../src/bots';
 import { createQuery } from '../src/db';
-import { orphanForfeitMs } from '../src/game-registry';
 import { insertBotGame, insertGame, recordFinish } from '../src/game-store';
 import { foldRatings } from '../src/rating';
 import { finishedGameLog, storedRatings } from '../src/rating-store';
@@ -70,6 +70,16 @@ describe('admin status', () => {
             Array.from({ length: 10 }, (_, index) => `reason ${String(12 - index)}`),
         );
         world.presence.close(`some-bot`);
+    });
+
+    it('counts the client keys held and the requests that carried no public address, so a deploy can check the forwarded address arrives', async () => {
+        await world.app.inject({ method: `GET`, url: `/api/me` });
+        await world.app.inject({ method: `GET`, url: `/api/me`, remoteAddress: `203.0.113.5` });
+        await world.app.inject({ method: `GET`, url: `/api/me`, remoteAddress: `198.51.100.5` });
+        const answer = world.admin({ op: `status` });
+        if (answer.kind !== `status`) throw new Error(`no status`);
+        expect(answer.status.clientKeys).toBe(2);
+        expect(answer.status.keylessRequests).toBe(1);
     });
 });
 

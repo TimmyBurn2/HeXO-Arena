@@ -21,6 +21,12 @@ tagged `sha-<commit>` and `latest`.
   compose file are silently ignored.
 - The rootless user may bind 80 and 443:
   `net.ipv4.ip_unprivileged_port_start=80` in the host sysctl.
+- Client addresses reach Caddy unchanged, since the rate limits count each
+  visitor by the address Caddy forwards: rootless Docker 29.5 or later with
+  `"userland-proxy": false` in its daemon.json, or the `slirp4netns` or
+  `pasta` port driver on older versions; IPv6 must reach Caddy without
+  docker-proxy. Without it every visitor counts as one caller and only the
+  site-wide limits apply; check it after deploying (below).
 - Pull access to the GHCR package, which stays private: `docker login ghcr.io`
   with a token holding `read:packages`. A public image would hand out the
   GPL-licensed programs of its Debian base, and with them the duty to offer
@@ -322,6 +328,10 @@ Runtime hardening:
 Admin path:
 
 - [ ] `docker compose exec app hexo-arena-admin status` answers.
+- [ ] After loading the site from two devices on two networks, such as a phone
+  off Wi-Fi and a laptop, `status` shows at least 2 `client keys`; 0 with a
+  climbing `keyless` means client addresses do not reach Caddy (see
+  Prerequisites).
 - [ ] `hexo-arena-admin pause --reason "checklist"` turns
   `curl -s -o /dev/null -w '%{http_code}' https://<domain>/healthz` to `503`,
   and `resume --reason "checklist"` back to `200`.

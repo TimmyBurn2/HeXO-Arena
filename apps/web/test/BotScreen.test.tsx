@@ -153,10 +153,23 @@ describe('BotScreen', () => {
         window.history.replaceState(null, ``, `/`);
     });
 
+    it('hold the retry of a rate-limited read for its wait', async () => {
+        vi.stubGlobal(
+            `fetch`,
+            vi.fn(() => Promise.resolve(new Response(JSON.stringify({ error: `slow down`, code: `rate_limited` }), { status: 429, headers: { 'retry-after': `6` } }))),
+        );
+        render(<BotScreen name="sealbot" />);
+        expect(await screen.findByText(`The bot did not load`)).toBeTruthy();
+        await waitFor(() => {
+            expect(document.querySelector(`.empty .sr-only`)?.textContent).toBe(`Too many tries; try again in 6 s`);
+        });
+    });
+
     it('offer a retry when the directory fails', async () => {
         stubDirectory([], 500);
         render(<BotScreen name="sealbot" />);
         expect(await screen.findByText(`The bot did not load`)).toBeTruthy();
+        expect(screen.getByRole(`heading`, { level: 1, name: `sealbot` })).toBeTruthy();
         stubDirectory([sealbot]);
         fireEvent.click(screen.getByRole(`button`, { name: `Try again` }));
         await waitFor(() => {
@@ -210,7 +223,40 @@ describe('BotScreen', () => {
         expect(writes).toEqual([{ method: `DELETE`, url: `/api/bots/sealbot` }]);
     });
 
-    it('link every live game the bot plays and nothing when it plays none', async () => {
+    it('hold rotate and delete for the wait a rate-limited change names', async () => {
+        vi.stubGlobal(
+            `fetch`,
+            vi.fn((url: string, init?: RequestInit) => {
+                if ((init?.method ?? `GET`) !== `GET`) {
+                    return Promise.resolve(
+                        new Response(JSON.stringify({ error: `slow down`, code: `rate_limited` }), { status: 429, headers: { 'retry-after': `42` } }),
+                    );
+                }
+                const body = url === `/api/me` ? { kind: `user`, name: `tom`, rating: 1503, provisional: false, discord: null } : [sealbot];
+                return Promise.resolve(new Response(JSON.stringify(body)));
+            }),
+        );
+        meStore.reset();
+        meStore.start();
+        render(<BotScreen name="sealbot" />);
+        fireEvent.click(await screen.findByRole(`button`, { name: `Rotate token` }));
+        const armed = screen.getByRole(`button`, { name: `Rotate; the old token stops now` });
+        fireEvent.click(armed);
+        const spoken = () => [...document.querySelectorAll(`.owner-row .field-error .sr-only`)].map((line) => line.textContent);
+        await waitFor(() => {
+            expect(spoken()).toEqual([`Too many tries; try again in 42 s`]);
+        });
+        expect(armed.hasAttribute(`disabled`)).toBe(true);
+        fireEvent.change(screen.getByRole(`textbox`, { name: `Type sealbot to confirm` }), { target: { value: `sealbot` } });
+        const remove = screen.getByRole(`button`, { name: `Delete sealbot` });
+        fireEvent.click(remove);
+        await waitFor(() => {
+            expect(spoken()).toEqual([`Too many tries; try again in 42 s`, `Too many tries; try again in 42 s`]);
+        });
+        expect(remove.hasAttribute(`disabled`)).toBe(true);
+    });
+
+    it('show a board for every live game the bot plays, each a way into it, and nothing when it plays none', async () => {
         const live = [
             {
                 gameId: `g-live`,
@@ -221,7 +267,8 @@ describe('BotScreen', () => {
                 timeControl: { mode: `unlimited` },
                 toMove: `o`,
                 rated: false,
-                plies: 5,
+                cells: [{ x: 0, y: 0, side: `x` }],
+                clock: { mode: `unlimited` },
             },
         ];
         vi.stubGlobal(
@@ -231,8 +278,13 @@ describe('BotScreen', () => {
             ),
         );
         render(<BotScreen name="sealbot" />);
-        const watch = await screen.findByRole(`link`, { name: `Watch vs Guest k3f9` });
+        const playing = await screen.findByRole(`region`, { name: `Playing now` });
+        const watch = within(playing).getByRole(`link`, { name: `Watch sealbot BOT vs Guest k3f9` });
         expect(watch.getAttribute(`href`)).toBe(`/game/g-live`);
+        expect(within(playing).getByRole(`img`, { name: `Board, sealbot vs Guest k3f9, Guest k3f9 to move` })).toBeTruthy();
+        expect(within(playing).getByRole(`heading`, { level: 3, name: `Watch sealbot BOT vs Guest k3f9` })).toBeTruthy();
+        expect(playing.textContent).toContain(`unrated`);
+        expect(playing.textContent).toContain(`Guest k3f9 to move`);
         cleanup();
         const others = [{ ...live[0], players: { ...live[0]?.players, x: { name: `hextide`, rating: 1690, provisional: false, kind: `bot` } } }];
         let listed = false;

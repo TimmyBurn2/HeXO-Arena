@@ -40,6 +40,7 @@ const snapshot = {
     you: `x`,
     openingPlies: 5,
     board: { cells: [{ x: 0, y: 0, side: `x` }] },
+    timeControl: { mode: `turn`, turnTimeMs: 10_000 },
     status: `in-progress`,
     toMove: `x`,
     clock: { mode: `turn`, remainingTurnMs: 10_000 },
@@ -302,7 +303,7 @@ describe('PlayScreen', () => {
 
     it('count a cooldown down on the disabled start, then let it go', async () => {
         vi.useFakeTimers({ toFake: [`setInterval`, `clearInterval`, `Date`] });
-        serve({ start: refused(400, `game_cooldown`, { 'retry-after': `3` }) });
+        serve({ start: refused(429, `game_cooldown`, { 'retry-after': `3` }) });
         render(<PlayScreen />);
         await ready();
         const start = screen.getByRole(`button`, { name: `Start game` });
@@ -328,9 +329,50 @@ describe('PlayScreen', () => {
         expect(start.getAttribute(`aria-disabled`)).toBe(null);
     });
 
+    it('count a rate limit down on the disabled start, then let it go', async () => {
+        vi.useFakeTimers({ toFake: [`setInterval`, `clearInterval`, `Date`] });
+        serve({ start: refused(429, `rate_limited`, { 'retry-after': `2` }) });
+        render(<PlayScreen />);
+        await ready();
+        const start = screen.getByRole(`button`, { name: `Start game` });
+        fireEvent.click(start, { detail: 1 });
+        const shown = () => document.querySelector(`.start-lines [aria-hidden="true"]`)?.textContent;
+        await waitFor(() => {
+            expect(shown()).toBe(`Too many tries; try again in 2 s`);
+        });
+        expect(start.getAttribute(`aria-disabled`)).toBe(`true`);
+        await act(async () => {});
+        act(() => {
+            vi.advanceTimersByTime(1000);
+        });
+        expect(shown()).toBe(`Too many tries; try again in 1 s`);
+        expect(document.querySelector(`.start-lines .sr-only`)?.textContent).toBe(`Too many tries; try again in 2 s`);
+        act(() => {
+            vi.advanceTimersByTime(1000);
+        });
+        expect(screen.queryByText(/try again in/u)).toBe(null);
+        expect(start.getAttribute(`aria-disabled`)).toBe(null);
+    });
+
+    it('hold Play as guest for the wait a rate-limited guest session names, leaving Sign in', async () => {
+        vi.useFakeTimers({ toFake: [`setInterval`, `clearInterval`, `Date`] });
+        serve({ me: null, guest: refused(429, `rate_limited`, { 'retry-after': `1140` }) });
+        render(<PlayScreen />);
+        await ready();
+        const guest = screen.getByRole(`button`, { name: `Play as guest` });
+        fireEvent.click(guest, { detail: 1 });
+        await waitFor(() => {
+            expect(document.querySelector(`.start-lines .sr-only`)?.textContent).toBe(
+                `Too many guest sessions from this network; try again in 19 minutes, or sign in`,
+            );
+        });
+        expect(guest.getAttribute(`aria-disabled`)).toBe(`true`);
+        expect(screen.getByRole(`link`, { name: /Sign in/u }).getAttribute(`aria-disabled`)).toBe(null);
+    });
+
     it('wait the cooldown the contract sets when the refusal names no wait', async () => {
         vi.useFakeTimers({ toFake: [`setInterval`, `clearInterval`, `Date`] });
-        serve({ start: refused(400, `game_cooldown`) });
+        serve({ start: refused(429, `game_cooldown`) });
         render(<PlayScreen />);
         await ready();
         fireEvent.click(screen.getByRole(`button`, { name: `Start game` }), { detail: 1 });
@@ -896,6 +938,53 @@ describe('PlayScreen', () => {
         expect(screen.queryByText(`quietlake is no longer listed; pick another bot`)).toBe(null);
     });
 
+    it.each([`not_found`, `delisted`, `clock_not_accepted`, `bot_busy`, `not_open`])(
+        'go back to a bot refused as %s once the list drops it and lists it again, with no line and the start free',
+        async (code) => {
+            let bots = roster;
+            let refuse = true;
+            const served = serve({
+                bots: () => bots,
+                start: () => {
+                    if (!refuse) return new Response(JSON.stringify(snapshot), { status: 201 });
+                    refuse = false;
+                    bots = roster.filter((entry) => entry.name !== `devbot-c`);
+                    return refused(400, code)(undefined);
+                },
+            });
+            vi.useFakeTimers({ toFake: [`setInterval`, `clearInterval`] });
+            render(<PlayScreen />);
+            await ready();
+            fireEvent.click(screen.getByRole(`button`, { name: `Start game` }), { detail: 1 });
+            const read = async () => {
+                await act(async () => {
+                    vi.advanceTimersByTime(15_000);
+                    await Promise.resolve();
+                });
+            };
+            await waitFor(() => {
+                expect(title()).toBe(`Play quietlake`);
+            });
+            await read();
+            expect(title()).toBe(`Play quietlake`);
+            expect(screen.getByRole(`button`, { name: `Start game` }).getAttribute(`aria-disabled`)).toBe(`true`);
+            bots = roster;
+            await read();
+            await read();
+            await waitFor(() => {
+                expect(title()).toBe(`Play devbot-c`);
+            });
+            expect(document.querySelectorAll(`.start-lines .field-error`)).toHaveLength(0);
+            const start = screen.getByRole(`button`, { name: `Start game` });
+            expect(start.getAttribute(`aria-disabled`)).toBe(null);
+            fireEvent.click(start, { detail: 0 });
+            await waitFor(() => {
+                expect(window.location.pathname).toBe(`/game/g1`);
+            });
+            expect(served.posts.at(-1)?.body).toMatchObject({ bot: `devbot-c` });
+        },
+    );
+
     it('say that an unlimited game ends with no winner while Unlimited is picked', async () => {
         serve();
         render(<PlayScreen />);
@@ -964,6 +1053,27 @@ describe('PlayScreen', () => {
         meStore.start();
         render(<PlayScreen />);
         expect(await screen.findByRole(`heading`, { name: `The bot list did not load` })).toBeTruthy();
+    });
+
+    it('hold the retry of a rate-limited bot list for its wait', async () => {
+        vi.stubGlobal(
+            `fetch`,
+            vi.fn((url: string) =>
+                Promise.resolve(
+                    url === `/api/me`
+                        ? new Response(JSON.stringify(tom))
+                        : new Response(JSON.stringify({ error: `slow down`, code: `rate_limited` }), { status: 429, headers: { 'retry-after': `7` } }),
+                ),
+            ),
+        );
+        meStore.reset();
+        meStore.start();
+        render(<PlayScreen />);
+        expect(await screen.findByRole(`heading`, { name: `The bot list did not load` })).toBeTruthy();
+        await waitFor(() => {
+            expect(document.querySelector(`.empty .sr-only`)?.textContent).toBe(`Too many tries; try again in 7 s`);
+        });
+        expect(screen.getByRole(`button`, { name: `Try again` }).getAttribute(`aria-disabled`)).toBe(`true`);
     });
 
     it('say so when the picked bot leaves the list, and fall back to another', async () => {

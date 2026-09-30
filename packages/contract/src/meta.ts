@@ -1,4 +1,5 @@
 import { unlimitedWallCapMs } from './games';
+import { gameTurnCap } from './limits';
 import type { FinishReason, Side, TimeControl } from './stream';
 
 /** The site's display name: the wordmark, every page title, and the API document's title. */
@@ -77,22 +78,36 @@ export const finishReasonLabels: Readonly<Record<FinishReason, string>> = {
 
 const wallCapHours = unlimitedWallCapMs / 3_600_000;
 
-/** How a game ended: the side that won, if any, and why. */
+/**
+ * The turns a board of this many stones holds, opening turns included:
+ * the origin is no turn, every later turn places two,
+ * and a win on the first stone of a turn leaves it one short.
+ */
+export function turnsOnBoard(stones: number): number {
+    return Math.ceil((stones - 1) / 2);
+}
+
+/** How a game ended: the side that won, if any, why, and after how many turns. */
 export interface GameResult {
     readonly winner: Side | null;
     readonly reason: FinishReason;
+    readonly turns: number;
 }
 
 /**
  * A finished game's result as one sentence; `you` names the reader's own
  * side, which reads as "You" or "you" in place of that player's name.
  * A game with a winner is terminated only by an illegal move, one without
- * only by the wall-time cap on unlimited games.
+ * by the turn cap or by the wall-time cap on unlimited games.
  */
 export function resultSentence(result: GameResult, names: Readonly<Record<Side, string>>, you?: Side): string {
-    const { winner, reason } = result;
+    const { winner, reason, turns } = result;
     if (winner === null) {
-        if (reason === `terminated`) return `No winner; the game reached the ${String(wallCapHours)}-hour limit`;
+        if (reason === `terminated`) {
+            return turns >= gameTurnCap
+                ? `No winner; the game reached the ${String(gameTurnCap)}-turn limit`
+                : `No winner; the game reached the ${String(wallCapHours)}-hour limit`;
+        }
         if (reason === `aborted`) return `No winner; the game was aborted`;
         return `No winner`;
     }
@@ -145,6 +160,9 @@ export function ladderMeta(roster?: Roster): PageMeta {
 
 /** The bot list's meta. */
 export const botsMeta: PageMeta = { title: pageTitle(`Bots`), description: `Every bot on ${siteName}, online or not` };
+
+/** Every game in progress, as boards. */
+export const liveGamesMeta: PageMeta = { title: pageTitle(`Live games`), description: `Every game in progress on ${siteName}, bots and humans alike` };
 
 /** The way to build a bot, from sign-in to a connected bot. */
 export const connectMeta: PageMeta = { title: pageTitle(`Build a bot`), description: `Sign in, create a bot, and connect it to the ladder` };
@@ -206,21 +224,21 @@ export function botMeta(bot: {
 
 /**
  * What a game's link preview needs: both names, and the side to move with
- * the clock, or the result; a clock whose settings are not at hand is
- * named by its mode.
+ * the clock, or the result.
  */
 export type GameHeadline =
     | {
           readonly status: `live`;
           readonly names: Record<Side, string>;
           readonly toMove: Side;
-          readonly timeControl: TimeControl | ClockMode;
+          readonly timeControl: TimeControl;
       }
     | {
           readonly status: `finished`;
           readonly names: Record<Side, string>;
           readonly winner: Side | null;
           readonly reason: FinishReason;
+          readonly turns: number;
       };
 
 /** A game's meta: both names, then who is to move under which clock, or the result. */

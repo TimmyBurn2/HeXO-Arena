@@ -4,7 +4,7 @@ import type { Query } from './db';
 import { rankablePlayers } from './rating-store';
 
 export function registerLeaderboardApi(app: FastifyInstance, deps: { query: Query }): void {
-    app.get(leaderboardPath, async (request, reply) => {
+    app.get(leaderboardPath, { config: { limit: `public` } }, async (request, reply) => {
         const parsed = leaderboardQuerySchema.safeParse(request.query);
         if (!parsed.success) {
             return reply.code(400).send({ error: `kind must be bots, humans, or all`, code: `bad_request` });

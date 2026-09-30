@@ -1,5 +1,7 @@
 import {
     botConcurrentGameCap,
+    challengeDailyCap,
+    challengePairPendingCap,
     challengeSchema,
     challengeTtlMs,
     type Challenge,
@@ -8,8 +10,9 @@ import {
     type StreamEvent,
     type TimeControl,
 } from '@hexo-arena/contract';
-import type { Query } from './db';
+import { nowSeconds, type Query } from './db';
 import {
+    countChallengesSince,
     decideChallenge,
     findChallenge,
     findChallengeByRequest,
@@ -32,7 +35,9 @@ interface LiveChallenge {
 
 export type CreateChallengeOutcome =
     | { kind: `created`; view: Challenge }
-    | { kind: `replay`; view: Challenge };
+    | { kind: `replay`; view: Challenge }
+    | { kind: `pair_pending` }
+    | { kind: `daily_cap`; retryAfter: number };
 
 export type ChallengeActionOutcome = { kind: `ok` } | { kind: `bot_busy` } | { kind: `unknown` };
 
@@ -90,6 +95,17 @@ export class ChallengeRegistry {
         // so the gates of this moment cannot unmake it.
         const existing = findChallengeByRequest(this.#query, input.challenger.id, input.requestKey);
         if (existing !== undefined) return { kind: `replay`, view: viewOf(this.#query, existing, existing.status) };
+        // One pending challenge per pair keeps a challenger from holding a target's whole inbox.
+        let pending = 0;
+        for (const live of this.#pending.values()) {
+            if (live.record.challengerBotId === input.challenger.id && live.record.destBotId === input.dest.id) pending += 1;
+        }
+        if (pending >= challengePairPendingCap) return { kind: `pair_pending` };
+        const now = nowSeconds();
+        const dayStart = Math.floor(now / 86_400) * 86_400;
+        if (countChallengesSince(this.#query, input.challenger.id, dayStart) >= challengeDailyCap) {
+            return { kind: `daily_cap`, retryAfter: dayStart + 86_400 - now };
+        }
         const id = insertChallenge(this.#query, {
             challengerBotId: input.challenger.id,
             destBotId: input.dest.id,

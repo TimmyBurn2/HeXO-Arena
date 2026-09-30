@@ -16,6 +16,7 @@ import type { GameRegistry } from './game-registry';
 import { countBotBotGamesSince, countPairBotGamesSince } from './game-store';
 import type { ChallengeRegistry } from './challenge-registry';
 import type { PresenceRegistry } from './presence';
+import type { CredentialLimits } from './request-limits';
 import type { StartGate } from './site-state';
 
 export interface ChallengeApiDeps {
@@ -24,6 +25,7 @@ export interface ChallengeApiDeps {
     gate: StartGate;
     games: GameRegistry;
     challenges: ChallengeRegistry;
+    limits: CredentialLimits;
 }
 
 interface NameParams {
@@ -40,11 +42,12 @@ function utcDayStartSeconds(seconds: number): number {
 }
 
 export function registerChallengeApi(app: FastifyInstance, deps: ChallengeApiDeps): void {
-    const { query, presence, games, challenges, gate } = deps;
+    const { query, presence, games, challenges, gate, limits } = deps;
 
-    app.post(`/api/bot/challenge/:name`, async (request, reply) => {
+    app.post(`/api/bot/challenge/:name`, { config: { limit: `principal` } }, async (request, reply) => {
         const challenger = requireBot(query, request, reply);
         if (!challenger) return reply;
+        if (limits.refuse(reply, `principal`, `bot:${challenger.id}`)) return reply;
         const parsed = createChallengeRequestSchema.safeParse(request.body);
         if (!parsed.success) {
             return reply.code(400).send({ error: `the request fails validation`, code: `bad_request` });
@@ -94,7 +97,10 @@ export function registerChallengeApi(app: FastifyInstance, deps: ChallengeApiDep
                 code: `inbox_full`,
             });
         }
-        const dayStart = utcDayStartSeconds(nowSeconds());
+        const now = nowSeconds();
+        const dayStart = utcDayStartSeconds(now);
+        // The daily caps lift when the UTC day turns, so they answer with the wait until then.
+        const untilTomorrow = String(dayStart + 86_400 - now);
         if (
             countPairBotGamesSince(
                 query,
@@ -102,7 +108,7 @@ export function registerChallengeApi(app: FastifyInstance, deps: ChallengeApiDep
                 dayStart,
             ) >= pairDailyCap
         ) {
-            return reply.code(400).send({
+            return reply.code(429).header(`retry-after`, untilTomorrow).send({
                 error: `this pair reached its daily game cap`,
                 code: `daily_pair_cap`,
             });
@@ -111,7 +117,7 @@ export function registerChallengeApi(app: FastifyInstance, deps: ChallengeApiDep
             countBotBotGamesSince(query, challenger.id, dayStart) >= botDailyCap ||
             countBotBotGamesSince(query, target.id, dayStart) >= botDailyCap
         ) {
-            return reply.code(400).send({
+            return reply.code(429).header(`retry-after`, untilTomorrow).send({
                 error: `a side reached its daily bot-vs-bot cap`,
                 code: `daily_bot_cap`,
             });
@@ -124,14 +130,24 @@ export function registerChallengeApi(app: FastifyInstance, deps: ChallengeApiDep
             firstPlayer: parsed.data.firstPlayer,
             requestKey: parsed.data.requestId,
         });
+        if (outcome.kind === `pair_pending`) {
+            return reply.code(400).send({ error: `a challenge to this bot is already pending`, code: `challenge_pending` });
+        }
+        if (outcome.kind === `daily_cap`) {
+            return reply
+                .code(429)
+                .header(`retry-after`, String(outcome.retryAfter))
+                .send({ error: `the challenger sent its daily challenges`, code: `daily_challenge_cap` });
+        }
         return reply
             .code(outcome.kind === `created` ? 201 : 200)
             .send(outcome.view);
     });
 
-    app.post(`/api/bot/challenge/:challengeId/accept`, async (request, reply) => {
+    app.post(`/api/bot/challenge/:challengeId/accept`, { config: { limit: `principal` } }, async (request, reply) => {
         const bot = requireBot(query, request, reply);
         if (!bot) return reply;
+        if (limits.refuse(reply, `principal`, `bot:${bot.id}`)) return reply;
         // Acceptance starts a game, so a pause holds it like any creation;
         // the challenge stays pending and may still be accepted on resume.
         if (gate.refuse(reply)) return reply;
@@ -149,9 +165,10 @@ export function registerChallengeApi(app: FastifyInstance, deps: ChallengeApiDep
         return reply.code(200).send({ ok: true });
     });
 
-    app.post(`/api/bot/challenge/:challengeId/decline`, async (request, reply) => {
+    app.post(`/api/bot/challenge/:challengeId/decline`, { config: { limit: `principal` } }, async (request, reply) => {
         const bot = requireBot(query, request, reply);
         if (!bot) return reply;
+        if (limits.refuse(reply, `principal`, `bot:${bot.id}`)) return reply;
         const { challengeId } = request.params as ChallengeParams;
         if (challenges.decline(bot.id, challengeId).kind !== `ok`) {
             return reply.code(404).send({ error: `no such challenge of yours`, code: `not_found` });
@@ -159,9 +176,10 @@ export function registerChallengeApi(app: FastifyInstance, deps: ChallengeApiDep
         return reply.code(200).send({ ok: true });
     });
 
-    app.post(`/api/bot/challenge/:challengeId/cancel`, async (request, reply) => {
+    app.post(`/api/bot/challenge/:challengeId/cancel`, { config: { limit: `principal` } }, async (request, reply) => {
         const bot = requireBot(query, request, reply);
         if (!bot) return reply;
+        if (limits.refuse(reply, `principal`, `bot:${bot.id}`)) return reply;
         const { challengeId } = request.params as ChallengeParams;
         if (challenges.cancel(bot.id, challengeId).kind !== `ok`) {
             return reply.code(404).send({ error: `no such challenge of yours`, code: `not_found` });

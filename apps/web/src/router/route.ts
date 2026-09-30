@@ -5,6 +5,7 @@ export type Route =
     | { readonly name: `ladder` }
     | { readonly name: `bots` }
     | { readonly name: `bot`; readonly bot: string }
+    | { readonly name: `live-games` }
     | { readonly name: `connect` }
     | { readonly name: `profile` }
     | { readonly name: `credits` }
@@ -29,6 +30,7 @@ export function parseRoute(pathname: string): Route {
     if (head === `bots` && segments.length === 2 && second !== undefined) {
         return { name: `bot`, bot: safeDecode(second) };
     }
+    if (head === `games` && second === `live` && segments.length === 2) return { name: `live-games` };
     if (head === `connect` && segments.length === 1) return { name: `connect` };
     if (head === `profile` && segments.length === 1) return { name: `profile` };
     if (head === `credits` && segments.length === 1) return { name: `credits` };
@@ -53,6 +55,8 @@ export function routePath(route: Route): string {
             return `/bots`;
         case `bot`:
             return `/bots/${encodeURIComponent(route.bot)}`;
+        case `live-games`:
+            return `/games/live`;
         case `connect`:
             return `/connect`;
         case `profile`:

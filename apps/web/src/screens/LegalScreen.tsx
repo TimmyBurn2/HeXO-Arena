@@ -22,7 +22,7 @@ const contentsFrom = 5;
 export function LegalScreen({ page }: { page: LegalPage }) {
     const route = useRoute();
     useDocumentMeta(route);
-    const { data, error, reload } = useAsync(fetchLegalDetails);
+    const { data, error, limited, reload } = useAsync(fetchLegalDetails);
 
     return (
         <>
@@ -33,7 +33,7 @@ export function LegalScreen({ page }: { page: LegalPage }) {
             {data !== null ? (
                 <LegalBody page={page} details={data} />
             ) : error ? (
-                <ErrorFrame sentence={legal.failed} onRetry={reload} />
+                <ErrorFrame sentence={legal.failed} onRetry={reload} wait={limited} />
             ) : (
                 <SkeletonRows />
             )}

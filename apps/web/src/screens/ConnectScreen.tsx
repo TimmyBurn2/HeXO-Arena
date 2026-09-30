@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type Ref } from 'react';
 import { namePattern, isReservedName } from '@hexo-arena/contract';
-import { ApiError, createBot } from '../api/client';
+import { ApiError, createBot, limitedFor } from '../api/client';
+import { useWait, WaitText } from '../components/wait';
 import { Link } from '../router/Link';
 import { landed, landingOf, useRoute } from '../router/use-route';
 import { DiscordSignIn } from '../components/DiscordButton';
@@ -141,6 +142,7 @@ function CreateBotForm({ ref, onCreated }: { ref: Ref<HTMLInputElement>; onCreat
     const [name, setName] = useState(``);
     const [failure, setFailure] = useState<string | null>(null);
     const [sending, setSending] = useState(false);
+    const limited = useWait();
 
     function liveProblem(value: string): string | null {
         if (value === ``) return null;
@@ -155,7 +157,10 @@ function CreateBotForm({ ref, onCreated }: { ref: Ref<HTMLInputElement>; onCreat
         try {
             onCreated(await createBot(name));
         } catch (cause) {
-            if (cause instanceof ApiError) {
+            const wait = limitedFor(cause);
+            if (wait !== null) {
+                limited.start(wait);
+            } else if (cause instanceof ApiError) {
                 setFailure(createErrorSentence(cause));
             } else {
                 setFailure(text.build.failed);
@@ -165,7 +170,7 @@ function CreateBotForm({ ref, onCreated }: { ref: Ref<HTMLInputElement>; onCreat
     }
 
     const problem = liveProblem(name);
-    const submittable = name !== `` && problem === null && !sending;
+    const submittable = name !== `` && problem === null && !sending && limited.wait === null;
 
     return (
         <>
@@ -201,6 +206,11 @@ function CreateBotForm({ ref, onCreated }: { ref: Ref<HTMLInputElement>; onCreat
             {failure !== null ? (
                 <p className="field-error" role="alert">
                     {failure}
+                </p>
+            ) : null}
+            {limited.wait !== null ? (
+                <p className="field-error" role="alert">
+                    <WaitText wait={limited.wait} line={text.states.tooMany} />
                 </p>
             ) : null}
         </>

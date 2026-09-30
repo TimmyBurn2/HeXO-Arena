@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import { clockText, type GameSnapshot, type Side } from '@hexo-arena/contract';
 import { BotBadge, Rating, Swatch } from '../components/player';
+import { WaitText } from '../components/wait';
 import { selfName, type MeState } from '../me';
 import { Link } from '../router/Link';
 import { text } from '../text';
@@ -167,13 +168,18 @@ export function TurnChip({ snapshot, you, status, link, onMoves }: {
         <Chip className="hud-bottom-center">
             <span className="hud-turn">{text.game.yourTurn}</span>
             <Pips placed={status.placed} />
-            {status.note === null ? (
-                <span className="hud-hint" role="status">
-                    {status.placed === 0 ? text.game.twoStones : text.game.oneStoneLeft}
-                </span>
-            ) : (
+            {/* the latest refusal speaks first; a running wait shows again after the next mark */}
+            {status.note !== null ? (
                 <span className="hud-note" role="alert">
                     {status.note}
+                </span>
+            ) : status.wait !== null ? (
+                <span className="hud-note" role="alert">
+                    <WaitText wait={status.wait} line={text.states.tooMany} />
+                </span>
+            ) : (
+                <span className="hud-hint" role="status">
+                    {status.placed === 0 ? text.game.twoStones : text.game.oneStoneLeft}
                 </span>
             )}
         </Chip>

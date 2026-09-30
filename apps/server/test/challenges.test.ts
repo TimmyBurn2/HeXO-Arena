@@ -1,5 +1,6 @@
 import {
     botWithTokenSchema,
+    challengeDailyCap,
     challengeSchema,
     nameKeyOf,
     type BwsMoveRequestPacket,
@@ -9,7 +10,7 @@ import http from 'node:http';
 import WebSocket, { type RawData } from 'ws';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createTestApp, type TestApp } from './helpers';
-import { createQuery } from '../src/db';
+import { createQuery, type Query } from '../src/db';
 import { findBot } from '../src/bots';
 import { findChallenge } from '../src/challenge-store';
 import { insertBotGame } from '../src/game-store';
@@ -37,6 +38,7 @@ interface HttpResult {
     status: number;
     text: string;
     setCookie: string[];
+    retryAfter: string | undefined;
 }
 
 function request(
@@ -53,10 +55,12 @@ function request(
                 text += chunk.toString();
             });
             response.on(`end`, () => {
+                const retryAfter = response.headers[`retry-after`];
                 resolve({
                     status: response.statusCode ?? 0,
                     text,
                     setCookie: response.headers[`set-cookie`] ?? [],
+                    retryAfter: typeof retryAfter === `string` ? retryAfter : undefined,
                 });
             });
         });
@@ -241,6 +245,14 @@ class Arena {
                 socket.close();
             },
         };
+    }
+
+    get query(): Query {
+        return createQuery(this.world.sqlite);
+    }
+
+    get sqlite(): TestApp[`sqlite`] {
+        return this.world.sqlite;
     }
 
     seedBotGame(challenger: string, dest: string): void {
@@ -447,12 +459,6 @@ describe('the bot-vs-bot challenge inbox', () => {
         });
         expect(replay.status).toBe(200);
         expect(challengeSchema.parse(json(replay)).challengeId).toBe(challengeId);
-        const other = await arena.challenge(first.token, `secondbot`, {
-            timeControl: turnControl,
-            requestId: `req-2`,
-        });
-        expect(other.status).toBe(201);
-        expect(challengeSchema.parse(json(other)).challengeId).not.toBe(challengeId);
         await vi.advanceTimersByTimeAsync(60_000);
         const afterExpiry = await arena.challenge(first.token, `secondbot`, {
             timeControl: turnControl,
@@ -463,9 +469,16 @@ describe('the bot-vs-bot challenge inbox', () => {
             challengeId,
             status: `expired`,
         });
+        const other = await arena.challenge(first.token, `secondbot`, {
+            timeControl: turnControl,
+            requestId: `req-2`,
+        });
+        expect(other.status).toBe(201);
+        expect(challengeSchema.parse(json(other)).challengeId).not.toBe(challengeId);
         // One inbox line per challenge: the replay created nothing.
-        const offers = second.stream.events.filter((event) => event.type === `challenge`);
-        expect(offers).toHaveLength(2);
+        const offers = () => second.stream.events.filter((event) => event.type === `challenge`);
+        await until(() => offers().length >= 2);
+        expect(offers()).toHaveLength(2);
     });
 
     it('refuses a target the challenger owner also owns', async () => {
@@ -536,25 +549,43 @@ describe('the bot-vs-bot challenge inbox', () => {
         expect(declined.status).toBe(200);
     });
 
-    it('bounds the target inbox at ten pending challenges', async () => {
-        const firstCookie = await arena.login(`firstowner`);
-        const secondSibling = await arena.createBot(firstCookie, `siblingbot`);
-        const thirdSibling = await arena.createBot(firstCookie, `thirdbot`);
-        for (let i = 1; i <= 4; i += 1) {
-            expect(await createChallengeStatus(arena, first.token, `r-first-${String(i)}`)).toBe(201);
+    it('bounds the target inbox at ten pending challenges, one from each challenger', async () => {
+        const challengers: string[] = [first.token];
+        for (const owner of [`inboxownera`, `inboxownerb`, `inboxownerc`, `inboxownerd`]) {
+            const cookie = await arena.login(owner);
+            for (const suffix of [`one`, `two`, `three`]) challengers.push(await arena.createBot(cookie, `${owner}${suffix}`));
         }
-        for (let i = 1; i <= 3; i += 1) {
-            expect(await createChallengeStatus(arena, secondSibling, `r-second-${String(i)}`)).toBe(201);
-        }
-        for (let i = 1; i <= 3; i += 1) {
-            expect(await createChallengeStatus(arena, thirdSibling, `r-third-${String(i)}`)).toBe(201);
-        }
-        const full = await arena.challenge(first.token, `secondbot`, {
+        const [eleventh, ...ten] = challengers.slice(0, 11).reverse();
+        for (const [index, token] of ten.entries()) expect(await createChallengeStatus(arena, token, `r-${String(index)}`)).toBe(201);
+        const full = await arena.challenge(eleventh ?? ``, `secondbot`, {
             timeControl: turnControl,
-            requestId: `r-first-5`,
+            requestId: `r-eleventh`,
         });
         expect(full.status).toBe(400);
         expect(json(full)).toMatchObject({ code: `inbox_full` });
+    });
+
+    it('hold one pending challenge per pair, while a resent request answers with the stored one', async () => {
+        expect(await createChallengeStatus(arena, first.token, `r-one`)).toBe(201);
+        const second = await arena.challenge(first.token, `secondbot`, { timeControl: turnControl, requestId: `r-two` });
+        expect(second.status).toBe(400);
+        expect(json(second)).toMatchObject({ code: `challenge_pending` });
+        expect(await createChallengeStatus(arena, first.token, `r-one`)).toBe(200);
+    });
+
+    it('cap a challenger at two hundred challenges a UTC day, and say how long until the day turns', async () => {
+        const firstBotId = findBot(arena.query, nameKeyOf(`firstbot`))?.id ?? ``;
+        const secondBotId = findBot(arena.query, nameKeyOf(`secondbot`))?.id ?? ``;
+        const now = Math.floor(Date.now() / 1000);
+        const seed = arena.sqlite.prepare(
+            `insert into challenges (id, challenger_bot_id, dest_bot_id, request_key, time_control, opening_plies, first_player, status, created_at, decided_at)
+             values (?, ?, ?, ?, '{"mode":"unlimited"}', 5, 'random', 'declined', ?, ?)`,
+        );
+        for (let sent = 0; sent < challengeDailyCap; sent += 1) seed.run(`c_seed_${String(sent)}`, firstBotId, secondBotId, `seed-${String(sent)}`, now, now);
+        const capped = await arena.challenge(first.token, `secondbot`, { timeControl: turnControl, requestId: `req-over` });
+        expect(capped.status).toBe(429);
+        expect(json(capped)).toMatchObject({ code: `daily_challenge_cap` });
+        expect(capped.retryAfter).toBe(String(86_400 - (now % 86_400)));
     });
 
     it('caps a pair at twenty bot-vs-bot games a day', async () => {
@@ -565,8 +596,9 @@ describe('the bot-vs-bot challenge inbox', () => {
             timeControl: turnControl,
             requestId: `req-1`,
         });
-        expect(capped.status).toBe(400);
+        expect(capped.status).toBe(429);
         expect(json(capped)).toMatchObject({ code: `daily_pair_cap` });
+        expect(Number(capped.retryAfter)).toBe(86_400 - (Math.floor(Date.now() / 1000) % 86_400));
     });
 
     it('caps a bot at a hundred bot-vs-bot games a day', async () => {
@@ -582,8 +614,9 @@ describe('the bot-vs-bot challenge inbox', () => {
             timeControl: turnControl,
             requestId: `req-1`,
         });
-        expect(capped.status).toBe(400);
+        expect(capped.status).toBe(429);
         expect(json(capped)).toMatchObject({ code: `daily_bot_cap` });
+        expect(Number(capped.retryAfter)).toBe(86_400 - (Math.floor(Date.now() / 1000) % 86_400));
         otherStream.close();
     });
 

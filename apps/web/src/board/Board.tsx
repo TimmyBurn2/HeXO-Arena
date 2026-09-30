@@ -3,6 +3,7 @@ import type { AxialCoord, Side } from '@hexo-arena/contract';
 import type { BoardSettings } from './board-settings';
 import {
     cellPoints,
+    cellSize,
     frontierCells,
     frontierOutline,
     hexCenter,
@@ -10,6 +11,7 @@ import {
     ringPoints,
     stonePoints,
     viewBoxOf,
+    type Frame,
 } from './geometry';
 import './Board.css';
 
@@ -34,6 +36,8 @@ export interface BoardProps {
     overlays?: BoardOverlays | undefined;
     // Pixels per svg unit; absent, the board fills its frame's width.
     scale?: number | undefined;
+    // The part of the field to show; absent, the whole frontier.
+    frame?: Frame | undefined;
     onCellClick?: ((cell: AxialCoord) => void) | undefined;
 }
 
@@ -120,10 +124,12 @@ const StoneNumber = memo(function StoneNumber({ stone, cut = false }: { stone: B
  * Nothing renders outside the frontier, so an illegal distance cannot be
  * clicked at all.
  */
-export function Board({ stones, settings, label, overlays, scale, onCellClick }: BoardProps) {
-    const cells = useMemo(() => frontierCells(stones), [stones]);
-    const outline = useMemo(() => frontierOutline(cells), [cells]);
-    const viewBox = useMemo(() => viewBoxOf(cells), [cells]);
+export function Board({ stones, settings, label, overlays, scale, frame, onCellClick }: BoardProps) {
+    const field = useMemo(() => frontierCells(stones), [stones]);
+    const outline = useMemo(() => frontierOutline(field), [field]);
+    const viewBox = useMemo(() => frame ?? viewBoxOf(field), [frame, field]);
+    // A framed board draws only the cells whose hexagon can reach into view.
+    const cells = useMemo(() => (frame === undefined ? field : field.filter((cell) => within(frame, cell))), [frame, field]);
     const shine = `shine${useId().replace(/:/g, ``)}`;
     const cut = `cut${useId().replace(/:/g, ``)}`;
     // Stones present at first render are history; only later ones animate in.
@@ -171,7 +177,7 @@ export function Board({ stones, settings, label, overlays, scale, onCellClick }:
                 {cells.map((cell) => (
                     <Cell key={`${String(cell.x)},${String(cell.y)}`} cell={cell} />
                 ))}
-                <path className="frontier" d={outline} />
+                {frame === undefined ? <path className="frontier" d={outline} /> : null}
                 {pending !== undefined && (
                     <>
                         <Ring className="ring-pending" coord={pending} />
@@ -216,6 +222,11 @@ export function Board({ stones, settings, label, overlays, scale, onCellClick }:
             </svg>
         </div>
     );
+}
+
+function within(frame: Frame, cell: AxialCoord): boolean {
+    const { cx, cy } = hexCenter(cell);
+    return cx > frame.x - cellSize && cx < frame.x + frame.w + cellSize && cy > frame.y - cellSize && cy < frame.y + frame.h + cellSize;
 }
 
 function winLinePoints(coords: readonly AxialCoord[]): string {

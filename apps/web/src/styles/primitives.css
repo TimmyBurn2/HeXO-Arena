@@ -9,7 +9,16 @@
         font-weight: var(--weight-display);
         line-height: var(--leading-tight);
         letter-spacing: var(--tracking-display);
+        overflow-wrap: break-word;
         margin: 0 0 var(--space-5);
+    }
+
+    /* Large text on a narrow window leaves a long word no room at the
+       full title size. */
+    @media (max-width: 19.5rem) {
+        .screen-title {
+            font-size: var(--text-xl);
+        }
     }
 
     .section-title {
@@ -190,8 +199,12 @@
         flex-wrap: wrap;
     }
 
+    /* Large text on a narrow window breaks the group between pills rather
+       than push the page sideways. */
     .pills {
         display: inline-flex;
+        flex-wrap: wrap;
+        max-width: 100%;
         gap: var(--space-1);
         background: var(--c-bg-raised);
         box-shadow: inset 0 var(--border-w) 0 var(--surface-edge-hi);
@@ -221,7 +234,10 @@
         color: var(--c-text);
     }
 
+    /* A table wider than the window scrolls inside its frame, which also
+       holds its hidden header text, so neither pushes the page sideways. */
     .table-wrap {
+        position: relative;
         background: var(--c-bg-raised);
         box-shadow: inset 0 var(--border-w) 0 var(--surface-edge-hi);
         overflow-x: auto;
@@ -347,7 +363,11 @@
         font-size: var(--text-sm);
     }
 
+    /* A field keeps its default width while it fits and narrows to its
+       column when large text leaves less. */
     input[type='text'] {
+        max-width: 100%;
+        min-width: 0;
         font-family: var(--font-sans);
         font-size: var(--text-base);
         color: var(--c-text);
@@ -359,6 +379,7 @@
 
     .name-field {
         display: flex;
+        max-width: 100%;
         gap: var(--space-2);
         align-items: center;
         flex-wrap: wrap;

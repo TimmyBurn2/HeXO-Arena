@@ -1,5 +1,10 @@
 import {
     botListingSchema,
+    engineDialLimit,
+    engineFrameLimitBytes,
+    engineStrayFrameCap,
+    principalRequestLimit,
+    streamOpenLimit,
     botWithTokenSchema,
     type BotListing,
     gameSnapshotSchema,
@@ -176,6 +181,10 @@ class Arena {
         return botWithTokenSchema.parse(json(result)).token;
     }
 
+    readAccount(token: string): Promise<HttpResult> {
+        return this.#call(`GET`, `/api/bot/account`, { authorization: `Bearer ${token}` });
+    }
+
     async declareWideAccepts(token: string): Promise<void> {
         const result = await this.#call(
             `PATCH`,
@@ -222,6 +231,24 @@ class Arena {
         });
         outgoing.end();
         return handle;
+    }
+
+    // Opens a stream and reports the status it answers with, keeping it open on 200.
+    openStreamStatus(token: string): Promise<{ status: number; retryAfter: string | undefined; close: () => void }> {
+        return new Promise((resolve, reject) => {
+            const outgoing = http.request(
+                { host: `127.0.0.1`, port: this.port, path: `/api/bot/stream?open=1`, method: `GET`, headers: { authorization: `Bearer ${token}` } },
+                (response) => {
+                    const retryAfter = response.headers[`retry-after`];
+                    resolve({ status: response.statusCode ?? 0, retryAfter: typeof retryAfter === `string` ? retryAfter : undefined, close: () => outgoing.destroy() });
+                    response.resume();
+                },
+            );
+            outgoing.on(`error`, (error) => {
+                reject(error);
+            });
+            outgoing.end();
+        });
     }
 
     async dialEngine(socketUrl: string, token: string): Promise<EngineHandle> {
@@ -613,6 +640,15 @@ describe('a human plays a connected bot end to end', () => {
         expect(stored.board.cells.slice(0, 5)).toEqual(snapshot.board.cells);
     });
 
+    it('states the clock with its amounts on live and stored snapshots', async () => {
+        const match = { mode: `match` as const, mainTimeMs: 300_000, incrementMs: 3_000 };
+        const { gameId, snapshot } = await startGame(arena, bot.cookie, match);
+        expect(snapshot.timeControl).toEqual(match);
+        expect((await arena.snapshot(bot.cookie, gameId)).timeControl).toEqual(match);
+        await arena.humanResign(bot.cookie, gameId);
+        expect((await arena.snapshot(bot.cookie, gameId)).timeControl).toEqual(match);
+    });
+
     it('defaults a game without an opening length to five plies', async () => {
         const response = await arena.createGame(bot.cookie, { bot: `opponentbot`, timeControl: turnControl });
         expect(response.status).toBe(201);
@@ -682,6 +718,123 @@ describe('a human plays a connected bot end to end', () => {
         await vi.advanceTimersByTimeAsync(30_000);
         expect(bot.stream.keepalives).toBe(3);
         expect(bot.stream.events.some((event) => event.type === `gameFinish`)).toBe(false);
+    });
+});
+
+describe('the stream and the engine session under their limits', () => {
+    let arena: Arena;
+    let bot: Fixture;
+
+    beforeEach(async () => {
+        vi.useFakeTimers(timerFakes);
+        arena = await startArena();
+        bot = await standardBot(arena);
+    });
+
+    afterEach(async () => {
+        bot.dispose();
+        await arena.close();
+        vi.useRealTimers();
+    });
+
+    it('refuse a sixth stream open within ten seconds with its wait, and leave the open stream running', async () => {
+        const opened: { close: () => void }[] = [];
+        for (let open = 1; open < streamOpenLimit.burst; open += 1) {
+            const answer = await arena.openStreamStatus(bot.token);
+            expect(answer.status).toBe(200);
+            opened.push(answer);
+        }
+        const refused = await arena.openStreamStatus(bot.token);
+        expect(refused.status).toBe(429);
+        expect(refused.retryAfter).toBe(String(streamOpenLimit.refillMs / 1000));
+        expect((await arena.directoryEntry(`opponentbot`))?.online).toBe(true);
+        const other = await arena.openStreamStatus(await arena.createBot(bot.cookie, `otherbot`));
+        expect(other.status).toBe(200);
+        opened.push(other);
+        vi.advanceTimersByTime(streamOpenLimit.refillMs);
+        const later = await arena.openStreamStatus(bot.token);
+        expect(later.status).toBe(200);
+        opened.push(later);
+        for (const stream of opened) stream.close();
+    });
+
+    it('refuse a sixth engine dial within ten seconds before the upgrade', async () => {
+        await startGame(arena, bot.cookie);
+        const start = await gameStartOn(bot.stream);
+        for (let dial = 0; dial < engineDialLimit.burst; dial += 1) {
+            const engine = await arena.dialEngine(start.engine.socketUrl, start.engine.token);
+            engine.close();
+        }
+        expect(await arena.dialEngineRefused(start.engine.socketUrl, start.engine.token)).toBe(429);
+        vi.advanceTimersByTime(engineDialLimit.refillMs);
+        const later = await arena.dialEngine(start.engine.socketUrl, start.engine.token);
+        expect(later.socket.readyState).toBe(WebSocket.OPEN);
+        later.close();
+    });
+
+    it(`hold a player's turns, and a seat's resignation beside its bot's calls, to ${String(principalRequestLimit.burst)} at once`, async () => {
+        const { gameId } = await startGame(arena, bot.cookie);
+        const start = await gameStartOn(bot.stream);
+        // Starting the game spent one of the player's calls.
+        const statuses: number[] = [];
+        for (let turn = 1; turn <= principalRequestLimit.burst; turn += 1) {
+            statuses.push((await arena.move(bot.cookie, gameId, [{ x: 40, y: 0 }, { x: 41, y: 0 }])).status);
+        }
+        expect(statuses.slice(0, -1)).not.toContain(429);
+        expect(statuses.at(-1)).toBe(429);
+        // The bot spent one call declaring what it accepts.
+        for (let call = 1; call < principalRequestLimit.burst; call += 1) expect((await arena.readAccount(bot.token)).status).toBe(200);
+        expect((await arena.botResign(gameId, start.engine.token)).status).toBe(429);
+        vi.advanceTimersByTime(principalRequestLimit.refillMs);
+        expect((await arena.botResign(gameId, start.engine.token)).status).toBe(200);
+    });
+
+    it(`close an engine session with 1009 on a frame over ${String(engineFrameLimitBytes / 1024)} KiB`, async () => {
+        await startGame(arena, bot.cookie);
+        const start = await gameStartOn(bot.stream);
+        const engine = await arena.dialEngine(start.engine.socketUrl, start.engine.token);
+        let closed: number | null = null;
+        engine.socket.on(`close`, (code) => {
+            closed = code;
+        });
+        engine.socket.send(`x`.repeat(engineFrameLimitBytes + 1));
+        await until(() => closed !== null);
+        expect(closed).toBe(1009);
+    });
+
+    it(`count an answer that names another request as a stray on the bot's own turn`, async () => {
+        // Three opening plies hand the first turn to the bot, which plays crosses.
+        await startGame(arena, bot.cookie, turnControl, 3);
+        const start = await gameStartOn(bot.stream);
+        const engine = await arena.dialEngine(start.engine.socketUrl, start.engine.token);
+        await until(() => engine.packets.some(isMoveRequest));
+        let closed: number | null = null;
+        engine.socket.on(`close`, (code) => {
+            closed = code;
+        });
+        const stray = JSON.stringify({ type: `move_response`, move: { pieces: [{ q: 1, r: 0 }, { q: 2, r: 0 }] }, request_id: 999 });
+        for (let frame = 0; frame <= engineStrayFrameCap; frame += 1) engine.socket.send(stray);
+        await until(() => closed !== null);
+        expect(closed).toBe(1008);
+    });
+
+    it('close an engine session with 1008 after ten frames that answer no request, forfeiting nothing', async () => {
+        const { gameId } = await startGame(arena, bot.cookie);
+        const start = await gameStartOn(bot.stream);
+        const engine = await arena.dialEngine(start.engine.socketUrl, start.engine.token);
+        let closed: { code: number; reason: string } | null = null;
+        engine.socket.on(`close`, (code, reason) => {
+            closed = { code, reason: reason.toString() };
+        });
+        const stray = JSON.stringify({ type: `move_response`, move: { pieces: [{ q: 1, r: 0 }, { q: 2, r: 0 }] }, request_id: 999 });
+        for (let frame = 0; frame < engineStrayFrameCap; frame += 1) engine.socket.send(stray);
+        await until(() => engine.socket.bufferedAmount === 0);
+        for (let spin = 0; spin < 50; spin += 1) await new Promise((resolve) => setImmediate(resolve));
+        expect(closed).toBe(null);
+        engine.socket.send(stray);
+        await until(() => closed !== null);
+        expect(closed).toEqual({ code: 1008, reason: `rate limit exceeded` });
+        expect(inProgress(await arena.snapshot(bot.cookie, gameId)).status).toBe(`in-progress`);
     });
 });
 
@@ -762,10 +915,17 @@ describe('a guest plays a connected bot', () => {
         const guest = await arena.guest();
         await startGame(arena, guest);
         const immediate = await arena.createGame(guest, { bot: `opponentbot`, timeControl: turnControl });
-        expect(immediate.status).toBe(400);
+        expect(immediate.status).toBe(429);
         expect(json(immediate)).toMatchObject({ code: `game_cooldown` });
         expect(immediate.retryAfter).toBe(`60`);
         await startGame(arena, await arena.guest());
+    });
+
+    it('states the clock on a guest game once it finishes', async () => {
+        const guest = await arena.guest();
+        const { gameId } = await startGame(arena, guest, turnControl);
+        await arena.humanResign(guest, gameId);
+        expect((await arena.snapshot(guest, gameId)).timeControl).toEqual(turnControl);
     });
 
     it('aborts the live game when the guest signs out and forgets it after', async () => {
@@ -862,7 +1022,7 @@ describe('game creation gates', () => {
             bot: `opponentbot`,
             timeControl: unlimitedControl,
         });
-        expect(immediate.status).toBe(400);
+        expect(immediate.status).toBe(429);
         expect(json(immediate)).toMatchObject({ code: `game_cooldown` });
         expect(immediate.retryAfter).toBe(`60`);
         await vi.advanceTimersByTimeAsync(30_000);
@@ -870,7 +1030,7 @@ describe('game creation gates', () => {
             bot: `opponentbot`,
             timeControl: unlimitedControl,
         });
-        expect(cooling.status).toBe(400);
+        expect(cooling.status).toBe(429);
         expect(json(cooling)).toMatchObject({ code: `game_cooldown` });
         expect(cooling.retryAfter).toBe(`30`);
         await vi.advanceTimersByTimeAsync(30_000);

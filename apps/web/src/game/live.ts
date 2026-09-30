@@ -34,13 +34,14 @@ export function applyTurn(snapshot: GameSnapshot, turn: GameTurn): TurnFit {
 /** The result lands on the board as it stands; a finished board keeps its own. */
 export function applyFinish(snapshot: GameSnapshot, finish: GameFinish): GameSnapshot {
     if (snapshot.status === `finished`) return snapshot;
-    const { gameId, players, openingPlies, board } = snapshot;
+    const { gameId, players, openingPlies, board, timeControl } = snapshot;
     return {
         gameId,
         players,
         ...(snapshot.you !== undefined && { you: snapshot.you }),
         openingPlies,
         board,
+        timeControl,
         status: `finished`,
         winner: finish.winner,
         reason: finish.reason,
