@@ -5,6 +5,8 @@ import {
     botsPath,
     createBotRequestSchema,
     createGameRequestSchema,
+    finishedGamesPageSchema,
+    finishedGamesPath,
     gameEventsPath,
     gamesPath,
     gameSnapshotSchema,
@@ -27,6 +29,7 @@ import {
     type AxialCoord,
     type BotListing,
     type CreateGameRequest,
+    type FinishedGamesPage,
     type GameSnapshot,
     type GuestMe,
     type LeaderboardEntry,
@@ -186,6 +189,11 @@ export function createGame(request: CreateGameRequest): Promise<GameSnapshot> {
 /** The games in progress, newest first, as far as the list's cap reaches. */
 export function fetchLiveGames(): Promise<LiveGameEntry[]> {
     return getJson(gamesPath, liveGameEntrySchema.array());
+}
+
+/** The newest page of finished games, unfiltered: the latest results first. */
+export function fetchRecentGames(): Promise<FinishedGamesPage> {
+    return getJson(finishedGamesPath, finishedGamesPageSchema);
 }
 
 /** Any game; the session only decides whether the caller's side is present. */

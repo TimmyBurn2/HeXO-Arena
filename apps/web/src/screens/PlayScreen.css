@@ -461,6 +461,15 @@
         position: absolute;
     }
 
+    .start-yours {
+        list-style: none;
+        margin: var(--space-1) 0 0;
+        padding: 0;
+        display: flex;
+        flex-wrap: wrap;
+        gap: var(--space-1) var(--space-4);
+    }
+
     .start-lines {
         display: flex;
         flex-direction: column;

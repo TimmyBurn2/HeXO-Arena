@@ -38,6 +38,9 @@ export interface BoardProps {
     scale?: number | undefined;
     // The part of the field to show; absent, the whole frontier.
     frame?: Frame | undefined;
+    // Whether the frontier's edge draws; a framed mini leaves it out, since
+    // its frame cuts through the field.
+    edge?: boolean | undefined;
     onCellClick?: ((cell: AxialCoord) => void) | undefined;
 }
 
@@ -124,7 +127,7 @@ const StoneNumber = memo(function StoneNumber({ stone, cut = false }: { stone: B
  * Nothing renders outside the frontier, so an illegal distance cannot be
  * clicked at all.
  */
-export function Board({ stones, settings, label, overlays, scale, frame, onCellClick }: BoardProps) {
+export function Board({ stones, settings, label, overlays, scale, frame, edge = frame === undefined, onCellClick }: BoardProps) {
     const field = useMemo(() => frontierCells(stones), [stones]);
     const outline = useMemo(() => frontierOutline(field), [field]);
     const viewBox = useMemo(() => frame ?? viewBoxOf(field), [frame, field]);
@@ -177,7 +180,7 @@ export function Board({ stones, settings, label, overlays, scale, frame, onCellC
                 {cells.map((cell) => (
                     <Cell key={`${String(cell.x)},${String(cell.y)}`} cell={cell} />
                 ))}
-                {frame === undefined ? <path className="frontier" d={outline} /> : null}
+                {edge ? <path className="frontier" d={outline} /> : null}
                 {pending !== undefined && (
                     <>
                         <Ring className="ring-pending" coord={pending} />

@@ -156,7 +156,7 @@ describe('ConnectScreen', () => {
     it('mark the sign-in step done for a signed-in user', async () => {
         vi.stubGlobal(
             `fetch`,
-            vi.fn(() => Promise.resolve(new Response(JSON.stringify({ kind: `user`, name: `tom`, rating: 1503, provisional: false, discord: null })))),
+            vi.fn(() => Promise.resolve(new Response(JSON.stringify({ kind: `user`, name: `tom`, rating: 1503, provisional: false, discord: null, liveGames: [] })))),
         );
         meStore.reset();
         meStore.start();
@@ -169,7 +169,7 @@ describe('ConnectScreen', () => {
     it('take focus to the bot name when an account was just made on the way here, once', async () => {
         vi.stubGlobal(
             `fetch`,
-            vi.fn(() => Promise.resolve(new Response(JSON.stringify({ kind: `user`, name: `tom`, rating: 1000, provisional: true, discord: null })))),
+            vi.fn(() => Promise.resolve(new Response(JSON.stringify({ kind: `user`, name: `tom`, rating: 1000, provisional: true, discord: null, liveGames: [] })))),
         );
         window.history.pushState({ landing: `bot-name` }, ``, `/connect`);
         meStore.reset();
@@ -185,7 +185,7 @@ describe('ConnectScreen', () => {
     });
 
     it('tell a guest that owning a bot takes an account', async () => {
-        vi.stubGlobal(`fetch`, vi.fn(() => Promise.resolve(new Response(JSON.stringify({ kind: `guest`, name: `Guest k3f9` })))));
+        vi.stubGlobal(`fetch`, vi.fn(() => Promise.resolve(new Response(JSON.stringify({ kind: `guest`, name: `Guest k3f9`, liveGames: [] })))));
         meStore.reset();
         meStore.start();
         render(<ConnectScreen />);

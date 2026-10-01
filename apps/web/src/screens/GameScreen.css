@@ -87,10 +87,114 @@
         bottom: var(--hud-clear);
     }
 
-    /* The ways on from a result wrap as a pair, never one alone. */
-    .hud-actions {
+    /* A replay's chip: its controls on the first line, the result or the
+       live state on the second. */
+    /* A column that wraps sizes itself poorly, so the two lines never do. */
+    .hud-replay .hud-chip {
+        flex-direction: column;
+        flex-wrap: nowrap;
+        gap: var(--space-1);
+    }
+
+    .hud-replay-line {
         display: inline-flex;
-        gap: var(--space-3);
+        align-items: center;
+        flex-wrap: wrap;
+        justify-content: center;
+        gap: var(--space-2) var(--space-3);
+        max-width: 100%;
+    }
+
+    .scrubber {
+        display: inline-flex;
+        align-items: center;
+        gap: var(--space-1);
+    }
+
+    .scrub-step {
+        display: grid;
+        place-items: center;
+        flex: none;
+        width: var(--control-md);
+        height: var(--control-md);
+        padding: 0;
+        border: none;
+        background: transparent;
+        color: var(--c-text-dim);
+        cursor: pointer;
+        transition: color var(--dur-fast) var(--ease), background var(--dur-fast) var(--ease);
+    }
+
+    .scrub-step:hover {
+        background: var(--c-bg-hover);
+        color: var(--c-text);
+    }
+
+    .scrub-step[aria-disabled='true'],
+    .scrub-step[aria-disabled='true']:hover {
+        background: transparent;
+        color: var(--c-border-strong);
+        cursor: not-allowed;
+    }
+
+    @media (forced-colors: active) {
+        .scrub-step[aria-disabled='true'],
+        .scrub-step[aria-disabled='true']:hover {
+            color: GrayText;
+        }
+    }
+
+    .scrub-step svg {
+        width: var(--text-xl);
+        height: var(--text-xl);
+        fill: none;
+        stroke: currentColor;
+        stroke-width: 2;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+    }
+
+    /* The count is the slider: its words, and under them the share of the
+       game on the board, in brass as every control's state is. */
+    .scrub-count {
+        display: inline-flex;
+        flex-direction: column;
+        align-items: stretch;
+        gap: var(--space-1);
+        min-width: var(--scrub-count-min);
+        padding: var(--space-1) var(--space-2);
+        cursor: default;
+    }
+
+    .scrub-words {
+        text-align: center;
+        font-variant-numeric: tabular-nums;
+        white-space: nowrap;
+    }
+
+    .scrub-track {
+        display: block;
+        height: var(--space-1);
+        background: var(--c-border-strong);
+        cursor: pointer;
+    }
+
+    .scrub-fill {
+        display: block;
+        height: 100%;
+        background: var(--c-accent-solid);
+    }
+
+    /* Off, the switch reads as a control, in brass words, apart from the
+       quiet watching tag beside it; on, it takes the accent tint. */
+    .scrub-live {
+        background: var(--c-bg-hover);
+        color: var(--c-accent);
+    }
+
+    .scrub-live[aria-pressed='true'] {
+        background: var(--c-accent-bg);
+        color: var(--c-accent);
     }
 
     .stage[data-pinned] .hud-top-right {
@@ -404,6 +508,11 @@
         color: var(--c-text);
     }
 
+    /* Turns the board has not reached yet read in the dim color, still held to AA. */
+    .feed-line.ahead {
+        color: var(--c-text-dim);
+    }
+
     .feed-line.fresh {
         animation: line-in var(--dur-base) var(--ease) both;
     }
@@ -658,6 +767,42 @@
 
         .hud-bottom-center .pips {
             display: none;
+        }
+
+        /* The sheet's peek holds a replay's steps, so the chip above it
+           keeps the result or the live state alone. */
+        .hud-replay .scrubber {
+            display: none;
+        }
+
+        /* A replay's peek gives its steps and count a row of their own
+           under the name and clock, so a long name never pushes them out;
+           the stage reserves the taller peek for the chip and the camera. */
+        .stage[data-replay] {
+            --sheet-peek-h: var(--sheet-peek-replay-h);
+        }
+
+        .peek-row:has(.peek-scrub) {
+            flex-wrap: wrap;
+            row-gap: var(--space-1);
+        }
+
+        .peek-scrub {
+            display: flex;
+            flex-basis: 100%;
+            justify-content: center;
+            cursor: default;
+        }
+
+        .scrubber.compact .scrub-step {
+            width: var(--control-lg);
+            height: var(--control-lg);
+        }
+
+        .scrubber.compact .scrub-count {
+            min-width: var(--scrub-count-min);
+            color: var(--c-text-dim);
+            font-size: var(--text-sm);
         }
     }
 }

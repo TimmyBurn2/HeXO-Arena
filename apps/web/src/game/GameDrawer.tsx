@@ -21,9 +21,11 @@ const tabs: readonly { id: DrawerTab; label: string }[] = [
  * A right-hand drawer on wide screens, a bottom sheet on phones whose peek
  * keeps the player's own chip in reach.
  */
-export function GameDrawer({ drawer, feed, facts, running, timed, onResign, peek }: {
+export function GameDrawer({ drawer, feed, current, facts, running, timed, onResign, peek }: {
     drawer: Drawer;
     feed: readonly FeedLine[];
+    // The feed line the board shows; a replay may stand before the newest.
+    current: number;
     facts: readonly (readonly [string, string])[];
     running: boolean;
     // Whether a clock runs down while nobody moves, as unlimited games have none.
@@ -145,7 +147,7 @@ export function GameDrawer({ drawer, feed, facts, running, timed, onResign, peek
                             <div className="moves-head">
                                 <BoardToggles />
                             </div>
-                            <MoveFeed feed={feed} visible={drawer.visible} />
+                            <MoveFeed feed={feed} current={current} visible={drawer.visible} />
                         </>
                     ) : null}
                     {drawer.tab === `game` ? <GameFacts facts={facts} running={running} timed={timed} onResign={onResign} /> : null}
@@ -177,23 +179,33 @@ export function FeedLabel({ line }: { line: FeedLine }) {
 }
 
 // The record, newest at the bottom; lines added after first render rise in.
+// The line the board shows is marked, and in a replay the lines after it
+// dim, since they have not happened on the board.
 // The panel around the list is what scrolls, and a hidden panel has no
-// height, so it follows the newest line on every turn and on every open.
-function MoveFeed({ feed, visible }: { feed: readonly FeedLine[]; visible: boolean }) {
+// height, so it follows the newest line, or the line shown in a replay,
+// on every turn, every step, and every open.
+function MoveFeed({ feed, current, visible }: { feed: readonly FeedLine[]; current: number; visible: boolean }) {
     const listRef = useRef<HTMLOListElement>(null);
     const settled = useRef(feed.length);
+    const newest = current >= feed.length - 1;
 
     useEffect(() => {
         const panel = listRef.current?.closest(`.drawer-panel`);
-        if (visible && panel instanceof HTMLElement) panel.scrollTop = panel.scrollHeight;
-    }, [feed.length, visible]);
+        if (!visible || !(panel instanceof HTMLElement)) return;
+        if (newest) {
+            panel.scrollTop = panel.scrollHeight;
+            return;
+        }
+        listRef.current?.querySelector(`[aria-current="step"]`)?.scrollIntoView({ block: `nearest` });
+    }, [feed.length, visible, current, newest]);
 
     return (
         <ol className="feed" ref={listRef}>
             {feed.map((line, index) => (
                 <li
                     key={`${line.label}-${line.groups.join(` `)}`}
-                    className={`feed-line${index === feed.length - 1 ? ` latest` : ``}${index >= settled.current ? ` fresh` : ``}`}
+                    className={`feed-line${index === current ? ` latest` : ``}${index > current ? ` ahead` : ``}${index >= settled.current ? ` fresh` : ``}`}
+                    aria-current={index === current ? `step` : undefined}
                 >
                     <span className="feed-n">
                         <FeedLabel line={line} />

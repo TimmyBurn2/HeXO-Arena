@@ -19,7 +19,7 @@
     }
 
     .topbar-panel-body {
-        max-height: calc(100dvh - var(--header-h) - var(--space-4));
+        max-height: calc(100dvh - var(--topbar-h) - var(--space-4));
         overflow-y: auto;
         padding: var(--space-4);
         background: var(--c-bg-overlay);

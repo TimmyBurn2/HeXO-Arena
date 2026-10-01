@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import type { Me } from '@hexo-arena/contract';
 import { looks, wear } from './matrix';
 import { serve, world } from './mock-api';
 
@@ -157,11 +158,12 @@ const framedScreens = [`/`, `/ladder`, `/bots`, `/bots/sealbot`, `/connect`, `/p
 
 // The legal links are the footer's last group: at the bottom right where
 // the footer is a row, at its end where it stacks, signed in or out.
-for (const [visitor, me] of [
+const visitors: readonly (readonly [string, Me])[] = [
     [`signed out`, null],
-    [`signed in`, { kind: `user`, name: `tom`, rating: 1503, provisional: false, discord: null }],
-    [`a guest`, { kind: `guest`, name: `Guest k3f9` }],
-] as const) {
+    [`signed in`, { kind: `user`, name: `tom`, rating: 1503, provisional: false, discord: null, liveGames: [] }],
+    [`a guest`, { kind: `guest`, name: `Guest k3f9`, liveGames: [] }],
+];
+for (const [visitor, me] of visitors) {
     for (const path of framedScreens) {
         test(`the legal links close the footer of ${path} for ${visitor} at 1280, 768, and 390 px`, async ({ page }) => {
             const look = looks[0];

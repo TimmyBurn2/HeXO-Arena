@@ -547,15 +547,30 @@ export class GameRegistry {
         return [...this.#games.values()]
             .reverse()
             .slice(0, limit)
-            .map((game) => ({
-                gameId: game.id,
-                players: this.#playersOf(game),
-                timeControl: game.timeControl,
-                toMove: sideToMove(game),
-                rated: !isGuestGame(game),
-                cells: boardCells(game.position),
-                clock: liveClockView(game),
-            }));
+            .map((game) => this.#liveEntry(game));
+    }
+
+    /** One person's live games, newest first; the live-game cap bounds them. */
+    liveGamesOf(person: PersonRef): LiveGameEntry[] {
+        return [...this.#games.values()]
+            .reverse()
+            .filter((game) => {
+                const human = humanSide(game);
+                return human !== null && samePerson(human.seat.person, person);
+            })
+            .map((game) => this.#liveEntry(game));
+    }
+
+    #liveEntry(game: LiveGame): LiveGameEntry {
+        return {
+            gameId: game.id,
+            players: this.#playersOf(game),
+            timeControl: game.timeControl,
+            toMove: sideToMove(game),
+            rated: !isGuestGame(game),
+            cells: boardCells(game.position),
+            clock: liveClockView(game),
+        };
     }
 
     /**

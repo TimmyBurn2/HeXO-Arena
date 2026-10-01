@@ -14,8 +14,8 @@ export function NotFoundScreen({
             <h1 className="screen-title">{heading}</h1>
             <p className="note">{sentence}</p>
             <p>
-                <Link to="/ladder" className="btn btn-ghost">
-                    {text.states.notFoundLadder}
+                <Link to="/" className="btn btn-ghost">
+                    {text.states.notFoundHome}
                 </Link>
             </p>
         </>

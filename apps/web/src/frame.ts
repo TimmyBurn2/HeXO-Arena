@@ -1,4 +1,5 @@
 import { useLayoutEffect, useSyncExternalStore } from 'react';
+import type { Route } from './router/route';
 
 let borrowers = 0;
 const listeners = new Set<() => void>();
@@ -43,3 +44,15 @@ export function useFrameLent(): boolean {
 
 /** Where a screen sits: inside the site's frame, or alone on the stage. */
 export type Layout = `framed` | `immersive`;
+
+// The game is immersive: the board is the screen, with no site chrome; a
+// paused banner would not apply, since live games continue.
+function layoutOf(route: Route): Layout {
+    return route.name === `game` ? `immersive` : `framed`;
+}
+
+/** Whether the screen at this route sits in the site's frame, its own or lent. */
+export function useFramed(route: Route): boolean {
+    const lentNow = useFrameLent();
+    return layoutOf(route) === `framed` || lentNow;
+}

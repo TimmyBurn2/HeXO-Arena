@@ -61,9 +61,12 @@ function minCellPx(element: HTMLElement, finished: boolean): number {
  * The camera fits the whole frontier when every cell stays at its minimum
  * size and scrolls natively otherwise; it refits between turns, never
  * while placing.
+ * A replay shows fewer stones than `frameStones`, the position the camera
+ * frames, so stones never jump as the reader steps through the game.
  */
 export function GameBoard({
     stones,
+    frameStones,
     position,
     you,
     lastMove,
@@ -75,6 +78,7 @@ export function GameBoard({
     onStatus,
 }: {
     stones: readonly BoardStone[];
+    frameStones?: readonly BoardStone[] | undefined;
     position: Position;
     // Null for a watcher, who never marks a stone.
     you: Side | null;
@@ -99,7 +103,8 @@ export function GameBoard({
     const [size, setSize] = useState<{ w: number; h: number } | null>(null);
     const [scale, setScale] = useState<number | undefined>(undefined);
     const centerOn = useRef<{ cx: number; cy: number; scale: number } | null>(null);
-    const box = useMemo(() => viewBoxOf(frontierCells(stones)), [stones]);
+    const framed = frameStones ?? stones;
+    const box = useMemo(() => viewBoxOf(frontierCells(framed)), [framed]);
 
     useEffect(() => {
         onStatus?.({ placed: pending === null ? 0 : 1, note, wait: limited.wait });
@@ -139,16 +144,16 @@ export function GameBoard({
         const h = size.h - Number.parseFloat(style.paddingTop) - Number.parseFloat(style.paddingBottom);
         const least = minCellPx(camera, finished) / cellWidth;
         const whole = Math.min(w / box.w, h / box.h);
-        if (whole >= least || stones.length === 0) {
+        if (whole >= least || framed.length === 0) {
             centerOn.current = null;
             setScale(whole);
             return;
         }
-        const near = nearBox(stones);
+        const near = nearBox(framed);
         const next = Math.max(least, Math.min(w / near.w, h / near.h));
         centerOn.current = { cx: near.x + near.w / 2, cy: near.y + near.h / 2, scale: next };
         setScale(next);
-    }, [stones.length, size, finished]);
+    }, [framed.length, size, finished]);
 
     // The stones center in the room between the paddings, which differ
     // above and below, once the refit's scale has laid out: in this same
@@ -247,6 +252,8 @@ export function GameBoard({
                     settings={settings}
                     label={text.drawer.boardStones(stones.length)}
                     scale={scale}
+                    frame={frameStones === undefined ? undefined : box}
+                    edge
                     overlays={{
                         ...(pending === null || you === null ? {} : { pending, pendingSide: you }),
                         ...(yourMove ? { focus } : {}),

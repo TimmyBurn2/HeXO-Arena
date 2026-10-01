@@ -69,6 +69,12 @@ import {
     gameSnapshotSchema,
     gameWatcherCap,
     gamesPath,
+    finishedGamesMemoMs,
+    finishedGamesPageCap,
+    finishedGamesPageSchema,
+    finishedGamesPageSize,
+    finishedGamesPath,
+    finishedGamesQuerySchema,
     guestConflictErrorCodes,
     guestIdleSeconds,
     guestLimitErrorCodes,
@@ -621,6 +627,30 @@ function registerSiteSurface(registry: OpenAPIRegistry, shared: SharedComponents
                 description: `The live games.`,
                 content: { 'application/json': { schema: liveGameEntrySchema.array() } },
             },
+        },
+    });
+
+    registry.registerPath({
+        method: 'get',
+        path: finishedGamesPath,
+        summary: 'List finished games.',
+        operationId: 'listFinishedGames',
+        tags: ['Games'],
+        security: [],
+        description: [
+            `Finished games, newest first, ${String(finishedGamesPageSize)} a page, at most ${String(finishedGamesPageCap)} pages per set of filters; before reaches older games.`,
+            `Guest games are never stored.`,
+            `A name no player holds, a deleted player's placeholder included, answers not_found.`,
+            `An identical query is read at most once every ${seconds(finishedGamesMemoMs)} s, every caller in that time getting the same body.`,
+        ].join(` `),
+        request: { query: finishedGamesQuerySchema },
+        responses: {
+            200: {
+                description: `One page of games.`,
+                content: { 'application/json': { schema: finishedGamesPageSchema } },
+            },
+            400: shared.badRequest,
+            404: shared.notFound,
         },
     });
 

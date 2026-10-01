@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { botConcurrentGameCap } from './games';
+import { botConcurrentGameCap, humanConcurrentGameCap, liveGameEntrySchema } from './games';
 import { provisionalSchema, ratingSchema } from './leaderboard';
 import { nameSyntaxSchema } from './names';
 import { discordNamesSchema, nextPathSchema } from './sign-in';
@@ -28,10 +28,18 @@ export const streamKeepaliveMs = 10_000;
 // account.
 export const guestLabelPattern = /^Guest [a-z0-9]{4}$/;
 
+// The person's own live games, so a page can lead back to them; the
+// live-game cap bounds how many there are.
+const ownLiveGamesSchema = z
+    .array(liveGameEntrySchema)
+    .max(humanConcurrentGameCap)
+    .meta({ id: `OwnLiveGames`, description: `The person's live games, newest first.` });
+
 export const guestMeSchema = z
     .object({
         kind: z.literal(`guest`),
         name: z.string().regex(guestLabelPattern),
+        liveGames: ownLiveGamesSchema,
     })
     .meta({ id: `Guest` });
 export type GuestMe = z.infer<typeof guestMeSchema>;
@@ -39,7 +47,7 @@ export type GuestMe = z.infer<typeof guestMeSchema>;
 // Who the session cookie names: a user by their global name with their
 // current rating and the Discord account they signed in with, which only
 // this read carries; an anonymous guest by its label (guests are never
-// rated); or no one.
+// rated); or no one. Either person carries their own live games.
 export const userMeSchema = z
     .object({
         kind: z.literal(`user`),
@@ -47,6 +55,7 @@ export const userMeSchema = z
         rating: ratingSchema,
         provisional: provisionalSchema,
         discord: discordNamesSchema.nullable(),
+        liveGames: ownLiveGamesSchema,
     })
     .meta({ id: `User`, description: `discord is null for a session made without Discord.` });
 export type UserMe = z.infer<typeof userMeSchema>;

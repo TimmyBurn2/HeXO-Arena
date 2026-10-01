@@ -5,9 +5,9 @@ import { liveGames, playBots, serve, signup, world, type World } from './mock-ap
 
 const visitors: readonly { name: string; me: Me }[] = [
     { name: `signed-out`, me: null },
-    { name: `signed-in`, me: { kind: `user`, name: `tom`, rating: 1503, provisional: false, discord: null } },
-    { name: `long-named`, me: { kind: `user`, name: `sealbot-owner-with-a-long-name`, rating: 1503, provisional: false, discord: { username: `owner.of.sealbot.and.two.more.xy`, displayName: `The Owner Of Sealbot And Two Mor` } } },
-    { name: `guest`, me: { kind: `guest`, name: `Guest k3f9` } },
+    { name: `signed-in`, me: { kind: `user`, name: `tom`, rating: 1503, provisional: false, discord: null, liveGames: [] } },
+    { name: `long-named`, me: { kind: `user`, name: `sealbot-owner-with-a-long-name`, rating: 1503, provisional: false, discord: { username: `owner.of.sealbot.and.two.more.xy`, displayName: `The Owner Of Sealbot And Two Mor` }, liveGames: [] } },
+    { name: `guest`, me: { kind: `guest`, name: `Guest k3f9`, liveGames: [] } },
 ];
 
 // Every framed screen;

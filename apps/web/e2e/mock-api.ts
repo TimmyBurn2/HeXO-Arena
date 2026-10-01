@@ -1,16 +1,20 @@
 import type { Page, Route } from '@playwright/test';
 import {
     botListingSchema,
+    devAccountSchema,
     gameSnapshotSchema,
     leaderboardEntrySchema,
     legalDetailsSchema,
+    finishedGamesPageSchema,
     liveGameEntrySchema,
     meSchema,
     signupSchema,
     type BotListing,
+    type DevAccount,
     type GameSnapshot,
     type LeaderboardEntry,
     type LegalDetails,
+    type FinishedGameEntry,
     type LiveGameEntry,
     type Me,
     type Side,
@@ -28,6 +32,8 @@ export interface World {
     bots: BotListing[];
     games: Record<string, GameSnapshot>;
     live: LiveGameEntry[];
+    // The finished games, newest first, as the history's first page holds them.
+    finished: FinishedGameEntry[];
     paused: boolean;
     // Hold every data answer back, for loading-state captures.
     stall: boolean;
@@ -47,6 +53,8 @@ export interface World {
     guestLimit: boolean;
     // Every data read, or every write, refused as rate-limited, with the wait its limit names.
     limited: `reads` | `writes` | null;
+    // The dev server's seeded personas; null answers as every other server does, not found.
+    devAccounts: DevAccount[] | null;
 }
 
 // Every state a bot in the Play roster can be in:
@@ -337,6 +345,18 @@ export const games: Record<string, GameSnapshot> = {
         winner: `x`,
         reason: `six-in-a-row`,
     },
+    // The newest result, apart from the finished game the game screen's
+    // tests use, so a path never names both.
+    won: {
+        gameId: `won`,
+        players: facing(`hextide`, 1690),
+        openingPlies: 1,
+        board: { cells: originCells },
+        timeControl: { mode: `turn`, turnTimeMs: 30_000 },
+        status: `finished`,
+        winner: `x`,
+        reason: `six-in-a-row`,
+    },
     origin: {
         gameId: `origin`,
         players: facing(`hextide`, 1690),
@@ -398,13 +418,42 @@ export const games: Record<string, GameSnapshot> = {
     },
 };
 
+// The latest results, newest first; the first three have snapshots, so a
+// frozen board can show the newest.
+const finishedAt = (minutesAgo: number) => new Date(Date.now() - minutesAgo * 60_000).toISOString();
+export const recentGames: FinishedGameEntry[] = [
+    { gameId: `won`, players: facing(`hextide`, 1690), winner: `x`, reason: `six-in-a-row`, timeControl: { mode: `turn`, turnTimeMs: 30_000 }, openingPlies: 1, turns: 12, finishedAt: finishedAt(3), rated: true },
+    { gameId: `five-finished`, players: facing(`sealbot`, 1712), winner: `o`, reason: `surrender`, timeControl: { mode: `turn`, turnTimeMs: 30_000 }, openingPlies: 5, turns: 5, finishedAt: finishedAt(41), rated: true },
+    { gameId: `nine-finished`, players: facing(`sealbot`, 1712), winner: `x`, reason: `timeout`, timeControl: { mode: `turn`, turnTimeMs: 30_000 }, openingPlies: 9, turns: 6, finishedAt: finishedAt(95), rated: true },
+    ...(
+        [
+            [seat.hextide, seat.sealbot, `o`, `six-in-a-row`],
+            [seat.quietlake, seat.driftwood, `x`, `timeout`],
+            [seat.ember, seat.hextide, null, `aborted`],
+            [seat.sealbot, seat.quietlake, `x`, `six-in-a-row`],
+            [seat.driftwood, seat.ember, `o`, `disconnect`],
+        ] as const
+    ).map(([x, o, winner, reason], index): FinishedGameEntry => ({
+        gameId: `past-${String(index)}`,
+        players: { x, o },
+        winner,
+        reason,
+        timeControl: { mode: `match`, mainTimeMs: 300_000, incrementMs: 2_000 },
+        openingPlies: 1,
+        turns: 20 + index,
+        finishedAt: finishedAt(180 + 600 * index),
+        rated: winner !== null,
+    })),
+];
+
 export function world(overrides: Partial<World> = {}): World {
     return {
-        me: { kind: `user`, name: `tom`, rating: 1503, provisional: false, discord: { username: `tom.hex`, displayName: `Tom` } },
+        me: { kind: `user`, name: `tom`, rating: 1503, provisional: false, discord: { username: `tom.hex`, displayName: `Tom` }, liveGames: [] },
         leaderboard,
         bots,
         games: structuredClone(games),
         live: liveGames.slice(0, 1),
+        finished: recentGames,
         paused: false,
         stall: false,
         broken: false,
@@ -415,6 +464,7 @@ export function world(overrides: Partial<World> = {}): World {
         start: `created`,
         guestLimit: false,
         limited: null,
+        devAccounts: null,
         ...overrides,
     };
 }
@@ -537,7 +587,7 @@ export async function serve(page: Page, state: World): Promise<void> {
                 });
                 return;
             }
-            state.me = { kind: `guest`, name: `Guest k3f9` };
+            state.me = { kind: `guest`, name: `Guest k3f9`, liveGames: [] };
             await json(route, 201, state.me);
             return;
         }
@@ -553,7 +603,7 @@ export async function serve(page: Page, state: World): Promise<void> {
             } else if (state.create === `created`) {
                 const body = request.postDataJSON() as { name: string };
                 state.signup = null;
-                state.me = { kind: `user`, name: body.name, rating: 1000, provisional: true, discord: held.discord };
+                state.me = { kind: `user`, name: body.name, rating: 1000, provisional: true, discord: held.discord, liveGames: [] };
                 await json(route, 201, { name: body.name });
             } else if (state.create === `failed`) {
                 await json(route, 500, { error: `boom`, code: `internal` });
@@ -590,6 +640,10 @@ export async function serve(page: Page, state: World): Promise<void> {
             }
             const data = JSON.stringify(viewOf(snapshot, state.me));
             await route.fulfill({ status: 200, contentType: `text/event-stream`, body: `event: snapshot\ndata: ${data}\n\n` });
+            return;
+        }
+        if (path === `/api/games/finished` && method === `GET`) {
+            await json(route, 200, finishedGamesPageSchema.parse({ games: state.finished.slice(0, 20), next: null, page: 1 }));
             return;
         }
         const game = /^\/api\/games\/([^/]+)(\/move|\/resign)?$/.exec(path);
@@ -657,6 +711,28 @@ export async function serve(page: Page, state: World): Promise<void> {
         if (path === `/api/bots` && method === `POST`) {
             const body = request.postDataJSON() as { name: string };
             await json(route, 201, { name: body.name, token: `hxo_${`b`.repeat(43)}` });
+            return;
+        }
+        if (path === `/api/dev/accounts` && method === `GET`) {
+            if (state.devAccounts === null) await json(route, 404, { error: `route not found`, code: `not_found` });
+            else await json(route, 200, devAccountSchema.array().parse(state.devAccounts));
+            return;
+        }
+        if (path === `/api/dev/login` && method === `POST` && state.devAccounts !== null) {
+            const body = request.postDataJSON() as { name?: string };
+            // Given a Discord account instead of a name, the server holds a first sign-in.
+            if (body.name === undefined) {
+                state.signup = signup;
+                await route.fulfill({ status: 302, headers: { location: `/welcome` } });
+                return;
+            }
+            const persona = state.devAccounts.find((account) => account.name === body.name);
+            if (persona?.banned === true) {
+                await json(route, 403, { error: `the account is banned`, code: `banned` });
+                return;
+            }
+            state.me = { kind: `user`, name: body.name, rating: persona?.rating ?? 1000, provisional: persona?.provisional ?? true, discord: null, liveGames: [] };
+            await json(route, 200, { name: body.name });
             return;
         }
         await json(route, 404, { error: `unmocked ${method} ${path}`, code: `not_found` });

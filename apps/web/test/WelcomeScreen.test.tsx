@@ -284,7 +284,7 @@ describe('WelcomeScreen', () => {
         });
         expect(screen.queryByRole(`button`, { name: `Create account` })).toBe(null);
         expect(document.querySelector(`.skeleton`)).toBeTruthy();
-        held.answer?.({ kind: `user`, name: `tom`, rating: 1503, provisional: false, discord: null });
+        held.answer?.({ kind: `user`, name: `tom`, rating: 1503, provisional: false, discord: null, liveGames: [] });
         expect(await screen.findByText(`Creating this account signs tom out.`)).toBeTruthy();
         expect(screen.getByRole(`button`, { name: `Create account` })).toBeTruthy();
     });
@@ -313,7 +313,7 @@ describe('WelcomeScreen', () => {
     });
 
     it('give a guest whose sign-up ended the guest line with the way back in', async () => {
-        serve(ok, refused(410, `signup_limit`), { kind: `guest`, name: `Guest k3f9` });
+        serve(ok, refused(410, `signup_limit`), { kind: `guest`, name: `Guest k3f9`, liveGames: [] });
         meStore.start();
         render(<WelcomeScreen />);
         await screen.findByText(`Creating your account ends this guest session and its games.`);
@@ -325,14 +325,14 @@ describe('WelcomeScreen', () => {
     });
 
     it('tell a guest that creating the account ends the guest session', async () => {
-        serve(ok, undefined, { kind: `guest`, name: `Guest k3f9` });
+        serve(ok, undefined, { kind: `guest`, name: `Guest k3f9`, liveGames: [] });
         meStore.start();
         render(<WelcomeScreen />);
         expect(await screen.findByText(`Creating your account ends this guest session and its games.`)).toBeTruthy();
     });
 
     it('give way to the profile of someone already signed in with no sign-up waiting, never saying expired', async () => {
-        serve(refused(410, `signup_expired`), undefined, { kind: `user`, name: `mira-hex`, rating: 1000, provisional: true, discord: null });
+        serve(refused(410, `signup_expired`), undefined, { kind: `user`, name: `mira-hex`, rating: 1000, provisional: true, discord: null, liveGames: [] });
         render(<WelcomeScreen />);
         await waitFor(() => {
             expect(document.querySelector(`.skeleton`)).toBeTruthy();
@@ -347,7 +347,7 @@ describe('WelcomeScreen', () => {
     });
 
     it('tell someone signed in that creating another account signs them out', async () => {
-        serve(ok, undefined, { kind: `user`, name: `tom`, rating: 1503, provisional: false, discord: null });
+        serve(ok, undefined, { kind: `user`, name: `tom`, rating: 1503, provisional: false, discord: null, liveGames: [] });
         meStore.start();
         render(<WelcomeScreen />);
         expect(await screen.findByText(`Creating this account signs tom out.`)).toBeTruthy();
@@ -360,7 +360,7 @@ describe('WelcomeScreen', () => {
             vi.fn((url: string, init?: RequestInit) => {
                 if (url === `/api/me`) return Promise.resolve(new Response(JSON.stringify(me)));
                 if (init?.method === `POST`) {
-                    me = { kind: `user`, name: `mira-hex`, rating: 1000, provisional: true, discord: null };
+                    me = { kind: `user`, name: `mira-hex`, rating: 1000, provisional: true, discord: null, liveGames: [] };
                     return Promise.resolve(refused(410, `signup_expired`)());
                 }
                 return Promise.resolve(ok());
@@ -378,7 +378,7 @@ describe('WelcomeScreen', () => {
     });
 
     it('end the sign-up of someone signed in whose own sign-up expired, pressing once while it checks', async () => {
-        const tom: Me = { kind: `user`, name: `tom`, rating: 1503, provisional: false, discord: null };
+        const tom: Me = { kind: `user`, name: `tom`, rating: 1503, provisional: false, discord: null, liveGames: [] };
         const posts: string[] = [];
         const pending: { answer: (() => void) | null } = { answer: null };
         let meReads = 0;

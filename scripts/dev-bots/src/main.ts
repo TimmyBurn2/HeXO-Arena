@@ -23,6 +23,7 @@ try {
         origin,
         count: env.DEV_BOTS_COUNT,
         tokenFile: fileURLToPath(new URL(`../../../apps/server/data/dev-bots.json`, import.meta.url)),
+        seedFile: fileURLToPath(new URL(`../../../apps/server/data/dev-seed.json`, import.meta.url)),
         challengeEveryMs: 60_000,
         thinkMs: () => randomInt(400, 1_500),
         random: Math.random,

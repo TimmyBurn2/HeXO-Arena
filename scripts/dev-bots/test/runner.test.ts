@@ -6,8 +6,8 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { z } from 'zod';
 import { createQuery } from '../../../apps/server/src/db';
 import { games } from '../../../apps/server/src/db/schema';
-import { createTestApp, type TestApp } from '../../../apps/server/test/helpers';
-import { NotADevServer, startDevBots, type DevBots } from '../src/runner';
+import { createTestApp, loginAs, mintBot, type TestApp } from '../../../apps/server/test/helpers';
+import { NotADevServer, saveTokens, startDevBots, type DevBots } from '../src/runner';
 
 // mulberry32, so a failing game replays move for move.
 function seeded(seed: number): () => number {
@@ -33,6 +33,7 @@ const tokensSchema = z.record(z.string(), z.string());
 describe('the dev bot runner', () => {
     let directory: string;
     let tokenFile: string;
+    let seedFile: string;
     let world: TestApp | null;
     let origin: string;
     let running: DevBots[];
@@ -41,6 +42,7 @@ describe('the dev bot runner', () => {
     beforeEach(() => {
         directory = mkdtempSync(join(tmpdir(), `hexo-arena-dev-bots-`));
         tokenFile = join(directory, `data`, `dev-bots.json`);
+        seedFile = join(directory, `data`, `dev-seed.json`);
         world = null;
         running = [];
         lines = [];
@@ -71,6 +73,7 @@ describe('the dev bot runner', () => {
             origin,
             count: 2,
             tokenFile,
+            seedFile,
             challengeEveryMs: 60_000,
             thinkMs: () => 0,
             random: seeded(7),
@@ -128,6 +131,29 @@ describe('the dev bot runner', () => {
             expect((await account(before[name])).status).toBe(401);
             expect((await account(after[name])).status).toBe(200);
         }
+    });
+
+    it('brings the seeded personas\' online bots up beside its own, and never lantern', async () => {
+        const booted = await boot(true);
+        const ana = await loginAs(booted.app, `ana`);
+        saveTokens(
+            seedFile,
+            new Map([
+                [`hextide`, await mintBot(booted.app, ana, `hextide`)],
+                [`lantern`, await mintBot(booted.app, ana, `lantern`)],
+            ]),
+        );
+        const bots = await start();
+        expect(bots.names).toEqual([`devbot-a`, `devbot-b`, `hextide`]);
+        const deadline = Date.now() + 5_000;
+        let online: string[] = [];
+        while (!online.includes(`hextide`) && Date.now() < deadline) {
+            const listing = botListingSchema.array().parse(await (await fetch(`${origin}${botsPath}?online=1`)).json());
+            online = listing.map((bot) => bot.name);
+            await new Promise((resolve) => setTimeout(resolve, 20));
+        }
+        expect(online).toContain(`hextide`);
+        expect(online).not.toContain(`lantern`);
     });
 
     it('refuses a target without the dev login route and creates nothing', async () => {

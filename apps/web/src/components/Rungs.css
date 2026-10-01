@@ -1,0 +1,140 @@
+@layer components {
+    /* The ladder is the product, so its top rungs lead wherever they show:
+       size and depth fall with rank, and each rung steps inward. */
+    .rungs {
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-2);
+        margin-bottom: var(--space-7);
+    }
+
+    .rung {
+        display: grid;
+        grid-template-columns: var(--rung-rank-w) minmax(0, 1fr) auto;
+        align-items: center;
+        column-gap: var(--space-4);
+        padding: var(--space-4) var(--space-5);
+        background: var(--c-bg-raised);
+        box-shadow: inset 0 var(--border-w) 0 var(--surface-edge-hi);
+        font-size: var(--text-lg);
+    }
+
+    .rung-lift {
+        filter: var(--lift);
+    }
+
+    .rung.r1 {
+        background: var(--c-bg-overlay);
+        box-shadow:
+            inset var(--focus-w) 0 0 var(--c-accent),
+            inset 0 var(--border-w) 0 var(--surface-edge-hi);
+        padding: var(--space-5) var(--space-6) var(--space-5) var(--space-5);
+        font-size: var(--text-rung-1);
+    }
+
+    .rung.r2,
+    .rung-skeleton.r2 {
+        margin-left: var(--space-5);
+    }
+
+    .rung.r2 {
+        font-size: var(--text-xl);
+    }
+
+    .rung.r3,
+    .rung-skeleton.r3 {
+        margin-left: var(--space-7);
+    }
+
+    .rung-rank,
+    .rung-rating {
+        font-weight: var(--weight-display);
+        font-variant-numeric: tabular-nums;
+    }
+
+    .rung-rank {
+        color: var(--c-text-dim);
+    }
+
+    .rung.r1 .rung-rank {
+        color: var(--c-accent);
+    }
+
+    .rung-name {
+        display: flex;
+        align-items: center;
+        gap: var(--space-2) var(--space-3);
+        min-width: 0;
+        flex-wrap: wrap;
+    }
+
+    /* A name stays whole beside its badge and breaks only when wider than the rung. */
+    .rung-name .player-name {
+        flex: none;
+        max-width: 100%;
+        min-width: 0;
+        font-weight: var(--weight-display);
+        letter-spacing: var(--tracking-display);
+        overflow-wrap: break-word;
+    }
+
+    .rung-name .badge-bot {
+        margin-left: 0;
+    }
+
+    .rung-owner,
+    .rung-kind {
+        color: var(--c-text-dim);
+        font-size: var(--text-sm);
+    }
+
+    .rung-skeleton {
+        height: var(--control-lg);
+        background: var(--c-bg-raised);
+    }
+
+    .rung-skeleton.r1 {
+        height: calc(var(--control-lg) * 2);
+    }
+
+    @media (max-width: 40rem) {
+        .rung {
+            grid-template-columns: var(--space-5) minmax(0, 1fr) auto;
+            column-gap: var(--space-3);
+            padding: var(--space-3) var(--space-4);
+            font-size: var(--text-base);
+        }
+
+        .rung.r1 {
+            padding: var(--space-4);
+            font-size: var(--text-xl);
+        }
+
+        .rung.r2 {
+            margin-left: var(--space-3);
+            font-size: var(--text-lg);
+        }
+
+        .rung.r3 {
+            margin-left: var(--space-5);
+        }
+
+        .rung-owner {
+            display: none;
+        }
+    }
+
+    /* Large text on a narrow window stacks each rung, rank over name over rating,
+       so the name has the rung's whole width,
+       and the top rung steps down a size. */
+    @media (max-width: 19.5rem) {
+        .rung {
+            grid-template-columns: minmax(0, 1fr);
+            row-gap: var(--space-1);
+        }
+
+        .rung.r1 {
+            font-size: var(--text-lg);
+        }
+    }
+}

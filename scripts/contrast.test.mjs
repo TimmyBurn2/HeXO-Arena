@@ -211,8 +211,8 @@ describe(`measureStep`, () => {
 });
 
 describe(`the mark`, () => {
-    // The home link's mark is brass at rest and brighter under the pointer,
-    // both straight on the page, so the gate holds both against it.
+    // The mark wears the default look's board in every theme, so only its
+    // brass frame meets each theme's page, at rest and hovered.
     it(`is gated on the page at rest and hovered`, () => {
         const against = (fg) => pairs.find(([, pairFg, bg]) => pairFg === fg && bg === `--c-bg`);
         assert.equal(against(`--c-accent-solid`)?.[3], 3);

@@ -1,0 +1,27 @@
+/** The dev pill's words; only the dev server's bundle loads them, and production holds none. */
+export const devEn = {
+    pill: (who: string) => `dev: ${who}`,
+    signedOut: `signed out`,
+    loading: `loading`,
+    title: `Dev accounts`,
+    close: `Close dev accounts`,
+    personas: `Personas`,
+    empty: `Run pnpm dev:seed`,
+    rating: (value: number, provisional: boolean) => `${String(value)}${provisional ? `?` : ``}`,
+    bots: (count: number) => (count === 1 ? `1 bot` : `${String(count)} bots`),
+    banned: `banned`,
+    current: `you`,
+    signInAs: `Sign in as`,
+    signIn: `Sign in`,
+    firstSignIn: `Start a first sign-in`,
+    firstSignInNote: `As a Discord account the site has not seen; choosing a name comes next`,
+    guest: `Guest session`,
+    signOut: `Sign out`,
+    failed: {
+        banned: (name: string) => `${name} is banned`,
+        invalid_name: `Not a valid name`,
+        name_reserved: `That name is reserved`,
+        name_taken: `A Discord account holds that name`,
+        other: `The dev login did not go through; see the server log`,
+    },
+} as const;

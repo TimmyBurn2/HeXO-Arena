@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { clockText, gameMeta, turnsOnBoard, type GameHeadline, type GameSnapshot } from '@hexo-arena/contract';
 import { BotBadge, Swatch } from '../components/player';
 import { useWait, WaitText } from '../components/wait';
@@ -11,6 +11,8 @@ import { useDocumentMeta } from '../use-document-meta';
 import { GameBoard, type TurnStatus } from '../game/GameBoard';
 import { FeedLabel, GameDrawer } from '../game/GameDrawer';
 import { clockOf, Pips, SeatChip, TurnChip, YouChip } from '../game/GameHud';
+import { lastTurnOf, turnOf, useReplay } from '../game/replay';
+import { Scrubber } from '../game/Scrubber';
 import { useDrawer } from '../game/use-drawer';
 import { selfName, useMe } from '../me';
 import { useGame, type GameLink, type GameSend, type Refusal } from '../game/use-game';
@@ -51,8 +53,8 @@ function FailedStage({ retry, wait }: { retry: () => void; wait: Refusal | null 
                     >
                         {text.states.tryAgain}
                     </button>
-                    <Link to="/ladder" className="btn btn-ghost">
-                        {text.game.ladder}
+                    <Link to="/" className="btn btn-ghost">
+                        {text.game.home}
                     </Link>
                 </div>
             </div>
@@ -127,6 +129,8 @@ function typingInto(target: EventTarget | null): boolean {
 
 // A watcher holds no seat: the same regions with the actions gone, x on
 // the bottom chip and o on the top one.
+// A finished game, and a live one to a watcher, replays: the board shows the
+// position the reader steps to, inside the camera of the latest one.
 function GameView({ snapshot, send, link }: { snapshot: GameSnapshot; send: GameSend; link: GameLink }) {
     const route = useRoute();
     const drawer = useDrawer();
@@ -137,6 +141,16 @@ function GameView({ snapshot, send, link }: { snapshot: GameSnapshot; send: Game
     const yourMove = running && snapshot.toMove === you;
     const stones = stonesOf(snapshot);
     const feed = feedOf(snapshot);
+    const replaying = !running || you === null;
+    const opening = snapshot.openingPlies;
+    const total = snapshot.board.cells.length;
+    const range = useMemo(() => ({ opening, total }), [opening, total]);
+    const replay = useReplay(range, replaying);
+    const shownStones = replaying ? stones.slice(0, replay.shown) : stones;
+    const atEnd = replay.shown >= total;
+    const winLine = atEnd ? (winLineOf(snapshot) ?? []) : [];
+    // The feed's first line is the whole opening, then one line a turn.
+    const currentLine = replay.shown <= opening ? 0 : turnOf(replay.shown) - turnOf(opening);
     const [status, setStatus] = useState<TurnStatus>(idleStatus);
     const hoverTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
     const openedByHover = useRef(false);
@@ -177,6 +191,15 @@ function GameView({ snapshot, send, link }: { snapshot: GameSnapshot; send: Game
         if (yourMove) document.querySelector<HTMLElement>(`.board-control`)?.focus({ preventScroll: true });
     }, [yourMove]);
 
+    // A replay opens with the keyboard on its scrubber, whichever of the
+    // chip's and the sheet's shows at this width.
+    const openedReplaying = useRef(replaying);
+    useEffect(() => {
+        if (!openedReplaying.current) return;
+        const shown = [...document.querySelectorAll<HTMLElement>(`.scrub-count`)].find((slider) => slider.offsetParent !== null);
+        shown?.focus({ preventScroll: true });
+    }, []);
+
     function hoverEdge() {
         if (drawer.visible) return;
         hoverTimer.current = setTimeout(() => {
@@ -203,7 +226,22 @@ function GameView({ snapshot, send, link }: { snapshot: GameSnapshot; send: Game
     // keeps the last move and the sentence appears once.
     const last = feed.at(-1);
     const showResult = !running && drawer.visible && drawer.tab !== `game`;
-    const peekLine = showResult ? (
+    // A replay's peek holds its steps and its count, so a phone steps
+    // through the game with the sheet up or down; a press there never
+    // reaches the peek's own toggle.
+    const peekLine = replaying ? (
+        <>
+            <span
+                className="peek-scrub"
+                onClick={(event) => {
+                    event.stopPropagation();
+                }}
+            >
+                <Scrubber replay={replay} live={running} compact />
+            </span>
+            {showResult ? <span className="peek-line peek-result">{resultLine(snapshot)}</span> : null}
+        </>
+    ) : showResult ? (
         <span className="peek-line peek-result">{resultLine(snapshot)}</span>
     ) : last === undefined ? null : (
         <span className="peek-line">
@@ -234,15 +272,17 @@ function GameView({ snapshot, send, link }: { snapshot: GameSnapshot; send: Game
             className="stage"
             data-pinned={drawer.pinned ? `` : undefined}
             data-open={drawer.visible && !drawer.pinned ? `` : undefined}
+            data-replay={replaying ? `` : undefined}
         >
             <h1 className="sr-only">{headingOf(snapshot)}</h1>
             <div className="board-host" ref={host}>
                 <GameBoard
-                    stones={stones}
+                    stones={shownStones}
+                    frameStones={replaying ? stones : undefined}
                     position={positionOf(snapshot)}
                     you={you}
-                    lastMove={running ? stones.slice(-2) : []}
-                    winLine={winLineOf(snapshot) ?? []}
+                    lastMove={replaying ? (winLine.length === 0 ? lastTurnOf(stones, replay.shown, range) : []) : stones.slice(-2)}
+                    winLine={winLine}
                     yourMove={yourMove}
                     finished={!running}
                     idleLabel={idleLabelOf(snapshot)}
@@ -270,21 +310,14 @@ function GameView({ snapshot, send, link }: { snapshot: GameSnapshot; send: Game
                 ) : (
                     <YouChip snapshot={snapshot} you={you} me={me} />
                 )}
-                <TurnChip
-                    snapshot={snapshot}
-                    you={you}
-                    link={link}
-                    status={yourMove ? status : idleStatus}
-                    onMoves={() => {
-                        drawer.show(`moves`);
-                    }}
-                />
+                <TurnChip snapshot={snapshot} you={you} link={link} status={yourMove ? status : idleStatus} replay={replaying ? replay : null} />
                 <div className="hot-edge" aria-hidden="true" onMouseEnter={hoverEdge} onMouseLeave={leaveEdge} />
             </div>
             <div className="drawer-slot" onMouseLeave={leaveDrawer}>
                 <GameDrawer
                     drawer={drawer}
                     feed={feed}
+                    current={replaying ? currentLine : feed.length - 1}
                     facts={factsOf(snapshot)}
                     running={running}
                     timed={snapshot.clock !== undefined && snapshot.clock.mode !== `unlimited`}

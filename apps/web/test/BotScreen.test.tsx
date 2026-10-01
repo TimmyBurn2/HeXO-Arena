@@ -50,7 +50,7 @@ function serveAs(name: string, writes: { method: string; url: string }[], delete
                 }
                 return Promise.resolve(new Response(JSON.stringify({ name: `sealbot`, token: `hxo_${`c`.repeat(43)}` })));
             }
-            const body = url === `/api/me` ? { kind: `user`, name, rating: 1503, provisional: false, discord: null } : [sealbot];
+            const body = url === `/api/me` ? { kind: `user`, name, rating: 1503, provisional: false, discord: null, liveGames: [] } : [sealbot];
             return Promise.resolve(new Response(JSON.stringify(body)));
         }),
     );
@@ -117,7 +117,7 @@ describe('BotScreen', () => {
         vi.stubGlobal(
             `fetch`,
             vi.fn((url: string) =>
-                Promise.resolve(new Response(JSON.stringify(url === `/api/me` ? { kind: `user`, name: `tom`, rating: 1503, provisional: false, discord: null } : [bare]))),
+                Promise.resolve(new Response(JSON.stringify(url === `/api/me` ? { kind: `user`, name: `tom`, rating: 1503, provisional: false, discord: null, liveGames: [] } : [bare]))),
             ),
         );
         meStore.reset();
@@ -232,7 +232,7 @@ describe('BotScreen', () => {
                         new Response(JSON.stringify({ error: `slow down`, code: `rate_limited` }), { status: 429, headers: { 'retry-after': `42` } }),
                     );
                 }
-                const body = url === `/api/me` ? { kind: `user`, name: `tom`, rating: 1503, provisional: false, discord: null } : [sealbot];
+                const body = url === `/api/me` ? { kind: `user`, name: `tom`, rating: 1503, provisional: false, discord: null, liveGames: [] } : [sealbot];
                 return Promise.resolve(new Response(JSON.stringify(body)));
             }),
         );

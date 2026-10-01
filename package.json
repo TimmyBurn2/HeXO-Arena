@@ -11,6 +11,7 @@
         "dev": "pnpm -r --parallel --if-present dev",
         "dev:compose": "docker compose up --build",
         "dev:bots": "pnpm --filter @hexo-arena/dev-bots start",
+        "dev:seed": "pnpm --filter @hexo-arena/dev-bots seed",
         "build": "pnpm -r --if-present build",
         "test": "node --test scripts/*.test.mjs && pnpm -r --if-present test",
         "e2e": "pnpm --filter @hexo-arena/web e2e",

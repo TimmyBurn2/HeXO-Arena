@@ -1,10 +1,10 @@
 import type { Side } from '@hexo-arena/contract';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createBot, findBot } from '../src/bots';
 import { createQuery, openDatabase, runMigrations, type Query, type Sqlite } from '../src/db';
 import { insertBotGame, insertGame, recordFinish } from '../src/game-store';
 import { foldRatings, isProvisional, rateGame, seedRating } from '../src/rating';
-import { finishedGameLog, readRating, recomputeRatings, storedRatings } from '../src/rating-store';
+import { explainRatedAtBefore, finishedGameLog, readRating, recomputeRatings, storedRatings } from '../src/rating-store';
 import { createUserWithExactName } from '../src/users';
 
 const unlimited = { mode: `unlimited` as const };
@@ -54,6 +54,7 @@ describe('stored ratings', () => {
     });
 
     afterEach(() => {
+        vi.useRealTimers();
         sqlite.close();
     });
 
@@ -66,8 +67,8 @@ describe('stored ratings', () => {
         const [botId = ``] = bots;
         recordFinish(query, humanGame(userId, botId, `o`), { winner: `o`, reason: `surrender` });
         const expected = rateGame(
-            { x: { kind: `bot`, id: botId }, o: { kind: `human`, id: userId }, winner: `o` },
-            { x: seedRating(`bot`), o: seedRating(`human`) },
+            { x: { kind: `bot`, id: botId }, o: { kind: `human`, id: userId }, winner: `o`, finishedAt: 0 },
+            { x: { rating: seedRating(`bot`), ratedAt: null }, o: { rating: seedRating(`human`), ratedAt: null } },
         );
         expect(readRating(query, { kind: `human`, id: userId })).toEqual(expected.o);
         expect(readRating(query, { kind: `bot`, id: botId })).toEqual(expected.x);
@@ -83,8 +84,13 @@ describe('stored ratings', () => {
         expect(storedRatings(query).size).toBe(0);
     });
 
-    it('reproduces the live table exactly when the whole log is folded', () => {
-        const random = seededRandom(20260925);
+    // Games finish out of creation order, as concurrent games do, hours or
+    // weeks apart, and some are voided while live; the live path must widen
+    // each deviation exactly as the fold does.
+    function playRandomLog(seed: number): void {
+        vi.useFakeTimers({ toFake: [`Date`] });
+        vi.setSystemTime(new Date(`2026-10-01T00:00:00Z`));
+        const random = seededRandom(seed);
         const open: string[] = [];
         for (let round = 0; round < 400; round++) {
             if (random() < 0.4) {
@@ -102,18 +108,47 @@ describe('stored ratings', () => {
                     }),
                 );
             }
-            // Games finish out of creation order, as concurrent games do.
             while (open.length > 0 && random() < 0.6) {
                 const [gameId = ``] = open.splice(Math.floor(random() * open.length), 1);
+                if (random() < 0.05) sqlite.prepare(`update games set voided_at = 1 where id = ?`).run(gameId);
                 const roll = random();
                 const winner: Side | null = roll < 0.1 ? null : roll < 0.55 ? `x` : `o`;
+                vi.setSystemTime(Date.now() + Math.floor((random() < 0.1 ? 14 * 86_400 : 3_600) * random() * 1000));
                 recordFinish(query, gameId, { winner, reason: winner === null ? `aborted` : `six-in-a-row` });
             }
         }
+    }
+
+    it('reproduces the live table exactly when the whole log is folded', () => {
+        playRandomLog(20260925);
         const live = storedRatings(query);
         expect(live.size).toBe(humans.length + bots.length);
         expect([...live.values()].some(({ rating }) => !isProvisional(rating))).toBe(true);
         expect(foldRatings(finishedGameLog(query))).toEqual(live);
+    });
+
+    it('recomputes the same tables from the same log every time, equal to the live ones', () => {
+        playRandomLog(20261001);
+        const gameRows = () => sqlite.prepare(`select * from game_ratings order by game_id, side`).all();
+        const live = { ratings: storedRatings(query), games: gameRows() };
+        recomputeRatings(query);
+        const first = { ratings: storedRatings(query), games: gameRows() };
+        recomputeRatings(query);
+        expect({ ratings: storedRatings(query), games: gameRows() }).toEqual(first);
+        expect(first).toEqual(live);
+    });
+
+    it('finds a player\'s previous rated game through the seat indexes, without sorting', () => {
+        const [userId = ``] = humans;
+        const [botId = ``] = bots;
+        const human = explainRatedAtBefore(query, { kind: `human`, id: userId }, 10).join(`\n`);
+        const bot = explainRatedAtBefore(query, { kind: `bot`, id: botId }, 10).join(`\n`);
+        expect(human).toContain(`USING INDEX games_user_finish_idx`);
+        for (const index of [`games_bot_finish_idx`, `games_challenger_finish_idx`, `games_dest_finish_idx`]) expect(bot).toContain(`USING INDEX ${index}`);
+        for (const plan of [human, bot]) {
+            expect(plan).not.toMatch(/SCAN games\b/u);
+            expect(plan).not.toContain(`TEMP B-TREE`);
+        }
     });
 
     it('recomputes a tampered table back to the fold of the log', () => {

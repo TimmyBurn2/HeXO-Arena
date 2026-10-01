@@ -17,10 +17,7 @@ import {
 import type { Route } from './router/route';
 import { text } from './text';
 
-/**
- * The root's meta: whatever screen it shows, the site's own address keeps
- * the site's title, as the server shell does.
- */
+/** The root's meta: the site's own title, as the server shell renders it. */
 export const rootMeta: PageMeta = siteMeta();
 
 /**
@@ -30,6 +27,8 @@ export const rootMeta: PageMeta = siteMeta();
  */
 export function routeMeta(route: Route): PageMeta {
     switch (route.name) {
+        case `home`:
+            return rootMeta;
         case `play`:
             return playMeta();
         case `ladder`:

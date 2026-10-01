@@ -1,0 +1,483 @@
+@layer screens {
+    .home {
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-7);
+    }
+
+    .home .section-title {
+        margin: 0;
+    }
+
+    /* The way into a game beside the game most worth watching; a phone,
+       or a slot with nothing to feature, gives the panel the whole row. */
+    .home-hero {
+        display: grid;
+        grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
+        align-items: start;
+        gap: var(--space-6);
+    }
+
+    .home-hero.solo {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .home-hero.solo .play-panel {
+        max-width: var(--home-panel-max);
+    }
+
+    .play-panel {
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-4);
+    }
+
+    .play-panel .screen-title {
+        margin: 0;
+    }
+
+    .play-panel p {
+        margin: 0;
+    }
+
+    .play-panel-rules {
+        color: var(--c-text-dim);
+    }
+
+    /* The panel's one primary way in, in brass as every primary control is. */
+    .play-card {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        flex-wrap: wrap;
+        gap: var(--space-1) var(--space-3);
+        padding: var(--space-4) var(--space-5);
+        background: var(--c-accent-solid);
+        color: var(--c-text-on-accent);
+        text-decoration: none;
+        transition: background var(--dur-fast) var(--ease);
+    }
+
+    .play-card:hover {
+        background: var(--c-accent-solid-hover);
+        color: var(--c-text-on-accent);
+    }
+
+    .play-card-title {
+        font-family: var(--font-display);
+        font-size: var(--text-xl);
+        font-weight: var(--weight-display);
+    }
+
+    .play-card-count {
+        font-size: var(--text-sm);
+        font-weight: var(--weight-strong);
+    }
+
+    /* With no bot online the card says so on a quiet surface, not a control's. */
+    .play-card-off,
+    .play-card-off:hover {
+        background: var(--c-bg-raised);
+        color: var(--c-text-dim);
+    }
+
+    .play-card-off .play-card-title {
+        color: var(--c-text);
+    }
+
+    .play-ready,
+    .your-games-list,
+    .recent-list,
+    .home-rows {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-1);
+    }
+
+    .play-ready-bot,
+    .your-game,
+    .recent-game {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        flex-wrap: wrap;
+        gap: var(--space-2) var(--space-4);
+        padding: var(--space-3) var(--space-4);
+        background: var(--c-bg-raised);
+        box-shadow: inset 0 var(--border-w) 0 var(--surface-edge-hi);
+        color: var(--c-text);
+        text-decoration: none;
+        transition: background var(--dur-fast) var(--ease);
+    }
+
+    .play-ready-bot:hover,
+    .your-game:hover,
+    .recent-game:hover {
+        background: var(--c-bg-hover);
+        color: var(--c-text);
+    }
+
+    .play-ready-bot {
+        padding-block: var(--space-2);
+    }
+
+    .play-ready-name {
+        min-width: 0;
+        overflow-wrap: break-word;
+    }
+
+    .play-ready-rating,
+    .home-row-figure,
+    .home-row-rank {
+        color: var(--c-text-dim);
+        font-variant-numeric: tabular-nums;
+    }
+
+    .play-panel-last {
+        color: var(--c-text-dim);
+        font-size: var(--text-sm);
+    }
+
+    .your-games {
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-2);
+    }
+
+    /* Your own games carry the accent edge, as your own row does on the ladder. */
+    .your-game {
+        box-shadow:
+            inset var(--focus-w) 0 0 var(--c-accent),
+            inset 0 var(--border-w) 0 var(--surface-edge-hi);
+    }
+
+    .your-game-who {
+        max-width: 100%;
+        min-width: 0;
+        font-weight: var(--weight-display);
+        overflow-wrap: break-word;
+    }
+
+    .your-game-turn {
+        color: var(--c-text-dim);
+        font-size: var(--text-sm);
+    }
+
+    .your-game-turn.yours {
+        color: var(--c-accent);
+        font-weight: var(--weight-strong);
+    }
+
+    /* The board fills the card, and the chips sit over its edges as the
+       game's own do; a press on a chip falls through to the board's link. */
+    .featured {
+        position: relative;
+        background: var(--c-bg-raised);
+        box-shadow: inset 0 var(--border-w) 0 var(--surface-edge-hi);
+    }
+
+    .featured-link {
+        display: block;
+        color: inherit;
+    }
+
+    /* The board is a link, so under the pointer its chips light as a control's surface does. */
+    .featured:has(.featured-link:hover) .featured-chip {
+        background: var(--c-bg-hover);
+    }
+
+    .featured-bar {
+        position: absolute;
+        left: 0;
+        right: 0;
+        z-index: 1;
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        flex-wrap: wrap;
+        gap: var(--space-2);
+        padding: var(--space-3);
+        pointer-events: none;
+    }
+
+    .featured-top {
+        top: 0;
+    }
+
+    .featured-bottom {
+        bottom: 0;
+        align-items: flex-end;
+    }
+
+    .featured-chip {
+        display: inline-flex;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: var(--space-1) var(--space-2);
+        max-width: 100%;
+        margin: 0;
+        padding: var(--space-1) var(--space-3);
+        background: var(--c-bg-overlay);
+        color: var(--c-text);
+        font-size: var(--text-sm);
+    }
+
+    .featured-chip .badge-bot {
+        margin-left: 0;
+    }
+
+    .featured-name {
+        flex: none;
+        max-width: 100%;
+        min-width: 0;
+        font-weight: var(--weight-display);
+        overflow-wrap: break-word;
+    }
+
+    .featured-rating {
+        color: var(--c-text-dim);
+        font-variant-numeric: tabular-nums;
+    }
+
+    .featured-skeleton {
+        aspect-ratio: 4 / 3;
+        height: auto;
+    }
+
+    .home-block {
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-3);
+        min-width: 0;
+    }
+
+    .home-block .note {
+        margin: 0;
+    }
+
+    .home-failed {
+        display: flex;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: var(--space-2) var(--space-3);
+        margin: 0;
+    }
+
+    /* Beside the hero the rungs lead their block, not the page, so each
+       steps down a size from the ladder's own. */
+    .home-block .rungs {
+        margin-bottom: 0;
+    }
+
+    .home-block .rung {
+        font-size: var(--text-base);
+    }
+
+    .home-block .rung.r1 {
+        font-size: var(--text-xl);
+    }
+
+    .home-block .rung.r2 {
+        font-size: var(--text-lg);
+    }
+
+    .home-block-head {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        flex-wrap: wrap;
+        gap: var(--space-2) var(--space-4);
+    }
+
+    /* The two boards share the row with the rest of the games as rows; a
+       phone draws them all as rows, the boards being the wider window's. */
+    .live-now-body {
+        display: grid;
+        grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+        align-items: start;
+        gap: var(--space-4);
+    }
+
+    .live-now-minis .live-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .live-now-rows-phone {
+        display: none;
+    }
+
+    /* Rows share the width out, however few they are. */
+    .live-now-more .live-list {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(min(100%, var(--mini-card-min)), 1fr));
+    }
+
+    .home-lower {
+        display: grid;
+        grid-template-columns: minmax(0, 7fr) minmax(0, 5fr);
+        align-items: start;
+        gap: var(--space-7) var(--space-6);
+    }
+
+    .home-column {
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-7);
+        min-width: 0;
+    }
+
+    .home-row {
+        display: flex;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: var(--space-2) var(--space-4);
+        padding: var(--space-2) var(--space-4);
+        background: var(--c-bg-raised);
+    }
+
+    .home-row-rank {
+        flex: none;
+        min-width: var(--space-5);
+    }
+
+    /* The name takes its own width first, so a narrow row wraps its
+       figures under it rather than squeezing the name. */
+    .home-row-who {
+        display: flex;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: var(--space-2);
+        min-width: 0;
+        flex: 1 1 auto;
+    }
+
+    /* A name stays whole beside its badge and breaks only when wider than the row. */
+    .home-row-who .player-name {
+        flex: none;
+        max-width: 100%;
+        min-width: 0;
+        font-weight: var(--weight-display);
+        overflow-wrap: break-word;
+    }
+
+    .home-row-who .badge-bot {
+        margin-left: 0;
+    }
+
+    .home-row-figure {
+        display: inline-flex;
+        align-items: center;
+        gap: var(--space-2);
+    }
+
+    .recent-meta {
+        display: inline-flex;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: var(--space-2) var(--space-3);
+        color: var(--c-text-dim);
+        font-size: var(--text-sm);
+    }
+
+    .build-band {
+        padding: var(--space-5);
+        background: var(--c-bg-raised);
+        box-shadow: inset 0 var(--border-w) 0 var(--surface-edge-hi);
+    }
+
+    .build-band-lead {
+        margin: 0;
+    }
+
+    .build-steps {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-2);
+    }
+
+    .build-steps li {
+        display: flex;
+        align-items: center;
+        gap: var(--space-3);
+    }
+
+    .build-step-n {
+        flex: none;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: var(--control-sm);
+        height: var(--control-sm);
+        background: var(--c-bg-hover);
+        color: var(--c-text-dim);
+        font-variant-numeric: tabular-nums;
+    }
+
+    .build-band .actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: var(--space-3);
+    }
+
+    /* Under the hero the band runs the full width, its steps in a row. */
+    .build-band.wide .build-steps {
+        flex-direction: row;
+        flex-wrap: wrap;
+        gap: var(--space-2) var(--space-6);
+    }
+
+    @media (max-width: 56rem) {
+        .home-hero,
+        .home-lower,
+        .live-now-body {
+            grid-template-columns: minmax(0, 1fr);
+        }
+    }
+
+    @media (max-width: 41rem) {
+        .home {
+            gap: var(--space-6);
+        }
+
+        /* A phone's board is too small to share with its chips, so they
+           stand above and below it. */
+        .featured {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .featured-bar {
+            position: static;
+        }
+
+        .featured-top {
+            order: -1;
+            padding-bottom: 0;
+        }
+
+        .featured-bottom {
+            padding-top: 0;
+        }
+
+        .live-now-minis {
+            display: none;
+        }
+
+        .live-now-rows-phone {
+            display: block;
+        }
+
+        .play-card,
+        .play-ready-bot,
+        .your-game,
+        .recent-game {
+            min-height: var(--control-lg);
+        }
+    }
+}

@@ -6,25 +6,30 @@ import { describe, it } from 'node:test';
 import { inflateSync } from 'node:zlib';
 import { declarations, parseColor, ratio, resolve } from './contrast.mjs';
 
-// The static icons are a frozen copy of three tokens: Ink's board ground
-// and x stone, and the brand's solid accent. A change to any of them fails
-// here until the svgs are drawn again, and a change to the ground or the
-// stone until the rasters are too.
+// The static icons are a frozen copy of the mark in the default look:
+// Ink's board ground and cell, its x and o stones, and the brand's solid
+// accent. A change to any of them fails here until the svgs are drawn
+// again, and to the rasters' colors until the rasters are too.
 const themeDir = `apps/web/src/styles/themes`;
 const read = (file) => declarations(readFileSync(join(themeDir, file), `utf8`));
 const tokens = new Map([...read(`brand.css`), ...read(`slots.css`), ...read(`ink.css`)]);
-const icons = [`apps/web/public/favicon.svg`, `apps/web/brand/touch.svg`];
+const favicon = `apps/web/public/favicon.svg`;
+const touch = `apps/web/brand/touch.svg`;
 
 // Whole 8-bit channels, the precision a hex color in a file holds.
 const bytes = (color) => color.rgb.map((channel) => Math.round(channel * 255));
+const token = (name) => bytes(resolve(tokens, name));
 
-// The plate is the first fill, the stones the last, the win line the stroke.
+// Every fill in drawing order, the strokes, and how many paints the file holds.
 function paintOf(svg) {
-    const fills = [...svg.matchAll(/fill="(#[0-9a-f]{6})"/gi)].map((match) => match[1]);
-    const strokes = [...svg.matchAll(/stroke="(#[0-9a-f]{6})"/gi)].map((match) => match[1]);
+    const fills = [...svg.matchAll(/fill="(#[0-9a-f]{6})"/gi)].map((match) => bytes(parseColor(match[1])));
+    const strokes = [...svg.matchAll(/stroke="(#[0-9a-f]{6})"/gi)].map((match) => bytes(parseColor(match[1])));
     const paints = [...svg.matchAll(/(?:fill|stroke|style)="/g)].length;
-    return { plate: fills[0], stone: fills.at(-1), line: strokes[0], count: fills.length + strokes.length, paints };
+    return { fills, strokes, paints };
 }
+
+// The path data of every path, in drawing order.
+const pathsOf = (source) => [...source.matchAll(/ d="([^"]+)"/g)].map((match) => match[1]);
 
 // A PNG states its size in the header chunk that follows its signature.
 function pngSize(file) {
@@ -82,27 +87,36 @@ function icoFrames(file) {
 }
 
 describe(`the static icons`, () => {
-    for (const file of icons) {
-        const paint = paintOf(readFileSync(file, `utf8`));
+    it(`the favicon paints Ink's cell, its x and o stones, and the brand accent on the frame, and nothing else`, () => {
+        const paint = paintOf(readFileSync(favicon, `utf8`));
+        assert.deepEqual(paint.fills, [token(`--board-cell`), token(`--board-stone-x`), token(`--board-stone-o`)]);
+        assert.deepEqual(paint.strokes, [token(`--c-accent-solid`)]);
+        assert.equal(paint.paints, 4);
+    });
 
-        it(`${file} paints Ink's board ground, Ink's x stone, and the brand accent, and nothing else`, () => {
-            assert.equal(paint.count, 3);
-            assert.equal(paint.paints, 3);
-            assert.deepEqual(bytes(parseColor(paint.plate)), bytes(resolve(tokens, `--board-bg`)));
-            assert.deepEqual(bytes(parseColor(paint.stone)), bytes(resolve(tokens, `--board-stone-x`)));
-            assert.deepEqual(bytes(parseColor(paint.line)), bytes(resolve(tokens, `--c-accent-solid`)));
-        });
+    // A touch icon cannot be clear, so the favicon stands on Ink's board ground.
+    it(`the touch icon is the favicon on a square of Ink's board ground`, () => {
+        const paint = paintOf(readFileSync(touch, `utf8`));
+        assert.deepEqual(paint.fills, [token(`--board-bg`), token(`--board-cell`), token(`--board-stone-x`), token(`--board-stone-o`)]);
+        assert.deepEqual(paint.strokes, [token(`--c-accent-solid`)]);
+        assert.deepEqual(pathsOf(readFileSync(touch, `utf8`)), pathsOf(readFileSync(favicon, `utf8`)));
+    });
 
-        it(`${file} holds its stones and its line at 3:1 or better on the plate`, () => {
-            const plate = parseColor(paint.plate);
-            assert.ok(ratio(parseColor(paint.stone), plate) >= 3);
-            assert.ok(ratio(parseColor(paint.line), plate) >= 3);
-        });
-    }
+    it(`holds its stones and its frame at 3:1 or better on the cell`, () => {
+        const cell = resolve(tokens, `--board-cell`);
+        for (const name of [`--board-stone-x`, `--board-stone-o`, `--c-accent-solid`]) assert.ok(ratio(resolve(tokens, name), cell) >= 3, name);
+    });
 
-    // Both svgs put the middle stone's center at (16, 16) of 32 units and
-    // leave the plate bare at (12, 3), so every raster shows the two there.
-    it(`every raster shows Ink's board ground on its plate and Ink's x stone in its middle`, () => {
+    // The favicon draws the mark's stones, so the tab and the bar show one drawing;
+    // its frame is heavier, to read at 16 px.
+    it(`draws the same stones as the mark in the bar`, () => {
+        const mark = pathsOf(readFileSync(`apps/web/src/components/Mark.tsx`, `utf8`));
+        assert.deepEqual(pathsOf(readFileSync(favicon, `utf8`)).slice(1), mark.slice(1));
+    });
+
+    // The x stone stands at (16, 11) of 32 units, an o stone at (12, 18),
+    // and the cell is bare at (16, 27), so every raster shows the three there.
+    it(`every raster shows Ink's x and o stones and its cell where the svgs put them`, () => {
         const rasters = [
             pngPixels(`apps/web/public/icon-512.png`),
             pngPixels(`apps/web/public/apple-touch-icon.png`),
@@ -110,9 +124,15 @@ describe(`the static icons`, () => {
         ];
         for (const raster of rasters) {
             const unit = raster.size / 32;
-            assert.deepEqual(raster.at(Math.floor(12 * unit), Math.floor(3 * unit)), bytes(resolve(tokens, `--board-bg`)));
-            assert.deepEqual(raster.at(Math.floor(16 * unit), Math.floor(16 * unit)), bytes(resolve(tokens, `--board-stone-x`)));
+            const at = (x, y) => raster.at(Math.floor(x * unit), Math.floor(y * unit));
+            assert.deepEqual(at(16, 11), token(`--board-stone-x`), `x stone at ${String(raster.size)} px`);
+            assert.deepEqual(at(12, 18), token(`--board-stone-o`), `o stone at ${String(raster.size)} px`);
+            assert.deepEqual(at(16, 27), token(`--board-cell`), `cell at ${String(raster.size)} px`);
         }
+    });
+
+    it(`the touch icon fills its corners with Ink's board ground, where the favicon is clear`, () => {
+        assert.deepEqual(pngPixels(`apps/web/public/apple-touch-icon.png`).at(2, 2), token(`--board-bg`));
     });
 
     it(`the ico carries a 16 and a 32 px frame, for browsers without svg icons`, () => {

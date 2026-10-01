@@ -10,8 +10,8 @@ async function ladder(page: Page, width: number, theme = `ink`): Promise<void> {
         if (window.localStorage.getItem(`hexo-arena.theme.v1`) === null) window.localStorage.setItem(`hexo-arena.theme.v1`, id);
     }, theme);
     await serve(page, world());
-    await page.goto(`/`);
-    await page.locator(`.live-game`).first().waitFor();
+    await page.goto(`/ladder`);
+    await page.locator(`.rung`).first().waitFor();
 }
 
 function gear(page: Page) {
@@ -210,7 +210,7 @@ for (const worn of looks) {
                 probe.remove();
                 const shown: Record<string, string[]> = {};
                 for (const id of ids) {
-                    const swatch = document.querySelector(`[data-theme-preview="${id}"]`);
+                    const swatch = document.querySelector(`.theme-swatch[data-theme-preview="${id}"]`);
                     if (swatch === null) throw new Error(`no swatch for ${id}`);
                     shown[id] = paint(swatch);
                 }

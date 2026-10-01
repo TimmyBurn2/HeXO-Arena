@@ -162,11 +162,21 @@ export const games = sqliteTable(
         voidedAt: integer(`voided_at`),
     },
     (table) => [
-        index(`games_user_id_idx`).on(table.userId),
         uniqueIndex(`games_finish_seq_idx`).on(table.finishSeq),
-        index(`games_bot_id_idx`).on(table.botId),
-        index(`games_challenger_bot_id_idx`).on(table.challengerBotId),
-        index(`games_dest_bot_id_idx`).on(table.destBotId),
+        // The history reads newest first through one index per filter: each
+        // seat column leads one with the finish order, which also serves
+        // its foreign key, and every other filter has one of its own.
+        index(`games_user_finish_idx`).on(table.userId, table.finishSeq),
+        index(`games_bot_finish_idx`).on(table.botId, table.finishSeq),
+        index(`games_challenger_finish_idx`).on(table.challengerBotId, table.finishSeq),
+        index(`games_dest_finish_idx`).on(table.destBotId, table.finishSeq),
+        index(`games_human_finish_idx`).on(table.finishSeq).where(sql`${table.userId} is not null`),
+        index(`games_bots_finish_idx`).on(table.finishSeq).where(sql`${table.challengerBotId} is not null`),
+        index(`games_undecided_finish_idx`).on(table.finishSeq).where(sql`${table.winner} is null`),
+        index(`games_reason_finish_idx`).on(table.finishReason, table.finishSeq),
+        index(`games_clock_finish_idx`).on(sql`${table.timeControl} ->> '$.mode'`, table.finishSeq),
+        index(`games_opening_finish_idx`).on(sql`json_array_length(${table.openingCells})`, table.finishSeq),
+        index(`games_finished_at_idx`).on(table.finishedAt),
         check(
             `games_user_side_check`,
             sql`${table.userSide} is null or ${table.userSide} in ('x', 'o')`,
@@ -302,6 +312,30 @@ export const ratings = sqliteTable(
         check(`ratings_rating_check`, sql`${table.rating} >= 400`),
         check(`ratings_deviation_check`, sql`${table.deviation} >= 45 and ${table.deviation} <= 500`),
         check(`ratings_volatility_check`, sql`${table.volatility} > 0 and ${table.volatility} <= 0.1`),
+    ],
+);
+
+// A cache of the fold beside the ratings: both sides' ratings around every
+// finished game, written in the transaction that records the finish, so a
+// history row reads the rating a player stood at. A game that rates nobody,
+// unrated or voided, carries after equal to before; a recompute rebuilds
+// the table from the log.
+export const gameRatings = sqliteTable(
+    `game_ratings`,
+    {
+        gameId: text(`game_id`)
+            .notNull()
+            .references(() => games.id, { onDelete: `cascade` }),
+        side: text(`side`).notNull(),
+        ratingBefore: real(`rating_before`).notNull(),
+        ratingAfter: real(`rating_after`).notNull(),
+        deviationAfter: real(`deviation_after`).notNull(),
+    },
+    (table) => [
+        primaryKey({ columns: [table.gameId, table.side] }),
+        check(`game_ratings_side_check`, sql`${table.side} in ('x', 'o')`),
+        check(`game_ratings_rating_check`, sql`${table.ratingBefore} >= 400 and ${table.ratingAfter} >= 400`),
+        check(`game_ratings_deviation_check`, sql`${table.deviationAfter} >= 45 and ${table.deviationAfter} <= 500`),
     ],
 );
 

@@ -42,6 +42,7 @@ checkout exists
   instead
 - Docker dev runtime: `pnpm dev:compose` (operator-run)
 - Local opponents: `pnpm dev:bots` in a second terminal (below)
+- Dev personas: `pnpm dev:seed` (below)
 - Tests: `pnpm test`
 - Prod build: `pnpm build`
 - Type-check + lint: `pnpm check`
@@ -70,6 +71,35 @@ Ctrl-C closes every stream; `pnpm dev` never starts the runner.
 `DEV_BOTS_ORIGIN` (default `http://127.0.0.1:$PORT`) and `DEV_BOTS_COUNT`
 (1 to 3, default 3) adjust it.
 
+## Dev personas
+
+`pnpm dev:seed`, beside `pnpm dev`, builds five accounts over the same
+API, each there to show one state:
+
+- `ana` at the bot cap: `hextide` (extends its longest line), `pebble`
+  (random turns), and `lantern` (never connects, declares nothing), plus
+  four rated games as a human
+- `bruno`, about ten rated games and no bots
+- `cleo`, brand new
+- `dmitri` with `quietlake`, provisional
+- `eve`, banned through the admin client after two games
+
+The seed plays the history itself, the humans with random turns over the
+human routes, inside the daily caps and the creation cooldown, so a first
+run takes about ten minutes.
+A rerun plays only what is missing.
+It ends with each persona's standing and the bots that became ranked.
+`pnpm dev:bots` brings `hextide`, `pebble`, and `quietlake` online from
+`apps/server/data/dev-seed.json` once the seed has run; restart it after
+the first seed.
+
+In the browser, the dev pill at the bottom left of framed screens names
+who is signed in and opens a panel: each persona one click away, any
+name, a first sign-in on to `/welcome`, a guest session, and sign out.
+In dev the Discord button opens the same panel.
+The pill loads only in the dev server's bundle and only when
+`GET /api/dev/accounts` answers; the production build holds none of it.
+
 ## Server environment
 
 `.env.example` lists every variable with its development value.
@@ -84,7 +114,8 @@ Ctrl-C closes every stream; `pnpm dev` never starts the runner.
   the route does not exist. Given a Discord account instead, as
   `{"discord": {"username": "mira.hex", "displayName": "Mira"}}`, it returns
   as a Discord sign-in would: a new account goes on to `/welcome`, so the
-  first sign-in works locally without Discord
+  first sign-in works locally without Discord. It also registers
+  `GET /api/dev/accounts`, the seeded personas as they stand
 - `ADMIN_SOCKET_PATH`: the admin socket, default `data/run/admin.sock`; its
   directory must be mode 0700 and owned by the server's uid, or boot fails.
   A socket left by an unclean stop is replaced at boot; a socket another
@@ -135,7 +166,7 @@ local `pnpm dev`.
 | `delist-bot <name>` / `relist-bot <name>` | hidden from the directory and leaderboard, refused from challenges and games both ways; live play continues |
 | `revoke-bot <name>` | token dead, stream closed; the owner mints a fresh one |
 | `abort-game <gameId>` / `abort-game --bot <name>` | unrated abort of one game, or of every live game of a bot |
-| `recompute-ratings [--exclude <gameId\|name>]...` | re-fold every rating from the game log; excluded games are voided for good |
+| `recompute-ratings [--exclude <gameId\|name>]...` | re-fold every rating, and the ratings around each game, from the game log; excluded games are voided for good |
 
 Every mutation takes `--reason` and writes an audit row. Deleting a bot,
 by its owner or through `delete-user`, keeps a bot that has a game with a

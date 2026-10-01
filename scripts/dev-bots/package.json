@@ -6,7 +6,8 @@
     "scripts": {
         "start": "tsx --env-file-if-exists=../../.env src/main.ts",
         "test": "vitest run",
-        "typecheck": "tsc --noEmit -p ."
+        "typecheck": "tsc --noEmit -p .",
+        "seed": "tsx --env-file-if-exists=../../.env src/seed-main.ts"
     },
     "dependencies": {
         "@hexo-arena/contract": "workspace:*",

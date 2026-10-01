@@ -85,6 +85,20 @@
       "when": 1790758683013,
       "tag": "0011_challenges_by_day",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "6",
+      "when": 1790845373191,
+      "tag": "0012_game_ratings",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "6",
+      "when": 1790846109328,
+      "tag": "0013_finished_games_indexes",
+      "breakpoints": true
     }
   ]
 }

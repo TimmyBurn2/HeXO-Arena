@@ -1,9 +1,9 @@
-import { useCallback, useEffect, useState } from 'react';
-import type { BotListing, LeaderboardEntry } from '@hexo-arena/contract';
+import { useCallback, useState } from 'react';
+import type { BotListing } from '@hexo-arena/contract';
 import { fetchBots, fetchLeaderboard, type LeaderboardKind } from '../api/client';
 import { useAsync } from '../api/use-async';
 import { BotBadge, PlayerName, Rating } from '../components/player';
-import { LiveRail } from '../components/LiveRail';
+import { Rungs } from '../components/Rungs';
 import { ErrorFrame, SkeletonRows } from '../components/states';
 import { useMe } from '../me';
 import { Link } from '../router/Link';
@@ -18,9 +18,6 @@ const kinds: readonly { value: LeaderboardKind; label: string }[] = [
 
 export function LadderScreen() {
     const [kind, setKind] = useState<LeaderboardKind>(`all`);
-    // Unknown until the ladder answers, so day one never flashes the rail's
-    // quiet line under the skeleton.
-    const [ladderEmpty, setLadderEmpty] = useState<boolean | null>(null);
     return (
         <>
             <div className="ladder-head">
@@ -41,28 +38,17 @@ export function LadderScreen() {
                     ))}
                 </div>
             </div>
-            <Standings key={kind} kind={kind} onRows={setLadderEmpty} />
-            {/* The live list is its own data, so the rail stays mounted
-                through a filter switch, a ladder reload, and a ladder error.
-                Day one leads with its empty state, whose copy is the way
-                forward; the rail follows it only while a game is live. */}
-            {ladderEmpty === null ? null : <LiveRail onlyWhenLive={ladderEmpty} />}
+            <Standings key={kind} kind={kind} />
         </>
     );
 }
 
-function Standings({ kind, onRows }: { kind: LeaderboardKind; onRows: (empty: boolean) => void }) {
+function Standings({ kind }: { kind: LeaderboardKind }) {
     const load = useCallback(async () => fetchLeaderboard(kind), [kind]);
     const { data, error, limited, loading, reload } = useAsync(load);
     const me = useMe();
     const loadBots = useCallback(async () => fetchBots(false), []);
     const roster = useAsync(loadBots).data;
-
-    // A ladder that failed to load is not day one, so the rail still shows.
-    useEffect(() => {
-        if (data !== null) onRows(data.length === 0);
-        else if (error) onRows(false);
-    }, [data, error, onRows]);
 
     if (loading && data === null) return <LadderSkeleton />;
     if (error && data === null) return <ErrorFrame sentence={text.ladder.failed} onRetry={reload} wait={limited} />;
@@ -136,46 +122,6 @@ function Pulse({ ranked, kind, roster }: { ranked: number; kind: LeaderboardKind
 
 function strong(words: string) {
     return <strong>{words}</strong>;
-}
-
-/**
- * The top of the filtered ladder as rungs: a view of the table's
- * first rows, never separate data, stepping inward as rank falls.
- */
-function Rungs({ entries, owners }: { entries: readonly LeaderboardEntry[]; owners: ReadonlyMap<string, string | null> }) {
-    return (
-        <section className="rungs" aria-label={text.ladder.top}>
-            {entries.map((entry, index) => {
-                const owner = owners.get(entry.name) ?? null;
-                // The tier follows position, not rank, so ties never double
-                // or drop the top rung.
-                const rung = (
-                    <div className={`rung r${String(index + 1)}`}>
-                        <span className="rung-rank">{String(entry.rank)}</span>
-                        <span className="rung-name">
-                            <PlayerName name={entry.name} kind={entry.kind} />
-                            {entry.kind === `bot` ? <BotBadge /> : null}
-                            {entry.kind === `human` ? (
-                                <span className="rung-kind">{text.ladder.human}</span>
-                            ) : owner === null ? null : (
-                                <span className="rung-owner">{text.ladder.by(owner)}</span>
-                            )}
-                        </span>
-                        <span className="rung-rating">{String(entry.rating)}</span>
-                    </div>
-                );
-                // The top rung lifts; the lift sits on a wrapper because the
-                // cut would clip it.
-                return index === 0 ? (
-                    <div className="rung-lift" key={entry.name}>
-                        {rung}
-                    </div>
-                ) : (
-                    <div key={entry.name}>{rung}</div>
-                );
-            })}
-        </section>
-    );
 }
 
 // The ladder's own shape while it loads, so nothing jumps when rows land.

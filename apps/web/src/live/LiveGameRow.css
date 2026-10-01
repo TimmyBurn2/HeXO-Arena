@@ -1,12 +1,4 @@
 @layer components {
-    .live-rail-head {
-        display: flex;
-        align-items: baseline;
-        justify-content: space-between;
-        flex-wrap: wrap;
-        gap: var(--space-2) var(--space-4);
-    }
-
     .live-list {
         list-style: none;
         margin: 0;
@@ -90,9 +82,5 @@
         gap: var(--space-2) var(--space-3);
         color: var(--c-text-dim);
         font-size: var(--text-sm);
-    }
-
-    .live-skeleton {
-        height: var(--control-lg);
     }
 }

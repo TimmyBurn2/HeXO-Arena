@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { GameCell, LiveGameEntry, Side } from '@hexo-arena/contract';
 import { playerToMove } from '@hexo-arena/rules';
 import { fetchLiveGames, limitedFor } from '../api/client';
@@ -134,15 +134,20 @@ export function useLiveReplay(): LiveReplay {
         };
     }, [now, entries]);
 
-    const games =
-        entries === null
-            ? null
-            : entries.map((entry) => {
-                  const landing = landings.current.get(entry.gameId);
-                  const count = landing === undefined ? entry.cells.length : shownBy(landing, now);
-                  const cells = count === entry.cells.length ? entry.cells : entry.cells.slice(0, count);
-                  return { entry, cells, toMove: count === entry.cells.length ? entry.toMove : sideAfter(cells), readAt };
-              });
+    // One list per read and per landing, so a screen that keys on it renders
+    // when a stone lands, not on every render of its own.
+    const games = useMemo(
+        () =>
+            entries === null
+                ? null
+                : entries.map((entry) => {
+                      const landing = landings.current.get(entry.gameId);
+                      const count = landing === undefined ? entry.cells.length : shownBy(landing, now);
+                      const cells = count === entry.cells.length ? entry.cells : entry.cells.slice(0, count);
+                      return { entry, cells, toMove: count === entry.cells.length ? entry.toMove : sideAfter(cells), readAt };
+                  }),
+        [entries, now, readAt],
+    );
 
     return { games, failed, limited, reload: () => void read() };
 }

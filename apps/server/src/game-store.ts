@@ -13,7 +13,7 @@ import { replay, type Coord, type Position } from '@hexo-arena/rules';
 import { nowSeconds, type Query } from './db';
 import { alias } from 'drizzle-orm/sqlite-core';
 import { bots, games, moves, users } from './db/schema';
-import { applyFinishedGame, finishedGameOf, seatColumns } from './rating-store';
+import { applyFinishedGame, countedGameOf, seatColumns } from './rating-store';
 
 // The position a game starts from: the origin stone plus the server-placed
 // opening stones, in placement order.
@@ -142,7 +142,7 @@ export function recordFinish(
             .returning({ ...seatColumns, voidedAt: games.voidedAt })
             .all();
         // A game voided while live finishes on the record but never rates.
-        if (finished !== undefined && finished.voidedAt === null) applyFinishedGame(tx, finishedGameOf(finished));
+        if (finished?.finishSeq != null) applyFinishedGame(tx, gameId, finished.finishSeq, countedGameOf(finished));
     });
 }
 

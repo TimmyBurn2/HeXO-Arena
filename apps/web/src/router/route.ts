@@ -1,6 +1,7 @@
 import { legalPagePath, legalPages, welcomePath, type LegalPage } from '@hexo-arena/contract';
 
 export type Route =
+    | { readonly name: `home` }
     | { readonly name: `play` }
     | { readonly name: `ladder` }
     | { readonly name: `bots` }
@@ -14,16 +15,12 @@ export type Route =
     | { readonly name: `game`; readonly gameId: string }
     | { readonly name: `not-found` };
 
-/**
- * The whole route table: parse a pathname, or build one back.
- * The root shows the ladder under the site's own address; the ladder's
- * built path is `/ladder`, so a link to it names what it opens.
- */
+/** The whole route table: parse a pathname, or build one back. */
 export function parseRoute(pathname: string): Route {
     const path = pathname.length > 1 && pathname.endsWith(`/`) ? pathname.slice(0, -1) : pathname;
     const segments = path.split(`/`).filter((segment) => segment !== ``);
     const [head, second] = segments;
-    if (segments.length === 0) return { name: `ladder` };
+    if (segments.length === 0) return { name: `home` };
     if (head === `play` && segments.length === 1) return { name: `play` };
     if (head === `ladder` && segments.length === 1) return { name: `ladder` };
     if (head === `bots` && segments.length === 1) return { name: `bots` };
@@ -47,6 +44,8 @@ export function parseRoute(pathname: string): Route {
 
 export function routePath(route: Route): string {
     switch (route.name) {
+        case `home`:
+            return `/`;
         case `play`:
             return `/play`;
         case `ladder`:

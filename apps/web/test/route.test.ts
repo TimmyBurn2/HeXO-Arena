@@ -2,8 +2,9 @@ import { describe, expect, it } from 'vitest';
 import { parseRoute, routePath } from '../src/router/route';
 
 describe('parseRoute', () => {
-    it('route the root and /ladder to the ladder', () => {
-        expect(parseRoute(`/`)).toEqual({ name: `ladder` });
+    it('route the root home and /ladder to the ladder', () => {
+        expect(parseRoute(`/`)).toEqual({ name: `home` });
+        expect(routePath({ name: `home` })).toBe(`/`);
         expect(parseRoute(`/ladder`)).toEqual({ name: `ladder` });
         expect(parseRoute(`/ladder/`)).toEqual({ name: `ladder` });
     });

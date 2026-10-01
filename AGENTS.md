@@ -17,6 +17,8 @@ per package later; the nearest one wins.
 - Dev: `pnpm dev` (server :3000, web :5173, hot reload; Ctrl-C stops both)
 - Local opponents: `pnpm dev:bots` beside `pnpm dev` (three bots over the
   bot API)
+- Dev personas: `pnpm dev:seed` beside `pnpm dev` (accounts, bots, and a
+  played history over the real API; restart dev:bots after)
 - Docker dev runtime: `pnpm dev:compose` (operator-run; containers are not
   verified by day-to-day dev)
 - Tests: `pnpm test`

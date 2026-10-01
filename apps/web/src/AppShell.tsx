@@ -2,7 +2,7 @@ import { lazy, Suspense, useEffect, useRef, useState, useSyncExternalStore } fro
 import { legalPagePath, signInFailureParam, signInFailureSchema, siteName, type SignInFailure } from '@hexo-arena/contract';
 import { Mark } from './components/Mark';
 import { SiteFooter } from './components/SiteFooter';
-import { useFrameLent, type Layout } from './frame';
+import { useFramed } from './frame';
 import { Identity } from './identity/Identity';
 import { Link } from './router/Link';
 import { loadScreen, RouteBoundary } from './RouteBoundary';
@@ -14,6 +14,10 @@ import { text } from './text';
 import { useDocumentMeta } from './use-document-meta';
 import './AppShell.css';
 
+const HomeScreen = lazy(async () => {
+    const module = await loadScreen(async () => import(`./screens/HomeScreen`));
+    return { default: module.HomeScreen };
+});
 const PlayScreen = lazy(async () => {
     const module = await loadScreen(async () => import(`./screens/PlayScreen`));
     return { default: module.PlayScreen };
@@ -68,17 +72,20 @@ interface NavEntry {
     label: string;
     // The screens the entry stands for: its own and those under it.
     screens: readonly Route[`name`][];
+    bar: boolean;
     phoneTab: boolean;
 }
 
 // The main nav as one table for the bar and the phone tabs: a new page
-// adds a row, and its flag says whether it takes a phone tab too.
+// adds a row, and its flags say where it shows. On the desktop the
+// wordmark is the way home, so Home is a phone tab alone.
 const nav: readonly NavEntry[] = [
-    { route: { name: `play` }, label: text.shell.nav.play, screens: [`play`], phoneTab: true },
-    { route: { name: `live-games` }, label: text.shell.nav.games, screens: [`live-games`], phoneTab: true },
-    { route: { name: `ladder` }, label: text.shell.nav.ladder, screens: [`ladder`], phoneTab: true },
-    { route: { name: `bots` }, label: text.shell.nav.bots, screens: [`bots`, `bot`], phoneTab: true },
-    { route: { name: `connect` }, label: text.shell.nav.build, screens: [`connect`], phoneTab: false },
+    { route: { name: `home` }, label: text.shell.nav.home, screens: [`home`], bar: false, phoneTab: true },
+    { route: { name: `play` }, label: text.shell.nav.play, screens: [`play`], bar: true, phoneTab: true },
+    { route: { name: `live-games` }, label: text.shell.nav.games, screens: [`live-games`], bar: true, phoneTab: true },
+    { route: { name: `ladder` }, label: text.shell.nav.ladder, screens: [`ladder`], bar: true, phoneTab: true },
+    { route: { name: `bots` }, label: text.shell.nav.bots, screens: [`bots`, `bot`], bar: true, phoneTab: true },
+    { route: { name: `connect` }, label: text.shell.nav.build, screens: [`connect`], bar: true, phoneTab: false },
 ];
 
 // The reason a sign-in failed, as the server's redirect names it; any
@@ -99,7 +106,6 @@ function dropSignInFailure(): void {
 export function AppShell() {
     const route = useRoute();
     const paused = useSyncExternalStore(siteStatusStore.subscribe, siteStatusStore.read, siteStatusStore.read);
-    const frameLent = useFrameLent();
     const mainRef = useRef<HTMLElement | null>(null);
     const firstRender = useRef(true);
     const [signInFailure, setSignInFailure] = useState<SignInFailure | null>(null);
@@ -133,7 +139,7 @@ export function AppShell() {
         mainRef.current?.focus({ preventScroll: true });
     }, [route]);
 
-    const framed = layoutOf(route) === `framed` || frameLent;
+    const framed = useFramed(route);
 
     // The main landmark keeps its place whichever layout wraps it, so a
     // screen that asks for the frame keeps its state.
@@ -152,9 +158,11 @@ export function AppShell() {
                             {siteName}
                         </Link>
                         <nav className="nav-links" aria-label={text.shell.mainNav}>
-                            {nav.map((entry) => (
-                                <NavLink key={entry.label} entry={entry} route={route} className="nav-link" />
-                            ))}
+                            {nav
+                                .filter((entry) => entry.bar)
+                                .map((entry) => (
+                                    <NavLink key={entry.label} entry={entry} route={route} className="nav-link" />
+                                ))}
                         </nav>
                         <div className="nav-right">
                             <Settings />
@@ -198,14 +206,10 @@ export function AppShell() {
     );
 }
 
-// The game is immersive: the board is the screen, with no site chrome; a
-// paused banner would not apply, since live games continue.
-function layoutOf(route: Route): Layout {
-    return route.name === `game` ? `immersive` : `framed`;
-}
-
 function RouteView({ route }: { route: Route }) {
     switch (route.name) {
+        case `home`:
+            return <HomeScreen />;
         case `play`:
             return <PlayScreen />;
         case `ladder`:

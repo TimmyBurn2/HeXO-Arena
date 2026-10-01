@@ -152,7 +152,7 @@ export const pairs = [
     [`focus on base`, `--c-focus`, `--c-bg`, 3],
     [`focus on overlay`, `--c-focus`, `--c-bg-overlay`, 3],
     [`accent solid on base`, `--c-accent-solid`, `--c-bg`, 3],
-    // The mark in the home link brightens to it under the pointer.
+    // The mark's brass frame meets the page and brightens under the pointer.
     [`accent solid hover on base`, `--c-accent-solid-hover`, `--c-bg`, 3],
     [`accent solid on raised`, `--c-accent-solid`, `--c-bg-raised`, 3],
     [`accent solid on overlay`, `--c-accent-solid`, `--c-bg-overlay`, 3],

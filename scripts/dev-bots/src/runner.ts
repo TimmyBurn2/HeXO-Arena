@@ -1,10 +1,11 @@
-import type { Accepts, StreamEvent, TimeControl } from '@hexo-arena/contract';
+import type { Accepts, TimeControl } from '@hexo-arena/contract';
 import { randomUUID } from 'node:crypto';
-import { chmodSync, mkdirSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
-import { setTimeout as sleep } from 'node:timers/promises';
+import { z } from 'zod';
 import { ApiError, ArenaClient } from './client';
-import { playGame, type EngineSession } from './player';
+import { hostBots, message, type HostedBot } from './host';
+import { personaBots } from './personas';
 
 // The play dialog spans its turn slider over this window, so it stays in
 // the range a person picks from: the 5 s floor to five minutes.
@@ -13,8 +14,6 @@ const devAccepts: Accepts = { turnMs: [5_000, 300_000], match: true, unlimited: 
 const about = `Plays random turns next to the stones; a local development opponent.`;
 
 const challengeClock: TimeControl = { mode: `turn`, turnTimeMs: 20_000 };
-
-const streamRetryMs = 2_000;
 
 // An owner's bots may not challenge each other, so every bot gets an owner
 // of its own.
@@ -25,6 +24,8 @@ export interface DevBotsOptions {
     origin: string;
     count: number;
     tokenFile: string;
+    // The tokens `pnpm dev:seed` left for the personas' online bots, if it has run.
+    seedFile: string;
     challengeEveryMs: number;
     thinkMs: () => number;
     random: () => number;
@@ -40,50 +41,39 @@ export interface DevBots {
 /** The target answered 404 on the dev login route, so it is not a dev server. */
 export class NotADevServer extends Error {}
 
-interface Bot {
-    readonly name: string;
-    readonly owner: string;
-    token: string;
-    readonly sessions: Map<string, EngineSession>;
-}
-
-// fetch reports a dropped connection as `terminated`, with the reason in
-// the cause.
-function message(error: unknown): string {
-    if (!(error instanceof Error)) return String(error);
-    return error.cause instanceof Error ? `${error.message}: ${error.cause.message}` : error.message;
-}
-
 function isDailyCap(error: unknown): boolean {
     return error instanceof ApiError && (error.code === `daily_pair_cap` || error.code === `daily_bot_cap` || error.code === `daily_challenge_cap`);
 }
 
-// Kept so a developer can drive a dev bot by hand; the file sits in the
-// gitignored data directory beside the database the tokens belong to.
-function saveTokens(file: string, bots: readonly Bot[]): void {
+const tokensSchema = z.record(z.string(), z.string());
+
+/** Writes a name-to-token map where only its owner reads it. */
+export function saveTokens(file: string, tokens: ReadonlyMap<string, string>): void {
     mkdirSync(dirname(file), { recursive: true });
-    writeFileSync(file, `${JSON.stringify(Object.fromEntries(bots.map((bot) => [bot.name, bot.token])), null, 4)}\n`);
+    writeFileSync(file, `${JSON.stringify(Object.fromEntries(tokens), null, 4)}\n`);
     chmodSync(file, 0o600);
 }
 
-function describeFinish(event: Extract<StreamEvent, { type: `gameFinish` }>): string {
-    return event.winner === null ? `no winner (${event.reason})` : `${event.winner} won (${event.reason})`;
+/** The name-to-token map a file holds, empty when there is none. */
+export function loadTokens(file: string): Map<string, string> {
+    if (!existsSync(file)) return new Map();
+    return new Map(Object.entries(tokensSchema.parse(JSON.parse(readFileSync(file, `utf8`)))));
 }
 
 /**
  * Signs in one dev owner per bot, claims its bot with a fresh token, holds
  * every stream open for challenges, plays every game it is dealt, and has
  * the bots challenge each other on an interval until a daily cap refuses.
+ * The personas' online bots join from the seed's file when it exists; they
+ * take challenges and play, and never challenge.
  * Rejects with NotADevServer before touching anything when the target has
  * no dev login route.
  */
 export async function startDevBots(options: DevBotsOptions): Promise<DevBots> {
     const client = new ArenaClient(options.origin);
     const { log } = options;
-    const controller = new AbortController();
-    // A function, not a read: narrowing would pin the flag across awaits.
-    const stopped = (): boolean => controller.signal.aborted;
-    const bots: Bot[] = [];
+    const owners = new Map<string, string>();
+    const tokens = new Map<string, string>();
 
     // The dev login route exists only under DEV_LOGIN=1, which production
     // refuses to boot with, so answering it proves the target is a dev
@@ -99,114 +89,33 @@ export async function startDevBots(options: DevBotsOptions): Promise<DevBots> {
             throw error;
         }
         const token = await client.claimBot(cookie, name);
-        await client.declare(token, devAccepts, about);
+        await client.declare(token, { accepts: devAccepts, about });
         return token;
     }
 
+    const devBots: HostedBot[] = [];
     for (const seat of seats.slice(0, options.count)) {
-        const owner = `devowner-${seat}`;
         const name = `devbot-${seat}`;
-        bots.push({ name, owner, token: await claim(owner, name), sessions: new Map() });
+        owners.set(name, `devowner-${seat}`);
+        const token = await claim(`devowner-${seat}`, name);
+        tokens.set(name, token);
+        devBots.push({ name, strategy: `random`, token });
     }
-    saveTokens(options.tokenFile, bots);
+    saveTokens(options.tokenFile, tokens);
 
-    function onEvent(bot: Bot, event: StreamEvent): void {
-        switch (event.type) {
-            case `gameStart`: {
-                // A replayed start carries a fresh token, and the fresh dial
-                // replaces the stale session on the server as well.
-                bot.sessions.get(event.gameId)?.close();
-                // A restart can end a game with no gameFinish, so a session
-                // leaves the map when its socket closes.
-                const session = playGame({
-                    url: client.engineUrl(event.engine.socketUrl, event.engine.token),
-                    random: options.random,
-                    thinkMs: options.thinkMs,
-                    log: (line) => {
-                        log(`${bot.name} ${event.gameId}: ${line}`);
-                    },
-                    closed: () => {
-                        if (bot.sessions.get(event.gameId) === session) bot.sessions.delete(event.gameId);
-                    },
-                });
-                bot.sessions.set(event.gameId, session);
-                log(`${bot.name} plays ${event.opponent.name} as ${event.side} in ${event.gameId}`);
-                return;
-            }
-            case `gameFinish`:
-                bot.sessions.get(event.gameId)?.close();
-                bot.sessions.delete(event.gameId);
-                log(`${bot.name} finished ${event.gameId}: ${describeFinish(event)}`);
-                return;
-            case `challenge`:
-                client.accept(bot.token, event.challenge.challengeId).catch((error: unknown) => {
-                    log(`${bot.name} could not accept ${event.challenge.challenger.name}: ${message(error)}`);
-                });
-                return;
-            // A replayed moveRequest needs nothing, since the fresh engine
-            // session after a replayed start receives the outstanding request
-            // itself; withdrawn and declined challenges need nothing either.
-            case `moveRequest`:
-            case `challengeCanceled`:
-            case `challengeDeclined`:
-                return;
-            default: {
-                const unknown: never = event;
-                return unknown;
-            }
-        }
-    }
+    // The seed owns its bots' tokens: a refused one is read again from its
+    // file, which holds a fresh one once a rerun of the seed is done.
+    const seeded = loadTokens(options.seedFile);
+    const personas: HostedBot[] = personaBots.flatMap((bot) => {
+        const token = seeded.get(bot.name);
+        return bot.online && token !== undefined ? [{ name: bot.name, strategy: bot.strategy, token }] : [];
+    });
 
-    // Answers null once the bot holds a fresh token, or why it could not.
-    async function reclaim(bot: Bot): Promise<unknown> {
-        try {
-            bot.token = await claim(bot.owner, bot.name);
-            saveTokens(options.tokenFile, bots);
-            return null;
-        } catch (error) {
-            return error;
-        }
-    }
-
-    // A server restart ends every stream; the bot redials until stopped,
-    // and a dead token (a wiped database, a revoke) is claimed afresh.
-    async function hold(bot: Bot, opened: () => void): Promise<void> {
-        let down = false;
-        while (!stopped()) {
-            try {
-                await client.stream(
-                    bot.token,
-                    {
-                        opened: () => {
-                            if (down) log(`${bot.name} is back online`);
-                            down = false;
-                            opened();
-                        },
-                        event: (event) => {
-                            onEvent(bot, event);
-                        },
-                    },
-                    controller.signal,
-                );
-            } catch (error) {
-                if (stopped()) return;
-                const failure = error instanceof ApiError && error.status === 401 ? await reclaim(bot) : error;
-                if (failure === null) continue;
-                if (!down) log(`${bot.name} is offline: ${message(failure)}; retrying every ${String(streamRetryMs / 1000)} s`);
-                down = true;
-                // A refused open names its wait, and a sooner retry would only be refused again.
-                if (failure instanceof ApiError && failure.retryAfter !== null) {
-                    await sleep(failure.retryAfter * 1000, undefined, { signal: controller.signal }).catch(() => undefined);
-                    continue;
-                }
-            }
-            await sleep(streamRetryMs, undefined, { signal: controller.signal }).catch(() => undefined);
-        }
-    }
-
-    const pairs = bots.flatMap((first, index) => bots.slice(index + 1).map((second) => [first, second] as const));
+    const pairs = devBots.flatMap((first, index) => devBots.slice(index + 1).map((second) => [first, second] as const));
     const cappedOn = new Map<string, string>();
+    let firstOpens = 0;
     let next = 0;
+    let stopped = false;
     // A rate limit's refusal names its wait, which every challenge sits out.
     let restUntil = 0;
 
@@ -218,7 +127,7 @@ export async function startDevBots(options: DevBotsOptions): Promise<DevBots> {
         for (let tried = 0; tried < pairs.length; tried += 1) {
             const pair = pairs[next % pairs.length];
             next += 1;
-            if (pair === undefined || stopped()) return;
+            if (pair === undefined || stopped) return;
             const key = `${pair[0].name} and ${pair[1].name}`;
             if (cappedOn.get(key) === today) continue;
             const [from, to] = options.random() < 0.5 ? pair : [pair[1], pair[0]];
@@ -241,30 +150,40 @@ export async function startDevBots(options: DevBotsOptions): Promise<DevBots> {
         }
     }
 
-    let firstOpens = 0;
-    const holds = bots.map((bot) => {
-        let counted = false;
-        return hold(bot, () => {
-            if (counted) return;
-            counted = true;
+    const host = hostBots([...devBots, ...personas], {
+        client,
+        thinkMs: options.thinkMs,
+        random: options.random,
+        log,
+        reclaim: async (bot) => {
+            const owner = owners.get(bot.name);
+            if (owner === undefined) {
+                const fresh = loadTokens(options.seedFile).get(bot.name);
+                if (fresh === undefined || fresh === bot.token) throw new Error(`no fresh token in ${options.seedFile}; run pnpm dev:seed`);
+                return fresh;
+            }
+            const token = await claim(owner, bot.name);
+            tokens.set(bot.name, token);
+            saveTokens(options.tokenFile, tokens);
+            return token;
+        },
+        opened: (bot) => {
+            if (!devBots.includes(bot)) return;
             firstOpens += 1;
-            if (firstOpens === bots.length) void challengeOnce();
-        });
+            if (firstOpens === devBots.length) void challengeOnce();
+        },
     });
+
     const ticker = setInterval(() => {
         void challengeOnce();
     }, options.challengeEveryMs);
 
     return {
-        names: bots.map((bot) => bot.name),
+        names: [...devBots, ...personas].map((bot) => bot.name),
         stop: async () => {
-            controller.abort();
+            stopped = true;
             clearInterval(ticker);
-            for (const bot of bots) {
-                for (const session of bot.sessions.values()) session.close();
-                bot.sessions.clear();
-            }
-            await Promise.allSettled(holds);
+            await host.stop();
         },
     };
 }

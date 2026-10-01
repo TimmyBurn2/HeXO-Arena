@@ -22,9 +22,10 @@ const results = [
     [`x`, `six-in-a-row`],
     [`o`, `timeout`],
 ] as const;
+const tom: Me = { kind: `user`, name: `tom`, rating: 1503, provisional: false, discord: null, liveGames: [] };
 const seats = [
     [`watching`, null],
-    [`seated`, { kind: `user`, name: `tom`, rating: 1503, provisional: false, discord: null }],
+    [`seated`, tom],
 ] as const;
 
 async function showResults(page: Page, players: GameSnapshot[`players`], me: Me, fixture = `finished`): Promise<number> {
@@ -92,7 +93,8 @@ async function measure(page: Page) {
             chip: box(document.querySelector(`.hud-bottom-center .hud-chip`)),
             top: box(document.querySelector(`.hud-top-left .hud-chip`)),
             text: result === null ? null : box(range),
-            actions: box(document.querySelector(`.hud-bottom-center .hud-actions`)),
+            // A phone keeps the replay's steps in the sheet, so the chip holds the result alone.
+            steps: ((steps) => (steps instanceof HTMLElement && steps.offsetParent !== null ? box(steps) : null))(document.querySelector(`.hud-bottom-center .scrubber`)),
             seat: seat !== null && getComputedStyle(seat).display !== `none` ? box(seat) : null,
             host: box(document.querySelector(`.board-host`)),
             room,
@@ -125,16 +127,16 @@ for (const [width, height] of [
             for (let id = 0; id < count; id += 1) {
                 await open(page, id);
                 await expect(async () => {
-                    const { chip, top, text, actions, room } = await measure(page);
-                    if (chip === null || top === null || text === null || actions === null || room === null) throw new Error(`the chip or the board is missing`);
+                    const { chip, top, text, steps, room } = await measure(page);
+                    if (chip === null || top === null || text === null || room === null) throw new Error(`the chip or the board is missing`);
                     expect(chip.x).toBeGreaterThanOrEqual(0);
                     expect(right(chip)).toBeLessThanOrEqual(width);
-                    // At its widest the chip keeps the top chip's gutters.
-                    if (players === long) {
+                    // At its widest, a result naming the long names, the chip keeps the top chip's gutters.
+                    if (players === long && results[id]?.[0] !== null) {
                         expect(Math.abs(chip.x - top.x)).toBeLessThanOrEqual(0.5);
                         expect(Math.abs(right(chip) - right(top))).toBeLessThanOrEqual(0.5);
                     }
-                    for (const inner of [text, actions]) {
+                    for (const inner of steps === null ? [text] : [text, steps]) {
                         expect(inner.x).toBeGreaterThanOrEqual(chip.x - 0.5);
                         expect(right(inner)).toBeLessThanOrEqual(right(chip) + 0.5);
                     }
@@ -170,14 +172,19 @@ for (const [width, height] of [
     }
 }
 
+async function openMoves(page: Page) {
+    await page.getByRole(`button`, { name: `Game panel` }).click();
+    await page.getByRole(`tab`, { name: `Moves` }).click();
+    await expect(page.getByRole(`tab`, { name: `Moves` })).toHaveAttribute(`aria-selected`, `true`);
+}
+
 // A finish seen live opens the Moves panel, which here takes its own
 // column, so the chip wraps in a narrower board beside it.
 async function underTheStones(page: Page, me: Me) {
     const count = await showResults(page, ordinary, me, `five-finished`);
     for (let id = 0; id < count; id += 1) {
         await open(page, id);
-        await page.locator(`.hud-bottom-center`).getByRole(`button`, { name: `Moves` }).click();
-        await expect(page.getByRole(`tab`, { name: `Moves` })).toHaveAttribute(`aria-selected`, `true`);
+        await openMoves(page);
         await expect(async () => {
             const { chip, seat, host, room, stones } = await measure(page);
             if (chip === null || seat === null || host === null || room === null) throw new Error(`a chip or the board is missing`);
@@ -285,8 +292,7 @@ for (const [width, height] of [
             }).toPass();
         };
         await centered();
-        await page.locator(`.hud-bottom-center`).getByRole(`button`, { name: `Moves` }).click();
-        await expect(page.getByRole(`tab`, { name: `Moves` })).toHaveAttribute(`aria-selected`, `true`);
+        await openMoves(page);
         await centered();
     });
 }
@@ -310,10 +316,7 @@ for (const [width, height] of [
                 const count = await showResults(page, players, me);
                 for (let id = 0; id < count; id += 1) {
                     await open(page, id);
-                    if (panel === `open`) {
-                        await page.locator(`.hud-bottom-center`).getByRole(`button`, { name: `Moves` }).click();
-                        await expect(page.getByRole(`tab`, { name: `Moves` })).toHaveAttribute(`aria-selected`, `true`);
-                    }
+                    if (panel === `open`) await openMoves(page);
                     await expect(async () => {
                         const { chip, seat, host, room, drawer } = await measure(page);
                         if (chip === null || seat === null || host === null || room === null) throw new Error(`a chip or the board is missing`);

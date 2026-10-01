@@ -7,7 +7,7 @@ import { serve, world } from './mock-api';
 // reach; while the raised sheet covers the result chip, the peek states
 // the result instead, whole, however long the names.
 const bot = (name: string, rating: number) => ({ name, rating, provisional: false, kind: `bot` as const });
-const tom = { kind: `user`, name: `tom`, rating: 1503, provisional: false, discord: null } as const;
+const tom: Me = { kind: `user`, name: `tom`, rating: 1503, provisional: false, discord: null, liveGames: [] };
 const long = { x: bot(`abcdefghijklmnopqrstuvwxyz1234`, 1500), o: bot(`W`.repeat(30), 1388) };
 const seats: readonly (readonly [string, GameSnapshot[`players`], Me])[] = [
     [`watching 9-letter names`, { x: bot(`driftwood`, 1388), o: bot(`quietlake`, 1461) }, null],
@@ -86,7 +86,7 @@ for (const width of [320, 344, 390]) {
                 await serveGames(page, { result: { ...finished, gameId: `result`, players, winner, reason } }, me);
                 await page.goto(`/game/result`);
                 const sentence = await page.locator(`.hud-bottom-center .hud-result`).innerText();
-                await page.locator(`.hud-bottom-center`).getByRole(`button`, { name: `Moves` }).click();
+                await page.getByRole(`button`, { name: `Open the game panel` }).click();
                 const peek = page.locator(`.peek-result`);
                 await expect(peek).toHaveText(sentence);
                 const fit = await peek.evaluate((line) => {

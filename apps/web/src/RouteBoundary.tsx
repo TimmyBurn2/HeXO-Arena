@@ -70,8 +70,8 @@ function RouteFailure({ layout, failed }: { layout: Layout; failed: Failed }) {
                     {text.states.reload}
                 </button>
                 {layout === `immersive` ? (
-                    <Link to="/ladder" className="btn btn-ghost">
-                        {text.states.routeFailedLadder}
+                    <Link to="/" className="btn btn-ghost">
+                        {text.states.routeFailedHome}
                     </Link>
                 ) : null}
             </div>

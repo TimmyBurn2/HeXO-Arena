@@ -60,7 +60,7 @@ describe('ProfileScreen', () => {
     });
 
     it('show a user their name, rating, and only their own bots with room for another', async () => {
-        serve({ kind: `user`, name: `tom`, rating: 1503, provisional: false, discord: null });
+        serve({ kind: `user`, name: `tom`, rating: 1503, provisional: false, discord: null, liveGames: [] });
         render(<ProfileScreen />);
         expect(await screen.findByText(`tom`, { selector: `.identity-name` })).toBeTruthy();
         expect(document.querySelector(`.identity-number`)?.textContent).toBe(`1503`);
@@ -79,7 +79,7 @@ describe('ProfileScreen', () => {
             vi.fn((url: string) =>
                 Promise.resolve(
                     url === `/api/me`
-                        ? new Response(JSON.stringify({ kind: `user`, name: `tom`, rating: 1503, provisional: false, discord: null }))
+                        ? new Response(JSON.stringify({ kind: `user`, name: `tom`, rating: 1503, provisional: false, discord: null, liveGames: [] }))
                         : new Response(JSON.stringify({ error: `slow down`, code: `rate_limited` }), { status: 429, headers: { 'retry-after': `8` } }),
                 ),
             ),
@@ -94,16 +94,16 @@ describe('ProfileScreen', () => {
     });
 
     it('show the person their pattern and the Discord account they signed in with', async () => {
-        serve({ kind: `user`, name: `mira-hex`, rating: 1000, provisional: true, discord: { username: `mira.hex`, displayName: `Mira` } });
+        serve({ kind: `user`, name: `mira-hex`, rating: 1000, provisional: true, discord: { username: `mira.hex`, displayName: `Mira` }, liveGames: [] });
         render(<ProfileScreen />);
         expect(await screen.findByText(`Signed in with Discord as Mira (@mira.hex)`)).toBeTruthy();
         expect(document.querySelector(`.identity-plate .sigil-plate svg.sigil`)).toBeTruthy();
         cleanup();
-        serve({ kind: `user`, name: `mira-hex`, rating: 1000, provisional: true, discord: { username: `mira.hex`, displayName: null } });
+        serve({ kind: `user`, name: `mira-hex`, rating: 1000, provisional: true, discord: { username: `mira.hex`, displayName: null }, liveGames: [] });
         render(<ProfileScreen />);
         expect(await screen.findByText(`Signed in with Discord as @mira.hex`)).toBeTruthy();
         cleanup();
-        serve({ kind: `user`, name: `tom`, rating: 1503, provisional: false, discord: null });
+        serve({ kind: `user`, name: `tom`, rating: 1503, provisional: false, discord: null, liveGames: [] });
         render(<ProfileScreen />);
         await screen.findByText(`tom`, { selector: `.identity-name` });
         expect(screen.queryByText(/^Signed in with Discord/u)).toBe(null);
@@ -111,7 +111,7 @@ describe('ProfileScreen', () => {
 
     it('sign a user out and forget them', async () => {
         const posts: string[] = [];
-        serve({ kind: `user`, name: `tom`, rating: 1503, provisional: false, discord: null }, posts);
+        serve({ kind: `user`, name: `tom`, rating: 1503, provisional: false, discord: null, liveGames: [] }, posts);
         render(<ProfileScreen />);
         fireEvent.click(await screen.findByRole(`button`, { name: `Sign out` }));
         await waitFor(() => {
@@ -124,7 +124,7 @@ describe('ProfileScreen', () => {
 
     it('tell a guest their games are unrated and end the session as the menu does', async () => {
         const posts: string[] = [];
-        serve({ kind: `guest`, name: `Guest k3f9` }, posts);
+        serve({ kind: `guest`, name: `Guest k3f9`, liveGames: [] }, posts);
         render(<ProfileScreen />);
         expect(await screen.findByText(`Guest k3f9`)).toBeTruthy();
         expect(screen.getByText(`Guest games are unrated and end with the session.`)).toBeTruthy();
@@ -136,7 +136,7 @@ describe('ProfileScreen', () => {
     });
 
     it('offer a guest the discord sign-in on their card', async () => {
-        serve({ kind: `guest`, name: `Guest k3f9` });
+        serve({ kind: `guest`, name: `Guest k3f9`, liveGames: [] });
         window.history.replaceState(null, ``, `/profile`);
         render(<ProfileScreen />);
         const signIn = await screen.findByRole(`link`, { name: `Sign in with Discord` });

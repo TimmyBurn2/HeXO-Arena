@@ -48,7 +48,8 @@
     .sigil-plate,
     .from-discord-plate,
     .pip,
-    .steps .step-n {
+    .steps .step-n,
+    .build-step-n {
         clip-path: var(--hex-path);
     }
 
@@ -62,6 +63,10 @@
     .rung-skeleton,
     .live-game,
     .live-card,
+    .play-card,
+    .featured,
+    .featured-skeleton,
+    .build-band,
     .bot-plate,
     .bot-card,
     .identity-plate,
@@ -74,6 +79,10 @@
 
     .clock-tile,
     .roster-row,
+    .play-ready-bot,
+    .your-game,
+    .recent-game,
+    .featured-chip,
     .stepper button,
     .opening-preview {
         clip-path: var(--cut-sm-path);
@@ -93,6 +102,7 @@
 
     .hud-exit,
     .hud-toggle,
+    .scrub-step,
     .drawer-close,
     .drawer-tab,
     .settings-gear,
@@ -135,6 +145,8 @@
     .btn:focus-visible,
     .hud-exit:focus-visible,
     .hud-toggle:focus-visible,
+    .scrub-step:focus-visible,
+    .scrub-count:focus-visible,
     .drawer-close:focus-visible,
     .drawer-tab:focus-visible,
     .settings-gear:focus-visible,
@@ -146,6 +158,11 @@
     .identity:focus-visible,
     .identity-row:focus-visible,
     .live-game:focus-visible,
+    .play-card:focus-visible,
+    .play-ready-bot:focus-visible,
+    .your-game:focus-visible,
+    .recent-game:focus-visible,
+    .featured-link:focus-visible,
     .skip:focus-visible,
     input[type='text']:focus-visible,
     .opt input:focus-visible + label {
@@ -162,7 +179,8 @@
 
     /* The focus color is the accent, so on an accent fill the ring
        switches to the text on it. */
-    .btn-primary:focus-visible {
+    .btn-primary:focus-visible,
+    .play-card:focus-visible {
         outline-color: var(--c-text-on-accent);
     }
 }

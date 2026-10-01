@@ -6,10 +6,24 @@ import {
     botWithTokenSchema,
     botsPath,
     challengeAcceptPath,
+    devAccountSchema,
+    devAccountsPath,
     devLoginPath,
+    gameEventSchema,
+    gameEventsPath,
+    gameMovePath,
+    gameResignPath,
+    gameSnapshotSchema,
+    gamesPath,
     sessionCookieName,
     streamEventSchema,
-    type Accepts,
+    type AccountDeclaration,
+    type AxialCoord,
+    type CreateGameRequest,
+    type DevAccount,
+    type GameEvent,
+    type GameSnapshot,
+    type OpeningPlies,
     type StreamEvent,
     type TimeControl,
 } from '@hexo-arena/contract';
@@ -104,20 +118,20 @@ export class ArenaClient {
         return botWithTokenSchema.parse(await created.json()).token;
     }
 
-    async declare(token: string, accepts: Accepts, about: string): Promise<void> {
+    async declare(token: string, declaration: AccountDeclaration): Promise<void> {
         const response = await fetch(this.#url(botAccountPath), {
             method: `PATCH`,
             headers: { ...bearer(token), ...json },
-            body: JSON.stringify({ accepts, about }),
+            body: JSON.stringify(declaration),
         });
         if (response.status !== 200) throw await refusal(response, `declaring the account`);
     }
 
-    async challenge(token: string, target: string, timeControl: TimeControl, requestId: string): Promise<void> {
+    async challenge(token: string, target: string, timeControl: TimeControl, requestId: string, openingPlies?: OpeningPlies): Promise<void> {
         const response = await fetch(this.#url(botChallengePath.replace(`{name}`, target)), {
             method: `POST`,
             headers: { ...bearer(token), ...json },
-            body: JSON.stringify({ timeControl, requestId }),
+            body: JSON.stringify({ timeControl, requestId, ...(openingPlies !== undefined && { openingPlies }) }),
         });
         if (response.status !== 201 && response.status !== 200) throw await refusal(response, `challenging ${target}`);
     }
@@ -149,6 +163,68 @@ export class ArenaClient {
                 // A bare newline is the keepalive.
                 if (line !== ``) handlers.event(streamEventSchema.parse(JSON.parse(line)));
                 newline = buffer.indexOf(`\n`);
+            }
+        }
+    }
+
+    /** The seeded personas as they stand; a target without the dev routes answers 404. */
+    async devAccounts(): Promise<DevAccount[]> {
+        const response = await fetch(this.#url(devAccountsPath));
+        if (response.status !== 200) throw await refusal(response, `listing the dev accounts`);
+        return devAccountSchema.array().parse(await response.json());
+    }
+
+    /** Starts a human game against a bot; the answer is the seated snapshot. */
+    async createGame(cookie: string, request: CreateGameRequest): Promise<GameSnapshot> {
+        const response = await fetch(this.#url(gamesPath), {
+            method: `POST`,
+            headers: { cookie, ...json },
+            body: JSON.stringify(request),
+        });
+        if (response.status !== 201) throw await refusal(response, `starting a game against ${request.bot}`);
+        return gameSnapshotSchema.parse(await response.json());
+    }
+
+    async move(cookie: string, gameId: string, cells: readonly [AxialCoord, AxialCoord]): Promise<void> {
+        const response = await fetch(this.#url(gameMovePath.replace(`{gameId}`, gameId)), {
+            method: `POST`,
+            headers: { cookie, ...json },
+            body: JSON.stringify({ cells }),
+        });
+        if (response.status !== 200) throw await refusal(response, `moving in ${gameId}`);
+    }
+
+    async resign(cookie: string, gameId: string): Promise<void> {
+        const response = await fetch(this.#url(gameResignPath.replace(`{gameId}`, gameId)), {
+            method: `POST`,
+            headers: { cookie },
+        });
+        if (response.status !== 200) throw await refusal(response, `resigning ${gameId}`);
+    }
+
+    /**
+     * Follows a game's event stream from its snapshot on, handing over each
+     * event as it arrives; settles when the server ends the stream or the
+     * signal aborts it.
+     */
+    async gameEvents(cookie: string, gameId: string, onEvent: (event: GameEvent) => void, signal: AbortSignal): Promise<void> {
+        const response = await fetch(this.#url(gameEventsPath.replace(`{gameId}`, gameId)), { headers: { cookie }, signal });
+        if (response.status !== 200 || response.body === null) throw await refusal(response, `following ${gameId}`);
+        let buffer = ``;
+        for await (const chunk of response.body.pipeThrough(new TextDecoderStream())) {
+            buffer += chunk;
+            let end = buffer.indexOf(`\n\n`);
+            while (end !== -1) {
+                const frame = buffer.slice(0, end);
+                buffer = buffer.slice(end + 2);
+                const fields = new Map(frame.split(`\n`).map((line) => [line.slice(0, line.indexOf(`:`)), line.slice(line.indexOf(`:`) + 1).trim()]));
+                // A frame of comment lines alone is the keepalive.
+                const name = fields.get(`event`);
+                if (name !== undefined) {
+                    const data: unknown = JSON.parse(fields.get(`data`) ?? `null`);
+                    onEvent(gameEventSchema.parse({ event: name, data }));
+                }
+                end = buffer.indexOf(`\n\n`);
             }
         }
     }

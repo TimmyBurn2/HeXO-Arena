@@ -8,6 +8,7 @@ import {
     botWithTokenSchema,
     type BotListing,
     gameSnapshotSchema,
+    meSchema,
     type BwsMoveRequestPacket,
     type BwsSetupPacket,
     type GameSnapshot,
@@ -160,7 +161,7 @@ class Arena {
         return botListingSchema.array().parse(json(result)).find((bot) => bot.name === name);
     }
 
-    count(table: `games` | `moves` | `ratings`): number {
+    count(table: `games` | `moves` | `ratings` | `game_ratings`): number {
         // count(*) always answers exactly one row with an integer n.
         const row = this.world.sqlite.prepare(`select count(*) as n from ${table}`).get() as { n: number };
         return row.n;
@@ -297,6 +298,11 @@ class Arena {
 
     getGame(cookie: string, gameId: string): Promise<HttpResult> {
         return this.#call(`GET`, `/api/games/${gameId}`, { cookie });
+    }
+
+    async liveGamesOf(cookie: string): Promise<string[]> {
+        const me = meSchema.parse(JSON.parse((await this.#call(`GET`, `/api/me`, { cookie })).text));
+        return me?.liveGames.map((game) => game.gameId) ?? [];
     }
 
     async snapshot(cookie: string, gameId: string): Promise<GameSnapshot> {
@@ -893,8 +899,10 @@ describe('a guest plays a connected bot', () => {
         expect(arena.count(`games`)).toBe(0);
         expect(arena.count(`moves`)).toBe(0);
         expect(arena.count(`ratings`)).toBe(0);
+        expect(arena.count(`game_ratings`)).toBe(0);
         expect(recomputeRatings(arena.query)).toBe(0);
         expect(arena.count(`ratings`)).toBe(0);
+        expect(arena.count(`game_ratings`)).toBe(0);
         const after = await arena.directoryEntry(`opponentbot`);
         expect(after?.liveGames).toBe(0);
         expect(after?.rating).toBe(before?.rating);
@@ -1010,6 +1018,22 @@ describe('game creation gates', () => {
         });
         expect(fourth.status).toBe(400);
         expect(json(fourth)).toMatchObject({ code: `human_busy` });
+    });
+
+    it('lists a person\'s own live games in me, newest first, until each ends', async () => {
+        expect(await arena.liveGamesOf(bot.cookie)).toEqual([]);
+        const started: string[] = [];
+        for (let created = 0; created < 3; created += 1) {
+            started.push((await startGame(arena, bot.cookie, unlimitedControl)).gameId);
+            await vi.advanceTimersByTimeAsync(60_000);
+        }
+        const guest = await arena.guest();
+        const guestGame = (await startGame(arena, guest, unlimitedControl)).gameId;
+        expect(await arena.liveGamesOf(bot.cookie)).toEqual([...started].reverse());
+        expect(await arena.liveGamesOf(guest)).toEqual([guestGame]);
+        const [first = ``] = started;
+        expect((await arena.humanResign(bot.cookie, first)).status).toBe(200);
+        expect(await arena.liveGamesOf(bot.cookie)).toEqual(started.slice(1).reverse());
     });
 
     it('cools a human down for sixty seconds between game creations', async () => {

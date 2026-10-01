@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
-import type { BotListing, Me } from '@hexo-arena/contract';
+import type { BotListing, LiveGameEntry, Me } from '@hexo-arena/contract';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { meStore } from '../src/me';
 import { navigate } from '../src/router/use-route';
@@ -30,7 +30,7 @@ const roster: BotListing[] = [
     bot(`lantern`, 1500, { online: false, openForChallenges: false }),
 ];
 
-const tom: Me = { kind: `user`, name: `tom`, rating: 1503, provisional: false, discord: null };
+const tom: Me = { kind: `user`, name: `tom`, rating: 1503, provisional: false, discord: null, liveGames: [] };
 const snapshot = {
     gameId: `g1`,
     players: {
@@ -69,8 +69,8 @@ function serve(options: { me?: Me; bots?: BotListing[] | (() => BotListing[]); s
             }
             if (url === `/api/auth/guest`) {
                 served.posts.push({ url, body });
-                const answer = options.guest?.(body) ?? new Response(JSON.stringify({ kind: `guest`, name: `Guest k3f9` }), { status: 201 });
-                if (answer.status === 201) me = { kind: `guest`, name: `Guest k3f9` };
+                const answer = options.guest?.(body) ?? new Response(JSON.stringify({ kind: `guest`, name: `Guest k3f9`, liveGames: [] }), { status: 201 });
+                if (answer.status === 201) me = { kind: `guest`, name: `Guest k3f9`, liveGames: [] };
                 return Promise.resolve(answer);
             }
             if (url === `/api/games`) {
@@ -458,6 +458,37 @@ describe('PlayScreen', () => {
         });
     });
 
+    it('lead to the games that fill the cap when a start is refused for it, reading the session again for them', async () => {
+        const game = (gameId: string, opponent: string, tomSide: `x` | `o`): LiveGameEntry => {
+            const tomSeat = { name: `tom`, rating: 1503, provisional: false, kind: `user` as const };
+            const bot = { name: opponent, rating: 1600, provisional: false, kind: `bot` as const };
+            return {
+                gameId,
+                players: tomSide === `x` ? { x: tomSeat, o: bot } : { x: bot, o: tomSeat },
+                timeControl: { mode: `unlimited` },
+                toMove: `x`,
+                rated: true,
+                cells: [{ x: 0, y: 0, side: `x` }],
+                clock: { mode: `unlimited` },
+            };
+        };
+        const liveGames = [game(`g1`, `hextide`, `x`), game(`g2`, `pebble`, `o`), game(`g3`, `lantern`, `x`)];
+        serve({ me: { kind: `user`, name: `tom`, rating: 1503, provisional: false, discord: null, liveGames }, start: refused(400, `human_busy`) });
+        render(<PlayScreen />);
+        await ready();
+        const sessionReads = () => vi.mocked(fetch).mock.calls.filter(([url]) => url === `/api/me`).length;
+        const before = sessionReads();
+        fireEvent.click(screen.getByRole(`button`, { name: `Start game` }), { detail: 1 });
+        expect(await screen.findByText(`You already have 3 live games; finish one first`)).toBeTruthy();
+        const links = await screen.findAllByRole(`link`, { name: /^Your game against/u });
+        expect(links.map((link) => [link.textContent, link.getAttribute(`href`)])).toEqual([
+            [`Your game against hextide`, `/game/g1`],
+            [`Your game against pebble`, `/game/g2`],
+            [`Your game against lantern`, `/game/g3`],
+        ]);
+        expect(sessionReads()).toBe(before + 1);
+    });
+
     it('show the ways in, with a warning that takes focus, once a refused session reads as signed out', async () => {
         const served = serve({ start: refused(401, `unauthorized`) });
         render(<PlayScreen />);
@@ -477,7 +508,7 @@ describe('PlayScreen', () => {
     });
 
     it('tell a guest whose session ended that the guest session ended', async () => {
-        serve({ me: { kind: `guest`, name: `Guest k3f9` }, start: refused(401, `unauthorized`) });
+        serve({ me: { kind: `guest`, name: `Guest k3f9`, liveGames: [] }, start: refused(401, `unauthorized`) });
         render(<PlayScreen />);
         await ready();
         fireEvent.click(screen.getByRole(`button`, { name: `Start game` }), { detail: 1 });

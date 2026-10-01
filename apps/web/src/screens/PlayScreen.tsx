@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState, useSyncExternalStore } from 'react';
 import { nameKeyOf, playMeta, type BotListing, type OpeningPlies, type TimeControl } from '@hexo-arena/contract';
 import { fetchBots, limitedFor } from '../api/client';
-import { liveRefreshMs } from '../api/use-live-games';
+import { liveRefreshMs } from '../api/refresh';
 import { BotBadge, Rating } from '../components/player';
 import { ErrorFrame, SkeletonRows } from '../components/states';
 import { useMe } from '../me';

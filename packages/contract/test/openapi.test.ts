@@ -12,6 +12,7 @@ import {
     challengeDeclinePath,
     botConcurrentGameCap,
     defaultOpeningPlies,
+    devAccountsPath,
     discordCallbackPath,
     discordLoginPath,
     gameEventsPath,
@@ -246,9 +247,10 @@ describe('openapi document', () => {
         expect([...new Set(readers)].sort()).toEqual([mePath, signupPath]);
     });
 
-    it('keeps the dev login route out of the public contract', () => {
+    it('keeps the dev routes out of the public contract', () => {
         const document = buildOpenApiDocument();
-        expect(`/api/dev/login` in document.paths).toBe(false);
+        expect(Object.keys(document.paths).filter((path) => path.startsWith(`/api/dev/`))).toEqual([]);
+        expect(JSON.stringify(document)).not.toContain(devAccountsPath);
     });
 
     it('documents the bot stream and account routes behind bearer auth', () => {

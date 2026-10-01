@@ -15,8 +15,8 @@ const envShape = z.object({
     DISCORD_CLIENT_ID: z.string().default(``),
     DISCORD_CLIENT_SECRET: z.string().default(``),
     NODE_ENV: z.string().default(``),
-    // Exactly `1` registers the dev login route; any other value leaves
-    // it unregistered.
+    // Exactly `1` registers the dev login and dev accounts routes; any
+    // other value leaves them unregistered.
     DEV_LOGIN: z.string().default(``),
     // Exactly `1` makes SIGTERM stop at once like SIGINT: tsx watch
     // restarts with SIGTERM and kills 5 s later, so a drain only delays them.

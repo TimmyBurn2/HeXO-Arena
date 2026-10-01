@@ -13,12 +13,14 @@ import { readinessOf, writePlayed } from './setup';
 // What the start area last heard back:
 // nothing yet, a request in flight,
 // a line to show, with the bot and clock the bot's side refused when it did,
+// the live-game cap, whose line leads to the games that fill it,
 // a wait counting down to a time from the seconds it began with, in its own words,
 // or a session that ended, with who held it.
 type Outcome =
     | { kind: `idle` }
     | { kind: `sending` }
     | { kind: `line`; text: string; refused: Refused | null }
+    | { kind: `capped` }
     | { kind: `wait`; until: number; seconds: number; line: (seconds: number) => string }
     | { kind: `stale`; was: `guest` | `user` };
 
@@ -100,7 +102,7 @@ export function StartArea({
     const [lastChoices, setLastChoices] = useState(choices);
     if (choices !== lastChoices) {
         setLastChoices(choices);
-        if (outcome.kind === `line`) setOutcome({ kind: `idle` });
+        if (outcome.kind === `line` || outcome.kind === `capped`) setOutcome({ kind: `idle` });
     }
     // After a refusal the list may move the bot or the clock;
     // the start then holds until the person picks, so the next press never starts a game nobody chose.
@@ -175,9 +177,15 @@ export function StartArea({
                     return;
                 }
             }
+            // The cap's line leads to the games that fill it, so the session is read again for them.
+            if (code === `human_busy`) {
+                await meStore.refresh();
+                setOutcome({ kind: `capped` });
+                return;
+            }
             const errors = text.play.errors;
             const line =
-                code === `human_busy` || code === `paused`
+                code === `paused`
                     ? errors[code]()
                     : code === `bot_busy` || code === `clock_not_accepted` || code === `not_open` || code === `delisted` || code === `not_found`
                       ? errors[code](bot.name)
@@ -195,7 +203,13 @@ export function StartArea({
     const blocked = paused || unavailable !== null || cooling !== null || moved || outcome.kind === `sending` || (stale && visitor !== null);
     // Where the list kept the bot and moved its clock, the line says so, whatever the refusal was.
     const outcomeLine =
-        outcome.kind !== `line` ? null : moved && refused.bot === bot.name ? text.play.errors.clock_not_accepted(bot.name) : outcome.text;
+        outcome.kind === `capped`
+            ? text.play.errors.human_busy()
+            : outcome.kind !== `line`
+              ? null
+              : moved && refused.bot === bot.name
+                ? text.play.errors.clock_not_accepted(bot.name)
+                : outcome.text;
     // A refusal the page then explains, by the bot's state or its absence from the list, is said once.
     const lines = [
         { key: `notice`, text: notice },
@@ -233,6 +247,17 @@ export function StartArea({
                         {line.text}
                     </p>
                 ))}
+                {outcome.kind === `capped` && visitor !== null && visitor.liveGames.length > 0 ? (
+                    <ul className="start-yours">
+                        {visitor.liveGames.map((game) => (
+                            <li key={game.gameId}>
+                                <Link to={`/game/${encodeURIComponent(game.gameId)}`}>
+                                    {text.play.yourGame(game.players[game.players.x.name === visitor.name ? `o` : `x`].name)}
+                                </Link>
+                            </li>
+                        ))}
+                    </ul>
+                ) : null}
                 {outcome.kind === `wait` && cooling !== null ? (
                     <p className="field-error">
                         <WaitText wait={{ seconds: outcome.seconds, left: cooling }} line={outcome.line} />

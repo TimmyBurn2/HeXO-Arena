@@ -3,7 +3,7 @@ import type { Me } from '@hexo-arena/contract';
 import { looks, wear } from './matrix';
 import { playBots, serve, world } from './mock-api';
 
-const guest: Me = { kind: `guest`, name: `Guest k3f9` };
+const guest: Me = { kind: `guest`, name: `Guest k3f9`, liveGames: [] };
 
 // How many lines a note runs to and how many words its last one holds; a
 // word runs across the note's text nodes, as "Privacy" and its period do.

@@ -8,6 +8,8 @@ import { text } from '../text';
 import { Clock } from './Clock';
 import type { TurnStatus } from './GameBoard';
 import type { GameLink } from './use-game';
+import type { Replay } from './replay';
+import { LiveSwitch, Scrubber } from './Scrubber';
 import { resultLine } from './snapshot-views';
 
 /**
@@ -106,15 +108,17 @@ export function Pips({ placed }: { placed: 0 | 1 }) {
 
 /**
  * Whose turn it is, in one chip: your two stones, the side to move
- * thinking, or the result with the ways onward.
+ * thinking, or the result.
  * A watcher, who holds no side, sees the side to move marked as watched.
+ * A finished game, or a live one watched, carries the replay's controls on
+ * the chip's first line and that state on its second.
  */
-export function TurnChip({ snapshot, you, status, link, onMoves }: {
+export function TurnChip({ snapshot, you, status, link, replay }: {
     snapshot: GameSnapshot;
     you: Side | null;
     status: TurnStatus;
     link: GameLink;
-    onMoves: () => void;
+    replay: Replay | null;
 }) {
     // A refused stream is the watcher cap, not a fault, so it reads calm; a
     // seat is never refused, so a player only ever sees the loss.
@@ -139,17 +143,26 @@ export function TurnChip({ snapshot, you, status, link, onMoves }: {
     }
     if (snapshot.status === `finished`) {
         return (
-            <Chip className="hud-bottom-center">
-                <span className="hud-result" role="status">
-                    {resultLine(snapshot)}
+            <Chip className="hud-bottom-center hud-replay">
+                {replay === null ? null : <Scrubber replay={replay} live={false} />}
+                <span className="hud-replay-line">
+                    <span className="hud-result" role="status">
+                        {resultLine(snapshot)}
+                    </span>
                 </span>
-                <span className="hud-actions">
-                    <Link to="/ladder" className="btn btn-primary btn-sm">
-                        {text.game.ladder}
-                    </Link>
-                    <button type="button" className="btn btn-ghost btn-sm" onClick={onMoves}>
-                        {text.game.moves}
-                    </button>
+            </Chip>
+        );
+    }
+    if (you === null && replay !== null) {
+        return (
+            <Chip className="hud-bottom-center hud-replay">
+                <Scrubber replay={replay} live />
+                <span className="hud-replay-line">
+                    <span className="tag muted">{text.game.watching}</span>
+                    <span className="hud-turn" role="status">
+                        {text.game.thinking(snapshot.players[snapshot.toMove].name)}
+                    </span>
+                    <LiveSwitch replay={replay} />
                 </span>
             </Chip>
         );

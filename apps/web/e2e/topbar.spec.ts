@@ -5,9 +5,9 @@ import { serve, world } from './mock-api';
 
 const visitors: readonly { name: string; me: Me }[] = [
     { name: `signed-out`, me: null },
-    { name: `signed-in`, me: { kind: `user`, name: `tom`, rating: 1503, provisional: false, discord: null } },
-    { name: `long-named`, me: { kind: `user`, name: `sealbot-owner-with-a-long-name`, rating: 1503, provisional: false, discord: { username: `owner.of.sealbot.and.two.more.xy`, displayName: `The Owner Of Sealbot And Two Mor` } } },
-    { name: `guest`, me: { kind: `guest`, name: `Guest k3f9` } },
+    { name: `signed-in`, me: { kind: `user`, name: `tom`, rating: 1503, provisional: false, discord: null, liveGames: [] } },
+    { name: `long-named`, me: { kind: `user`, name: `sealbot-owner-with-a-long-name`, rating: 1503, provisional: false, discord: { username: `owner.of.sealbot.and.two.more.xy`, displayName: `The Owner Of Sealbot And Two Mor` }, liveGames: [] } },
+    { name: `guest`, me: { kind: `guest`, name: `Guest k3f9`, liveGames: [] } },
 ];
 
 const screens: readonly { name: string; path: string }[] = [
@@ -28,7 +28,7 @@ const screens: readonly { name: string; path: string }[] = [
 // the nav links return beside the gear and who is here, so it is swept
 // closely, from the narrowest phone out to the desktop widths, on every
 // framed screen, with the edges where the mark comes and goes.
-const widths = [320, 336, 337, 360, 480, 481, 560, 600, 640, 656, 657, 700, 740, 768, 769, 800, 848, 849, 1024, 1280];
+const widths = [320, 352, 353, 360, 480, 481, 560, 600, 640, 656, 657, 700, 740, 768, 769, 800, 848, 849, 1024, 1280];
 
 // The nav links sit in the tab bar up to 41rem,
 // and share the bar, drawn tighter, up to 48rem;
@@ -111,9 +111,9 @@ async function barFits(page: Page, width: number, signedIn: boolean, longName: b
     if (signedIn) expect(bar.labelShown).toBe(width > band.fold);
     expect(bar.brand.lines).toBe(1);
     // The mark shows where the row has room for it: past the band, and on
-    // phones from 21rem, where the nav links move to the tab bar; it
+    // phones from 22rem, where the nav links move to the tab bar; it
     // stands before the name, centered on its line.
-    const shown = width > band.to || (width > 336 && width <= band.from);
+    const shown = width > band.to || (width > 352 && width <= band.from);
     expect(bar.mark !== null).toBe(shown);
     if (shown) {
         const box = bar.mark;
@@ -197,7 +197,7 @@ test('on a phone the tabs are the nav entries and Profile opens from the monogra
     await serve(page, world());
     await page.goto(`/ladder`);
     await page.locator(`h1`).waitFor();
-    await expect(page.locator(`nav.tabbar a`)).toHaveText([`Play`, `Games`, `Ladder`, `Bots`]);
+    await expect(page.locator(`nav.tabbar a`)).toHaveText([`Home`, `Play`, `Games`, `Ladder`, `Bots`]);
     await expect(page.locator(`nav.tabbar a[aria-current="page"]`)).toHaveText(`Ladder`);
     await page.locator(`header button.identity`).click();
     await page.locator(`dialog.identity-panel`).getByRole(`link`, { name: `Profile` }).click();
@@ -206,34 +206,43 @@ test('on a phone the tabs are the nav entries and Profile opens from the monogra
     await expect(page.locator(`header button.identity`)).toHaveClass(/\bactive\b/);
 });
 
-// The mark takes the brass, and brightens with the home link under the
-// pointer as the brass buttons do, in every theme.
+// The mark wears the default look's board in every theme, so it stays
+// one brand; its brass frame brightens with the home link under the
+// pointer as the brass buttons do.
 for (const look of looks) {
-    test(`the mark wears the brass in ${look.name} and brightens on hover`, async ({ page }) => {
+    test(`the mark wears the default board in ${look.name} and brightens its frame on hover`, async ({ page }) => {
         await page.setViewportSize({ width: 1280, height: 800 });
         await wear(page, look);
         await serve(page, world());
         await page.goto(`/ladder`);
         const mark = page.locator(`header .brand-mark`);
         await mark.waitFor();
-        // A token's color as the page computes it, through a probe element.
+        // A token's color in the default look, through a probe inside a preview of it.
         const token = (name: string) =>
             page.evaluate((property) => {
+                const preview = document.createElement(`div`);
+                preview.dataset.themePreview = `ink`;
                 const probe = document.createElement(`span`);
                 probe.style.color = `var(${property})`;
-                document.body.append(probe);
+                preview.append(probe);
+                document.body.append(preview);
                 const color = getComputedStyle(probe).color;
-                probe.remove();
+                preview.remove();
                 return color;
             }, name);
-        const fill = () => mark.evaluate((element) => getComputedStyle(element).fill);
-        await expect.poll(fill).toBe(await token(`--c-accent-solid`));
+        const paints = () =>
+            mark.evaluate((element) => {
+                const style = (part: string) => getComputedStyle(element.querySelector(`.brand-mark-${part}`) ?? element);
+                return { cell: style(`cell`).fill, frame: style(`cell`).stroke, x: style(`x`).fill, o: style(`o`).fill };
+            });
+        const board = { cell: await token(`--board-cell`), x: await token(`--board-stone-x`), o: await token(`--board-stone-o`) };
+        await expect.poll(paints).toEqual({ ...board, frame: await token(`--c-accent-solid`) });
         await page.locator(`header .brand`).hover();
-        await expect.poll(fill).toBe(await token(`--c-accent-solid-hover`));
+        await expect.poll(paints).toEqual({ ...board, frame: await token(`--c-accent-solid-hover`) });
     });
 }
 
-test('under forced colors the mark takes the home link color, at rest and hovered', async ({ page }) => {
+test('under forced colors the mark drops its cell and takes the home link color, at rest and hovered', async ({ page }) => {
     await page.emulateMedia({ forcedColors: `active` });
     const look = looks[0];
     if (look === undefined) throw new Error(`no look registered`);
@@ -242,15 +251,14 @@ test('under forced colors the mark takes the home link color, at rest and hovere
     await page.goto(`/ladder`);
     const mark = page.locator(`header .brand-mark`);
     const colors = () =>
-        mark.evaluate((element) => ({
-            fill: getComputedStyle(element).fill,
-            link: getComputedStyle(element.closest(`a`) ?? element).color,
-        }));
-    const rest = await colors();
-    expect(rest.fill).toBe(rest.link);
+        mark.evaluate((element) => {
+            const style = (part: string) => getComputedStyle(element.querySelector(`.brand-mark-${part}`) ?? element);
+            const link = getComputedStyle(element.closest(`a`) ?? element).color;
+            return [style(`cell`).fill, style(`cell`).stroke, style(`x`).fill, style(`o`).fill].map((paint) => (paint === link ? `link` : paint));
+        });
+    expect(await colors()).toEqual([`none`, `link`, `link`, `link`]);
     await page.locator(`header .brand`).hover();
-    const hovered = await colors();
-    expect(hovered.fill).toBe(hovered.link);
+    expect(await colors()).toEqual([`none`, `link`, `link`, `link`]);
 });
 
 // The subset holds only the wordmark's glyphs, so a wordmark it does not

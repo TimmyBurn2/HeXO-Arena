@@ -2,7 +2,7 @@ import { expect, test, type Page, type Request } from '@playwright/test';
 import { discordLoginHref, discordLoginPath, type Me } from '@hexo-arena/contract';
 import { playBots, serve, world, type World } from './mock-api';
 
-const guest: Me = { kind: `guest`, name: `Guest k3f9` };
+const guest: Me = { kind: `guest`, name: `Guest k3f9`, liveGames: [] };
 
 async function open(page: Page, path: string, overrides: Partial<World> = {}): Promise<World> {
     const state = world({ bots: playBots, ...overrides });

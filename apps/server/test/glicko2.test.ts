@@ -5,7 +5,7 @@ describe('glicko2Update', () => {
     // The worked example from Glickman's "Example of the Glicko-2 system".
     // The paper rounds mu' to four places before converting back, so its
     // printed 1464.06 sits within 0.01 of the unrounded 1464.05.
-    it('reproduces the worked example of the paper', () => {
+    it('reproduces the worked example of the paper over a single period', () => {
         const updated = glicko2Update(
             { rating: 1500, deviation: 200, volatility: 0.06 },
             [
@@ -14,6 +14,7 @@ describe('glicko2Update', () => {
                 { opponent: { rating: 1700, deviation: 300 }, score: 0 },
             ],
             0.5,
+            1,
         );
         expect(updated.rating).toBeCloseTo(1464.06, 1);
         expect(updated.deviation).toBeCloseTo(151.52, 1);
@@ -25,6 +26,20 @@ describe('glicko2Update', () => {
         expect(updated.rating).toBe(1500);
         expect(updated.volatility).toBe(0.06);
         expect(updated.deviation).toBeCloseTo(Math.sqrt((200 / 173.7178) ** 2 + 0.06 ** 2) * 173.7178, 9);
+    });
+
+    it('widens an idle player by the volatility over as many periods as passed', () => {
+        const idle = glicko2Update({ rating: 1500, deviation: 200, volatility: 0.06 }, [], 0.5, 6.4308);
+        expect(idle.deviation).toBeCloseTo(Math.sqrt((200 / 173.7178) ** 2 + 6.4308 * 0.06 ** 2) * 173.7178, 9);
+    });
+
+    it('adds no period to a game that spans none', () => {
+        const player = { rating: 1500, deviation: 200, volatility: 0.06 };
+        const opponent = { rating: 1500, deviation: 200 };
+        const spanning = glicko2Update(player, [{ opponent, score: 1 }], 0.5, 0);
+        const paper = glicko2Update(player, [{ opponent, score: 1 }], 0.5, 1);
+        expect(spanning.deviation).toBeLessThan(paper.deviation);
+        expect(spanning.rating - 1500).toBeLessThan(paper.rating - 1500);
     });
 
     it('moves a winner up and a loser down by the same game', () => {

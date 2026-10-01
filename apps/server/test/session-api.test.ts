@@ -42,7 +42,7 @@ describe('GET /api/me', () => {
     it('names the signed-in user with the seeded, provisional rating before any game', async () => {
         const arena = await createTestApp();
         const session = await loginAs(arena.app, `alice`);
-        expect(await readMe(arena, session)).toEqual({ kind: `user`, name: `alice`, rating: 1000, provisional: true, discord: null });
+        expect(await readMe(arena, session)).toEqual({ kind: `user`, name: `alice`, rating: 1000, provisional: true, discord: null, liveGames: [] });
         await arena.app.close();
     });
 });
@@ -85,7 +85,7 @@ describe('POST /api/auth/guest', () => {
         expect(cookie?.httpOnly).toBe(true);
         expect(cookie?.maxAge).toBeUndefined();
         const { name } = guestMeSchema.parse(response.json());
-        expect(await readMe(arena, cookie?.value)).toEqual({ kind: `guest`, name });
+        expect(await readMe(arena, cookie?.value)).toEqual({ kind: `guest`, name, liveGames: [] });
         const rows = arena.sqlite.prepare(`select (select count(*) from users) + (select count(*) from sessions) as n`).get();
         expect(rows).toEqual({ n: 0 });
         await arena.app.close();
@@ -100,7 +100,7 @@ describe('POST /api/auth/guest', () => {
             cookies: { hexo_arena_session: guest.session },
         });
         expect(again.statusCode).toBe(200);
-        expect(again.json()).toEqual({ kind: `guest`, name: guest.name });
+        expect(again.json()).toEqual({ kind: `guest`, name: guest.name, liveGames: [] });
         await arena.app.close();
     });
 

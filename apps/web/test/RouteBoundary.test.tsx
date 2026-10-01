@@ -54,14 +54,14 @@ describe('a screen that fails to load', () => {
         expect(screen.queryByText(/did not download/)).toBeNull();
     });
 
-    it('says so on the stage for the game, without the frame, with a way to the ladder', async () => {
+    it('says so on the stage for the game, without the frame, with a way home', async () => {
         window.history.replaceState(null, ``, `/game/g1`);
         render(<AppShell />);
         const heading = await screen.findByRole(`heading`, { name: `This page did not load` });
         expect(heading.closest(`.stage-message`)).toBeTruthy();
         expect(document.querySelector(`header.topbar`)).toBeNull();
         expect(screen.getByRole(`button`, { name: `Reload` })).toBeTruthy();
-        expect(screen.getByRole(`link`, { name: `Ladder` }).getAttribute(`href`)).toBe(`/ladder`);
+        expect(screen.getByRole(`link`, { name: `Home` }).getAttribute(`href`)).toBe(`/`);
     });
 
     it('gives way to the next screen once the route changes', async () => {

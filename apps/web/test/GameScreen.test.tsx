@@ -129,7 +129,7 @@ describe('GameScreen', () => {
         fireEvent.click(screen.getByRole(`tab`, { name: `Game` }));
         expect(screen.getByRole(`button`, { name: `Resign` })).toBeTruthy();
         const exit = [...document.querySelectorAll(`#drawer-panel-game a`)];
-        expect(exit.map((link) => [link.textContent, link.getAttribute(`href`)])).toEqual([[`Ladder`, `/`]]);
+        expect(exit.map((link) => [link.textContent, link.getAttribute(`href`)])).toEqual([[`Home`, `/`]]);
         expect(document.querySelector(`#drawer-body .drawer-foot`)).toBeTruthy();
         fireEvent.keyDown(screen.getByRole(`tab`, { name: `Game` }), { key: `Escape` });
         expect(document.querySelector(`#drawer-body`)?.hasAttribute(`hidden`)).toBe(true);
@@ -168,12 +168,12 @@ describe('GameScreen', () => {
         expect([...document.querySelectorAll(`.facts dt`)].map((term) => term.textContent)).toEqual([`Opening`, `Your side`, `Result`]);
     });
 
-    it('offer a retry and the way to the ladder when the game does not load', async () => {
+    it('offer a retry and the way home when the game does not load', async () => {
         stubGame(runningSnapshot, 500);
         render(<GameScreen gameId="g-run" />);
         expect(await screen.findByRole(`heading`, { level: 1, name: `The game did not load` })).toBeTruthy();
         expect(screen.getByRole(`button`, { name: `Try again` })).toBeTruthy();
-        expect(screen.getByRole(`link`, { name: `Ladder` }).getAttribute(`href`)).toBe(`/ladder`);
+        expect(screen.getByRole(`link`, { name: `Home` }).getAttribute(`href`)).toBe(`/`);
     });
 
     it('hold the retry of a game whose read was rate-limited for its wait', async () => {
@@ -302,8 +302,9 @@ describe('GameScreen', () => {
         render(<GameScreen gameId="g-end" />);
         expect(await screen.findByText(`hextide won with six in a row`, { selector: `.hud-result` })).toBeTruthy();
         expect(document.querySelector(`polyline.win-line`)).toBeTruthy();
-        // The exit and the result chip both lead to the ladder.
-        expect(screen.getAllByRole(`link`, { name: `Ladder` }).map((link) => link.getAttribute(`href`))).toEqual([`/`, `/ladder`]);
+        // The exit leads home; the chip under the board holds the replay and the result.
+        expect(screen.getAllByRole(`link`, { name: `Home` }).map((link) => link.getAttribute(`href`))).toEqual([`/`]);
+        expect(document.querySelector(`.hud-bottom-center [role="slider"]`)?.getAttribute(`aria-valuetext`)).toBe(`Turn 5 of 5`);
         expect(document.querySelector(`#drawer-body`)?.hasAttribute(`hidden`)).toBe(true);
         expect(document.querySelector(`.board-control`)?.getAttribute(`role`)).toBe(`group`);
         // The phone sheet's peek carries the result only while the open sheet covers the chip.
@@ -342,7 +343,9 @@ describe('GameScreen', () => {
         expect(document.querySelector(`.peek-line`)?.textContent).toBe(`hextide won with six in a row`);
         fireEvent.click(screen.getByRole(`tab`, { name: `Game` }));
         expect(screen.getByText(`hextide won with six in a row`, { selector: `.facts dd` })).toBeTruthy();
-        expect(document.querySelector(`.peek-line`)?.textContent).toBe(`5 o: (5,0) (6,0)`);
+        // A replay's peek holds its steps, so the Game tab leaves it the steps alone.
+        expect(document.querySelector(`.peek-line`)).toBe(null);
+        expect(document.querySelector(`.peek-scrub [role="slider"]`)).toBeTruthy();
         fireEvent.click(screen.getByRole(`tab`, { name: `Moves` }));
         expect(document.querySelector(`.peek-line`)?.textContent).toBe(`hextide won with six in a row`);
     });
@@ -421,7 +424,7 @@ describe('GameScreen', () => {
         render(<GameScreen gameId="g-x" />);
         expect(await screen.findByRole(`heading`, { level: 1, name: `No such game` })).toBeTruthy();
         expect(screen.getByText(`That game does not exist; guest games are gone once their session ends.`)).toBeTruthy();
-        expect(screen.getByRole(`link`, { name: `Ladder` }).getAttribute(`href`)).toBe(`/ladder`);
+        expect(screen.getByRole(`link`, { name: `Home` }).getAttribute(`href`)).toBe(`/`);
         await waitFor(() => {
             expect(document.title).toBe(`Not found - HeXO Arena`);
         });
@@ -566,7 +569,7 @@ describe('GameScreen', () => {
             vi.fn((url: string) =>
                 Promise.resolve(
                     new Response(
-                        JSON.stringify(url === `/api/me` ? { kind: `guest`, name: `Guest k3f9` } : runningSnapshot),
+                        JSON.stringify(url === `/api/me` ? { kind: `guest`, name: `Guest k3f9`, liveGames: [] } : runningSnapshot),
                     ),
                 ),
             ),

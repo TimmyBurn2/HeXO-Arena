@@ -60,15 +60,19 @@ function nextVolatility(phi: number, sigma: number, v: number, delta: number, ta
 }
 
 /**
- * Updates one player over one rating period, following Mark Glickman,
+ * Updates one player over a rating period, following Mark Glickman,
  * "Example of the Glicko-2 system" (glicko.net), steps 2 through 8.
  * Variable names follow the paper.
  * `tau` constrains how far volatility moves in one period.
+ * `periods` is how many periods step 6 widens the deviation by: one in
+ * the paper; zero for a game whose player brings a deviation already
+ * widened by the time since their previous game.
  */
 export function glicko2Update(
     player: Glicko2Rating,
     results: readonly Glicko2Result[],
     tau: number,
+    periods = 1,
 ): Glicko2Rating {
     const mu = (player.rating - 1500) / glickoScale;
     const phi = player.deviation / glickoScale;
@@ -76,7 +80,7 @@ export function glicko2Update(
     if (results.length === 0) {
         return {
             rating: player.rating,
-            deviation: Math.sqrt(phi * phi + sigma * sigma) * glickoScale,
+            deviation: Math.sqrt(phi * phi + periods * sigma * sigma) * glickoScale,
             volatility: sigma,
         };
     }
@@ -91,7 +95,7 @@ export function glicko2Update(
     }
     const v = 1 / information;
     const sigmaPrime = nextVolatility(phi, sigma, v, v * improvement, tau);
-    const phiStar = Math.sqrt(phi * phi + sigmaPrime * sigmaPrime);
+    const phiStar = Math.sqrt(phi * phi + periods * sigmaPrime * sigmaPrime);
     const phiPrime = 1 / Math.sqrt(1 / (phiStar * phiStar) + 1 / v);
     const muPrime = mu + phiPrime * phiPrime * improvement;
     return {

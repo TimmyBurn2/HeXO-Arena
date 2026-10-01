@@ -10,7 +10,7 @@ import {
 } from '@hexo-arena/contract';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import type { Query } from './db';
-import type { Person } from './game-registry';
+import type { GameRegistry, Person } from './game-registry';
 import type { GuestSessions } from './guests';
 import { refuseRate, type ClientLimits } from './request-limits';
 import { streamPlayerOf } from './rating-store';
@@ -19,6 +19,7 @@ import { deleteSession, findSessionUser } from './sessions';
 export interface SessionApiDeps {
     query: Query;
     guests: GuestSessions;
+    games: GameRegistry;
     secureCookies: boolean;
     limits: ClientLimits;
 }
@@ -52,21 +53,22 @@ export function sessionPerson(query: Query, guests: GuestSessions, request: Fast
 
 // The Discord names come from the session row, so only the cookie's owner
 // ever reads them.
-function meOf(query: Query, guests: GuestSessions, token: string | undefined): Me {
+function meOf(deps: SessionApiDeps, token: string | undefined): Me {
+    const { query, guests, games } = deps;
     if (token === undefined) return null;
     const guest = guests.find(token);
-    if (guest !== null) return { kind: `guest`, name: guest.name };
+    if (guest !== null) return { kind: `guest`, name: guest.name, liveGames: games.liveGamesOf({ kind: `guest`, id: guest.id }) };
     const user = findSessionUser(query, token);
     if (user === null) return null;
     const { rating, provisional } = streamPlayerOf(query, { kind: `human`, id: user.id }, user.name);
-    return { kind: `user`, name: user.name, rating, provisional, discord: user.discord };
+    return { kind: `user`, name: user.name, rating, provisional, discord: user.discord, liveGames: games.liveGamesOf({ kind: `user`, id: user.id }) };
 }
 
 export function registerSessionApi(app: FastifyInstance, deps: SessionApiDeps): void {
-    const { query, guests, secureCookies, limits } = deps;
+    const { query, guests, games, secureCookies, limits } = deps;
 
     app.get(mePath, { config: { limit: `public` } }, async (request, reply) => {
-        return reply.code(200).send(meOf(query, guests, request.cookies[sessionCookieName]));
+        return reply.code(200).send(meOf(deps, request.cookies[sessionCookieName]));
     });
 
     app.post(logoutPath, { config: { limit: `public` } }, async (request, reply) => {
@@ -85,7 +87,7 @@ export function registerSessionApi(app: FastifyInstance, deps: SessionApiDeps): 
             return reply.code(409).send({ error: `a user is signed in`, code: `signed_in` });
         }
         if (person?.kind === `guest`) {
-            const same: GuestMe = { kind: `guest`, name: person.name };
+            const same: GuestMe = { kind: `guest`, name: person.name, liveGames: games.liveGamesOf(person) };
             return reply.code(200).send(same);
         }
         // One client could otherwise fill the cap every visitor shares.
@@ -97,7 +99,7 @@ export function registerSessionApi(app: FastifyInstance, deps: SessionApiDeps): 
             return reply.code(429).send({ error: `the guest cap is full`, code: `guest_limit` });
         }
         setSessionCookie(reply, minted.token, secureCookies, `guest`);
-        const fresh: GuestMe = { kind: `guest`, name: minted.guest.name };
+        const fresh: GuestMe = { kind: `guest`, name: minted.guest.name, liveGames: [] };
         return reply.code(201).send(fresh);
     });
 }

@@ -43,7 +43,7 @@ describe('AppShell', () => {
             `fetch`,
             vi.fn((url: string) =>
                 Promise.resolve(
-                    new Response(url === `/api/me` ? JSON.stringify({ kind: `user`, name: `tom`, rating: 1503, provisional: false, discord: null }) : null, {
+                    new Response(url === `/api/me` ? JSON.stringify({ kind: `user`, name: `tom`, rating: 1503, provisional: false, discord: null, liveGames: [] }) : null, {
                         status: 200,
                     }),
                 ),
@@ -81,7 +81,7 @@ describe('AppShell', () => {
         }
     });
 
-    it('render the ladder with its nav item active on the landing route and on /ladder, Play leading the nav', async () => {
+    it('render home on the root under the wordmark, Play leading the nav, and the ladder active on /ladder', async () => {
         stubHealthOk();
         window.history.replaceState(null, ``, `/`);
         render(<AppShell />);
@@ -91,6 +91,9 @@ describe('AppShell', () => {
         expect(topLink(`Ladder`).getAttribute(`href`)).toBe(`/ladder`);
         expect(topLink(`HeXO Arena`).getAttribute(`href`)).toBe(`/`);
 
+        expect(await screen.findByRole(`heading`, { level: 1, name: `Play HeXO` })).toBeTruthy();
+        expect(topbar().querySelector(`.nav-links [aria-current="page"]`)).toBe(null);
+        navigate(`/ladder`);
         expect(await screen.findByRole(`heading`, { level: 1, name: `Ladder` })).toBeTruthy();
         expect(topLink(`Ladder`).getAttribute(`aria-current`)).toBe(`page`);
         expect(topLink(`Bots`).getAttribute(`aria-current`)).toBe(null);
@@ -127,7 +130,7 @@ describe('AppShell', () => {
         render(<AppShell />);
         const tabbar = document.querySelector(`nav.tabbar`) as HTMLElement;
         const labels = (root: Element) => [...root.querySelectorAll(`a`)].map((a) => a.textContent);
-        expect(labels(tabbar)).toEqual([`Play`, `Games`, `Ladder`, `Bots`]);
+        expect(labels(tabbar)).toEqual([`Home`, `Play`, `Games`, `Ladder`, `Bots`]);
         expect(labels(topbar().querySelector(`nav.nav-links`) as HTMLElement)).toEqual([`Play`, `Games`, `Ladder`, `Bots`, `Build a bot`]);
         expect(document.querySelector(`a[href="/profile"]`)).toBe(null);
         await waitFor(() => {
@@ -169,8 +172,8 @@ describe('AppShell', () => {
         render(<AppShell />);
         expect(await screen.findByRole(`heading`, { name: `Not found` })).toBeTruthy();
         const back = document.querySelector(`main .btn-ghost`) as HTMLElement;
-        expect(back.textContent).toBe(`Ladder`);
-        expect(back.getAttribute(`href`)).toBe(`/ladder`);
+        expect(back.textContent).toBe(`Home`);
+        expect(back.getAttribute(`href`)).toBe(`/`);
     });
 
     it('banner the paused state from the health probe', async () => {

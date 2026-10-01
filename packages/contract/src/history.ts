@@ -1,0 +1,78 @@
+import { z } from 'zod';
+import { gamePlayersSchema } from './games';
+import { rankableDeviation } from './leaderboard';
+import { nameKeyOf, nameMaxLength } from './names';
+import { finishReasonSchema, openingPliesSchema, sideSchema, timeControlSchema } from './stream';
+
+export const finishedGamesPath = `/api/games/finished`;
+
+/** Finished games one page holds, newest first. */
+export const finishedGamesPageSize = 20;
+
+/** Pages one filter set reaches; older games are a `before` date away. */
+export const finishedGamesPageCap = 10;
+
+// Every reader of the same query within this window gets the one body
+// serialized for it.
+export const finishedGamesMemoMs = 5_000;
+
+// A page number past the first and the finish order the page starts
+// below; opaque to callers, who only hand back what `next` said.
+const cursorPattern = new RegExp(`^(?:[2-9]|10)\\.[1-9][0-9]{0,14}$`);
+
+const playerName = z.string().min(1).max(nameMaxLength);
+
+export const finishedGamesQuerySchema = z
+    .strictObject({
+        player: playerName.optional().meta({ param: { description: `A player's name, matched case-folded, in either seat.` } }),
+        vs: playerName.optional().meta({ param: { description: `The opponent's name; needs player.` } }),
+        kind: z.enum([`bot-bot`, `human-bot`]).optional().meta({ param: { description: `Who sat: two bots, or a human and a bot.` } }),
+        result: z
+            .enum([`won`, `lost`, `none`])
+            .optional()
+            .meta({ param: { description: `won and lost are the player's results and need player; none is a game without a winner.` } }),
+        side: sideSchema.optional().meta({ param: { description: `The player's side; needs player.` } }),
+        // The bare values, so the parameter does not repeat the component's description.
+        reason: z.enum(finishReasonSchema.options).optional().meta({ param: { description: `How the game ended.` } }),
+        clock: z.enum([`turn`, `match`, `unlimited`]).optional().meta({ param: { description: `The time control's mode.` } }),
+        opening: z.enum([`1`, `3`, `5`, `7`, `9`]).optional().meta({ param: { description: `The opening's plies.` } }),
+        before: z.iso.date().optional().meta({ param: { description: `Only games finished before this UTC date, YYYY-MM-DD; how older games are reached.` } }),
+        cursor: z.string().regex(cursorPattern).optional().meta({ param: { description: `The page after the last one read, as its next said.` } }),
+    })
+    .refine((query) => query.player !== undefined || (query.vs === undefined && query.side === undefined && query.result !== `won` && query.result !== `lost`), {
+        message: `vs, side, won, and lost need player`,
+    })
+    .refine((query) => query.player === undefined || query.vs === undefined || nameKeyOf(query.player) !== nameKeyOf(query.vs), {
+        message: `vs names a player other than player`,
+    });
+export type FinishedGamesQuery = z.infer<typeof finishedGamesQuerySchema>;
+
+export const finishedGameEntrySchema = z
+    .object({
+        gameId: z.string(),
+        players: gamePlayersSchema,
+        winner: sideSchema.nullable(),
+        reason: finishReasonSchema,
+        timeControl: timeControlSchema,
+        openingPlies: openingPliesSchema,
+        turns: z.number().int().min(0).meta({ description: `Turns on the board at the finish, the opening's included.` }),
+        finishedAt: z.iso.datetime(),
+        rated: z.boolean().meta({ description: `False for a game without a winner and for a voided one.` }),
+    })
+    .meta({
+        id: `FinishedGameEntry`,
+        description: [
+            `A finished game as the history lists it.`,
+            `Each seat's rating is the one it stood at before this result, and provisional says whether its deviation was above ${String(rankableDeviation)} after it.`,
+        ].join(` `),
+    });
+export type FinishedGameEntry = z.infer<typeof finishedGameEntrySchema>;
+
+export const finishedGamesPageSchema = z
+    .object({
+        games: z.array(finishedGameEntrySchema).max(finishedGamesPageSize),
+        next: z.string().regex(cursorPattern).nullable().meta({ description: `The cursor of the next page; null on the last one.` }),
+        page: z.number().int().min(1).max(finishedGamesPageCap),
+    })
+    .meta({ id: `FinishedGamesPage` });
+export type FinishedGamesPage = z.infer<typeof finishedGamesPageSchema>;

@@ -175,7 +175,7 @@ describe('LadderScreen', () => {
             vi.fn((url: string) =>
                 Promise.resolve(
                     new Response(
-                        JSON.stringify(url === `/api/me` ? { kind: `user`, name: `tom`, rating: 1503, provisional: false, discord: null } : board),
+                        JSON.stringify(url === `/api/me` ? { kind: `user`, name: `tom`, rating: 1503, provisional: false, discord: null, liveGames: [] } : board),
                     ),
                 ),
             ),

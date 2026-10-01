@@ -86,6 +86,7 @@ const longNamed: World[`me`] = {
     rating: 1503,
     provisional: false,
     discord: { username: `owner.of.sealbot.and.two.more.xy`, displayName: `The Owner Of Sealbot And Two Mor` },
+    liveGames: [],
 };
 const welcoming = (overrides: Partial<World> = {}) => world({ me: null, signup, ...overrides });
 
@@ -96,7 +97,7 @@ async function typeName(page: Page, name: string): Promise<void> {
 async function createAccount(page: Page): Promise<void> {
     await page.getByRole(`button`, { name: `Create account` }).click();
 }
-const guest = world({ me: { kind: `guest`, name: `Guest k3f9` } });
+const guest = world({ me: { kind: `guest`, name: `Guest k3f9`, liveGames: [] } });
 
 async function openSettings(page: Page): Promise<void> {
     await page.getByRole(`button`, { name: `Settings`, exact: true }).click();
@@ -109,22 +110,22 @@ async function openIdentity(page: Page): Promise<void> {
 }
 
 export const shots: readonly Shot[] = [
-    { name: `ladder`, path: `/`, world: world(), ready: `.live-game`, framed: true },
-    { name: `ladder-path`, path: `/ladder`, world: world(), ready: `.live-game`, framed: true },
-    { name: `ladder-empty`, path: `/`, world: world({ leaderboard: [], live: [] }), ready: `.empty`, framed: true },
-    { name: `ladder-empty-live`, path: `/`, world: world({ leaderboard: [] }), ready: `.live-game`, framed: true },
-    { name: `ladder-live-none`, path: `/`, world: world({ live: [] }), ready: `.live-rail .note`, framed: true },
+    { name: `home`, path: `/`, world: world({ live: liveGames }), ready: `.featured`, framed: true, board: true },
+    { name: `home-few`, path: `/`, world: world({ live: liveGames.slice(1, 2), leaderboard: [] }), ready: `.featured`, framed: true, board: true },
+    { name: `home-quiet`, path: `/`, world: world({ live: [] }), ready: `.featured`, framed: true, board: true },
+    { name: `home-day-one`, path: `/`, world: world({ live: [], leaderboard: [], bots: [], finished: [] }), ready: `.build-band.wide`, framed: true },
     {
-        name: `ladder-live-full`,
+        name: `home-your-games`,
         path: `/`,
-        world: world({ live: liveGames }),
-        ready: `.live-game`,
+        world: world({ live: liveGames, me: { kind: `user`, name: `tom`, rating: 1503, provisional: false, discord: null, liveGames: liveGames.filter((game) => game.players.x.name === `tom`) } }),
+        ready: `.your-game`,
         framed: true,
-        after: async (page) => {
-            await page.locator(`.live-rail`).scrollIntoViewIfNeeded();
-        },
     },
-    { name: `settings`, path: `/`, world: world(), ready: `.live-game`, framed: true, after: openSettings, board: true },
+    { name: `home-loading`, path: `/`, world: world({ stall: true }), ready: `.featured-skeleton`, framed: true },
+    { name: `home-error`, path: `/`, world: world({ broken: true }), ready: `.build-band.wide`, framed: true },
+    { name: `ladder`, path: `/ladder`, world: world(), ready: `.rung`, framed: true },
+    { name: `ladder-empty`, path: `/ladder`, world: world({ leaderboard: [], live: [] }), ready: `.empty`, framed: true },
+    { name: `settings`, path: `/`, world: world(), ready: `.featured`, framed: true, after: openSettings, board: true },
     {
         name: `settings-aids`,
         path: `/bots/sealbot`,
@@ -141,21 +142,21 @@ export const shots: readonly Shot[] = [
     {
         name: `menu-identity-provisional`,
         path: `/profile`,
-        world: world({ me: { kind: `user`, name: `quietowner`, rating: 1420, provisional: true, discord: null } }),
+        world: world({ me: { kind: `user`, name: `quietowner`, rating: 1420, provisional: true, discord: null, liveGames: [] } }),
         ready: `h1`,
         framed: true,
         after: openIdentity,
         viewports: panelViewports,
     },
     { name: `menu-guest`, path: `/connect`, world: guest, ready: `h1`, framed: true, after: openIdentity, viewports: panelViewports },
-    { name: `signin-expired`, path: `/?signin=expired`, world: signedOut, ready: `.live-game`, framed: true },
-    { name: `signin-banned`, path: `/?signin=banned`, world: signedOut, ready: `.live-game`, framed: true },
+    { name: `signin-expired`, path: `/?signin=expired`, world: signedOut, ready: `.featured`, framed: true },
+    { name: `signin-banned`, path: `/?signin=banned`, world: signedOut, ready: `.featured`, framed: true },
     { name: `signin-cancelled`, path: `/connect?signin=cancelled`, world: signedOut, ready: `.site-banner`, framed: true },
     { name: `signin-rejected`, path: `/bots?signin=rejected`, world: signedOut, ready: `table`, framed: true },
     { name: `signin-busy`, path: `/play?signin=busy`, world: playing({ me: null }), ready: `.site-banner`, framed: true },
-    { name: `ladder-loading`, path: `/`, world: world({ stall: true }), ready: `.skeleton`, framed: true },
-    { name: `ladder-error`, path: `/`, world: world({ broken: true }), ready: `.empty`, framed: true },
-    { name: `ladder-rate-limited`, path: `/`, world: world({ limited: `reads` }), ready: `.empty .note`, framed: true },
+    { name: `ladder-loading`, path: `/ladder`, world: world({ stall: true }), ready: `.skeleton`, framed: true },
+    { name: `ladder-error`, path: `/ladder`, world: world({ broken: true }), ready: `.empty`, framed: true },
+    { name: `ladder-rate-limited`, path: `/ladder`, world: world({ limited: `reads` }), ready: `.empty .note`, framed: true },
     { name: `bots`, path: `/bots`, world: world(), ready: `table`, framed: true },
     { name: `bot-owner`, path: `/bots/sealbot`, world: world(), ready: `.bot-live`, framed: true, board: true },
     {
@@ -178,7 +179,7 @@ export const shots: readonly Shot[] = [
     {
         name: `bot-visitor`,
         path: `/bots/sealbot`,
-        world: world({ me: { kind: `user`, name: `ana`, rating: 1402, provisional: false, discord: null } }),
+        world: world({ me: { kind: `user`, name: `ana`, rating: 1402, provisional: false, discord: null, liveGames: [] } }),
         ready: `h1`,
         framed: true,
     },
@@ -354,6 +355,18 @@ export const shots: readonly Shot[] = [
         board: true,
     },
     { name: `watch-running`, path: `/game/running`, world: signedOut, ready: `svg polygon.cell`, framed: false, board: true },
+    { name: `game-replay`, path: `/game/finished?turn=2`, world: signedOut, ready: `.scrub-count:visible`, framed: false, board: true },
+    {
+        name: `watch-running-back`,
+        path: `/game/running`,
+        world: signedOut,
+        ready: `.scrub-count:visible`,
+        framed: false,
+        board: true,
+        after: async (page) => {
+            await page.locator(`.scrub-count:visible`).press(`ArrowLeft`);
+        },
+    },
     { name: `watch-guest`, path: `/game/guest`, world: signedOut, ready: `svg polygon.cell`, framed: false, board: true },
     { name: `watch-finished`, path: `/game/finished`, world: signedOut, ready: `svg polygon.cell`, framed: false, board: true },
     ...(
@@ -404,7 +417,7 @@ export const shots: readonly Shot[] = [
     { name: `not-found`, path: `/nowhere`, world: world(), ready: `h1`, framed: true },
     { name: `play`, path: `/play`, world: playing(), ready: `.play-setup`, framed: true },
     { name: `play-signed-out`, path: `/play`, world: playing({ me: null }), ready: `.play-setup`, framed: true },
-    { name: `play-guest`, path: `/play`, world: playing({ me: { kind: `guest`, name: `Guest k3f9` } }), ready: `.play-setup`, framed: true },
+    { name: `play-guest`, path: `/play`, world: playing({ me: { kind: `guest`, name: `Guest k3f9`, liveGames: [] } }), ready: `.play-setup`, framed: true },
     { name: `play-named`, path: `/play?bot=devbot-c`, world: playing(), ready: `.play-setup`, framed: true },
     { name: `play-named-closed`, path: `/play?bot=pebble`, world: playing(), ready: `.play-setup`, framed: true },
     { name: `play-named-busy`, path: `/play?bot=sealbot`, world: playing(), ready: `.play-setup`, framed: true },
@@ -511,7 +524,7 @@ export const shots: readonly Shot[] = [
     {
         name: `welcome-guest`,
         path: `/welcome`,
-        world: welcoming({ me: { kind: `guest`, name: `Guest k3f9` } }),
+        world: welcoming({ me: { kind: `guest`, name: `Guest k3f9`, liveGames: [] } }),
         ready: `.field-ok`,
         framed: true,
     },

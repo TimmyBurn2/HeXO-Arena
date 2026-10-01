@@ -20,7 +20,10 @@ import { registerChallengeApi } from './challenge-api';
 import { ChallengeRegistry, challengeTtlSeconds } from './challenge-registry';
 import { expireStaleChallenges } from './challenge-store';
 import { createQuery, type Query, type Sqlite } from './db';
+import { registerDevAccountsApi } from './dev-accounts';
+import { registerFinishedGamesApi } from './finished-games';
 import { abortUnfinishedGames } from './game-store';
+import { fillGameRatings } from './rating-store';
 import { engineSocketRoute, registerGameApi } from './game-api';
 import { GameRegistry, wirePresence } from './game-registry';
 import { registerLeaderboardApi } from './leaderboard-api';
@@ -102,6 +105,7 @@ export async function buildApp(deps: AppDeps): Promise<BuiltApp> {
     // left unfinished is closed here, before any route can reach it.
     const generation = beginGeneration(query);
     abortUnfinishedGames(query);
+    fillGameRatings(query);
     expireStaleChallenges(query, challengeTtlSeconds);
     sweepExpired(query);
     const sweep = setInterval(() => {
@@ -155,10 +159,12 @@ export async function buildApp(deps: AppDeps): Promise<BuiltApp> {
     registerBotApi(app, { query, presence, gate, games, limits });
     registerChallengeApi(app, { query, presence, games, challenges, gate, limits });
     registerGameApi(app, { query, presence, games, watchers, gate, guests, limits });
+    registerFinishedGamesApi(app, { query, now: deps.now ?? Date.now });
     registerLeaderboardApi(app, { query });
     registerLegalApi(app, deps.legalDetails);
-    registerSessionApi(app, { query, guests, secureCookies: deps.secureCookies, limits });
+    registerSessionApi(app, { query, guests, games, secureCookies: deps.secureCookies, limits });
     registerSignInApi(app, { query, guests, discord: deps.discord, secureCookies: deps.secureCookies, devLogin: deps.devLogin, limits });
+    if (deps.devLogin) registerDevAccountsApi(app, { query });
     if (deps.webIndexPath !== undefined) {
         registerOgShell(app, { query, presence, games, indexPath: deps.webIndexPath, publicOrigin: deps.publicOrigin });
     }
