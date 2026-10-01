@@ -1,6 +1,6 @@
 import type { Page } from '@playwright/test';
 import { themes } from '../src/theme/themes';
-import { liveGames, playBots, signup, world, type World } from './mock-api';
+import { leaderboard, liveGames, playBots, rivalry, signup, world, type World } from './mock-api';
 
 /** A named look the whole site can wear. */
 export interface Look {
@@ -123,7 +123,29 @@ export const shots: readonly Shot[] = [
     },
     { name: `home-loading`, path: `/`, world: world({ stall: true }), ready: `.featured-skeleton`, framed: true },
     { name: `home-error`, path: `/`, world: world({ broken: true }), ready: `.build-band.wide`, framed: true },
-    { name: `ladder`, path: `/ladder`, world: world(), ready: `.rung`, framed: true },
+    { name: `ladder`, path: `/ladder`, world: world(), ready: `.podium-plate`, framed: true, board: true },
+    { name: `ladder-all-time`, path: `/ladder?active=all`, world: world(), ready: `.podium-plate`, framed: true },
+    { name: `ladder-two`, path: `/ladder`, world: world({ leaderboard: leaderboard.slice(0, 2) }), ready: `.podium-plate`, framed: true },
+    { name: `ladder-one`, path: `/ladder`, world: world({ leaderboard: leaderboard.slice(0, 1) }), ready: `.podium-plate`, framed: true },
+    {
+        name: `ladder-found`,
+        path: `/ladder`,
+        world: world(),
+        ready: `.podium-plate`,
+        framed: true,
+        after: async (page) => {
+            await page.getByLabel(`Find a name`).fill(`hextide`);
+            await page.locator(`tr.found`).waitFor();
+        },
+    },
+    {
+        name: `ladder-settling`,
+        path: `/ladder`,
+        world: world({ me: { kind: `user`, name: `newcomer`, rating: 1000, provisional: true, discord: null, liveGames: [] } }),
+        ready: `.ladder-you`,
+        framed: true,
+    },
+    { name: `ladder-quiet`, path: `/ladder`, world: world({ leaderboard: leaderboard.slice(-1) }), ready: `.empty`, framed: true },
     { name: `ladder-empty`, path: `/ladder`, world: world({ leaderboard: [], live: [] }), ready: `.empty`, framed: true },
     { name: `settings`, path: `/`, world: world(), ready: `.featured`, framed: true, after: openSettings, board: true },
     {
@@ -168,6 +190,41 @@ export const shots: readonly Shot[] = [
         board: true,
         after: async (page) => {
             await page.locator(`.bot-live`).scrollIntoViewIfNeeded();
+        },
+    },
+    { name: `games`, path: `/games`, world: world(), ready: `.game-row`, framed: true },
+    { name: `games-h2h`, path: `/games?player=hextide&vs=quietlake`, world: world({ finished: rivalry(230) }), ready: `.games-h2h`, framed: true },
+    { name: `games-cap`, path: `/games?player=hextide&cursor=10.180`, world: world({ finished: rivalry(230) }), ready: `.games-cap`, framed: true },
+    { name: `games-day-one`, path: `/games`, world: world({ finished: [] }), ready: `.empty`, framed: true },
+    { name: `games-no-match`, path: `/games?player=hextide&reason=terminated&clock=match`, world: world(), ready: `.empty`, framed: true },
+    { name: `games-unknown`, path: `/games?player=nobody`, world: world(), ready: `.empty`, framed: true },
+    { name: `games-loading`, path: `/games`, world: world({ stall: true }), ready: `.skeleton`, framed: true },
+    { name: `games-error`, path: `/games`, world: world({ broken: true }), ready: `.empty`, framed: true },
+    {
+        name: `games-more`,
+        path: `/games?player=hextide`,
+        world: world({ finished: rivalry(40) }),
+        ready: `.game-row`,
+        framed: true,
+        viewports: [
+            { name: `desktop`, width: 1440, height: 900 },
+            { name: `tablet`, width: 768, height: 1024 },
+        ],
+        after: async (page) => {
+            await page.getByRole(`button`, { name: `More filters` }).click();
+            await page.locator(`#games-more`).waitFor();
+        },
+    },
+    {
+        name: `games-sheet`,
+        path: `/games?player=hextide&clock=turn`,
+        world: world({ finished: rivalry(40) }),
+        ready: `.game-row`,
+        framed: true,
+        viewports: phones,
+        after: async (page) => {
+            await page.getByRole(`button`, { name: `Filters (1)` }).click();
+            await page.locator(`dialog.games-sheet[open]`).waitFor();
         },
     },
     { name: `live-games`, path: `/games/live`, world: world({ live: liveGames }), ready: `.live-card`, framed: true, board: true },

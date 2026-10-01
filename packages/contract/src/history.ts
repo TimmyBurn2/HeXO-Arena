@@ -36,7 +36,7 @@ export const finishedGamesQuerySchema = z
         reason: z.enum(finishReasonSchema.options).optional().meta({ param: { description: `How the game ended.` } }),
         clock: z.enum([`turn`, `match`, `unlimited`]).optional().meta({ param: { description: `The time control's mode.` } }),
         opening: z.enum([`1`, `3`, `5`, `7`, `9`]).optional().meta({ param: { description: `The opening's plies.` } }),
-        before: z.iso.date().optional().meta({ param: { description: `Only games finished before this UTC date, YYYY-MM-DD; how older games are reached.` } }),
+        before: z.iso.date().optional().meta({ param: { description: `Only games finished before this UTC date, YYYY-MM-DD.` } }),
         cursor: z.string().regex(cursorPattern).optional().meta({ param: { description: `The page after the last one read, as its next said.` } }),
     })
     .refine((query) => query.player !== undefined || (query.vs === undefined && query.side === undefined && query.result !== `won` && query.result !== `lost`), {
@@ -68,11 +68,32 @@ export const finishedGameEntrySchema = z
     });
 export type FinishedGameEntry = z.infer<typeof finishedGameEntrySchema>;
 
+const countSchema = z.number().int().min(0);
+
+const sideRecordSchema = z.object({ games: countSchema, won: countSchema, lost: countSchema });
+
+export const finishedGamesRecordSchema = z
+    .object({
+        games: countSchema,
+        won: countSchema,
+        lost: countSchema,
+        undecided: countSchema.meta({ description: `Games that ended without a winner.` }),
+        asX: sideRecordSchema,
+        asO: sideRecordSchema,
+    })
+    .meta({
+        id: `FinishedGamesRecord`,
+        description: `The named player's record over every game the filters select, past the page cap: wins, losses, and games without a winner, in all and by side.`,
+    });
+export type FinishedGamesRecord = z.infer<typeof finishedGamesRecordSchema>;
+
 export const finishedGamesPageSchema = z
     .object({
         games: z.array(finishedGameEntrySchema).max(finishedGamesPageSize),
         next: z.string().regex(cursorPattern).nullable().meta({ description: `The cursor of the next page; null on the last one.` }),
+        previous: z.string().regex(cursorPattern).nullable().meta({ description: `The cursor of the page before; null when that page is the first, or on the first.` }),
         page: z.number().int().min(1).max(finishedGamesPageCap),
+        record: finishedGamesRecordSchema.optional().meta({ description: `Present when the query names a player.` }),
     })
     .meta({ id: `FinishedGamesPage` });
 export type FinishedGamesPage = z.infer<typeof finishedGamesPageSchema>;

@@ -11,7 +11,7 @@ async function ladder(page: Page, width: number, theme = `ink`): Promise<void> {
     }, theme);
     await serve(page, world());
     await page.goto(`/ladder`);
-    await page.locator(`.rung`).first().waitFor();
+    await page.locator(`.podium-plate`).first().waitFor();
 }
 
 function gear(page: Page) {

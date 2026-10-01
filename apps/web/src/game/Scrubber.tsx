@@ -49,8 +49,18 @@ export function Scrubber({ replay, live, compact = false }: { replay: Replay; li
         }
     }
 
-    // A press on the track seeks to the turn under it.
-    function onTrack(event: PointerEvent<HTMLSpanElement>) {
+    // A press on the track seeks to the turn under it, and the track holds
+    // the pointer so a drag keeps seeking wherever it wanders.
+    function onPress(event: PointerEvent<HTMLSpanElement>) {
+        event.currentTarget.setPointerCapture(event.pointerId);
+        seek(event);
+    }
+
+    function onDrag(event: PointerEvent<HTMLSpanElement>) {
+        if (event.currentTarget.hasPointerCapture(event.pointerId)) seek(event);
+    }
+
+    function seek(event: PointerEvent<HTMLSpanElement>) {
         const box = event.currentTarget.getBoundingClientRect();
         if (box.width === 0) return;
         const share = Math.min(1, Math.max(0, (event.clientX - box.left) / box.width));
@@ -94,7 +104,7 @@ export function Scrubber({ replay, live, compact = false }: { replay: Replay; li
             >
                 <span className="scrub-words">{count}</span>
                 {compact ? null : (
-                    <span className="scrub-track" aria-hidden="true" onPointerDown={onTrack}>
+                    <span className="scrub-track" aria-hidden="true" onPointerDown={onPress} onPointerMove={onDrag}>
                         <span className="scrub-fill" style={{ inlineSize: `${String(Math.round(filled * 1000) / 10)}%` }} />
                     </span>
                 )}

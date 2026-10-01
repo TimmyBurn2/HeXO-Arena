@@ -243,6 +243,7 @@ describe('request limits', () => {
             'GET /ladder': `shell`,
             'GET /play': `shell`,
             'GET /bots': `shell`,
+            'GET /games': `shell`,
             'GET /games/live': `shell`,
             'GET /connect': `shell`,
             'GET /profile': `shell`,

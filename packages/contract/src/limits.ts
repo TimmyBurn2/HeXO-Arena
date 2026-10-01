@@ -31,6 +31,9 @@ export const engineFrameLimitBytes = 16 * 1024;
 /** How long a bot's live games wait for its stream to return before it forfeits them. */
 export const orphanForfeitMs = 30_000;
 
+/** An unlimited game ends after this long with no winner, as `terminated`. */
+export const unlimitedWallCapMs = 24 * 60 * 60 * 1000;
+
 /** Guest sessions one client may start. */
 export const guestMintLimit: RateLimit = { burst: 3, refillMs: 20 * 60_000 };
 

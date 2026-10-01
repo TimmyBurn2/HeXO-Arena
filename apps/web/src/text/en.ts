@@ -23,6 +23,13 @@ const wallCapHours = unlimitedWallCapMs / 3_600_000;
 // A wait in whole minutes, as a rate and as a delay: "a minute" for one.
 const perMinutes = (minutes: number) => (minutes === 1 ? `a minute` : `every ${String(minutes)} minutes`);
 const inMinutes = (minutes: number) => (minutes === 1 ? `a minute` : `${String(minutes)} minutes`);
+// A place in English: 1st, 2nd, 3rd, 4th, and 11th to 13th.
+function ordinal(place: number): string {
+    const tens = place % 100;
+    const ones = place % 10;
+    const suffix = tens >= 11 && tens <= 13 ? `th` : ones === 1 ? `st` : ones === 2 ? `nd` : ones === 3 ? `rd` : `th`;
+    return `${String(place)}${suffix}`;
+}
 // A wait the server named, in seconds under a minute and whole minutes, rounded up, past it.
 const inWait = (seconds: number) => (seconds < 60 ? `${String(seconds)} s` : inMinutes(Math.ceil(seconds / 60)));
 
@@ -130,13 +137,38 @@ export const en = {
         rank: `Rank`,
         player: `Player`,
         rating: `Rating`,
+        games: `Games`,
+        lastPlayed: `Last played`,
+        byOwner: (owner: string) => `by ${owner}`,
         you: `you`,
-        note: `Players join the ladder once their rating is no longer provisional.`,
+        lead: `One rating pool for bots and humans; a player joins once their rating is no longer provisional.`,
+        played: `Played`,
+        playedWithin: { '30d': `in the last 30 days`, all: `all time` },
+        find: `Find a name`,
+        findNone: (name: string) => `No player on this ladder matches ${name}`,
+        findCount: (count: number, name: string) =>
+            count === 0 ? `No player on this ladder matches ${name}` : `${String(count)} ${plural(count, `player matches`, `players match`)} ${name}`,
+        yourPlace: (rank: number, rating: number) => `You are ${ordinal(rank)} with ${String(rating)}`,
+        showMine: `Show my row`,
+        settling: `Your rating is still settling; you join the ladder once it is no longer provisional.`,
+        podiumLabel: (top: readonly { name: string; rating: number }[]) =>
+            `Podium: ${top.map((entry, index) => `${[`first`, `second`, `third`][index] ?? ``} ${entry.name}, ${String(entry.rating)}`).join(`; `)}`,
+        plateMeta: (owner: string | null, games: number) => {
+            const played = `${String(games)} ${plural(games, `game`, `games`)}`;
+            return owner === null ? played : `by ${owner}, ${played}`;
+        },
+        play: `Play`,
+        playBot: (name: string) => `Play ${name}`,
         empty: {
             heading: `No ranked players yet`,
             body: `A player joins the ladder once their rating is no longer provisional. ${siteName} runs no bots of its own; the ladder is whatever you bring.`,
             build: `Build a bot`,
             browse: `Browse bots`,
+        },
+        quiet: {
+            heading: `No ranked player played in the last 30 days`,
+            body: `Players who sat out the month stay on the ladder for all time.`,
+            all: `Show all time`,
         },
         live: {
             title: `Live games`,
@@ -196,16 +228,11 @@ export const en = {
         allLive: `All live games`,
         ladder: `Ladder`,
         fullLadder: `Full ladder`,
+        allTime: `All time; no ranked player played in the last 30 days.`,
         settling: `Settling ratings`,
         settlingNote: `No ranked players yet; a player joins the ladder once their rating is no longer provisional.`,
         recent: `Recent results`,
-        finishedAgo: (seconds: number) => {
-            if (seconds < 60) return `just now`;
-            if (seconds < 3_600) return `${String(Math.floor(seconds / 60))} min ago`;
-            if (seconds < 86_400) return `${String(Math.floor(seconds / 3_600))} h ago`;
-            const days = Math.floor(seconds / 86_400);
-            return `${String(days)} ${plural(days, `day`, `days`)} ago`;
-        },
+        allGames: `All games`,
         botsOnline: `Bots online`,
         allBots: `All bots`,
         buildLead: `Write a program that plays HeXO through the Bot API; it plays everyone here and climbs the ladder.`,
@@ -229,6 +256,84 @@ export const en = {
             play: `Play a bot`,
             build: `Build a bot`,
         },
+    },
+    games: {
+        title: `Games`,
+        views: `Games`,
+        finished: `Finished`,
+        live: `Live`,
+        note: `Newest first; guest games are not kept, so they never show here.`,
+        search: `Filter games`,
+        filters: (count: number) => (count === 0 ? `Filters` : `Filters (${String(count)})`),
+        moreFilters: `More filters`,
+        player: `Player`,
+        vs: `Against`,
+        result: `Result`,
+        side: `Side`,
+        reason: `Ending`,
+        clock: `Clock`,
+        kind: `Who played`,
+        opening: `Opening`,
+        before: `Before`,
+        any: `Any`,
+        results: { won: `Won`, lost: `Lost`, none: `No winner` },
+        clocks: { turn: `Turn clock`, match: `Match clock`, unlimited: `Unlimited` },
+        kinds: { 'bot-bot': `Bot vs bot`, 'human-bot': `Human vs bot` },
+        openingValue: (stones: number) => (stones === 1 ? `Origin only` : `${String(stones)} stones`),
+        chips: {
+            vs: (name: string) => `against ${name}`,
+            results: { won: `won`, lost: `lost`, none: `no winner` },
+            side: (side: string) => `as ${side}`,
+            clocks: { turn: `turn clock`, match: `match clock`, unlimited: `unlimited` },
+            kinds: { 'bot-bot': `bot vs bot`, 'human-bot': `human vs bot` },
+            opening: (stones: number) => (stones === 1 ? `origin only` : `${String(stones)}-stone opening`),
+            before: (date: string) => `before ${date}`,
+        },
+        chipsLabel: `Active filters`,
+        remove: (chip: string) => `Remove ${chip}`,
+        clear: `Clear filters`,
+        gamesOf: (name: string) => `All games of ${name}`,
+        show: `Show games`,
+        closeSheet: `Close filters`,
+        columns: { players: `Players`, result: `Result`, clock: `Clock`, opening: `Opening`, length: `Length`, finished: `Finished` },
+        versus: `vs`,
+        turns: (count: number) => `${String(count)} ${plural(count, `turn`, `turns`)}`,
+        page: (page: number) => `Page ${String(page)}`,
+        listed: (page: number) => `Games, page ${String(page)}`,
+        paging: `Pages`,
+        newer: `Newer`,
+        older: `Older`,
+        cap: (count: number) => `The newest ${String(count)} games for these filters; pick a Before date to reach older games.`,
+        pickBefore: `Pick a date`,
+        failed: `The games did not load`,
+        dayOne: {
+            heading: `No finished games yet`,
+            body: `A game lands here the moment it ends.`,
+            watch: `Watch a live game`,
+            build: `Build a bot`,
+        },
+        noMatch: {
+            heading: `No games match these filters`,
+            body: (filters: string) => `No finished game matches ${filters}.`,
+        },
+        unknown: (name: ReactNode): ReactNode => rich`No player named ${name}`,
+        unknownBody: `A name must match in full; capitals do not matter.`,
+        against: (player: ReactNode, vs: ReactNode): ReactNode => rich`${player} against ${vs}`,
+        won: (name: string) => `${name} won`,
+        noWinner: `No winner`,
+        split: (player: string, games: number, x: { games: number; won: number; lost: number }, o: { games: number; won: number; lost: number }) => {
+            const total = `${String(games)} ${plural(games, `game`, `games`)}`;
+            const line = (side: { won: number; lost: number }) => `won ${String(side.won)} and lost ${String(side.lost)}`;
+            if (x.games === 0) return `${total}; ${player} ${line(o)}, all as o.`;
+            if (o.games === 0) return `${total}; ${player} ${line(x)}, all as x.`;
+            return `${total}; ${player} ${line(x)} as x, and ${line(o)} as o.`;
+        },
+        recent: `Recent games`,
+        yours: `Your games`,
+        none: `No finished games yet.`,
+        all: (count: number) => (count === 1 ? `The 1 game` : `All ${String(count)} games`),
+        meetings: (x: string, o: string, won: number, lost: number, games: number) =>
+            `${x} won ${String(won)} and ${o} ${String(lost)} of their ${String(games)} ${plural(games, `game`, `games`)}`,
     },
     bot: {
         failed: `The bot did not load`,
@@ -449,21 +554,18 @@ export const en = {
     credits: {
         title: `Credits`,
         game: `The game`,
-        gameAbout: (name: Slot, site: Slot): ReactNode =>
-            rich`${name(`HeXO`)} is the game played here: each turn places 2 stones, and 6 in a row wins. People play it at ${site(`hexo.did.science`)}, a site made by WolverinDEV.`,
-        gameIndependent: `${siteName} implements the rules independently and is not affiliated with the HeXO project.`,
+        gameAbout: (name: Slot): ReactNode => rich`${name(`HeXO`)} is the game played here: each turn places 2 stones, and 6 in a row wins.`,
+        community: `Community`,
+        marks: `Discord and YouTube are trademarks of Discord Inc. and Google LLC.`,
         themes: `Themes`,
-        themesLead: `Ink is ${siteName}'s own. The other themes take their colors, and only their colors, from these projects:`,
-        themesSmall: `No code, fonts, images, or logos come from these projects. Where a theme needed a shade its source lacks, it is derived from the source's own colors.`,
+        themesLead: `Ink is ${siteName}'s own. The other themes take their colors from these projects:`,
         font: `Font`,
         protocol: `Protocol and ratings`,
         inspiration: `Inspiration`,
-        inspirationSmall: `No code or design comes from it.`,
-        discord: `Discord`,
         licenses: `Licenses`,
         licensesProse: (file: Slot): ReactNode =>
             rich`The open-source code your browser receives, such as React and zod, and the font are listed with their license texts under ${file(`Licenses`)}.`,
-        discordProse: `Sign-in uses Discord. The Discord symbol on the sign-in button is shown unaltered under Discord's brand guidelines. Discord is a trademark of Discord Inc.; ${siteName} is not affiliated with Discord.`,
+        platforms: { youtube: `YouTube`, discord: `Discord` },
         mit: `MIT License`,
         mitSummary: `The MIT License`,
         mitText: [
@@ -472,6 +574,13 @@ export const en = {
             `THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.`,
         ],
         rows: {
+            webgoatguy: {
+                name: `webgoatguy`,
+                gives: (video: Slot): ReactNode => rich`Came up with HeXO in the video ${video(`can tic-tac-toe, with hexagons?`)}`,
+            },
+            hexoSite: { name: `hexo.did.science`, by: `WolverinDEV`, gives: `Where people play HeXO online` },
+            hexoDiscord: { name: `HeXO - Official`, gives: `The game's official community` },
+            botDevDiscord: { name: `HexO Bot Dev`, gives: `Where people build HeXO bots` },
             renderer: { name: `HeXO Renderer`, by: `MineKing`, gives: `HDS, HTTTX, Tyto, and Omok boards and stones`, copyright: `Copyright (c) 2026 MineKing` },
             strix: { name: `Strix`, by: `Tyto (SootyOwl)`, gives: `The Tyto page`, copyright: `Copyright (c) 2026 SootyOwl` },
             playsix: { name: `playsix`, by: `CixMango`, gives: `The Six board, stones, and page`, copyright: `Copyright (c) 2026 CixMango` },
@@ -588,11 +697,21 @@ export const en = {
         boardToMove: (name: string) => `${name} to move`,
         boardWaiting: (name: string) => `waiting for ${name}`,
         boardWatching: (match: string, state: string) => `watching ${match}, ${state}`,
+        headToHead: `Head to head`,
         turnFailed: `Your turn was not sent; try again`,
         gameOver: `The game is over`,
         cellTaken: `That cell is taken`,
         firstAtOrigin: `The first stone belongs at the origin`,
         tooFar: `Too far; play within ${String(placementRadius)} cells of a stone`,
+    },
+    time: {
+        ago: (seconds: number) => {
+            if (seconds < 60) return `just now`;
+            if (seconds < 3_600) return `${String(Math.floor(seconds / 60))} min ago`;
+            if (seconds < 86_400) return `${String(Math.floor(seconds / 3_600))} h ago`;
+            const days = Math.floor(seconds / 86_400);
+            return `${String(days)} ${plural(days, `day`, `days`)} ago`;
+        },
     },
     states: {
         loading: `Loading`,

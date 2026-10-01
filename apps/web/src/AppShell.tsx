@@ -34,6 +34,10 @@ const BotScreen = lazy(async () => {
     const module = await loadScreen(async () => import(`./screens/BotScreen`));
     return { default: module.BotScreen };
 });
+const GamesScreen = lazy(async () => {
+    const module = await loadScreen(async () => import(`./screens/GamesScreen`));
+    return { default: module.GamesScreen };
+});
 const LiveGamesScreen = lazy(async () => {
     const module = await loadScreen(async () => import(`./screens/LiveGamesScreen`));
     return { default: module.LiveGamesScreen };
@@ -82,7 +86,7 @@ interface NavEntry {
 const nav: readonly NavEntry[] = [
     { route: { name: `home` }, label: text.shell.nav.home, screens: [`home`], bar: false, phoneTab: true },
     { route: { name: `play` }, label: text.shell.nav.play, screens: [`play`], bar: true, phoneTab: true },
-    { route: { name: `live-games` }, label: text.shell.nav.games, screens: [`live-games`], bar: true, phoneTab: true },
+    { route: { name: `games` }, label: text.shell.nav.games, screens: [`games`, `live-games`], bar: true, phoneTab: true },
     { route: { name: `ladder` }, label: text.shell.nav.ladder, screens: [`ladder`], bar: true, phoneTab: true },
     { route: { name: `bots` }, label: text.shell.nav.bots, screens: [`bots`, `bot`], bar: true, phoneTab: true },
     { route: { name: `connect` }, label: text.shell.nav.build, screens: [`connect`], bar: true, phoneTab: false },
@@ -218,6 +222,8 @@ function RouteView({ route }: { route: Route }) {
             return <BotsScreen />;
         case `bot`:
             return <BotScreen name={route.bot} />;
+        case `games`:
+            return <GamesScreen />;
         case `live-games`:
             return <LiveGamesScreen />;
         case `connect`:

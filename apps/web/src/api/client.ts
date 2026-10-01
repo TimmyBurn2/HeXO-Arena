@@ -7,6 +7,7 @@ import {
     createGameRequestSchema,
     finishedGamesPageSchema,
     finishedGamesPath,
+    finishedGamesQuerySchema,
     gameEventsPath,
     gamesPath,
     gameSnapshotSchema,
@@ -20,9 +21,9 @@ import {
     signupRequestSchema,
     signupSchema,
     humanMoveRequestSchema,
-    leaderboardEntrySchema,
     leaderboardPath,
     leaderboardQuerySchema,
+    leaderboardSchema,
     legalDetailsPath,
     legalDetailsSchema,
     liveGameEntrySchema,
@@ -30,6 +31,7 @@ import {
     type BotListing,
     type CreateGameRequest,
     type FinishedGamesPage,
+    type FinishedGamesQuery,
     type GameSnapshot,
     type GuestMe,
     type LeaderboardEntry,
@@ -41,6 +43,9 @@ import {
 import type { ZodType } from 'zod';
 
 export type LeaderboardKind = `all` | `bots` | `humans`;
+
+/** Who the board holds by their latest rated game: the last 30 days, or everyone ranked. */
+export type LeaderboardActive = `30d` | `all`;
 
 /**
  * A failed call: status 0 carries a network or parse break, anything else
@@ -157,13 +162,13 @@ export function deleteBot(name: string): Promise<void> {
 }
 
 /**
- * The whole rankable board for one kind; the filter narrows the board, no
- * number on it changes.
+ * The rankable board for one kind and window; either filter narrows the
+ * board, no number on it changes.
  */
-export function fetchLeaderboard(kind: LeaderboardKind): Promise<LeaderboardEntry[]> {
-    const query = leaderboardQuerySchema.parse({ kind });
-    const search = new URLSearchParams({ kind: query.kind });
-    return getJson(`${leaderboardPath}?${search.toString()}`, leaderboardEntrySchema.array());
+export function fetchLeaderboard(kind: LeaderboardKind, active: LeaderboardActive = `30d`): Promise<LeaderboardEntry[]> {
+    const query = leaderboardQuerySchema.parse({ kind, active });
+    const search = new URLSearchParams({ kind: query.kind, active: query.active });
+    return getJson(`${leaderboardPath}?${search.toString()}`, leaderboardSchema);
 }
 
 /**
@@ -194,6 +199,13 @@ export function fetchLiveGames(): Promise<LiveGameEntry[]> {
 /** The newest page of finished games, unfiltered: the latest results first. */
 export function fetchRecentGames(): Promise<FinishedGamesPage> {
     return getJson(finishedGamesPath, finishedGamesPageSchema);
+}
+
+/** One page of finished games for a query; a name no player holds answers 404. */
+export function fetchFinishedGames(query: FinishedGamesQuery): Promise<FinishedGamesPage> {
+    const search = new URLSearchParams(Object.entries(finishedGamesQuerySchema.parse(query)).filter((entry): entry is [string, string] => entry[1] !== undefined));
+    const tail = search.size === 0 ? `` : `?${search.toString()}`;
+    return getJson(`${finishedGamesPath}${tail}`, finishedGamesPageSchema);
 }
 
 /** Any game; the session only decides whether the caller's side is present. */

@@ -45,19 +45,22 @@ export function hexCenter(coord: AxialCoord): { cx: number; cy: number } {
     };
 }
 
-/** The six-vertex outline of a cell-sized hexagon centered at the origin. */
-export function hexPoints(size: number): string {
+/**
+ * The six-vertex outline of a cell-sized hexagon centered at the origin,
+ * pointy-top as the board lays its cells, or flat-top when asked.
+ */
+export function hexPoints(size: number, flat = false): string {
     const points: string[] = [];
     for (let k = 0; k < 6; k += 1) {
-        const angle = (Math.PI / 180) * (60 * k + 30);
+        const angle = (Math.PI / 180) * (60 * k + (flat ? 0 : 30));
         points.push(`${(size * Math.cos(angle)).toFixed(2)},${(size * Math.sin(angle)).toFixed(2)}`);
     }
     return points.join(` `);
 }
 
 /** The outline every cell renders with. */
-export function cellPoints(): string {
-    return hexPoints(cellSize);
+export function cellPoints(flat = false): string {
+    return hexPoints(cellSize, flat);
 }
 
 /** The slightly smaller outline the cell rings render with. */
@@ -66,13 +69,13 @@ export function ringPoints(): string {
 }
 
 /** The stone outline for the hex style, at the stone radius the sheet sets. */
-export function stonePoints(): string {
-    return hexPoints(stoneRadius());
+export function stonePoints(flat = false): string {
+    return hexPoints(stoneRadius(), flat);
 }
 
 /** The inset hexagon a theme may edge a stone with. */
-export function markPoints(): string {
-    return hexPoints(cellSize * markScale);
+export function markPoints(flat = false): string {
+    return hexPoints(cellSize * markScale, flat);
 }
 
 /**

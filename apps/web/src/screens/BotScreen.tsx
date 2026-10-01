@@ -3,6 +3,7 @@ import { botMeta, nameKeyOf, notFoundMeta, type BotListing, type LiveGameEntry }
 import { fetchBots } from '../api/client';
 import { useAsync } from '../api/use-async';
 import { OwnerPanel } from '../components/OwnerPanel';
+import { PlayerHistory } from '../games/PlayerHistory';
 import { LiveGameGrid } from '../live/LiveGameCard';
 import { useLiveReplay } from '../live/use-live-replay';
 import { BotBadge, OpenTag, PresenceDot, Rating } from '../components/player';
@@ -168,6 +169,7 @@ function BotProfile({ bot }: { bot: BotListing }) {
                 )}
             </p>
             <PlayingNow bot={bot.name} />
+            <PlayerHistory player={bot.name} title={text.games.recent} />
             {owned ? <OwnerPanel bot={bot.name} /> : null}
         </>
     );

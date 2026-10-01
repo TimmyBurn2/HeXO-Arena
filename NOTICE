@@ -1,56 +1,50 @@
 HeXO Arena
 
-HeXO Arena's own code is published under the MIT License in LICENSE. The
+HeXO Arena's code is under the MIT License in LICENSE. The
 Chakra Petch font in apps/web/public/fonts is licensed under the SIL Open
-Font License 1.1 instead, as its entry below says.
+Font License 1.1 instead.
 
-HeXO Arena builds on the works below; the MIT License text of the
-MIT-licensed ones closes this file.
+Five board themes take their color palettes, and nothing else, from these
+MIT-licensed projects:
 
-Five of HeXO Arena's board themes take their color palettes, and only their
-palettes, from the MIT-licensed projects below. No code, fonts, sounds,
-images, or logos are copied from them.
-
-HeXO Renderer, for the HDS, HTTTX, Tyto, and Omok boards and stones
+HeXO Renderer: the HDS, HTTTX, Tyto, and Omok boards and stones
 https://github.com/MineKing9534/HeXO
 Copyright (c) 2026 MineKing
 
-Strix, for the Tyto page
+Strix: the Tyto page
 https://github.com/SootyOwl/hexo-strix
 Copyright (c) 2026 SootyOwl
 
-playsix, for the Six theme
+playsix: the Six theme
 https://github.com/CixMango/Six
 Copyright (c) 2026 CixMango
 
-Tailwind CSS, for the HDS page's color palette
+Tailwind CSS: the HDS page
 https://github.com/tailwindlabs/tailwindcss
 Copyright (c) Tailwind Labs, Inc.
 
-The engine session every bot speaks follows the htttx bot protocol; the
-contract mirrors its schemas' field names and bounds, and the Bot API copies
-its schema block verbatim. It is published under the MIT License.
-htttx-bot-api
+The engine session every bot speaks follows the htttx bot protocol, under
+the MIT License; the contract mirrors its schemas' field names and bounds,
+and the Bot API copies its schema block verbatim.
 https://github.com/hex-tic-tac-toe/htttx-bot-api
 Copyright (c) 2026 hex-tic-tac-toe
 
-The rating system is Glicko-2, the published method of Mark Glickman.
+The rating system is Glicko-2, Mark Glickman's published method.
 https://www.glicko.net/glicko/glicko2.pdf
 
 How the site works, the rating settings, and the name rule take ideas and
-parameter values from lichess; no code is copied from it.
+parameter values from lichess.
 https://lichess.org
 
-The wordmark font is a subset of Chakra Petch, published under the SIL Open
-Font License 1.1 and outside this repository's license; the license text is
-apps/web/public/fonts/chakra-petch-OFL.txt.
+The wordmark font is a subset of Chakra Petch, under the SIL Open Font
+License 1.1; its text is apps/web/public/fonts/chakra-petch-OFL.txt.
 https://github.com/m4rc1e/Chakra-Petch
 Copyright 2018 The Chakra Petch Project Authors
 
 The Discord symbol on the sign-in button belongs to Discord and is shown
 unaltered under Discord's brand guidelines.
 
-The MIT License, under which the MIT-licensed works above are published:
+The MIT License, for the MIT-licensed works above:
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal

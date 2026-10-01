@@ -3,6 +3,7 @@ import { botCapPerUser, nameKeyOf, type GuestMe, type UserMe } from '@hexo-arena
 import { fetchBots } from '../api/client';
 import { useAsync } from '../api/use-async';
 import { DiscordSignIn } from '../components/DiscordButton';
+import { PlayerHistory } from '../games/PlayerHistory';
 import { BotBadge, OpenTag, PresenceDot, Rating, provisionalNote } from '../components/player';
 import { Sigil } from '../components/Sigil';
 import { ErrorFrame, SkeletonRows } from '../components/states';
@@ -31,7 +32,12 @@ export function ProfileScreen() {
                 <UserIdentity me={state.me} />
             )}
 
-            {state.status === `ready` && state.me?.kind === `user` ? <YourBots owner={state.me.name} /> : null}
+            {state.status === `ready` && state.me?.kind === `user` ? (
+                <>
+                    <YourBots owner={state.me.name} />
+                    <PlayerHistory player={state.me.name} title={text.games.yours} />
+                </>
+            ) : null}
         </>
     );
 }

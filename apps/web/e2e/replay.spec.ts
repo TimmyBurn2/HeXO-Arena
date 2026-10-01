@@ -69,6 +69,25 @@ test('a link opens the replay at its turn, and the steps answer a press', async 
     await expect(page.getByRole(`button`, { name: `Go forward a turn` })).toHaveAttribute(`aria-disabled`, `true`);
 });
 
+test('the track seeks along a drag, not only where it is pressed', async ({ page }) => {
+    await open(page, `/game/finished`);
+    const track = page.locator(`.hud-bottom-center .scrub-track`);
+    const box = await track.boundingBox();
+    if (box === null) throw new Error(`the track has no box`);
+    const y = box.y + box.height / 2;
+    await page.mouse.move(box.x + 1, y);
+    await page.mouse.down();
+    await expect(slider(page)).toHaveAttribute(`aria-valuetext`, `Origin only`);
+    await page.mouse.move(box.x + box.width / 2, y, { steps: 4 });
+    await expect(slider(page)).toHaveAttribute(`aria-valuetext`, `Turn 3 of 6`);
+    // Held by the track, the drag keeps seeking past its ends.
+    await page.mouse.move(box.x + box.width + 40, y + 60, { steps: 4 });
+    await expect(slider(page)).toHaveAttribute(`aria-valuetext`, `Turn 6 of 6`);
+    await page.mouse.up();
+    await page.mouse.move(box.x + 1, y);
+    await expect(slider(page)).toHaveAttribute(`aria-valuetext`, `Turn 6 of 6`);
+});
+
 test('the board keeps its arrows for scrolling when focused, leaving the replay where it stands', async ({ page }) => {
     await open(page, `/game/finished?turn=4`);
     await page.locator(`.board-control`).focus();

@@ -71,11 +71,20 @@ describe('finishedGamesQuerySchema', () => {
 });
 
 describe('finishedGamesPageSchema', () => {
-    it('holds a page of entries, its next cursor, and its number', () => {
-        const page = { games: Array.from({ length: finishedGamesPageSize }, () => entry), next: `2.381`, page: 1 };
+    it('holds a page of entries, its next and previous cursors, and its number', () => {
+        const page = { games: Array.from({ length: finishedGamesPageSize }, () => entry), next: `4.381`, previous: `2.425`, page: 3 };
         expect(finishedGamesPageSchema.parse(page)).toEqual(page);
         expect(finishedGamesPageSchema.safeParse({ ...page, games: [...page.games, entry] }).success).toBe(false);
-        expect(finishedGamesPageSchema.safeParse({ games: [], next: null, page: finishedGamesPageCap + 1 }).success).toBe(false);
+        expect(finishedGamesPageSchema.safeParse({ ...page, previous: `1.425` }).success).toBe(false);
+        expect(finishedGamesPageSchema.safeParse({ games: [], next: null, previous: null, page: finishedGamesPageCap + 1 }).success).toBe(false);
+    });
+
+    it('carries the record of the player named, counted past the cap and split by side', () => {
+        const record = { games: 41, won: 24, lost: 15, undecided: 2, asX: { games: 21, won: 14, lost: 6 }, asO: { games: 20, won: 10, lost: 9 } };
+        const page = { games: [entry], next: null, previous: null, page: 1, record };
+        expect(finishedGamesPageSchema.parse(page)).toEqual(page);
+        expect(finishedGamesPageSchema.safeParse({ ...page, record: { ...record, won: -1 } }).success).toBe(false);
+        expect(finishedGamesPageSchema.safeParse({ ...page, record: { ...record, asO: { games: 20, won: 10 } } }).success).toBe(false);
     });
 
     it('carries no analysis count yet', () => {

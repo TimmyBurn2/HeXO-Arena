@@ -1,22 +1,35 @@
-import { leaderboardEntrySchema, leaderboardPath, leaderboardQuerySchema, type LeaderboardEntry } from '@hexo-arena/contract';
+import { leaderboardActiveDays, leaderboardCap, leaderboardPath, leaderboardQuerySchema, leaderboardSchema, type LeaderboardEntry } from '@hexo-arena/contract';
 import type { FastifyInstance } from 'fastify';
 import type { Query } from './db';
+import type { PresenceRegistry } from './presence';
 import { rankablePlayers } from './rating-store';
 
-export function registerLeaderboardApi(app: FastifyInstance, deps: { query: Query }): void {
+const secondsPerDay = 86_400;
+
+/** The earliest finish, in epoch seconds, that keeps a player on the default board at this moment. */
+export function activeSince(nowMs: number): number {
+    return Math.floor(nowMs / 1000) - leaderboardActiveDays * secondsPerDay;
+}
+
+function isoOf(seconds: number): string {
+    return new Date(seconds * 1000).toISOString().replace(/\.\d{3}Z$/u, `Z`);
+}
+
+export function registerLeaderboardApi(app: FastifyInstance, deps: { query: Query; presence: PresenceRegistry; now: () => number }): void {
     app.get(leaderboardPath, { config: { limit: `public` } }, async (request, reply) => {
         const parsed = leaderboardQuerySchema.safeParse(request.query);
         if (!parsed.success) {
-            return reply.code(400).send({ error: `kind must be bots, humans, or all`, code: `bad_request` });
+            return reply.code(400).send({ error: `kind must be bots, humans, or all, and active 30d or all`, code: `bad_request` });
         }
-        const board = rankablePlayers(deps.query, parsed.data.kind).map(
-            (player, index): LeaderboardEntry => ({
-                rank: index + 1,
-                name: player.name,
-                kind: player.kind,
-                rating: Math.round(player.rating),
-            }),
-        );
-        return reply.code(200).send(leaderboardEntrySchema.array().parse(board));
+        const { kind, active } = parsed.data;
+        const board = rankablePlayers(deps.query, { kind, activeSince: active === `all` ? null : activeSince(deps.now()) })
+            .slice(0, leaderboardCap)
+            .map((player, index): LeaderboardEntry => {
+                const entry = { rank: index + 1, name: player.name, rating: Math.round(player.rating), games: player.games, lastPlayedAt: isoOf(player.lastPlayedAt) };
+                return player.botId === null
+                    ? { ...entry, kind: `human` }
+                    : { ...entry, kind: `bot`, ownerName: player.ownerName, online: deps.presence.isOnline(player.botId) };
+            });
+        return reply.code(200).send(leaderboardSchema.parse(board));
     });
 }

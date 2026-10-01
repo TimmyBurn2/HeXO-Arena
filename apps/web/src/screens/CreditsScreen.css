@@ -91,9 +91,12 @@
         flex-direction: column;
     }
 
+    /* A name can be a web address, one word with no space to wrap at,
+       which at large text on a phone is wider than the row. */
     .credit-who a {
         font-size: var(--text-base);
         font-weight: var(--weight-strong);
+        overflow-wrap: anywhere;
     }
 
     /* A paragraph, so a link inside it is underlined as in any running text. */
@@ -118,6 +121,46 @@
 
     .credit-plain {
         color: var(--c-text);
+    }
+
+    /* The platform a link opens: its mark at the smallest size Discord
+       allows its symbol, which YouTube's icon matches, and inline, so the
+       label keeps the row's baseline. */
+    .credit-platform {
+        color: var(--c-text);
+        font-weight: var(--weight-strong);
+    }
+
+    .credit-platform svg {
+        height: var(--discord-symbol-h);
+        width: auto;
+        margin-right: var(--discord-symbol-space);
+        vertical-align: middle;
+    }
+
+    .youtube-icon-frame {
+        fill: var(--c-youtube);
+    }
+
+    .youtube-icon-play {
+        fill: var(--c-on-youtube);
+    }
+
+    /* Blurple is one of the three colors Discord allows its symbol, and the
+       one that reads on every theme's ground. */
+    .credit-platform .discord-symbol {
+        fill: var(--c-discord);
+    }
+
+    @media (forced-colors: active) {
+        .credit-platform .discord-symbol,
+        .credit-platform .youtube-icon-frame {
+            fill: CanvasText;
+        }
+
+        .credit-platform .youtube-icon-play {
+            fill: Canvas;
+        }
     }
 
     .credits-license {

@@ -754,6 +754,81 @@ describe('GameScreen for a watcher', () => {
         expect(screen.getByText(`No, a guest is playing`, { selector: `.facts dd` })).toBeTruthy();
     });
 
+    it('hold the frame a stepped-back watcher left as stones land, and leave the record closed at the finish', async () => {
+        stubGame(watched(runningSnapshot));
+        render(<GameScreen gameId="g-run" />);
+        await screen.findByRole(`heading`, { name: `hextide vs tom` });
+        const frame = () => document.querySelector(`.board-camera .board-svg`)?.getAttribute(`viewBox`);
+        const opened = frame();
+        const stream = FakeEventSource.latest();
+        act(() => {
+            stream.emit(`turn`, { turn: 2, side: `o`, cells: [{ x: 3, y: 0 }, { x: 4, y: 0 }], toMove: `x`, clock: { mode: `turn`, remainingTurnMs: 40_000 } });
+        });
+        // Following, the camera takes each new position.
+        expect(frame()).not.toBe(opened);
+        fireEvent.click(screen.getAllByRole(`button`, { name: `Go back a turn` })[0] as HTMLElement);
+        const held = frame();
+        act(() => {
+            stream.emit(`turn`, { turn: 3, side: `x`, cells: [{ x: -1, y: 0 }, { x: -2, y: 0 }], toMove: `o`, clock: { mode: `turn`, remainingTurnMs: 45_000 } });
+        });
+        expect(document.querySelectorAll(`g.stone`)).toHaveLength(3);
+        expect(frame()).toBe(held);
+        act(() => {
+            stream.emit(`finish`, { winner: `x`, reason: `timeout`, clock: { mode: `turn`, remainingTurnMs: 0 } });
+        });
+        expect(await screen.findByText(`hextide won on time`, { selector: `.hud-result` })).toBeTruthy();
+        expect(frame()).toBe(held);
+        expect(document.querySelector(`#drawer-body`)?.hasAttribute(`hidden`)).toBe(true);
+        fireEvent.click(screen.getAllByRole(`button`, { name: `Go to the end` })[0] as HTMLElement);
+        expect(document.querySelectorAll(`g.stone`)).toHaveLength(7);
+        expect(frame()).not.toBe(held);
+    });
+
+    it('open the record at the finish of a game the watcher follows', async () => {
+        stubGame(watched(runningSnapshot));
+        render(<GameScreen gameId="g-run" />);
+        await screen.findByRole(`heading`, { name: `hextide vs tom` });
+        act(() => {
+            FakeEventSource.latest().emit(`finish`, { winner: `x`, reason: `timeout`, clock: { mode: `turn`, remainingTurnMs: 0 } });
+        });
+        expect(await screen.findByText(`hextide won on time`, { selector: `.hud-result` })).toBeTruthy();
+        await waitFor(() => {
+            expect(document.querySelector(`#drawer-body`)?.hasAttribute(`hidden`)).toBe(false);
+        });
+    });
+
+    it('lead from the Game tab to the two players\' games, with their record', async () => {
+        const record = { games: 41, won: 24, lost: 15, undecided: 2, asX: { games: 21, won: 14, lost: 6 }, asO: { games: 20, won: 10, lost: 9 } };
+        const reads: string[] = [];
+        vi.stubGlobal(
+            `fetch`,
+            vi.fn((url: string) => {
+                reads.push(url);
+                return Promise.resolve(new Response(JSON.stringify(url.startsWith(`/api/games/finished`) ? { games: [], next: null, previous: null, page: 1, record } : watched(finishedSnapshot))));
+            }),
+        );
+        stubEventSource(watched(finishedSnapshot));
+        render(<GameScreen gameId="g-end" />);
+        await screen.findByRole(`heading`, { name: `hextide vs tom` });
+        await openWithM();
+        fireEvent.click(screen.getByRole(`tab`, { name: `Game` }));
+        const line = await screen.findByRole(`link`, { name: `hextide won 24 and tom 15 of their 41 games` });
+        expect(line.getAttribute(`href`)).toBe(`/games?player=hextide&vs=tom`);
+        expect(line.closest(`.facts-row`)?.querySelector(`dt`)?.textContent).toBe(`Head to head`);
+        expect(reads).toContain(`/api/games/finished?player=hextide&vs=tom`);
+    });
+
+    it('leave the head-to-head out of a game a guest sits in, which is never kept', async () => {
+        const guestGame = { ...watched(finishedSnapshot), players: { ...players, o: { name: `Guest k3f9`, rating: null, provisional: false, kind: `guest` as const } } } as GameSnapshot;
+        stubGame(guestGame);
+        render(<GameScreen gameId="g-end" />);
+        await screen.findByRole(`heading`, { name: `hextide vs Guest k3f9` });
+        await openWithM();
+        fireEvent.click(screen.getByRole(`tab`, { name: `Game` }));
+        expect(screen.queryByText(`Head to head`)).toBe(null);
+        expect(vi.mocked(fetch).mock.calls.some(([url]) => typeof url === `string` && url.startsWith(`/api/games/finished`))).toBe(false);
+    });
+
     it('name the winner in the result, never you', async () => {
         stubGame(watched(finishedSnapshot));
         render(<GameScreen gameId="g-end" />);

@@ -309,7 +309,7 @@ describe('openapi document', () => {
         const engine = description(`paths`, botGameSocketPath, `get`, `responses`, `101`);
         expect(engine).toContain(`${String(serverLineLimitBytes / 1024)} KiB`);
         expect(engine).toContain(`${String(streamBacklogLimitBytes / 1024)} KiB`);
-        expect(engine).toContain(`1008 after more than ${String(engineStrayFrameCap)} frames that answer no outstanding request, a malformed frame, or a protocol violation`);
+        expect(engine).toContain(`1008 after more than ${String(engineStrayFrameCap)} frames in one session that answer no outstanding request, a malformed frame, or a protocol violation`);
         expect(description(`paths`, gameEventsPath, `get`, `responses`, `200`)).toContain(`${String(streamBacklogLimitBytes / 1024)} KiB`);
         expect(description(`components`, `schemas`, `FinishReason`)).toContain(`${String(gameTurnCap)} turns`);
     });

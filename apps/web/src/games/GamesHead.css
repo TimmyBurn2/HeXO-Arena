@@ -1,0 +1,23 @@
+@layer components {
+    .games-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        flex-wrap: wrap;
+        gap: var(--space-3) var(--space-4);
+        margin-bottom: var(--space-4);
+    }
+
+    .games-head .screen-title {
+        margin: 0;
+    }
+
+    .games-views .pill {
+        gap: var(--space-2);
+        text-decoration: none;
+    }
+
+    .games-view-count {
+        font-variant-numeric: tabular-nums;
+    }
+}

@@ -51,6 +51,8 @@ interface Reads {
     live?: LiveGameEntry[];
     bots?: BotListing[];
     ladder?: LeaderboardEntry[];
+    // The all-time board, when it differs from the 30-day one.
+    allTime?: LeaderboardEntry[];
     finished?: FinishedGameEntry[];
 }
 
@@ -69,9 +71,9 @@ function serve(reads: Reads): void {
                       : path === `/api/bots`
                         ? (reads.bots ?? [])
                         : path === `/api/leaderboard`
-                          ? (reads.ladder ?? [])
+                          ? ((url.includes(`active=all`) ? reads.allTime : undefined) ?? reads.ladder ?? [])
                           : path === `/api/games/finished`
-                            ? { games: reads.finished ?? [], next: null, page: 1 }
+                            ? { games: reads.finished ?? [], next: null, previous: null, page: 1 }
                             : undefined;
             return Promise.resolve(body === undefined ? new Response(`{}`, { status: 404 }) : new Response(JSON.stringify(body)));
         }),
@@ -100,6 +102,27 @@ describe('HomeScreen', () => {
         expect(screen.getByRole(`link`, { name: `Start building` }).getAttribute(`href`)).toBe(`/connect`);
     });
 
+    it('show the all-time ladder when nobody ranked played this month, leading to it', async () => {
+        const allTime: LeaderboardEntry[] = [`apex`, `summit`].map((name, index) => ({
+            rank: index + 1,
+            name,
+            kind: `bot`,
+            rating: 2000 - 100 * index,
+            games: 60,
+            lastPlayedAt: `2026-08-01T08:00:00Z`,
+            ownerName: `owner`,
+            online: false,
+        }));
+        serve({ bots: [listing(`apex`, 2000)], ladder: [], allTime, finished: [result(0)] });
+        render(<HomeScreen />);
+        const block = (await screen.findByRole(`heading`, { name: `Ladder` })).closest(`section`);
+        if (block === null) throw new Error(`no ladder block`);
+        expect(within(block).getByText(`All time; no ranked player played in the last 30 days.`)).toBeTruthy();
+        expect(within(block).getByRole(`link`, { name: `Full ladder` }).getAttribute(`href`)).toBe(`/ladder?active=all`);
+        expect(block.querySelectorAll(`.rung`)).toHaveLength(2);
+        expect(screen.queryByRole(`heading`, { name: `Settling ratings` })).toBe(null);
+    });
+
     it('with a few players lists the bots by rating while no rating has settled, and offers the ready ones', async () => {
         serve({ bots: [listing(`pebble`, 1400), listing(`hextide`, 1600), listing(`lantern`, 1500, false)], finished: [result(0)] });
         render(<HomeScreen />);
@@ -115,7 +138,16 @@ describe('HomeScreen', () => {
 
     it('when busy features the best game and lists the rest, the ladder, and eight results without rating moves', async () => {
         const games = [live(`a`, bot(`low`, 1200), bot(`lower`, 1100)), live(`b`, bot(`apex`, 2000), bot(`summit`, 1900)), live(`c`, bot(`mid`, 1500), bot(`middle`, 1400))];
-        const ladder: LeaderboardEntry[] = [`apex`, `summit`, `mid`, `middle`, `low`].map((name, index) => ({ rank: index + 1, name, kind: `bot`, rating: 2000 - 100 * index }));
+        const ladder: LeaderboardEntry[] = [`apex`, `summit`, `mid`, `middle`, `low`].map((name, index) => ({
+            rank: index + 1,
+            name,
+            kind: `bot`,
+            rating: 2000 - 100 * index,
+            games: 60,
+            lastPlayedAt: `2026-10-01T08:00:00Z`,
+            ownerName: `owner`,
+            online: true,
+        }));
         serve({ live: games, bots: [listing(`apex`, 2000)], ladder, finished: Array.from({ length: 12 }, (_, index) => result(index)) });
         render(<HomeScreen />);
         expect((await screen.findByRole(`link`, { name: `Watch apex vs summit` })).getAttribute(`href`)).toBe(`/game/b`);
@@ -124,7 +156,8 @@ describe('HomeScreen', () => {
         });
         const recent = screen.getByRole(`heading`, { name: `Recent results` }).closest(`section`);
         if (recent === null) throw new Error(`no results block`);
-        const rows = within(recent).getAllByRole(`link`);
+        expect(within(recent).getByRole(`link`, { name: `All games` }).getAttribute(`href`)).toBe(`/games`);
+        const rows = within(recent).getAllByRole(`listitem`).map((item) => within(item).getByRole(`link`));
         expect(rows.map((row) => row.getAttribute(`href`))).toEqual(Array.from({ length: 8 }, (_, index) => `/game/g-${String(index)}`));
         // A result names who won and how, never a rating or its move.
         expect(rows.every((row) => !/\d{3,}|[+-]\d/u.test(row.textContent))).toBe(true);

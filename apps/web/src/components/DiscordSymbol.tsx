@@ -1,9 +1,9 @@
 /**
  * Discord's symbol, the path verbatim from the white symbol in Discord's
  * branding assets.
- * Discord's brand guidelines allow the symbol only in white, black, or
- * blurple and forbid altering, recoloring, or distorting it, so the path,
- * the view box, and the white fill never change.
+ * Discord's brand guidelines allow the symbol in blurple, black, or white
+ * and forbid editing, distorting, or reconfiguring it, so the path and
+ * the view box never change and each place picks one of those colors.
  */
 export function DiscordSymbol() {
     return (

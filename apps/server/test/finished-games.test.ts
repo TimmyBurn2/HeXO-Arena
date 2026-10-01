@@ -97,12 +97,40 @@ describe('GET /api/games/finished', () => {
         expect(third.games.map((game) => game.gameId)).toEqual(newest.slice(40));
     });
 
+    it('leads back from any page to the one before, a linked page included', async () => {
+        for (let n = 0; n < 85; n++) finish(n % 2 === 0 ? bots(`alpha`, `beta`, `x`) : human(`ann`, `alpha`, `o`), `x`);
+        for (const filter of [``, `player=alpha&`]) {
+            const read: FinishedGamesPage[] = [await page(`?${filter}`)];
+            for (let next = read.at(-1)?.next ?? null; next !== null; next = read.at(-1)?.next ?? null) read.push(await page(`?${filter}cursor=${next}`));
+            expect(read).toHaveLength(5);
+            expect(read.slice(0, 2).map((answer) => answer.previous)).toEqual([null, null]);
+            for (const [at, answer] of read.entries()) {
+                if (at < 2) continue;
+                const back = await page(`?${filter}cursor=${answer.previous ?? ``}`);
+                expect(back.page).toBe(at);
+                expect(back.games.map((game) => game.gameId)).toEqual(read[at - 1]?.games.map((game) => game.gameId));
+            }
+        }
+    });
+
     it('stops at ten pages for one set of filters', async () => {
         for (let n = 0; n < 205; n++) finish(bots(`alpha`, `beta`, `x`), `o`);
         const read: FinishedGamesPage[] = [await page()];
         for (let next = read.at(-1)?.next ?? null; next !== null; next = read.at(-1)?.next ?? null) read.push(await page(`?cursor=${next}`));
         expect(read.map((answer) => answer.page)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
         expect(read.flatMap((answer) => answer.games)).toHaveLength(200);
+        expect(read.every((answer) => answer.record === undefined)).toBe(true);
+    });
+
+    it('counts the record of the player named over every game past the cap, on every page', async () => {
+        for (let n = 0; n < 205; n++) finish(bots(`alpha`, `beta`, n % 5 === 0 ? `x` : `o`), n % 3 === 0 ? null : `x`, n % 3 === 0 ? `aborted` : `six-in-a-row`);
+        const first = await page(`?player=beta`);
+        const tenth = await page(`?player=beta&cursor=10.20`);
+        // alpha sits x in 41 games, so beta sits x in the other 164, winning those it does not lose.
+        const record = { games: 205, won: 109, lost: 27, undecided: 69, asX: { games: 164, won: 109, lost: 0 }, asO: { games: 41, won: 0, lost: 27 } };
+        expect(first.record).toEqual(record);
+        expect(tenth.page).toBe(10);
+        expect(tenth.record).toEqual(record);
     });
 
     it('says who sat where at the rating each stood at before, and how the game went', async () => {
@@ -202,6 +230,20 @@ describe('GET /api/games/finished', () => {
             expect(await read(search)).toMatchObject({ status: 400, body: { code: `bad_request` } });
         });
 
+        it.each([
+            [`?player=alpha`, { games: 4, won: 1, lost: 2, undecided: 1, asX: { games: 1, won: 0, lost: 0 }, asO: { games: 3, won: 1, lost: 2 } }],
+            [`?player=alpha&vs=gamma`, { games: 1, won: 0, lost: 1, undecided: 0, asX: { games: 0, won: 0, lost: 0 }, asO: { games: 1, won: 0, lost: 1 } }],
+            [`?player=alpha&result=won`, { games: 1, won: 1, lost: 0, undecided: 0, asX: { games: 0, won: 0, lost: 0 }, asO: { games: 1, won: 1, lost: 0 } }],
+            [`?player=ann&vs=bob`, { games: 0, won: 0, lost: 0, undecided: 0, asX: { games: 0, won: 0, lost: 0 }, asO: { games: 0, won: 0, lost: 0 } }],
+            [`?player=alpha&before=2026-01-01`, { games: 0, won: 0, lost: 0, undecided: 0, asX: { games: 0, won: 0, lost: 0 }, asO: { games: 0, won: 0, lost: 0 } }],
+        ])('counts the record for %s', async (search, record) => {
+            expect((await page(search)).record).toEqual(record);
+        });
+
+        it('counts no record when no player is named', async () => {
+            expect(await page(`?kind=bot-bot`)).not.toHaveProperty(`record`);
+        });
+
         it.each([[`?player=nobody`], [`?player=ann&vs=nobody`], [`?player=not%20a%20name`]])('answers %s with not_found', async (search) => {
             expect(await read(search)).toMatchObject({ status: 404, body: { code: `not_found` } });
         });
@@ -229,6 +271,7 @@ describe('GET /api/games/finished', () => {
     it.each([
         [{}, [`games_finish_seq_idx`]],
         [{ cursor: `2.40` }, [`games_finish_seq_idx`]],
+        [{ cursor: `5.40`, player: `alpha` }, [`games_bot_finish_idx`, `games_challenger_finish_idx`, `games_dest_finish_idx`]],
         [{ player: `ann` }, [`games_user_finish_idx`]],
         [{ player: `alpha` }, [`games_bot_finish_idx`, `games_challenger_finish_idx`, `games_dest_finish_idx`]],
         [{ player: `alpha`, vs: `beta` }, [`games_dest_finish_idx`]],
@@ -239,7 +282,7 @@ describe('GET /api/games/finished', () => {
         [{ clock: `match` }, [`games_clock_finish_idx`]],
         [{ opening: `5` }, [`games_opening_finish_idx`]],
         [{ before: `2026-10-01` }, [`games_finished_at_idx`, `games_finish_seq_idx`]],
-    ] as const)('reads %j through its index, sorting no more than a page per seat', (filters, indexes) => {
+    ] as const)('reads %j through its index, sorting no more than a page per seat and nothing for the record', (filters, indexes) => {
         const plan = explainFinishedGames(query, filters);
         expect(plan.filter((line) => /(?:SCAN|SEARCH) games\b/u.test(line) && !line.includes(`USING`))).toEqual([]);
         // The seats' arms merge in finish order: each sorts the page or less its index read.

@@ -1,4 +1,4 @@
-import { unlimitedWallCapMs } from './games';
+import { unlimitedWallCapMs } from './limits';
 import { gameTurnCap } from './limits';
 import type { FinishReason, Side, TimeControl } from './stream';
 
@@ -161,6 +161,9 @@ export function ladderMeta(roster?: Roster): PageMeta {
 /** The bot list's meta. */
 export const botsMeta: PageMeta = { title: pageTitle(`Bots`), description: `Every bot on ${siteName}, online or not` };
 
+/** The finished games, newest first, with their filters. */
+export const gamesMeta: PageMeta = { title: pageTitle(`Games`), description: `Every finished game on ${siteName}, newest first, by player, result, and clock` };
+
 /** Every game in progress, as boards. */
 export const liveGamesMeta: PageMeta = { title: pageTitle(`Live games`), description: `Every game in progress on ${siteName}, bots and humans alike` };
 
@@ -182,7 +185,7 @@ export function playMeta(bot?: string): PageMeta {
 export const welcomeMeta: PageMeta = { title: pageTitle(`Create your account`), description: `Choose the public name for your ${siteName} account` };
 
 /** What the site builds on. */
-export const creditsMeta: PageMeta = { title: pageTitle(`Credits`), description: `The game, themes, font, and projects ${siteName} builds on` };
+export const creditsMeta: PageMeta = { title: pageTitle(`Credits`), description: `The game, its community, and the themes, font, and projects ${siteName} builds on` };
 
 /** A page that does not exist, a hidden bot, or a game that is gone. */
 export const notFoundMeta: PageMeta = { title: pageTitle(`Not found`), description: `That page does not exist` };

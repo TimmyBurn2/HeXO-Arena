@@ -1,20 +1,49 @@
 @layer screens {
     .ladder-head {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: var(--space-4);
-        flex-wrap: wrap;
-        margin-bottom: var(--space-2);
+        margin-bottom: var(--space-4);
     }
 
     .ladder-head .screen-title {
+        margin: 0 0 var(--space-2);
+    }
+
+    .ladder-head .note {
         margin: 0;
+        max-width: var(--measure);
+    }
+
+    .ladder-filters {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: flex-end;
+        gap: var(--space-3) var(--space-4);
+        margin-bottom: var(--space-4);
+    }
+
+    .ladder-field {
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-1);
+        min-width: 0;
+        max-width: 100%;
+    }
+
+    .ladder-field label {
+        color: var(--c-text-dim);
+        font-size: var(--text-sm);
+    }
+
+    .ladder-find {
+        margin-left: auto;
+    }
+
+    .ladder-find input {
+        width: var(--games-name-w);
     }
 
     .pulse {
         color: var(--c-text-dim);
-        margin: 0 0 var(--space-5);
+        margin: 0 0 var(--space-4);
     }
 
     .pulse strong {
@@ -27,6 +56,19 @@
         margin-right: var(--space-1);
     }
 
+    .ladder-you {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: var(--space-2) var(--space-3);
+        margin: 0;
+        font-weight: var(--weight-strong);
+    }
+
+    .ladder-you + .section-title {
+        margin-top: var(--space-5);
+    }
+
     .rank-col {
         width: var(--rung-rank-w);
     }
@@ -37,9 +79,34 @@
         text-align: left;
     }
 
-    /* your own row carries the accent, once, so you find yourself */
+    .ladder-owner {
+        color: var(--c-text-dim);
+    }
+
+    .ladder-when {
+        color: var(--c-text-dim);
+        white-space: nowrap;
+    }
+
+    /* Your own row carries the accent once, with the brass edge, so you find yourself. */
     tr.you td {
         background: var(--c-accent-bg);
+    }
+
+    /* The tint leaves the dim gray too little contrast in some themes. */
+    tr.you td,
+    tr.you .ladder-owner {
+        color: var(--c-text);
+    }
+
+    tr.you td:first-child {
+        box-shadow:
+            inset var(--focus-w) 0 0 var(--c-accent),
+            inset 0 var(--border-w) 0 var(--c-border);
+    }
+
+    tr.found td {
+        background: var(--c-bg-active);
     }
 
     .you-tag {
@@ -48,9 +115,55 @@
         font-weight: var(--weight-strong);
     }
 
-    /* The empty and error cards sit where the pulse would. */
-    .ladder-head + .empty,
-    .ladder-head + .ladder-skeleton {
+    /* The skeleton podium keeps its plates' and boards' room, blank. */
+    .podium-skeleton {
+        height: auto;
+        background: var(--c-bg-active);
+    }
+
+    .podium-skeleton .podium-plates,
+    .podium-skeleton .podium-board {
+        visibility: hidden;
+    }
+
+    .pulse-skeleton {
+        display: inline-block;
+        width: min(var(--skeleton-line-w), 100%);
+        height: 1lh;
+        vertical-align: top;
+    }
+
+    .you-skeleton {
+        width: min(var(--skeleton-short-w), 100%);
+        height: var(--control-sm);
+    }
+
+    /* The empty and error cards sit where the podium would. */
+    .ladder-filters + .empty {
         margin-top: var(--space-4);
+    }
+
+    /* A phone keeps the rank, the player, and the rating; the find field
+       takes the row's width. */
+    @media (max-width: 40rem) {
+        .ladder-find {
+            flex-basis: 100%;
+            margin-left: 0;
+        }
+
+        .ladder-find input {
+            width: 100%;
+        }
+
+        .ladder-owner,
+        .ladder-games,
+        .ladder-when {
+            display: none;
+        }
+
+        /* The counts line runs to two lines at this width. */
+        .pulse-skeleton {
+            height: 2lh;
+        }
     }
 }

@@ -28,7 +28,7 @@
     .discord-face {
         display: inline-flex;
         align-items: center;
-        gap: var(--space-2);
+        gap: var(--discord-symbol-space);
         height: var(--control-md);
         padding: 0 var(--space-4);
         background: var(--c-discord);
@@ -41,7 +41,8 @@
     }
 
     .discord-symbol {
-        width: var(--discord-symbol-w);
+        height: var(--discord-symbol-h);
+        width: auto;
         flex: none;
         fill: var(--c-on-discord);
     }

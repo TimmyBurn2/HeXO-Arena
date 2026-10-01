@@ -4,17 +4,27 @@ import { legalDetailsSchema, legalPageMeta, legalPagePath, legalPages } from '..
 const details = {
     operator: {
         name: `Ada Beispiel`,
-        addressLines: [`Musterweg 7`, `12345 Beispielstadt`, `Germany`],
+        street: `Musterweg 7`,
+        postcodeAndCity: `12345 Beispielstadt`,
+        country: `Germany`,
         email: `contact@arena.example`,
         discord: `ada_b`,
     },
-    host: { name: `Example Hosting GmbH`, addressLines: [`Serverstrasse 1`, `54321 Rechenburg`, `Germany`], serverLocation: `Rechenburg, Germany` },
+    host: {
+        name: `Example Hosting GmbH`,
+        street: `Serverstrasse 1`,
+        postcodeAndCity: `54321 Rechenburg`,
+        country: `Germany`,
+        serverLocation: `Rechenburg, Germany`,
+    },
     supervisoryAuthority: {
         name: `Example State Data Protection Authority`,
-        addressLines: [`Aufsichtsplatz 2`, `11111 Landeshausen`, `Germany`],
+        street: `Aufsichtsplatz 2`,
+        postcodeAndCity: `11111 Landeshausen`,
+        country: `Germany`,
         url: `https://authority.example/`,
     },
-    mailProvider: { name: `Example Mail AG`, addressLines: [`Postfach 3`, `22222 Briefstadt`, `Germany`] },
+    mailProvider: { name: `Example Mail AG`, street: `Postfach 3`, postcodeAndCity: `22222 Briefstadt`, country: `Germany` },
 };
 
 describe('legal details', () => {
@@ -37,8 +47,9 @@ describe('legal details', () => {
     it('refuse empty names and addresses, an address without an at sign, and a plain-http authority link', () => {
         const bad = [
             { ...details, operator: { ...details.operator, name: ` ` } },
-            { ...details, operator: { ...details.operator, addressLines: [] } },
-            { ...details, host: { ...details.host, addressLines: [``] } },
+            { ...details, operator: { ...details.operator, street: `` } },
+            { ...details, host: { ...details.host, postcodeAndCity: ` ` } },
+            { ...details, supervisoryAuthority: { ...details.supervisoryAuthority, country: undefined } },
             { ...details, operator: { ...details.operator, email: `contact.arena.example` } },
             { ...details, supervisoryAuthority: { ...details.supervisoryAuthority, url: `http://authority.example/` } },
             { ...details, supervisoryAuthority: undefined },

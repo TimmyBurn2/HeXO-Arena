@@ -14,7 +14,7 @@ function stubJson(body: unknown, status = 200): void {
     );
 }
 
-const board = [{ rank: 1, name: `sealbot`, kind: `bot`, rating: 1712 }];
+const board = [{ rank: 1, name: `sealbot`, kind: `bot`, rating: 1712, games: 214, lastPlayedAt: `2026-10-01T08:00:00Z`, ownerName: `tom`, online: true }];
 
 afterEach(() => {
     vi.unstubAllGlobals();
@@ -25,7 +25,13 @@ describe('fetchLeaderboard', () => {
         stubJson(board);
         const entries = await fetchLeaderboard(`bots`);
         expect(entries).toEqual(board);
-        expect(calls[0]).toBe(`/api/leaderboard?kind=bots`);
+        expect(calls[0]).toBe(`/api/leaderboard?kind=bots&active=30d`);
+    });
+
+    it('ask for every ranked player when all time is asked for', async () => {
+        stubJson(board);
+        await fetchLeaderboard(`all`, `all`);
+        expect(calls.at(-1)).toBe(`/api/leaderboard?kind=all&active=all`);
     });
 
     it('reject a payload off the contract', async () => {

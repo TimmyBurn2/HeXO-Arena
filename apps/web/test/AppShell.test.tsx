@@ -68,7 +68,7 @@ describe('AppShell', () => {
         meStore.reset();
         meStore.start();
         render(<AppShell />);
-        for (const path of [`/`, `/ladder`, `/games/live`, `/bots`, `/bots/sealbot`, `/connect`, `/profile`, `/nowhere`]) {
+        for (const path of [`/`, `/ladder`, `/games`, `/games/live`, `/bots`, `/bots/sealbot`, `/connect`, `/profile`, `/nowhere`]) {
             navigate(path);
             await waitFor(() => {
                 expect(topbar().querySelector(`.nav-right a.discord-button`)).toBeTruthy();
@@ -120,7 +120,12 @@ describe('AppShell', () => {
         await waitFor(() => {
             expect(topLink(`Games`).getAttribute(`aria-current`)).toBe(`page`);
         });
-        expect(topLink(`Games`).getAttribute(`href`)).toBe(`/games/live`);
+        expect(topLink(`Games`).getAttribute(`href`)).toBe(`/games`);
+        expect(topbar().querySelectorAll(`[aria-current="page"]`)).toHaveLength(1);
+        navigate(`/games?player=hextide`);
+        await waitFor(() => {
+            expect(topLink(`Games`).getAttribute(`aria-current`)).toBe(`page`);
+        });
         expect(topbar().querySelectorAll(`[aria-current="page"]`)).toHaveLength(1);
     });
 

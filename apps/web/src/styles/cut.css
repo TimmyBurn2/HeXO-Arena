@@ -24,7 +24,10 @@
     kbd,
     .clock,
     .theme-tile,
-    input[type='text'] {
+    .chip,
+    input[type='text'],
+    input[type='date'],
+    select {
         clip-path: var(--cut-sm-path);
     }
 
@@ -46,11 +49,17 @@
     .monogram,
     .identity-monogram,
     .sigil-plate,
-    .from-discord-plate,
     .pip,
     .steps .step-n,
-    .build-step-n {
+    .build-step-n,
+    .podium-rank {
         clip-path: var(--hex-path);
+    }
+
+    /* Discord's brand kit shows its symbol only in rectangular or circular
+       containers, so the plate around it takes a control's cut, not a cell. */
+    .from-discord-plate {
+        clip-path: var(--cut-sm-path);
     }
 
     /* The hexagon clips the checkbox's own ring, so its label shows focus. */
@@ -61,6 +70,9 @@
 
     .rung,
     .rung-skeleton,
+    .games-h2h,
+    .podium,
+    .podium-plate,
     .live-game,
     .live-card,
     .play-card,
@@ -82,6 +94,7 @@
     .play-ready-bot,
     .your-game,
     .recent-game,
+    .game-row,
     .featured-chip,
     .stepper button,
     .opening-preview {
@@ -162,9 +175,13 @@
     .play-ready-bot:focus-visible,
     .your-game:focus-visible,
     .recent-game:focus-visible,
+    .game-row:focus-visible,
+    .chip:focus-visible,
     .featured-link:focus-visible,
     .skip:focus-visible,
     input[type='text']:focus-visible,
+    input[type='date']:focus-visible,
+    select:focus-visible,
     .opt input:focus-visible + label {
         outline: var(--focus-w) solid var(--c-focus);
         outline-offset: calc(-1 * var(--focus-w));

@@ -74,16 +74,17 @@ export function LiveNow({ games }: { games: readonly LiveView[] }) {
 }
 
 /**
- * The top of the ladder as rungs and a few rows, or, while no rating has
- * settled, the bots by rating with their ratings still marked provisional.
+ * The top of the ladder as rungs and a few rows, the all-time ladder when
+ * nobody ranked played this month, or, while no rating has settled, the
+ * bots by rating with their ratings still marked provisional.
  */
-export function LadderBlock({ ladder, roster, failed, retry }: {
+export function LadderBlock({ ladder, allTime, roster, failed, retry }: {
     ladder: readonly LeaderboardEntry[];
+    allTime: boolean;
     roster: readonly BotListing[] | null;
     failed: boolean;
     retry: () => void;
 }) {
-    const owners = new Map((roster ?? []).map((bot) => [bot.name, bot.ownerName]));
     if (failed) {
         return (
             <section className="home-block" aria-labelledby="home-ladder-title">
@@ -120,8 +121,9 @@ export function LadderBlock({ ladder, roster, failed, retry }: {
     const rows = ladder.slice(3, 3 + ladderRows);
     return (
         <section className="home-block" aria-labelledby="home-ladder-title">
-            <Heading id="home-ladder-title" title={text.home.ladder} link={{ to: `/ladder`, label: text.home.fullLadder }} />
-            <Rungs entries={ladder.slice(0, 3)} owners={owners} />
+            <Heading id="home-ladder-title" title={text.home.ladder} link={{ to: allTime ? `/ladder?active=all` : `/ladder`, label: text.home.fullLadder }} />
+            {allTime ? <p className="note">{text.home.allTime}</p> : null}
+            <Rungs entries={ladder.slice(0, 3)} />
             {rows.length === 0 ? null : (
                 <ol className="home-rows">
                     {rows.map((entry) => (
@@ -153,7 +155,7 @@ export function RecentResults({ games, failed, now, retry }: { games: readonly F
     if (games.length === 0) return null;
     return (
         <section className="home-block" aria-labelledby="recent-title">
-            <Heading id="recent-title" title={text.home.recent} />
+            <Heading id="recent-title" title={text.home.recent} link={{ to: `/games`, label: text.home.allGames }} />
             <ul className="recent-list">
                 {games.slice(0, recentCount).map((game) => (
                     <li key={game.gameId}>
@@ -165,7 +167,7 @@ export function RecentResults({ games, failed, now, retry }: { games: readonly F
                             </span>
                             <span className="recent-meta">
                                 <span>{resultSentence(game, { x: game.players.x.name, o: game.players.o.name })}</span>
-                                <span>{text.home.finishedAgo(Math.max(0, Math.floor((now - Date.parse(game.finishedAt)) / 1000)))}</span>
+                                <span>{text.time.ago(Math.max(0, Math.floor((now - Date.parse(game.finishedAt)) / 1000)))}</span>
                             </span>
                         </Link>
                     </li>

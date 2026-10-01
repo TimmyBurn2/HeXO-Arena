@@ -10,9 +10,9 @@ import { createTestApp } from './helpers';
 const examplePath = new URL(`../legal-details.example.json`, import.meta.url);
 
 const invented: LegalDetails = {
-    operator: { name: `Ada Beispiel`, addressLines: [`Musterweg 7`, `12345 Beispielstadt`, `Germany`], email: `contact@arena.example` },
-    host: { name: `Example Hosting GmbH`, addressLines: [`Serverstrasse 1`, `54321 Rechenburg`, `Germany`], serverLocation: `Rechenburg, Germany` },
-    supervisoryAuthority: { name: `Example Authority`, addressLines: [`Aufsichtsplatz 2`, `11111 Landeshausen`], url: `https://authority.example/` },
+    operator: { name: `Ada Beispiel`, street: `Musterweg 7`, postcodeAndCity: `12345 Beispielstadt`, country: `Germany`, email: `contact@arena.example` },
+    host: { name: `Example Hosting GmbH`, street: `Serverstrasse 1`, postcodeAndCity: `54321 Rechenburg`, country: `Germany`, serverLocation: `Rechenburg, Germany` },
+    supervisoryAuthority: { name: `Example Authority`, street: `Aufsichtsplatz 2`, postcodeAndCity: `11111 Landeshausen`, country: `Germany`, url: `https://authority.example/` },
 };
 
 describe('the committed legal details example', () => {
@@ -74,7 +74,7 @@ describe('readLegalDetails', () => {
     });
 
     it('refuses in production any value that still holds a placeholder, naming where without quoting it', () => {
-        expect(() => readLegalDetails(examplePath.pathname, true)).toThrow(/placeholders at operator\.name, operator\.addressLines\[0\]/);
+        expect(() => readLegalDetails(examplePath.pathname, true)).toThrow(/placeholders at operator\.name, operator\.street, operator\.postcodeAndCity, operator\.country, operator\.email/);
         expect(() => readLegalDetails(file(JSON.stringify({ ...invented, operator: { ...invented.operator, name: `Ada Beispiel>` } })), true)).toThrow(
             /placeholders at operator\.name$/,
         );

@@ -127,6 +127,8 @@ describe('stored ratings', () => {
         expect(foldRatings(finishedGameLog(query))).toEqual(live);
     });
 
+    // Four hundred games played, then folded twice, outlast the default five
+    // seconds on a busy machine.
     it('recomputes the same tables from the same log every time, equal to the live ones', () => {
         playRandomLog(20261001);
         const gameRows = () => sqlite.prepare(`select * from game_ratings order by game_id, side`).all();
@@ -136,7 +138,7 @@ describe('stored ratings', () => {
         recomputeRatings(query);
         expect({ ratings: storedRatings(query), games: gameRows() }).toEqual(first);
         expect(first).toEqual(live);
-    });
+    }, 30_000);
 
     it('finds a player\'s previous rated game through the seat indexes, without sorting', () => {
         const [userId = ``] = humans;

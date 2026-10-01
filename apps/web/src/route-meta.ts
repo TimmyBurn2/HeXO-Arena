@@ -2,6 +2,7 @@ import {
     botsMeta,
     connectMeta,
     creditsMeta,
+    gamesMeta,
     ladderMeta,
     legalPageMeta,
     liveGamesMeta,
@@ -37,6 +38,8 @@ export function routeMeta(route: Route): PageMeta {
             return botsMeta;
         case `bot`:
             return { title: pageTitle(route.bot), description: siteDescription };
+        case `games`:
+            return gamesMeta;
         case `live-games`:
             return liveGamesMeta;
         case `connect`:

@@ -35,7 +35,7 @@ describe('page meta', () => {
         expect(connectMeta).toEqual({ title: `Build a bot - HeXO Arena`, description: `Sign in, create a bot, and connect it to the ladder` });
         expect(liveGamesMeta).toEqual({ title: `Live games - HeXO Arena`, description: `Every game in progress on HeXO Arena, bots and humans alike` });
         expect(profileMeta).toEqual({ title: `Profile - HeXO Arena`, description: `Your rating and your bots` });
-        expect(creditsMeta).toEqual({ title: `Credits - HeXO Arena`, description: `The game, themes, font, and projects HeXO Arena builds on` });
+        expect(creditsMeta).toEqual({ title: `Credits - HeXO Arena`, description: `The game, its community, and the themes, font, and projects HeXO Arena builds on` });
     });
 
     it('describes the root and the ladder by the roster when it is known, and by the site otherwise', () => {

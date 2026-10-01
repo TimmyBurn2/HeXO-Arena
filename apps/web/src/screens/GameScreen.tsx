@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { clockText, gameMeta, turnsOnBoard, type GameHeadline, type GameSnapshot } from '@hexo-arena/contract';
+import { clockText, gameMeta, turnsOnBoard, type FinishedGamesRecord, type GameHeadline, type GameSnapshot } from '@hexo-arena/contract';
+import { fetchFinishedGames } from '../api/client';
 import { BotBadge, Swatch } from '../components/player';
 import { useWait, WaitText } from '../components/wait';
+import { gamesPathOf } from '../games/filters';
 import { Link } from '../router/Link';
 import { useBorrowFrame } from '../frame';
 import { routeMeta } from '../route-meta';
@@ -11,7 +13,7 @@ import { useDocumentMeta } from '../use-document-meta';
 import { GameBoard, type TurnStatus } from '../game/GameBoard';
 import { FeedLabel, GameDrawer } from '../game/GameDrawer';
 import { clockOf, Pips, SeatChip, TurnChip, YouChip } from '../game/GameHud';
-import { lastTurnOf, turnOf, useReplay } from '../game/replay';
+import { lastTurnOf, turnOf, useReplay, type Replay } from '../game/replay';
 import { Scrubber } from '../game/Scrubber';
 import { useDrawer } from '../game/use-drawer';
 import { selfName, useMe } from '../me';
@@ -88,6 +90,17 @@ function MissingGame() {
 
 const idleStatus: TurnStatus = { placed: 0, note: null, wait: null };
 
+// The camera frames the latest position while the board follows it; a
+// watcher who steps back holds the frame they left, so stones landing
+// meanwhile never move the board under them, and it widens only as they
+// step past it.
+function useHeldFrame<T>(stones: readonly T[], replay: Replay): readonly T[] {
+    const [heldAt, setHeldAt] = useState(stones.length);
+    if (replay.following && heldAt !== stones.length) setHeldAt(stones.length);
+    const length = replay.following ? stones.length : Math.max(heldAt, replay.shown);
+    return length === stones.length ? stones : stones.slice(0, length);
+}
+
 // A result wraps to as many rows as its names need, so under a finished
 // game the game screen measures its chip: one that would come nearer the
 // seat chip than the seat chip sits to the edge stacks above it, and the
@@ -147,6 +160,7 @@ function GameView({ snapshot, send, link }: { snapshot: GameSnapshot; send: Game
     const range = useMemo(() => ({ opening, total }), [opening, total]);
     const replay = useReplay(range, replaying);
     const shownStones = replaying ? stones.slice(0, replay.shown) : stones;
+    const frameStones = useHeldFrame(stones, replay);
     const atEnd = replay.shown >= total;
     const winLine = atEnd ? (winLineOf(snapshot) ?? []) : [];
     // The feed's first line is the whole opening, then one line a turn.
@@ -156,6 +170,7 @@ function GameView({ snapshot, send, link }: { snapshot: GameSnapshot; send: Game
     const openedByHover = useRef(false);
     const finishedShown = useRef(!running);
     const host = useResultReach(!running);
+    const meetings = useMeetings(snapshot);
 
     const meta = gameMeta(headlineOf(snapshot));
     useDocumentMeta(route, meta.title, meta.description);
@@ -164,14 +179,17 @@ function GameView({ snapshot, send, link }: { snapshot: GameSnapshot; send: Game
         setStatus(next);
     }, []);
 
-    // The game's end opens the record once, so the result has its story.
+    // The game's end opens the record once, so the result has its story;
+    // a watcher stepped back is reading an earlier turn, so the record
+    // stays as they left it.
     const show = drawer.show;
+    const following = replay.following;
     useEffect(() => {
         if (!running && !finishedShown.current) {
             finishedShown.current = true;
-            show(`moves`);
+            if (following) show(`moves`);
         }
-    }, [running, show]);
+    }, [running, following, show]);
 
     const toggle = drawer.toggle;
     useEffect(() => {
@@ -278,7 +296,7 @@ function GameView({ snapshot, send, link }: { snapshot: GameSnapshot; send: Game
             <div className="board-host" ref={host}>
                 <GameBoard
                     stones={shownStones}
-                    frameStones={replaying ? stones : undefined}
+                    frameStones={replaying ? frameStones : undefined}
                     position={positionOf(snapshot)}
                     you={you}
                     lastMove={replaying ? (winLine.length === 0 ? lastTurnOf(stones, replay.shown, range) : []) : stones.slice(-2)}
@@ -319,6 +337,11 @@ function GameView({ snapshot, send, link }: { snapshot: GameSnapshot; send: Game
                     feed={feed}
                     current={replaying ? currentLine : feed.length - 1}
                     facts={factsOf(snapshot)}
+                    meetings={meetings === null ? null : (
+                        <Link to={gamesPathOf(meetings.x, meetings.o)}>
+                            {text.games.meetings(meetings.x, meetings.o, meetings.record.won, meetings.record.lost, meetings.record.games)}
+                        </Link>
+                    )}
                     running={running}
                     timed={snapshot.clock !== undefined && snapshot.clock.mode !== `unlimited`}
                     onResign={you === null ? null : send.resign}
@@ -327,6 +350,37 @@ function GameView({ snapshot, send, link }: { snapshot: GameSnapshot; send: Game
             </div>
         </div>
     );
+}
+
+/** Two players' record against each other, as x's. */
+interface Meetings {
+    readonly x: string;
+    readonly o: string;
+    readonly record: FinishedGamesRecord;
+}
+
+// Guest games are never kept, so a guest's seat has no record to read; the
+// record is read again at the finish, which adds this game to it.
+function useMeetings(snapshot: GameSnapshot): Meetings | null {
+    const { x, o } = snapshot.players;
+    const kept = x.kind !== `guest` && o.kind !== `guest`;
+    const finished = snapshot.status === `finished`;
+    const [meetings, setMeetings] = useState<Meetings | null>(null);
+    useEffect(() => {
+        if (!kept) return;
+        let cancelled = false;
+        fetchFinishedGames({ player: x.name, vs: o.name }).then(
+            (page) => {
+                if (!cancelled && page.record !== undefined && page.record.games > 0) setMeetings({ x: x.name, o: o.name, record: page.record });
+            },
+            // The line is extra; a read that fails leaves it out.
+            () => undefined,
+        );
+        return () => {
+            cancelled = true;
+        };
+    }, [kept, x.name, o.name, finished]);
+    return meetings;
 }
 
 function factsOf(snapshot: GameSnapshot): (readonly [string, string])[] {

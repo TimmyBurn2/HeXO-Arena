@@ -8,11 +8,11 @@ import './Rungs.css';
  * data, stepping inward as rank falls.
  * A bot's rung names its owner where the owner is known.
  */
-export function Rungs({ entries, owners }: { entries: readonly LeaderboardEntry[]; owners: ReadonlyMap<string, string | null> }) {
+export function Rungs({ entries }: { entries: readonly LeaderboardEntry[] }) {
     return (
         <section className="rungs" aria-label={text.ladder.top}>
             {entries.map((entry, index) => {
-                const owner = owners.get(entry.name) ?? null;
+                const owner = entry.kind === `bot` ? entry.ownerName : null;
                 // The tier follows position, not rank, so ties never double
                 // or drop the top rung.
                 const rung = (

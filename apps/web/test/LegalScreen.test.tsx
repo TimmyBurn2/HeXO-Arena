@@ -16,10 +16,10 @@ import { LegalScreen } from '../src/screens/LegalScreen';
 import { themeStorageKey } from '../src/theme/themes';
 
 const details: LegalDetails = {
-    operator: { name: `Ada Beispiel`, addressLines: [`Musterweg 7`, `12345 Beispielstadt`, `Germany`], email: `contact@arena.example`, discord: `ada_b` },
-    host: { name: `Example Hosting GmbH`, addressLines: [`Serverstrasse 1`, `54321 Rechenburg`], serverLocation: `Rechenburg, Germany` },
-    supervisoryAuthority: { name: `Example Authority`, addressLines: [`Aufsichtsplatz 2`, `11111 Landeshausen`], url: `https://authority.example/` },
-    mailProvider: { name: `Example Mail AG`, addressLines: [`Postfach 3`, `22222 Briefstadt`] },
+    operator: { name: `Ada Beispiel`, street: `Musterweg 7`, postcodeAndCity: `12345 Beispielstadt`, country: `Germany`, email: `contact@arena.example`, discord: `ada_b` },
+    host: { name: `Example Hosting GmbH`, street: `Serverstrasse 1`, postcodeAndCity: `54321 Rechenburg`, country: `Germany`, serverLocation: `Rechenburg, Germany` },
+    supervisoryAuthority: { name: `Example Authority`, street: `Aufsichtsplatz 2`, postcodeAndCity: `11111 Landeshausen`, country: `Germany`, url: `https://authority.example/` },
+    mailProvider: { name: `Example Mail AG`, street: `Postfach 3`, postcodeAndCity: `22222 Briefstadt`, country: `Germany` },
 };
 
 function serve(answer: () => Response): void {
@@ -49,7 +49,7 @@ describe('LegalScreen', () => {
         render(<LegalScreen page="imprint" />);
         expect(screen.getByRole(`heading`, { level: 1, name: `Impressum / Legal notice` })).toBeTruthy();
         const address = await screen.findByText(`Ada Beispiel`);
-        expect(screen.getByText(`This website is provided, under sec. 18(1) Medienstaatsvertrag and sec. 5 DDG, by:`)).toBeTruthy();
+        expect(screen.getByText(`Under sec. 18(1) Medienstaatsvertrag and sec. 5 DDG:`)).toBeTruthy();
         expect(address.closest(`address`)?.textContent).toBe(`Ada BeispielMusterweg 712345 BeispielstadtGermany`);
         const mail = screen.getAllByRole(`link`, { name: `contact@arena.example` })[0];
         expect(mail?.getAttribute(`href`)).toBe(`mailto:contact@arena.example`);
@@ -57,6 +57,27 @@ describe('LegalScreen', () => {
         expect(screen.getByRole(`link`, { name: `Reporting` }).getAttribute(`href`)).toBe(`/legal/terms#reporting`);
         // A short page needs no list of its sections.
         expect(screen.queryByRole(`navigation`)).toBe(null);
+    });
+
+    it('say what the ladder, the game search, and the bot list make public, and what challenges and bot deletion keep', async () => {
+        serve(ok(details));
+        render(<LegalScreen page="privacy" />);
+        await screen.findByRole(`navigation`, { name: `On this page` });
+        expect(section(`Your account and public name`).textContent).toContain(
+            `anyone can search the games by it, which shows your results and your record against each opponent.`,
+        );
+        const games = section(`Games and ratings`).textContent;
+        expect(games).toContain(`each player's rating before and after. Games, ratings, and the rating history are public`);
+        expect(games).toContain(`each player's rating, rated games played, and when the last one finished`);
+        const bots = section(`Bots`);
+        expect(bots.textContent).toContain(`whether the bot is connected, whether it is open to challenges, and how many games it is playing`);
+        expect(bots.textContent).toContain(`These records are not public, count toward the daily challenge limits, and have no set end yet.`);
+        expect(bots.textContent).toContain(`for the challenge records, Art. 6(1)(f) GDPR, legitimate interest: enforcing fair challenge limits.`);
+        expect(within(bots).getByRole(`link`, { name: `Deleting your account` }).getAttribute(`href`)).toBe(`#deletion`);
+        // Every kind of data says how long it is kept.
+        expect(bots.textContent).toContain(`A bot is kept until you delete it.`);
+        expect(games).toContain(`Games and ratings are kept as the public record.`);
+        expect(section(`Your account and public name`).textContent).toContain(`It is kept until it is deleted.`);
     });
 
     it('leave out Discord and the mail provider when the deployment names none', async () => {
@@ -81,13 +102,14 @@ describe('LegalScreen', () => {
         expect(entries.map((entry) => entry.getAttribute(`href`))).toEqual(sections.map((section) => `#${section.id}`));
         expect(entries.map((entry) => entry.textContent)).toEqual(sections.map((section) => section.querySelector(`h2`)?.textContent));
         const text = document.body.textContent;
-        expect(text).toContain(`Example Hosting GmbH, Serverstrasse 1, 54321 Rechenburg, hosts the server under a data processing agreement (Art. 28 GDPR); the server stands in Rechenburg, Germany.`);
-        expect(text).toContain(`Example Mail AG, Postfach 3, 22222 Briefstadt, hosts the contact mailbox.`);
-        expect(text).toContain(`Example Authority, Aufsichtsplatz 2, 11111 Landeshausen, https://authority.example/.`);
-        expect(text).toContain(`You must be at least 16 to create an account or play as a guest. If you are under 18, you need permission from a parent or guardian.`);
-        const summary = section(`In short`);
-        expect(within(summary).getByRole(`link`, { name: `Deleting your account` }).getAttribute(`href`)).toBe(`#deletion`);
+        expect(text).toContain(`Example Hosting GmbH, Serverstrasse 1, 54321 Rechenburg, Germany, hosts the server under a data processing agreement (Art. 28 GDPR); the server stands in Rechenburg, Germany.`);
+        expect(text).toContain(`Example Mail AG, Postfach 3, 22222 Briefstadt, Germany, hosts the contact mailbox.`);
+        expect(text).toContain(`Example Authority, Aufsichtsplatz 2, 11111 Landeshausen, Germany, https://authority.example/.`);
         expect(screen.getByRole(`link`, { name: `https://authority.example/` }).getAttribute(`href`)).toBe(`https://authority.example/`);
+        // Every processing on a legitimate interest names that interest.
+        for (const block of document.querySelectorAll(`.legal-section p`)) {
+            if (block.textContent.includes(`Art. 6(1)(f)`) && !block.closest(`#objection`)) expect(block.textContent).toContain(`legitimate interest:`);
+        }
         expect(section(`Right to object`).classList.contains(`card`)).toBe(true);
         // Plain sections: the page's landmarks stay the site's own.
         expect(screen.queryAllByRole(`region`)).toHaveLength(0);
@@ -101,7 +123,6 @@ describe('LegalScreen', () => {
         expect(storage).toContain(`The cookie ${sessionCookieName}, set when you sign in`);
         expect(storage).toContain(`It lasts ${String(sessionMaxAgeSeconds / 86_400)} days after sign-in`);
         expect(storage).toContain(`under ${themeStorageKey}, ${boardSettingsStorageKey}, ${drawerPinnedStorageKey}, and ${playStorageKey}:`);
-        expect(section(`Retention at a glance`).textContent).toContain(`Sessions: ${String(sessionMaxAgeSeconds / 86_400)} days.`);
         expect(section(`Playing as a guest`).textContent).toContain(
             `when you end it or sign in with Discord, when the server restarts, or after ${String(guestIdleSeconds / 3_600)} hours without a request while no game runs.`,
         );
@@ -112,10 +133,8 @@ describe('LegalScreen', () => {
         render(<LegalScreen page="privacy" />);
         await screen.findByRole(`heading`, { name: `Visiting the site` });
         expect(section(`Visiting the site`).textContent).toContain(
-            `To stop any one visitor from flooding the site, the server counts requests under a keyed hash of your IP address (for IPv6, of its first half).`,
+            `To limit flooding, the server counts requests under a keyed hash of your IP address (for IPv6, of its first half), held in memory for an hour at most after your last request, or while you watch a game, and never written to disk or to a log; the key is random and replaced every day.`,
         );
-        expect(section(`Visiting the site`).textContent).toContain(`never written to disk or to a log, and the key behind the hash is random and replaced every day.`);
-        expect(section(`Retention at a glance`).textContent).toContain(`Request counters against flooding: in memory, an hour at most.`);
     });
 
     it('state what a sign-in keeps from Discord, for how long, and the first sign-in held until the name is chosen', async () => {
@@ -124,23 +143,19 @@ describe('LegalScreen', () => {
         await screen.findByRole(`heading`, { name: `Signing in with Discord` });
         const minutes = String(signupMaxAgeSeconds / 60);
         const days = String(sessionMaxAgeSeconds / 86_400);
-        expect(section(`In short`).textContent).toContain(
-            `You sign in with Discord. HeXO Arena keeps your Discord user ID and the public name you confirm when you create your account, and your Discord username and display name while you are signed in; it never receives your email address or password.`,
-        );
         const signIn = section(`Signing in with Discord`).textContent;
-        expect(signIn).toContain(`HeXO Arena keeps the user ID, username, and display name; everything else, the avatar included, is discarded at once.`);
         expect(signIn).toContain(
-            `On your first sign-in these are held for up to ${minutes} minutes while you choose your public name, and deleted if you do not create the account. Afterwards your username and display name are kept with each sign-in session and shown only to you, until you sign out or the session ends after ${days} days; each sign-in updates them.`,
+            `HeXO Arena asks Discord only for the identify permission and never receives your email address or password. It keeps your Discord user ID, username, and display name, and discards the rest, such as your avatar and locale.`,
+        );
+        expect(signIn).toContain(
+            `On your first sign-in these are held for up to ${minutes} minutes while you choose your public name, and deleted if you do not create the account. After that, the user ID stays with your account, and your username and display name are kept with each sign-in session, shown only to you, and updated at each sign-in, until you sign out or the session ends after ${days} days.`,
         );
         expect(section(`Your account and public name`).textContent).toContain(
-            `You choose your public name when you create your account; the site suggests one made from your Discord username.`,
+            `You choose your public name when you create your account, starting from your Discord username; it stays fixed when your Discord name changes.`,
         );
         expect(section(`Cookies and browser storage`).textContent).toContain(
-            `The cookie ${signupCookieName}, set when a first sign-in comes back from Discord: a random reference to the unfinished sign-up, first-party and not readable by scripts; it lasts ${minutes} minutes, or until you create the account or cancel.`,
+            `The cookie ${signupCookieName}, set when a first sign-in returns from Discord: a random reference to the unfinished sign-up, first-party and not readable by scripts. It lasts ${minutes} minutes, or until you create the account or cancel.`,
         );
-        const retention = section(`Retention at a glance`).textContent;
-        expect(retention).toContain(`Unfinished sign-ups: ${minutes} minutes.`);
-        expect(retention).toContain(`Your Discord username and display name: with the session, ${days} days at most.`);
     });
 
     it('state deletion by email and the moderation records as they are today', async () => {
@@ -150,14 +165,12 @@ describe('LegalScreen', () => {
         const deletion = section(`Deleting your account`);
         expect(deletion.textContent).toContain(`Write to contact@arena.example and name your account; the operator deletes it within one month.`);
         expect(deletion.textContent).toContain(
-            `Your account, sessions, and bots are deleted, and your name becomes free. Your games, and the games of each bot of yours that has a game with a winner, stay in the public record, because they are part of your opponents' histories and ratings.`,
+            `Your account, sessions, and bots are deleted, and your name becomes free. Your games, and the games of each bot of yours with a game that has a winner, stay in the public record, your name and those bots' names replaced by placeholders such as deleted-12. A bot without a game that has a winner is deleted with its games, yours against it included.`,
         );
-        expect(deletion.textContent).toContain(
-            `In them your name and those bots' names become placeholders such as deleted-12. A bot without a game with a winner is deleted with its games, including any you played against it.`,
-        );
+        expect(deletion.textContent).toContain(`legitimate interest: keeping your opponents' histories and ratings whole.`);
         expect(deletion.textContent).toContain(`Nothing the site shows links a placeholder to you; the operator's record of the deletion keeps your name.`);
         expect(section(`Moderation records`).textContent).toContain(
-            `The records have no set end yet, and a record keeps the affected name even after that account is deleted.`,
+            `The records have no set end yet and keep the name after the account is deleted.`,
         );
     });
 
@@ -180,11 +193,11 @@ describe('LegalScreen', () => {
         expect(headings.indexOf(`Guests`)).toBe(headings.indexOf(`Accounts`) + 1);
         const guests = section(`Guests`);
         expect(guests.textContent).toBe(
-            `GuestsYou can play without an account, as a guest. These terms apply to guests as they do to accounts, the age rule included. Guest games are unrated and are gone when the guest session ends; see Playing as a guest in the Privacy policy. The operator may end a guest session and its games at any time, for example to protect the service.`,
+            `GuestsYou can play as a guest, without an account. These terms, the age rule included, apply to guests too. Guest games are unrated and end with the guest session; see Playing as a guest in the Privacy policy. The operator may end a guest session and its games at any time.`,
         );
         expect(within(guests).getByRole(`link`, { name: `Playing as a guest` }).getAttribute(`href`)).toBe(`/legal/privacy#guests`);
         expect(section(`Moderation`).textContent).toContain(`and ban or delete accounts or end guest sessions when these terms or the law are broken`);
-        expect(section(`Changes`).textContent).toContain(`If you disagree, you can have your account deleted, or stop playing as a guest, before they take effect.`);
+        expect(section(`Changes`).textContent).toContain(`If you disagree, you can have your account deleted, or stop playing as a guest, before then.`);
     });
 
     it('show the error frame with a retry when the details fail, and no text with gaps', async () => {

@@ -16,11 +16,13 @@ describe('parseRoute', () => {
         expect(parseRoute(`/credits`)).toEqual({ name: `credits` });
     });
 
-    it('route the live games under /games, and nothing else there yet', () => {
+    it('route the finished games to /games and the live ones under it, and nothing else there', () => {
+        expect(parseRoute(`/games`)).toEqual({ name: `games` });
+        expect(parseRoute(`/games/`)).toEqual({ name: `games` });
+        expect(routePath({ name: `games` })).toBe(`/games`);
         expect(parseRoute(`/games/live`)).toEqual({ name: `live-games` });
         expect(parseRoute(`/games/live/`)).toEqual({ name: `live-games` });
         expect(routePath({ name: `live-games` })).toBe(`/games/live`);
-        expect(parseRoute(`/games`)).toEqual({ name: `not-found` });
         expect(parseRoute(`/games/finished`)).toEqual({ name: `not-found` });
     });
 

@@ -59,6 +59,15 @@ export function useRoute(): Route {
     return useSyncExternalStore(subscribe, currentRoute, currentRoute);
 }
 
+function currentSearch(): string {
+    return window.location.search;
+}
+
+/** The query string, for a screen whose state lives in its address. */
+export function useSearch(): string {
+    return useSyncExternalStore(subscribe, currentSearch, currentSearch);
+}
+
 function currentPath(): string {
     return window.location.pathname;
 }

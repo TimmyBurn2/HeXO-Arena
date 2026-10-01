@@ -85,7 +85,7 @@ describe('bot api export', () => {
         const limited = String(dig(document, `components`, `responses`, `RateLimited`, `description`));
         expect(limited).toContain(`network address`);
         expect(limited).toContain(`bot`);
-        expect(limited).toContain(`game seat`);
+        expect(limited).toContain(`game token`);
         for (const word of [`user`, `guest`, `account`]) expect(limited).not.toContain(word);
     });
 

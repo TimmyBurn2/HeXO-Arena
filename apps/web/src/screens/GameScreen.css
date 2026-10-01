@@ -172,11 +172,13 @@
         white-space: nowrap;
     }
 
+    /* A drag along the track seeks rather than scrolls the page. */
     .scrub-track {
         display: block;
         height: var(--space-1);
         background: var(--c-border-strong);
         cursor: pointer;
+        touch-action: none;
     }
 
     .scrub-fill {

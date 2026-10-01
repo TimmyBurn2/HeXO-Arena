@@ -70,8 +70,8 @@ test('the contents of a long page stay beside the text as it scrolls on a wide w
     await serve(page, world({ me: null }));
     await page.goto(`/legal/privacy`);
     const contents = page.getByRole(`navigation`, { name: `On this page` });
-    await page.getByRole(`link`, { name: `Changes` }).click();
-    await expect(page.getByRole(`heading`, { level: 2, name: `Changes` })).toBeInViewport();
+    await page.getByRole(`link`, { name: `Do you have to provide data?` }).click();
+    await expect(page.getByRole(`heading`, { level: 2, name: `Do you have to provide data?` })).toBeInViewport();
     await expect(contents).toBeInViewport();
     const text = await page.locator(`.legal-text`).boundingBox();
     const box = await contents.boundingBox();

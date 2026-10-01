@@ -64,14 +64,15 @@ const Ring = memo(function Ring({ className, coord }: { className: string; coord
  * A stone at the origin in three fixed layers, a body with a rim stroke, a
  * shine, and an inset mark; themes reach each through effect slots, so a
  * glare, an outline, or a mark needs no change here.
- * `shine` names the gradients a {@link ShineDefs} in the same svg defines.
+ * `shine` names the gradients a {@link ShineDefs} in the same svg defines;
+ * `flat` turns the stone flat-top, its glare staying where the board's is.
  */
-export function StoneArt({ side, shine }: { side: Side; shine: string }) {
+export function StoneArt({ side, shine, flat = false }: { side: Side; shine: string; flat?: boolean }) {
     return (
         <g className="stone-art">
-            <polygon className={`body b-${side}`} points={stonePoints()} />
-            <polygon className="shine" points={stonePoints()} fill={`url(#${shine}-${side})`} />
-            <polygon className={`stone-mark m-${side}`} points={markPoints()} />
+            <polygon className={`body b-${side}`} points={stonePoints(flat)} />
+            <polygon className="shine" points={stonePoints(flat)} fill={`url(#${shine}-${side})`} />
+            <polygon className={`stone-mark m-${side}`} points={markPoints(flat)} />
         </g>
     );
 }

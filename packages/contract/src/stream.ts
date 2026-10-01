@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { htttxMoveRequestSchema, htttxSideSchema } from './htttx';
 import { provisionalSchema, ratingSchema } from './leaderboard';
-import { gameTurnCap } from './limits';
+import { gameTurnCap, orphanForfeitMs, unlimitedWallCapMs } from './limits';
 
 // One line of the bot event stream, discriminated by `type`; the set of
 // kinds is closed, so an unknown discriminator is a hard parse failure.
@@ -14,7 +14,15 @@ export const finishReasonSchema = z
     .enum([`aborted`, `disconnect`, `surrender`, `timeout`, `terminated`, `six-in-a-row`])
     .meta({
         id: `FinishReason`,
-        description: `How a game ended. A game is terminated when a side plays an illegal move, which loses, or with no winner when it reaches ${String(gameTurnCap)} turns or an unlimited game reaches its wall-time cap.`,
+        description: [
+            `How a game ended.`,
+            `six-in-a-row: the winner completed six in a row.`,
+            `timeout: the loser's clock ran out.`,
+            `surrender: the loser resigned.`,
+            `disconnect: the loser's stream stayed closed for ${String(orphanForfeitMs / 1000)} s.`,
+            `terminated: the loser played an illegal move, or, with no winner, the game reached ${String(gameTurnCap)} turns or an unlimited game ${String(unlimitedWallCapMs / 3_600_000)} hours.`,
+            `aborted: the operator, a restart, or the end of a human player's session stopped the game, with no winner.`,
+        ].join(` `),
     });
 export type FinishReason = z.infer<typeof finishReasonSchema>;
 
@@ -30,7 +38,13 @@ export const timeControlSchema = z
             incrementMs: z.number().int().min(0),
         }),
     ])
-    .meta({ id: `TimeControl`, description: `Durations are in milliseconds.` });
+    .meta({
+        id: `TimeControl`,
+        description: [
+            `turn gives each turn turnTimeMs, and unused time is lost; match gives each side mainTimeMs for the game, adding incrementMs after each of its turns; unlimited has no clock.`,
+            `Each move_request carries the seconds left for that move.`,
+        ].join(` `),
+    });
 export type TimeControl = z.infer<typeof timeControlSchema>;
 
 // A player in a game or challenge, named by the one global namespace shared
@@ -75,9 +89,8 @@ export const openingPliesSchema = z.enum({ one: 1, three: 3, five: 5, seven: 7, 
     description: [
         `Stones the server places before either player acts, the origin at (0, 0) included.`,
         `A ply is one stone; turn 0 is the origin, and turn t >= 1 is plies 2t-1 and 2t.`,
-        `Each later ply lands in order on an empty cell drawn uniformly from those within hex distance ${String(openingRadius)} of the origin, for the player who owns that ply.`,
+        `Each later ply lands on an empty cell drawn uniformly from those within hex distance ${String(openingRadius)} of the origin.`,
         `The whole opening is redrawn while any ${String(openingWindowCells)} consecutive cells on an axis hold ${String(openingThreatStones)} or more stones of one player and none of the other.`,
-        `The draw uses a CSPRNG when the game is created, for a challenge at acceptance.`,
     ].join(` `),
 });
 export type OpeningPlies = z.infer<typeof openingPliesSchema>;
@@ -119,7 +132,11 @@ export const challengeSchema = z
     })
     .meta({
         id: `Challenge`,
-        description: `firstPlayer names who plays turn (openingPlies + 1) / 2, the first turn after the opening. A random firstPlayer is drawn at acceptance.`,
+        description: [
+            `firstPlayer picks who moves first after the opening, on turn (openingPlies + 1) / 2.`,
+            `o plays the odd turns, so after 1, 5, or 9 opening plies the first player is o, and after 3 or 7 it is x.`,
+            `random is drawn at acceptance; gameStart.side gives each bot its side.`,
+        ].join(` `),
     });
 export type Challenge = z.infer<typeof challengeSchema>;
 
@@ -131,9 +148,9 @@ export const sessionHeartbeatMs = 10_000;
 
 export const engineSessionSchema = z
     .object({
-        socketUrl: z.string().meta({ description: `The engine-session websocket, origin-relative.` }),
+        socketUrl: z.string().meta({ description: `A path on the API's origin; dial it as wss://, or ws:// where the API is http://.` }),
         token: z.string().meta({
-            description: `The game token, valid for ${String(sessionTokenTtlMs / 1000)} s; each gameStart line carries a fresh one.`,
+            description: `The game token (hgs_...): it opens this game's engine session and resigns the game until ${String(sessionTokenTtlMs / 1000)} s after this gameStart; reopening the stream replays gameStart with a fresh one.`,
         }),
     })
     .meta({ id: `EngineSession` });
@@ -152,7 +169,7 @@ export const gameStartEventSchema = z
     })
     .meta({
         id: `GameStartEvent`,
-        description: `A game the bot plays has started, or is replayed as the stream opens.`,
+        description: `A game the bot plays has started, or is replayed as the stream opens. A game started by a player on the website arrives with no challenge before it.`,
     });
 export type GameStartEvent = z.infer<typeof gameStartEventSchema>;
 
@@ -164,7 +181,7 @@ export const moveRequestEventSchema = z
     })
     .meta({
         id: `MoveRequestEvent`,
-        description: `Follows a replayed gameStart when it is the bot's turn; live turns arrive on the engine session.`,
+        description: `Follows a replayed gameStart when the bot is to move, for information; it needs no answer, since the engine session sends its own move_request.`,
     });
 export type MoveRequestEvent = z.infer<typeof moveRequestEventSchema>;
 
@@ -173,7 +190,7 @@ export const gameFinishEventSchema = z
         type: z.literal(`gameFinish`),
         gameId: z.string(),
         winner: sideSchema.nullable().meta({
-            description: `Null after an abort, a termination, or a disconnect that left neither side connected.`,
+            description: `Null after aborted, and after terminated at the turn or time cap.`,
         }),
         reason: finishReasonSchema,
     })

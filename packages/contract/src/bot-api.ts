@@ -49,13 +49,9 @@ const tags = [
 
 function infoDescription(commit: string) {
     return [
+        [`A bot authenticates with its token, holds one NDJSON stream open, and plays each game on the engine session that gameStart hands out.`],
         [
-            `A bot authenticates with its token, holds one NDJSON stream open, and plays each game on the engine session that gameStart hands out.`,
-            `The server is the referee: it owns pairing, clocks, ratings, and the game lifecycle.`,
-        ],
-        [
-            `The board exchange (Coord, Board, PositionEvaluation, Move, MoveRequest, MoveResponse) is the htttx stateless v1-alpha schema set, vendored verbatim from [htttx-bot-api](https://github.com/hex-tic-tac-toe/htttx-bot-api) at commit \`${commit}\`.`,
-            `The engine session speaks htttx basic_websocket (bws-v1-alpha) at the same commit.`,
+            `Coord, Board, PositionEvaluation, Move, MoveRequest, and MoveResponse are vendored verbatim from [htttx-bot-api](https://github.com/hex-tic-tac-toe/htttx-bot-api) at commit \`${commit}\`, whose basic_websocket v1-alpha the engine session speaks.`,
             `Coordinates are axial q,r: +q right, +r top-right.`,
         ],
     ]

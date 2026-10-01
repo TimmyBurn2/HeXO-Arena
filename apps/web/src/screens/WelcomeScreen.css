@@ -39,7 +39,8 @@
     }
 
     .from-discord-plate .discord-symbol {
-        width: calc(var(--discord-plate-size) / 2);
+        height: var(--discord-symbol-h);
+        width: auto;
     }
 
     .from-discord-text {

@@ -70,8 +70,11 @@ afterEach(() => {
 describe('LiveGamesScreen', () => {
     it('show every live game as a board with its seats, clock, and whose turn, each a way into its game', async () => {
         render(<LiveGamesScreen />);
-        expect(screen.getByRole(`heading`, { level: 1, name: `Live games` })).toBeTruthy();
+        expect(screen.getByRole(`heading`, { level: 1, name: `Games` })).toBeTruthy();
         const cards = await screen.findAllByRole(`article`);
+        const views = screen.getByRole(`navigation`, { name: `Games` });
+        expect(within(views).getByRole(`link`, { name: `Finished` }).getAttribute(`href`)).toBe(`/games`);
+        expect(within(views).getByRole(`link`, { name: `Live 2` }).getAttribute(`aria-current`)).toBe(`page`);
         expect(cards).toHaveLength(2);
         const [guest, bots] = cards as [HTMLElement, HTMLElement];
         expect(within(guest).getByRole(`img`, { name: `Board, sealbot vs Guest k3f9, Guest k3f9 to move` })).toBeTruthy();

@@ -3,9 +3,12 @@ import {
     botListingSchema,
     devAccountSchema,
     gameSnapshotSchema,
-    leaderboardEntrySchema,
+    leaderboardActiveDays,
+    leaderboardQuerySchema,
+    leaderboardSchema,
     legalDetailsSchema,
     finishedGamesPageSchema,
+    finishedGamesQuerySchema,
     liveGameEntrySchema,
     meSchema,
     signupSchema,
@@ -15,6 +18,7 @@ import {
     type LeaderboardEntry,
     type LegalDetails,
     type FinishedGameEntry,
+    type FinishedGamesPage,
     type LiveGameEntry,
     type Me,
     type Side,
@@ -76,23 +80,28 @@ export const signup: Signup = { discord: { username: `mira.hex`, displayName: `M
 
 // Invented values: no real operator, host, or authority belongs in a fixture.
 export const legalDetails: LegalDetails = {
-    operator: { name: `Ada Beispiel`, addressLines: [`Musterweg 7`, `12345 Beispielstadt`, `Germany`], email: `contact@arena.example`, discord: `ada_b` },
-    host: { name: `Example Hosting GmbH`, addressLines: [`Serverstrasse 1`, `54321 Rechenburg`, `Germany`], serverLocation: `Rechenburg, Germany` },
+    operator: { name: `Ada Beispiel`, street: `Musterweg 7`, postcodeAndCity: `12345 Beispielstadt`, country: `Germany`, email: `contact@arena.example`, discord: `ada_b` },
+    host: { name: `Example Hosting GmbH`, street: `Serverstrasse 1`, postcodeAndCity: `54321 Rechenburg`, country: `Germany`, serverLocation: `Rechenburg, Germany` },
     supervisoryAuthority: {
         name: `Example State Data Protection Authority`,
-        addressLines: [`Aufsichtsplatz 2`, `11111 Landeshausen`, `Germany`],
+        street: `Aufsichtsplatz 2`,
+        postcodeAndCity: `11111 Landeshausen`,
+        country: `Germany`,
         url: `https://authority.example/`,
     },
-    mailProvider: { name: `Example Mail AG`, addressLines: [`Postfach 3`, `22222 Briefstadt`, `Germany`] },
+    mailProvider: { name: `Example Mail AG`, street: `Postfach 3`, postcodeAndCity: `22222 Briefstadt`, country: `Germany` },
 };
 
+const playedAgo = (hours: number) => new Date(Date.now() - hours * 3_600_000).toISOString().replace(/\.\d{3}Z$/u, `Z`);
+
+// The ranked players, the last of them idle past the default 30 days.
 export const leaderboard: LeaderboardEntry[] = [
-    { rank: 1, name: `sealbot`, kind: `bot`, rating: 1712 },
-    { rank: 2, name: `hextide`, kind: `bot`, rating: 1690 },
-    { rank: 3, name: `tom`, kind: `human`, rating: 1503 },
-    { rank: 4, name: `quietlake`, kind: `bot`, rating: 1461 },
-    { rank: 5, name: `ana`, kind: `human`, rating: 1402 },
-    { rank: 6, name: `driftwood`, kind: `bot`, rating: 1388 },
+    { rank: 1, name: `sealbot`, kind: `bot`, rating: 1712, games: 214, lastPlayedAt: playedAgo(0.1), ownerName: `tom`, online: true },
+    { rank: 2, name: `hextide`, kind: `bot`, rating: 1690, games: 188, lastPlayedAt: playedAgo(2), ownerName: `ana`, online: true },
+    { rank: 3, name: `tom`, kind: `human`, rating: 1503, games: 57, lastPlayedAt: playedAgo(30) },
+    { rank: 4, name: `quietlake`, kind: `bot`, rating: 1461, games: 96, lastPlayedAt: playedAgo(80), ownerName: `tom`, online: false },
+    { rank: 5, name: `ana`, kind: `human`, rating: 1402, games: 49, lastPlayedAt: playedAgo(200) },
+    { rank: 6, name: `driftwood`, kind: `bot`, rating: 1388, games: 71, lastPlayedAt: playedAgo(24 * 45), ownerName: `bruno`, online: false },
 ];
 
 export const bots: BotListing[] = [
@@ -446,6 +455,80 @@ export const recentGames: FinishedGameEntry[] = [
     })),
 ];
 
+/**
+ * A long history between two bots, newest first: past the ten pages one
+ * filter set reaches, with each side and each result in it.
+ */
+export function rivalry(count: number): FinishedGameEntry[] {
+    return Array.from({ length: count }, (_, index): FinishedGameEntry => {
+        const hextideX = index % 2 === 0;
+        const winner = index % 7 === 6 ? null : index % 3 === 0 ? (hextideX ? `o` : `x`) : hextideX ? `x` : `o`;
+        return {
+            gameId: `rival-${String(index)}`,
+            players: hextideX ? { x: seat.hextide, o: seat.quietlake } : { x: seat.quietlake, o: seat.hextide },
+            winner,
+            reason: winner === null ? `aborted` : `six-in-a-row`,
+            timeControl: index % 4 === 3 ? { mode: `unlimited` } : { mode: `turn`, turnTimeMs: 10_000 },
+            openingPlies: index % 5 === 0 ? 1 : 5,
+            turns: 18 + (index % 23),
+            finishedAt: finishedAt(240 + 37 * index),
+            rated: winner !== null,
+        };
+    });
+}
+
+const pageSize = 20;
+
+// The finished-games read over a world's games: every filter, the cursor's
+// pages up to the cap, the record of a named player, and a refusal for a
+// name no seat or listing holds.
+function finishedPage(state: World, params: URLSearchParams): { status: 200; body: FinishedGamesPage } | { status: 400 | 404 } {
+    const parsed = finishedGamesQuerySchema.safeParse(Object.fromEntries(params));
+    if (!parsed.success) return { status: 400 };
+    const query = parsed.data;
+    const key = (name: string) => name.toLowerCase();
+    const known = new Set([
+        ...state.finished.flatMap((game) => [key(game.players.x.name), key(game.players.o.name)]),
+        ...state.bots.map((bot) => key(bot.name)),
+        ...state.leaderboard.map((entry) => key(entry.name)),
+    ]);
+    if ((query.player !== undefined && !known.has(key(query.player))) || (query.vs !== undefined && !known.has(key(query.vs)))) return { status: 404 };
+    const sideOf = (game: FinishedGameEntry, name: string): Side | null =>
+        key(game.players.x.name) === key(name) ? `x` : key(game.players.o.name) === key(name) ? `o` : null;
+    const matches = state.finished.filter((game) => {
+        const side = query.player === undefined ? null : sideOf(game, query.player);
+        if (query.player !== undefined && side === null) return false;
+        if (query.vs !== undefined && side !== null && sideOf(game, query.vs) !== (side === `x` ? `o` : `x`)) return false;
+        const kinds = [game.players.x.kind, game.players.o.kind];
+        if (query.kind === `bot-bot` && kinds.some((kind) => kind !== `bot`)) return false;
+        if (query.kind === `human-bot` && !kinds.includes(`user`)) return false;
+        if (query.result === `none` && game.winner !== null) return false;
+        if (query.result === `won` && game.winner !== side) return false;
+        if (query.result === `lost` && (game.winner === null || game.winner === side)) return false;
+        if (query.side !== undefined && side !== query.side) return false;
+        if (query.reason !== undefined && game.reason !== query.reason) return false;
+        if (query.clock !== undefined && game.timeControl.mode !== query.clock) return false;
+        if (query.opening !== undefined && String(game.openingPlies) !== query.opening) return false;
+        return query.before === undefined || Date.parse(game.finishedAt) < Date.parse(`${query.before}T00:00:00Z`);
+    });
+    const [page = 1, start = 0] = query.cursor === undefined ? [1, 0] : query.cursor.split(`.`).map(Number);
+    const games = matches.slice(start, start + pageSize);
+    const next = matches.length > start + pageSize && page < 10 ? `${String(page + 1)}.${String(start + pageSize)}` : null;
+    const previous = page > 2 ? `${String(page - 1)}.${String(start - pageSize)}` : null;
+    const body: FinishedGamesPage = { games, next, previous, page };
+    if (query.player === undefined) return { status: 200, body };
+    const player = query.player;
+    const bySide = (side: Side) => {
+        const sat = matches.filter((game) => sideOf(game, player) === side);
+        return { games: sat.length, won: sat.filter((game) => game.winner === side).length, lost: sat.filter((game) => game.winner !== null && game.winner !== side).length };
+    };
+    const asX = bySide(`x`);
+    const asO = bySide(`o`);
+    const won = asX.won + asO.won;
+    const lost = asX.lost + asO.lost;
+    return { status: 200, body: { ...body, record: { games: matches.length, won, lost, undecided: matches.length - won - lost, asX, asO } } };
+}
+
 export function world(overrides: Partial<World> = {}): World {
     return {
         me: { kind: `user`, name: `tom`, rating: 1503, provisional: false, discord: { username: `tom.hex`, displayName: `Tom` }, liveGames: [] },
@@ -618,11 +701,18 @@ export async function serve(page: Page, state: World): Promise<void> {
             return;
         }
         if (path === `/api/leaderboard` && method === `GET`) {
-            const kind = url.searchParams.get(`kind`) ?? `all`;
+            const query = leaderboardQuerySchema.safeParse(Object.fromEntries(url.searchParams));
+            if (!query.success) {
+                await json(route, 400, { error: `refused`, code: `bad_request` });
+                return;
+            }
+            const { kind, active } = query.data;
+            const since = Date.now() - leaderboardActiveDays * 86_400_000;
             const rows = state.leaderboard
                 .filter((entry) => kind === `all` || (kind === `bots`) === (entry.kind === `bot`))
+                .filter((entry) => active === `all` || Date.parse(entry.lastPlayedAt) >= since)
                 .map((entry, index) => ({ ...entry, rank: index + 1 }));
-            await json(route, 200, leaderboardEntrySchema.array().parse(rows));
+            await json(route, 200, leaderboardSchema.parse(rows));
             return;
         }
         if (path === `/api/bots` && method === `GET`) {
@@ -643,7 +733,9 @@ export async function serve(page: Page, state: World): Promise<void> {
             return;
         }
         if (path === `/api/games/finished` && method === `GET`) {
-            await json(route, 200, finishedGamesPageSchema.parse({ games: state.finished.slice(0, 20), next: null, page: 1 }));
+            const answer = finishedPage(state, url.searchParams);
+            if (answer.status === 200) await json(route, 200, finishedGamesPageSchema.parse(answer.body));
+            else await json(route, answer.status, { error: `refused`, code: answer.status === 404 ? `not_found` : `bad_request` });
             return;
         }
         const game = /^\/api\/games\/([^/]+)(\/move|\/resign)?$/.exec(path);

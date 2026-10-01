@@ -80,8 +80,8 @@ components:
         application/json:
           schema:
             $ref: "#/components/schemas/PausedError"
-      description: "The site is paused: nothing new starts, while open streams and live games run on.
-        Retry after 60 s."
+      description: "The site is paused: no new stream, challenge, or game starts, and open streams and
+        live games continue. Retry after Retry-After."
       headers:
         Retry-After:
           $ref: "#/components/headers/RetryAfter"
@@ -112,12 +112,14 @@ components:
       description: No session cookie, or the session is expired or unknown.
   schemas:
     Accepts:
-      description: The clocks the bot agrees to play.
+      description: The clocks the bot plays; a bot that never declared accepts plays none.
       properties:
         match:
+          description: True to play any match clock.
           type: boolean
         turnMs:
-          description: The accepted turn time window [min, max] in milliseconds, or null for none.
+          description: The turn clocks the bot plays, as the inclusive [min, max] of turnTimeMs; null refuses
+            turn clocks.
           items:
             type: integer
           maxItems: 2
@@ -125,6 +127,7 @@ components:
           nullable: true
           type: array
         unlimited:
+          description: True to play games with no clock.
           type: boolean
       required:
         - turnMs
@@ -318,8 +321,9 @@ components:
         - token
       type: object
     Challenge:
-      description: firstPlayer names who plays turn (openingPlies + 1) / 2, the first turn after the
-        opening. A random firstPlayer is drawn at acceptance.
+      description: firstPlayer picks who moves first after the opening, on turn (openingPlies + 1) / 2. o
+        plays the odd turns, so after 1, 5, or 9 opening plies the first player is o, and after 3 or
+        7 it is x. random is drawn at acceptance; gameStart.side gives each bot its side.
       properties:
         challengeId:
           type: string
@@ -490,18 +494,23 @@ components:
     EngineSession:
       properties:
         socketUrl:
-          description: The engine-session websocket, origin-relative.
+          description: A path on the API's origin; dial it as wss://, or ws:// where the API is http://.
           type: string
         token:
-          description: The game token, valid for 60 s; each gameStart line carries a fresh one.
+          description: "The game token (hgs_...): it opens this game's engine session and resigns the game
+            until 60 s after this gameStart; reopening the stream replays gameStart with a fresh
+            one."
           type: string
       required:
         - socketUrl
         - token
       type: object
     FinishReason:
-      description: How a game ended. A game is terminated when a side plays an illegal move, which loses,
-        or with no winner when it reaches 500 turns or an unlimited game reaches its wall-time cap.
+      description: "How a game ended. six-in-a-row: the winner completed six in a row. timeout: the
+        loser's clock ran out. surrender: the loser resigned. disconnect: the loser's stream stayed
+        closed for 30 s. terminated: the loser played an illegal move, or, with no winner, the game
+        reached 500 turns or an unlimited game 24 hours. aborted: the operator, a restart, or the
+        end of a human player's session stopped the game, with no winner."
       enum:
         - aborted
         - disconnect
@@ -568,9 +577,71 @@ components:
           maximum: 10
           minimum: 1
           type: integer
+        previous:
+          description: The cursor of the page before; null when that page is the first, or on the first.
+          nullable: true
+          pattern: ^(?:[2-9]|10)\.[1-9][0-9]{0,14}$
+          type: string
+        record:
+          description: Present when the query names a player.
+          properties:
+            asO:
+              properties:
+                games:
+                  minimum: 0
+                  type: integer
+                lost:
+                  minimum: 0
+                  type: integer
+                won:
+                  minimum: 0
+                  type: integer
+              required:
+                - games
+                - won
+                - lost
+              type: object
+            asX:
+              properties:
+                games:
+                  minimum: 0
+                  type: integer
+                lost:
+                  minimum: 0
+                  type: integer
+                won:
+                  minimum: 0
+                  type: integer
+              required:
+                - games
+                - won
+                - lost
+              type: object
+            games:
+              minimum: 0
+              type: integer
+            lost:
+              minimum: 0
+              type: integer
+            undecided:
+              description: Games that ended without a winner.
+              minimum: 0
+              type: integer
+            won:
+              minimum: 0
+              type: integer
+          required:
+            - games
+            - won
+            - lost
+            - undecided
+            - asX
+            - asO
+          type: object
       required:
         - games
         - next
+        - previous
         - page
       type: object
     GameBoard:
@@ -735,7 +806,7 @@ components:
             - gameFinish
           type: string
         winner:
-          description: Null after an abort, a termination, or a disconnect that left neither side connected.
+          description: Null after aborted, and after terminated at the turn or time cap.
           enum:
             - x
             - o
@@ -875,7 +946,8 @@ components:
             - reason
           type: object
     GameStartEvent:
-      description: A game the bot plays has started, or is replayed as the stream opens.
+      description: A game the bot plays has started, or is replayed as the stream opens. A game started by
+        a player on the website arrives with no challenge before it.
       properties:
         engine:
           $ref: "#/components/schemas/EngineSession"
@@ -991,17 +1063,27 @@ components:
         - error
         - code
       type: object
-    LeaderboardEntry:
+    LeaderboardBot:
+      description: A bot carries its owner and presence as the bot list has them.
       properties:
+        games:
+          minimum: 1
+          type: integer
         kind:
           enum:
             - bot
-            - human
+          type: string
+        lastPlayedAt:
+          format: date-time
           type: string
         name:
           type: string
+        online:
+          type: boolean
+        ownerName:
+          nullable: true
+          type: string
         rank:
-          description: The position on the filtered board.
           minimum: 1
           type: integer
         rating:
@@ -1009,26 +1091,66 @@ components:
       required:
         - rank
         - name
-        - kind
         - rating
+        - games
+        - lastPlayedAt
+        - kind
+        - ownerName
+        - online
+      type: object
+    LeaderboardEntry:
+      description: rank is the position on the filtered board, games the rated games the player has
+        played, and lastPlayedAt when the latest of them finished.
+      discriminator:
+        mapping:
+          bot: "#/components/schemas/LeaderboardBot"
+          human: "#/components/schemas/LeaderboardHuman"
+        propertyName: kind
+      oneOf:
+        - $ref: "#/components/schemas/LeaderboardBot"
+        - $ref: "#/components/schemas/LeaderboardHuman"
+    LeaderboardHuman:
+      properties:
+        games:
+          minimum: 1
+          type: integer
+        kind:
+          enum:
+            - human
+          type: string
+        lastPlayedAt:
+          format: date-time
+          type: string
+        name:
+          type: string
+        rank:
+          minimum: 1
+          type: integer
+        rating:
+          $ref: "#/components/schemas/Rating"
+      required:
+        - rank
+        - name
+        - rating
+        - games
+        - lastPlayedAt
+        - kind
       type: object
     LegalDetails:
       additionalProperties: false
-      description: The operator, the host with the server's location, the supervisory authority, and an
-        optional mail provider.
       properties:
         host:
           additionalProperties: false
           properties:
-            addressLines:
-              items:
-                maxLength: 200
-                minLength: 1
-                type: string
-              maxItems: 6
-              minItems: 1
-              type: array
+            country:
+              maxLength: 200
+              minLength: 1
+              type: string
             name:
+              maxLength: 200
+              minLength: 1
+              type: string
+            postcodeAndCity:
               maxLength: 200
               minLength: 1
               type: string
@@ -1036,41 +1158,49 @@ components:
               maxLength: 200
               minLength: 1
               type: string
-          required:
-            - name
-            - addressLines
-            - serverLocation
-          type: object
-        mailProvider:
-          additionalProperties: false
-          properties:
-            addressLines:
-              items:
-                maxLength: 200
-                minLength: 1
-                type: string
-              maxItems: 6
-              minItems: 1
-              type: array
-            name:
+            street:
               maxLength: 200
               minLength: 1
               type: string
           required:
             - name
-            - addressLines
+            - street
+            - postcodeAndCity
+            - country
+            - serverLocation
+          type: object
+        mailProvider:
+          additionalProperties: false
+          properties:
+            country:
+              maxLength: 200
+              minLength: 1
+              type: string
+            name:
+              maxLength: 200
+              minLength: 1
+              type: string
+            postcodeAndCity:
+              maxLength: 200
+              minLength: 1
+              type: string
+            street:
+              maxLength: 200
+              minLength: 1
+              type: string
+          required:
+            - name
+            - street
+            - postcodeAndCity
+            - country
           type: object
         operator:
           additionalProperties: false
           properties:
-            addressLines:
-              items:
-                maxLength: 200
-                minLength: 1
-                type: string
-              maxItems: 6
-              minItems: 1
-              type: array
+            country:
+              maxLength: 200
+              minLength: 1
+              type: string
             discord:
               maxLength: 64
               minLength: 1
@@ -1083,23 +1213,37 @@ components:
               maxLength: 200
               minLength: 1
               type: string
+            postcodeAndCity:
+              maxLength: 200
+              minLength: 1
+              type: string
+            street:
+              maxLength: 200
+              minLength: 1
+              type: string
           required:
             - name
-            - addressLines
+            - street
+            - postcodeAndCity
+            - country
             - email
           type: object
         supervisoryAuthority:
           additionalProperties: false
           properties:
-            addressLines:
-              items:
-                maxLength: 200
-                minLength: 1
-                type: string
-              maxItems: 6
-              minItems: 1
-              type: array
+            country:
+              maxLength: 200
+              minLength: 1
+              type: string
             name:
+              maxLength: 200
+              minLength: 1
+              type: string
+            postcodeAndCity:
+              maxLength: 200
+              minLength: 1
+              type: string
+            street:
               maxLength: 200
               minLength: 1
               type: string
@@ -1109,7 +1253,9 @@ components:
               type: string
           required:
             - name
-            - addressLines
+            - street
+            - postcodeAndCity
+            - country
             - url
           type: object
       required:
@@ -1195,8 +1341,8 @@ components:
         - board
       type: object
     MoveRequestEvent:
-      description: Follows a replayed gameStart when it is the bot's turn; live turns arrive on the engine
-        session.
+      description: Follows a replayed gameStart when the bot is to move, for information; it needs no
+        answer, since the engine session sends its own move_request.
       properties:
         gameId:
           type: string
@@ -1252,10 +1398,9 @@ components:
     OpeningPlies:
       description: Stones the server places before either player acts, the origin at (0, 0) included. A
         ply is one stone; turn 0 is the origin, and turn t >= 1 is plies 2t-1 and 2t. Each later ply
-        lands in order on an empty cell drawn uniformly from those within hex distance 2 of the
-        origin, for the player who owns that ply. The whole opening is redrawn while any 6
-        consecutive cells on an axis hold 4 or more stones of one player and none of the other. The
-        draw uses a CSPRNG when the game is created, for a challenge at acceptance.
+        lands on an empty cell drawn uniformly from those within hex distance 2 of the origin. The
+        whole opening is redrawn while any 6 consecutive cells on an axis hold 4 or more stones of
+        one player and none of the other.
       enum:
         - 1
         - 3
@@ -1458,7 +1603,9 @@ components:
         - $ref: "#/components/schemas/ChallengeCanceledEvent"
         - $ref: "#/components/schemas/ChallengeDeclinedEvent"
     TimeControl:
-      description: Durations are in milliseconds.
+      description: turn gives each turn turnTimeMs, and unused time is lost; match gives each side
+        mainTimeMs for the game, adding incrementMs after each of its turns; unlimited has no clock.
+        Each move_request carries the seconds left for that move.
       oneOf:
         - properties:
             mode:
@@ -1572,7 +1719,7 @@ components:
       type: apiKey
 info:
   title: HeXO Arena
-  version: 0.26.0
+  version: 0.29.0
 openapi: 3.0.3
 paths:
   /api/auth/discord/callback:
@@ -1941,16 +2088,15 @@ paths:
           $ref: "#/components/responses/RateLimited"
       security:
         - gameToken: []
-      summary: Resign a game over the engine-session token.
+      summary: Resign a game with its game token.
       tags:
         - Engine session
   /api/bot/game/{gameId}/socket:
     get:
-      description: Speaks htttx basic_websocket v1-alpha, the server as client and the bot as bot. The bot
-        must support the move_skips and request_id capabilities. A new connection replaces the
-        previous one. Each move_request lists in previous only the turns this connection has not
-        seen. Heartbeats come every 10 s. A move_response must echo request_id, or it is dropped. An
-        illegal move forfeits.
+      description: "Speaks htttx basic_websocket v1-alpha: the bot dials, then answers each move_request
+        with a move_response of two cells that echoes its request_id, or the answer is dropped. The
+        bot declares no capabilities but must handle move_skips, so previous may hold several turns,
+        and request_id. A new connection replaces the previous one. An illegal move forfeits."
       operationId: openEngineSession
       parameters:
         - $ref: "#/components/parameters/GameId"
@@ -1962,11 +2108,17 @@ paths:
             type: string
       responses:
         "101":
-          description: "Switching protocols; the engine session is open. No frame the server sends is larger
-            than 64 KiB. It closes with 1008 after more than 10 frames that answer no outstanding
-            request, a malformed frame, or a protocol violation, with 1008 when more than 128 KiB
-            sent to it go unread, and with 1009 for a frame over 16 KiB. A close forfeits nothing:
-            the clock runs, and the bot may dial again while its game token lives."
+          description: "Switching protocols; the engine session is open. The server first sends setup, whose
+            board holds the origin stone alone. On each of the bot's turns it sends move_request
+            with side, request_id, move_time_limit in seconds when there is a clock, and previous:
+            every turn this connection has not seen, the opening's included, oldest first, as {side,
+            pieces}. Every 10 s it sends heartbeat, with waiting true while it waits on this bot's
+            move; the bot never answers a heartbeat, and a bot that hears waiting true while it is
+            not working on a move hangs up and redials. No frame the server sends exceeds 64 KiB. It
+            closes with 1009 for a bot frame over 16 KiB, with 1008 after more than 10 frames in one
+            session that answer no outstanding request, a malformed frame, or a protocol violation,
+            and with 1008 when more than 128 KiB go unread. A close forfeits nothing, but the clock
+            runs; dial again while the game token is valid."
         "404":
           content:
             application/json:
@@ -1979,7 +2131,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/RateLimitedError"
           description: A seat dials at most 5 at once, then 1 every 10 s (rate_limited), or too many requests;
-            refused before the upgrade, so an open session stays. Retry after Retry-After.
+            a refused dial leaves an open session alone. Retry after Retry-After.
           headers:
             Retry-After:
               $ref: "#/components/headers/RetryAfter"
@@ -1995,7 +2147,9 @@ paths:
         the engine session that gameStart hands out.
       operationId: openStream
       parameters:
-        - description: Present as 1, the bot takes challenges and games while the stream is open.
+        - description: "Present as 1, the bot is open while the stream is: other bots may challenge it, and
+            players on the website may start games against it, which arrive as gameStart with no
+            challenge."
           in: query
           name: open
           required: false
@@ -2340,7 +2494,7 @@ paths:
               - "7"
               - "9"
             type: string
-        - description: Only games finished before this UTC date, YYYY-MM-DD; how older games are reached.
+        - description: Only games finished before this UTC date, YYYY-MM-DD.
           in: query
           name: before
           required: false
@@ -2514,8 +2668,8 @@ paths:
         - Games
   /api/leaderboard:
     get:
-      description: Rankable players, highest rating first, ties by name fold, without pagination. A player
-        is rankable at a rating deviation of 75 or below. Banned users, delisted bots, and bots of
+      description: Rankable players, highest rating first, ties by name fold, at most 500. A player is
+        rankable at a rating deviation of 75 or below. Banned users, delisted bots, and bots of
         banned owners never appear. Bots and humans share one rating pool.
       operationId: getLeaderboard
       parameters:
@@ -2529,6 +2683,16 @@ paths:
               - humans
               - all
             type: string
+        - description: Players whose latest rated game finished in the last 30 days, or all; 30 days when
+            absent.
+          in: query
+          name: active
+          required: false
+          schema:
+            enum:
+              - 30d
+              - all
+            type: string
       responses:
         "200":
           content:
@@ -2536,6 +2700,7 @@ paths:
               schema:
                 items:
                   $ref: "#/components/schemas/LeaderboardEntry"
+                maxItems: 500
                 type: array
           description: The board.
         "400":
@@ -2548,9 +2713,8 @@ paths:
         - Directory
   /api/legal:
     get:
-      description: The values the imprint and privacy pages show, read once at start from a file the
-        deployment provides. A production server refuses to start without that file, so only a
-        development server answers 404.
+      description: The values the legal pages show, read once at start from the deployment's file; a
+        development server without the file answers 404.
       operationId: getLegalDetails
       responses:
         "200":
@@ -2558,7 +2722,7 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/LegalDetails"
-          description: Operator, host, supervisory authority, and mail provider.
+          description: The legal details.
         "404":
           $ref: "#/components/responses/NotFound"
         "429":

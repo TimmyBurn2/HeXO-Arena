@@ -160,13 +160,13 @@ export async function buildApp(deps: AppDeps): Promise<BuiltApp> {
     registerChallengeApi(app, { query, presence, games, challenges, gate, limits });
     registerGameApi(app, { query, presence, games, watchers, gate, guests, limits });
     registerFinishedGamesApi(app, { query, now: deps.now ?? Date.now });
-    registerLeaderboardApi(app, { query });
+    registerLeaderboardApi(app, { query, presence, now: deps.now ?? Date.now });
     registerLegalApi(app, deps.legalDetails);
     registerSessionApi(app, { query, guests, games, secureCookies: deps.secureCookies, limits });
     registerSignInApi(app, { query, guests, discord: deps.discord, secureCookies: deps.secureCookies, devLogin: deps.devLogin, limits });
     if (deps.devLogin) registerDevAccountsApi(app, { query });
     if (deps.webIndexPath !== undefined) {
-        registerOgShell(app, { query, presence, games, indexPath: deps.webIndexPath, publicOrigin: deps.publicOrigin });
+        registerOgShell(app, { query, presence, games, indexPath: deps.webIndexPath, publicOrigin: deps.publicOrigin, now: deps.now ?? Date.now });
     }
     const admin = createAdminHandler({ query, presence, games, challenges, limits, actor: deps.adminActor });
 

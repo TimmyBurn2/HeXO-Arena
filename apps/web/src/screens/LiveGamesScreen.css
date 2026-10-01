@@ -7,15 +7,10 @@
     }
 
     .live-head {
-        display: flex;
-        align-items: baseline;
-        justify-content: space-between;
-        flex-wrap: wrap;
-        gap: var(--space-2) var(--space-4);
         margin-bottom: var(--space-5);
     }
 
-    .live-head .screen-title {
+    .live-head .note {
         margin: 0;
     }
 

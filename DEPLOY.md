@@ -1,7 +1,7 @@
 # Deploying HeXO Arena
 
-The production stack is `docker/prod/compose.yml`: four services from one
-pulled image plus Caddy.
+The production stack is `docker/prod/compose.yml`: four services, three from
+one pulled image plus Caddy.
 
 | service | role |
 |---|---|
@@ -10,38 +10,38 @@ pulled image plus Caddy.
 | `web` | one-shot copy of the static site into the volume Caddy serves |
 | `caddy` | TLS, the static site, and the proxy to the API and the shell routes |
 
-The box never builds anything.
+The box builds nothing.
 CI builds the image on every push and publishes it to GHCR from `main`,
 tagged `sha-<commit>` and `latest`.
 
 ## Prerequisites
 
 - Rootless Docker with Compose v2 and cgroup v2 delegation for the rootless
-  user (`cpu`, `memory`, `pids`); without delegation the limits in the
-  compose file are silently ignored.
+  user (`cpu`, `memory`, `pids`); without delegation the compose file's
+  limits are ignored.
 - The rootless user may bind 80 and 443:
   `net.ipv4.ip_unprivileged_port_start=80` in the host sysctl.
-- Client addresses reach Caddy unchanged, since the rate limits count each
-  visitor by the address Caddy forwards: rootless Docker 29.5 or later with
+- Client addresses reach Caddy unchanged: rootless Docker 29.5 or later with
   `"userland-proxy": false` in its daemon.json, or the `slirp4netns` or
   `pasta` port driver on older versions; IPv6 must reach Caddy without
-  docker-proxy. Without it every visitor counts as one caller and only the
-  site-wide limits apply; check it after deploying (below).
-- Pull access to the GHCR package, which stays private: `docker login ghcr.io`
-  with a token holding `read:packages`. A public image would hand out the
-  GPL-licensed programs of its Debian base, and with them the duty to offer
-  their source. The package's page on GitHub, under the owner's Packages
-  tab, shows its visibility beside its name, and its Package settings
-  change it under Danger Zone; check it after CI's first push.
+  docker-proxy.
+  Otherwise every visitor counts as one caller for the rate limits; the
+  checklist below checks it.
+- Pull access to the GHCR package, which stays private, since a public image
+  would distribute its Debian base's GPL programs: `docker login ghcr.io`
+  with a token holding `read:packages`.
+  The package's GitHub page shows its visibility beside its name; Package
+  settings, Danger Zone, changes it.
+  Check it after CI's first push.
 - A Discord application whose OAuth redirect is
   `https://<domain>/api/auth/discord/callback`.
 
 ### DNS precondition
 
-Before pointing the domain at this stack, confirm that nothing third party
-holds a URL or token baked against the deployment the domain serves today.
-If any external bot does, run the arena on a side subdomain instead, and
-answer the old API with `410` until those clients move.
+Before pointing the domain at this stack, confirm no third party holds a URL
+or token for the deployment the domain serves today.
+If an external bot does, run the arena on a side subdomain and answer the old
+API with `410` until those clients move.
 
 ### Retiring the existing deployment
 
@@ -87,7 +87,7 @@ BACKUP_HOUR_UTC=3
 ```
 
 The image sets `NODE_ENV=production`, the bind address, and every path.
-Never set `DEV_LOGIN` or `DEV_FAST_STOP`: in production any value refuses the boot.
+Never set `DEV_LOGIN` or `DEV_FAST_STOP`: in production any value fails the boot.
 
 ```sh
 chmod 0600 .env hexo-arena.env
@@ -97,28 +97,29 @@ chmod 0600 .env hexo-arena.env
 
 `legal-details.json` holds what the imprint and the privacy policy name:
 
-- the operator: name, postal address lines, a contact email a person reads,
-  and optionally a Discord handle;
-- the host: name, address lines, and where the server stands;
-- the supervisory authority: name, address lines, and web address;
-- optionally the provider of the contact mailbox: name and address lines.
+- the operator: name, street and number, postcode and city, country, a
+  contact email a person reads, and optionally a Discord handle;
+- the host: name, postal address, and where the server stands;
+- the supervisory authority: name, postal address, and web address;
+- optionally the provider of the contact mailbox: name and postal address.
 
-Start from `apps/server/legal-details.example.json` in the repository and
-replace every `<...>` value.
-The file never enters the repository; `.gitignore` and `.dockerignore`
-exclude its name.
+Every postal address takes the same three keys: `street`,
+`postcodeAndCity`, and `country`.
+
+Start from `apps/server/legal-details.example.json` and replace every
+`<...>` value.
+`.gitignore` and `.dockerignore` exclude the file's name.
 
 The compose file mounts it read-only at `/etc/hexo-arena/legal-details.json`,
 where the image's `LEGAL_DETAILS_PATH` points, and does not start the app
 without it.
 Caddy mounts the same file at the same path and answers the details read
-from it while the app is down or restarting, so the legal pages keep naming
-the operator.
-A production boot refuses a file it cannot read, one that does not match the
-schema, and one where any value still holds `<` or `>`; the log names the key,
-never the value.
-Every value shows on the public legal pages, so the file holds no secret, and
-the app's and Caddy's uids must read it:
+while the app is down or restarting.
+A production boot refuses a file it cannot read, one that fails the schema,
+and one where any value still holds `<` or `>`; the log names the key, never
+the value.
+Every value is public on the legal pages, and the app's and Caddy's uids
+must read the file:
 
 ```sh
 chmod 0644 legal-details.json
@@ -142,9 +143,9 @@ docker compose exec app hexo-arena-admin status
 `up -d` stops the old app with SIGTERM, which drains:
 
 - new streams, games, challenges, and acceptances answer `503 paused` with
-  `Retry-After: 60`; bots retry against the new process;
+  `Retry-After: 60`;
 - open streams and live games run on for up to 120 s;
-- whatever is still live then ends aborted and unrated, and both sides hear
+- whatever is still live then ends aborted and unrated, and both sides get
   `gameFinish`;
 - a stream cut during the drain aborts its games instead of forfeiting them.
 
@@ -166,10 +167,10 @@ Rollback: put the previous tag back in `.env`, then `pull` and `up -d`.
 The app writes `VACUUM INTO` snapshots nightly at `BACKUP_HOUR_UTC` into the
 `backup` volume, named `hexo-arena-YYYY-MM-DD.sqlite`, and keeps the newest
 `BACKUP_KEEP`.
-Never copy the live database file: a WAL database copied mid-write tears.
+Never copy the live database file.
 
-The privacy policy promises that deleted data leaves every backup within
-14 days, so keep `BACKUP_KEEP` at 14 or less.
+The privacy policy states that deleted data leaves every backup within 14
+days: keep `BACKUP_KEEP` at 14 or less.
 The app prunes only when it writes the next backup; while it is stopped,
 delete snapshots older than 14 days by hand:
 
@@ -178,8 +179,8 @@ docker compose run --rm --no-deps app find /backup -name 'hexo-arena-*.sqlite' -
 ```
 
 Copies off the box are encrypted, hold one night's snapshot each, and are kept
-14 days at most.
-For example, with an age key whose private half stays off the box:
+14 days at most; for example, with an age key whose private half stays off
+the box:
 
 ```sh
 latest=$(docker compose exec -T app sh -c 'ls /backup/hexo-arena-*.sqlite | tail -n 1')
@@ -237,15 +238,49 @@ Pass: `ok`, a plausible game count, and a `status` answer.
 ## Logs
 
 The app writes JSON lines to stdout; `docker compose logs app` reads them.
-Each request leaves lines tied by `reqId`:
-the method and route pattern, such as `/api/bots/:name` (`null` when nothing matched),
-then the status and response time.
+Each request leaves lines tied by `reqId`: the method and route pattern, such
+as `/api/bots/:name` (`null` when nothing matched), then the status and
+response time.
 A client error logs its code and status; a server error its message and stack.
-No request line holds a URL, a query string, a request body, a header, or a client address.
+No request line holds a URL, a query string, a request body, a header, or a
+client address.
 
-Caddy keeps no access log.
-One added later masks client addresses (`ip_mask`) and keeps at most 7 days (`roll_keep_for 168h`).
-Docker's json-file driver keeps 5 files of 10 MB per service, rotated by size, not by time.
+Caddy keeps no access log; one added later masks client addresses
+(`ip_mask`) and keeps at most 7 days (`roll_keep_for 168h`).
+Docker's json-file driver keeps 5 files of 10 MB per service, rotated by size.
+
+## Administration
+
+The site has no admin role, route, or UI.
+The app applies admin operations itself, one JSON request per connection on
+a Unix socket only its own uid can open, at `/run/hexo-arena/admin.sock` on a
+private tmpfs.
+The `hexo-arena-admin` client ships in the same image:
+
+```sh
+docker compose exec app hexo-arena-admin status
+docker compose exec app hexo-arena-admin pause --reason "incident"
+docker compose exec app hexo-arena-admin ban-user somebody --reason "cheating"
+```
+
+Outside Docker, `pnpm --filter @hexo-arena/server admin status` talks to a
+local `pnpm dev`.
+
+| op | effect |
+|---|---|
+| `status` | uptime, paused flag, live streams, active games, client keys, requests without a public address, the last 10 admin actions |
+| `pause` / `resume` | new streams, games, and challenges answer `503` with `Retry-After`; open streams and live games run on; the flag survives restarts |
+| `ban-user <name>` / `unban-user <name>` | sessions end, bots are closed and hidden, their tokens answer `403`; unban relists the bots and kills their old tokens |
+| `delete-user <name>` | live games aborted, bots deleted as below, the user forgotten; rated history stays under a `deleted-<n>` placeholder |
+| `delist-bot <name>` / `relist-bot <name>` | hidden from the directory and the ladder, refused from challenges and games both ways; live play continues |
+| `revoke-bot <name>` | token dead, stream closed; the owner mints a fresh one |
+| `abort-game <gameId>` / `abort-game --bot <name>` | unrated abort of one game, or of every live game of a bot |
+| `recompute-ratings [--exclude <gameId\|name>]...` | re-fold every rating, and the ratings around each game, from the game log; excluded games are voided for good |
+
+Every mutation takes `--reason` and writes an audit row.
+Deleting a bot, by its owner or through `delete-user`, keeps a bot that has a
+game with a winner under a placeholder, its name still reserved, and deletes
+any other bot outright, freeing the name.
 
 ## Break-glass
 
@@ -285,7 +320,7 @@ table inet hexo-arena-egress {
 }
 ```
 
-The trade-offs are why the proxy is the default:
+Its costs:
 
 - nftables matches addresses, not names; `discord.com` sits behind a CDN,
   so the set needs a timer that re-resolves it, and it admits everything
@@ -299,9 +334,9 @@ variables, and put `app` on the `edge` network.
 
 ## Operator checklist
 
-CI verifies the code, the image build, and the proxy's allowlist logic.
-The rest only the box can show.
-Run from `~/hexo-arena` after the first deploy, and again after changing the
+CI verifies the code, the image build, and the proxy's allowlist logic; the
+rest only the box shows.
+Run it from `~/hexo-arena` after the first deploy, and after changing the
 host or the compose file.
 
 Image:

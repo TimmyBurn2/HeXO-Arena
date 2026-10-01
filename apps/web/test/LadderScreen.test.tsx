@@ -1,13 +1,13 @@
 // @vitest-environment jsdom
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { meStore } from '../src/me';
 import { LadderScreen } from '../src/screens/LadderScreen';
 
 const board = [
-    { rank: 1, name: `sealbot`, kind: `bot`, rating: 1712 },
-    { rank: 2, name: `hextide`, kind: `bot`, rating: 1690 },
-    { rank: 3, name: `tom`, kind: `human`, rating: 1503 },
+    { rank: 1, name: `sealbot`, kind: `bot`, rating: 1712, games: 214, lastPlayedAt: `2026-10-01T08:00:00Z`, ownerName: `tom`, online: true },
+    { rank: 2, name: `hextide`, kind: `bot`, rating: 1690, games: 188, lastPlayedAt: `2026-09-30T08:00:00Z`, ownerName: `ana`, online: false },
+    { rank: 3, name: `tom`, kind: `human`, rating: 1503, games: 57, lastPlayedAt: `2026-09-29T08:00:00Z` },
 ];
 
 function stubBoard(rows: unknown[], status = 200): void {
@@ -20,27 +20,132 @@ function stubBoard(rows: unknown[], status = 200): void {
 afterEach(() => {
     cleanup();
     vi.unstubAllGlobals();
+    meStore.reset();
+    window.history.replaceState(null, ``, `/`);
 });
 
+const roster = [
+    { name: `sealbot`, ownerName: `tom`, online: true, openForChallenges: true, rating: 1712, provisional: false, liveGames: 0, accepts: { turnMs: [5000, 60000], match: true, unlimited: true } },
+    { name: `hextide`, ownerName: `ana`, online: false, openForChallenges: false, rating: 1690, provisional: false, liveGames: 0 },
+];
+
+// The board answers by its query, the roster and the session by path.
+function serve(answer: (search: string) => unknown, me: unknown = null): string[] {
+    const reads: string[] = [];
+    vi.stubGlobal(
+        `fetch`,
+        vi.fn((url: string) => {
+            reads.push(url);
+            const [path = ``, search = ``] = url.split(`?`);
+            const body = path === `/api/me` ? me : path === `/api/bots` ? roster : answer(search);
+            return Promise.resolve(new Response(JSON.stringify(body)));
+        }),
+    );
+    meStore.reset();
+    meStore.start();
+    return reads;
+}
+
+const tom = { kind: `user`, name: `tom`, rating: 1503, provisional: false, discord: null, liveGames: [] };
+
 describe('LadderScreen', () => {
-    it('render the whole board with its top rungs and linked bot names', async () => {
+    it('render the whole board: rank, player with presence and owner, rating, games, and last played', async () => {
         stubBoard(board);
         render(<LadderScreen />);
-        expect(await screen.findByRole(`table`)).toBeTruthy();
+        const table = await screen.findByRole(`table`);
+        expect([...table.querySelectorAll(`th`)].map((head) => head.textContent)).toEqual([`Rank`, `Player`, `Rating`, `Games`, `Last played`]);
+        const first = table.querySelector(`tbody tr`) as HTMLElement;
+        expect([...first.querySelectorAll(`td`)].map((cell) => cell.textContent)).toEqual([`1`, `sealbotBOTby tom`, `1712`, `214`, expect.stringMatching(/ago$/u)]);
+        expect(first.querySelector(`.dot`)?.getAttribute(`title`)).toBe(`Online`);
+        expect(table.querySelector(`tbody tr:nth-child(2) .dot.offline`)).toBeTruthy();
+        expect(table.querySelector(`tbody tr:nth-child(3) .dot`)).toBe(null);
         expect(screen.getAllByRole(`link`, { name: /sealbot/ })[0]?.getAttribute(`href`)).toBe(`/bots/sealbot`);
         expect(document.querySelector(`a[href="/bots/tom"]`)).toBe(null);
-        expect(document.querySelectorAll(`.rung`).length).toBe(3);
-        expect(document.querySelectorAll(`.badge-bot`).length).toBe(4);
     });
 
-    it('step the rungs down in rank order and lift only the first', async () => {
-        stubBoard(board);
+    it('stand the top three on a podium of 5, 6, and 4 stones, the six won, labelled for a reader', async () => {
+        serve(() => board);
+        render(<LadderScreen />);
+        const podium = await screen.findByRole(`region`, { name: `Top of the ladder` });
+        const [wide] = within(podium).getAllByRole(`img`);
+        expect(wide?.getAttribute(`aria-label`)).toBe(`Podium: first sealbot, 1712; second hextide, 1690; third tom, 1503`);
+        expect(wide?.querySelectorAll(`g.stone`)).toHaveLength(15);
+        expect(wide?.querySelectorAll(`polyline.win-line`)).toHaveLength(1);
+        const plates = [...podium.querySelectorAll(`.podium-slot`)];
+        expect(plates.map((plate) => plate.className)).toEqual([`podium-slot p1`, `podium-slot p2`, `podium-slot p3`]);
+        expect(plates[0]?.textContent).toBe(`1sealbotBOT1712by tom, 214 gamesPlay`);
+        expect(plates[2]?.textContent).toBe(`3tom150357 games`);
+        // Only a bot that would start a game now offers Play.
+        await waitFor(() => {
+            expect(within(podium).getAllByRole(`link`, { name: /^Play / }).map((link) => link.getAttribute(`href`))).toEqual([`/play?bot=sealbot`]);
+        });
+    });
+
+    it('stand fewer towers for fewer players, first in the middle', async () => {
+        serve(() => board.slice(0, 2));
+        render(<LadderScreen />);
+        const podium = await screen.findByRole(`region`, { name: `Top of the ladder` });
+        expect(within(podium).getAllByRole(`img`)[0]?.querySelectorAll(`g.stone`)).toHaveLength(11);
+        cleanup();
+        serve(() => board.slice(0, 1));
+        render(<LadderScreen />);
+        const alone = await screen.findByRole(`region`, { name: `Top of the ladder` });
+        expect(within(alone).getAllByRole(`img`)[0]?.querySelectorAll(`g.stone`)).toHaveLength(6);
+        expect(alone.querySelector(`.podium-plates`)?.getAttribute(`data-places`)).toBe(`1`);
+    });
+
+    it('hold the kind and the window in the address and read the board they name', async () => {
+        window.history.replaceState(null, ``, `/ladder?kind=bots`);
+        const reads = serve(() => board);
         render(<LadderScreen />);
         await screen.findByRole(`table`);
-        const rungs = [...document.querySelectorAll(`.rung`)].map((rung) => rung.className);
-        expect(rungs).toEqual([`rung r1`, `rung r2`, `rung r3`]);
-        expect(document.querySelectorAll(`.rung-lift .rung`)).toHaveLength(1);
-        expect(document.querySelector(`.rung.r3 .rung-kind`)?.textContent).toBe(`Human`);
+        expect(screen.getByRole(`button`, { name: `Bots` }).getAttribute(`aria-pressed`)).toBe(`true`);
+        fireEvent.change(screen.getByLabelText(`Played`), { target: { value: `all` } });
+        expect(window.location.search).toBe(`?kind=bots&active=all`);
+        await waitFor(() => {
+            expect(reads.filter((url) => url.startsWith(`/api/leaderboard`)).at(-1)).toBe(`/api/leaderboard?kind=bots&active=all`);
+        });
+        fireEvent.click(screen.getByRole(`button`, { name: `All` }));
+        expect(window.location.search).toBe(`?active=all`);
+    });
+
+    it('find a name among the rows, keeping their ranks and marking the one named', async () => {
+        serve(() => board);
+        render(<LadderScreen />);
+        await screen.findByRole(`table`);
+        fireEvent.change(screen.getByLabelText(`Find a name`), { target: { value: `HEXTIDE` } });
+        const rows = [...document.querySelectorAll(`tbody tr`)];
+        expect(rows.map((row) => row.querySelector(`td`)?.textContent)).toEqual([`2`]);
+        expect(rows[0]?.classList.contains(`found`)).toBe(true);
+        fireEvent.change(screen.getByLabelText(`Find a name`), { target: { value: `zz` } });
+        expect(document.querySelector(`tbody .table-note`)?.textContent).toBe(`No player on this ladder matches zz`);
+    });
+
+    it('say where the signed-in player stands and take them to their row, clearing the search', async () => {
+        serve(() => board, tom);
+        render(<LadderScreen />);
+        expect(await screen.findByText(`You are 3rd with 1503`)).toBeTruthy();
+        fireEvent.change(screen.getByLabelText(`Find a name`), { target: { value: `seal` } });
+        expect(document.querySelector(`tr.you`)).toBe(null);
+        fireEvent.click(screen.getByRole(`button`, { name: `Show my row` }));
+        await waitFor(() => {
+            expect(document.activeElement).toBe(document.querySelector(`tr.you`));
+        });
+        expect(screen.getByLabelText<HTMLInputElement>(`Find a name`).value).toBe(``);
+    });
+
+    it('tell a provisional player their rating is still settling', async () => {
+        serve(() => board, { ...tom, name: `newcomer`, provisional: true });
+        render(<LadderScreen />);
+        expect(await screen.findByText(`Your rating is still settling; you join the ladder once it is no longer provisional.`)).toBeTruthy();
+        expect(screen.queryByRole(`button`, { name: `Show my row` })).toBe(null);
+    });
+
+    it('send a quiet month to all time, where ranked players still stand', async () => {
+        serve((search) => (search.includes(`active=all`) ? board : []));
+        render(<LadderScreen />);
+        expect(await screen.findByRole(`heading`, { name: `No ranked player played in the last 30 days` })).toBeTruthy();
+        expect(screen.getByRole(`link`, { name: `Show all time` }).getAttribute(`href`)).toBe(`/ladder?active=all`);
     });
 
     it('count the ranked players and the bots online in one sentence, a zero in words', async () => {
@@ -65,7 +170,6 @@ describe('LadderScreen', () => {
         await waitFor(() => {
             expect(document.querySelector(`.pulse`)?.textContent).toBe(`3 ranked players; 2 bots online, 1 open for challenges`);
         });
-        expect(document.querySelector(`.rung.r1 .rung-owner`)?.textContent).toBe(`By tom`);
         cleanup();
         vi.stubGlobal(
             `fetch`,

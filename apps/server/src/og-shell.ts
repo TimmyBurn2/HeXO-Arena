@@ -6,6 +6,7 @@ import {
     welcomeMeta,
     welcomePath,
     gameMeta,
+    gamesMeta,
     ladderMeta,
     legalPageMeta,
     legalPagePath,
@@ -27,6 +28,7 @@ import type { Query } from './db';
 import type { GameRegistry } from './game-registry';
 import type { PresenceRegistry } from './presence';
 import { isProvisional } from './rating';
+import { activeSince } from './leaderboard-api';
 import { rankablePlayers } from './rating-store';
 
 export interface OgShellDeps {
@@ -35,6 +37,7 @@ export interface OgShellDeps {
     games: GameRegistry;
     indexPath: string;
     publicOrigin: string;
+    now: () => number;
 }
 
 function escapeHtml(text: string): string {
@@ -78,6 +81,7 @@ export function renderShell(template: string, meta: PageMeta, publicOrigin: stri
 // Pages whose meta needs no data, each at its own path.
 const fixedPages: readonly (readonly [string, PageMeta])[] = [
     [`/bots`, botsMeta],
+    [`/games`, gamesMeta],
     [`/games/live`, liveGamesMeta],
     [`/connect`, connectMeta],
     [`/profile`, profileMeta],
@@ -100,7 +104,7 @@ export const shellRoutes: readonly string[] = [`/`, `/play`, `/ladder`, `/bots/:
  * it removed.
  */
 export function registerOgShell(app: FastifyInstance, deps: OgShellDeps): void {
-    const { query, presence, games, indexPath, publicOrigin } = deps;
+    const { query, presence, games, indexPath, publicOrigin, now } = deps;
 
     async function sendShell(reply: FastifyReply, status: 200 | 404, meta: PageMeta): Promise<FastifyReply> {
         const template = await readFile(indexPath, `utf8`);
@@ -116,7 +120,7 @@ export function registerOgShell(app: FastifyInstance, deps: OgShellDeps): void {
         return {
             listed: listed.length,
             online: listed.filter((bot) => presence.isOnline(bot.id)).length,
-            leader: rankablePlayers(query, `all`)[0],
+            leader: rankablePlayers(query, { kind: `all`, activeSince: activeSince(now()) })[0],
         };
     }
 

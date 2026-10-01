@@ -19,11 +19,11 @@ describe('CreditsScreen', () => {
         render(<CreditsScreen />);
         expect(screen.getAllByRole(`heading`, { level: 2 }).map((heading) => heading.textContent)).toEqual([
             `The game`,
+            `Community`,
             `Themes`,
             `Font`,
             `Protocol and ratings`,
             `Inspiration`,
-            `Discord`,
             `Licenses`,
         ]);
     });
@@ -37,13 +37,32 @@ describe('CreditsScreen', () => {
         );
     });
 
-    it('credit the game where it is played, its maker as that site names it, and say the rules are its own', () => {
+    it('credit the game to the creator who came up with it, with the video, and to the site where it is played', () => {
         render(<CreditsScreen />);
-        expect(document.body.textContent).toContain(
-            `HeXO is the game played here: each turn places 2 stones, and 6 in a row wins. People play it at hexo.did.science, a site made by WolverinDEV.`,
+        expect(document.body.textContent).toContain(`HeXO is the game played here: each turn places 2 stones, and 6 in a row wins.`);
+        expect(screen.getByRole(`link`, { name: `webgoatguy` }).getAttribute(`href`)).toBe(`https://www.youtube.com/@webgoatguy`);
+        const creator = within(row(`webgoatguy`));
+        expect(creator.getByRole(`link`, { name: `can tic-tac-toe, with hexagons?` }).getAttribute(`href`)).toBe(
+            `https://www.youtube.com/watch?v=Ob6QINTMIOA`,
         );
+        expect(row(`webgoatguy`).textContent).toContain(`Came up with HeXO in the video can tic-tac-toe, with hexagons?`);
+        expect(creator.getByText(`YouTube`).querySelector(`svg.youtube-icon`)).toBeTruthy();
         expect(screen.getByRole(`link`, { name: `hexo.did.science` }).getAttribute(`href`)).toBe(`https://hexo.did.science`);
-        expect(screen.getByText(`HeXO Arena implements the rules independently and is not affiliated with the HeXO project.`)).toBeTruthy();
+        expect(within(row(`hexo.did.science`)).getByText(`WolverinDEV`)).toBeTruthy();
+        expect(document.body.textContent).not.toContain(`not affiliated`);
+    });
+
+    it('link the community servers by their invites, each marked as Discord', () => {
+        render(<CreditsScreen />);
+        for (const [name, invite, gives] of [
+            [`HeXO - Official`, `https://discord.gg/M3TdwYzM2w`, `The game's official community`],
+            [`HexO Bot Dev`, `https://discord.gg/7RDwUEt9rc`, `Where people build HeXO bots`],
+        ] as const) {
+            expect(screen.getByRole(`link`, { name }).getAttribute(`href`)).toBe(invite);
+            const server = within(row(name));
+            expect(server.getByText(gives)).toBeTruthy();
+            expect(server.getByText(`Discord`).querySelector(`svg.discord-symbol`)).toBeTruthy();
+        }
     });
 
     it('show every theme as a tile of its preview and its name alone, in picker order', () => {
@@ -70,8 +89,7 @@ describe('CreditsScreen', () => {
             expect(credit.getByText(copyright)).toBeTruthy();
             expect(credit.getByRole(`link`, { name: `MIT License` }).getAttribute(`href`)).toBe(`#mit`);
         }
-        expect(document.body.textContent).toContain(`The other themes take their colors, and only their colors, from these projects:`);
-        expect(document.body.textContent).toContain(`No code, fonts, images, or logos come from these projects.`);
+        expect(document.body.textContent).toContain(`Ink is HeXO Arena's own. The other themes take their colors from these projects:`);
     });
 
     it('open the one MIT text from any MIT link', () => {
@@ -97,10 +115,9 @@ describe('CreditsScreen', () => {
         expect(screen.queryByText(/RPS Strategy/)).toBe(null);
     });
 
-    it('credit the Discord symbol and name the mark', () => {
+    it('name the owners of the marks it shows, once, under the community', () => {
         render(<CreditsScreen />);
-        expect(document.body.textContent).toContain(
-            `Discord is a trademark of Discord Inc.; HeXO Arena is not affiliated with Discord.`,
-        );
+        const marks = screen.getByText(`Discord and YouTube are trademarks of Discord Inc. and Google LLC.`);
+        expect(marks.closest(`section`)?.getAttribute(`aria-labelledby`)).toBe(`credits-community`);
     });
 });

@@ -365,7 +365,9 @@
 
     /* A field keeps its default width while it fits and narrows to its
        column when large text leaves less. */
-    input[type='text'] {
+    input[type='text'],
+    input[type='date'],
+    select {
         max-width: 100%;
         min-width: 0;
         font-family: var(--font-sans);
@@ -375,6 +377,24 @@
         border: none;
         height: var(--control-md);
         padding: 0 var(--space-3);
+    }
+
+    select {
+        padding-right: var(--space-2);
+        cursor: pointer;
+    }
+
+    /* Every theme's page is dark, so the browser draws a field's own
+       parts, the date's calendar and the menu's list, dark as well. */
+    input[type='date'],
+    select {
+        color-scheme: dark;
+    }
+
+    input:disabled,
+    select:disabled {
+        color: var(--c-text-dim);
+        cursor: not-allowed;
     }
 
     .name-field {

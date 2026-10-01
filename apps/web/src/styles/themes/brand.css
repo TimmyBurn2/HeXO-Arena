@@ -1,5 +1,6 @@
 /*
- * One accent, one bot hue, and Discord's blurple, identical in every theme.
+ * One accent, one bot hue, and Discord's and YouTube's colors, identical
+ * in every theme.
  * Themes never set these; the contrast check holds them against each
  * theme's surfaces.
  */
@@ -22,6 +23,10 @@
         --c-discord: #5865f2;
         --c-discord-hover: #4954d6;
         --c-on-discord: #ffffff;
+
+        /* YouTube's icon red and the white of its play triangle. */
+        --c-youtube: #ff0000;
+        --c-on-youtube: #ffffff;
 
         /* a luminance mask's two ends: what it keeps and what it cuts */
         --mask-keep: #ffffff;

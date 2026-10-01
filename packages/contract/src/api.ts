@@ -127,11 +127,11 @@ export const acceptsSchema = z
             .refine((window) => window === null || (window[0] ?? 0) <= (window[1] ?? 0), {
                 message: `turnMs min must not exceed max`,
             })
-            .meta({ description: `The accepted turn time window [min, max] in milliseconds, or null for none.` }),
-        match: z.boolean(),
-        unlimited: z.boolean(),
+            .meta({ description: `The turn clocks the bot plays, as the inclusive [min, max] of turnTimeMs; null refuses turn clocks.` }),
+        match: z.boolean().meta({ description: `True to play any match clock.` }),
+        unlimited: z.boolean().meta({ description: `True to play games with no clock.` }),
     })
-    .meta({ id: `Accepts`, description: `The clocks the bot agrees to play.` });
+    .meta({ id: `Accepts`, description: `The clocks the bot plays; a bot that never declared accepts plays none.` });
 export type Accepts = z.infer<typeof acceptsSchema>;
 
 // ownerName is nullable because a hidden-owner state is reserved; today

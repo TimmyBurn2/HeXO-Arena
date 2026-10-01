@@ -32,6 +32,25 @@ afterEach(() => {
     meStore.reset();
 });
 
+// A history of twelve games, of which a page holds every one.
+function history(player: string): unknown {
+    const games = Array.from({ length: 12 }, (_, index) => ({
+        gameId: `g-${String(index)}`,
+        players: {
+            x: { name: player, rating: 1700, provisional: false, kind: player === `tom` ? `user` : `bot` },
+            o: { name: `hextide`, rating: 1690, provisional: false, kind: `bot` },
+        },
+        winner: index % 2 === 0 ? `x` : `o`,
+        reason: `six-in-a-row`,
+        timeControl: { mode: `unlimited` },
+        openingPlies: 1,
+        turns: 20,
+        finishedAt: new Date(Date.now() - (index + 1) * 3_600_000).toISOString(),
+        rated: true,
+    }));
+    return { games, next: null, previous: null, page: 1, record: { games: 12, won: 6, lost: 6, undecided: 0, asX: { games: 12, won: 6, lost: 6 }, asO: { games: 0, won: 0, lost: 0 } } };
+}
+
 // The owner panel needs a session, so these serve me beside the directory
 // and record every write.
 function serveAs(name: string, writes: { method: string; url: string }[], deleteStatus = 204): void {
@@ -59,6 +78,40 @@ function serveAs(name: string, writes: { method: string; url: string }[], delete
 }
 
 describe('BotScreen', () => {
+    it('list its five latest games, then lead to all of them in Games', async () => {
+        const reads: string[] = [];
+        vi.stubGlobal(
+            `fetch`,
+            vi.fn((url: string) => {
+                reads.push(url);
+                const body = url.startsWith(`/api/games/finished`) ? history(`sealbot`) : url === `/api/games` ? [] : [sealbot];
+                return Promise.resolve(new Response(JSON.stringify(body)));
+            }),
+        );
+        render(<BotScreen name="sealbot" />);
+        const section = (await screen.findByRole(`heading`, { name: `Recent games` })).closest(`section`) as HTMLElement;
+        await waitFor(() => {
+            expect(within(section).getAllByRole(`listitem`)).toHaveLength(5);
+        });
+        expect(within(section).getAllByRole(`listitem`).map((item) => within(item).getByRole(`link`).getAttribute(`href`))).toEqual([`/game/g-0`, `/game/g-1`, `/game/g-2`, `/game/g-3`, `/game/g-4`]);
+        expect(within(section).getByRole(`link`, { name: `All 12 games` }).getAttribute(`href`)).toBe(`/games?player=sealbot`);
+        expect(reads).toContain(`/api/games/finished?player=sealbot`);
+    });
+
+    it('say a bot that has finished no game has none yet', async () => {
+        vi.stubGlobal(
+            `fetch`,
+            vi.fn((url: string) => {
+                const body = url.startsWith(`/api/games/finished`) ? { games: [], next: null, previous: null, page: 1, record: { games: 0, won: 0, lost: 0, undecided: 0, asX: { games: 0, won: 0, lost: 0 }, asO: { games: 0, won: 0, lost: 0 } } } : url === `/api/games` ? [] : [sealbot];
+                return Promise.resolve(new Response(JSON.stringify(body)));
+            }),
+        );
+        render(<BotScreen name="sealbot" />);
+        const section = (await screen.findByRole(`heading`, { name: `Recent games` })).closest(`section`) as HTMLElement;
+        expect(await within(section).findByText(`No finished games yet.`)).toBeTruthy();
+        expect(within(section).queryByRole(`link`)).toBe(null);
+    });
+
     it('show the declaration, accepts table, and Play linking to the Play page', async () => {
         stubDirectory([sealbot]);
         render(<BotScreen name="sealbot" />);

@@ -96,6 +96,9 @@
         --mini-card-min: 20rem;
         --home-panel-max: 36rem;
         --scrub-count-min: 9rem;
+        --games-name-w: 11rem;
+        --skeleton-line-w: 24rem;
+        --skeleton-short-w: 16rem;
         --rung-rank-w: 3.5rem;
         --game-max: 90rem;
         --topbar-h: 4rem;
@@ -106,7 +109,10 @@
         --sheet-peek-replay-h: 8.25rem;
         --swatch-size: 0.875rem;
         --pip-size: 0.75rem;
-        --discord-symbol-w: 1.25rem;
+        /* Discord's smallest symbol on screen is 20 px tall, with a third
+           of its width clear around it. */
+        --discord-symbol-h: 1.25rem;
+        --discord-symbol-space: 0.625rem;
         --discord-plate-size: 3rem;
         --play-card-w: 27rem;
         --play-card-min: 22rem;

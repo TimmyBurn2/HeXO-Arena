@@ -1,5 +1,7 @@
 import { useRef, type ReactNode } from 'react';
 import { ThemeSwatch } from '../board/ThemeSwatch';
+import { DiscordSymbol } from '../components/DiscordSymbol';
+import { YouTubeIcon } from '../components/YouTubeIcon';
 import { useRoute } from '../router/use-route';
 import { botApiRepository, thirdPartyLicensesPath } from '../site-links';
 import { text } from '../text';
@@ -10,18 +12,45 @@ import './CreditsScreen.css';
 const credits = text.credits;
 
 // The terms each credit is used under: the in-page MIT text, a license
-// file, or a plain statement where nothing is licensed.
-type Terms = { kind: `mit`; copyright: string } | { kind: `file`; label: string; href: string; copyright: string } | { kind: `plain`; label: string };
+// file, or a plain statement where nothing is licensed; for a credit that
+// is a person or a place rather than a work, the platform its link opens.
+type Terms =
+    | { kind: `mit`; copyright: string }
+    | { kind: `file`; label: string; href: string; copyright: string }
+    | { kind: `plain`; label: string }
+    | { kind: `platform`; platform: keyof typeof credits.platforms };
 
 interface Credit {
     name: string;
     href: string;
-    by: string;
+    by?: string;
     gives: ReactNode;
-    terms: Terms;
+    terms?: Terms;
 }
 
 const rows = credits.rows;
+
+const platformMarks = { youtube: YouTubeIcon, discord: DiscordSymbol } satisfies Record<keyof typeof credits.platforms, () => ReactNode>;
+
+const game: readonly Credit[] = [
+    {
+        ...rows.webgoatguy,
+        href: `https://www.youtube.com/@webgoatguy`,
+        gives: rows.webgoatguy.gives((words) => (
+            <a href="https://www.youtube.com/watch?v=Ob6QINTMIOA" rel="noreferrer">
+                {words}
+            </a>
+        )),
+        terms: { kind: `platform`, platform: `youtube` },
+    },
+    { ...rows.hexoSite, href: `https://hexo.did.science` },
+];
+
+// Invites that never expire, so a link here keeps working.
+const community: readonly Credit[] = [
+    { ...rows.hexoDiscord, href: `https://discord.gg/M3TdwYzM2w`, terms: { kind: `platform`, platform: `discord` } },
+    { ...rows.botDevDiscord, href: `https://discord.gg/7RDwUEt9rc`, terms: { kind: `platform`, platform: `discord` } },
+];
 
 const themeSources: readonly Credit[] = [
     { ...rows.renderer, href: `https://github.com/MineKing9534/HeXO`, terms: { kind: `mit`, copyright: rows.renderer.copyright } },
@@ -52,7 +81,8 @@ const inspiration: readonly Credit[] = [
 
 /**
  * What the site builds on, one row style throughout: what, who, what it
- * gives here, and the terms; the themes lead as tiles above their sources.
+ * gives here, and the terms; the game's origin and its community come
+ * first, and the themes lead their part as tiles above their sources.
  */
 export function CreditsScreen() {
     const route = useRoute();
@@ -73,15 +103,16 @@ export function CreditsScreen() {
                 <h2 id="credits-game" className="section-title">
                     {credits.game}
                 </h2>
-                <p className="credits-prose">
-                    {credits.gameAbout(
-                        (words) => (
-                            <strong>{words}</strong>
-                        ),
-                        (words) => <a href="https://hexo.did.science">{words}</a>,
-                    )}
-                </p>
-                <p className="credits-prose">{credits.gameIndependent}</p>
+                <p className="credits-prose">{credits.gameAbout((words) => <strong>{words}</strong>)}</p>
+                <CreditRows credits={game} onLicense={openLicense} />
+            </section>
+
+            <section className="credits-section" aria-labelledby="credits-community">
+                <h2 id="credits-community" className="section-title">
+                    {credits.community}
+                </h2>
+                <CreditRows credits={community} onLicense={openLicense} />
+                <p className="credits-small">{credits.marks}</p>
             </section>
 
             <section className="credits-section" aria-labelledby="credits-themes">
@@ -98,7 +129,6 @@ export function CreditsScreen() {
                 </ul>
                 <p className="credits-prose">{credits.themesLead}</p>
                 <CreditRows credits={themeSources} onLicense={openLicense} />
-                <p className="credits-small">{credits.themesSmall}</p>
                 <details className="credits-license" id="mit" ref={license}>
                     <summary>{credits.mitSummary}</summary>
                     {credits.mitText.map((paragraph) => (
@@ -126,14 +156,6 @@ export function CreditsScreen() {
                     {credits.inspiration}
                 </h2>
                 <CreditRows credits={inspiration} onLicense={openLicense} />
-                <p className="credits-small">{credits.inspirationSmall}</p>
-            </section>
-
-            <section className="credits-section" aria-labelledby="credits-discord">
-                <h2 id="credits-discord" className="section-title">
-                    {credits.discord}
-                </h2>
-                <p className="credits-prose">{credits.discordProse}</p>
             </section>
 
             <section className="credits-section" aria-labelledby="credits-licenses">
@@ -155,12 +177,14 @@ function CreditRows({ credits: list, onLicense }: { credits: readonly Credit[]; 
                         <a href={credit.href} rel="noreferrer">
                             {credit.name}
                         </a>
-                        <span className="credit-by">{credit.by}</span>
+                        {credit.by === undefined ? null : <span className="credit-by">{credit.by}</span>}
                     </div>
                     <p className="credit-for">{credit.gives}</p>
-                    <div className="credit-terms">
-                        <CreditTerms terms={credit.terms} onLicense={onLicense} />
-                    </div>
+                    {credit.terms === undefined ? null : (
+                        <div className="credit-terms">
+                            <CreditTerms terms={credit.terms} onLicense={onLicense} />
+                        </div>
+                    )}
                 </li>
             ))}
         </ul>
@@ -187,5 +211,14 @@ function CreditTerms({ terms, onLicense }: { terms: Terms; onLicense: () => void
             );
         case `plain`:
             return <span className="credit-plain">{terms.label}</span>;
+        case `platform`: {
+            const Mark = platformMarks[terms.platform];
+            return (
+                <span className="credit-platform">
+                    <Mark />
+                    {credits.platforms[terms.platform]}
+                </span>
+            );
+        }
     }
 }

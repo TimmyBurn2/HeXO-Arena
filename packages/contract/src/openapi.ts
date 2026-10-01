@@ -91,8 +91,10 @@ import {
     nextPathMaxLength,
     nextPathSchema,
     humanMoveRequestSchema,
-    leaderboardEntrySchema,
+    leaderboardActiveDays,
+    leaderboardCap,
     leaderboardPath,
+    leaderboardSchema,
     legalDetailsPath,
     legalDetailsSchema,
     liveGameEntrySchema,
@@ -102,7 +104,6 @@ import {
     okSchema,
     pairDailyCap,
     pausedErrorCodes,
-    pausedRetryAfterSeconds,
     payloadTooLargeErrorCodes,
     publicRequestLimit,
     rateLimitedErrorCodes,
@@ -217,7 +218,7 @@ function registerSharedComponents(registry: OpenAPIRegistry, surface: `site` | `
         badRequest: response(`BadRequest`, `The request fails validation.`, badRequestError),
         gameOver: response(`GameOver`, `The game is already finished (game_over).`, gameOverError),
         paused: registry.registerComponent('responses', 'Paused', {
-            description: `The site is paused: nothing new starts, while open streams and live games run on. Retry after ${String(pausedRetryAfterSeconds)} s.`,
+            description: `The site is paused: no new stream, challenge, or game starts, and open streams and live games continue. Retry after Retry-After.`,
             headers: { 'Retry-After': retryAfter },
             content: json(pausedError),
         }).ref,
@@ -225,7 +226,7 @@ function registerSharedComponents(registry: OpenAPIRegistry, surface: `site` | `
             description:
                 surface === `site`
                     ? `Too many requests (rate_limited): one client, by network address, makes ${rateText(clientRequestLimit)}; operations needing no credential take ${rateText(publicRequestLimit)} from all callers together; each bot, user, guest, or game seat makes ${rateText(principalRequestLimit)} with its credential, and an account changes its bots ${rateText(botManagementLimit)}. Retry after Retry-After.`
-                    : `Too many requests (rate_limited): one client, by network address, makes ${rateText(clientRequestLimit)}; operations needing no credential take ${rateText(publicRequestLimit)} from all callers together; each bot or game seat makes ${rateText(principalRequestLimit)} with its credential. Retry after Retry-After.`,
+                    : `Too many requests (rate_limited). Per network address: ${rateText(clientRequestLimit)}. Per bot token, and per game token: ${rateText(principalRequestLimit)}. Without a credential, across all callers: ${rateText(publicRequestLimit)}. Retry after Retry-After.`,
             headers: { 'Retry-After': retryAfter },
             content: json(rateLimitedError),
         }).ref,
@@ -300,10 +301,10 @@ function registerSiteSurface(registry: OpenAPIRegistry, shared: SharedComponents
         operationId: 'getLegalDetails',
         tags: ['Site'],
         security: [],
-        description: `The values the imprint and privacy pages show, read once at start from a file the deployment provides. A production server refuses to start without that file, so only a development server answers 404.`,
+        description: `The values the legal pages show, read once at start from the deployment's file; a development server without the file answers 404.`,
         responses: {
             200: {
-                description: `Operator, host, supervisory authority, and mail provider.`,
+                description: `The legal details.`,
                 content: { 'application/json': { schema: legalDetailsSchema } },
             },
             404: shared.notFound,
@@ -485,7 +486,7 @@ function registerSiteSurface(registry: OpenAPIRegistry, shared: SharedComponents
         operationId: 'getLeaderboard',
         tags: ['Directory'],
         security: [],
-        description: `Rankable players, highest rating first, ties by name fold, without pagination. A player is rankable at a rating deviation of ${String(rankableDeviation)} or below. Banned users, delisted bots, and bots of banned owners never appear. Bots and humans share one rating pool.`,
+        description: `Rankable players, highest rating first, ties by name fold, at most ${String(leaderboardCap)}. A player is rankable at a rating deviation of ${String(rankableDeviation)} or below. Banned users, delisted bots, and bots of banned owners never appear. Bots and humans share one rating pool.`,
         parameters: [
             {
                 name: 'kind',
@@ -494,12 +495,19 @@ function registerSiteSurface(registry: OpenAPIRegistry, shared: SharedComponents
                 description: `Narrows the board to bots or humans; all when absent.`,
                 schema: { type: 'string', enum: ['bots', 'humans', 'all'] },
             },
+            {
+                name: 'active',
+                in: 'query',
+                required: false,
+                description: `Players whose latest rated game finished in the last ${String(leaderboardActiveDays)} days, or all; ${String(leaderboardActiveDays)} days when absent.`,
+                schema: { type: 'string', enum: ['30d', 'all'] },
+            },
         ],
         responses: {
             200: {
                 description: 'The board.',
                 content: {
-                    'application/json': { schema: leaderboardEntrySchema.array() },
+                    'application/json': { schema: leaderboardSchema },
                 },
             },
             400: shared.badRequest,
@@ -796,7 +804,7 @@ function registerBotSurface(registry: OpenAPIRegistry, shared: SharedComponents)
                 name: 'open',
                 in: 'query',
                 required: false,
-                description: `Present as 1, the bot takes challenges and games while the stream is open.`,
+                description: `Present as 1, the bot is open while the stream is: other bots may challenge it, and players on the website may start games against it, which arrive as gameStart with no challenge.`,
                 schema: { type: 'string', enum: ['1'] },
             },
         ],
@@ -876,7 +884,12 @@ function registerBotSurface(registry: OpenAPIRegistry, shared: SharedComponents)
         operationId: 'openEngineSession',
         tags: ['Engine session'],
         security: [],
-        description: `Speaks htttx basic_websocket v1-alpha, the server as client and the bot as bot. The bot must support the move_skips and request_id capabilities. A new connection replaces the previous one. Each move_request lists in previous only the turns this connection has not seen. Heartbeats come every ${seconds(sessionHeartbeatMs)} s. A move_response must echo request_id, or it is dropped. An illegal move forfeits.`,
+        description: [
+            `Speaks htttx basic_websocket v1-alpha: the bot dials, then answers each move_request with a move_response of two cells that echoes its request_id, or the answer is dropped.`,
+            `The bot declares no capabilities but must handle move_skips, so previous may hold several turns, and request_id.`,
+            `A new connection replaces the previous one.`,
+            `An illegal move forfeits.`,
+        ].join(` `),
         parameters: [
             shared.gameId,
             {
@@ -889,14 +902,22 @@ function registerBotSurface(registry: OpenAPIRegistry, shared: SharedComponents)
         ],
         responses: {
             101: {
-                description: `Switching protocols; the engine session is open. No frame the server sends is larger than ${kib(serverLineLimitBytes)} KiB. It closes with 1008 after more than ${String(engineStrayFrameCap)} frames that answer no outstanding request, a malformed frame, or a protocol violation, with 1008 when more than ${kib(streamBacklogLimitBytes)} KiB sent to it go unread, and with 1009 for a frame over ${kib(engineFrameLimitBytes)} KiB. A close forfeits nothing: the clock runs, and the bot may dial again while its game token lives.`,
+                description: [
+                    `Switching protocols; the engine session is open.`,
+                    `The server first sends setup, whose board holds the origin stone alone.`,
+                    `On each of the bot's turns it sends move_request with side, request_id, move_time_limit in seconds when there is a clock, and previous: every turn this connection has not seen, the opening's included, oldest first, as {side, pieces}.`,
+                    `Every ${seconds(sessionHeartbeatMs)} s it sends heartbeat, with waiting true while it waits on this bot's move; the bot never answers a heartbeat, and a bot that hears waiting true while it is not working on a move hangs up and redials.`,
+                    `No frame the server sends exceeds ${kib(serverLineLimitBytes)} KiB.`,
+                    `It closes with 1009 for a bot frame over ${kib(engineFrameLimitBytes)} KiB, with 1008 after more than ${String(engineStrayFrameCap)} frames in one session that answer no outstanding request, a malformed frame, or a protocol violation, and with 1008 when more than ${kib(streamBacklogLimitBytes)} KiB go unread.`,
+                    `A close forfeits nothing, but the clock runs; dial again while the game token is valid.`,
+                ].join(` `),
             },
             404: {
                 description: `Unknown game, or a game token that is expired or rotated.`,
                 content: { 'application/json': { schema: notFoundError } },
             },
             429: {
-                description: `A seat dials at most ${rateText(engineDialLimit)} (rate_limited), or too many requests; refused before the upgrade, so an open session stays. Retry after Retry-After.`,
+                description: `A seat dials at most ${rateText(engineDialLimit)} (rate_limited), or too many requests; a refused dial leaves an open session alone. Retry after Retry-After.`,
                 headers: { 'Retry-After': shared.retryAfter },
                 content: { 'application/json': { schema: rateLimitedError } },
             },
@@ -906,7 +927,7 @@ function registerBotSurface(registry: OpenAPIRegistry, shared: SharedComponents)
     registry.registerPath({
         method: 'post',
         path: botGameResignPath,
-        summary: 'Resign a game over the engine-session token.',
+        summary: 'Resign a game with its game token.',
         operationId: 'resignBotGame',
         tags: ['Engine session'],
         security: [{ gameToken: [] }],

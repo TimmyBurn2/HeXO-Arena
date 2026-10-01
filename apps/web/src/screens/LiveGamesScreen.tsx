@@ -1,4 +1,5 @@
 import { ErrorFrame } from '../components/states';
+import { GamesHead } from '../games/GamesHead';
 import { LiveGameGrid } from '../live/LiveGameCard';
 import { useLiveReplay } from '../live/use-live-replay';
 import { Link } from '../router/Link';
@@ -11,7 +12,7 @@ export function LiveGamesScreen() {
     return (
         <>
             <div className="live-head">
-                <h1 className="screen-title">{text.live.title}</h1>
+                <GamesHead view="live" live={games?.length ?? null} />
                 {games === null || games.length === 0 ? null : <p className="note">{text.live.count(games.length)}</p>}
             </div>
             {games === null ? (

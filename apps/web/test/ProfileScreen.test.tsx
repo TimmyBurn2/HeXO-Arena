@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { Me } from '@hexo-arena/contract';
 import { ProfileScreen } from '../src/screens/ProfileScreen';
@@ -21,7 +21,7 @@ function serve(me: Me, posts: string[] = []): void {
                 if (url === `/api/auth/logout`) session = null;
                 return Promise.resolve(new Response(null, { status: 204 }));
             }
-            const body = url === `/api/me` ? session : roster;
+            const body = url === `/api/me` ? session : url.startsWith(`/api/games/finished`) ? history(`tom`) : roster;
             return Promise.resolve(new Response(JSON.stringify(body), { status: 200 }));
         }),
     );
@@ -36,7 +36,41 @@ afterEach(() => {
     window.history.replaceState(null, ``, `/`);
 });
 
+// A history of twelve games, of which a page holds every one.
+function history(player: string): unknown {
+    const games = Array.from({ length: 12 }, (_, index) => ({
+        gameId: `g-${String(index)}`,
+        players: {
+            x: { name: player, rating: 1700, provisional: false, kind: player === `tom` ? `user` : `bot` },
+            o: { name: `hextide`, rating: 1690, provisional: false, kind: `bot` },
+        },
+        winner: index % 2 === 0 ? `x` : `o`,
+        reason: `six-in-a-row`,
+        timeControl: { mode: `unlimited` },
+        openingPlies: 1,
+        turns: 20,
+        finishedAt: new Date(Date.now() - (index + 1) * 3_600_000).toISOString(),
+        rated: true,
+    }));
+    return { games, next: null, previous: null, page: 1, record: { games: 12, won: 6, lost: 6, undecided: 0, asX: { games: 12, won: 6, lost: 6 }, asO: { games: 0, won: 0, lost: 0 } } };
+}
+
 describe('ProfileScreen', () => {
+    it('list the latest games of a signed-in player, then lead to all of them', async () => {
+        serve({ kind: `user`, name: `tom`, rating: 1503, provisional: false, discord: null, liveGames: [] });
+        render(<ProfileScreen />);
+        const section = (await screen.findByRole(`heading`, { name: `Your games` })).closest(`section`) as HTMLElement;
+        expect(within(section).getAllByRole(`listitem`)).toHaveLength(5);
+        expect(within(section).getByRole(`link`, { name: `All 12 games` }).getAttribute(`href`)).toBe(`/games?player=tom`);
+    });
+
+    it('keep no games for a guest, whose games are never kept', async () => {
+        serve({ kind: `guest`, name: `Guest k3f9`, liveGames: [] });
+        render(<ProfileScreen />);
+        await screen.findByText(`Guest games are unrated and end with the session.`);
+        expect(screen.queryByRole(`heading`, { name: `Your games` })).toBe(null);
+    });
+
     it('offer the discord sign-in and the way to build a bot when signed out', async () => {
         serve(null);
         window.history.replaceState(null, ``, `/profile`);

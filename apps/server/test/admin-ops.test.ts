@@ -206,9 +206,11 @@ describe('delist and relist', () => {
     }
 
     it('hides a delisted bot from the directory and the leaderboard until relisted', async () => {
-        world.sqlite
-            .prepare(`insert into ratings (bot_id, rating, deviation, volatility) values (?, 1600, 60, 0.06)`)
-            .run(botId(world, `beta`));
+        // The board lists a settled player with a rated game, so beta wins one and then settles.
+        const query = createQuery(world.sqlite);
+        const game = insertBotGame(query, { challengerBotId: botId(world, `alpha`), destBotId: botId(world, `beta`), challengerSide: `x`, timeControl: { mode: `unlimited` }, opening: [{ x: 0, y: 0, player: 0 }] });
+        recordFinish(query, game, { winner: `o`, reason: `six-in-a-row` });
+        world.sqlite.prepare(`update ratings set deviation = 60 where bot_id = ?`).run(botId(world, `beta`));
         const board = async () =>
             (await world.app.inject({ method: `GET`, url: `/api/leaderboard` })).json<{ name: string }[]>().map((row) => row.name);
         expect(await board()).toEqual([`beta`]);

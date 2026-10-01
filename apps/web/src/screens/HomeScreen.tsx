@@ -25,7 +25,12 @@ export function HomeScreen() {
     // shows the latest result.
     const live = replay.games ?? (replay.failed ? noGames : null);
     const loadRoster = useCallback(async () => fetchBots(false), []);
-    const loadLadder = useCallback(async () => fetchLeaderboard(`all`), []);
+    // A quiet month leaves the default board empty while players still stand
+    // on the all-time ladder, so Home reads that before it calls ratings settling.
+    const loadLadder = useCallback(async () => {
+        const month = await fetchLeaderboard(`all`);
+        return month.length > 0 ? { entries: month, allTime: false } : { entries: await fetchLeaderboard(`all`, `all`), allTime: true };
+    }, []);
     const roster = useAsync(loadRoster);
     const recent = useAsync(fetchRecentGames);
     const ladder = useAsync(loadLadder);
@@ -70,7 +75,7 @@ export function HomeScreen() {
             {others.length === 0 ? null : <LiveNow games={others} />}
             <div className="home-lower">
                 <div className="home-column">
-                    {ladder.data === null && !ladder.error ? null : <LadderBlock ladder={ladder.data ?? []} roster={roster.data} failed={ladder.data === null} retry={ladder.reload} />}
+                    {ladder.data === null && !ladder.error ? null : <LadderBlock ladder={ladder.data?.entries ?? []} allTime={ladder.data?.allTime ?? false} roster={roster.data} failed={ladder.data === null} retry={ladder.reload} />}
                     {recent.data === null && !recent.error ? null : <RecentResults games={recent.data?.games ?? []} failed={recent.data === null} now={now} retry={recent.reload} />}
                 </div>
                 <div className="home-column">

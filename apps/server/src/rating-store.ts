@@ -1,5 +1,5 @@
 import { rankableDeviation, type LeaderboardQuery, type Side, type StreamPlayer } from '@hexo-arena/contract';
-import { and, asc, count, desc, eq, isNotNull, isNull, lt, lte, notExists, or, sql } from 'drizzle-orm';
+import { and, asc, count, desc, eq, isNotNull, isNull, lt, lte, notExists, or, sql, type SQL, type SQLWrapper } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/sqlite-core';
 import type { Query } from './db';
 import { bots, gameRatings, games, ratings, users } from './db/schema';
@@ -233,15 +233,56 @@ export interface RankedPlayer {
     readonly name: string;
     readonly kind: PlayerRef[`kind`];
     readonly rating: number;
+    /** The rated games the player has played. */
+    readonly games: number;
+    /** When the latest of them finished, in epoch seconds. */
+    readonly lastPlayedAt: number;
+    /** The bot's id, for its presence; null for a human. */
+    readonly botId: string | null;
+    readonly ownerName: string | null;
 }
 
 const botOwners = alias(users, `bot_owner`);
 
-export function rankablePlayers(query: Query, kind: LeaderboardQuery[`kind`]): RankedPlayer[] {
+// A rated game is one with a winner that no moderation voided.
+const ratedFinish = sql`${games.winner} is not null and ${games.voidedAt} is null`;
+
+// The rated games in one seat column, by count and latest finish, read
+// through that seat's index; a column the player cannot sit in counts none.
+function seatCount(column: SQLWrapper, id: SQLWrapper): SQL {
+    return sql`(select count(*) from ${games} where ${column} = ${id} and ${ratedFinish})`;
+}
+
+function seatLatest(column: SQLWrapper, id: SQLWrapper): SQL {
+    return sql`coalesce((select max(${games.finishedAt}) from ${games} where ${column} = ${id} and ${ratedFinish}), 0)`;
+}
+
+/**
+ * The rankable players by rating, ties by name fold, each with their rated
+ * games and the latest one's finish; `activeSince`, in epoch seconds, keeps
+ * those whose latest rated game finished then or later.
+ * A player with no rated game is never rankable, so none is listed.
+ */
+export function rankablePlayers(query: Query, filter: { kind: LeaderboardQuery[`kind`]; activeSince: number | null }): RankedPlayer[] {
+    const { kind, activeSince } = filter;
     const narrowed =
         kind === `bots` ? isNotNull(ratings.botId) : kind === `humans` ? isNotNull(ratings.userId) : undefined;
+    const seats = [
+        [games.userId, ratings.userId],
+        [games.botId, ratings.botId],
+        [games.challengerBotId, ratings.botId],
+        [games.destBotId, ratings.botId],
+    ] as const;
     return query
-        .select({ rating: ratings.rating, userName: users.name, botName: bots.name })
+        .select({
+            rating: ratings.rating,
+            userName: users.name,
+            botName: bots.name,
+            botId: bots.id,
+            ownerName: botOwners.name,
+            games: sql<number>`${sql.join(seats.map(([column, id]) => seatCount(column, id)), sql` + `)}`,
+            lastPlayedAt: sql<number>`max(${sql.join(seats.map(([column, id]) => seatLatest(column, id)), sql`, `)})`,
+        })
         .from(ratings)
         .leftJoin(users, eq(ratings.userId, users.id))
         .leftJoin(bots, eq(ratings.botId, bots.id))
@@ -262,9 +303,11 @@ export function rankablePlayers(query: Query, kind: LeaderboardQuery[`kind`]): R
         )
         .orderBy(desc(ratings.rating), sql`coalesce(${users.nameKey}, ${bots.nameKey})`)
         .all()
+        .filter((row) => row.games > 0 && (activeSince === null || row.lastPlayedAt >= activeSince))
         .map((row): RankedPlayer => {
-            if (row.userName !== null) return { name: row.userName, kind: `human`, rating: row.rating };
-            if (row.botName !== null) return { name: row.botName, kind: `bot`, rating: row.rating };
+            const played = { rating: row.rating, games: row.games, lastPlayedAt: row.lastPlayedAt };
+            if (row.userName !== null) return { name: row.userName, kind: `human`, ...played, botId: null, ownerName: null };
+            if (row.botName !== null && row.botId !== null) return { name: row.botName, kind: `bot`, ...played, botId: row.botId, ownerName: row.ownerName };
             throw new Error(`stored rating row names nobody`);
         });
 }
