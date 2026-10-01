@@ -118,13 +118,19 @@
         color: var(--c-text-dim);
     }
 
+    /* A narrow window drops the badge under the name rather than break a short name mid-word. */
     .games-h2h-name {
         display: inline-flex;
+        flex-wrap: wrap;
         align-items: center;
         gap: var(--space-2);
         color: var(--c-text);
         font-weight: var(--weight-display);
-        overflow-wrap: anywhere;
+        overflow-wrap: break-word;
+    }
+
+    .games-h2h-name .player-name {
+        font-weight: inherit;
     }
 
     .games-h2h-name .badge-bot {

@@ -169,7 +169,7 @@ export const gameStartEventSchema = z
     })
     .meta({
         id: `GameStartEvent`,
-        description: `A game the bot plays has started, or is replayed as the stream opens. A game started by a player on the website arrives with no challenge before it.`,
+        description: `A game the bot plays has started, or is replayed as the stream opens. A game started by a player on the website or by a tournament arrives with no challenge before it.`,
     });
 export type GameStartEvent = z.infer<typeof gameStartEventSchema>;
 

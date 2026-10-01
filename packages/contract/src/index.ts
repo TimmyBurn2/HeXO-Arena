@@ -1,6 +1,6 @@
 // The API version is spec semver, decoupled from package versions on
 // purpose.
-export const apiVersion = `0.29.0`;
+export const apiVersion = `0.31.0`;
 
 // The bot surface's own document, which other servers may implement,
 // versions apart from the whole site's.
@@ -23,6 +23,8 @@ export * from './legal';
 export * from './limits';
 export * from './meta';
 export * from './names';
+export * from './players';
 export * from './sigil';
 export * from './sign-in';
 export * from './stream';
+export * from './tournaments';

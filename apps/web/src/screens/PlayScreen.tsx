@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState, useSyncExternalStore } from 'react';
 import { nameKeyOf, playMeta, type BotListing, type OpeningPlies, type TimeControl } from '@hexo-arena/contract';
-import { fetchBots, limitedFor } from '../api/client';
+import { fetchBots, fetchTournament, fetchTournaments, limitedFor } from '../api/client';
 import { liveRefreshMs } from '../api/refresh';
 import { BotBadge, Rating } from '../components/player';
 import { ErrorFrame, SkeletonRows } from '../components/states';
@@ -23,10 +23,15 @@ import './PlayScreen.css';
 // and at once after a refusal on the bot's side.
 function useBotList() {
     const [bots, setBots] = useState<BotListing[] | null>(null);
+    const [reserved, setReserved] = useState<ReadonlySet<string>>(noReservations);
     const [reads, setReads] = useState(0);
     const [failed, setFailed] = useState(false);
     const [limited, setLimited] = useState<number | null>(null);
     const reload = useCallback(async () => {
+        // The list never waits on the tournament read.
+        void reservedBots().then((held) => {
+            if (held !== null) setReserved(held);
+        });
         try {
             setBots(await fetchBots(false));
             setReads((count) => count + 1);
@@ -50,7 +55,22 @@ function useBotList() {
             document.removeEventListener(`visibilitychange`, onVisible);
         };
     }, [reload]);
-    return { bots, reads, failed, limited, reload };
+    return { bots, reserved, reads, failed, limited, reload };
+}
+
+const noReservations: ReadonlySet<string> = new Set();
+
+// The bots the running tournament holds; null when the read failed, which
+// leaves the last set standing, since the bot list stands without it.
+async function reservedBots(): Promise<ReadonlySet<string> | null> {
+    try {
+        const { running } = await fetchTournaments();
+        if (running === null) return noReservations;
+        const detail = await fetchTournament(running.id);
+        return new Set(detail.entries.filter((entry) => entry.state === `playing`).map((entry) => entry.bot));
+    } catch {
+        return null;
+    }
 }
 
 function readAsked() {
@@ -116,7 +136,7 @@ export function PlayScreen() {
     // listed again before the person picks, it takes the card back.
     const rating = me.status === `ready` && me.me?.kind === `user` ? me.me.rating : null;
     const fallback =
-        ready && pickedBot === null && openedBot === null ? preselect(bots, picked === null && lost === null ? asked.bot : null, played.opponent, rating) : null;
+        ready && pickedBot === null && openedBot === null ? preselect(bots, picked === null && lost === null ? asked.bot : null, played.opponent, rating, list.reserved) : null;
     const bot = pickedBot ?? openedBot ?? fallback;
     useEffect(() => {
         if (bots === null) return;
@@ -137,8 +157,8 @@ export function PlayScreen() {
     // A bot the card showed while it was not ready keeps its row for the visit,
     // so picking another never moves the list under the pointer.
     useEffect(() => {
-        if (bot !== null && readinessOf(bot) !== `ready` && !shown.includes(bot.name)) setShown([...shown, bot.name]);
-    }, [bot, shown]);
+        if (bot !== null && readinessOf(bot, list.reserved) !== `ready` && !shown.includes(bot.name)) setShown([...shown, bot.name]);
+    }, [bot, shown, list.reserved]);
     const unlisted = picked === null && lost === null && asked.bot !== null && bots !== null && find(asked.bot) === null ? asked.bot : null;
     // A lost bot listed again needs no line.
     const gone = lost !== null ? (find(lost) === null ? lost : null) : unlisted;
@@ -173,7 +193,7 @@ export function PlayScreen() {
     }
     if (bots.length === 0) return <Empty kind="none" />;
     if (bot === null || clock === null) return <Empty kind="unready" />;
-    const roster = rosterOf(bots, [...(asked.bot === null ? [] : [asked.bot]), ...shown, bot.name]);
+    const roster = rosterOf(bots, [...(asked.bot === null ? [] : [asked.bot]), ...shown, bot.name], list.reserved);
 
     return (
         <>
@@ -186,7 +206,7 @@ export function PlayScreen() {
                         </h2>
                         <span className="note">{text.play.readyCount(roster.ready.length)}</span>
                     </div>
-                    <RosterList roster={roster} chosen={bot} name="opponent" labelledBy="opponent-label" onChoose={choose} />
+                    <RosterList roster={roster} reserved={list.reserved} chosen={bot} name="opponent" labelledBy="opponent-label" onChoose={choose} />
                 </section>
                 <SetupCard
                     key={visit}
@@ -199,6 +219,7 @@ export function PlayScreen() {
                     notice={notice}
                     choices={choices}
                     reads={list.reads}
+                    reserved={list.reserved}
                     onClock={(next) => {
                         setPicks(next);
                         setChoices((count) => count + 1);
@@ -220,7 +241,7 @@ export function PlayScreen() {
                         setSheet(false);
                     }}
                 >
-                    <RosterList roster={roster} chosen={bot} name="sheet-opponent" labelledBy="sheet-title" onChoose={choose} />
+                    <RosterList roster={roster} reserved={list.reserved} chosen={bot} name="sheet-opponent" labelledBy="sheet-title" onChoose={choose} />
                 </OpponentSheet>
             ) : null}
         </>
@@ -269,6 +290,7 @@ function SetupCard({
     notice,
     choices,
     reads,
+    reserved,
     onClock,
     onAdjust,
     onOpening,
@@ -285,6 +307,7 @@ function SetupCard({
     notice: string | null;
     choices: number;
     reads: number;
+    reserved: ReadonlySet<string>;
     onClock: (clock: TimeControl) => void;
     onAdjust: (clock: TimeControl) => void;
     onOpening: (opening: OpeningPlies) => void;
@@ -319,7 +342,7 @@ function SetupCard({
                 </div>
                 <ClockPicker bot={bot} clock={clock} last={last} onClock={onClock} onAdjust={onAdjust} />
                 <OpeningRow opening={opening} onOpening={onOpening} />
-                <StartArea bot={bot} clock={clock} opening={opening} path={path} paused={paused} notice={notice} choices={choices} reads={reads} onRefused={onRefused} />
+                <StartArea bot={bot} clock={clock} opening={opening} path={path} paused={paused} notice={notice} choices={choices} reads={reads} onRefused={onRefused} reserved={reserved} />
             </section>
         </div>
     );

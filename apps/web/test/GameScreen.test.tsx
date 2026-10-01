@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { GameSnapshot } from '@hexo-arena/contract';
 import { boardSettingsStore, defaultBoardSettings } from '../src/board/board-settings';
@@ -812,10 +812,27 @@ describe('GameScreen for a watcher', () => {
         await screen.findByRole(`heading`, { name: `hextide vs tom` });
         await openWithM();
         fireEvent.click(screen.getByRole(`tab`, { name: `Game` }));
-        const line = await screen.findByRole(`link`, { name: `hextide won 24 and tom 15 of their 41 games` });
+        const line = await screen.findByRole(`link`, { name: `41 games` });
         expect(line.getAttribute(`href`)).toBe(`/games?player=hextide&vs=tom`);
-        expect(line.closest(`.facts-row`)?.querySelector(`dt`)?.textContent).toBe(`Head to head`);
+        const row = line.closest<HTMLElement>(`.facts-row`);
+        if (row === null) throw new Error(`the line stands in no facts row`);
+        expect(row.querySelector(`dt`)?.textContent).toBe(`Head to head`);
+        expect(row.querySelector(`dd`)?.textContent).toBe(`hextide won 24 and tom 15 of their 41 games`);
+        expect(within(row).getByRole(`link`, { name: `hextide` }).getAttribute(`href`)).toBe(`/bots/hextide`);
+        expect(within(row).getByRole(`link`, { name: `tom` }).getAttribute(`href`)).toBe(`/players/tom`);
         expect(reads).toContain(`/api/games/finished?player=hextide&vs=tom`);
+    });
+
+    it('name a tournament game\'s place on the Game tab, leading to its tournament', async () => {
+        const tournamentGame = { ...watched(finishedSnapshot), tournament: { id: `t_autumnrobin1`, name: `Autumn round robin`, round: 4, game: 2 } } as GameSnapshot;
+        stubGame(tournamentGame);
+        render(<GameScreen gameId="g-end" />);
+        await screen.findByRole(`heading`, { name: `hextide vs tom` });
+        await openWithM();
+        fireEvent.click(screen.getByRole(`tab`, { name: `Game` }));
+        const line = await screen.findByRole(`link`, { name: `Autumn round robin, round 4, game 2 of 2` });
+        expect(line.getAttribute(`href`)).toBe(`/tournaments/t_autumnrobin1`);
+        expect(line.closest(`.facts-row`)?.querySelector(`dt`)?.textContent).toBe(`Tournament`);
     });
 
     it('leave the head-to-head out of a game a guest sits in, which is never kept', async () => {

@@ -54,7 +54,7 @@ interface Served {
 type Answer = (body: unknown) => Response;
 
 // The API as one test sees it: who is here, the bot list, and how a start answers.
-function serve(options: { me?: Me; bots?: BotListing[] | (() => BotListing[]); start?: Answer; guest?: Answer } = {}): Served {
+function serve(options: { me?: Me; bots?: BotListing[] | (() => BotListing[]); start?: Answer; guest?: Answer; tournament?: string[] } = {}): Served {
     const served: Served = { posts: [], listReads: 0 };
     let me = options.me === undefined ? tom : options.me;
     vi.stubGlobal(
@@ -78,6 +78,15 @@ function serve(options: { me?: Me; bots?: BotListing[] | (() => BotListing[]); s
                 const answer = options.start?.(body) ?? new Response(JSON.stringify(snapshot), { status: 201 });
                 if (answer.status === 401) me = null;
                 return Promise.resolve(answer);
+            }
+            if (url === `/api/tournaments` && options.tournament !== undefined) {
+                const running = { id: `t_autumnrobin1`, name: `Autumn round robin`, status: `running`, startsAt: `2026-10-01T18:00:00Z`, timeControl: { mode: `turn`, turnTimeMs: 10_000 }, openingPlies: 5, entrants: 3, maxEntrants: 12, winner: null };
+                return Promise.resolve(new Response(JSON.stringify({ running, scheduled: [], past: [] })));
+            }
+            if (url === `/api/tournaments/t_autumnrobin1` && options.tournament !== undefined) {
+                const entries = options.tournament.map((name) => ({ bot: name, ownerName: `owner`, online: true, ratingAtStart: 1500, state: `playing` }));
+                const detail = { id: `t_autumnrobin1`, name: `Autumn round robin`, status: `running`, startsAt: `2026-10-01T18:00:00Z`, startedAt: `2026-10-01T18:00:00Z`, endedAt: null, timeControl: { mode: `turn`, turnTimeMs: 10_000 }, openingPlies: 5, maxEntrants: 12, entries, rounds: [], standings: [], live: [] };
+                return Promise.resolve(new Response(JSON.stringify(detail)));
             }
             return Promise.resolve(new Response(null, { status: 404 }));
         }),
@@ -379,6 +388,16 @@ describe('PlayScreen', () => {
         await waitFor(() => {
             expect(document.querySelector(`.start-lines .sr-only`)?.textContent).toBe(`1 new game a minute; try again in 60 s`);
         });
+    });
+
+    it('list a bot the running tournament holds as busy until it ends, and say so when it is the one picked', async () => {
+        serve({ tournament: [`hextide`] });
+        window.history.replaceState(null, ``, `/play?bot=hextide`);
+        render(<PlayScreen />);
+        await ready();
+        expect(await screen.findByText(`hextide is in a tournament until it ends; pick another bot`)).toBeTruthy();
+        const row = screen.getAllByRole(`radio`, { name: /hextide/u })[0]?.closest(`label`);
+        expect(row?.textContent).toContain(`In a tournament until it ends`);
     });
 
     it('say the game is starting while the start is sent', async () => {

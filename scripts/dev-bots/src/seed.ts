@@ -6,6 +6,7 @@ import { hostBots, message, type HostedBot, type HostedFinish } from './host';
 import { playHumanGame } from './human';
 import { personaBots, type BotSeries, type PersonaName, type SeedPlan } from './personas';
 import { NotADevServer, saveTokens } from './runner';
+import { seedDevTournament, type Candidate, type DevTournament } from './tournament';
 
 /** How the seed reaches its target, what it plays, and how it bans. */
 export interface SeedOptions {
@@ -20,6 +21,12 @@ export interface SeedOptions {
     paceMs: number;
     random: () => number;
     log: (line: string) => void;
+    // Schedules a tournament through the admin client and answers its id;
+    // without it the seed schedules none.
+    scheduleTournament?: (name: string, startsAt: Date) => Promise<string>;
+    // Bots the dev tournament may take beside the personas' own.
+    tournamentCandidates?: readonly Candidate[];
+    now?: () => number;
 }
 
 /** What the seed left: the personas as they stand, the bots now ranked, and what this run played. */
@@ -29,6 +36,7 @@ export interface SeedReport {
     readonly played: number;
     // Series a daily cap stopped short, with the cap's code.
     readonly capped: readonly string[];
+    readonly tournament: DevTournament | null;
 }
 
 // A challenge waits on these and tries again; a daily cap ends its series.
@@ -184,7 +192,25 @@ export async function seedDevData(options: SeedOptions): Promise<SeedReport> {
         saveTokens(options.tokenFile, new Map(online.map((bot) => [bot.name, bot.token])));
     }
 
+    // The personas' online bots first, one per owner, then the others offered.
+    const candidates: Candidate[] = [];
+    for (const bot of personaBots) {
+        if (bot.online && cookies.has(bot.owner) && !candidates.some((candidate) => candidate.owner === bot.owner)) {
+            candidates.push({ owner: bot.owner, bot: bot.name });
+        }
+    }
+    const tournament =
+        options.scheduleTournament === undefined
+            ? null
+            : await seedDevTournament({
+                  client,
+                  schedule: options.scheduleTournament,
+                  candidates: [...candidates, ...(options.tournamentCandidates ?? [])],
+                  now: options.now ?? Date.now,
+                  log,
+              });
+
     const accounts = await client.devAccounts();
     const ranked = accounts.flatMap((account) => account.bots).filter((bot) => !bot.provisional).map((bot) => bot.name);
-    return { accounts, ranked, played, capped };
+    return { accounts, ranked, played, capped, tournament };
 }

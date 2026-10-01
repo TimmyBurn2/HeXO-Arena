@@ -21,7 +21,7 @@ const tabs: readonly { id: DrawerTab; label: string }[] = [
  * A right-hand drawer on wide screens, a bottom sheet on phones whose peek
  * keeps the player's own chip in reach.
  */
-export function GameDrawer({ drawer, feed, current, facts, meetings, running, timed, onResign, peek }: {
+export function GameDrawer({ drawer, feed, current, facts, meetings, tournament, running, timed, onResign, peek }: {
     drawer: Drawer;
     feed: readonly FeedLine[];
     // The feed line the board shows; a replay may stand before the newest.
@@ -29,6 +29,8 @@ export function GameDrawer({ drawer, feed, current, facts, meetings, running, ti
     facts: readonly (readonly [string, string])[];
     // The two players' record against each other, leading to their games; null before it is known or when they have none.
     meetings: ReactNode;
+    // The tournament game's place, leading to its tournament; null for any other game.
+    tournament: ReactNode;
     running: boolean;
     // Whether a clock runs down while nobody moves, as unlimited games have none.
     timed: boolean;
@@ -152,7 +154,7 @@ export function GameDrawer({ drawer, feed, current, facts, meetings, running, ti
                             <MoveFeed feed={feed} current={current} visible={drawer.visible} />
                         </>
                     ) : null}
-                    {drawer.tab === `game` ? <GameFacts facts={facts} meetings={meetings} running={running} timed={timed} onResign={onResign} /> : null}
+                    {drawer.tab === `game` ? <GameFacts facts={facts} meetings={meetings} tournament={tournament} running={running} timed={timed} onResign={onResign} /> : null}
                 </div>
                 {/* under either tab, so a standing link is the drawer and one
                     press away from the board */}
@@ -230,9 +232,10 @@ function key(name: string) {
     return <kbd>{name}</kbd>;
 }
 
-function GameFacts({ facts, meetings, running, timed, onResign }: {
+function GameFacts({ facts, meetings, tournament, running, timed, onResign }: {
     facts: readonly (readonly [string, string])[];
     meetings: ReactNode;
+    tournament: ReactNode;
     running: boolean;
     timed: boolean;
     onResign: (() => Promise<Sent>) | null;
@@ -267,6 +270,12 @@ function GameFacts({ facts, meetings, running, timed, onResign }: {
     return (
         <div className="game-facts">
             <dl className="facts">
+                {tournament === null ? null : (
+                    <div className="facts-row">
+                        <dt>{text.drawer.tournament}</dt>
+                        <dd>{tournament}</dd>
+                    </div>
+                )}
                 {facts.map(([term, value]) => (
                     <div key={term} className="facts-row">
                         <dt>{term}</dt>

@@ -34,13 +34,17 @@ export const custom = {
 } as const;
 
 /** Whether a bot can start a game now, or why not. */
-export type Readiness = `ready` | `busy` | `offline` | `closed` | `nothing`;
+export type Readiness = `ready` | `busy` | `tournament` | `offline` | `closed` | `nothing`;
 
-export function readinessOf(bot: BotListing): Readiness {
+const unreserved: ReadonlySet<string> = new Set();
+
+/** A bot's readiness; one the running tournament reserves takes no other game until it ends. */
+export function readinessOf(bot: BotListing, reserved: ReadonlySet<string> = unreserved): Readiness {
     if (!bot.online) return `offline`;
     if (!bot.openForChallenges) return `closed`;
     const covered = coveredModes(bot.accepts);
     if (!covered.turn && !covered.match && !covered.unlimited) return `nothing`;
+    if (reserved.has(bot.name)) return `tournament`;
     return bot.liveGames >= botConcurrentGameCap ? `busy` : `ready`;
 }
 
@@ -54,16 +58,16 @@ export interface Roster {
 }
 
 const byRating = (a: BotListing, b: BotListing) => b.rating - a.rating || a.name.localeCompare(b.name);
-const listed = (bot: BotListing) => readinessOf(bot) === `ready` || readinessOf(bot) === `busy`;
-
-/** The roster, pinning each named bot that is not ready in the order named, once. */
-export function rosterOf(bots: readonly BotListing[], named: readonly string[]): Roster {
+/** The roster, pinning each named bot that is not ready in the order named, once; busy bots include those a tournament holds. */
+export function rosterOf(bots: readonly BotListing[], named: readonly string[], reserved: ReadonlySet<string> = unreserved): Roster {
+    const state = (bot: BotListing) => readinessOf(bot, reserved);
+    const listed = (bot: BotListing) => state(bot) === `ready` || state(bot) === `busy` || state(bot) === `tournament`;
     const keys = [...new Set(named.map(nameKeyOf))];
     const pinned = keys.flatMap((key) => bots.filter((bot) => nameKeyOf(bot.name) === key && !listed(bot)));
     return {
         named: pinned,
-        ready: bots.filter((bot) => readinessOf(bot) === `ready`).sort(byRating),
-        busy: bots.filter((bot) => readinessOf(bot) === `busy`).sort(byRating),
+        ready: bots.filter((bot) => state(bot) === `ready`).sort(byRating),
+        busy: bots.filter((bot) => state(bot) === `busy` || state(bot) === `tournament`).sort(byRating),
         others: bots.filter((bot) => !pinned.includes(bot) && !listed(bot)).length,
     };
 }
@@ -74,16 +78,22 @@ export function rosterOf(bots: readonly BotListing[], named: readonly string[]):
  * else the ready bot nearest the player's rating, a visitor counting as a new player;
  * else a busy one, so the card says why nothing can start.
  */
-export function preselect(bots: readonly BotListing[], named: string | null, last: string | null, rating: number | null): BotListing | null {
+export function preselect(
+    bots: readonly BotListing[],
+    named: string | null,
+    last: string | null,
+    rating: number | null,
+    reserved: ReadonlySet<string> = unreserved,
+): BotListing | null {
     const find = (name: string | null) => (name === null ? undefined : bots.find((bot) => nameKeyOf(bot.name) === nameKeyOf(name)));
     const linked = find(named);
     if (linked !== undefined) return linked;
     const previous = find(last);
-    if (previous !== undefined && readinessOf(previous) === `ready`) return previous;
+    if (previous !== undefined && readinessOf(previous, reserved) === `ready`) return previous;
     const target = rating ?? humanSeedRating;
-    const ready = bots.filter((bot) => readinessOf(bot) === `ready`);
+    const ready = bots.filter((bot) => readinessOf(bot, reserved) === `ready`);
     const nearest = [...ready].sort((a, b) => Math.abs(a.rating - target) - Math.abs(b.rating - target) || b.rating - a.rating)[0];
-    return nearest ?? rosterOf(bots, []).busy[0] ?? null;
+    return nearest ?? rosterOf(bots, [], reserved).busy[0] ?? null;
 }
 
 /** Whether the bot accepts the clock; a bot with nothing declared accepts none. */

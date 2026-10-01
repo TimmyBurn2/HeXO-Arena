@@ -77,6 +77,7 @@ const protocol: readonly Credit[] = [
 
 const inspiration: readonly Credit[] = [
     { ...rows.lichess, href: `https://lichess.org`, terms: { kind: `plain`, label: rows.lichess.terms } },
+    { ...rows.rps, href: `https://rps.henhen1227.com`, terms: { kind: `plain`, label: rows.rps.terms } },
 ];
 
 /**

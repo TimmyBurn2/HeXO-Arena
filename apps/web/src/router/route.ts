@@ -4,8 +4,11 @@ export type Route =
     | { readonly name: `home` }
     | { readonly name: `play` }
     | { readonly name: `ladder` }
+    | { readonly name: `tournaments` }
+    | { readonly name: `tournament`; readonly id: string }
     | { readonly name: `bots` }
     | { readonly name: `bot`; readonly bot: string }
+    | { readonly name: `player`; readonly player: string }
     | { readonly name: `games` }
     | { readonly name: `live-games` }
     | { readonly name: `connect` }
@@ -24,10 +27,13 @@ export function parseRoute(pathname: string): Route {
     if (segments.length === 0) return { name: `home` };
     if (head === `play` && segments.length === 1) return { name: `play` };
     if (head === `ladder` && segments.length === 1) return { name: `ladder` };
+    if (head === `tournaments` && segments.length === 1) return { name: `tournaments` };
+    if (head === `tournaments` && segments.length === 2 && second !== undefined) return { name: `tournament`, id: safeDecode(second) };
     if (head === `bots` && segments.length === 1) return { name: `bots` };
     if (head === `bots` && segments.length === 2 && second !== undefined) {
         return { name: `bot`, bot: safeDecode(second) };
     }
+    if (head === `players` && segments.length === 2 && second !== undefined) return { name: `player`, player: safeDecode(second) };
     if (head === `games` && segments.length === 1) return { name: `games` };
     if (head === `games` && second === `live` && segments.length === 2) return { name: `live-games` };
     if (head === `connect` && segments.length === 1) return { name: `connect` };
@@ -52,10 +58,16 @@ export function routePath(route: Route): string {
             return `/play`;
         case `ladder`:
             return `/ladder`;
+        case `tournaments`:
+            return `/tournaments`;
+        case `tournament`:
+            return `/tournaments/${encodeURIComponent(route.id)}`;
         case `bots`:
             return `/bots`;
         case `bot`:
             return `/bots/${encodeURIComponent(route.bot)}`;
+        case `player`:
+            return `/players/${encodeURIComponent(route.player)}`;
         case `games`:
             return `/games`;
         case `live-games`:

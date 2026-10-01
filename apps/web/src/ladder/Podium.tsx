@@ -18,6 +18,17 @@ function translate(x: number, y: number): string {
     return `translate(${x.toFixed(2)} ${y.toFixed(2)})`;
 }
 
+/** One plate on the podium: who stands there, the big figure, the line under it, and a way to play them. */
+export interface PodiumPlace {
+    readonly name: string;
+    readonly kind: `bot` | `human`;
+    readonly figure: string;
+    readonly meta: string;
+    readonly play: { readonly to: string; readonly label: string } | null;
+    /** The place the plate names when it differs from the tower's, as a shared second does. */
+    readonly rank?: number;
+}
+
 /**
  * The top of the ladder as a piece of board: x stones stacked in towers
  * of 5, 6, and 4 on a floor of empty cells, the six carrying the win line,
@@ -27,21 +38,38 @@ function translate(x: number, y: number): string {
  */
 export function Podium({ entries, roster }: { entries: readonly LeaderboardEntry[]; roster: readonly BotListing[] | null }) {
     const top = entries.slice(0, 3);
-    const places = top.map((_, index): Place => (index === 0 ? 1 : index === 1 ? 2 : 3));
-    const wide = podiumLayout(wideSpread, places);
-    const narrow = podiumLayout(narrowSpread, places);
+    const places = top.map((entry): PodiumPlace => {
+        const listing = entry.kind === `bot` ? roster?.find((bot) => bot.name === entry.name) : undefined;
+        const ready = listing !== undefined && readinessOf(listing) === `ready`;
+        return {
+            name: entry.name,
+            kind: entry.kind,
+            figure: String(entry.rating),
+            meta: text.ladder.plateMeta(entry.kind === `bot` ? entry.ownerName : null, entry.games),
+            play: ready ? { to: playBotPath(entry.name), label: text.ladder.playBot(entry.name) } : null,
+        };
+    });
     const label = text.ladder.podiumLabel(top.map((entry) => ({ name: entry.name, rating: entry.rating })));
+    return <PodiumStand places={places} label={label} title={text.ladder.top} />;
+}
+
+/** Up to three places on the podium's towers, first in the middle, under one accessible label. */
+export function PodiumStand({ places, label, title }: { places: readonly PodiumPlace[]; label: string; title: string }) {
+    const top = places.slice(0, 3);
+    const ranks = top.map((_, index): Place => (index === 0 ? 1 : index === 1 ? 2 : 3));
+    const wide = podiumLayout(wideSpread, ranks);
+    const narrow = podiumLayout(narrowSpread, ranks);
     const drop = (layout: PodiumLayout, place: Place) => -100 * (layout.towers.find((tower) => tower.place === place)?.drop ?? 0);
     return (
-        <section className="podium" aria-label={text.ladder.top}>
+        <section className="podium" aria-label={title}>
             <ol className="podium-plates" data-places={String(top.length)}>
                 {top.map((entry, index) => {
-                    const place = places[index] ?? 1;
+                    const place = ranks[index] ?? 1;
                     // React passes custom properties through as written; CSSProperties only lacks their names.
                     const style = { '--drop-wide': `${drop(wide, place).toFixed(3)}%`, '--drop-narrow': `${drop(narrow, place).toFixed(3)}%` } as CSSProperties;
                     return (
                         <li key={entry.name} className={`podium-slot p${String(place)}`} style={style}>
-                            <Plate entry={entry} place={place} listing={roster?.find((bot) => bot.name === entry.name)} />
+                            <Plate entry={entry} place={place} />
                         </li>
                     );
                 })}
@@ -94,25 +122,23 @@ export function PodiumSkeleton({ play }: { play: boolean }) {
     );
 }
 
-function Plate({ entry, place, listing }: { entry: LeaderboardEntry; place: Place; listing: BotListing | undefined }) {
-    const ready = entry.kind === `bot` && listing !== undefined && readinessOf(listing) === `ready`;
-    const owner = entry.kind === `bot` ? entry.ownerName : null;
+function Plate({ entry, place }: { entry: PodiumPlace; place: Place }) {
     return (
         <div className="podium-plate">
             <span className="podium-who">
-                <span className={place === 1 ? `podium-rank first` : `podium-rank`}>{String(place)}</span>
+                <span className={(entry.rank ?? place) === 1 ? `podium-rank first` : `podium-rank`}>{String(entry.rank ?? place)}</span>
                 <span className="podium-name">
                     <PlayerName name={entry.name} kind={entry.kind} />
                 </span>
                 {entry.kind === `bot` ? <BotBadge /> : null}
             </span>
-            <span className="podium-rating">{String(entry.rating)}</span>
-            <span className="podium-meta">{text.ladder.plateMeta(owner, entry.games)}</span>
-            {ready ? (
-                <Link to={playBotPath(entry.name)} className="btn btn-primary btn-sm podium-play" ariaLabel={text.ladder.playBot(entry.name)}>
+            <span className="podium-rating">{entry.figure}</span>
+            <span className="podium-meta">{entry.meta}</span>
+            {entry.play === null ? null : (
+                <Link to={entry.play.to} className="btn btn-primary btn-sm podium-play" ariaLabel={entry.play.label}>
                     {text.ladder.play}
                 </Link>
-            ) : null}
+            )}
         </div>
     );
 }

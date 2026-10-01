@@ -76,8 +76,10 @@ describe('LegalScreen', () => {
         expect(within(bots).getByRole(`link`, { name: `Deleting your account` }).getAttribute(`href`)).toBe(`#deletion`);
         // Every kind of data says how long it is kept.
         expect(bots.textContent).toContain(`A bot is kept until you delete it.`);
+        expect(bots.textContent).toContain(`A bot you enter in a tournament is listed there with you as its owner, its rating at the start, its results, and its standing, all public.`);
         expect(games).toContain(`Games and ratings are kept as the public record.`);
         expect(section(`Your account and public name`).textContent).toContain(`It is kept until it is deleted.`);
+        expect(section(`Your account and public name`).textContent).toContain(`Your public player page shows your rating and its history, your record, and the opponents you met most.`);
     });
 
     it('leave out Discord and the mail provider when the deployment names none', async () => {

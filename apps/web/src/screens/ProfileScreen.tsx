@@ -4,6 +4,7 @@ import { fetchBots } from '../api/client';
 import { useAsync } from '../api/use-async';
 import { DiscordSignIn } from '../components/DiscordButton';
 import { PlayerHistory } from '../games/PlayerHistory';
+import { PlayerBlocks } from '../players/PlayerBlocks';
 import { BotBadge, OpenTag, PresenceDot, Rating, provisionalNote } from '../components/player';
 import { Sigil } from '../components/Sigil';
 import { ErrorFrame, SkeletonRows } from '../components/states';
@@ -35,6 +36,7 @@ export function ProfileScreen() {
             {state.status === `ready` && state.me?.kind === `user` ? (
                 <>
                     <YourBots owner={state.me.name} />
+                    <PlayerBlocks name={state.me.name} />
                     <PlayerHistory player={state.me.name} title={text.games.yours} />
                 </>
             ) : null}

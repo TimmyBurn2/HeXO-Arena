@@ -1,7 +1,7 @@
 import { adminGameIdSchema, nameKeyOf } from '@hexo-arena/contract';
 import { and, count, eq, inArray, isNotNull, isNull, like, or, type SQL } from 'drizzle-orm';
 import { nowSeconds, type Query } from './db';
-import { bots, games, nameReservations, sessions, users } from './db/schema';
+import { bots, games, nameReservations, sessions, tournamentEntries, users } from './db/schema';
 import { randomToken, sha256Hex } from './tokens';
 
 export type ModerationChange = { kind: `changed`; id: string } | { kind: `unchanged` } | { kind: `not_found` };
@@ -61,13 +61,19 @@ function hasDecidedGame(query: Query, seat: SQL | undefined): boolean {
     return query.select({ id: games.id }).from(games).where(and(seat, isNotNull(games.winner))).limit(1).get() !== undefined;
 }
 
+// An entry left after the bot's waiting entries are removed is a
+// tournament it took part in, whose record keeps the bot.
+function hasTournamentEntry(query: Query, botId: string): boolean {
+    return query.select({ botId: tournamentEntries.botId }).from(tournamentEntries).where(eq(tournamentEntries.botId, botId)).limit(1).get() !== undefined;
+}
+
 function botSeat(botId: string): SQL | undefined {
     return or(eq(games.botId, botId), eq(games.challengerBotId, botId), eq(games.destBotId, botId));
 }
 
 /**
- * Deletes a bot under the recorded policy: with rated games it is
- * anonymized and kept, so the fold stays exact and no opponent's rating
+ * Deletes a bot under the recorded policy: with rated games or a
+ * tournament it took part in, it is anonymized and kept, so the fold stays exact and no opponent's rating
  * shifts, and its name stays reserved; without them it is deleted
  * outright, its unrated games with it, and its name is freed.
  * Callers end its live games first.
@@ -75,7 +81,7 @@ function botSeat(botId: string): SQL | undefined {
 export function deleteBotByPolicy(query: Query, botId: string): `anonymized` | `deleted` {
     const bot = query.select({ nameKey: bots.nameKey }).from(bots).where(eq(bots.id, botId)).get();
     if (bot === undefined) throw new Error(`deleting a bot that does not exist: ${botId}`);
-    if (hasDecidedGame(query, botSeat(botId))) {
+    if (hasDecidedGame(query, botSeat(botId)) || hasTournamentEntry(query, botId)) {
         const placeholder = claimPlaceholderName(query);
         query.update(bots)
             .set({

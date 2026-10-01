@@ -1,4 +1,4 @@
-import { botListingSchema, botsPath } from '@hexo-arena/contract';
+import { botListingSchema, botsPath, tournamentListSchema, tournamentsPath } from '@hexo-arena/contract';
 import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -10,6 +10,7 @@ import { createTestApp, type TestApp } from '../../../apps/server/test/helpers';
 import type { SeedPlan } from '../src/personas';
 import { NotADevServer } from '../src/runner';
 import { seedDevData, type SeedReport } from '../src/seed';
+import { devTournamentLeadMs, devTournamentName } from '../src/tournament';
 
 // One game of each kind the full plan holds, so a run takes seconds.
 // Eve resigns at the first turn, before hextide can hold the six stones a win needs.
@@ -56,8 +57,9 @@ describe('the dev seed', () => {
         return booted;
     }
 
-    function seed(booted: TestApp): Promise<SeedReport> {
+    function seed(booted: TestApp, extra: Partial<Parameters<typeof seedDevData>[0]> = {}): Promise<SeedReport> {
         return seedDevData({
+            ...extra,
             origin,
             plan,
             tokenFile,
@@ -111,6 +113,32 @@ describe('the dev seed', () => {
             first.accounts.map((account) => [account.name, account.games, account.bots.length, account.banned]),
         );
         expect(finishes(booted)).toHaveLength(4);
+    }, 60_000);
+
+    it('schedules the dev tournament a few minutes out with one bot per owner, and a rerun enters into the same one', async () => {
+        const booted = await boot(true);
+        const now = Date.now();
+        const schedule = (name: string, startsAt: Date) => {
+            const answer = booted.admin({
+                op: `tournament-create`,
+                name,
+                startsAt: startsAt.toISOString(),
+                timeControl: { mode: `turn`, turnTimeMs: 10_000 },
+                openingPlies: 5,
+                maxEntrants: 12,
+                reason: `dev seed tournament`,
+            });
+            const id = answer.kind === `done` ? / as (t_[a-z0-9]{12})/.exec(answer.summary)?.[1] : undefined;
+            return id === undefined ? Promise.reject(new Error(`not scheduled`)) : Promise.resolve(id);
+        };
+        const extra = { scheduleTournament: schedule, tournamentCandidates: [{ owner: `devowner-a`, bot: `devbot-a` }], now: () => now };
+        const first = await seed(booted, extra);
+        expect(first.tournament?.entered).toEqual([`hextide`, `quietlake`]);
+        const list = tournamentListSchema.parse(await (await fetch(`${origin}${tournamentsPath}`)).json());
+        expect(list.scheduled).toMatchObject([{ id: first.tournament?.id, name: devTournamentName, entrants: 2 }]);
+        expect(Date.parse(list.scheduled[0]?.startsAt ?? ``) - now).toBeLessThanOrEqual(devTournamentLeadMs);
+        const second = await seed(booted, extra);
+        expect(second.tournament).toEqual(first.tournament);
     }, 60_000);
 
     it('refuses a target without the dev routes and creates nothing', async () => {

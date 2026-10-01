@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 import { z } from 'zod';
 import { seedPlan } from './personas';
-import { NotADevServer } from './runner';
+import { NotADevServer, seats } from './runner';
 import { seedDevData } from './seed';
 
 const envSchema = z.object({
@@ -33,6 +33,15 @@ async function ban(name: string): Promise<void> {
     }
 }
 
+// The admin client schedules the tournament; its answer names the id.
+async function scheduleTournament(name: string, startsAt: Date): Promise<string> {
+    const args = [`--silent`, `--filter`, `@hexo-arena/server`, `admin`, `tournament-create`, `--name`, name, `--start`, startsAt.toISOString(), `--clock`, `turn:10`, `--opening`, `5`, `--reason`, `dev seed tournament`];
+    const { stdout } = await run(`pnpm`, args, { cwd: repoRoot });
+    const id = / as (t_[a-z0-9]{12})/.exec(stdout)?.[1];
+    if (id === undefined) throw new Error(`the admin client scheduled no tournament: ${stdout}`);
+    return id;
+}
+
 try {
     log(`seeding ${origin}; the humans keep the creation cooldown, so this takes about ten minutes`);
     const report = await seedDevData({
@@ -44,6 +53,8 @@ try {
         paceMs: 500,
         random: Math.random,
         log,
+        scheduleTournament,
+        tournamentCandidates: seats.map((seat) => ({ owner: `devowner-${seat}`, bot: `devbot-${seat}` })),
     });
     log(`played ${String(report.played)} games`);
     for (const account of report.accounts) {
@@ -56,6 +67,9 @@ try {
     }
     for (const line of report.capped) log(`stopped by a daily cap: ${line}`);
     log(`ranked: ${report.ranked.length === 0 ? `none` : report.ranked.join(`, `)}`);
+    if (report.tournament !== null) {
+        log(`dev tournament ${report.tournament.id}, entered: ${report.tournament.entered.join(`, `) || `none`}`);
+    }
     log(`restart pnpm dev:bots to bring the personas' online bots up`);
 } catch (error) {
     if (error instanceof NotADevServer) {

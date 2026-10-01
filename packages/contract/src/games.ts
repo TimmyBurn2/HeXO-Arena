@@ -71,6 +71,11 @@ export type GamePlayer = z.infer<typeof gamePlayerSchema>;
 export const gamePlayersSchema = z.object({ x: gamePlayerSchema, o: gamePlayerSchema }).meta({ id: `GamePlayers` });
 export type GamePlayers = z.infer<typeof gamePlayersSchema>;
 
+export const gameTournamentSchema = z
+    .object({ id: z.string(), name: z.string(), round: z.number().int().min(1), game: z.union([z.literal(1), z.literal(2)]) })
+    .meta({ id: `GameTournament`, description: `The tournament a game belongs to: its round, and which of the pairing's two games it is.` });
+export type GameTournament = z.infer<typeof gameTournamentSchema>;
+
 const snapshotBase = {
     gameId: z.string(),
     players: gamePlayersSchema,
@@ -78,6 +83,7 @@ const snapshotBase = {
     openingPlies: openingPliesSchema,
     board: gameBoardSchema,
     timeControl: timeControlSchema,
+    tournament: gameTournamentSchema.optional(),
 };
 
 export const gameSnapshotSchema = z

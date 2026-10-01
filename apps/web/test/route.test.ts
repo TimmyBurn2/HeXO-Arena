@@ -9,6 +9,13 @@ describe('parseRoute', () => {
         expect(parseRoute(`/ladder/`)).toEqual({ name: `ladder` });
     });
 
+    it('route the tournaments under the ladder', () => {
+        expect(parseRoute(`/tournaments`)).toEqual({ name: `tournaments` });
+        expect(parseRoute(`/tournaments/t_abcdefghijk2`)).toEqual({ name: `tournament`, id: `t_abcdefghijk2` });
+        expect(routePath({ name: `tournament`, id: `t_abcdefghijk2` })).toBe(`/tournaments/t_abcdefghijk2`);
+        expect(parseRoute(`/tournaments/a/b`)).toEqual({ name: `not-found` });
+    });
+
     it('route the four surfaces', () => {
         expect(parseRoute(`/bots`)).toEqual({ name: `bots` });
         expect(parseRoute(`/connect`)).toEqual({ name: `connect` });
@@ -32,8 +39,9 @@ describe('parseRoute', () => {
         expect(parseRoute(`/welcome/x`)).toEqual({ name: `not-found` });
     });
 
-    it('carry the bot name and game id', () => {
+    it('carry the bot name, the player name, and the game id', () => {
         expect(parseRoute(`/bots/sealbot`)).toEqual({ name: `bot`, bot: `sealbot` });
+        expect(parseRoute(`/players/ana`)).toEqual({ name: `player`, player: `ana` });
         expect(parseRoute(`/game/g-123`)).toEqual({ name: `game`, gameId: `g-123` });
     });
 
@@ -57,6 +65,8 @@ describe('parseRoute', () => {
     it('fall through to not-found for anything else', () => {
         expect(parseRoute(`/nope`)).toEqual({ name: `not-found` });
         expect(parseRoute(`/bots/a/b`)).toEqual({ name: `not-found` });
+        expect(parseRoute(`/players`)).toEqual({ name: `not-found` });
+        expect(parseRoute(`/players/a/b`)).toEqual({ name: `not-found` });
         expect(parseRoute(`/game`)).toEqual({ name: `not-found` });
         expect(parseRoute(`/ladder/x`)).toEqual({ name: `not-found` });
     });
@@ -67,6 +77,7 @@ describe('routePath', () => {
         expect(routePath({ name: `ladder` })).toBe(`/ladder`);
         expect(routePath({ name: `bots` })).toBe(`/bots`);
         expect(routePath({ name: `bot`, bot: `sealbot` })).toBe(`/bots/sealbot`);
+        expect(routePath({ name: `player`, player: `j\u00e9r\u00f4me` })).toBe(`/players/j%C3%A9r%C3%B4me`);
         expect(routePath({ name: `connect` })).toBe(`/connect`);
         expect(routePath({ name: `profile` })).toBe(`/profile`);
         expect(routePath({ name: `credits` })).toBe(`/credits`);

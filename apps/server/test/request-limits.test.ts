@@ -208,6 +208,12 @@ describe('request limits', () => {
         expect(classes).toEqual({
             'GET /healthz': `public`,
             'GET /api/legal': `public`,
+            'GET /api/tournaments': `public`,
+            'GET /api/players/:name': `public`,
+            'GET /api/players/:name/rating': `public`,
+            'GET /api/tournaments/:id': `public`,
+            'PUT /api/tournaments/:id/entry': `principal`,
+            'DELETE /api/tournaments/:id/entry': `principal`,
             'GET /api/leaderboard': `public`,
             'GET /api/me': `public`,
             'POST /api/auth/logout': `public`,
@@ -245,6 +251,7 @@ describe('request limits', () => {
             'GET /bots': `shell`,
             'GET /games': `shell`,
             'GET /games/live': `shell`,
+            'GET /tournaments': `shell`,
             'GET /connect': `shell`,
             'GET /profile': `shell`,
             'GET /credits': `shell`,
@@ -254,6 +261,8 @@ describe('request limits', () => {
             'GET /legal/terms': `shell`,
             'GET /bots/:name': `shell`,
             'GET /game/:gameId': `shell`,
+            'GET /tournaments/:id': `shell`,
+            'GET /players/:name': `shell`,
         });
     });
 

@@ -62,8 +62,11 @@ export function StartArea({
     choices,
     reads,
     onRefused,
+    reserved,
 }: {
     bot: BotListing;
+    // The bots the running tournament holds.
+    reserved: ReadonlySet<string>;
     clock: TimeControl;
     opening: OpeningPlies;
     path: string;
@@ -84,7 +87,7 @@ export function StartArea({
     useEffect(() => {
         readsNow.current = reads;
     });
-    const state = readinessOf(bot);
+    const state = readinessOf(bot, reserved);
 
     useEffect(() => {
         if (outcome.kind !== `wait`) return;
@@ -110,7 +113,7 @@ export function StartArea({
     // skipping the read the refusal asks for, which may lag the server's own count.
     const refused = outcome.kind === `line` ? outcome.refused : null;
     const moved = refused !== null && refused.setup !== setupOf(bot, clock);
-    if (refused !== null && !moved && reads > refused.reads + 1 && readinessOf(bot) === `ready`) setOutcome({ kind: `idle` });
+    if (refused !== null && !moved && reads > refused.reads + 1 && readinessOf(bot, reserved) === `ready`) setOutcome({ kind: `idle` });
 
     const visitor = me.status === `loading` ? null : me.me;
     const stale = outcome.kind === `stale`;
@@ -187,7 +190,9 @@ export function StartArea({
             const line =
                 code === `paused`
                     ? errors[code]()
-                    : code === `bot_busy` || code === `clock_not_accepted` || code === `not_open` || code === `delisted` || code === `not_found`
+                    : code === `bot_busy` && reserved.has(bot.name)
+                      ? text.play.unavailable.tournament(bot.name)
+                      : code === `bot_busy` || code === `clock_not_accepted` || code === `not_open` || code === `delisted` || code === `not_found`
                       ? errors[code](bot.name)
                       : text.play.failed;
             setOutcome({

@@ -4,6 +4,7 @@ import { fetchBots } from '../api/client';
 import { useAsync } from '../api/use-async';
 import { OwnerPanel } from '../components/OwnerPanel';
 import { PlayerHistory } from '../games/PlayerHistory';
+import { PlayerBlocks } from '../players/PlayerBlocks';
 import { LiveGameGrid } from '../live/LiveGameCard';
 import { useLiveReplay } from '../live/use-live-replay';
 import { BotBadge, OpenTag, PresenceDot, Rating } from '../components/player';
@@ -63,6 +64,7 @@ function BotProfile({ bot }: { bot: BotListing }) {
     const readiness = readinessOf(bot);
     const blockedReasons = {
         busy: text.play.busy,
+        tournament: text.play.inTournament,
         offline: text.bot.offlineReason,
         closed: text.bot.closedReason,
         nothing: text.bot.noClockReason,
@@ -169,6 +171,7 @@ function BotProfile({ bot }: { bot: BotListing }) {
                 )}
             </p>
             <PlayingNow bot={bot.name} />
+            <PlayerBlocks name={bot.name} />
             <PlayerHistory player={bot.name} title={text.games.recent} />
             {owned ? <OwnerPanel bot={bot.name} /> : null}
         </>

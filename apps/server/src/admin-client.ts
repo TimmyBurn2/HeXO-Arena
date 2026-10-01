@@ -1,4 +1,5 @@
 import {
+    parseClockArg,
     adminRequestSchema,
     adminResponseSchema,
     type AdminRequest,
@@ -21,17 +22,32 @@ export const adminUsage = `usage: hexo-arena-admin <op> [target] [--reason <text
   revoke-bot <name> --reason <text>
   abort-game <gameId> --reason <text>
   abort-game --bot <name> --reason <text>
-  recompute-ratings [--exclude <gameId|name>]... --reason <text>`;
+  recompute-ratings [--exclude <gameId|name>]... --reason <text>
+  tournament-create --name <text> --start <ISO time> --clock turn:<s>|match:<min>+<s> [--opening <plies>] [--max <bots>] --reason <text>
+  tournament-cancel <tournamentId> --reason <text>`;
 
 export type ParsedArgs = { kind: `request`; request: AdminRequest } | { kind: `usage`; error: string };
 
 const namedOps = new Set([`ban-user`, `unban-user`, `delete-user`, `delist-bot`, `relist-bot`, `revoke-bot`]);
 
-function requestBody(
-    op: string,
-    target: string | undefined,
-    flags: { reason?: string | undefined; bot?: string | undefined; exclude?: string[] | undefined },
-): Record<string, unknown> {
+interface Flags {
+    reason?: string | undefined;
+    bot?: string | undefined;
+    exclude?: string[] | undefined;
+    name?: string | undefined;
+    start?: string | undefined;
+    clock?: string | undefined;
+    opening?: string | undefined;
+    max?: string | undefined;
+}
+
+// A number flag the schema then bounds; text that is no number fails there.
+function numberFlag(value: string | undefined): number | string | undefined {
+    if (value === undefined) return undefined;
+    return /^\d+$/.test(value) ? Number(value) : value;
+}
+
+function requestBody(op: string, target: string | undefined, flags: Flags): Record<string, unknown> {
     const reason = flags.reason === undefined ? {} : { reason: flags.reason };
     if (op === `status`) return { op };
     if (namedOps.has(op)) return { op, name: target, ...reason };
@@ -39,6 +55,20 @@ function requestBody(
         return { op, ...(target !== undefined && { gameId: target }), ...(flags.bot !== undefined && { bot: flags.bot }), ...reason };
     }
     if (op === `recompute-ratings`) return { op, exclude: flags.exclude ?? [], ...reason };
+    if (op === `tournament-create`) {
+        const opening = numberFlag(flags.opening);
+        const max = numberFlag(flags.max);
+        return {
+            op,
+            name: flags.name,
+            startsAt: flags.start,
+            timeControl: flags.clock === undefined ? undefined : (parseClockArg(flags.clock) ?? flags.clock),
+            ...(opening !== undefined && { openingPlies: opening }),
+            ...(max !== undefined && { maxEntrants: max }),
+            ...reason,
+        };
+    }
+    if (op === `tournament-cancel`) return { op, id: target, ...reason };
     return { op, ...reason };
 }
 
@@ -58,6 +88,11 @@ export function parseAdminArgs(argv: readonly string[]): ParsedArgs {
                 reason: { type: `string` },
                 bot: { type: `string` },
                 exclude: { type: `string`, multiple: true },
+                name: { type: `string` },
+                start: { type: `string` },
+                clock: { type: `string` },
+                opening: { type: `string` },
+                max: { type: `string` },
             },
         });
     } catch (error) {
@@ -86,8 +121,14 @@ function formatStatus(status: AdminStatus): string {
         `active games  ${String(status.activeGames)}`,
         `client keys   ${String(status.clientKeys)}`,
         `keyless       ${String(status.keylessRequests)}`,
-        `recent admin actions:`,
+        `tournaments:`,
     ];
+    if (status.tournaments.length === 0) lines.push(`  none running or scheduled`);
+    for (const tournament of status.tournaments) {
+        const at = new Date(tournament.startsAt * 1000).toISOString();
+        lines.push(`  ${tournament.id}  ${tournament.status}  ${at}  ${String(tournament.entrants)} entered  ${tournament.name}`);
+    }
+    lines.push(`recent admin actions:`);
     if (status.recentActions.length === 0) lines.push(`  none`);
     for (const action of status.recentActions) {
         const at = new Date(action.at * 1000).toISOString();

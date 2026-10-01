@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { liveGameListCap, type LiveGameEntry } from '@hexo-arena/contract';
-import { fetchBots, fetchLeaderboard, fetchRecentGames } from '../api/client';
+import { fetchBots, fetchLeaderboard, fetchRecentGames, fetchTournaments } from '../api/client';
 import { useAsync } from '../api/use-async';
 import { FeaturedBoard } from '../home/FeaturedBoard';
 import { useFeatured } from '../home/featured';
-import { BotsOnline, BuildBand, LadderBlock, LiveNow, RecentResults } from '../home/blocks';
+import { BotsOnline, BuildBand, LadderBlock, LiveNow, RecentResults, TournamentBlock } from '../home/blocks';
 import { PlayPanel } from '../home/PlayPanel';
 import { useLiveReplay, type LiveView } from '../live/use-live-replay';
 import { meStore, useMe } from '../me';
@@ -34,6 +34,7 @@ export function HomeScreen() {
     const roster = useAsync(loadRoster);
     const recent = useAsync(fetchRecentGames);
     const ladder = useAsync(loadLadder);
+    const tournaments = useAsync(fetchTournaments);
     const [now, setNow] = useState(() => Date.now());
 
     // The session read at boot knows nothing of games started since, so
@@ -75,6 +76,7 @@ export function HomeScreen() {
             {others.length === 0 ? null : <LiveNow games={others} />}
             <div className="home-lower">
                 <div className="home-column">
+                    {tournaments.data === null ? null : <TournamentBlock list={tournaments.data} now={now} />}
                     {ladder.data === null && !ladder.error ? null : <LadderBlock ladder={ladder.data?.entries ?? []} allTime={ladder.data?.allTime ?? false} roster={roster.data} failed={ladder.data === null} retry={ladder.reload} />}
                     {recent.data === null && !recent.error ? null : <RecentResults games={recent.data?.games ?? []} failed={recent.data === null} now={now} retry={recent.reload} />}
                 </div>

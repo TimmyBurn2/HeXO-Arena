@@ -1,7 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
 import type { Me } from '@hexo-arena/contract';
 import { looks, wear } from './matrix';
-import { liveGames, playBots, rivalry, serve, signup, world, type World } from './mock-api';
+import { liveGames, playBots, rivalry, serve, signup, tournaments, world, type World } from './mock-api';
 
 const visitors: readonly { name: string; me: Me }[] = [
     { name: `signed-out`, me: null },
@@ -22,10 +22,14 @@ const screens: readonly { name: string; path: string; world?: Partial<World> }[]
     { name: `a head-to-head`, path: `/games?player=hextide&vs=quietlake`, world: { finished: rivalry(30) } },
     { name: `live games`, path: `/games/live` },
     { name: `the ladder`, path: `/ladder` },
+    { name: `tournaments`, path: `/tournaments` },
+    { name: `a running tournament`, path: `/tournaments/t_autumnrobin1`, world: { tournaments } },
+    { name: `a waiting tournament`, path: `/tournaments/t_wintercup202` },
     { name: `bots`, path: `/bots` },
     { name: `a bot page`, path: `/bots/sealbot` },
     { name: `build a bot`, path: `/connect` },
     { name: `profile`, path: `/profile` },
+    { name: `a player page`, path: `/players/ana` },
     { name: `credits`, path: `/credits` },
     { name: `the first sign-in`, path: `/welcome` },
     { name: `the legal notice`, path: `/legal/imprint` },

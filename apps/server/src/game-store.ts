@@ -4,6 +4,7 @@ import {
     turnsOnBoard,
     type FinishReason,
     type GameHeadline,
+    type GameTournament,
     type Side,
     type TimeControl,
 } from '@hexo-arena/contract';
@@ -12,7 +13,7 @@ import { randomUUID } from 'node:crypto';
 import { replay, type Coord, type Position } from '@hexo-arena/rules';
 import { nowSeconds, type Query } from './db';
 import { alias } from 'drizzle-orm/sqlite-core';
-import { bots, games, moves, users } from './db/schema';
+import { bots, games, moves, tournamentPairings, tournaments, users } from './db/schema';
 import { applyFinishedGame, countedGameOf, seatColumns } from './rating-store';
 
 // The position a game starts from: the origin stone plus the server-placed
@@ -108,6 +109,7 @@ export function insertBotGame(
         challengerSide: Side;
         timeControl: TimeControl;
         opening: readonly OpeningCell[];
+        pairing?: { id: string; game: 1 | 2 };
     },
 ): string {
     const id = `g_${randomUUID()}`;
@@ -120,6 +122,7 @@ export function insertBotGame(
             timeControl: JSON.stringify(game.timeControl),
             openingCells: JSON.stringify(game.opening),
             createdAt: nowSeconds(),
+            ...(game.pairing === undefined ? {} : { pairingId: game.pairing.id, pairingGame: game.pairing.game }),
         })
         .run();
     return id;
@@ -315,6 +318,19 @@ export function countPairBotGamesSince(
         )
         .all();
     return row?.n ?? 0;
+}
+
+/** The tournament a game belongs to, with its round and game number. */
+export function findGameTournament(query: Query, gameId: string): GameTournament | undefined {
+    const row = query
+        .select({ id: tournaments.id, name: tournaments.name, round: tournamentPairings.round, game: games.pairingGame })
+        .from(games)
+        .innerJoin(tournamentPairings, eq(tournamentPairings.id, games.pairingId))
+        .innerJoin(tournaments, eq(tournaments.id, tournamentPairings.tournamentId))
+        .where(eq(games.id, gameId))
+        .get();
+    if (row === undefined || (row.game !== 1 && row.game !== 2)) return undefined;
+    return { id: row.id, name: row.name, round: row.round, game: row.game };
 }
 
 export function countBotBotGamesSince(query: Query, botId: string, sinceSeconds: number): number {

@@ -70,6 +70,9 @@ missing.
 Once it has run, `pnpm dev:bots` also brings `hextide`, `pebble`, and
 `quietlake` online from `apps/server/data/dev-seed.json`; restart it after
 the first seed.
+The seed ends by scheduling the dev tournament three minutes out, unless one
+runs or waits, and enters one bot per owner with games left today: the
+personas' online bots, then the dev bots.
 
 The dev pill at the bottom left of framed screens signs in as a persona, any
 name, a first sign-in, or a guest; in dev the Discord button opens the same

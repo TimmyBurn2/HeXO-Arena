@@ -61,11 +61,10 @@ export function Rating({ value, provisional }: { value: number; provisional: boo
     );
 }
 
-/** Bot names link to the bot page; human names stay plain text. */
+/** A name leads to its page: a bot's under Bots, a human's under Players. */
 export function PlayerName({ name, kind }: { name: string; kind: `bot` | `human` }): ReactNode {
-    if (kind === `human`) return <span className="player-name">{name}</span>;
     return (
-        <Link to={`/bots/${encodeURIComponent(name)}`} className="player-name">
+        <Link to={kind === `bot` ? `/bots/${encodeURIComponent(name)}` : `/players/${encodeURIComponent(name)}`} className="player-name">
             {name}
         </Link>
     );

@@ -8,10 +8,12 @@ import {
     liveGamesMeta,
     notFoundMeta,
     pageTitle,
+    playerMeta,
     playMeta,
     profileMeta,
     siteDescription,
     siteMeta,
+    tournamentsMeta,
     welcomeMeta,
     type PageMeta,
 } from '@hexo-arena/contract';
@@ -34,10 +36,16 @@ export function routeMeta(route: Route): PageMeta {
             return playMeta();
         case `ladder`:
             return ladderMeta();
+        case `tournaments`:
+            return tournamentsMeta;
+        case `tournament`:
+            return { title: pageTitle(text.meta.tournament), description: tournamentsMeta.description };
         case `bots`:
             return botsMeta;
         case `bot`:
             return { title: pageTitle(route.bot), description: siteDescription };
+        case `player`:
+            return playerMeta(route.player);
         case `games`:
             return gamesMeta;
         case `live-games`:

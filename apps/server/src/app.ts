@@ -7,6 +7,8 @@ import {
     nameKeyOf,
     nameSyntaxSchema,
     requestBodyLimitBytes,
+    tournamentDevLeadMs,
+    tournamentLeadMs,
     type LegalDetails,
 } from '@hexo-arena/contract';
 import websocketPlugin from '@fastify/websocket';
@@ -41,6 +43,9 @@ import { sessionUser, sweepSessions } from './sessions';
 import { registerSignInApi } from './sign-in-api';
 import { sweepSignups } from './signups';
 import { beginGeneration, StartGate } from './site-state';
+import { registerPlayerApi } from './player-api';
+import { registerTournamentApi } from './tournament-api';
+import { TournamentScheduler } from './tournament-scheduler';
 import type { GameWatchers } from './watchers';
 
 export interface AppDeps {
@@ -70,14 +75,21 @@ export interface AppDeps {
     // The clock the limits count by, and their numbers; tests move and shrink them.
     now?: () => number;
     limits?: LimitTable;
+    // How often the tournament scheduler looks for work; 0 leaves it to the caller's ticks.
+    tournamentTickMs?: number;
 }
 
 export interface BuiltApp {
     app: FastifyInstance;
     limits: RequestLimits;
     admin: AdminHandler;
+    tournaments: TournamentScheduler;
     drain: (graceMs: number) => Promise<number>;
 }
+
+// The scheduler looks for a game to start, a grace to end, or a round to
+// begin this often.
+const tournamentTickMs = 1_000;
 
 // Expired sign-ups and sessions, with the Discord names they hold,
 // leave at boot and on this beat,
@@ -135,6 +147,18 @@ export async function buildApp(deps: AppDeps): Promise<BuiltApp> {
     );
     const challenges = new ChallengeRegistry({ query, presence, games });
     wirePresence(presence, games);
+    const tournaments = new TournamentScheduler({
+        query,
+        presence,
+        games,
+        generation,
+        draining: () => gate.draining,
+        ...(deps.now === undefined ? {} : { now: deps.now }),
+    });
+    games.onFinish((finished) => {
+        tournaments.gameFinished(finished);
+    });
+    if ((deps.tournamentTickMs ?? tournamentTickMs) > 0) tournaments.start(deps.tournamentTickMs ?? tournamentTickMs);
     const guests = new GuestSessions({
         seated: (guestId) => games.activeHumanGameCount({ kind: `guest`, id: guestId }) > 0,
         ended: (guestId) => {
@@ -153,22 +177,35 @@ export async function buildApp(deps: AppDeps): Promise<BuiltApp> {
     });
     app.addHook(`onClose`, () => {
         clearInterval(sweep);
+        tournaments.stop();
         challenges.stop();
         games.stop();
     });
     registerBotApi(app, { query, presence, gate, games, limits });
-    registerChallengeApi(app, { query, presence, games, challenges, gate, limits });
-    registerGameApi(app, { query, presence, games, watchers, gate, guests, limits });
+    registerChallengeApi(app, { query, presence, games, challenges, gate, limits, reservations: tournaments });
+    registerGameApi(app, { query, presence, games, watchers, gate, guests, limits, reservations: tournaments });
     registerFinishedGamesApi(app, { query, now: deps.now ?? Date.now });
     registerLeaderboardApi(app, { query, presence, now: deps.now ?? Date.now });
     registerLegalApi(app, deps.legalDetails);
+    registerTournamentApi(app, { query, presence, games, limits, now: deps.now ?? Date.now });
+    registerPlayerApi(app, { query, now: deps.now ?? Date.now });
     registerSessionApi(app, { query, guests, games, secureCookies: deps.secureCookies, limits });
     registerSignInApi(app, { query, guests, discord: deps.discord, secureCookies: deps.secureCookies, devLogin: deps.devLogin, limits });
     if (deps.devLogin) registerDevAccountsApi(app, { query });
     if (deps.webIndexPath !== undefined) {
         registerOgShell(app, { query, presence, games, indexPath: deps.webIndexPath, publicOrigin: deps.publicOrigin, now: deps.now ?? Date.now });
     }
-    const admin = createAdminHandler({ query, presence, games, challenges, limits, actor: deps.adminActor });
+    const admin = createAdminHandler({
+        query,
+        presence,
+        games,
+        challenges,
+        tournaments,
+        limits,
+        actor: deps.adminActor,
+        tournamentLeadMs: deps.devLogin ? tournamentDevLeadMs : tournamentLeadMs,
+        ...(deps.now === undefined ? {} : { now: deps.now }),
+    });
 
     app.get(healthzPath, { config: { limit: `public` } }, async (_request, reply) => {
         // One bit: up and serving, or up and refusing new starts, which
@@ -225,6 +262,7 @@ export async function buildApp(deps: AppDeps): Promise<BuiltApp> {
         }
         presence.close(botId);
         challenges.withdrawFor(botId);
+        tournaments.withdraw(botId, `deleted`);
         query.transaction((tx) => deleteBotByPolicy(tx, botId));
         return reply.code(204).send();
     });
@@ -246,5 +284,5 @@ export async function buildApp(deps: AppDeps): Promise<BuiltApp> {
         return reply.code(200).send(rotated);
     });
 
-    return { app, admin, limits, drain: (graceMs) => drain({ query, gate, games, generation }, graceMs) };
+    return { app, admin, limits, tournaments, drain: (graceMs) => drain({ query, gate, games, generation }, graceMs) };
 }

@@ -113,6 +113,7 @@ function privacy(details: LegalDetails, links: LegalLinks) {
                     text(
                         `You choose your public name when you create your account, starting from your Discord username; it stays fixed when your Discord name changes. It shows on the ladder, in your games, on your bots' pages, and in link previews, and anyone can search the games by it, which shows your results and your record against each opponent.`,
                     ),
+                    text(`Your public player page shows your rating and its history, your record, and the opponents you met most.`),
                     text(`Your account also records when it was created and, if it is banned, when. It is kept until it is deleted.`),
                     text(`Legal basis: Art. 6(1)(b) GDPR; for showing results, Art. 6(1)(f) GDPR, legitimate interest: running a public competition.`),
                 ],
@@ -126,6 +127,9 @@ function privacy(details: LegalDetails, links: LegalLinks) {
                     ),
                     text(
                         `Each challenge between bots records both bots, the clock, the opening, the outcome, and the times. These records are not public, count toward the daily challenge limits, and have no set end yet.`,
+                    ),
+                    text(
+                        `A bot you enter in a tournament is listed there with you as its owner, its rating at the start, its results, and its standing, all public.`,
                     ),
                     text(
                         rich`A bot is kept until you delete it. A bot with a game that has a winner then stays in the public record under a placeholder (see ${see(`deletion`, `Deleting your account`)}); any other bot is deleted with its games and challenges.`,

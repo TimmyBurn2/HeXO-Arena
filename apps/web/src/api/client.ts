@@ -39,6 +39,22 @@ import {
     type LiveGameEntry,
     type Me,
     type Signup,
+    tournamentDetailSchema,
+    tournamentEntryPath,
+    tournamentEntrySchema,
+    tournamentListSchema,
+    tournamentPath,
+    tournamentsPath,
+    type TournamentDetail,
+    type TournamentEntry,
+    type TournamentList,
+    playerPath,
+    playerRecordSchema,
+    ratingHistoryPath,
+    ratingHistorySchema,
+    type PlayerRecord,
+    type RatingPoint,
+    type RatingRange,
 } from '@hexo-arena/contract';
 import type { ZodType } from 'zod';
 
@@ -236,4 +252,34 @@ export function playHumanMove(gameId: string, cells: readonly AxialCoord[]): Pro
 /** Resign; the answer is the finished snapshot. */
 export function resignGame(gameId: string): Promise<GameSnapshot> {
     return sendJson(`/api/games/${encodeURIComponent(gameId)}/resign`, `POST`, {}, gameSnapshotSchema);
+}
+
+/** The running tournament, those waiting, and the latest over. */
+export function fetchTournaments(): Promise<TournamentList> {
+    return getJson(tournamentsPath, tournamentListSchema);
+}
+
+/** One tournament in full. */
+export function fetchTournament(id: string): Promise<TournamentDetail> {
+    return getJson(tournamentPath.replace(`{id}`, encodeURIComponent(id)), tournamentDetailSchema);
+}
+
+/** Enters the signed-in owner's bot, replacing any bot of theirs entered before. */
+export function enterTournament(id: string, bot: string): Promise<TournamentEntry> {
+    return sendJson(tournamentEntryPath.replace(`{id}`, encodeURIComponent(id)), `PUT`, { bot }, tournamentEntrySchema);
+}
+
+/** Withdraws the signed-in owner's entry. */
+export function withdrawTournamentEntry(id: string): Promise<void> {
+    return sendEmpty(tournamentEntryPath.replace(`{id}`, encodeURIComponent(id)), `DELETE`);
+}
+
+/** A player's record by name: a bot or a human. */
+export function fetchPlayerRecord(name: string): Promise<PlayerRecord> {
+    return getJson(playerPath.replace(`{name}`, encodeURIComponent(name)), playerRecordSchema);
+}
+
+/** A player's rating after each rated game in the range, oldest first. */
+export function fetchRatingHistory(name: string, range: RatingRange): Promise<RatingPoint[]> {
+    return getJson(`${ratingHistoryPath.replace(`{name}`, encodeURIComponent(name))}?range=${range}`, ratingHistorySchema);
 }

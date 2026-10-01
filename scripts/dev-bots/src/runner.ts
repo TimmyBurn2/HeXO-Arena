@@ -17,7 +17,8 @@ const challengeClock: TimeControl = { mode: `turn`, turnTimeMs: 20_000 };
 
 // An owner's bots may not challenge each other, so every bot gets an owner
 // of its own.
-const seats = [`a`, `b`, `c`] as const;
+/** The dev bots' seats: devbot-a, owned by devowner-a, and on. */
+export const seats = [`a`, `b`, `c`] as const;
 
 /** How the runner reaches its target and paces its bots. */
 export interface DevBotsOptions {

@@ -11,7 +11,12 @@ import {
     finishedGamesQuerySchema,
     liveGameEntrySchema,
     meSchema,
+    playerRecordSchema,
+    ratingRangeSchema,
     signupSchema,
+    tournamentDetailSchema,
+    tournamentEntryRequestSchema,
+    tournamentListSchema,
     type BotListing,
     type DevAccount,
     type GameSnapshot,
@@ -21,8 +26,14 @@ import {
     type FinishedGamesPage,
     type LiveGameEntry,
     type Me,
+    type PlayerRecord,
+    type RatingPoint,
+    type RatingRange,
     type Side,
     type Signup,
+    type TournamentDetail,
+    type TournamentGame,
+    type TournamentSummary,
 } from '@hexo-arena/contract';
 
 /**
@@ -57,6 +68,8 @@ export interface World {
     guestLimit: boolean;
     // Every data read, or every write, refused as rate-limited, with the wait its limit names.
     limited: `reads` | `writes` | null;
+    // The tournaments by id, which the list reads too.
+    tournaments: TournamentDetail[];
     // The dev server's seeded personas; null answers as every other server does, not found.
     devAccounts: DevAccount[] | null;
 }
@@ -236,6 +249,146 @@ export const liveGames: LiveGameEntry[] = (
         clock: runningClock(timeControl, index),
     };
 });
+
+const tGame = (x: string, outcome: TournamentGame[`outcome`], point: string | null = null, gameId: string | null = null, missing: string[] = []): TournamentGame => ({
+    x,
+    gameId,
+    outcome,
+    point,
+    missing,
+});
+const playing = (bot: string, ownerName: string, ratingAtStart: number, online = true) => ({ bot, ownerName, online, ratingAtStart, state: `playing` as const });
+const hoursFromNow = (hours: number) => new Date(Date.now() + hours * 3_600_000).toISOString().replace(/\.\d{3}Z$/u, `Z`);
+
+// A running round robin of four, the second round under way with one
+// game live; one entrant missed the start.
+const runningTournament: TournamentDetail = {
+    id: `t_autumnrobin1`,
+    name: `Autumn round robin`,
+    status: `running`,
+    startsAt: hoursFromNow(-1),
+    startedAt: hoursFromNow(-1),
+    endedAt: null,
+    timeControl: { mode: `turn`, turnTimeMs: 10_000 },
+    openingPlies: 5,
+    maxEntrants: 12,
+    entries: [
+        playing(`sealbot`, `tom`, 1712),
+        playing(`hextide`, `ana`, 1690),
+        playing(`driftwood`, `bruno`, 1388),
+        playing(`ember`, `cleo`, 1320),
+        { bot: `lantern`, ownerName: `dmitri`, online: false, ratingAtStart: null, state: `absent` },
+    ],
+    rounds: [
+        {
+            round: 1,
+            pairings: [
+                { first: `sealbot`, second: `ember`, games: [tGame(`sealbot`, `played`, `sealbot`, `won`), tGame(`ember`, `played`, `sealbot`, `five-finished`)] },
+                { first: `hextide`, second: `driftwood`, games: [tGame(`hextide`, `played`, `driftwood`, `nine-finished`), tGame(`driftwood`, `no_show`, `driftwood`, null, [`hextide`])] },
+            ],
+            rest: null,
+        },
+        {
+            round: 2,
+            pairings: [
+                { first: `hextide`, second: `sealbot`, games: [tGame(`hextide`, `live`, null, `live-1`), tGame(`sealbot`, `pending`)] },
+                { first: `driftwood`, second: `ember`, games: [tGame(`driftwood`, `played`, `ember`, `finished`), tGame(`ember`, `pending`)] },
+            ],
+            rest: null,
+        },
+        {
+            round: 3,
+            pairings: [
+                { first: `sealbot`, second: `driftwood`, games: [tGame(`sealbot`, `pending`), tGame(`driftwood`, `pending`)] },
+                { first: `ember`, second: `hextide`, games: [tGame(`ember`, `pending`), tGame(`hextide`, `pending`)] },
+            ],
+            rest: null,
+        },
+    ],
+    standings: [
+        { rank: 1, bot: `sealbot`, ownerName: `tom`, points: 2, asX: 1, asO: 1, withdrawn: false },
+        { rank: 2, bot: `driftwood`, ownerName: `bruno`, points: 2, asX: 1, asO: 1, withdrawn: false },
+        { rank: 3, bot: `ember`, ownerName: `cleo`, points: 1, asX: 0, asO: 1, withdrawn: false },
+        { rank: 4, bot: `hextide`, ownerName: `ana`, points: 0, asX: 0, asO: 0, withdrawn: false },
+    ],
+    live: liveGames.slice(1, 2),
+};
+
+// Every game of the running one played out, sealbot first.
+const finishedTournament: TournamentDetail = {
+    ...runningTournament,
+    id: `t_summercup202`,
+    name: `Summer cup`,
+    status: `finished`,
+    startsAt: hoursFromNow(-200),
+    startedAt: hoursFromNow(-200),
+    endedAt: hoursFromNow(-199),
+    rounds: runningTournament.rounds.map((round) => ({
+        ...round,
+        pairings: round.pairings.map((pairing) => ({
+            ...pairing,
+            games: pairing.games.map((game, index) =>
+                game.outcome === `pending` || game.outcome === `live` ? tGame(game.x, `played`, index === 0 ? pairing.first : pairing.second, `won`) : game,
+            ),
+        })),
+    })),
+    standings: [
+        { rank: 1, bot: `sealbot`, ownerName: `tom`, points: 4, asX: 2, asO: 2, withdrawn: false },
+        { rank: 2, bot: `driftwood`, ownerName: `bruno`, points: 3, asX: 2, asO: 1, withdrawn: false },
+        { rank: 2, bot: `hextide`, ownerName: `ana`, points: 3, asX: 2, asO: 1, withdrawn: false },
+        { rank: 4, bot: `ember`, ownerName: `cleo`, points: 2, asX: 1, asO: 1, withdrawn: true },
+    ],
+    entries: [...runningTournament.entries.slice(0, 3), { bot: `ember`, ownerName: `cleo`, online: false, ratingAtStart: 1320, state: `withdrawn`, reason: `missed` }, { bot: `lantern`, ownerName: `dmitri`, online: false, ratingAtStart: null, state: `left_out`, reason: `daily_cap` }],
+    live: [],
+};
+
+// One waiting a few hours, two bots entered; tom, signed in by default, has entered none.
+const waitingTournament: TournamentDetail = {
+    ...runningTournament,
+    id: `t_wintercup202`,
+    name: `Winter cup`,
+    status: `scheduled`,
+    startsAt: hoursFromNow(3),
+    startedAt: null,
+    entries: [
+        { bot: `hextide`, ownerName: `ana`, online: true, ratingAtStart: null, state: `entered` },
+        { bot: `driftwood`, ownerName: `bruno`, online: false, ratingAtStart: null, state: `entered` },
+    ],
+    rounds: [],
+    standings: [],
+    live: [],
+};
+
+const calledOffTournament: TournamentDetail = {
+    ...waitingTournament,
+    id: `t_raincup20261`,
+    name: `Rain cup`,
+    status: `called_off`,
+    startsAt: hoursFromNow(-30),
+    endedAt: hoursFromNow(-30),
+    entries: [
+        { bot: `hextide`, ownerName: `ana`, online: true, ratingAtStart: null, state: `entered` },
+        { bot: `driftwood`, ownerName: `bruno`, online: false, ratingAtStart: null, state: `absent` },
+        { bot: `ember`, ownerName: `cleo`, online: true, ratingAtStart: null, state: `entered` },
+    ],
+};
+
+export const tournaments: TournamentDetail[] = [runningTournament, waitingTournament, finishedTournament, calledOffTournament];
+
+function summaryOf(detail: TournamentDetail): TournamentSummary {
+    const top = detail.standings[0];
+    return {
+        id: detail.id,
+        name: detail.name,
+        status: detail.status,
+        startsAt: detail.startsAt,
+        timeControl: detail.timeControl,
+        openingPlies: detail.openingPlies,
+        entrants: detail.startedAt === null ? detail.entries.length : detail.standings.length,
+        maxEntrants: detail.maxEntrants,
+        winner: detail.status === `finished` && top !== undefined ? { name: top.bot, ownerName: top.ownerName } : null,
+    };
+}
 
 const midCells: GameSnapshot[`board`][`cells`] = [
     { x: 0, y: 0, side: `x` },
@@ -548,7 +701,10 @@ export function world(overrides: Partial<World> = {}): World {
         guestLimit: false,
         limited: null,
         devAccounts: null,
-        ...overrides,
+        // A running tournament reserves its bots on Play, so a world takes one only when it asks.
+        tournaments: structuredClone(tournaments.filter((entry) => entry.status !== `running`)),
+        // A world owns its data, so an entry one test makes stays out of the next.
+        ...structuredClone(overrides),
     };
 }
 
@@ -620,6 +776,68 @@ function json(route: Route, status: number, body: unknown): Promise<void> {
 }
 
 /** Serve the world at the network layer for every API call the page makes. */
+// A player's record agrees with the ladder and the bot list: the rating and
+// the games come from there, the split and the opponents are drawn from them.
+function recordOf(state: World, name: string): PlayerRecord | null {
+    const key = name.toLowerCase();
+    const ranked = state.leaderboard.find((entry) => entry.name.toLowerCase() === key);
+    const bot = state.bots.find((entry) => entry.name.toLowerCase() === key);
+    const me = state.me?.kind === `user` && state.me.name.toLowerCase() === key ? state.me : null;
+    const kind = ranked?.kind ?? (bot !== undefined ? `bot` : me !== null ? `human` : null);
+    if (kind === null) return null;
+    const playerName = ranked?.name ?? bot?.name ?? me?.name ?? name;
+    const games = ranked?.games ?? 24;
+    const won = Math.round(games * 0.55);
+    const undecided = Math.min(2, games - won);
+    const lost = games - won - undecided;
+    const asXGames = Math.ceil(games / 2);
+    const opponents = state.leaderboard.filter((entry) => entry.name !== playerName).slice(0, 5);
+    const placings = state.tournaments
+        .filter((entry) => entry.status === `finished` && entry.endedAt !== null)
+        .flatMap((entry) => {
+            const standing = entry.standings.find((line) => line.bot === playerName);
+            return standing === undefined || entry.endedAt === null
+                ? []
+                : [{ tournamentId: entry.id, name: entry.name, rank: standing.rank, entrants: entry.standings.length, points: standing.points, endedAt: entry.endedAt }];
+        });
+    return playerRecordSchema.parse({
+        name: playerName,
+        kind,
+        rating: ranked?.rating ?? bot?.rating ?? 1000,
+        provisional: bot?.provisional ?? ranked === undefined,
+        rank: ranked?.rank ?? null,
+        games,
+        won,
+        lost,
+        undecided,
+        asX: { games: asXGames, won: Math.ceil(won / 2) },
+        asO: { games: games - asXGames, won: Math.floor(won / 2) },
+        forfeits: { disconnect: Math.min(1, lost), terminated: 0 },
+        opponents: opponents.map((entry, index) => ({ name: entry.name, kind: entry.kind, games: 12 - index * 2, won: 6 - index, lost: 5 - index })),
+        firstGameAt: games === 0 ? null : finishedAt(60 * 24 * 200),
+        lastGameAt: games === 0 ? null : finishedAt(30),
+        ...(kind === `bot` ? { placings } : {}),
+    });
+}
+
+// A rating walk from the first game's 1500 to the rating now, the deviation
+// narrowing as it goes; the first eight games provisional.
+function historyOf(record: PlayerRecord, range: RatingRange): RatingPoint[] {
+    const days = { '30d': 30, '1y': 200, all: 200 }[range];
+    const count = Math.min(record.games, range === `30d` ? 12 : 40);
+    return Array.from({ length: count }, (_, index) => {
+        const share = count === 1 ? 1 : index / (count - 1);
+        const wobble = index === count - 1 ? 0 : Math.round(28 * Math.sin(index * 1.7));
+        return {
+            gameId: `g-rated-${String(index + 1)}`,
+            at: finishedAt(Math.round((1 - share) * days * 24 * 60) + 30),
+            rating: Math.round(1500 + (record.rating - 1500) * share ** 0.6) + wobble,
+            deviation: Math.max(48, Math.round(350 * 0.9 ** index)),
+            provisional: range !== `30d` && index < 8,
+        };
+    });
+}
+
 export async function serve(page: Page, state: World): Promise<void> {
     await page.addInitScript(installHeldEventSource);
     await page.route((url) => url.pathname === state.unloadable, (route) => route.abort());
@@ -698,6 +916,54 @@ export async function serve(page: Page, state: World): Promise<void> {
         if (path === `/api/legal` && method === `GET`) {
             if (state.legal === null) await json(route, 404, { error: `no legal details on this server`, code: `not_found` });
             else await json(route, 200, legalDetailsSchema.parse(state.legal));
+            return;
+        }
+        const playerRead = /^\/api\/players\/([^/]+)(\/rating)?$/u.exec(path);
+        if (playerRead !== null && method === `GET`) {
+            const record = recordOf(state, decodeURIComponent(playerRead[1] ?? ``));
+            if (record === null) await json(route, 404, { error: `no such player`, code: `not_found` });
+            else if (playerRead[2] === undefined) await json(route, 200, record);
+            else await json(route, 200, historyOf(record, ratingRangeSchema.parse(url.searchParams.get(`range`) ?? `1y`)));
+            return;
+        }
+        if (path === `/api/tournaments` && method === `GET`) {
+            const listed = state.tournaments.map(summaryOf);
+            await json(
+                route,
+                200,
+                tournamentListSchema.parse({
+                    running: listed.find((entry) => entry.status === `running`) ?? null,
+                    scheduled: listed.filter((entry) => entry.status === `scheduled`),
+                    past: listed.filter((entry) => entry.status !== `running` && entry.status !== `scheduled`),
+                }),
+            );
+            return;
+        }
+        const tournamentPath = /^\/api\/tournaments\/([^/]+)(\/entry)?$/u.exec(path);
+        if (tournamentPath !== null) {
+            const detail = state.tournaments.find((entry) => entry.id === tournamentPath[1]);
+            if (detail === undefined) {
+                await json(route, 404, { error: `no such tournament`, code: `not_found` });
+                return;
+            }
+            if (tournamentPath[2] === undefined) {
+                await json(route, 200, tournamentDetailSchema.parse(detail));
+                return;
+            }
+            const owner = state.me?.kind === `user` ? state.me.name : null;
+            if (owner === null) {
+                await json(route, 401, { error: `no session`, code: `unauthorized` });
+                return;
+            }
+            detail.entries = detail.entries.filter((entry) => entry.ownerName !== owner);
+            if (method === `DELETE`) {
+                await route.fulfill({ status: 204 });
+                return;
+            }
+            const { bot } = tournamentEntryRequestSchema.parse(request.postDataJSON());
+            const entry = { bot, ownerName: owner, online: state.bots.find((listed) => listed.name === bot)?.online ?? false, ratingAtStart: null, state: `entered` as const };
+            detail.entries.push(entry);
+            await json(route, 200, entry);
             return;
         }
         if (path === `/api/leaderboard` && method === `GET`) {

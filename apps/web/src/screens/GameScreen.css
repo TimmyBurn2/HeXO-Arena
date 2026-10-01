@@ -525,7 +525,7 @@
 
     .facts-row {
         display: grid;
-        grid-template-columns: var(--space-8) minmax(0, 1fr);
+        grid-template-columns: var(--facts-term-w) minmax(0, 1fr);
         gap: var(--space-3);
         padding: var(--space-1) 0;
         font-size: var(--text-sm);
@@ -537,6 +537,12 @@
 
     .facts-row dd {
         margin: 0;
+    }
+
+    /* The head to head line runs as a sentence, so its links need more than their hue. */
+    .facts-row dd a:not([class]) {
+        text-decoration: underline;
+        text-underline-offset: var(--underline-offset);
     }
 
     @keyframes drawer-in {

@@ -232,6 +232,12 @@ export const en = {
         settling: `Settling ratings`,
         settlingNote: `No ranked players yet; a player joins the ladder once their rating is no longer provisional.`,
         recent: `Recent results`,
+        tournament: `Tournament`,
+        allTournaments: `All tournaments`,
+        tournamentRunning: (bots: number, clock: string) => `${String(bots)} ${plural(bots, `bot`, `bots`)}; ${clock}`,
+        tournamentLive: `live`,
+        tournamentStarts: (entered: number, max: number) => `${String(entered)} of ${String(max)} bots entered`,
+        tournamentIn: (wait: string) => `in ${wait}`,
         allGames: `All games`,
         botsOnline: `Bots online`,
         allBots: `All bots`,
@@ -332,8 +338,8 @@ export const en = {
         yours: `Your games`,
         none: `No finished games yet.`,
         all: (count: number) => (count === 1 ? `The 1 game` : `All ${String(count)} games`),
-        meetings: (x: string, o: string, won: number, lost: number, games: number) =>
-            `${x} won ${String(won)} and ${o} ${String(lost)} of their ${String(games)} ${plural(games, `game`, `games`)}`,
+        meetings: (x: ReactNode, o: ReactNode, won: number, lost: number, games: (words: string) => ReactNode, count: number): ReactNode =>
+            rich`${x} won ${String(won)} and ${o} ${String(lost)} of their ${games(`${String(count)} ${plural(count, `game`, `games`)}`)}`,
     },
     bot: {
         failed: `The bot did not load`,
@@ -436,6 +442,7 @@ export const en = {
             closed: `Closed for challenges`,
             nothing: `Accepts nothing yet`,
         },
+        inTournament: `In a tournament until it ends`,
         others: (count: number, bots: Slot): ReactNode =>
             rich`${String(count)} more ${plural(count, `bot is`, `bots are`)} offline or closed; see ${bots(`Bots`)}.`,
         cardTitle: (name: string) => `Play ${name}`,
@@ -498,6 +505,7 @@ export const en = {
         starting: `Starting the game`,
         paused: `Starting games is paused; this page updates when it resumes`,
         unavailable: {
+            tournament: (name: string) => `${name} is in a tournament until it ends; pick another bot`,
             offline: (name: string) => `${name} is offline; pick another bot`,
             closed: (name: string) => `${name} is closed for challenges right now; pick another bot`,
             nothing: (name: string) => `${name} accepts no clock yet; pick another bot`,
@@ -605,6 +613,12 @@ export const en = {
                 gives: `How the site works, the rating settings, and the name rule`,
                 terms: `Ideas and values only`,
             },
+            rps: {
+                name: `RPS Strategy`,
+                by: `Henry Abrahamsen`,
+                gives: `The tournament format: paired games from one opening, sides swapped`,
+                terms: `Ideas only`,
+            },
         },
     },
     settings: {
@@ -698,6 +712,8 @@ export const en = {
         boardWaiting: (name: string) => `waiting for ${name}`,
         boardWatching: (match: string, state: string) => `watching ${match}, ${state}`,
         headToHead: `Head to head`,
+        tournament: `Tournament`,
+        tournamentGame: (name: string, round: number, game: number) => `${name}, round ${String(round)}, game ${String(game)} of 2`,
         turnFailed: `Your turn was not sent; try again`,
         gameOver: `The game is over`,
         cellTaken: `That cell is taken`,
@@ -705,6 +721,14 @@ export const en = {
         tooFar: `Too far; play within ${String(placementRadius)} cells of a stone`,
     },
     time: {
+        // A wait ahead, to the minute: "3 h 20 min", "45 min", "under a minute", or days past a day.
+        until: (seconds: number) => {
+            if (seconds < 60) return `under a minute`;
+            if (seconds < 3_600) return `${String(Math.floor(seconds / 60))} min`;
+            if (seconds < 86_400) return `${String(Math.floor(seconds / 3_600))} h ${String(Math.floor((seconds % 3_600) / 60))} min`;
+            const days = Math.floor(seconds / 86_400);
+            return `${String(days)} ${plural(days, `day`, `days`)}`;
+        },
         ago: (seconds: number) => {
             if (seconds < 60) return `just now`;
             if (seconds < 3_600) return `${String(Math.floor(seconds / 60))} min ago`;
@@ -726,8 +750,165 @@ export const en = {
         reload: `Reload`,
         routeFailedHome: `Home`,
     },
+    players: {
+        human: `Human`,
+        rating: `Rating`,
+        provisionalRating: `Provisional rating`,
+        missing: (name: string) => `No player named ${name}`,
+        missingBody: `A name must match in full; capitals do not matter.`,
+        failed: `The player did not load`,
+        browse: `Ladder`,
+        chart: {
+            title: `Rating`,
+            range: `Period`,
+            ranges: { '30d': `30 days`, '1y': `1 year`, all: `All` },
+            none: `No rated game in this period.`,
+            failed: `The rating history did not load`,
+            label: (games: number, rating: number, provisional: boolean) =>
+                `Rating chart, ${String(games)} rated ${plural(games, `game`, `games`)}, now ${String(rating)}${provisional ? `, provisional` : ``}; arrow keys move between games, Enter opens one`,
+            band: (low: number, high: number) => `band ${String(low)} to ${String(high)}`,
+            open: `click to open the game`,
+            tapToOpen: `tap again to open the game`,
+            readout: (rating: number, low: number, high: number, date: string, provisional: boolean) =>
+                `${String(rating)}, band ${String(low)} to ${String(high)}, ${date}${provisional ? `, provisional` : ``}`,
+            key: `Dim while provisional; the band shows how far the rating may be off`,
+        },
+        record: {
+            title: `Record`,
+            games: `games`,
+            won: `won`,
+            lost: `lost`,
+            none: `no winner`,
+            asX: `As x`,
+            asO: `As o`,
+            side: (games: number, won: number) => `${String(games)} ${plural(games, `game`, `games`)}, ${String(won)} won`,
+            forfeits: `Forfeits`,
+            forfeitLine: (disconnect: number, illegal: number) =>
+                disconnect + illegal === 0 ? `None` : `${String(disconnect)} by disconnect, ${String(illegal)} by illegal move`,
+            empty: `No finished games yet.`,
+            failed: `The record did not load`,
+            played: `Played`,
+            span: (first: string, last: string) => (first === last ? first : `${first} to ${last}`),
+            ladder: `Ladder`,
+            rank: (rank: number) => ordinal(rank),
+            aborted: `Aborted games are not counted.`,
+        },
+        mostPlayed: {
+            title: `Most played`,
+            none: `No games yet.`,
+            meetings: (games: number, won: number, lost: number) => `${String(games)} ${plural(games, `game`, `games`)}: ${String(won)} won, ${String(lost)} lost`,
+        },
+        placings: {
+            title: `Tournaments`,
+            none: `No finished tournament yet.`,
+            line: (rank: number, of: number, points: number, date: string) =>
+                `${ordinal(rank)} of ${String(of)}, ${String(points)} ${plural(points, `point`, `points`)}, ${date}`,
+        },
+    },
+    tournaments: {
+        title: `Tournaments`,
+        views: `Ladder and tournaments`,
+        ladder: `Ladder`,
+        lead: `Bot round robins the operator schedules; each pair plays one opening twice, sides swapped.`,
+        failed: `The tournaments did not load`,
+        running: `Running now`,
+        waiting: `Coming up`,
+        past: `Past`,
+        none: {
+            heading: `No tournaments yet`,
+            body: `The operator schedules each one; owners enter a bot on its page.`,
+        },
+        entered: (count: number, max: number) => `${String(count)} of ${String(max)} entered`,
+        played: (count: number) => `${String(count)} ${plural(count, `bot`, `bots`)}`,
+        starts: (when: string) => `Starts ${when}`,
+        won: (bot: ReactNode, owner: ReactNode): ReactNode => rich`${bot} by ${owner} won`,
+        outcome: { called_off: `Called off`, canceled: `Canceled` },
+        notFound: `No tournament here`,
+        notFoundBody: `The address names no tournament.`,
+        detailFailed: `The tournament did not load`,
+        rules: (bots: number, clock: string, plies: number) =>
+            `${String(bots)} ${plural(bots, `bot`, `bots`)}, one per owner; ${clock}; ${String(plies)}-stone openings; rated.`,
+        pairing: `Each pair plays one opening twice, sides swapped, one game after the other.`,
+        status: {
+            scheduled: (when: string, wait: string) => `Starts ${when}, in ${wait}.`,
+            due: (when: string) => `Starts ${when}, any moment now.`,
+            live: (round: number, rounds: number) => `Round ${String(round)} of ${String(rounds)} is live.`,
+            gap: (round: number, rounds: number) => `Round ${String(round)} of ${String(rounds)} starts shortly.`,
+            finished: (date: string) => `Finished ${date}.`,
+            calledOff: (could: number, entered: number, needed: number) =>
+                `Called off: ${String(could)} of ${String(entered)} entered ${plural(entered, `bot`, `bots`)} could play at the start; ${String(needed)} are needed.`,
+            canceled: `Canceled by the operator.`,
+        },
+        rounds: `Rounds`,
+        roundSteps: `Round progress`,
+        step: (round: number, state: `done` | `live` | `next`) => `Round ${String(round)}, ${{ done: `done`, live: `live`, next: `to come` }[state]}`,
+        round: (round: number) => `Round ${String(round)}`,
+        rest: (bot: string) => `${bot} rests`,
+        standings: `Standings`,
+        standingsNote: `One point per game won; a no-show scores for the opponent. Ties go to the points between the tied bots, then Sonneborn-Berger.`,
+        columns: { rank: `Rank`, bot: `Bot`, rating: `Rating at start`, points: `Points`, sides: `As x, as o` },
+        withdrawn: `withdrawn`,
+        crosstable: `Crosstable`,
+        crosstableNote: `Each cell holds two games, as x then as o: filled won, ring lost or no winner, ring with a dot live, dot to play, dash not played.`,
+        total: `Total`,
+        hex: (bot: string, side: string, opponent: string, outcome: string) => `${bot} as ${side} against ${opponent}: ${outcome}`,
+        outcomes: {
+            won: `won`,
+            lost: `lost`,
+            none: `no winner`,
+            pending: `to play`,
+            live: `live`,
+            no_show: `no-show`,
+            forfeit: `withdrawn`,
+            not_played: `not played`,
+        },
+        pairingLine: (first: string, second: string) => `${first} vs ${second}`,
+        gameLine: (game: number, outcome: string) => `Game ${String(game)}: ${outcome}`,
+        score: (first: number, second: number) => `${String(first)}-${String(second)}`,
+        liveGames: `Live games`,
+        enteredTitle: (count: number, max: number) => `Entered (${String(count)} of ${String(max)})`,
+        noEntries: `No bot entered yet.`,
+        didNotPlay: `Did not play`,
+        reasons: {
+            absent: `not online at the start`,
+            daily_cap: `too few bot games left that day`,
+            clock: `does not accept the clock`,
+            missed: `missed two pairings in a row`,
+            banned: `its owner was banned`,
+            delisted: `delisted`,
+            deleted: `deleted`,
+        },
+        podium: (top: readonly { name: string; points: number; rank: number }[]) =>
+            `Podium: ${top.map((entry) => `${[`first`, `second`, `third`][entry.rank - 1] ?? ``} ${entry.name}, ${String(entry.points)} ${plural(entry.points, `point`, `points`)}`).join(`; `)}`,
+        podiumTitle: `Podium`,
+        points: (points: number) => `${String(points)} ${plural(points, `point`, `points`)}`,
+        plateMeta: (points: number, owner: string) => `${plural(points, `point`, `points`)}, by ${owner}`,
+        entry: {
+            title: `Enter a bot`,
+            note: `Your bot must be online at the start and accept the clock; from the start to the end it takes no other game. One bot per owner.`,
+            bot: `Your bot`,
+            enter: `Enter`,
+            change: `Enter instead`,
+            withdraw: `Withdraw`,
+            yours: (bot: string) => `${bot} is entered.`,
+            signIn: `Sign in to enter a bot.`,
+            noBots: `You have no bot to enter yet.`,
+            build: `Build a bot`,
+            errors: {
+                clock_not_accepted: (bot: string) => `${bot} does not accept this clock; change what it accepts first`,
+                full: () => `The tournament is full`,
+                closed: () => `Entries are closed`,
+                delisted: (bot: string) => `${bot} is delisted`,
+                not_owner: (bot: string) => `${bot} is not yours`,
+            },
+            failed: `The entry did not go through; try again`,
+            withdrawFailed: `The entry was not withdrawn; try again`,
+        },
+    },
     meta: {
         game: `Game`,
+        tournament: `Tournament`,
+        player: `Player`,
     },
 };
 

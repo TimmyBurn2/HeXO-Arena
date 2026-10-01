@@ -15,6 +15,7 @@ import { nowSeconds, type Query } from './db';
 import type { GameRegistry } from './game-registry';
 import { countBotBotGamesSince, countPairBotGamesSince } from './game-store';
 import type { ChallengeRegistry } from './challenge-registry';
+import { findChallenge } from './challenge-store';
 import type { PresenceRegistry } from './presence';
 import type { CredentialLimits } from './request-limits';
 import type { StartGate } from './site-state';
@@ -26,6 +27,8 @@ export interface ChallengeApiDeps {
     games: GameRegistry;
     challenges: ChallengeRegistry;
     limits: CredentialLimits;
+    // A bot playing a tournament takes no challenge either way until it ends.
+    reservations: { isReserved: (botId: string) => boolean };
 }
 
 interface NameParams {
@@ -42,7 +45,7 @@ function utcDayStartSeconds(seconds: number): number {
 }
 
 export function registerChallengeApi(app: FastifyInstance, deps: ChallengeApiDeps): void {
-    const { query, presence, games, challenges, gate, limits } = deps;
+    const { query, presence, games, challenges, gate, limits, reservations } = deps;
 
     app.post(`/api/bot/challenge/:name`, { config: { limit: `principal` } }, async (request, reply) => {
         const challenger = requireBot(query, request, reply);
@@ -84,10 +87,12 @@ export function registerChallengeApi(app: FastifyInstance, deps: ChallengeApiDep
         }
         if (
             games.activeGameCount(target.id) >= botConcurrentGameCap ||
-            games.activeGameCount(challenger.id) >= botConcurrentGameCap
+            games.activeGameCount(challenger.id) >= botConcurrentGameCap ||
+            reservations.isReserved(target.id) ||
+            reservations.isReserved(challenger.id)
         ) {
             return reply.code(400).send({
-                error: `a side is at its concurrent-game cap`,
+                error: `a side is at its concurrent-game cap or playing a tournament`,
                 code: `bot_busy`,
             });
         }
@@ -152,6 +157,11 @@ export function registerChallengeApi(app: FastifyInstance, deps: ChallengeApiDep
         // the challenge stays pending and may still be accepted on resume.
         if (gate.refuse(reply)) return reply;
         const { challengeId } = request.params as ChallengeParams;
+        // A tournament that started since the challenge was sent holds it pending.
+        const pending = findChallenge(query, challengeId);
+        if (pending !== undefined && pending.destBotId === bot.id && (reservations.isReserved(pending.challengerBotId) || reservations.isReserved(bot.id))) {
+            return reply.code(400).send({ error: `a side is playing a tournament`, code: `bot_busy` });
+        }
         const result = challenges.accept(bot.id, challengeId);
         if (result.kind === `unknown`) {
             return reply.code(404).send({ error: `no such challenge of yours`, code: `not_found` });

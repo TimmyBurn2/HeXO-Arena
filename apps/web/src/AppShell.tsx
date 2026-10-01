@@ -26,6 +26,18 @@ const LadderScreen = lazy(async () => {
     const module = await loadScreen(async () => import(`./screens/LadderScreen`));
     return { default: module.LadderScreen };
 });
+const TournamentsScreen = lazy(async () => {
+    const module = await loadScreen(async () => import(`./screens/TournamentsScreen`));
+    return { default: module.TournamentsScreen };
+});
+const TournamentScreen = lazy(async () => {
+    const module = await loadScreen(async () => import(`./screens/TournamentScreen`));
+    return { default: module.TournamentScreen };
+});
+const PlayerScreen = lazy(async () => {
+    const module = await loadScreen(async () => import(`./screens/PlayerScreen`));
+    return { default: module.PlayerScreen };
+});
 const BotsScreen = lazy(async () => {
     const module = await loadScreen(async () => import(`./screens/BotsScreen`));
     return { default: module.BotsScreen };
@@ -87,7 +99,7 @@ const nav: readonly NavEntry[] = [
     { route: { name: `home` }, label: text.shell.nav.home, screens: [`home`], bar: false, phoneTab: true },
     { route: { name: `play` }, label: text.shell.nav.play, screens: [`play`], bar: true, phoneTab: true },
     { route: { name: `games` }, label: text.shell.nav.games, screens: [`games`, `live-games`], bar: true, phoneTab: true },
-    { route: { name: `ladder` }, label: text.shell.nav.ladder, screens: [`ladder`], bar: true, phoneTab: true },
+    { route: { name: `ladder` }, label: text.shell.nav.ladder, screens: [`ladder`, `tournaments`, `tournament`], bar: true, phoneTab: true },
     { route: { name: `bots` }, label: text.shell.nav.bots, screens: [`bots`, `bot`], bar: true, phoneTab: true },
     { route: { name: `connect` }, label: text.shell.nav.build, screens: [`connect`], bar: true, phoneTab: false },
 ];
@@ -218,6 +230,12 @@ function RouteView({ route }: { route: Route }) {
             return <PlayScreen />;
         case `ladder`:
             return <LadderScreen />;
+        case `tournaments`:
+            return <TournamentsScreen />;
+        case `player`:
+            return <PlayerScreen name={route.player} />;
+        case `tournament`:
+            return <TournamentScreen id={route.id} />;
         case `bots`:
             return <BotsScreen />;
         case `bot`:

@@ -11,6 +11,7 @@ import {
     legalPagePath,
     legalPages,
     liveGamesMeta,
+    tournamentsMeta,
     logoutPath,
     profileMeta,
 } from '@hexo-arena/contract';
@@ -109,7 +110,7 @@ describe('the og shell routes', () => {
     });
 
     it('carries the site icon at its size and the site name on every shell route, found or not', async () => {
-        for (const url of [`/`, `/play`, `/play?bot=nobody`, `/ladder`, `/bots`, `/bots/nobody`, `/game/g_nothing`, `/games`, `/games/live`, `/connect`, `/profile`, `/credits`, `/welcome`, ...legalPages.map(legalPagePath)]) {
+        for (const url of [`/`, `/play`, `/play?bot=nobody`, `/ladder`, `/bots`, `/bots/nobody`, `/game/g_nothing`, `/games`, `/games/live`, `/tournaments`, `/tournaments/t_aaaaaaaaaaaa`, `/connect`, `/profile`, `/credits`, `/welcome`, ...legalPages.map(legalPagePath)]) {
             const response = await arena.app.inject({ method: `GET`, url });
             expect(response.body).toContain(`<meta property="og:image" content="https://arena.example/icon-512.png" />`);
             expect(response.body).toContain(`<meta property="og:image:width" content="512" />`);
@@ -123,6 +124,7 @@ describe('the og shell routes', () => {
             [`/bots`, botsMeta],
             [`/games`, gamesMeta],
             [`/games/live`, liveGamesMeta],
+            [`/tournaments`, tournamentsMeta],
             [`/connect`, connectMeta],
             [`/profile`, profileMeta],
             [`/credits`, creditsMeta],
@@ -212,6 +214,31 @@ describe('the og shell routes', () => {
         expect(done.meta.ogTitle).toBe(`beta vs alpha - HeXO Arena`);
         expect(done.meta.ogDescription).toBe(`alpha won; beta resigned`);
         expect((await shell(`/game/g_nothing`)).status).toBe(404);
+    });
+
+    it('previews a human player by rating and games, and answers 404 for a bot\'s name or an unknown one', async () => {
+        await openBot(`sealbot`);
+        await loginAs(arena.app, `mira`);
+        const human = await shell(`/players/mira`);
+        expect(human.status).toBe(200);
+        expect(human.meta.ogTitle).toBe(`mira - HeXO Arena`);
+        expect(human.meta.ogDescription).toBe(`HeXO player, rated 1000 (provisional); 0 games, 0 won`);
+        expect((await shell(`/players/sealbot`)).status).toBe(404);
+        expect((await shell(`/players/nobody`)).status).toBe(404);
+    });
+
+    it('previews a waiting tournament by its name, start, and entries, and answers 404 for an unknown one', async () => {
+        arena.sqlite
+            .prepare(
+                `insert into tournaments (id, name, status, starts_at, time_control, opening_plies, max_entrants, created_at) values ('t_aaaaaaaaaaaa', 'Autumn round robin', 'scheduled', 1790877600, '{"mode":"turn","turnTimeMs":10000}', 5, 8, 1)`,
+            )
+            .run();
+        const waiting = await shell(`/tournaments/t_aaaaaaaaaaaa`);
+        expect(waiting.status).toBe(200);
+        expect(waiting.meta.ogTitle).toBe(`Autumn round robin - HeXO Arena`);
+        expect(waiting.meta.ogDescription).toBe(`Bot round robin; starts 2026-10-01 18:00 UTC; 0 of 8 bots entered; turn clock 10 s`);
+        expect((await shell(`/tournaments/t_bbbbbbbbbbbb`)).status).toBe(404);
+        expect((await shell(`/tournaments/nope`)).status).toBe(404);
     });
 });
 

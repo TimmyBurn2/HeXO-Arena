@@ -21,7 +21,7 @@
 
 	# Every page of the site gets its shell from the app, with og meta from
 	# live data and an absolute preview image.
-	@shell path / /play /ladder /bots/* /game/* /bots /games /games/live /connect /profile /credits /welcome /legal/imprint /legal/privacy /legal/terms
+	@shell path / /play /ladder /bots/* /players/* /game/* /tournaments/* /bots /games /games/live /tournaments /connect /profile /credits /welcome /legal/imprint /legal/privacy /legal/terms
 	handle @shell {
 		reverse_proxy app:3000
 	}
@@ -29,7 +29,7 @@
 	# An app that is down or restarting still leaves these routes the
 	# static shell, so the site stays usable through a deploy.
 	handle_errors 502 503 504 {
-		@shellDown path / /play /ladder /bots/* /game/* /bots /games /games/live /connect /profile /credits /welcome /legal/imprint /legal/privacy /legal/terms
+		@shellDown path / /play /ladder /bots/* /players/* /game/* /tournaments/* /bots /games /games/live /tournaments /connect /profile /credits /welcome /legal/imprint /legal/privacy /legal/terms
 		handle @shellDown {
 			root * /srv/web
 			rewrite * /index.html

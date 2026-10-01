@@ -1,6 +1,6 @@
 import type { Page } from '@playwright/test';
 import { themes } from '../src/theme/themes';
-import { leaderboard, liveGames, playBots, rivalry, signup, world, type World } from './mock-api';
+import { leaderboard, liveGames, playBots, rivalry, signup, tournaments, world, type World } from './mock-api';
 
 /** A named look the whole site can wear. */
 export interface Look {
@@ -125,6 +125,13 @@ export const shots: readonly Shot[] = [
     { name: `home-error`, path: `/`, world: world({ broken: true }), ready: `.build-band.wide`, framed: true },
     { name: `ladder`, path: `/ladder`, world: world(), ready: `.podium-plate`, framed: true, board: true },
     { name: `ladder-all-time`, path: `/ladder?active=all`, world: world(), ready: `.podium-plate`, framed: true },
+    { name: `tournaments`, path: `/tournaments`, world: world({ tournaments }), ready: `.tournament-row`, framed: true },
+    { name: `tournaments-none`, path: `/tournaments`, world: world({ tournaments: [] }), ready: `.empty`, framed: true },
+    { name: `tournament-waiting`, path: `/tournaments/t_wintercup202`, world: world(), ready: `.entry-pick`, framed: true },
+    { name: `tournament-waiting-signed-out`, path: `/tournaments/t_wintercup202`, world: signedOut, ready: `.entry-sign-in`, framed: true },
+    { name: `tournament-running`, path: `/tournaments/t_autumnrobin1`, world: world({ live: liveGames, tournaments }), ready: `.xt`, framed: true, board: true },
+    { name: `tournament-finished`, path: `/tournaments/t_summercup202`, world: world(), ready: `.podium-plate`, framed: true, board: true },
+    { name: `tournament-called-off`, path: `/tournaments/t_raincup20261`, world: world(), ready: `.tournament-status`, framed: true },
     { name: `ladder-two`, path: `/ladder`, world: world({ leaderboard: leaderboard.slice(0, 2) }), ready: `.podium-plate`, framed: true },
     { name: `ladder-one`, path: `/ladder`, world: world({ leaderboard: leaderboard.slice(0, 1) }), ready: `.podium-plate`, framed: true },
     {
@@ -232,7 +239,7 @@ export const shots: readonly Shot[] = [
     { name: `live-games-empty`, path: `/games/live`, world: world({ live: [] }), ready: `.empty`, framed: true, board: true },
     { name: `live-games-loading`, path: `/games/live`, world: world({ stall: true }), ready: `.skeleton`, framed: true },
     { name: `live-games-error`, path: `/games/live`, world: world({ broken: true }), ready: `.empty`, framed: true },
-    { name: `bot-live-none`, path: `/bots/sealbot`, world: world({ live: [] }), ready: `h1`, framed: true },
+    { name: `bot-live-none`, path: `/bots/sealbot`, world: world({ live: [] }), ready: `.rating-chart-plot`, framed: true },
     {
         name: `bot-visitor`,
         path: `/bots/sealbot`,
@@ -276,7 +283,11 @@ export const shots: readonly Shot[] = [
             await page.locator(`.owner-panel`).scrollIntoViewIfNeeded();
         },
     },
-    { name: `profile`, path: `/profile`, world: world(), ready: `h1`, framed: true },
+    { name: `profile`, path: `/profile`, world: world(), ready: `.rating-chart-plot`, framed: true },
+    { name: `player`, path: `/players/ana`, world: world(), ready: `.rating-chart-plot`, framed: true },
+    { name: `player-missing`, path: `/players/nobody`, world: world(), ready: `.empty`, framed: true },
+    { name: `player-loading`, path: `/players/ana`, world: world({ stall: true }), ready: `.skeleton`, framed: true },
+    { name: `player-error`, path: `/players/ana`, world: world({ broken: true }), ready: `.empty`, framed: true },
     { name: `profile-guest`, path: `/profile`, world: guest, ready: `h1`, framed: true },
     {
         name: `profile-long-names`,

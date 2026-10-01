@@ -41,6 +41,8 @@ export interface GameApiDeps {
     watchers: GameWatchers;
     guests: GuestSessions;
     limits: CredentialLimits & ClientLimits;
+    // A bot playing a tournament takes no other new game until it ends.
+    reservations: { isReserved: (botId: string) => boolean };
 }
 
 interface GameParams {
@@ -119,9 +121,9 @@ export function registerGameApi(app: FastifyInstance, deps: GameApiDeps): void {
                 code: `clock_not_accepted`,
             });
         }
-        if (games.activeGameCount(bot.id) >= botConcurrentGameCap) {
+        if (games.activeGameCount(bot.id) >= botConcurrentGameCap || deps.reservations.isReserved(bot.id)) {
             return reply.code(400).send({
-                error: `the bot is at its concurrent-game cap`,
+                error: `the bot is at its concurrent-game cap or playing a tournament`,
                 code: `bot_busy`,
             });
         }

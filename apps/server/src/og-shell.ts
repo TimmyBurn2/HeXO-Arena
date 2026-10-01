@@ -17,7 +17,11 @@ import {
     notFoundMeta,
     playMeta,
     profileMeta,
+    playerMeta,
     siteMeta,
+    tournamentIdSchema,
+    tournamentMeta,
+    tournamentsMeta,
     type PageMeta,
     type Roster,
 } from '@hexo-arena/contract';
@@ -29,7 +33,9 @@ import type { GameRegistry } from './game-registry';
 import type { PresenceRegistry } from './presence';
 import { isProvisional } from './rating';
 import { activeSince } from './leaderboard-api';
+import { playerRecord } from './player-api';
 import { rankablePlayers } from './rating-store';
+import { tournamentSummary } from './tournament-api';
 
 export interface OgShellDeps {
     query: Query;
@@ -83,6 +89,7 @@ const fixedPages: readonly (readonly [string, PageMeta])[] = [
     [`/bots`, botsMeta],
     [`/games`, gamesMeta],
     [`/games/live`, liveGamesMeta],
+    [`/tournaments`, tournamentsMeta],
     [`/connect`, connectMeta],
     [`/profile`, profileMeta],
     [`/credits`, creditsMeta],
@@ -95,7 +102,7 @@ const fixedPages: readonly (readonly [string, PageMeta])[] = [
  * page of the site, so a pasted link to any of them previews with an
  * absolute image.
  */
-export const shellRoutes: readonly string[] = [`/`, `/play`, `/ladder`, `/bots/:name`, `/game/:gameId`, ...fixedPages.map(([path]) => path)];
+export const shellRoutes: readonly string[] = [`/`, `/play`, `/ladder`, `/bots/:name`, `/players/:name`, `/game/:gameId`, `/tournaments/:id`, ...fixedPages.map(([path]) => path)];
 
 /**
  * Serves the SPA shell for every page of the site, with meta from live
@@ -163,9 +170,21 @@ export function registerOgShell(app: FastifyInstance, deps: OgShellDeps): void {
         );
     });
 
+    // A bot's name previews as a missing page here, as its own page is under Bots.
+    app.get<{ Params: { name: string } }>(`/players/:name`, { config: { limit: `shell` } }, async (request, reply) => {
+        const record = playerRecord(query, request.params.name, now());
+        return record === null || record.kind === `bot` ? sendShell(reply, 404, notFoundMeta) : sendShell(reply, 200, playerMeta(record.name, record));
+    });
+
     app.get<{ Params: { gameId: string } }>(`/game/:gameId`, { config: { limit: `shell` } }, async (request, reply) => {
         const { gameId } = request.params;
         const headline = games.headline(gameId);
         return headline === null ? sendShell(reply, 404, notFoundMeta) : sendShell(reply, 200, gameMeta(headline));
+    });
+
+    app.get<{ Params: { id: string } }>(`/tournaments/:id`, { config: { limit: `shell` } }, async (request, reply) => {
+        const { id } = request.params;
+        const tournament = tournamentIdSchema.safeParse(id).success ? tournamentSummary(query, id) : null;
+        return tournament === null ? sendShell(reply, 404, notFoundMeta) : sendShell(reply, 200, tournamentMeta(tournament));
     });
 }

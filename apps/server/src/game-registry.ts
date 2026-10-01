@@ -19,6 +19,7 @@ import {
     unlimitedWallCapMs,
     wireToInternal,
     type FinishReason,
+    type GameTournament,
     type FirstPlayer,
     type GameClock,
     type GameHeadline,
@@ -50,8 +51,10 @@ import {
     insertGame,
     insertMove,
     recordFinish,
+    findGameTournament,
     replayPosition,
     type GameRecord,
+    type OpeningCell,
 } from './game-store';
 import type { PresenceRegistry } from './presence';
 import { randomFloat, randomIndex } from './random';
@@ -148,6 +151,7 @@ export interface LiveGame {
     pending: number | null;
     clock: Clock;
     wallTimer: Timer | null;
+    tournament?: GameTournament;
 }
 
 export type MoveErrorCode = `not_your_turn` | `cell_occupied` | `out_of_range` | `game_over`;
@@ -167,6 +171,13 @@ export type BotResignResult =
     | { kind: `rejected`; code: `game_over` }
     | { kind: `unauthorized` }
     | { kind: `unknown` };
+
+/** What a finish listener hears: the game and how it ended. */
+export interface FinishedGameNote {
+    readonly gameId: string;
+    readonly winner: Side | null;
+    readonly reason: FinishReason;
+}
 
 export interface RegistryDeps {
     query: Query;
@@ -261,6 +272,26 @@ function boardCells(position: Position) {
         y: stone.y,
         side: sideOf(stone.player),
     }));
+}
+
+// Pairs of plies after the origin are whole turns, so the opening
+// reaches engine sessions as ordinary two-stone turns.
+function openingTurns(position: Position): { position: Position; turns: TurnEntry[] } {
+    const turns: TurnEntry[] = [];
+    for (let ply = 1; ply < position.stones.length; ply += 2) {
+        const first = position.stones[ply];
+        const second = position.stones[ply + 1];
+        // An odd ply count leaves every stone after the origin paired.
+        if (first === undefined || second === undefined) throw new Error(`an opening split a turn`);
+        turns.push({
+            side: sideOf(first.player),
+            cells: [
+                { x: first.x, y: first.y },
+                { x: second.x, y: second.y },
+            ],
+        });
+    }
+    return { position, turns };
 }
 
 function sideToMove(game: LiveGame): Side {
@@ -369,6 +400,7 @@ export class GameRegistry {
     readonly #generation: number;
     readonly #random: () => number;
     readonly #randomIndex: (bound: number) => number;
+    readonly #finishListeners: ((finished: FinishedGameNote) => void)[] = [];
 
     constructor(deps: RegistryDeps) {
         this.#query = deps.query;
@@ -504,25 +536,61 @@ export class GameRegistry {
         return { gameId };
     }
 
-    // Pairs of plies after the origin are whole turns, so the opening
-    // reaches engine sessions as ordinary two-stone turns.
+    /**
+     * A tournament game between two bots on their stated sides, from a
+     * stored opening, or a fresh one drawn to the given length when none is
+     * stored yet; answers the opening so the pairing's second game reuses it.
+     */
+    createTournamentGame(input: {
+        x: { id: string; name: string };
+        o: { id: string; name: string };
+        timeControl: TimeControl;
+        openingPlies: OpeningPlies;
+        opening: readonly OpeningCell[] | null;
+        pairing: { id: string; game: 1 | 2 };
+    }): { gameId: string; opening: OpeningCell[] } {
+        const { position, turns } =
+            input.opening === null ? this.#placeOpening(input.openingPlies) : openingTurns({ stones: input.opening.map((cell) => ({ ...cell })) });
+        const opening = position.stones.map((stone) => ({ x: stone.x, y: stone.y, player: stone.player }));
+        const gameId = insertBotGame(this.#query, {
+            challengerBotId: input.x.id,
+            destBotId: input.o.id,
+            challengerSide: `x`,
+            timeControl: input.timeControl,
+            opening,
+            pairing: input.pairing,
+        });
+        const game: LiveGame = {
+            id: gameId,
+            seats: { x: botSeat(input.x), o: botSeat(input.o) },
+            timeControl: input.timeControl,
+            openingPlies: input.openingPlies,
+            position,
+            turnLog: turns,
+            nextSeq: 1,
+            requestCounter: 0,
+            pending: null,
+            clock: { mode: `unlimited` },
+            wallTimer: null,
+        };
+        const tournament = findGameTournament(this.#query, gameId);
+        if (tournament !== undefined) game.tournament = tournament;
+        this.#games.set(gameId, game);
+        this.#armClock(game, initialClock(game.timeControl));
+        this.#armWallCap(game);
+        this.#requestBotMove(game);
+        this.#presence.send(input.x.id, this.#gameStartEvent(game, `x`));
+        this.#presence.send(input.o.id, this.#gameStartEvent(game, `o`));
+        return { gameId, opening };
+    }
+
+    /** Tells a listener of every finish, after it is recorded. */
+    onFinish(listener: (finished: FinishedGameNote) => void): void {
+        this.#finishListeners.push(listener);
+    }
+
     #placeOpening(openingPlies: OpeningPlies): { position: Position; turns: TurnEntry[] } {
-        const position = drawOpening(openingPlies, this.#randomIndex);
-        const turns: TurnEntry[] = [];
-        for (let ply = 1; ply < position.stones.length; ply += 2) {
-            const first = position.stones[ply];
-            const second = position.stones[ply + 1];
-            // An odd ply count leaves every stone after the origin paired.
-            if (first === undefined || second === undefined) throw new Error(`an opening split a turn`);
-            turns.push({
-                side: sideOf(first.player),
-                cells: [
-                    { x: first.x, y: first.y },
-                    { x: second.x, y: second.y },
-                ],
-            });
-        }
-        return { position, turns };
+        return openingTurns(drawOpening(openingPlies, this.#randomIndex));
     }
 
     /**
@@ -561,6 +629,14 @@ export class GameRegistry {
             .map((game) => this.#liveEntry(game));
     }
 
+    /** The live games among these ids, in the order given. */
+    liveEntriesOf(gameIds: readonly string[]): LiveGameEntry[] {
+        return gameIds.flatMap((gameId) => {
+            const game = this.#games.get(gameId);
+            return game === undefined ? [] : [this.#liveEntry(game)];
+        });
+    }
+
     #liveEntry(game: LiveGame): LiveGameEntry {
         return {
             gameId: game.id,
@@ -594,6 +670,7 @@ export class GameRegistry {
             record.kind === `human` && viewer !== null && samePerson(viewer, { kind: `user`, id: record.userId })
                 ? record.userSide
                 : undefined;
+        const tournament = record.kind === `bots` ? findGameTournament(this.#query, gameId) : undefined;
         return {
             gameId: record.id,
             status: `finished`,
@@ -605,6 +682,7 @@ export class GameRegistry {
             timeControl: record.timeControl,
             winner: record.winner,
             reason: record.finishReason,
+            ...(tournament === undefined ? {} : { tournament }),
         };
     }
 
@@ -1084,6 +1162,7 @@ export class GameRegistry {
                 reason,
             });
         }
+        for (const listener of this.#finishListeners) listener({ gameId: game.id, winner, reason });
     }
 
     #closeSession(seat: BotSeat, code = 1000, reason = `closed`): void {
@@ -1151,6 +1230,7 @@ export class GameRegistry {
             openingPlies: game.openingPlies,
             board: { cells: boardCells(game.position) },
             timeControl: game.timeControl,
+            ...(game.tournament === undefined ? {} : { tournament: game.tournament }),
         };
     }
 

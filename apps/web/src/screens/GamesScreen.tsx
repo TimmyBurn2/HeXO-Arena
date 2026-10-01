@@ -12,7 +12,7 @@ import {
     type GamePlayer,
 } from '@hexo-arena/contract';
 import { ApiError, fetchFinishedGames, limitedFor } from '../api/client';
-import { BotBadge } from '../components/player';
+import { BotBadge, PlayerName } from '../components/player';
 import { ErrorFrame, SkeletonRows } from '../components/states';
 import { activeKeys, gamesPathOf, searchOf, viewOf, withFilter, type FilterKey, type GameFilters, type GamesView } from '../games/filters';
 import { GameRows } from '../games/GameRows';
@@ -575,7 +575,7 @@ function seatNamed(games: readonly FinishedGameEntry[], name: string): GamePlaye
 function Named({ player }: { player: GamePlayer }): ReactNode {
     return (
         <span className="games-h2h-name">
-            {player.name}
+            {player.kind === `guest` ? player.name : <PlayerName name={player.name} kind={player.kind === `bot` ? `bot` : `human`} />}
             {player.kind === `bot` ? <BotBadge /> : null}
         </span>
     );

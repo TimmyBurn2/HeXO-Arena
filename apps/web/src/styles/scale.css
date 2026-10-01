@@ -97,8 +97,18 @@
         --home-panel-max: 36rem;
         --scrub-count-min: 9rem;
         --games-name-w: 11rem;
+        --facts-term-w: 6.5rem;
         --skeleton-line-w: 24rem;
         --skeleton-short-w: 16rem;
+        --round-step-w: 1.75rem;
+        --xt-hex-w: 1.25rem;
+        --xt-name-w: 11rem;
+        --tournament-side-w: 26rem;
+        --rating-chart-h: 16rem;
+        --rating-chart-gutter: 3.5rem;
+        --chart-line-w: 2px;
+        --chart-dot: 0.875rem;
+        --chart-band-opacity: 0.08;
         --rung-rank-w: 3.5rem;
         --game-max: 90rem;
         --topbar-h: 4rem;

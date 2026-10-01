@@ -101,7 +101,7 @@ describe('CreditsScreen', () => {
         expect(license?.textContent).toContain(`Permission is hereby granted, free of charge`);
     });
 
-    it('credit the font under its own license, and the protocol, the ratings, and the site it learns from', () => {
+    it('credit the font under its own license, and the protocol, the ratings, and the sites it learns from', () => {
         render(<CreditsScreen />);
         const font = within(row(`Chakra Petch`));
         expect(font.getByRole(`link`, { name: `SIL Open Font License 1.1` }).getAttribute(`href`)).toBe(`/fonts/chakra-petch-OFL.txt`);
@@ -112,7 +112,9 @@ describe('CreditsScreen', () => {
         expect(within(row(`Glicko-2`)).getByText(`Published method`)).toBeTruthy();
         expect(screen.getByRole(`link`, { name: `Glicko-2` }).getAttribute(`href`)).toBe(`https://www.glicko.net/glicko.html`);
         expect(within(row(`lichess`)).getByText(`Ideas and values only`)).toBeTruthy();
-        expect(screen.queryByText(/RPS Strategy/)).toBe(null);
+        expect(within(row(`RPS Strategy`)).getByText(`Henry Abrahamsen`)).toBeTruthy();
+        expect(within(row(`RPS Strategy`)).getByText(`Ideas only`)).toBeTruthy();
+        expect(within(row(`RPS Strategy`)).getByRole(`link`, { name: `RPS Strategy` }).getAttribute(`href`)).toBe(`https://rps.henhen1227.com`);
     });
 
     it('name the owners of the marks it shows, once, under the community', () => {

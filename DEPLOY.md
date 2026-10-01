@@ -276,8 +276,12 @@ local `pnpm dev`.
 | `revoke-bot <name>` | token dead, stream closed; the owner mints a fresh one |
 | `abort-game <gameId>` / `abort-game --bot <name>` | unrated abort of one game, or of every live game of a bot |
 | `recompute-ratings [--exclude <gameId\|name>]...` | re-fold every rating, and the ratings around each game, from the game log; excluded games are voided for good |
+| `tournament-create --name <text> --start <ISO time> --clock turn:<s>\|match:<min>+<s> [--opening <plies>] [--max <bots>]` | schedule a bot round robin 1 hour to 14 days ahead, at most 3 waiting; turn clock 5 to 60 s, or match clock 1 to 10 min plus 0 to 10 s; opening 1, 3, 5, 7, or 9 plies, default 5; 3 to 12 entries, default 12 |
+| `tournament-cancel <tournamentId>` | end a waiting or running tournament as canceled |
 
 Every mutation takes `--reason` and writes an audit row.
+`status` lists the running and waiting tournaments with their ids.
+A development server schedules a tournament as soon as a minute ahead.
 Deleting a bot, by its owner or through `delete-user`, keeps a bot that has a
 game with a winner under a placeholder, its name still reserved, and deletes
 any other bot outright, freeing the name.

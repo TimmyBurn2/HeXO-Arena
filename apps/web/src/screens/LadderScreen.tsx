@@ -4,6 +4,7 @@ import { fetchBots, fetchLeaderboard, type LeaderboardActive, type LeaderboardKi
 import { useAsync } from '../api/use-async';
 import { BotBadge, PlayerName, PresenceDot, Rating } from '../components/player';
 import { ErrorFrame, SkeletonRows } from '../components/states';
+import { LadderHead } from '../ladder/LadderHead';
 import { Podium, PodiumSkeleton } from '../ladder/Podium';
 import { useMe } from '../me';
 import { Link } from '../router/Link';
@@ -46,10 +47,9 @@ export function LadderScreen() {
     const [find, setFind] = useState(``);
     return (
         <>
-            <div className="ladder-head">
-                <h1 className="screen-title">{text.ladder.title}</h1>
+            <LadderHead view="ladder" title={text.ladder.title}>
                 <p className="note">{text.ladder.lead}</p>
-            </div>
+            </LadderHead>
             <div className="ladder-filters">
                 <div className="pills" role="group" aria-label={text.ladder.kindFilter}>
                     {kinds.map((entry) => (

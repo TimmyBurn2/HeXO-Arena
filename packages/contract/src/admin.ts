@@ -1,5 +1,15 @@
 import { z } from 'zod';
 import { nameSyntaxSchema } from './names';
+import { openingPliesSchema } from './stream';
+import {
+    adminTournamentSchema,
+    defaultTournamentOpening,
+    tournamentClockSchema,
+    tournamentIdSchema,
+    tournamentMaxEntrants,
+    tournamentMinPresent,
+    tournamentNameSchema,
+} from './tournaments';
 
 // The admin socket speaks one JSON request per connection, ended by a
 // newline or by the client closing its side, and answers with one JSON
@@ -44,6 +54,16 @@ export const adminRequestSchema = z.discriminatedUnion(`op`, [
         exclude: z.array(z.union([adminGameIdSchema, nameSyntaxSchema])).max(100).default([]),
         reason: adminReasonSchema,
     }),
+    z.strictObject({
+        op: z.literal(`tournament-create`),
+        name: tournamentNameSchema,
+        startsAt: z.iso.datetime({ offset: true }),
+        timeControl: tournamentClockSchema,
+        openingPlies: openingPliesSchema.default(defaultTournamentOpening),
+        maxEntrants: z.number().int().min(tournamentMinPresent).max(tournamentMaxEntrants).default(tournamentMaxEntrants),
+        reason: adminReasonSchema,
+    }),
+    z.strictObject({ op: z.literal(`tournament-cancel`), id: tournamentIdSchema, reason: adminReasonSchema }),
 ]);
 export type AdminRequest = z.infer<typeof adminRequestSchema>;
 export type AdminMutation = Exclude<AdminRequest, { op: `status` }>;
@@ -67,6 +87,7 @@ export const adminStatusSchema = z.object({
     // or the forwarded address is not reaching the app.
     clientKeys: z.number().int().min(0),
     keylessRequests: z.number().int().min(0),
+    tournaments: z.array(adminTournamentSchema),
     recentActions: z.array(adminActionSchema).max(10),
 });
 export type AdminStatus = z.infer<typeof adminStatusSchema>;

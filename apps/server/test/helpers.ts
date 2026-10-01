@@ -59,6 +59,7 @@ export interface TestApp {
     admin: BuiltApp[`admin`];
     drain: BuiltApp[`drain`];
     limits: BuiltApp[`limits`];
+    tournaments: BuiltApp[`tournaments`];
     presence: PresenceRegistry;
     watchers: GameWatchers;
 }
@@ -88,7 +89,7 @@ export async function createTestApp(options?: {
     runMigrations(sqlite);
     const presence = options?.presence ?? new PresenceRegistry();
     const watchers = new GameWatchers();
-    const { app, admin, drain, limits } = await buildApp({
+    const { app, admin, drain, limits, tournaments } = await buildApp({
         sqlite,
         discord,
         secureCookies: options?.secureCookies ?? false,
@@ -104,8 +105,10 @@ export async function createTestApp(options?: {
         ...(options?.trustedProxy !== undefined && { trustedProxy: options.trustedProxy }),
         ...(options?.now !== undefined && { now: options.now }),
         ...(options?.limits !== undefined && { limits: options.limits }),
+        // Tests move the scheduler with their own ticks.
+        tournamentTickMs: 0,
     });
-    return { sqlite, app, admin, drain, limits, presence, watchers };
+    return { sqlite, app, admin, drain, limits, presence, watchers, tournaments };
 }
 
 /**

@@ -1,4 +1,12 @@
-import { nameKeyOf, type AdminMutation, type AdminRequest, type AdminResponse, type AdminStatus } from '@hexo-arena/contract';
+import {
+    nameKeyOf,
+    tournamentHorizonMs,
+    tournamentWaitingCap,
+    type AdminMutation,
+    type AdminRequest,
+    type AdminResponse,
+    type AdminStatus,
+} from '@hexo-arena/contract';
 import type { AdminHandler } from './admin-socket';
 import { recentAdminActions, recordAdminAction } from './admin-store';
 import {
@@ -22,14 +30,21 @@ import { findGame } from './game-store';
 import type { PresenceRegistry } from './presence';
 import type { RequestLimits } from './request-limits';
 import { isPaused, setPaused } from './site-state';
+import type { TournamentScheduler } from './tournament-scheduler';
+import { createTournament, openTournaments } from './tournament-store';
 
 export interface AdminDeps {
     query: Query;
     presence: PresenceRegistry;
     games: GameRegistry;
     challenges: ChallengeRegistry;
+    tournaments: Pick<TournamentScheduler, `cancel` | `withdraw`>;
     limits: Pick<RequestLimits, `clientCount` | `keys`>;
     actor: string;
+    // How soon a tournament may start: an hour in production, a minute on a
+    // development server.
+    tournamentLeadMs: number;
+    now?: () => number;
 }
 
 const recentActionCount = 10;
@@ -42,6 +57,7 @@ function statusOf(deps: AdminDeps): AdminStatus {
         activeGames: deps.games.liveGameCount(),
         clientKeys: deps.limits.clientCount,
         keylessRequests: deps.limits.keys.keyless,
+        tournaments: openTournaments(deps.query),
         recentActions: recentAdminActions(deps.query, recentActionCount),
     };
 }
@@ -56,6 +72,10 @@ function unchanged(error: string): AdminResponse {
 
 function notFound(error: string): AdminResponse {
     return { kind: `error`, code: `not_found`, error };
+}
+
+function badRequest(error: string): AdminResponse {
+    return { kind: `error`, code: `bad_request`, error };
 }
 
 // What a mutation answers, plus the effect on live streams and games that
@@ -133,6 +153,7 @@ function forgetUser(deps: AdminDeps, tx: Query, name: string): Outcome {
         aborted += deps.games.abortForBot(botId);
         deps.presence.close(botId);
         deps.challenges.withdrawFor(botId);
+        deps.tournaments.withdraw(botId, `deleted`);
     }
     const deletion = deleteUser(tx, userId);
     const user = deletion.placeholder === null ? `user deleted` : `user kept as ${deletion.placeholder}`;
@@ -145,6 +166,42 @@ function recompute(tx: Query, exclude: readonly string[]): Outcome {
     if (voided.kind === `not_found`) return { response: notFound(`no game or player matches ${voided.match}`) };
     const rated = recomputeRatings(tx);
     return { response: done(`re-folded ${String(rated)} rated games; voided ${String(voided.count)} more`) };
+}
+
+function nowSecondsOf(deps: AdminDeps): number {
+    return Math.floor((deps.now ?? Date.now)() / 1000);
+}
+
+function scheduleTournament(deps: AdminDeps, tx: Query, request: Extract<AdminRequest, { op: `tournament-create` }>): Outcome {
+    const startsAt = Math.floor(Date.parse(request.startsAt) / 1000);
+    const created = createTournament(
+        tx,
+        { name: request.name, startsAt, timeControl: request.timeControl, openingPlies: request.openingPlies, maxEntrants: request.maxEntrants },
+        nowSecondsOf(deps),
+        deps.tournamentLeadMs,
+    );
+    switch (created.kind) {
+        case `created`:
+            return { response: done(`scheduled ${request.name} as ${created.id}, starting ${new Date(startsAt * 1000).toISOString()}`) };
+        case `too_soon`:
+            return { response: badRequest(`a tournament starts at least ${String(deps.tournamentLeadMs / 60_000)} minutes ahead`) };
+        case `too_far`:
+            return { response: badRequest(`a tournament starts at most ${String(tournamentHorizonMs / 86_400_000)} days ahead`) };
+        case `waiting_full`:
+            return { response: badRequest(`${String(tournamentWaitingCap)} tournaments are already waiting`) };
+    }
+}
+
+function endTournament(deps: AdminDeps, id: string): Outcome {
+    const canceled = deps.tournaments.cancel(id);
+    switch (canceled.kind) {
+        case `canceled`:
+            return { response: done(`canceled ${id}, which was ${canceled.status}; ${String(canceled.aborted ?? 0)} live games aborted`) };
+        case `over`:
+            return { response: unchanged(`the tournament is already over`) };
+        case `not_found`:
+            return { response: notFound(`no such tournament`) };
+    }
 }
 
 /**
@@ -174,6 +231,7 @@ export function createAdminHandler(deps: AdminDeps): AdminHandler {
                         // still pending leaves with it.
                         live: (botId) => {
                             deps.challenges.withdrawFor(botId);
+                            deps.tournaments.withdraw(botId, `delisted`);
                         },
                     }),
                 );
@@ -190,6 +248,7 @@ export function createAdminHandler(deps: AdminDeps): AdminHandler {
                             for (const botId of botIdsOf(deps.query, userId)) {
                                 deps.presence.close(botId);
                                 deps.challenges.withdrawFor(botId);
+                                deps.tournaments.withdraw(botId, `banned`);
                             }
                         },
                     }),
@@ -230,6 +289,10 @@ export function createAdminHandler(deps: AdminDeps): AdminHandler {
                 );
             case `delete-user`:
                 return audited(deps, request, request.name, (tx) => forgetUser(deps, tx, request.name));
+            case `tournament-create`:
+                return audited(deps, request, request.name, (tx) => scheduleTournament(deps, tx, request));
+            case `tournament-cancel`:
+                return audited(deps, request, request.id, () => endTournament(deps, request.id));
         }
     };
 }

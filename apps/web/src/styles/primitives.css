@@ -42,6 +42,32 @@
         font-size: var(--text-sm);
     }
 
+    .card-title {
+        margin: 0 0 var(--space-3);
+        font-size: var(--text-base);
+        font-weight: var(--weight-display);
+    }
+
+    /* A value such as a repository link is one long word, so the value
+       column may shrink and the word wrap rather than push the card wide. */
+    .kv {
+        display: grid;
+        grid-template-columns: max-content minmax(0, 1fr);
+        gap: var(--space-2) var(--space-5);
+        margin: 0;
+        font-size: var(--text-sm);
+    }
+
+    .kv dt {
+        color: var(--c-text-dim);
+    }
+
+    .kv dd {
+        margin: 0;
+        font-weight: var(--weight-strong);
+        overflow-wrap: anywhere;
+    }
+
     .controls {
         display: flex;
         flex-wrap: wrap;

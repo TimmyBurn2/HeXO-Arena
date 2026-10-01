@@ -3,10 +3,6 @@
         margin-bottom: var(--space-4);
     }
 
-    .ladder-head .screen-title {
-        margin: 0 0 var(--space-2);
-    }
-
     .ladder-head .note {
         margin: 0;
         max-width: var(--measure);

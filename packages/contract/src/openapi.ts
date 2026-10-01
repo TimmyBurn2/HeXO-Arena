@@ -95,6 +95,24 @@ import {
     leaderboardCap,
     leaderboardPath,
     leaderboardSchema,
+    playerPath,
+    playerRecordMemoMs,
+    playerRecordSchema,
+    ratingHistoryCap,
+    ratingHistoryPath,
+    ratingHistoryQuerySchema,
+    ratingHistorySchema,
+    tournamentDetailMemoMs,
+    tournamentDetailSchema,
+    tournamentEntryPath,
+    tournamentEntryRequestSchema,
+    tournamentEntrySchema,
+    tournamentListPastCap,
+    tournamentListSchema,
+    tournamentPath,
+    tournamentPresenceGraceMs,
+    tournamentsPath,
+    tournamentWaitingCap,
     legalDetailsPath,
     legalDetailsSchema,
     liveGameEntrySchema,
@@ -604,7 +622,7 @@ function registerSiteSurface(registry: OpenAPIRegistry, shared: SharedComponents
                 content: { 'application/json': { schema: gameSnapshotSchema } },
             },
             400: {
-                description: `Validation failed (bad_request), the caller is at its live-game cap (human_busy), or the bot is not open (not_open), excludes the clock (clock_not_accepted), or is at its game cap (bot_busy).`,
+                description: `Validation failed (bad_request), the caller is at its live-game cap (human_busy), or the bot is not open (not_open), excludes the clock (clock_not_accepted), or is at its game cap or playing a tournament (bot_busy).`,
                 content: {
                     'application/json': {
                         schema: gameCreateError,
@@ -751,6 +769,130 @@ function registerSiteSurface(registry: OpenAPIRegistry, shared: SharedComponents
             400: shared.gameOver,
             401: shared.unauthorized,
             404: shared.notFound,
+        },
+    });
+
+    registerTournamentPaths(registry, shared);
+    registerPlayerPaths(registry, shared);
+}
+
+const tournamentEntryError = errorBodySchema([...badRequestErrorCodes, `clock_not_accepted`]).meta({ id: `TournamentEntryError` });
+const tournamentForbiddenError = errorBodySchema([`not_owner`, `delisted`]).meta({ id: `TournamentForbiddenError` });
+const tournamentClosedError = errorBodySchema([`closed`, `full`]).meta({ id: `TournamentClosedError` });
+
+function registerPlayerPaths(registry: OpenAPIRegistry, shared: SharedComponents) {
+    const name = registry.registerComponent('parameters', 'PlayerName', {
+        name: 'name',
+        in: 'path',
+        required: true,
+        description: `A player's name, matched case-folded: a bot or a human.`,
+        schema: { type: 'string' },
+    }).ref;
+
+    registry.registerPath({
+        method: 'get',
+        path: playerPath,
+        summary: `Read a player's record.`,
+        operationId: 'getPlayerRecord',
+        tags: ['Players'],
+        security: [],
+        description: `Games won, lost, and without a winner, by side, forfeits, the most played opponents, and a bot's tournament places. A deleted player's placeholder answers not_found. A record is read at most once every ${String(playerRecordMemoMs / 1000)} s, every caller in that time getting the same body.`,
+        parameters: [name],
+        responses: {
+            200: { description: `The record.`, content: { 'application/json': { schema: playerRecordSchema } } },
+            404: shared.notFound,
+        },
+    });
+
+    registry.registerPath({
+        method: 'get',
+        path: ratingHistoryPath,
+        summary: `Read a player's rating history.`,
+        operationId: 'getRatingHistory',
+        tags: ['Players'],
+        security: [],
+        description: `The rating after each rated game in the range, the newest ${String(ratingHistoryCap)} at most. A deleted player's placeholder answers not_found.`,
+        parameters: [name],
+        request: { query: ratingHistoryQuerySchema },
+        responses: {
+            200: { description: `The history.`, content: { 'application/json': { schema: ratingHistorySchema } } },
+            400: shared.badRequest,
+            404: shared.notFound,
+        },
+    });
+}
+
+function registerTournamentPaths(registry: OpenAPIRegistry, shared: SharedComponents) {
+    const tournamentId = registry.registerComponent('parameters', 'TournamentId', {
+        name: 'id',
+        in: 'path',
+        required: true,
+        description: `The tournament's id.`,
+        schema: { type: 'string' },
+    }).ref;
+
+    registry.registerPath({
+        method: 'get',
+        path: tournamentsPath,
+        summary: 'List tournaments.',
+        operationId: 'listTournaments',
+        tags: ['Tournaments'],
+        security: [],
+        description: `The running tournament, up to ${String(tournamentWaitingCap)} waiting, and the latest ${String(tournamentListPastCap)} over. The operator schedules each one: a paired round robin of bots, one per owner.`,
+        responses: {
+            200: { description: `The tournaments.`, content: { 'application/json': { schema: tournamentListSchema } } },
+        },
+    });
+
+    registry.registerPath({
+        method: 'get',
+        path: tournamentPath,
+        summary: 'Read a tournament.',
+        operationId: 'getTournament',
+        tags: ['Tournaments'],
+        security: [],
+        description: `Its entries, rounds, standings, and live games. Each pairing plays one opening twice, sides swapped, one game after the other; a game waits ${String(tournamentPresenceGraceMs / 1000)} s for a bot that is not connected. A tournament is read at most once every ${String(tournamentDetailMemoMs / 1000)} s, every caller in that time getting the same body.`,
+        parameters: [tournamentId],
+        responses: {
+            200: { description: `The tournament.`, content: { 'application/json': { schema: tournamentDetailSchema } } },
+            404: shared.notFound,
+        },
+    });
+
+    registry.registerPath({
+        method: 'put',
+        path: tournamentEntryPath,
+        summary: 'Enter a bot, or replace the entered one.',
+        operationId: 'enterTournament',
+        tags: ['Tournaments'],
+        security: [{ sessionCookie: [] }],
+        description: `While the tournament waits, its owner enters one bot, replacing any bot the owner entered before. From the start to the end an entrant takes no other new game, and challenges to or from it answer bot_busy.`,
+        parameters: [tournamentId],
+        request: { body: { content: { 'application/json': { schema: tournamentEntryRequestSchema } } } },
+        responses: {
+            200: { description: `The entry.`, content: { 'application/json': { schema: tournamentEntrySchema } } },
+            400: { description: `Validation failed (bad_request), or the bot does not accept the clock (clock_not_accepted).`, content: { 'application/json': { schema: tournamentEntryError } } },
+            401: shared.unauthorized,
+            403: { description: `The bot is someone else's (not_owner), or it is delisted (delisted).`, content: { 'application/json': { schema: tournamentForbiddenError } } },
+            404: shared.notFound,
+            409: { description: `The tournament no longer waits (closed), or holds its most entries (full).`, content: { 'application/json': { schema: tournamentClosedError } } },
+        },
+    });
+
+    registry.registerPath({
+        method: 'delete',
+        path: tournamentEntryPath,
+        summary: `Withdraw the caller's entry.`,
+        operationId: 'withdrawTournamentEntry',
+        tags: ['Tournaments'],
+        security: [{ sessionCookie: [] }],
+        description: `While the tournament waits; without an entry nothing changes.`,
+        parameters: [tournamentId],
+        responses: {
+            204: { description: `No bot of the caller is entered.` },
+            401: shared.unauthorized,
+            404: shared.notFound,
+            409: { description: `The tournament no longer waits (closed).`, content: { 'application/json': { schema: tournamentClosedError } } },
         },
     });
 }
@@ -977,7 +1119,7 @@ function registerBotSurface(registry: OpenAPIRegistry, shared: SharedComponents)
                 content: { 'application/json': { schema: challengeSchema } },
             },
             400: {
-                description: `Validation failed (bad_request), the target is not open (not_open) or excludes the clock (clock_not_accepted), a side is at its game cap (bot_busy), the target's inbox is full (inbox_full), or the challenger already has a challenge pending with the target (challenge_pending).`,
+                description: `Validation failed (bad_request), the target is not open (not_open) or excludes the clock (clock_not_accepted), a side is at its game cap or playing a tournament (bot_busy), the target's inbox is full (inbox_full), or the challenger already has a challenge pending with the target (challenge_pending).`,
                 content: {
                     'application/json': {
                         schema: challengeCreateError,
@@ -1018,7 +1160,7 @@ function registerBotSurface(registry: OpenAPIRegistry, shared: SharedComponents)
                 content: { 'application/json': { schema: okSchema } },
             },
             400: {
-                description: `The challenged bot is at its game cap (bot_busy); the challenge stays pending.`,
+                description: `The challenged bot is at its game cap, or a side is playing a tournament (bot_busy); the challenge stays pending.`,
                 content: {
                     'application/json': {
                         schema: challengeAcceptError,

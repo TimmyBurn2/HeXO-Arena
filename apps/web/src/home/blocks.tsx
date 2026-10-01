@@ -1,5 +1,5 @@
-import type { BotListing, FinishedGameEntry, GamePlayer, LeaderboardEntry, Side } from '@hexo-arena/contract';
-import { resultSentence } from '@hexo-arena/contract';
+import type { BotListing, FinishedGameEntry, GamePlayer, LeaderboardEntry, Side, TournamentList } from '@hexo-arena/contract';
+import { clockText, resultSentence } from '@hexo-arena/contract';
 import { BotBadge, OpenTag, PlayerName, PresenceDot, Rating, Swatch } from '../components/player';
 import { Rungs } from '../components/Rungs';
 import { LiveGameGrid } from '../live/LiveGameCard';
@@ -259,6 +259,42 @@ export function BuildBand({ wide, signedInAs }: { wide: boolean; signedInAs: str
                     {text.home.readApi}
                 </a>
             </div>
+        </section>
+    );
+}
+
+/** How far ahead a waiting tournament earns a block on Home. */
+const tournamentSoonMs = 86_400_000;
+
+/**
+ * The tournament worth a look: the one running, else the next one starting
+ * within a day; nothing otherwise.
+ */
+export function TournamentBlock({ list, now }: { list: TournamentList; now: number }) {
+    const soon = list.scheduled.find((entry) => Date.parse(entry.startsAt) - now <= tournamentSoonMs);
+    const shown = list.running ?? soon ?? null;
+    if (shown === null) return null;
+    const wait = Math.max(0, Math.floor((Date.parse(shown.startsAt) - now) / 1000));
+    return (
+        <section className="home-block" aria-labelledby="tournament-block-title">
+            <Heading id="tournament-block-title" title={text.home.tournament} link={{ to: `/tournaments`, label: text.home.allTournaments }} />
+            <ul className="home-rows">
+                <li className="home-row">
+                    <span className="home-row-who">
+                        <Link to={`/tournaments/${encodeURIComponent(shown.id)}`} className="player-name">
+                            {shown.name}
+                        </Link>
+                        <span className="note">
+                            {shown.status === `running`
+                                ? text.home.tournamentRunning(shown.entrants, clockText(shown.timeControl))
+                                : text.home.tournamentStarts(shown.entrants, shown.maxEntrants)}
+                        </span>
+                    </span>
+                    <span className="home-row-figure">
+                        {shown.status === `running` ? <span className="tag">{text.home.tournamentLive}</span> : <span>{text.home.tournamentIn(text.time.until(wait))}</span>}
+                    </span>
+                </li>
+            </ul>
         </section>
     );
 }

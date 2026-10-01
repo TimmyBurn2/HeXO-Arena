@@ -1,5 +1,6 @@
-import { check, index, integer, primaryKey, real, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core';
+import { check, foreignKey, index, integer, primaryKey, real, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core';
 import { sql } from 'drizzle-orm';
+import type { AnySQLiteColumn } from 'drizzle-orm/sqlite-core';
 import { discordNameMaxLength, nextPathMaxLength, signupAttemptCap } from '@hexo-arena/contract';
 // One global namespace shared by users and bots: a SQLite unique index
 // cannot span two tables, so the fold key is reserved here first and both
@@ -126,6 +127,8 @@ export const bots = sqliteTable(
     },
     (table) => [
         index(`bots_owner_id_idx`).on(table.ownerId),
+        // A tournament entry names the bot with its owner, held to this pair.
+        uniqueIndex(`bots_id_owner_idx`).on(table.id, table.ownerId),
         check(`bots_scope_check`, sql`${table.scope} in ('bot:play')`),
     ],
 );
@@ -160,6 +163,10 @@ export const games = sqliteTable(
         finishSeq: integer(`finish_seq`),
         // A voided game stays in the log but never counts toward a rating.
         voidedAt: integer(`voided_at`),
+        // A tournament game names its pairing and which of the pairing's two
+        // games it is; a game the drain cut replays under the same pair.
+        pairingId: text(`pairing_id`).references((): AnySQLiteColumn => tournamentPairings.id, { onDelete: `cascade` }),
+        pairingGame: integer(`pairing_game`),
     },
     (table) => [
         uniqueIndex(`games_finish_seq_idx`).on(table.finishSeq),
@@ -177,6 +184,13 @@ export const games = sqliteTable(
         index(`games_clock_finish_idx`).on(sql`${table.timeControl} ->> '$.mode'`, table.finishSeq),
         index(`games_opening_finish_idx`).on(sql`json_array_length(${table.openingCells})`, table.finishSeq),
         index(`games_finished_at_idx`).on(table.finishedAt),
+        index(`games_pairing_idx`).on(table.pairingId, table.pairingGame),
+        // A null makes an in-list unknown, which a check lets pass, so the
+        // nullable values these checks pin are coalesced first.
+        check(
+            `games_pairing_check`,
+            sql`(${table.pairingId} is null and ${table.pairingGame} is null) or (${table.pairingId} is not null and coalesce(${table.pairingGame}, 0) in (1, 2) and ${table.challengerBotId} is not null)`,
+        ),
         check(
             `games_user_side_check`,
             sql`${table.userSide} is null or ${table.userSide} in ('x', 'o')`,
@@ -369,8 +383,116 @@ export const adminActions = sqliteTable(
     (table) => [
         check(
             `admin_actions_action_check`,
-            sql`${table.action} in ('pause', 'resume', 'ban-user', 'unban-user', 'delete-user', 'delist-bot', 'relist-bot', 'revoke-bot', 'abort-game', 'recompute-ratings')`,
+            sql`${table.action} in ('pause', 'resume', 'ban-user', 'unban-user', 'delete-user', 'delist-bot', 'relist-bot', 'revoke-bot', 'abort-game', 'recompute-ratings', 'tournament-create', 'tournament-cancel')`,
         ),
         check(`admin_actions_reason_check`, sql`length(${table.reason}) > 0`),
+    ],
+);
+
+// A round robin the operator scheduled. It waits scheduled until its start,
+// then runs, or is called off when too few bots are connected; the operator
+// may cancel it before it ends. ended_at is set exactly once it is over.
+export const tournaments = sqliteTable(
+    `tournaments`,
+    {
+        id: text(`id`).primaryKey(),
+        name: text(`name`).notNull(),
+        status: text(`status`).notNull(),
+        startsAt: integer(`starts_at`).notNull(),
+        timeControl: text(`time_control`).notNull(),
+        openingPlies: integer(`opening_plies`).notNull(),
+        maxEntrants: integer(`max_entrants`).notNull(),
+        createdAt: integer(`created_at`).notNull(),
+        startedAt: integer(`started_at`),
+        endedAt: integer(`ended_at`),
+    },
+    (table) => [
+        index(`tournaments_status_starts_idx`).on(table.status, table.startsAt),
+        check(`tournaments_status_check`, sql`${table.status} in ('scheduled', 'running', 'finished', 'called_off', 'canceled')`),
+        check(`tournaments_name_check`, sql`length(${table.name}) between 3 and 40 and ${table.name} not glob '*[^ -~]*'`),
+        check(`tournaments_opening_check`, sql`${table.openingPlies} in (1, 3, 5, 7, 9)`),
+        check(`tournaments_max_check`, sql`${table.maxEntrants} between 3 and 12`),
+        check(
+            `tournaments_started_check`,
+            sql`${table.status} = 'canceled' or (${table.status} in ('running', 'finished')) = (${table.startedAt} is not null)`,
+        ),
+        check(`tournaments_ended_check`, sql`(${table.status} in ('finished', 'called_off', 'canceled')) = (${table.endedAt} is not null)`),
+    ],
+);
+
+// One bot per owner per tournament. An entry is entered while the
+// tournament waits; at the start it plays, is absent, or is left out, and a
+// playing bot may later be withdrawn; left out and withdrawn say why.
+export const tournamentEntries = sqliteTable(
+    `tournament_entries`,
+    {
+        tournamentId: text(`tournament_id`)
+            .notNull()
+            .references(() => tournaments.id, { onDelete: `cascade` }),
+        botId: text(`bot_id`).notNull(),
+        ownerId: text(`owner_id`).notNull(),
+        state: text(`state`).notNull().default(`entered`),
+        reason: text(`reason`),
+        ratingAtStart: real(`rating_at_start`),
+        enteredAt: integer(`entered_at`).notNull(),
+    },
+    (table) => [
+        primaryKey({ columns: [table.tournamentId, table.botId] }),
+        uniqueIndex(`tournament_entries_owner_idx`).on(table.tournamentId, table.ownerId),
+        index(`tournament_entries_bot_idx`).on(table.botId, table.ownerId),
+        index(`tournament_entries_owner_id_idx`).on(table.ownerId),
+        foreignKey({ columns: [table.botId, table.ownerId], foreignColumns: [bots.id, bots.ownerId] }).onDelete(`cascade`),
+        foreignKey({ columns: [table.ownerId], foreignColumns: [users.id] }).onDelete(`cascade`),
+        check(`tournament_entries_state_check`, sql`${table.state} in ('entered', 'playing', 'absent', 'left_out', 'withdrawn')`),
+        check(
+            `tournament_entries_reason_check`,
+            sql`(${table.state} = 'left_out' and coalesce(${table.reason}, '') in ('daily_cap', 'clock')) or (${table.state} = 'withdrawn' and coalesce(${table.reason}, '') in ('missed', 'banned', 'delisted', 'deleted')) or (${table.state} not in ('left_out', 'withdrawn') and ${table.reason} is null)`,
+        ),
+        check(`tournament_entries_rating_check`, sql`${table.ratingAtStart} is null or ${table.ratingAtStart} >= 400`),
+    ],
+);
+
+// One meeting of two bots in a round: two games from one opening, the
+// first bot playing x in game 1 and the second in game 2. Each game's state
+// says how it went; its seat names the winner of a played game, the bot
+// that missed a no-show, or the bot withdrawn from a forfeit, both for the
+// last two when neither came.
+export const tournamentPairings = sqliteTable(
+    `tournament_pairings`,
+    {
+        id: text(`id`).primaryKey(),
+        tournamentId: text(`tournament_id`)
+            .notNull()
+            .references(() => tournaments.id, { onDelete: `cascade` }),
+        round: integer(`round`).notNull(),
+        firstBotId: text(`first_bot_id`)
+            .notNull()
+            .references(() => bots.id, { onDelete: `cascade` }),
+        secondBotId: text(`second_bot_id`)
+            .notNull()
+            .references(() => bots.id, { onDelete: `cascade` }),
+        openingCells: text(`opening_cells`),
+        game1: text(`game1`).notNull().default(`pending`),
+        game1Seat: text(`game1_seat`),
+        game2: text(`game2`).notNull().default(`pending`),
+        game2Seat: text(`game2_seat`),
+    },
+    (table) => [
+        index(`tournament_pairings_round_idx`).on(table.tournamentId, table.round),
+        index(`tournament_pairings_first_idx`).on(table.firstBotId),
+        index(`tournament_pairings_second_idx`).on(table.secondBotId),
+        check(`tournament_pairings_round_check`, sql`${table.round} >= 1`),
+        check(`tournament_pairings_pair_check`, sql`${table.firstBotId} <> ${table.secondBotId}`),
+        ...([
+            [`game1`, table.game1, table.game1Seat],
+            [`game2`, table.game2, table.game2Seat],
+        ] as const).map(([name, state, seat]) =>
+            check(
+                `tournament_pairings_${name}_check`,
+                sql`(${state} in ('pending', 'live', 'not_played', 'aborted') and ${seat} is null) or (${state} = 'played' and (${seat} is null or ${seat} in ('first', 'second'))) or (${state} in ('no_show', 'forfeit') and coalesce(${seat}, '') in ('first', 'second', 'both'))`,
+            ),
+        ),
+        // Game 2 waits for game 1 to be over.
+        check(`tournament_pairings_order_check`, sql`${table.game2} = 'pending' or ${table.game1} not in ('pending', 'live')`),
     ],
 );

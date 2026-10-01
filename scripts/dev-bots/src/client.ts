@@ -6,8 +6,11 @@ import {
     botWithTokenSchema,
     botsPath,
     challengeAcceptPath,
+    botListingSchema,
     devAccountSchema,
     devAccountsPath,
+    finishedGamesPageSchema,
+    finishedGamesPath,
     devLoginPath,
     gameEventSchema,
     gameEventsPath,
@@ -17,15 +20,21 @@ import {
     gamesPath,
     sessionCookieName,
     streamEventSchema,
+    tournamentEntryPath,
+    tournamentListSchema,
+    tournamentsPath,
     type AccountDeclaration,
+    type BotListing,
     type AxialCoord,
     type CreateGameRequest,
     type DevAccount,
+    type FinishedGamesQuery,
     type GameEvent,
     type GameSnapshot,
     type OpeningPlies,
     type StreamEvent,
     type TimeControl,
+    type TournamentList,
 } from '@hexo-arena/contract';
 import { z } from 'zod';
 
@@ -165,6 +174,37 @@ export class ArenaClient {
                 newline = buffer.indexOf(`\n`);
             }
         }
+    }
+
+    /** Every listed bot. */
+    async listBots(): Promise<BotListing[]> {
+        const response = await fetch(this.#url(botsPath));
+        if (response.status !== 200) throw await refusal(response, `listing the bots`);
+        return botListingSchema.array().parse(await response.json());
+    }
+
+    /** The games a query names, counted past the page cap; the query names a player. */
+    async finishedCount(query: FinishedGamesQuery): Promise<number> {
+        const search = new URLSearchParams(Object.entries(query).filter((entry): entry is [string, string] => typeof entry[1] === `string`));
+        const response = await fetch(this.#url(`${finishedGamesPath}?${search.toString()}`));
+        if (response.status !== 200) throw await refusal(response, `counting finished games`);
+        return finishedGamesPageSchema.parse(await response.json()).record?.games ?? 0;
+    }
+
+    async tournaments(): Promise<TournamentList> {
+        const response = await fetch(this.#url(tournamentsPath));
+        if (response.status !== 200) throw await refusal(response, `listing the tournaments`);
+        return tournamentListSchema.parse(await response.json());
+    }
+
+    /** Enters the owner's bot in a waiting tournament. */
+    async enterTournament(cookie: string, tournamentId: string, bot: string): Promise<void> {
+        const response = await fetch(this.#url(tournamentEntryPath.replace(`{id}`, tournamentId)), {
+            method: `PUT`,
+            headers: { cookie, ...json },
+            body: JSON.stringify({ bot }),
+        });
+        if (response.status !== 200) throw await refusal(response, `entering ${bot}`);
     }
 
     /** The seeded personas as they stand; a target without the dev routes answers 404. */

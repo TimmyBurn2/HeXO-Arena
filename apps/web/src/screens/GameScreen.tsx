@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { clockText, gameMeta, turnsOnBoard, type FinishedGamesRecord, type GameHeadline, type GameSnapshot } from '@hexo-arena/contract';
 import { fetchFinishedGames } from '../api/client';
-import { BotBadge, Swatch } from '../components/player';
+import { BotBadge, PlayerName, Swatch } from '../components/player';
 import { useWait, WaitText } from '../components/wait';
 import { gamesPathOf } from '../games/filters';
 import { Link } from '../router/Link';
@@ -338,8 +338,18 @@ function GameView({ snapshot, send, link }: { snapshot: GameSnapshot; send: Game
                     current={replaying ? currentLine : feed.length - 1}
                     facts={factsOf(snapshot)}
                     meetings={meetings === null ? null : (
-                        <Link to={gamesPathOf(meetings.x, meetings.o)}>
-                            {text.games.meetings(meetings.x, meetings.o, meetings.record.won, meetings.record.lost, meetings.record.games)}
+                        text.games.meetings(
+                            <PlayerName name={meetings.x.name} kind={meetings.x.kind} />,
+                            <PlayerName name={meetings.o.name} kind={meetings.o.kind} />,
+                            meetings.record.won,
+                            meetings.record.lost,
+                            (words) => <Link to={gamesPathOf(meetings.x.name, meetings.o.name)}>{words}</Link>,
+                            meetings.record.games,
+                        )
+                    )}
+                    tournament={snapshot.tournament === undefined ? null : (
+                        <Link to={`/tournaments/${encodeURIComponent(snapshot.tournament.id)}`}>
+                            {text.drawer.tournamentGame(snapshot.tournament.name, snapshot.tournament.round, snapshot.tournament.game)}
                         </Link>
                     )}
                     running={running}
@@ -354,8 +364,8 @@ function GameView({ snapshot, send, link }: { snapshot: GameSnapshot; send: Game
 
 /** Two players' record against each other, as x's. */
 interface Meetings {
-    readonly x: string;
-    readonly o: string;
+    readonly x: { readonly name: string; readonly kind: `bot` | `human` };
+    readonly o: { readonly name: string; readonly kind: `bot` | `human` };
     readonly record: FinishedGamesRecord;
 }
 
@@ -363,6 +373,7 @@ interface Meetings {
 // record is read again at the finish, which adds this game to it.
 function useMeetings(snapshot: GameSnapshot): Meetings | null {
     const { x, o } = snapshot.players;
+    const seated = (player: typeof x) => ({ name: player.name, kind: player.kind === `bot` ? (`bot` as const) : (`human` as const) });
     const kept = x.kind !== `guest` && o.kind !== `guest`;
     const finished = snapshot.status === `finished`;
     const [meetings, setMeetings] = useState<Meetings | null>(null);
@@ -371,7 +382,7 @@ function useMeetings(snapshot: GameSnapshot): Meetings | null {
         let cancelled = false;
         fetchFinishedGames({ player: x.name, vs: o.name }).then(
             (page) => {
-                if (!cancelled && page.record !== undefined && page.record.games > 0) setMeetings({ x: x.name, o: o.name, record: page.record });
+                if (!cancelled && page.record !== undefined && page.record.games > 0) setMeetings({ x: seated(x), o: seated(o), record: page.record });
             },
             // The line is extra; a read that fails leaves it out.
             () => undefined,

@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { BotListing, FinishedGameEntry, GamePlayer, LeaderboardEntry, LiveGameEntry, Me } from '@hexo-arena/contract';
+import type { BotListing, FinishedGameEntry, GamePlayer, LeaderboardEntry, LiveGameEntry, Me, TournamentList } from '@hexo-arena/contract';
 import { meStore } from '../src/me';
 import { HomeScreen } from '../src/screens/HomeScreen';
 
@@ -54,6 +54,7 @@ interface Reads {
     // The all-time board, when it differs from the 30-day one.
     allTime?: LeaderboardEntry[];
     finished?: FinishedGameEntry[];
+    tournaments?: TournamentList;
 }
 
 // Every read answers by path; a game read answers not found, so the slot
@@ -74,7 +75,9 @@ function serve(reads: Reads): void {
                           ? ((url.includes(`active=all`) ? reads.allTime : undefined) ?? reads.ladder ?? [])
                           : path === `/api/games/finished`
                             ? { games: reads.finished ?? [], next: null, previous: null, page: 1 }
-                            : undefined;
+                            : path === `/api/tournaments`
+                              ? (reads.tournaments ?? { running: null, scheduled: [], past: [] })
+                              : undefined;
             return Promise.resolve(body === undefined ? new Response(`{}`, { status: 404 }) : new Response(JSON.stringify(body)));
         }),
     );
@@ -163,6 +166,25 @@ describe('HomeScreen', () => {
         expect(rows.every((row) => !/\d{3,}|[+-]\d/u.test(row.textContent))).toBe(true);
         expect(screen.getAllByRole(`link`, { name: /^Full ladder$/u })).toHaveLength(1);
         expect(document.querySelectorAll(`.rung`)).toHaveLength(3);
+    });
+
+    it('shows the tournament running now, or one starting within a day, and none further off', async () => {
+        const summary = { id: `t_autumnrobin1`, name: `Autumn round robin`, status: `scheduled` as const, startsAt: new Date(Date.now() + 3 * 3_600_000 + 30_000).toISOString(), timeControl: { mode: `turn` as const, turnTimeMs: 10_000 }, openingPlies: 5 as const, entrants: 4, maxEntrants: 12, winner: null };
+        serve({ tournaments: { running: null, scheduled: [summary], past: [] } });
+        const { unmount } = render(<HomeScreen />);
+        expect((await screen.findByRole(`link`, { name: `Autumn round robin` })).getAttribute(`href`)).toBe(`/tournaments/t_autumnrobin1`);
+        expect(screen.getByText(`4 of 12 bots entered`)).toBeTruthy();
+        expect(screen.getByText(`in 3 h 0 min`)).toBeTruthy();
+        unmount();
+        serve({ tournaments: { running: { ...summary, status: `running` }, scheduled: [], past: [] } });
+        const second = render(<HomeScreen />);
+        expect(await screen.findByText(`4 bots; turn clock 10 s`)).toBeTruthy();
+        expect(screen.getByText(`live`)).toBeTruthy();
+        second.unmount();
+        serve({ tournaments: { running: null, scheduled: [{ ...summary, startsAt: new Date(Date.now() + 30 * 3_600_000).toISOString() }], past: [] } });
+        render(<HomeScreen />);
+        await screen.findByText(`No bots online right now`);
+        expect(screen.queryByRole(`heading`, { name: `Tournament` })).toBeNull();
     });
 
     it('leads back to the reader\'s own live games, and drops one that ended', async () => {

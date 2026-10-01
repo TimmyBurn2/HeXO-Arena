@@ -27,6 +27,20 @@ components:
       required: true
       schema:
         type: string
+    PlayerName:
+      description: "A player's name, matched case-folded: a bot or a human."
+      in: path
+      name: name
+      required: true
+      schema:
+        type: string
+    TournamentId:
+      description: The tournament's id.
+      in: path
+      name: id
+      required: true
+      schema:
+        type: string
   responses:
     ArchiveLimited:
       content:
@@ -889,6 +903,8 @@ components:
                 - x
                 - o
               type: string
+            tournament:
+              $ref: "#/components/schemas/GameTournament"
             you:
               enum:
                 - x
@@ -923,6 +939,8 @@ components:
               type: string
             timeControl:
               $ref: "#/components/schemas/TimeControl"
+            tournament:
+              $ref: "#/components/schemas/GameTournament"
             winner:
               enum:
                 - x
@@ -947,7 +965,7 @@ components:
           type: object
     GameStartEvent:
       description: A game the bot plays has started, or is replayed as the stream opens. A game started by
-        a player on the website arrives with no challenge before it.
+        a player on the website or by a tournament arrives with no challenge before it.
       properties:
         engine:
           $ref: "#/components/schemas/EngineSession"
@@ -980,6 +998,30 @@ components:
         - openingPlies
         - rated
         - engine
+      type: object
+    GameTournament:
+      description: "The tournament a game belongs to: its round, and which of the pairing's two games it is."
+      properties:
+        game:
+          anyOf:
+            - enum:
+                - 1
+              type: number
+            - enum:
+                - 2
+              type: number
+        id:
+          type: string
+        name:
+          type: string
+        round:
+          minimum: 1
+          type: integer
+      required:
+        - id
+        - name
+        - round
+        - game
       type: object
     GameTurn:
       description: One applied turn, numbered from turn 0 at the origin. cells holds its stones in order;
@@ -1451,6 +1493,159 @@ components:
         - rating
         - provisional
       type: object
+    PlayerRecord:
+      description: Every finished game the player sat in counts, aborted games aside.
+      properties:
+        asO:
+          properties:
+            games:
+              minimum: 0
+              type: integer
+            won:
+              minimum: 0
+              type: integer
+          required:
+            - games
+            - won
+          type: object
+        asX:
+          properties:
+            games:
+              minimum: 0
+              type: integer
+            won:
+              minimum: 0
+              type: integer
+          required:
+            - games
+            - won
+          type: object
+        firstGameAt:
+          format: date-time
+          nullable: true
+          type: string
+        forfeits:
+          description: Games lost by a stream that stayed closed, and by an illegal move.
+          properties:
+            disconnect:
+              minimum: 0
+              type: integer
+            terminated:
+              minimum: 0
+              type: integer
+          required:
+            - disconnect
+            - terminated
+          type: object
+        games:
+          minimum: 0
+          type: integer
+        kind:
+          enum:
+            - bot
+            - human
+          type: string
+        lastGameAt:
+          format: date-time
+          nullable: true
+          type: string
+        lost:
+          minimum: 0
+          type: integer
+        name:
+          type: string
+        opponents:
+          description: The opponents met most, with the player's wins and losses against each.
+          items:
+            properties:
+              games:
+                minimum: 0
+                type: integer
+              kind:
+                enum:
+                  - bot
+                  - human
+                type: string
+              lost:
+                minimum: 0
+                type: integer
+              name:
+                type: string
+              won:
+                minimum: 0
+                type: integer
+            required:
+              - name
+              - kind
+              - games
+              - won
+              - lost
+            type: object
+          maxItems: 5
+          type: array
+        placings:
+          description: A bot's finished tournaments, newest first, with its place in each.
+          items:
+            properties:
+              endedAt:
+                format: date-time
+                type: string
+              entrants:
+                minimum: 0
+                type: integer
+              name:
+                type: string
+              points:
+                minimum: 0
+                type: integer
+              rank:
+                minimum: 1
+                type: integer
+              tournamentId:
+                type: string
+            required:
+              - tournamentId
+              - name
+              - rank
+              - entrants
+              - points
+              - endedAt
+            type: object
+          maxItems: 10
+          type: array
+        provisional:
+          $ref: "#/components/schemas/Provisional"
+        rank:
+          description: The place on the ladder of the last 30 days, or null off it.
+          minimum: 1
+          nullable: true
+          type: integer
+        rating:
+          $ref: "#/components/schemas/Rating"
+        undecided:
+          description: Games that reached a cap with no winner.
+          minimum: 0
+          type: integer
+        won:
+          minimum: 0
+          type: integer
+      required:
+        - name
+        - kind
+        - rating
+        - provisional
+        - rank
+        - games
+        - won
+        - lost
+        - undecided
+        - asX
+        - asO
+        - forfeits
+        - opponents
+        - firstGameAt
+        - lastGameAt
+      type: object
     Provisional:
       description: True while the rating deviation is above 75.
       type: boolean
@@ -1469,6 +1664,34 @@ components:
     Rating:
       description: The Glicko-2 rating, rounded to a whole point.
       type: integer
+    RatingHistory:
+      description: Oldest first.
+      items:
+        $ref: "#/components/schemas/RatingPoint"
+      maxItems: 500
+      type: array
+    RatingPoint:
+      description: The rating and its deviation after one rated game.
+      properties:
+        at:
+          format: date-time
+          type: string
+        deviation:
+          minimum: 0
+          type: integer
+        gameId:
+          type: string
+        provisional:
+          $ref: "#/components/schemas/Provisional"
+        rating:
+          $ref: "#/components/schemas/Rating"
+      required:
+        - gameId
+        - at
+        - rating
+        - deviation
+        - provisional
+      type: object
     Seat:
       properties:
         name:
@@ -1643,6 +1866,333 @@ components:
             - mainTimeMs
             - incrementMs
           type: object
+    TournamentClosedError:
+      properties:
+        code:
+          enum:
+            - closed
+            - full
+          type: string
+        error:
+          type: string
+      required:
+        - error
+        - code
+      type: object
+    TournamentDetail:
+      properties:
+        endedAt:
+          format: date-time
+          nullable: true
+          type: string
+        entries:
+          description: Every bot entered, its state, and once it starts, its rating then.
+          items:
+            $ref: "#/components/schemas/TournamentEntry"
+          type: array
+        id:
+          pattern: ^t_[a-z0-9]{12}$
+          type: string
+        live:
+          items:
+            $ref: "#/components/schemas/LiveGameEntry"
+          type: array
+        maxEntrants:
+          maximum: 12
+          minimum: 3
+          type: integer
+        name:
+          type: string
+        openingPlies:
+          $ref: "#/components/schemas/OpeningPlies"
+        rounds:
+          description: Every round with its pairings, drawn at the start.
+          items:
+            $ref: "#/components/schemas/TournamentRound"
+          type: array
+        standings:
+          description: One point per game won; a no-show or a withdrawal scores for the opponent; ties go to
+            the points between the tied bots, then Sonneborn-Berger, and are otherwise shared.
+          items:
+            $ref: "#/components/schemas/TournamentStanding"
+          type: array
+        startedAt:
+          format: date-time
+          nullable: true
+          type: string
+        startsAt:
+          format: date-time
+          type: string
+        status:
+          enum:
+            - scheduled
+            - running
+            - finished
+            - called_off
+            - canceled
+          type: string
+        timeControl:
+          $ref: "#/components/schemas/TimeControl"
+      required:
+        - id
+        - name
+        - status
+        - startsAt
+        - startedAt
+        - endedAt
+        - timeControl
+        - openingPlies
+        - maxEntrants
+        - entries
+        - rounds
+        - standings
+        - live
+      type: object
+    TournamentEntry:
+      properties:
+        bot:
+          type: string
+        online:
+          type: boolean
+        ownerName:
+          type: string
+        ratingAtStart:
+          nullable: true
+          type: integer
+        reason:
+          description: "Why a bot was left out at the start (daily_cap: too few bot games left that day;
+            clock: it does not accept the clock) or withdrawn (missed: two pairings missed in a row;
+            banned, delisted, deleted)."
+          enum:
+            - daily_cap
+            - clock
+            - missed
+            - banned
+            - delisted
+            - deleted
+          type: string
+        state:
+          enum:
+            - entered
+            - playing
+            - absent
+            - left_out
+            - withdrawn
+          type: string
+      required:
+        - bot
+        - ownerName
+        - online
+        - ratingAtStart
+        - state
+      type: object
+    TournamentEntryError:
+      properties:
+        code:
+          enum:
+            - bad_request
+            - clock_not_accepted
+          type: string
+        error:
+          type: string
+      required:
+        - error
+        - code
+      type: object
+    TournamentEntryRequest:
+      additionalProperties: false
+      properties:
+        bot:
+          pattern: ^[A-Za-z][A-Za-z0-9_-]{0,28}[A-Za-z0-9]$
+          type: string
+      required:
+        - bot
+      type: object
+    TournamentForbiddenError:
+      properties:
+        code:
+          enum:
+            - not_owner
+            - delisted
+          type: string
+        error:
+          type: string
+      required:
+        - error
+        - code
+      type: object
+    TournamentGame:
+      properties:
+        gameId:
+          nullable: true
+          type: string
+        missing:
+          description: The bots that did not show for a no-show, or were withdrawn for a forfeit.
+          items:
+            type: string
+          type: array
+        outcome:
+          enum:
+            - pending
+            - live
+            - played
+            - no_show
+            - forfeit
+            - not_played
+            - aborted
+          type: string
+        point:
+          description: "The bot the game scored for: the winner, or the bot that came or stayed when the other
+            did not."
+          nullable: true
+          type: string
+        x:
+          description: "The bot playing x: the pairing's first in game 1, its second in game 2."
+          type: string
+      required:
+        - x
+        - gameId
+        - outcome
+        - point
+        - missing
+      type: object
+    TournamentList:
+      properties:
+        past:
+          description: Finished, called off, or canceled, latest first.
+          items:
+            $ref: "#/components/schemas/TournamentSummary"
+          maxItems: 20
+          type: array
+        running:
+          $ref: "#/components/schemas/TournamentSummary"
+        scheduled:
+          description: Soonest first.
+          items:
+            $ref: "#/components/schemas/TournamentSummary"
+          maxItems: 3
+          type: array
+      required:
+        - running
+        - scheduled
+        - past
+      type: object
+    TournamentPairing:
+      properties:
+        first:
+          type: string
+        games:
+          items:
+            $ref: "#/components/schemas/TournamentGame"
+          type: array
+        second:
+          type: string
+      required:
+        - first
+        - second
+        - games
+      type: object
+    TournamentRound:
+      properties:
+        pairings:
+          items:
+            $ref: "#/components/schemas/TournamentPairing"
+          type: array
+        rest:
+          description: The bot sitting the round out, in an odd field.
+          nullable: true
+          type: string
+        round:
+          minimum: 1
+          type: integer
+      required:
+        - round
+        - pairings
+        - rest
+      type: object
+    TournamentStanding:
+      properties:
+        asO:
+          minimum: 0
+          type: integer
+        asX:
+          minimum: 0
+          type: integer
+        bot:
+          type: string
+        ownerName:
+          type: string
+        points:
+          minimum: 0
+          type: integer
+        rank:
+          minimum: 1
+          type: integer
+        withdrawn:
+          type: boolean
+      required:
+        - rank
+        - bot
+        - ownerName
+        - points
+        - asX
+        - asO
+        - withdrawn
+      type: object
+    TournamentSummary:
+      nullable: true
+      properties:
+        entrants:
+          description: Bots entered; once it starts, the bots that played.
+          minimum: 0
+          type: integer
+        id:
+          pattern: ^t_[a-z0-9]{12}$
+          type: string
+        maxEntrants:
+          maximum: 12
+          minimum: 3
+          type: integer
+        name:
+          type: string
+        openingPlies:
+          $ref: "#/components/schemas/OpeningPlies"
+        startsAt:
+          format: date-time
+          type: string
+        status:
+          enum:
+            - scheduled
+            - running
+            - finished
+            - called_off
+            - canceled
+          type: string
+        timeControl:
+          $ref: "#/components/schemas/TimeControl"
+        winner:
+          description: The bot first in the final standings, once finished.
+          nullable: true
+          properties:
+            name:
+              type: string
+            ownerName:
+              type: string
+          required:
+            - name
+            - ownerName
+          type: object
+      required:
+        - id
+        - name
+        - status
+        - startsAt
+        - timeControl
+        - openingPlies
+        - entrants
+        - maxEntrants
+        - winner
+      type: object
     UnauthorizedError:
       properties:
         code:
@@ -1719,7 +2269,7 @@ components:
       type: apiKey
 info:
   title: HeXO Arena
-  version: 0.29.0
+  version: 0.31.0
 openapi: 3.0.3
 paths:
   /api/auth/discord/callback:
@@ -1899,7 +2449,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ChallengeAcceptError"
-          description: The challenged bot is at its game cap (bot_busy); the challenge stays pending.
+          description: The challenged bot is at its game cap, or a side is playing a tournament (bot_busy);
+            the challenge stays pending.
         "401":
           $ref: "#/components/responses/BotUnauthorized"
         "403":
@@ -2027,9 +2578,9 @@ paths:
               schema:
                 $ref: "#/components/schemas/ChallengeCreateError"
           description: Validation failed (bad_request), the target is not open (not_open) or excludes the
-            clock (clock_not_accepted), a side is at its game cap (bot_busy), the target's inbox is
-            full (inbox_full), or the challenger already has a challenge pending with the target
-            (challenge_pending).
+            clock (clock_not_accepted), a side is at its game cap or playing a tournament
+            (bot_busy), the target's inbox is full (inbox_full), or the challenger already has a
+            challenge pending with the target (challenge_pending).
         "401":
           $ref: "#/components/responses/BotUnauthorized"
         "403":
@@ -2383,7 +2934,7 @@ paths:
                 $ref: "#/components/schemas/GameCreateError"
           description: Validation failed (bad_request), the caller is at its live-game cap (human_busy), or
             the bot is not open (not_open), excludes the clock (clock_not_accepted), or is at its
-            game cap (bot_busy).
+            game cap or playing a tournament (bot_busy).
         "401":
           $ref: "#/components/responses/Unauthorized"
         "403":
@@ -2753,6 +3304,64 @@ paths:
       summary: Who the session names.
       tags:
         - Auth
+  /api/players/{name}:
+    get:
+      description: Games won, lost, and without a winner, by side, forfeits, the most played opponents,
+        and a bot's tournament places. A deleted player's placeholder answers not_found. A record is
+        read at most once every 5 s, every caller in that time getting the same body.
+      operationId: getPlayerRecord
+      parameters:
+        - $ref: "#/components/parameters/PlayerName"
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PlayerRecord"
+          description: The record.
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+      security: []
+      summary: Read a player's record.
+      tags:
+        - Players
+  /api/players/{name}/rating:
+    get:
+      description: The rating after each rated game in the range, the newest 500 at most. A deleted
+        player's placeholder answers not_found.
+      operationId: getRatingHistory
+      parameters:
+        - $ref: "#/components/parameters/PlayerName"
+        - description: "How far back: 30 days, a year, or all; a year when absent."
+          in: query
+          name: range
+          required: false
+          schema:
+            default: 1y
+            enum:
+              - 30d
+              - 1y
+              - all
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RatingHistory"
+          description: The history.
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+      security: []
+      summary: Read a player's rating history.
+      tags:
+        - Players
   /api/signup:
     delete:
       description: "Idempotent: deletes whatever the cookie holds and clears the cookie."
@@ -2839,6 +3448,125 @@ paths:
       summary: Create the account under the chosen public name.
       tags:
         - Auth
+  /api/tournaments:
+    get:
+      description: "The running tournament, up to 3 waiting, and the latest 20 over. The operator
+        schedules each one: a paired round robin of bots, one per owner."
+      operationId: listTournaments
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TournamentList"
+          description: The tournaments.
+        "429":
+          $ref: "#/components/responses/RateLimited"
+      security: []
+      summary: List tournaments.
+      tags:
+        - Tournaments
+  /api/tournaments/{id}:
+    get:
+      description: Its entries, rounds, standings, and live games. Each pairing plays one opening twice,
+        sides swapped, one game after the other; a game waits 60 s for a bot that is not connected.
+        A tournament is read at most once every 2 s, every caller in that time getting the same
+        body.
+      operationId: getTournament
+      parameters:
+        - $ref: "#/components/parameters/TournamentId"
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TournamentDetail"
+          description: The tournament.
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+      security: []
+      summary: Read a tournament.
+      tags:
+        - Tournaments
+  /api/tournaments/{id}/entry:
+    delete:
+      description: While the tournament waits; without an entry nothing changes.
+      operationId: withdrawTournamentEntry
+      parameters:
+        - $ref: "#/components/parameters/TournamentId"
+      responses:
+        "204":
+          description: No bot of the caller is entered.
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TournamentClosedError"
+          description: The tournament no longer waits (closed).
+        "429":
+          $ref: "#/components/responses/RateLimited"
+      security:
+        - sessionCookie: []
+      summary: Withdraw the caller's entry.
+      tags:
+        - Tournaments
+    put:
+      description: While the tournament waits, its owner enters one bot, replacing any bot the owner
+        entered before. From the start to the end an entrant takes no other new game, and challenges
+        to or from it answer bot_busy.
+      operationId: enterTournament
+      parameters:
+        - $ref: "#/components/parameters/TournamentId"
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TournamentEntryRequest"
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TournamentEntry"
+          description: The entry.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TournamentEntryError"
+          description: Validation failed (bad_request), or the bot does not accept the clock
+            (clock_not_accepted).
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TournamentForbiddenError"
+          description: The bot is someone else's (not_owner), or it is delisted (delisted).
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TournamentClosedError"
+          description: The tournament no longer waits (closed), or holds its most entries (full).
+        "413":
+          $ref: "#/components/responses/PayloadTooLarge"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+      security:
+        - sessionCookie: []
+      summary: Enter a bot, or replace the entered one.
+      tags:
+        - Tournaments
   /healthz:
     get:
       responses:

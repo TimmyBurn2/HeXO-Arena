@@ -18,8 +18,11 @@ export function RosterList({
     name,
     labelledBy,
     onChoose,
+    reserved,
 }: {
     roster: Roster;
+    // The bots the running tournament holds, listed busy with their own reason.
+    reserved: ReadonlySet<string>;
     chosen: BotListing;
     name: string;
     labelledBy: string;
@@ -32,7 +35,7 @@ export function RosterList({
     const rows: { bot: BotListing; state: Readiness }[] = [
         ...roster.named.map((bot) => ({ bot, state: readinessOf(bot) })),
         ...roster.ready.map((bot) => ({ bot, state: `ready` as const })),
-        ...roster.busy.map((bot) => ({ bot, state: `busy` as const })),
+        ...roster.busy.map((bot) => ({ bot, state: reserved.has(bot.name) ? (`tournament` as const) : (`busy` as const) })),
     ];
     return (
         <>
@@ -50,7 +53,7 @@ export function RosterList({
                 {rows.map(({ bot, state }) => {
                     const checked = nameKeyOf(bot.name) === nameKeyOf(chosen.name);
                     // A busy bot cannot be picked; one the link named stays picked with its reason.
-                    const disabled = state === `busy` && !checked;
+                    const disabled = (state === `busy` || state === `tournament`) && !checked;
                     return (
                         <label key={bot.name} className="roster-row" aria-disabled={disabled ? `true` : undefined}>
                             <input
@@ -82,7 +85,7 @@ export function RosterList({
                                         <span>{summarizeAccepts(bot.accepts)}</span>
                                     </>
                                 ) : (
-                                    <span className="roster-reason">{state === `busy` ? text.play.busy : text.play.reasons[state]}</span>
+                                    <span className="roster-reason">{state === `busy` ? text.play.busy : state === `tournament` ? text.play.inTournament : text.play.reasons[state]}</span>
                                 )}
                             </span>
                             <span className="roster-rating">

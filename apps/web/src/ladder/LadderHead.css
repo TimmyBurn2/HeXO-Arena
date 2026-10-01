@@ -1,0 +1,20 @@
+@layer components {
+    .ladder-head-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        flex-wrap: wrap;
+        gap: var(--space-3) var(--space-4);
+        margin-bottom: var(--space-2);
+    }
+
+    .ladder-head-row .screen-title {
+        margin: 0;
+        min-width: 0;
+        overflow-wrap: anywhere;
+    }
+
+    .ladder-views .pill {
+        text-decoration: none;
+    }
+}
