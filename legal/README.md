@@ -15,7 +15,7 @@ The files here are templates; one details file fills them in.
 1. Copy this folder to the box as `legal/`, beside `compose.yml`.
 2. In that copy, copy `details.example.json` to `details.json` and replace every `<...>` value.
 3. Delete the documents the deployment does not need; see below.
-   A sentence pointing at a deleted document keeps its words, unlinked, so reword it: the Terms name the Impressum under The service and the Privacy policy under Guests and Ending, and the Impressum names the Terms under Reporting content.
+   A sentence pointing at a deleted document keeps its words, unlinked, so reword it: the Terms name the Privacy policy under Guests and Ending, and the Impressum names the Terms under Reporting content.
 4. Open each remaining page, `https://<domain>/legal/imprint`, `/legal/privacy`, and `/legal/terms`, and read it through.
 
 Caddy serves `imprint.md`, `privacy.md`, `terms.md`, and `details.json` from the copy, mounted read-only, and nothing else in it.
@@ -29,14 +29,14 @@ The app reads the folder too, read-only, and its boot log names the documents mi
 
 `details.json` holds every value the documents name; all of them are public.
 
-- `operator`: your `name`, `street` and number, `postcodeAndCity`, `country`, an `email` a person reads, and optionally a `discord` handle.
+- `operator`: your `name`, an `email` a person reads, and optionally your postal address, `street` and number, `postcodeAndCity`, and `country`, all three or none, and a `discord` handle.
 - `host`: the hosting company's `name` and postal address, and `serverLocation`, the city and country of the server.
 - `supervisoryAuthority`: the data protection authority's `name`, postal address, and `url`, an `https://` address.
 - `mailProvider`, optional: the `name` and postal address of whoever hosts the contact mailbox.
 
 Every postal address takes the same three keys: `street`, `postcodeAndCity`, and `country`.
 A key the file does not know, or a required one it lacks, makes the file invalid: every document that names a detail, all three as they come, is then left out, and the browser console names the key at fault.
-An optional value left out takes the paragraph or list item naming it with it.
+An optional value left out takes the paragraph or list item naming it with it; in a paragraph broken into lines, as an address is, only its line.
 
 ## Placeholders
 
@@ -50,7 +50,7 @@ A placeholder neither knows shows as written, so a misspelling is plain on the p
 
 This is not legal advice.
 
-- **Impressum** (`imprint.md`): required of an operator in Germany.
+- **Impressum** (`imprint.md`): required of an operator in Germany, and it needs the postal address.
   sec. 18(1) Medienstaatsvertrag asks it of any public site that is not purely personal or family, money or not; sec. 5 DDG adds to it once the site is commercial.
   Elsewhere, keep it only if your law asks for something like it; otherwise delete it.
 - **Privacy policy** (`privacy.md`): keep it.
@@ -58,6 +58,18 @@ This is not legal advice.
   Being reachable from the EU does not count on its own (Recital 23), but a site that welcomes accounts from anywhere, the EU included, offers itself there.
 - **Terms of use** (`terms.md`): no law requires them.
   They set the rules moderation acts on and limit the operator's liability; they are written for German law.
+
+## Privacy and Terms only
+
+A deployment that publishes no Impressum and no postal address:
+
+1. Copy this folder to the box as `legal/` and delete `imprint.md`.
+2. Copy `details.example.json` to `details.json`, delete the `street`, `postcodeAndCity`, and `country` lines under `operator`, and replace every other `<...>` value.
+   Delete `discord` too: only the Impressum names it, and `details.json` is public as a whole.
+   Delete `mailProvider` if nobody else hosts the contact mailbox.
+3. Open `/legal/privacy` and `/legal/terms` and read them through: Who is responsible names you and your email, and the footer links Privacy and Terms only.
+
+The GDPR asks a privacy policy for the controller's identity and contact details (Art. 13(1)(a)); whether a name without an address meets that is yours to judge.
 
 ## Keep the texts true
 

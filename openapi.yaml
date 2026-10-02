@@ -71,12 +71,12 @@ components:
           schema:
             $ref: "#/components/schemas/UnauthorizedError"
       description: Missing, unknown, or rotated bot token.
-    Delisted:
+    GameCreateForbidden:
       content:
         application/json:
           schema:
-            $ref: "#/components/schemas/DelistedError"
-      description: The bot is delisted and takes no new games.
+            $ref: "#/components/schemas/GameCreateForbiddenError"
+      description: The bot is the caller's own (own_bot), or it is delisted and takes no new games (delisted).
     GameOver:
       content:
         application/json:
@@ -477,18 +477,6 @@ components:
         - error
         - code
       type: object
-    DelistedError:
-      properties:
-        code:
-          enum:
-            - delisted
-          type: string
-        error:
-          type: string
-      required:
-        - error
-        - code
-      type: object
     DiscordNames:
       description: The Discord account behind a session, shown only to its owner.
       properties:
@@ -742,6 +730,19 @@ components:
             - not_open
             - clock_not_accepted
             - bot_busy
+          type: string
+        error:
+          type: string
+      required:
+        - error
+        - code
+      type: object
+    GameCreateForbiddenError:
+      properties:
+        code:
+          enum:
+            - own_bot
+            - delisted
           type: string
         error:
           type: string
@@ -2853,7 +2854,7 @@ paths:
         "401":
           $ref: "#/components/responses/Unauthorized"
         "403":
-          $ref: "#/components/responses/Delisted"
+          $ref: "#/components/responses/GameCreateForbidden"
         "413":
           $ref: "#/components/responses/PayloadTooLarge"
         "429":

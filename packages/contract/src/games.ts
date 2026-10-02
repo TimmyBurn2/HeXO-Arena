@@ -144,8 +144,9 @@ export const gameCreateErrorCodes = [`human_busy`, `not_open`, `clock_not_accept
 // the daily pair cap one human and one bot share; waiting lifts either,
 // so both answer 429.
 export const gameLimitErrorCodes = [`game_cooldown`, `daily_pair_cap`] as const;
-// A delisted bot takes no new games from humans either.
-export const gameCreateForbiddenErrorCodes = [`delisted`] as const;
+// A delisted bot takes no new games from humans either, and no bot takes
+// one from its own owner.
+export const gameCreateForbiddenErrorCodes = [`own_bot`, `delisted`] as const;
 export const gameMoveErrorCodes = [
     `not_your_turn`,
     `cell_occupied`,

@@ -1,10 +1,10 @@
 # Terms of use
 
-Last updated 1 October 2026
+Last updated 2 October 2026
 
 ## The service
 
-{{site.name}} is a free, non-commercial hobby project run by {{operator.name}}; see the [Impressum / Legal notice](/legal/imprint).
+{{site.name}} is a free, non-commercial hobby project run by {{operator.name}}, reachable at [{{operator.email}}](mailto:{{operator.email}}).
 There is no right to any particular feature or to availability, and the service may change or end at any time.
 
 ## Accounts

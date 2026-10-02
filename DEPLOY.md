@@ -12,7 +12,7 @@ one pulled image plus Caddy.
 
 The box builds nothing.
 CI builds the image on every push and publishes it to GHCR from `main`,
-tagged `sha-<commit>` and `latest`.
+tagged `sha-<full commit hash>` and `latest`.
 
 ## Prerequisites
 
@@ -27,9 +27,16 @@ tagged `sha-<commit>` and `latest`.
   docker-proxy.
   Otherwise every visitor counts as one caller for the rate limits; the
   checklist below checks it.
+- With `"userland-proxy": false` the daemon starts only once the host loads
+  `br_netfilter`:
+  `modprobe br_netfilter`, and `br_netfilter` in
+  `/etc/modules-load.d/br_netfilter.conf` for the next boot.
+- The compose file enables IPv6 on the `edge` network, so Docker publishes
+  80 and 443 on IPv6 too; nothing more is needed on the host.
 - Pull access to the GHCR package, which stays private, since a public image
   would distribute its Debian base's GPL programs: `docker login ghcr.io`
-  with a token holding `read:packages`.
+  with a classic personal access token holding `read:packages`; GHCR takes
+  no fine-grained token.
   The package's GitHub page shows its visibility beside its name; Package
   settings, Danger Zone, changes it.
   Check it after CI's first push.
@@ -65,10 +72,14 @@ project and prefixes the volume names (`hexo-arena_data`, `hexo-arena_backup`).
   legal/              the deployment's legal documents and their details
 ```
 
+`compose.yml` and `Caddyfile` come from the commit the image was built
+from, for example `git show v0.1.0:docker/prod/compose.yml > compose.yml`
+in a checkout, copied over.
+
 `.env`:
 
 ```sh
-HEXO_ARENA_IMAGE=ghcr.io/<owner>/hexo-arena:sha-<commit>
+HEXO_ARENA_IMAGE=ghcr.io/<owner>/hexo-arena:sha-<full commit hash>
 HEXO_ARENA_DOMAIN=<domain>
 ```
 
@@ -99,6 +110,9 @@ chmod 0600 .env hexo-arena.env
 `details.json` they fill in.
 Copy the repository's `legal/` folder and follow its `README.md`: what to
 fill in, and which documents are required where.
+For Privacy and Terms only, without an Impressum or a postal address,
+follow its "Privacy and Terms only" steps: delete `imprint.md`, and leave
+the operator's address out of `details.json`.
 Caddy mounts the folder read-only and serves those four files; an edit
 shows on the next page load.
 Every document is optional: the site links only those the folder has, and
@@ -110,13 +124,32 @@ Every value in it is public, and Caddy's uid must read it:
 chmod -R a+rX legal
 ```
 
-## Deploy
+## First deploy
 
-First time and every update:
+With the files above in `~/hexo-arena`:
 
 ```sh
 cd ~/hexo-arena
-# edit HEXO_ARENA_IMAGE in .env to the new sha tag
+docker login ghcr.io
+docker compose pull
+docker compose up -d
+docker compose ps
+docker compose exec app hexo-arena-admin status
+docker compose exec app hexo-arena-admin backup
+```
+
+`ps` shows `app` and `caddy` healthy and `web` exited with 0 once the
+site is copied; Caddy fetches the certificate on the first request.
+`backup` writes tonight's snapshot at once, so the restore test below
+runs on the first day.
+Then run the operator checklist.
+
+## Update
+
+```sh
+cd ~/hexo-arena
+# edit HEXO_ARENA_IMAGE in .env to the new sha tag; when the release
+# changed compose.yml or the Caddyfile, copy those over too
 docker compose pull
 docker compose up -d
 docker compose exec app hexo-arena-admin status
@@ -149,6 +182,8 @@ Rollback: put the previous tag back in `.env`, then `pull` and `up -d`.
 The app writes `VACUUM INTO` snapshots nightly at `BACKUP_HOUR_UTC` into the
 `backup` volume, named `hexo-arena-YYYY-MM-DD.sqlite`, and keeps the newest
 `BACKUP_KEEP`.
+`docker compose exec app hexo-arena-admin backup` writes the day's
+snapshot at once, replacing one written earlier that day.
 Never copy the live database file.
 
 The privacy policy states that deleted data leaves every backup within 14
@@ -208,8 +243,9 @@ docker run --rm --network none -v hexo-arena_backup:/backup:ro -v hexo-arena-res
   cp /backup/hexo-arena-YYYY-MM-DD.sqlite /data/hexo-arena.sqlite
 docker run --rm --network none -v hexo-arena-restore-test:/data "$image" \
   node -e "const db = new (require('better-sqlite3'))('/data/hexo-arena.sqlite'); console.log(db.pragma('integrity_check', { simple: true }), db.prepare('select count(*) as games from games').get())"
-docker run -d --name hexo-arena-restore-test --network none -v hexo-arena-restore-test:/data \
-  --tmpfs /run/hexo-arena:mode=0700,uid=10001,gid=10001 "$image"
+# A production boot names a proxy address; with no network, any will do.
+docker run -d --name hexo-arena-restore-test --network none -e TRUSTED_PROXY=127.0.0.1 \
+  -v hexo-arena-restore-test:/data --tmpfs /run/hexo-arena:mode=0700,uid=10001,gid=10001 "$image"
 docker exec hexo-arena-restore-test hexo-arena-admin status
 docker rm -f hexo-arena-restore-test
 docker volume rm hexo-arena-restore-test
@@ -251,6 +287,7 @@ local `pnpm dev`.
 | op | effect |
 |---|---|
 | `status` | uptime, paused flag, live streams, active games, client keys, requests without a public address, the last 10 admin actions |
+| `backup` | write the day's backup now; no audit row, as it changes no data |
 | `pause` / `resume` | new streams, games, and challenges answer `503` with `Retry-After`; open streams and live games run on; the flag survives restarts |
 | `ban-user <name>` / `unban-user <name>` | sessions end, bots are closed and hidden, their tokens answer `403`; unban relists the bots and kills their old tokens |
 | `delete-user <name>` | live games aborted, bots deleted as below, the user forgotten; rated history stays under a `deleted-<n>` placeholder |
@@ -340,7 +377,8 @@ Image:
 - [ ] `docker compose exec app node --version` is 24.5 or later, which the
   proxy variables need.
 - [ ] `docker compose exec app id` shows uid 10001.
-- [ ] `docker compose ps` shows `app` healthy.
+- [ ] `docker compose ps` shows `app` and `caddy` healthy.
+- [ ] `docker compose exec caddy caddy version` shows v2.11.4.
 
 Runtime hardening:
 
@@ -352,7 +390,8 @@ Runtime hardening:
   prints `0000000000000000` and `1`.
 - [ ] `docker compose exec app cat /sys/fs/cgroup/memory.max /sys/fs/cgroup/pids.max /sys/fs/cgroup/cpu.max`
   prints `536870912`, `256`, `100000 100000`.
-- [ ] `docker stats --no-stream` shows the 64 MiB caps on `caddy` and `egress`.
+- [ ] `docker stats --no-stream` shows the 256 MiB cap on `caddy` and 64 MiB
+  on `egress`.
 
 Admin path:
 
@@ -378,6 +417,18 @@ TLS and proxying:
 
 - [ ] `curl -sI https://<domain>/healthz` answers `200` over a valid
   certificate, and `http://` redirects to `https://`.
+- [ ] `curl -sI` on `https://<domain>/`, `/api/me`, and a `/assets/` file
+  shows `content-security-policy`, `strict-transport-security`,
+  `x-frame-options`, and no `server` header; `/api/me` also shows
+  `cache-control: no-store`.
+- [ ] The site answers over IPv6: `curl -6 -sI https://<domain>/healthz`
+  from a host with IPv6.
+- [ ] The browser console on the home page and a game page shows no CSP
+  violation.
+- [ ] From one client, after `ulimit -n 4096`, 3,000 idle connections leave Caddy up:
+  `python3 -c "import socket,time;s=[socket.create_connection(('<domain>',443)) for _ in range(3000)];time.sleep(30)"`,
+  then `docker inspect -f '{{.State.OOMKilled}} {{.RestartCount}}' hexo-arena-caddy-1`
+  prints `false 0` and the site still answers.
 - [ ] `curl -s -o /dev/null -w '%{http_code}' -X POST https://<domain>/api/dev/login`
   prints `404`.
 - [ ] `curl -N -H 'authorization: Bearer <bot token>' https://<domain>/api/bot/stream`
@@ -387,9 +438,11 @@ TLS and proxying:
 - [ ] `curl -s https://<domain>/bots/<bot name> | grep og:description`
   shows the bot's owner and rating; with the app stopped the same URL still
   answers the static shell.
-- [ ] `https://<domain>/legal/imprint` shows the operator's name, address, and
-  email, and `https://<domain>/legal/privacy` the host, server location, and
-  authority, with no `<` placeholder anywhere.
+- [ ] `https://<domain>/legal/privacy` shows the operator's name and email,
+  the host, server location, and authority, with no `<` placeholder anywhere;
+  with an Impressum, `https://<domain>/legal/imprint` shows the name,
+  address, and email, and without one it is not found and the footer links
+  Privacy and Terms only.
 - [ ] With the app stopped, the legal pages still show in full.
 - [ ] `curl -s https://<domain>/legal/details.json` prints the details, and
   `curl -s https://<domain>/legal/README.md` the site's page, not the file.
@@ -399,6 +452,7 @@ Drain and backup:
 - [ ] With no live games, `docker compose restart app` finishes in seconds.
 - [ ] With a live test game, `docker compose restart app` logs `draining`,
   the game ends on its own or at 120 s as `aborted`, and no rating moves.
-- [ ] The morning after, `docker compose exec app ls -l /backup` lists last
+- [ ] `hexo-arena-admin backup` answers `backup written to /backup/...`, and
+  the morning after, `docker compose exec app ls -l /backup` lists last
   night's file.
 - [ ] The restore test passes.

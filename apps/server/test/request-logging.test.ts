@@ -78,13 +78,17 @@ interface SeatedGame {
     stream: http.ClientRequest;
 }
 
-// A signed-in human starts a game against a freshly declared bot, whose
-// stream hands over the engine session.
+// A signed-in human starts a game against another owner's freshly declared
+// bot, whose stream hands over the engine session.
 async function seatBotInGame(port: number): Promise<SeatedGame> {
-    const login = await request(port, `POST`, `/api/dev/login`, { 'content-type': `application/json` }, `{"name":"humanplayer"}`);
-    expect(login.status).toBe(200);
-    const cookie = login.setCookie[0]?.split(`;`)[0] ?? ``;
-    const created = await request(port, `POST`, `/api/bots`, { cookie, 'content-type': `application/json` }, `{"name":"opponentbot"}`);
+    const devLogin = async (name: string): Promise<string> => {
+        const login = await request(port, `POST`, `/api/dev/login`, { 'content-type': `application/json` }, JSON.stringify({ name }));
+        expect(login.status).toBe(200);
+        return login.setCookie[0]?.split(`;`)[0] ?? ``;
+    };
+    const owner = await devLogin(`botowner`);
+    const cookie = await devLogin(`humanplayer`);
+    const created = await request(port, `POST`, `/api/bots`, { cookie: owner, 'content-type': `application/json` }, `{"name":"opponentbot"}`);
     expect(created.status).toBe(201);
     const token = botWithTokenSchema.parse(JSON.parse(created.text)).token;
     const declared = await request(
@@ -168,14 +172,17 @@ describe('request logging', () => {
         const login = await request(port, `GET`, `${discordLoginPath}?next=${encodeURIComponent(`/bots/nextmarker`)}`, {});
         const issued = new URL(login.location ?? ``).searchParams.get(`state`) ?? ``;
         expect(issued).not.toBe(``);
-        const signedIn = await request(port, `GET`, `${discordCallbackPath}?code=codemarker&state=${issued}`, {});
+        const binding = login.setCookie[0]?.split(`;`)[0] ?? ``;
+        const signedIn = await request(port, `GET`, `${discordCallbackPath}?code=codemarker&state=${issued}`, { cookie: binding });
         expect(signedIn.status).toBe(302);
+        expect(signedIn.location).toBe(`/welcome`);
 
         const logs = sink.text();
         expect(sink.records()).toContainEqual(expect.objectContaining({ req: { method: `GET`, route: discordCallbackPath } }));
         expect(logs).not.toContain(`codemarker`);
         expect(logs).not.toContain(`statemarker`);
         expect(logs).not.toContain(issued);
+        expect(logs).not.toContain(binding.slice(binding.indexOf(`=`) + 1));
         expect(logs).not.toContain(`nextmarker`);
     });
 

@@ -41,7 +41,7 @@ export default tseslint.config(
         },
     },
     {
-        files: ['eslint.config.js', 'scripts/**/*.mjs'],
+        files: ['eslint.config.js', 'scripts/**/*.mjs', 'apps/web/public/*.js'],
         ...tseslint.configs.disableTypeChecked,
     },
     {

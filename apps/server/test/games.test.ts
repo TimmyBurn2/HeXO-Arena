@@ -360,9 +360,10 @@ async function startArena(random: () => number = humanCircles): Promise<Arena> {
     return new Arena(world.app, world);
 }
 
+// The human plays a bot of another owner's, as no owner may play their own.
 async function standardBot(arena: Arena): Promise<Fixture> {
+    const token = await arena.createBot(await arena.login(`botowner`), `opponentbot`);
     const cookie = await arena.login(`humanplayer`);
-    const token = await arena.createBot(cookie, `opponentbot`);
     await arena.declareWideAccepts(token);
     const stream = arena.openStream(token);
     return {
@@ -1092,6 +1093,15 @@ describe('game creation gates', () => {
         expect(json(refused)).toMatchObject({ code: `daily_pair_cap` });
         const later = Math.floor(Date.now() / 1000);
         expect(refused.retryAfter).toBe(String(dayStart + 86_400 - later));
+    });
+
+    it('refuses an owner a game against their own bot, starting nothing, while another person still plays it', async () => {
+        const owner = await arena.login(`botowner`);
+        const refused = await arena.createGame(owner, { bot: `opponentbot`, timeControl: unlimitedControl });
+        expect(refused.status).toBe(403);
+        expect(json(refused)).toMatchObject({ code: `own_bot` });
+        expect(arena.count(`games`)).toBe(0);
+        expect((await arena.createGame(bot.cookie, { bot: `opponentbot`, timeControl: unlimitedControl })).status).toBe(201);
     });
 
     it('answers 404 for an unknown bot and rejects malformed bodies', async () => {

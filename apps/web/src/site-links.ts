@@ -7,11 +7,18 @@ export const botApiRepository = `https://github.com/TimmyBurn2/Hexo-Bot-Api`;
 /** The site's own repository: its code, the legal templates, and how to run it. */
 export const siteRepository = `https://github.com/TimmyBurn2/HeXO-Arena`;
 
+/** Whether the standing links lead to the site's repository; off while the repository is private. */
+// Widened from the literal: the switch is a setting either value must type-check against.
+export const siteRepositoryPublic = false as boolean;
+
 /**
  * One standing link of the site: a page of the app, or a document it does
  * not render, which may carry the mark of the place it opens.
  */
 export type SiteLink = { kind: `page`; label: string; to: string } | { kind: `external`; label: string; href: string; mark?: `github` };
+
+/** The site's repository as a standing link, under GitHub's mark. */
+export const sourceLink: SiteLink = { kind: `external`, label: text.shell.links.source, href: siteRepository, mark: `github` };
 
 /**
  * The links every framed screen carries in its footer and the game carries
@@ -22,7 +29,7 @@ export const siteLinks: readonly SiteLink[] = [
     { kind: `page`, label: text.shell.links.build, to: `/connect` },
     { kind: `page`, label: text.shell.links.credits, to: `/credits` },
     { kind: `external`, label: text.shell.links.botApi, href: botApiRepository },
-    { kind: `external`, label: text.shell.links.source, href: siteRepository, mark: `github` },
+    ...(siteRepositoryPublic ? [sourceLink] : []),
 ];
 
 /** The licenses of the code and the font the site ships, a file the build writes at the site's root. */

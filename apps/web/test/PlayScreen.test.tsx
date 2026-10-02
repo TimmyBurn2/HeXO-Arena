@@ -179,6 +179,22 @@ describe('PlayScreen', () => {
         expect(document.querySelector(`.play-roster .roster-foot`)?.textContent).toBe(`1 more bot is offline or closed; see Bots.`);
     });
 
+    it('hold Start on a bot of the person\'s own, saying so, and say it when the server refuses one', async () => {
+        window.history.replaceState(null, ``, `/play?bot=devbot-c`);
+        serve({ bots: roster.map((listed) => (listed.name === `devbot-c` ? { ...listed, ownerName: `tom` } : listed)) });
+        render(<PlayScreen />);
+        await ready();
+        expect(title()).toBe(`Play devbot-c`);
+        expect(screen.getByText(`devbot-c is your own bot; pick another bot`)).toBeTruthy();
+        expect(screen.getByRole(`button`, { name: `Start game` }).getAttribute(`aria-disabled`)).toBe(`true`);
+        cleanup();
+        serve({ start: refused(403, `own_bot`) });
+        render(<PlayScreen />);
+        const card = await ready();
+        fireEvent.click(screen.getByRole(`button`, { name: `Start game` }), { detail: 1 });
+        expect(await within(card).findByText(`devbot-c is your own bot; pick another bot`)).toBeTruthy();
+    });
+
     it('open on the last bot played here when it is ready, with the last clock it takes', async () => {
         window.localStorage.setItem(playStorageKey, JSON.stringify({ opponent: `hextide`, clock: `t20` }));
         serve();

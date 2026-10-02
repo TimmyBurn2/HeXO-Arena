@@ -140,6 +140,20 @@ function inline(tokens: readonly Token[], fill: (name: string) => Filling): Inli
     return out;
 }
 
+// A paragraph broken into lines, as an address is, loses only the lines
+// naming a value left out, so a name stays without its address.
+function lines(tokens: readonly Token[], fill: (name: string) => Filling): Inline[] | null {
+    const split: Token[][] = [[]];
+    for (const token of tokens) {
+        if (token.type === `br`) split.push([]);
+        else split.at(-1)?.push(token);
+    }
+    if (split.length === 1) return inline(tokens, fill);
+    const kept = split.map((line) => inline(line, fill)).filter((line): line is Inline[] => line !== null && line.length > 0);
+    if (kept.length === 0) return null;
+    return kept.flatMap((line, index) => (index === 0 ? line : [{ kind: `break` as const }, ...line]));
+}
+
 function blocks(tokens: readonly Token[], fill: (name: string) => Filling): Block[] {
     const out: Block[] = [];
     for (const token of tokens.map(own)) {
@@ -151,7 +165,7 @@ function blocks(tokens: readonly Token[], fill: (name: string) => Filling): Bloc
             }
             case `paragraph`:
             case `text`: {
-                const children = inline(token.type === `text` ? [token] : token.tokens, fill);
+                const children = lines(token.type === `text` ? [token] : token.tokens, fill);
                 if (children !== null && children.length > 0) out.push({ kind: `paragraph`, children });
                 break;
             }
@@ -230,7 +244,8 @@ function slugger(): (heading: string) => string {
  * A legal document's Markdown laid out for its page: the title, the lead,
  * and one section per second-level heading, each placeholder filled.
  * A paragraph, list item, or table row naming a value the deployment
- * leaves out is left out with it.
+ * leaves out is left out with it; a paragraph broken into lines loses
+ * only that line.
  */
 export function layoutLegal(markdown: string, fill: (name: string) => Filling): LegalLayout {
     const all = blocks(new Lexer({ gfm: true }).lex(markdown), fill);

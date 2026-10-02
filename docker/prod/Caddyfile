@@ -1,12 +1,44 @@
-# TLS and proxying only.
+# TLS, proxying, and the browser's security headers.
 # Rate limits live in the app, egress control in the network, and nothing
 # here compresses or buffers the API.
 # The app's rate limits read the client address this proxy forwards,
 # keyed and hashed in memory, never logged.
 # No access log, so no client address is stored.
+{
+	servers {
+		# A connection that never finishes its headers holds memory until
+		# the container's cap; ten seconds bounds each.
+		# No body or write timeout: either would cut bot streams and live
+		# game events.
+		timeouts {
+			read_header 10s
+		}
+	}
+}
+
+# The site runs no inline script or style and loads nothing from
+# elsewhere, so the policy allows its own origin alone.
+(security_headers) {
+	header {
+		Content-Security-Policy "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; font-src 'self'; connect-src 'self'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; object-src 'none'"
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "same-origin"
+		Permissions-Policy "camera=(), microphone=(), geolocation=(), payment=(), usb=()"
+		Cross-Origin-Opener-Policy "same-origin"
+		Cross-Origin-Resource-Policy "same-origin"
+		-Server
+	}
+}
 
 {$HEXO_ARENA_DOMAIN} {
+	import security_headers
+
 	handle /api/* {
+		# Tokens and account data ride these answers; nothing may cache
+		# one the app left unmarked.
+		header ?Cache-Control "no-store"
 		# Flush every write at once: a buffered NDJSON line is a bot that
 		# looks offline.
 		# Websocket upgrades pass through as is.
@@ -40,6 +72,8 @@
 	# An app that is down or restarting still leaves these routes the
 	# static shell, so the site stays usable through a deploy.
 	handle_errors 502 503 504 {
+		# An error answer starts without the headers set above.
+		import security_headers
 		@shellDown path / /play /ladder /bots/* /players/* /game/* /tournaments/* /bots /games /games/live /tournaments /connect /profile /credits /welcome /legal/imprint /legal/privacy /legal/terms
 		handle @shellDown {
 			root * /srv/web

@@ -202,7 +202,7 @@ export function StartArea({
                     ? errors[code]()
                     : code === `bot_busy` && reserved.has(bot.name)
                       ? text.play.unavailable.tournament(bot.name, held)
-                      : code === `bot_busy` || code === `clock_not_accepted` || code === `not_open` || code === `delisted` || code === `not_found`
+                      : code === `bot_busy` || code === `clock_not_accepted` || code === `not_open` || code === `delisted` || code === `not_found` || code === `own_bot`
                       ? errors[code](bot.name)
                       : text.play.failed;
             setOutcome({
@@ -213,7 +213,15 @@ export function StartArea({
         }
     }
 
-    const unavailable = state === `ready` ? null : state === `tournament` ? text.play.unavailable.tournament(bot.name, held) : text.play.unavailable[state](bot.name);
+    // No owner may play their own bot, rated or not; the server refuses it too.
+    const own = me.status === `ready` && me.me?.kind === `user` && bot.ownerName === me.me.name;
+    const unavailable = own
+        ? text.play.unavailable.own(bot.name)
+        : state === `ready`
+          ? null
+          : state === `tournament`
+            ? text.play.unavailable.tournament(bot.name, held)
+            : text.play.unavailable[state](bot.name);
     const cooling = outcome.kind === `wait` ? Math.max(1, Math.ceil((outcome.until - now) / 1000)) : null;
     const blocked = paused || unavailable !== null || cooling !== null || moved || outcome.kind === `sending` || (stale && visitor !== null);
     // Where the list kept the bot and moved its clock, the line says so, whatever the refusal was.

@@ -55,12 +55,24 @@ const postalAddress = {
 // The checks on the address and the link stay loose enough for the
 // committed example's placeholders; strict objects make a misspelled key
 // fail instead of vanishing.
-const operatorSchema = z.strictObject({
-    name: line,
-    ...postalAddress,
-    email: z.string().trim().max(254).regex(/^[^\s@]+@[^\s@]+$/),
-    discord: line.max(64).optional(),
-});
+// Where no law asks the operator for a postal address, the documents name
+// them by name and email alone; an address given comes whole.
+const operatorSchema = z
+    .strictObject({
+        name: line,
+        street: line.optional(),
+        postcodeAndCity: line.optional(),
+        country: line.optional(),
+        email: z.string().trim().max(254).regex(/^[^\s@]+@[^\s@]+$/),
+        discord: line.max(64).optional(),
+    })
+    .superRefine((operator, context) => {
+        const lines = [`street`, `postcodeAndCity`, `country`] as const;
+        if (lines.every((key) => operator[key] === undefined)) return;
+        for (const key of lines) {
+            if (operator[key] === undefined) context.addIssue({ code: `custom`, path: [key], message: `an address needs all three lines` });
+        }
+    });
 
 const hostSchema = z.strictObject({
     name: line,

@@ -3,9 +3,11 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-li
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { deploy, details, onlyLegal } from './legal-deploy';
 import { AppShell } from '../src/AppShell';
+import { SiteLinks } from '../src/components/SiteLinks';
 import { legalStore } from '../src/legal/documents';
 import { meStore } from '../src/me';
 import { navigate } from '../src/router/use-route';
+import { sourceLink } from '../src/site-links';
 import { stubEventSource } from './event-source';
 
 afterEach(() => {
@@ -261,7 +263,6 @@ describe('AppShell', () => {
                 [`Build a bot`, `/connect`, null],
                 [`Credits`, `/credits`, null],
                 [`Bot API`, `https://github.com/TimmyBurn2/Hexo-Bot-Api`, null],
-                [`Source`, `https://github.com/TimmyBurn2/HeXO-Arena`, null],
                 [`Impressum / Legal notice`, `/legal/imprint`, null],
                 [`Privacy`, `/legal/privacy`, null],
                 [`Terms`, `/legal/terms`, null],
@@ -389,12 +390,9 @@ describe('AppShell', () => {
         expect(link.matches(`p a:not([class])`)).toBe(true);
     });
 
-    it('link the site\'s source with GitHub\'s own mark beside the word, the mark hidden from assistive tech', async () => {
-        stubHealthOk();
-        render(<AppShell />);
-        navigate(`/credits`);
-        const source = await screen.findByRole(`link`, { name: `Source` });
-        expect(source.closest(`footer.site-footer`)).toBeTruthy();
+    it('link the site\'s source with GitHub\'s own mark beside the word, the mark hidden from assistive tech', () => {
+        render(<SiteLinks links={[sourceLink]} open="here" />);
+        const source = screen.getByRole(`link`, { name: `Source` });
         expect(source.getAttribute(`href`)).toBe(`https://github.com/TimmyBurn2/HeXO-Arena`);
         expect(source.getAttribute(`rel`)).toBe(`noreferrer`);
         const mark = source.querySelector(`svg.github-mark`);

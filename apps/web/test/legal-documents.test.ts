@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { legalDetailsExampleFile, legalDetailsPath, legalDetailsSchema, legalDocumentPath, legalPages } from '@hexo-arena/contract';
+import { legalDetailsExampleFile, legalDetailsFaults, legalDetailsPath, legalDetailsSchema, legalDocumentPath, legalPages } from '@hexo-arena/contract';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { exampleDetailsFile, legalFileRoutes } from '../build/legal';
 import { legalStore, placeholderPattern, siteFacts, type LegalState } from '../src/legal/documents';
@@ -49,6 +49,15 @@ describe('the legal documents a deployment serves', () => {
         expect(said).toContain(`operator.email`);
         expect(said).toContain(`operater`);
         expect(said).not.toContain(`Ada Beispiel`);
+    });
+
+    it('take an operator without a postal address, and name the lines missing from an address given in part', async () => {
+        const { street: _street, postcodeAndCity: _city, country: _country, ...unaddressed } = details.operator;
+        deploy({ ...details, operator: unaddressed });
+        const fill = (await settled()).documents.get(`privacy`)?.fill;
+        expect(fill?.(`operator.name`)).toEqual({ kind: `value`, text: `Ada Beispiel` });
+        expect(fill?.(`operator.street`)).toEqual({ kind: `absent` });
+        expect(legalDetailsFaults({ ...details, operator: { ...unaddressed, street: `Musterweg 7` } })).toEqual([`operator.postcodeAndCity`, `operator.country`]);
     });
 
     it('take a page the server answers with the site itself for a missing file', async () => {
@@ -116,7 +125,7 @@ describe('the repository legal folder', () => {
     it('holds an example of the details that matches them and holds a placeholder in every value, so no real value can hide in it', () => {
         const example: unknown = JSON.parse(readFileSync(join(folder, exampleDetailsFile), `utf8`));
         const parsed = legalDetailsSchema.parse(example);
-        const values = Object.values(parsed).flatMap((party) => Object.values(party ?? {}));
+        const values = Object.values(parsed).flatMap((party) => Object.values(party ?? {}).filter((value) => value !== undefined));
         expect(values.length).toBe(legalDetailNames.size);
         expect(values.filter((value) => !/<[^>]+>/.test(value))).toEqual([]);
     });

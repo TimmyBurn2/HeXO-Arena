@@ -35,6 +35,7 @@ const { app, admin, drain: drainApp } = await buildApp({
     publicOrigin: env.PUBLIC_ORIGIN,
     trustedProxy: env.TRUSTED_PROXY,
     ...(env.WEB_INDEX_PATH !== `` && { webIndexPath: env.WEB_INDEX_PATH }),
+    ...(env.BACKUP_DIR !== `` && { backup: { dir: env.BACKUP_DIR, keep: env.BACKUP_KEEP } }),
 });
 
 reportLegalDocuments(env.LEGAL_DIR, app.log, env.DEV_LOGIN ? legalDetailsExampleFile : legalDetailsFile);

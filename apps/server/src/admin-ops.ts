@@ -42,6 +42,8 @@ export interface AdminDeps {
     tournaments: Pick<TournamentScheduler, `cancel` | `withdraw`>;
     limits: Pick<RequestLimits, `clientCount` | `keys`>;
     actor: string;
+    // Writes the night's backup now and answers its path; null without a backup folder.
+    backup: (() => string) | null;
     // How soon a tournament may start: an hour in production, a minute on a
     // development server.
     tournamentLeadMs: number;
@@ -258,6 +260,11 @@ export function createAdminHandler(deps: AdminDeps): AdminHandler {
         switch (request.op) {
             case `status`:
                 return { kind: `status`, status: statusOf(deps) };
+            // A snapshot changes no data, so it writes no audit row.
+            case `backup`:
+                return deps.backup === null
+                    ? { kind: `error`, code: `bad_request`, error: `no backup folder is set` }
+                    : { kind: `done`, summary: `backup written to ${deps.backup()}` };
             case `pause`:
                 return audited(deps, request, null, (tx) => ({
                     response: setPaused(tx, true) ? done(`paused`) : unchanged(`already paused`),

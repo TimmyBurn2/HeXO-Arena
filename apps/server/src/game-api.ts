@@ -95,6 +95,10 @@ export function registerGameApi(app: FastifyInstance, deps: GameApiDeps): void {
         if (bot.delisted) {
             return reply.code(403).send({ error: `the bot is delisted`, code: `delisted` });
         }
+        // An owner's wins over their own bot would rate them up at will.
+        if (person.kind === `user` && bot.ownerId === person.id) {
+            return reply.code(403).send({ error: `the bot is your own`, code: `own_bot` });
+        }
         if (games.activeHumanGameCount(person) >= humanConcurrentGameCap) {
             return reply.code(400).send({
                 error: `you already hold the active-game cap`,

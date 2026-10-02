@@ -9,7 +9,7 @@ export const legalDetailNames: ReadonlySet<string> = new Set(
 export function legalDetailValues(details: LegalDetails): ReadonlyMap<string, string> {
     return new Map(
         Object.entries(details).flatMap(([party, values]) =>
-            Object.entries(values ?? {}).map(([field, value]) => [`${party}.${field}`, value] as const),
+            Object.entries(values ?? {}).flatMap(([field, value]) => (value === undefined ? [] : [[`${party}.${field}`, value] as const])),
         ),
     );
 }

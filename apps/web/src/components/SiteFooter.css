@@ -57,13 +57,22 @@
         }
     }
 
-    /* Where one row cannot hold the five standing links, they stand three
-       to a row, then two, so a wrapped row never leaves one link alone
-       beside a full one. */
+    /* Where one row cannot hold the standing links, they stand in even
+       rows, so a wrapped row never leaves one link alone beside a full
+       one: five three to a row, then two; four two to a row.
+       The counts sit in :where() so the narrower rules below still win. */
     @media (width < 26.5rem) {
-        .site-footer .site-links:not(.legal-links) {
+        .site-footer .site-links:not(.legal-links):where(:has(> :nth-child(5))) {
             display: grid;
             grid-template-columns: repeat(3, auto);
+            justify-content: start;
+        }
+    }
+
+    @media (width < 21.25rem) {
+        .site-footer .site-links:not(.legal-links):where(:not(:has(> :nth-child(5)))) {
+            display: grid;
+            grid-template-columns: repeat(2, auto);
             justify-content: start;
         }
     }

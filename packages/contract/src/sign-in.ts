@@ -72,6 +72,12 @@ export function signInFailurePath(reason: SignInFailure, next = `/`): string {
     return `${at === -1 ? next : next.slice(0, at)}?${params.toString()}`;
 }
 
+/** The cookie that ties Discord's answer to the browser that started the sign-in. */
+export const oauthCookieName = `hexo_arena_oauth`;
+
+/** How long a sign-in waits for Discord's answer, and its cookie with it. */
+export const oauthMaxAgeSeconds = 10 * 60;
+
 /** The first sign-in's unfinished account: read it, create it, or drop it. */
 export const signupPath = `/api/signup`;
 

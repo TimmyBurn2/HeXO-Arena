@@ -1,4 +1,4 @@
-import { botWithTokenSchema, botsPath, devLoginPath, discordCallbackPath, discordLoginPath, signupPath } from '@hexo-arena/contract';
+import { botWithTokenSchema, botsPath, devLoginPath, discordCallbackPath, discordLoginHref, discordLoginPath, oauthCookieName, signupPath } from '@hexo-arena/contract';
 import { buildApp, type BuiltApp } from '../src/app';
 import { openDatabase, runMigrations, type Sqlite } from '../src/db';
 import type { DiscordIdentity, DiscordOAuth } from '../src/discord';
@@ -82,6 +82,7 @@ export async function createTestApp(options?: {
     trustedProxy?: string;
     now?: () => number;
     limits?: LimitTable;
+    backup?: { dir: string; keep: number };
 }): Promise<TestApp> {
     const discord = options?.discord === undefined ? fakeDiscord({ id: `1`, username: `tester` }).oauth : options.discord;
     const sqlite = options?.sqlite ?? openDatabase(`:memory:`);
@@ -103,10 +104,25 @@ export async function createTestApp(options?: {
         ...(options?.trustedProxy !== undefined && { trustedProxy: options.trustedProxy }),
         ...(options?.now !== undefined && { now: options.now }),
         ...(options?.limits !== undefined && { limits: options.limits }),
+        ...(options?.backup !== undefined && { backup: options.backup }),
         // Tests move the scheduler with their own ticks.
         tournamentTickMs: 0,
     });
     return { sqlite, app, admin, drain, limits, presence, watchers, tournaments };
+}
+
+/** A Discord sign-in started in one browser: the state Discord echoes, and the cookies that browser then holds. */
+export interface StartedSignIn {
+    state: string;
+    cookies: Record<string, string>;
+}
+
+/** Start a sign-in through the app's Discord, returning to `next`. */
+export async function startDiscordSignIn(app: TestApp[`app`], next?: string): Promise<StartedSignIn> {
+    const login = await app.inject({ method: `GET`, url: next === undefined ? discordLoginPath : discordLoginHref(next) });
+    const state = new URL(login.headers.location ?? ``).searchParams.get(`state`) ?? ``;
+    const nonce = login.cookies.find((entry) => entry.name === oauthCookieName)?.value;
+    return { state, cookies: nonce === undefined ? {} : { [oauthCookieName]: nonce } };
 }
 
 /**
@@ -114,9 +130,8 @@ export async function createTestApp(options?: {
  * session cookie's value.
  */
 export async function signUpWithDiscord(app: TestApp[`app`], name: string): Promise<string> {
-    const login = await app.inject({ method: `GET`, url: discordLoginPath });
-    const state = new URL(login.headers.location ?? ``).searchParams.get(`state`) ?? ``;
-    const back = await app.inject({ method: `GET`, url: `${discordCallbackPath}?code=c&state=${encodeURIComponent(state)}` });
+    const { state, cookies } = await startDiscordSignIn(app);
+    const back = await app.inject({ method: `GET`, url: `${discordCallbackPath}?code=c&state=${encodeURIComponent(state)}`, cookies });
     const signup = back.cookies.find((entry) => entry.name === `hexo_arena_signup`)?.value;
     if (signup === undefined) throw new Error(`the callback held no sign-up: ${String(back.headers.location)}`);
     const created = await app.inject({ method: `POST`, url: signupPath, payload: { name }, cookies: { hexo_arena_signup: signup } });

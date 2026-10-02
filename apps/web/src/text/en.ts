@@ -531,6 +531,7 @@ export const en = {
             closed: (name: string) => `${name} is closed for challenges right now; pick another bot`,
             nothing: (name: string) => `${name} accepts no clock yet; pick another bot`,
             busy: (name: string) => `${name} is in ${String(botConcurrentGameCap)} ${plural(botConcurrentGameCap, `game`, `games`)} already; try again shortly`,
+            own: (name: string) => `${name} is your own bot; pick another bot`,
         },
         yourGame: (opponent: string) => `Your game against ${opponent}`,
         errors: {
@@ -540,6 +541,7 @@ export const en = {
             not_open: (name: string) => `${name} is closed for challenges right now`,
             delisted: (name: string) => `${name} takes no new games`,
             not_found: (name: string) => `${name} is no longer listed; pick another bot`,
+            own_bot: (name: string) => `${name} is your own bot; pick another bot`,
             daily_pair_cap: (name: string) =>
                 `You have played ${name} ${String(pairDailyCap)} times today, the most one day allows; pick another bot, or play it again after 00:00 UTC`,
             paused: () => `Starting games is paused; live games continue`,

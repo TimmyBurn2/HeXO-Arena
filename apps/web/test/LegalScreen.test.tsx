@@ -2,6 +2,8 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import {
     guestIdleSeconds,
+    oauthCookieName,
+    oauthMaxAgeSeconds,
     sessionCookieName,
     sessionMaxAgeSeconds,
     signupCookieName,
@@ -91,6 +93,17 @@ describe('LegalScreen', () => {
         expect(section(`Who receives data`).querySelectorAll(`li`)).toHaveLength(2);
     });
 
+    it('name the operator and a mail link in the privacy policy when the deployment gives no postal address', async () => {
+        const { street: _street, postcodeAndCity: _city, country: _country, ...operator } = details.operator;
+        deploy({ ...details, operator });
+        render(<LegalScreen page="privacy" />);
+        await screen.findByRole(`heading`, { name: `Who is responsible` });
+        const responsible = section(`Who is responsible`);
+        expect(lines(responsible.querySelector(`p`))).toEqual([`Ada Beispiel`]);
+        expect(within(responsible).getByRole(`link`, { name: `contact@arena.example` }).getAttribute(`href`)).toBe(`mailto:contact@arena.example`);
+        expect(document.body.textContent).not.toContain(`Musterweg`);
+    });
+
     it('fill the privacy policy from the details and list its sections with links to each', async () => {
         deploy(details);
         render(<LegalScreen page="privacy" />);
@@ -122,6 +135,8 @@ describe('LegalScreen', () => {
         const storage = section(`Cookies and browser storage`).textContent;
         expect(storage).toContain(`The cookie ${sessionCookieName}, set when you sign in`);
         expect(storage).toContain(`It lasts ${String(sessionMaxAgeSeconds / 86_400)} days after sign-in`);
+        expect(storage).toContain(`The cookie ${oauthCookieName}, set when you start a sign-in with Discord`);
+        expect(storage).toContain(`It lasts ${String(oauthMaxAgeSeconds / 60)} minutes, or until Discord sends you back.`);
         expect(storage).toContain(`under ${themeStorageKey}, ${boardSettingsStorageKey}, ${drawerPinnedStorageKey}, and ${playStorageKey}:`);
         expect(section(`Playing as a guest`).textContent).toContain(
             `when you end it or sign in with Discord, when the server restarts, or after ${String(guestIdleSeconds / 3_600)} hours without a request while no game runs.`,
@@ -173,11 +188,12 @@ describe('LegalScreen', () => {
         expect(section(`Moderation records`).textContent).toContain(`The records have no set end yet and keep the name after the account is deleted.`);
     });
 
-    it('run the terms under the operator name and link the privacy policy section on deletion', async () => {
+    it('run the terms under the operator name and email, needing no Impressum, and link the privacy policy section on deletion', async () => {
         deploy(details);
         render(<LegalScreen page="terms" />);
-        expect(await screen.findByText(/run by Ada Beispiel; see the/u)).toBeTruthy();
-        expect(screen.getByRole(`link`, { name: `Impressum / Legal notice` }).getAttribute(`href`)).toBe(`/legal/imprint`);
+        expect(await screen.findByText(/run by Ada Beispiel, reachable at/u)).toBeTruthy();
+        expect(within(section(`The service`)).getByRole(`link`, { name: `contact@arena.example` }).getAttribute(`href`)).toBe(`mailto:contact@arena.example`);
+        expect(template(`terms`)).not.toContain(`/legal/imprint`);
         expect(screen.getByRole(`link`, { name: `Deleting your account` }).getAttribute(`href`)).toBe(`/legal/privacy#deleting-your-account`);
         expect(screen.getByRole(`link`, { name: `Bot API` }).getAttribute(`href`)).toBe(`https://github.com/TimmyBurn2/Hexo-Bot-Api`);
         expect(screen.getByRole(`navigation`, { name: `On this page` })).toBeTruthy();
@@ -240,13 +256,12 @@ describe('LegalScreen', () => {
     });
 
     it('leave the words of a link to a document the deployment lacks unlinked, never a way to a missing page', async () => {
-        deploy(details, { imprint: null });
+        deploy(details, { privacy: null });
         render(<LegalScreen page="terms" />);
-        const service = await screen.findByRole(`heading`, { level: 2, name: `The service` });
-        const text = service.closest(`section`);
-        expect(text?.textContent).toContain(`see the Impressum / Legal notice.`);
-        expect(screen.queryByRole(`link`, { name: `Impressum / Legal notice` })).toBe(null);
-        expect(screen.getByRole(`link`, { name: `Deleting your account` }).getAttribute(`href`)).toBe(`/legal/privacy#deleting-your-account`);
+        await screen.findByRole(`heading`, { level: 2, name: `Guests` });
+        expect(section(`Guests`).textContent).toContain(`see Playing as a guest in the Privacy policy.`);
+        expect(screen.queryByRole(`link`, { name: `Playing as a guest` })).toBe(null);
+        expect(screen.getByRole(`link`, { name: `Bot API` }).getAttribute(`href`)).toBe(`https://github.com/TimmyBurn2/Hexo-Bot-Api`);
     });
 
     it('drop raw HTML and images from a deployment\'s own text, and never run them', async () => {

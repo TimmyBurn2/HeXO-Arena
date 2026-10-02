@@ -7,6 +7,8 @@ import {
     nameKeyOf,
     nextParam,
     nextPathOf,
+    oauthCookieName,
+    oauthMaxAgeSeconds,
     sessionCookieName,
     signInFailurePath,
     signInStateCap,
@@ -54,6 +56,15 @@ function clearSignupCookie(reply: FastifyReply, secure: boolean): void {
     reply.clearCookie(signupCookieName, { path: signupPath, httpOnly: true, sameSite: `lax`, secure });
 }
 
+// Lax, so the cookie rides Discord's top-level redirect back.
+function setOAuthCookie(reply: FastifyReply, nonce: string, secure: boolean): void {
+    reply.setCookie(oauthCookieName, nonce, { path: discordCallbackPath, httpOnly: true, sameSite: `lax`, secure, maxAge: oauthMaxAgeSeconds });
+}
+
+function clearOAuthCookie(reply: FastifyReply, secure: boolean): void {
+    reply.clearCookie(oauthCookieName, { path: discordCallbackPath, httpOnly: true, sameSite: `lax`, secure });
+}
+
 // A sign-in replaces whatever session the browser held: a guest ends with
 // its games, and an account's old session is deleted.
 function endHeldSession(deps: SignInApiDeps, request: FastifyRequest): void {
@@ -94,13 +105,16 @@ export function registerSignInApi(app: FastifyInstance, deps: SignInApiDeps): vo
         if (deps.limits.wait(`signInStart`, request) !== null || outstandingOAuthStates(query) >= signInStateCap) {
             return reply.redirect(signInFailurePath(`busy`, next));
         }
-        return reply.redirect(deps.discord.authorizeUrl(createOAuthState(query, next)));
+        const issued = createOAuthState(query, next);
+        setOAuthCookie(reply, issued.nonce, secureCookies);
+        return reply.redirect(deps.discord.authorizeUrl(issued.state));
     });
 
     app.get(discordCallbackPath, { config: { limit: `public` } }, async (request, reply) => {
         const parsed = callbackQuerySchema.safeParse(request.query);
         const { code, state, error } = parsed.success ? parsed.data : {};
-        const issued = state === undefined ? null : consumeOAuthState(query, state);
+        const issued = state === undefined ? null : consumeOAuthState(query, state, request.cookies[oauthCookieName]);
+        if (request.cookies[oauthCookieName] !== undefined) clearOAuthCookie(reply, secureCookies);
         const next = issued?.next ?? `/`;
         if (!deps.discord) return reply.redirect(signInFailurePath(`unconfigured`, next));
         if (error !== undefined) return reply.redirect(signInFailurePath(error === `access_denied` ? `cancelled` : `rejected`, next));

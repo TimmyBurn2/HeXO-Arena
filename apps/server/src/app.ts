@@ -14,6 +14,7 @@ import websocketPlugin from '@fastify/websocket';
 import cookiePlugin from '@fastify/cookie';
 import Fastify, { errorCodes, type FastifyInstance, type FastifyRequest } from 'fastify';
 import { createAdminHandler } from './admin-ops';
+import { backupNow, type BackupPolicy } from './backup';
 import type { AdminHandler } from './admin-socket';
 import { createBot, rotateBotToken } from './bots';
 import { registerBotApi } from './bot-api';
@@ -72,6 +73,8 @@ export interface AppDeps {
     limits?: LimitTable;
     // How often the tournament scheduler looks for work; 0 leaves it to the caller's ticks.
     tournamentTickMs?: number;
+    // Where backups go and how many stay; without it the admin socket writes none.
+    backup?: Pick<BackupPolicy, `dir` | `keep`>;
 }
 
 export interface BuiltApp {
@@ -193,6 +196,7 @@ export async function buildApp(deps: AppDeps): Promise<BuiltApp> {
     if (deps.webIndexPath !== undefined) {
         registerOgShell(app, { query, presence, games, players: playerReads, indexPath: deps.webIndexPath, publicOrigin: deps.publicOrigin, now: deps.now ?? Date.now });
     }
+    const backupPolicy = deps.backup;
     const admin = createAdminHandler({
         query,
         presence,
@@ -201,6 +205,7 @@ export async function buildApp(deps: AppDeps): Promise<BuiltApp> {
         tournaments,
         limits,
         actor: deps.adminActor,
+        backup: backupPolicy === undefined ? null : () => backupNow(deps.sqlite, backupPolicy, new Date()),
         tournamentLeadMs: leadMs,
         ...(deps.now === undefined ? {} : { now: deps.now }),
     });

@@ -22,6 +22,7 @@ const sundayRule = {
 describe('parseAdminArgs', () => {
     it.each([
         [[`status`], { op: `status` }],
+        [[`backup`], { op: `backup` }],
         [[`pause`, `--reason`, `incident`], { op: `pause`, reason: `incident` }],
         [[`ban-user`, `ann`, `--reason`, `cheating`], { op: `ban-user`, name: `ann`, reason: `cheating` }],
         [[`abort-game`, `--bot`, `alpha`, `--reason`, `rogue`], { op: `abort-game`, bot: `alpha`, reason: `rogue` }],

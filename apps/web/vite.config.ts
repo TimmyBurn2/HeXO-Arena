@@ -1,3 +1,4 @@
+import { fileURLToPath } from 'node:url';
 import react from '@vitejs/plugin-react';
 import { defineConfig } from 'vitest/config';
 import { legalFiles } from './build/legal.ts';
@@ -14,7 +15,11 @@ export default defineConfig({
         include: ['test/**/*.test.{ts,tsx}'],
     },
     server: {
-        host: true,
+        // The dev server signs anyone in and serves dev bot tokens, so it
+        // stays on the loopback address unless asked otherwise, and serves
+        // no file outside what the site loads.
+        host: process.env.VITE_HOST ?? `127.0.0.1`,
+        fs: { allow: [`.`, `../../packages`, `../../legal`, `../../node_modules`].map((path) => fileURLToPath(new URL(path, import.meta.url))) },
         port: 5173,
         strictPort: true,
         // The SPA talks to the API on its own origin; dev traffic forwards

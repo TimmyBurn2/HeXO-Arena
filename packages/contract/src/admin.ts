@@ -34,6 +34,7 @@ const tournamentEntrantsSchema = z.number().int().min(tournamentMinPresent).max(
 
 export const adminRequestSchema = z.discriminatedUnion(`op`, [
     z.strictObject({ op: z.literal(`status`) }),
+    z.strictObject({ op: z.literal(`backup`) }),
     z.strictObject({ op: z.literal(`pause`), reason: adminReasonSchema }),
     z.strictObject({ op: z.literal(`resume`), reason: adminReasonSchema }),
     z.strictObject({ op: z.literal(`ban-user`), name: nameSyntaxSchema, reason: adminReasonSchema }),
@@ -87,7 +88,7 @@ export const adminRequestSchema = z.discriminatedUnion(`op`, [
     z.strictObject({ op: z.literal(`tournament-schedule-remove`), id: tournamentRuleIdSchema, reason: adminReasonSchema }),
 ]);
 export type AdminRequest = z.infer<typeof adminRequestSchema>;
-export type AdminMutation = Exclude<AdminRequest, { op: `status` | `tournament-schedule-list` }>;
+export type AdminMutation = Exclude<AdminRequest, { op: `status` | `backup` | `tournament-schedule-list` }>;
 
 export const adminActionSchema = z.object({
     actor: z.string(),

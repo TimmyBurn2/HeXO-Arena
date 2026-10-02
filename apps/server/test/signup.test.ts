@@ -1,4 +1,4 @@
-import { discordCallbackPath, discordLoginHref, guestPath, mePath, meSchema, sessionMaxAgeSeconds, signupPath, signupSchema } from '@hexo-arena/contract';
+import { discordCallbackPath, guestPath, mePath, meSchema, sessionMaxAgeSeconds, signupPath, signupSchema } from '@hexo-arena/contract';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { buildApp } from '../src/app';
 import { createQuery, nowSeconds, openDatabase, runMigrations } from '../src/db';
@@ -7,14 +7,13 @@ import { discordNameOf } from '../src/discord';
 import { PresenceRegistry } from '../src/presence';
 import { sweepSignups } from '../src/signups';
 import { GameWatchers } from '../src/watchers';
-import { createTestApp, fakeDiscord, signUpWithDiscord, type TestApp } from './helpers';
+import { createTestApp, fakeDiscord, signUpWithDiscord, startDiscordSignIn, type TestApp } from './helpers';
 
 // A first sign-in through the fake Discord, held and waiting: the signup
 // cookie's value.
 async function heldSignup(world: TestApp, next = `/`): Promise<string> {
-    const login = await world.app.inject({ method: `GET`, url: discordLoginHref(next) });
-    const state = new URL(login.headers.location ?? ``).searchParams.get(`state`) ?? ``;
-    const back = await world.app.inject({ method: `GET`, url: `${discordCallbackPath}?code=c&state=${encodeURIComponent(state)}` });
+    const { state, cookies } = await startDiscordSignIn(world.app, next);
+    const back = await world.app.inject({ method: `GET`, url: `${discordCallbackPath}?code=c&state=${encodeURIComponent(state)}`, cookies });
     return back.cookies.find((entry) => entry.name === `hexo_arena_signup`)?.value ?? ``;
 }
 

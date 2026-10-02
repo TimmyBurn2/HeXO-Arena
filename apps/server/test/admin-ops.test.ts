@@ -1,6 +1,9 @@
+import { existsSync, mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { orphanForfeitMs } from '@hexo-arena/contract';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { createTestApp, fakeDiscord, FakeStreamSocket, loginAs, mintBot, type TestApp } from './helpers';
+import { createTestApp, fakeDiscord, FakeStreamSocket, loginAs, mintBot, startDiscordSignIn, type TestApp } from './helpers';
 import { findBot } from '../src/bots';
 import { createQuery } from '../src/db';
 import { insertBotGame, insertGame, recordFinish } from '../src/game-store';
@@ -80,6 +83,23 @@ describe('admin status', () => {
         if (answer.kind !== `status`) throw new Error(`no status`);
         expect(answer.status.clientKeys).toBe(2);
         expect(answer.status.keylessRequests).toBe(1);
+    });
+});
+
+describe('backup on demand', () => {
+    it('writes the night\'s snapshot at once and names it, auditing nothing, and says when no backup folder is set', async () => {
+        const dir = mkdtempSync(join(tmpdir(), `hexo-arena-admin-backup-`));
+        const world = await createTestApp({ backup: { dir, keep: 14 } });
+        const answer = world.admin({ op: `backup` });
+        const path = join(dir, `hexo-arena-${new Date().toISOString().slice(0, 10)}.sqlite`);
+        expect(answer).toEqual({ kind: `done`, summary: `backup written to ${path}` });
+        expect(existsSync(path)).toBe(true);
+        expect(auditRows(world)).toEqual([]);
+        await world.app.close();
+        rmSync(dir, { recursive: true, force: true });
+        const bare = await createTestApp();
+        expect(bare.admin({ op: `backup` })).toMatchObject({ kind: `error`, code: `bad_request` });
+        await bare.app.close();
     });
 });
 
@@ -334,15 +354,15 @@ describe('ban and unban', () => {
         const devLogin = await world.app.inject({ method: `POST`, url: `/api/dev/login`, payload: { name: `ann` } });
         expect(devLogin.statusCode).toBe(403);
         expect(devLogin.json()).toEqual({ error: `the account is banned`, code: `banned` });
-        const start = await world.app.inject({ method: `GET`, url: `/api/auth/discord/login` });
-        const state = new URL(start.headers.location ?? ``).searchParams.get(`state`) ?? ``;
+        const { state, cookies } = await startDiscordSignIn(world.app);
         const callback = await world.app.inject({
             method: `GET`,
             url: `/api/auth/discord/callback?code=abc&state=${encodeURIComponent(state)}`,
+            cookies,
         });
         expect(callback.statusCode).toBe(302);
         expect(callback.headers.location).toBe(`/?signin=banned`);
-        expect(callback.headers[`set-cookie`]).toBeUndefined();
+        expect(callback.cookies.filter((entry) => entry.value !== ``)).toEqual([]);
     });
 
     it('lets a banned bot forfeit its live game on the clock, rated', async () => {

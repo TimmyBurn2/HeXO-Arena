@@ -77,6 +77,16 @@ describe('a legal document laid out for its page', () => {
         expect(words(layout.sections[0]?.blocks ?? [])).toEqual([`Email: contact@arena.example`, `The public.`]);
     });
 
+    it('leaves out only the line naming a value left out from a paragraph broken into lines, as an address is', () => {
+        const layout = layoutLegal(`## Who\n\n{{operator.email}}\\\n{{operator.discord}}\\\nGermany\n\n{{operator.discord}}\\\n{{mailProvider.name}}`, fill);
+        expect(layout.sections[0]?.blocks).toEqual([
+            {
+                kind: `paragraph`,
+                children: [{ kind: `text`, text: `contact@arena.example` }, { kind: `break` }, { kind: `text`, text: `Germany` }],
+            },
+        ]);
+    });
+
     it('shows a placeholder nobody knows as written, so a misspelling is plain on the page', () => {
         const layout = layoutLegal(`## Who\n\nRun by {{operater.name}}.`, fill);
         expect(words(layout.sections[0]?.blocks ?? [])).toEqual([`Run by {{operater.name}}.`]);

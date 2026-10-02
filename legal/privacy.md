@@ -1,6 +1,6 @@
 # Privacy policy
 
-Last updated 1 October 2026
+Last updated 2 October 2026
 
 ## Who is responsible
 
@@ -83,6 +83,8 @@ Legal basis: Art. 6(1)(b) GDPR.
 
 - The cookie {{site.sessionCookie}}, set when you sign in or start playing as a guest: a random session reference, first-party and not readable by scripts.
   It lasts {{site.sessionDays}} days after sign-in, or until you close the browser for a guest.
+- The cookie {{site.oauthCookie}}, set when you start a sign-in with Discord: a random reference that ties Discord's answer to your browser, first-party and not readable by scripts.
+  It lasts {{site.oauthMinutes}} minutes, or until Discord sends you back.
 - The cookie {{site.signupCookie}}, set when a first sign-in returns from Discord: a random reference to the unfinished sign-up, first-party and not readable by scripts.
   It lasts {{site.signupMinutes}} minutes, or until you create the account or cancel.
 - Browser storage (localStorage) under {{site.themeKey}}, {{site.boardKey}}, {{site.drawerKey}}, and {{site.playKey}}: your theme, your board settings, whether the game panel stays pinned, and the opponent and clock of your last game.

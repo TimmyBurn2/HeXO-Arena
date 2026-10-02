@@ -181,7 +181,7 @@ const signupEndedError = errorBodySchema([...signupExpiredErrorCodes, ...signupL
 const gameCreateError = errorBodySchema([...badRequestErrorCodes, ...gameCreateErrorCodes]).meta({
     id: `GameCreateError`,
 });
-const delistedError = errorBodySchema(gameCreateForbiddenErrorCodes).meta({ id: `DelistedError` });
+const gameCreateForbiddenError = errorBodySchema(gameCreateForbiddenErrorCodes).meta({ id: `GameCreateForbiddenError` });
 const moveError = errorBodySchema([...badRequestErrorCodes, ...gameMoveErrorCodes]).meta({ id: `MoveError` });
 const gameOverError = errorBodySchema(gameResignErrorCodes).meta({ id: `GameOverError` });
 const challengeCreateError = errorBodySchema([...badRequestErrorCodes, ...challengeCreateErrorCodes]).meta({
@@ -225,7 +225,7 @@ function registerSharedComponents(registry: OpenAPIRegistry, surface: `site` | `
             `The bot's owner is banned; after the ban lifts, the owner must rotate the token.`,
             bannedError,
         ),
-        delisted: response(`Delisted`, `The bot is delisted and takes no new games.`, delistedError),
+        gameCreateForbidden: response(`GameCreateForbidden`, `The bot is the caller's own (own_bot), or it is delisted and takes no new games (delisted).`, gameCreateForbiddenError),
         notFound: response(
             `NotFound`,
             `The target does not exist or is not the caller's to act on.`,
@@ -611,7 +611,7 @@ function registerSiteSurface(registry: OpenAPIRegistry, shared: SharedComponents
                 },
             },
             401: shared.unauthorized,
-            403: shared.delisted,
+            403: shared.gameCreateForbidden,
             429: {
                 description: `The caller is inside the creation cooldown (game_cooldown); or a signed-in caller has played this bot ${String(pairDailyCap)} times this UTC day (daily_pair_cap), until 00:00 UTC; Retry-After says how long either has left; or too many requests (rate_limited).`,
                 headers: { 'Retry-After': shared.retryAfter },
