@@ -69,6 +69,16 @@ export function finishedGameOf(row: SeatRow): FinishedGame {
     throw new Error(`stored game row seats nobody`);
 }
 
+// A guest's game, and one against a bot at a level other than its
+// default, rate nobody: the level has no rating of its own to count
+// against, and the bot's would flatter a win over a weakened bot.
+const ratable = sql`${games.guestName} is null and ${games.xLevel} is null and ${games.oLevel} is null`;
+
+/** Whether a game of the log can move a rating: no guest seat, and every bot at its default level. */
+export function ratesSomebody(row: { guestName: string | null; xLevel: string | null; oLevel: string | null }): boolean {
+    return row.guestName === null && row.xLevel === null && row.oLevel === null;
+}
+
 /** The game as the fold counts it: a voided one stays on the record and rates nobody, as a game without a winner. */
 export function countedGameOf(row: SeatRow & { voidedAt: number | null }): FinishedGame {
     const game = finishedGameOf(row);
@@ -80,12 +90,12 @@ export interface LoggedGame extends FinishedGame {
     readonly id: string;
 }
 
-// A guest's games rate nobody, so the log the fold reads leaves them out.
+// The log the fold reads leaves out the games that rate nobody.
 export function finishedGameLog(query: Query): LoggedGame[] {
     return query
         .select({ id: games.id, voidedAt: games.voidedAt, ...seatColumns })
         .from(games)
-        .where(and(isNotNull(games.finishSeq), isNull(games.guestName)))
+        .where(and(isNotNull(games.finishSeq), ratable))
         .orderBy(asc(games.finishSeq))
         .all()
         .map((row) => ({ id: row.id, ...countedGameOf(row) }));
@@ -154,6 +164,7 @@ function lastRatedIn(query: Query, seat: ReturnType<typeof seatsOf>[number], pla
                 lt(games.finishSeq, finishSeq),
                 isNotNull(games.winner),
                 isNull(games.voidedAt),
+                ratable,
                 by === undefined ? undefined : lte(games.finishedAt, by),
             ),
         )
@@ -261,7 +272,7 @@ export function recomputeRatings(query: Query): number {
 export function fillGameRatings(query: Query): number {
     return query.transaction((tx) => {
         const cached = tx.select({ gameId: gameRatings.gameId }).from(gameRatings).where(eq(gameRatings.gameId, games.id));
-        const missing = tx.select({ n: count() }).from(games).where(and(isNotNull(games.finishSeq), isNull(games.guestName), notExists(cached))).get()?.n ?? 0;
+        const missing = tx.select({ n: count() }).from(games).where(and(isNotNull(games.finishSeq), ratable, notExists(cached))).get()?.n ?? 0;
         if (missing === 0) return 0;
         tx.delete(gameRatings).run();
         foldRatings(finishedGameLog(tx), (game, step) => {
@@ -286,8 +297,8 @@ export interface RankedPlayer {
 
 const botOwners = alias(users, `bot_owner`);
 
-// A rated game is one with a winner that no moderation voided and no guest played.
-const ratedFinish = sql`${games.winner} is not null and ${games.voidedAt} is null and ${games.guestName} is null`;
+// A rated game is one with a winner that no moderation voided, of those that rate anybody.
+const ratedFinish = sql`${games.winner} is not null and ${games.voidedAt} is null and ${ratable}`;
 
 // The rated games in one seat column, by count and latest finish, read
 // through that seat's index; a column the player cannot sit in counts none.

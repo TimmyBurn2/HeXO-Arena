@@ -1,5 +1,5 @@
 import { clockText, type GamePlayer, type LiveGameEntry, type Side } from '@hexo-arena/contract';
-import { BotBadge, Swatch } from '../components/player';
+import { BotBadge, seatLevelFacts, seatName, Swatch } from '../components/player';
 import { Clock } from '../game/Clock';
 import { Link } from '../router/Link';
 import { text } from '../text';
@@ -45,7 +45,7 @@ function LiveGameCard({ game, level }: { game: LiveView; level: 2 | 3 }) {
                     </Link>
                 </Heading>
                 <p className="live-card-turn">
-                    <span>{text.ladder.live.toMove(entry.players[game.toMove].name)}</span>
+                    <span>{text.ladder.live.toMove(seatName(entry.players[game.toMove]))}</span>
                     {landed ? <RunningClock entry={entry} side={game.toMove} since={game.readAt} /> : null}
                 </p>
                 <p className="live-card-meta">
@@ -63,7 +63,9 @@ function Seat({ side, player }: { side: Side; player: GamePlayer }) {
         <span className="live-seat">
             <span className="live-seat-who">
                 <Swatch side={side} />
-                <span className="live-name">{player.name}</span>
+                <span className="live-name" title={seatLevelFacts(player)}>
+                    {seatName(player)}
+                </span>
             </span>
             {player.kind === `bot` ? <BotBadge /> : null}
         </span>

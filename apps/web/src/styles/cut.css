@@ -92,6 +92,7 @@
     }
 
     .clock-tile,
+    .strength-chip,
     .roster-row,
     .play-ready-bot,
     .your-game,
@@ -106,6 +107,7 @@
     /* The cut clips a ring drawn outside, so a picked tile or row shows
        focus inside its edge. */
     .clock-tile:has(input:focus-visible),
+    .strength-chip:has(input:focus-visible),
     .roster-row:has(input:focus-visible) {
         outline: var(--focus-w) solid var(--c-focus);
         outline-offset: calc(-3 * var(--focus-w));

@@ -19,6 +19,7 @@ const gameStart = {
     timeControl: { mode: `unlimited` },
     openingPlies: 5,
     rated: false,
+    level: null,
     engine: { socketUrl: `/api/bot/game/g1/socket`, token: `hgs_token` },
 };
 
@@ -101,6 +102,14 @@ describe('streamEventSchema', () => {
         expect(challengeCanceledEventSchema.safeParse(withoutReason).success).toBe(false);
     });
 
+    it('names the level a game is played at, null at the default, on every gameStart', () => {
+        expect(gameStartEventSchema.parse({ ...gameStart, level: `quick` }).level).toBe(`quick`);
+        expect(gameStartEventSchema.parse(gameStart).level).toBeNull();
+        expect(gameStartEventSchema.safeParse({ ...gameStart, level: `Quick` }).success).toBe(false);
+        const { level: _omitted, ...withoutLevel } = gameStart;
+        expect(gameStartEventSchema.safeParse(withoutLevel).success).toBe(false);
+    });
+
     it('requires the opening length on every gameStart, the plain game included', () => {
         expect(gameStartEventSchema.parse({ ...gameStart, openingPlies: 1 }).openingPlies).toBe(1);
         expect(gameStartEventSchema.parse({ ...gameStart, openingPlies: 9 }).openingPlies).toBe(9);
@@ -173,17 +182,33 @@ describe('accountDeclarationSchema', () => {
         expect(accountDeclarationSchema.safeParse({}).success).toBe(true);
     });
 
-    it('refuses control and bidirectional characters in about and version, and takes other text as written', () => {
-        for (const text of [`a\nb`, `tab\there`, `nul\u0000`, `\u202eabc`, `x\u2067y`, `mark\u200f`, `arabic\u061c`]) {
-            expect(accountDeclarationSchema.safeParse({ about: text }).success, JSON.stringify(text)).toBe(false);
-            expect(accountDeclarationSchema.safeParse({ version: text }).success, JSON.stringify(text)).toBe(false);
+    it('cleans about and version instead of refusing them: breaks and tabs become spaces, control and format characters go', () => {
+        for (const [text, cleaned] of [
+            [`line one\nline two`, `line one line two`],
+            [`tab\there\r\n`, `tab here`],
+            [`nul\u0000 bell\u0007`, `nul bell`],
+            [`\u202eabc`, `abc`],
+            [`x\u2067y\u2069`, `xy`],
+            [`mark\u200f`, `mark`],
+            [`arabic\u061c`, `arabic`],
+            [`zero\u200bwidth\u200djoin\u00adsoft\ufeff`, `zerowidthjoinsoft`],
+            [`  spaced   out  `, `spaced out`],
+        ] as const) {
+            expect(accountDeclarationSchema.parse({ about: text }).about, JSON.stringify(text)).toBe(cleaned);
+            expect(accountDeclarationSchema.parse({ version: text }).version, JSON.stringify(text)).toBe(cleaned);
         }
-        expect(accountDeclarationSchema.safeParse({ about: `Spielt vorsichtig, \u00e9l\u00e8ve de HeXO, \u{1f40d}`, version: `v2.1.0-rc.1` }).success).toBe(true);
+        expect(accountDeclarationSchema.parse({ about: `\n\u202e ` }).about).toBe(``);
+        expect(accountDeclarationSchema.parse({ about: `Spielt vorsichtig, \u00e9l\u00e8ve de HeXO, \u{1f40d}`, version: `v2.1.0-rc.1` })).toEqual({
+            about: `Spielt vorsichtig, \u00e9l\u00e8ve de HeXO, \u{1f40d}`,
+            version: `v2.1.0-rc.1`,
+        });
     });
 
-    it('caps about at 280 chars and version at 64', () => {
+    it('caps about at 280 chars and version at 64, counting the cleaned text', () => {
         expect(accountDeclarationSchema.safeParse({ about: `a`.repeat(281) }).success).toBe(false);
         expect(accountDeclarationSchema.safeParse({ version: `v`.repeat(65) }).success).toBe(false);
+        expect(accountDeclarationSchema.parse({ about: `${`a`.repeat(280)}\u200f\n` }).about).toBe(`a`.repeat(280));
+        expect(accountDeclarationSchema.parse({ version: `\u202e${`v`.repeat(64)}` }).version).toBe(`v`.repeat(64));
     });
 
     it('takes http and https urls, the empty string, and nothing else', () => {

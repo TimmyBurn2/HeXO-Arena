@@ -1,10 +1,12 @@
 import {
     acceptsSchema,
     botCapPerUser,
+    levelsSchema,
     nameKeyOf,
     type Accepts,
     type AccountDeclaration,
     type BotAccount,
+    type Levels,
 } from '@hexo-arena/contract';
 import { and, count, eq, isNull } from 'drizzle-orm';
 import { randomUUID } from 'node:crypto';
@@ -30,6 +32,7 @@ export interface BotRow {
     version?: string;
     repoUrl?: string;
     accepts?: Accepts;
+    levels: Levels | null;
 }
 
 interface DeclarationColumns {
@@ -37,6 +40,7 @@ interface DeclarationColumns {
     version: string | null;
     repoUrl: string | null;
     accepts: string | null;
+    levels: string | null;
 }
 
 const declarationColumns = {
@@ -44,12 +48,16 @@ const declarationColumns = {
     version: bots.version,
     repoUrl: bots.repoUrl,
     accepts: bots.accepts,
+    levels: bots.levels,
 };
 
-// Absent, not null: the wire shape omits a field the bot never declared,
-// so the row nulls are dropped here and never cross a boundary again.
-function declarationView(row: DeclarationColumns): Pick<BotRow, `about` | `version` | `repoUrl` | `accepts`> {
-    const view: Pick<BotRow, `about` | `version` | `repoUrl` | `accepts`> = {};
+// Absent, not null: the wire shape omits a text field or accepts the bot
+// never declared, so the row nulls are dropped here and never cross a
+// boundary again; levels alone read as null until declared.
+function declarationView(row: DeclarationColumns): Pick<BotRow, `about` | `version` | `repoUrl` | `accepts` | `levels`> {
+    const view: Pick<BotRow, `about` | `version` | `repoUrl` | `accepts` | `levels`> = {
+        levels: row.levels === null ? null : levelsSchema.parse(JSON.parse(row.levels)),
+    };
     if (row.about !== null) view.about = row.about;
     if (row.version !== null) view.version = row.version;
     if (row.repoUrl !== null) view.repoUrl = row.repoUrl;
@@ -179,6 +187,7 @@ export function updateBotDeclaration(query: Query, botId: string, changes: Accou
         if (changes.version !== undefined) set.version = clearableText(changes.version);
         if (changes.repoUrl !== undefined) set.repoUrl = clearableText(changes.repoUrl);
         if (changes.accepts !== undefined) set.accepts = JSON.stringify(changes.accepts);
+        if (changes.levels !== undefined) set.levels = changes.levels === null ? null : JSON.stringify(changes.levels);
         const [row] =
             Object.keys(set).length === 0
                 ? tx

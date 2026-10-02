@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { htttxMoveRequestSchema, htttxSideSchema } from './htttx';
 import { provisionalSchema, ratingSchema } from './leaderboard';
+import { levelIdSchema } from './levels';
 import { gameTurnCap, orphanForfeitMs, unlimitedWallCapMs } from './limits';
 
 // One line of the bot event stream, discriminated by `type`; the set of
@@ -166,6 +167,9 @@ export const gameStartEventSchema = z
         openingPlies: openingPliesSchema,
         rated: z.boolean().meta({
             description: `Whether this game moves the bot's own rating: true only against another bot. A game against a player moves only the player's rating, and one against a guest moves none.`,
+        }),
+        level: levelIdSchema.nullable().meta({
+            description: `The declared level the bot plays this game at, by id; null at its default. A bot that no longer declares the level plays its default.`,
         }),
         engine: engineSessionSchema,
     })

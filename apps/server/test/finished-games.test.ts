@@ -202,6 +202,21 @@ describe('GET /api/games/finished', () => {
         expect(await read(`?player=${encodeURIComponent(`Guest k3f9`)}`)).toMatchObject({ status: 404, body: { code: `not_found` } });
     });
 
+    it('lists a game at a bot level other than its default under the level, unrated, with no rating on either seat', async () => {
+        const level = { id: `quick`, label: `quick`, budget: { timeMs: 200 } };
+        const practice = finish(insertGame(query, { userId: id(`ann`), botId: id(`alpha`), userSide: `o`, timeControl: turnClock, opening: opening(1), level }), `o`);
+        const rated = finish(human(`ann`, `alpha`, `o`), `o`);
+        const [newest, older] = (await page(`?player=ann`)).games;
+        expect(newest).toMatchObject({ gameId: rated, rated: true, players: { x: { name: `alpha`, rating: 1500 }, o: { name: `ann`, rating: 1000 } } });
+        expect(newest?.players.x.level).toBeUndefined();
+        expect(older).toMatchObject({
+            gameId: practice,
+            rated: false,
+            players: { x: { name: `alpha`, kind: `bot`, rating: null, provisional: false, level }, o: { name: `ann`, kind: `user`, rating: null } },
+        });
+        expect(older?.players.o.level).toBeUndefined();
+    });
+
     describe('filters', () => {
         let games: Record<string, string>;
 

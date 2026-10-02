@@ -658,6 +658,37 @@
             min-width: 0;
         }
 
+        /* The second line ends before the clock: the clock's mode, which
+           the clock beside it shows, gives way first. */
+        .hud-top-left .hud-meta {
+            min-width: 0;
+            overflow: hidden;
+        }
+
+        .hud-top-left .hud-meta > * {
+            flex: none;
+        }
+
+        .hud-top-left .hud-meta > .hud-mode {
+            flex: 0 1 auto;
+            min-width: 0;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        /* A bot's level takes the mode's room, the drawer still naming the
+           clock; a label too long for what is left ellipsizes last. */
+        .hud-top-left .hud-level ~ .hud-mode {
+            display: none;
+        }
+
+        .hud-top-left .hud-meta > .hud-level {
+            flex: 0 1 auto;
+            min-width: 0;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
         .hud-top-right,
         .hud-bottom-left,
         .hot-edge {
@@ -850,6 +881,14 @@
             min-width: var(--scrub-count-min);
             color: var(--c-text-dim);
             font-size: var(--text-sm);
+        }
+    }
+
+    /* Narrow phones fit the level alone beside the clock; the rundown
+       and the drawer say the game is unrated. */
+    @media (max-width: 24rem) {
+        .hud-top-left .hud-level + .tag {
+            display: none;
         }
     }
 }

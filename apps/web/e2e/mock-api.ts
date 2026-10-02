@@ -29,6 +29,7 @@ import {
     type GameSnapshot,
     type LegalDetails,
     type LegalPage,
+    type Levels,
     type LeaderboardEntry,
     type FinishedGameEntry,
     type FinishedGamesPage,
@@ -87,19 +88,32 @@ export interface World {
     devAccounts: DevAccount[] | null;
 }
 
+// Three strengths, weakest first, the middle one rated, as the alpha-beta example declares them.
+export const strengths: Levels = {
+    default: `standard`,
+    list: [
+        { id: `quick`, label: `quick`, about: `Answers at once; a gentle first opponent.`, budget: { timeMs: 200 } },
+        { id: `standard`, label: `standard`, budget: { nodes: 1_000_000 } },
+        { id: `deep`, label: `deep`, budget: { depthTurns: 8, timeMs: 5_000 }, note: `slow on crowded boards` },
+    ],
+};
+
+// A bot seat at a level other than its default, which shows no rating.
+const atQuick = { id: `quick`, label: `quick`, budget: { timeMs: 200 } } as const;
+
 // Every state a bot in the Play roster can be in:
 // ready at several ratings and clocks, busy at its game cap,
 // one taking turn clocks of 10 to 60 s only, one closed, one offline.
 const full = { turnMs: [5000, 300000], match: true, unlimited: true };
 export const playBots: BotListing[] = [
-    { name: `sealbot`, ownerName: `bruno`, online: true, openForChallenges: true, rating: 1712, provisional: false, liveGames: 4, accepts: { turnMs: [5000, 60000], match: true, unlimited: false } },
-    { name: `hextide`, ownerName: `ana`, online: true, openForChallenges: true, rating: 1690, provisional: false, liveGames: 1, accepts: { turnMs: [5000, 60000], match: true, unlimited: false } },
-    { name: `devbot-b`, ownerName: `devowner-b`, online: true, openForChallenges: true, rating: 1538, provisional: false, liveGames: 0, accepts: full },
-    { name: `devbot-a`, ownerName: `devowner-a`, online: true, openForChallenges: true, rating: 1520, provisional: false, liveGames: 2, accepts: full },
-    { name: `devbot-c`, ownerName: `devowner-c`, online: true, openForChallenges: true, rating: 1514, provisional: false, liveGames: 0, accepts: full },
-    { name: `quietlake`, ownerName: `dmitri`, online: true, openForChallenges: true, rating: 1420, provisional: true, liveGames: 0, accepts: { turnMs: [10000, 60000], match: false, unlimited: false } },
-    { name: `pebble`, ownerName: `ana`, online: true, openForChallenges: false, rating: 1388, provisional: true, liveGames: 0, accepts: { turnMs: [5000, 30000], match: false, unlimited: true } },
-    { name: `lantern`, ownerName: `ana`, online: false, openForChallenges: false, rating: 1500, provisional: true, liveGames: 0 },
+    { name: `sealbot`, ownerName: `bruno`, online: true, openForChallenges: true, rating: 1712, provisional: false, liveGames: 4, levels: null, accepts: { turnMs: [5000, 60000], match: true, unlimited: false } },
+    { name: `hextide`, ownerName: `ana`, online: true, openForChallenges: true, rating: 1690, provisional: false, liveGames: 1, levels: strengths, accepts: { turnMs: [5000, 60000], match: true, unlimited: false } },
+    { name: `devbot-b`, ownerName: `devowner-b`, online: true, openForChallenges: true, rating: 1538, provisional: false, liveGames: 0, levels: null, accepts: full },
+    { name: `devbot-a`, ownerName: `devowner-a`, online: true, openForChallenges: true, rating: 1520, provisional: false, liveGames: 2, levels: null, accepts: full },
+    { name: `devbot-c`, ownerName: `devowner-c`, online: true, openForChallenges: true, rating: 1514, provisional: false, liveGames: 0, levels: null, accepts: full },
+    { name: `quietlake`, ownerName: `dmitri`, online: true, openForChallenges: true, rating: 1420, provisional: true, liveGames: 0, levels: null, accepts: { turnMs: [10000, 60000], match: false, unlimited: false } },
+    { name: `pebble`, ownerName: `ana`, online: true, openForChallenges: false, rating: 1388, provisional: true, liveGames: 0, levels: null, accepts: { turnMs: [5000, 30000], match: false, unlimited: true } },
+    { name: `lantern`, ownerName: `ana`, online: false, openForChallenges: false, rating: 1500, provisional: true, liveGames: 0, levels: null },
 ];
 
 export const signup: Signup = { discord: { username: `mira.hex`, displayName: `Mira` }, suggestedName: `mira-hex`, next: `/connect` };
@@ -139,6 +153,7 @@ export const bots: BotListing[] = [
         rating: 1712,
         provisional: false,
         liveGames: 0,
+        levels: strengths,
         about: `A clean-room HeXO engine with a rotation opener.`,
         version: `0.3.1`,
         repoUrl: `https://github.com/quinn/sealbot`,
@@ -152,6 +167,7 @@ export const bots: BotListing[] = [
         rating: 1690,
         provisional: false,
         liveGames: 0,
+        levels: null,
         version: `2.0.0`,
         accepts: { turnMs: null, match: true, unlimited: true },
     },
@@ -163,6 +179,7 @@ export const bots: BotListing[] = [
         rating: 1461,
         provisional: true,
         liveGames: 0,
+        levels: null,
     },
 ];
 
@@ -176,6 +193,8 @@ const seat = {
     ana: { name: `ana`, rating: 1402, provisional: false, kind: `user` },
     guest: { name: `Guest k3f9`, rating: null, provisional: false, kind: `guest` },
     gone: { name: `deleted player`, rating: 1460, provisional: false, kind: `user`, deleted: true },
+    quietlakeQuick: { name: `quietlake`, rating: null, provisional: false, kind: `bot`, level: atQuick },
+    emberQuick: { name: `ember`, rating: null, provisional: false, kind: `bot`, level: atQuick },
 } as const;
 
 const clocks = [
@@ -247,7 +266,7 @@ export const liveGames: LiveGameEntry[] = (
         [seat.sealbot, seat.driftwood],
         [seat.guest, seat.ember],
         [seat.quietlake, seat.driftwood],
-        [seat.quinn, seat.ember],
+        [seat.quinn, seat.emberQuick],
         [seat.hextide, seat.quietlake],
     ] as const
 ).map(([x, o], index) => {
@@ -258,7 +277,7 @@ export const liveGames: LiveGameEntry[] = (
         players: { x, o },
         timeControl,
         toMove: sideOfPly(cells.length),
-        rated: x.kind !== `guest` && o.kind !== `guest`,
+        rated: [x, o].every((player) => player.kind !== `guest` && !(`level` in player)),
         voided: false,
         cells,
         clock: runningClock(timeControl, index),
@@ -543,6 +562,28 @@ export const games: Record<string, GameSnapshot> = {
         toMove: `o`,
         clock: { mode: `turn`, remainingTurnMs: 28_000 },
     },
+    // quinn against sealbot at a level other than its default, before the first turn.
+    practice: {
+        gameId: `practice`,
+        players: { x: facing(`sealbot`, 1712).x, o: { name: `sealbot`, rating: null, provisional: false, kind: `bot`, level: atQuick } },
+        openingPlies: 5,
+        board: { cells: midCells.slice(0, 5) },
+        timeControl: { mode: `turn`, turnTimeMs: 30_000 },
+        status: `in-progress`,
+        toMove: `o`,
+        clock: { mode: `turn`, remainingTurnMs: 28_000 },
+    },
+    // A long label and name, the top chip's hardest case.
+    'practice-long': {
+        gameId: `practice-long`,
+        players: { x: facing(`sealbot`, 1712).x, o: { name: `quietlake`, rating: null, provisional: false, kind: `bot`, level: { id: `6400`, label: `6400 sims`, budget: { playouts: 6400, timeMs: 5000 } } } },
+        openingPlies: 5,
+        board: { cells: midCells.slice(0, 5) },
+        timeControl: { mode: `turn`, turnTimeMs: 30_000 },
+        status: `in-progress`,
+        toMove: `o`,
+        clock: { mode: `turn`, remainingTurnMs: 28_000 },
+    },
     'fresh-yours': {
         gameId: `fresh-yours`,
         players: facing(`sealbot`, 1712),
@@ -705,6 +746,7 @@ export const recentGames: FinishedGameEntry[] = [
 export const keptNames: FinishedGameEntry[] = [
     { gameId: `gone`, players: { x: seat.sealbot, o: seat.gone }, winner: `x`, reason: `six-in-a-row`, timeControl: { mode: `turn`, turnTimeMs: 30_000 }, openingPlies: 1, turns: 14, finishedAt: finishedAt(1), rated: true, voided: false },
     { gameId: `guest-finished`, players: { x: { ...seat.sealbot, rating: null }, o: seat.guest }, winner: `o`, reason: `surrender`, timeControl: { mode: `turn`, turnTimeMs: 30_000 }, openingPlies: 1, turns: 9, finishedAt: finishedAt(2), rated: false, voided: false },
+    { gameId: `practice-finished`, players: { x: { ...seat.quinn, rating: null }, o: seat.quietlakeQuick }, winner: `x`, reason: `six-in-a-row`, timeControl: { mode: `turn`, turnTimeMs: 30_000 }, openingPlies: 1, turns: 11, finishedAt: finishedAt(2.5), rated: false, voided: false },
     ...recentGames,
 ];
 

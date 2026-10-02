@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState, useSyncExternalStore } from 'react';
-import { nameKeyOf, playMeta, type BotListing, type OpeningPlies, type TimeControl } from '@hexo-arena/contract';
+import { nameKeyOf, playMeta, type BotListing, type Level, type OpeningPlies, type TimeControl } from '@hexo-arena/contract';
 import { fetchBots, fetchTournament, fetchTournaments, limitedFor } from '../api/client';
 import { liveRefreshMs } from '../api/refresh';
 import { BotBadge, Rating } from '../components/player';
@@ -10,7 +10,20 @@ import { useExpectedScore } from '../play/expected';
 import { OpeningRow } from '../play/OpeningRow';
 import { OpponentSheet, RosterList, type PickedBy } from '../play/Roster';
 import { StartArea } from '../play/StartArea';
-import { clockFor, clockFromParam, openingFromParam, playPath, preselect, readinessOf, readPlayed, rosterOf, type Holder } from '../play/setup';
+import { StrengthRow } from '../play/StrengthRow';
+import {
+    clockFor,
+    clockFromParam,
+    levelFor,
+    openingFromParam,
+    playPath,
+    preselect,
+    readinessOf,
+    readPlayed,
+    rosterOf,
+    type Holder,
+    type PickedLevel,
+} from '../play/setup';
 import { Link } from '../router/Link';
 import { routePath } from '../router/route';
 import { subscribe, useRoute } from '../router/use-route';
@@ -81,9 +94,17 @@ async function reservedBots(): Promise<{ bots: ReadonlySet<string>; tournament: 
     }
 }
 
+// A level in the address belongs to the bot the address names.
 function readAsked() {
     const params = new URLSearchParams(window.location.search);
-    return { bot: params.get(`bot`), clock: clockFromParam(params.get(`clock`)), opening: openingFromParam(params.get(`opening`)) };
+    const bot = params.get(`bot`);
+    const level = params.get(`level`);
+    return {
+        bot,
+        clock: clockFromParam(params.get(`clock`)),
+        opening: openingFromParam(params.get(`opening`)),
+        level: bot === null || level === null ? null : { bot, id: level },
+    };
 }
 
 /**
@@ -108,6 +129,7 @@ export function PlayScreen() {
     const [choices, setChoices] = useState(0);
     const [picks, setPicks] = useState<TimeControl | null>(asked.clock);
     const [opening, setOpening] = useState<OpeningPlies>(asked.opening);
+    const [strength, setStrength] = useState<PickedLevel | null>(asked.level);
     const [sheet, setSheet] = useState(false);
     const [visit, setVisit] = useState(0);
 
@@ -126,6 +148,7 @@ export function PlayScreen() {
                 setShown([]);
                 setPicks(next.clock);
                 setOpening(next.opening);
+                setStrength(next.level);
                 setSheet(false);
                 setVisit((count) => count + 1);
             }),
@@ -173,9 +196,11 @@ export function PlayScreen() {
     const notice = gone === null ? null : text.play.errors.not_found(gone);
     // The clock picked stands while the bot takes it; otherwise the bot's default does.
     const clock = bot === null ? null : clockFor(bot, picks, played.clock);
+    // A strength stands for the bot it was picked for, while the bot still offers it; otherwise the default does.
+    const level = bot === null ? null : levelFor(bot, strength);
 
     // The address follows the setup, without a history entry per change.
-    const path = ready ? playPath(bot?.name ?? null, clock, opening) : null;
+    const path = ready ? playPath(bot?.name ?? null, clock, opening, level) : null;
     // A new visit writes it too, for a nav link that left a bare address on the same setup.
     useEffect(() => {
         if (path !== null) window.history.replaceState(window.history.state, ``, path);
@@ -184,8 +209,10 @@ export function PlayScreen() {
     const meta = playMeta(bot?.name);
     useDocumentMeta(route, meta.title, meta.description);
 
+    // A strength belongs to the bot it was picked for; another pick opens on that bot's default.
     function choose(next: BotListing, from: PickedBy) {
         setPicked(next.name);
+        setStrength(null);
         setLost(null);
         setChoices((count) => count + 1);
         if (from === `pointer`) setSheet(false);
@@ -220,9 +247,10 @@ export function PlayScreen() {
                     key={visit}
                     bot={bot}
                     clock={clock}
+                    level={level}
                     last={played.clock}
                     opening={opening}
-                    path={playPath(bot.name, clock, opening)}
+                    path={playPath(bot.name, clock, opening, level)}
                     paused={paused}
                     notice={notice}
                     choices={choices}
@@ -234,6 +262,10 @@ export function PlayScreen() {
                         setChoices((count) => count + 1);
                     }}
                     onAdjust={setPicks}
+                    onLevel={(id) => {
+                        setStrength({ bot: bot.name, id });
+                        setChoices((count) => count + 1);
+                    }}
                     onOpening={(next) => {
                         setOpening(next);
                         setChoices((count) => count + 1);
@@ -292,6 +324,7 @@ function Empty({ kind }: { kind: `none` | `unready` }) {
 function SetupCard({
     bot,
     clock,
+    level,
     last,
     opening,
     path,
@@ -303,12 +336,15 @@ function SetupCard({
     holder,
     onClock,
     onAdjust,
+    onLevel,
     onOpening,
     onChange,
     onRefused,
 }: {
     bot: BotListing;
     clock: TimeControl;
+    // The bot's level picked, null at its default.
+    level: Level | null;
     last: TimeControl | null;
     opening: OpeningPlies;
     // The setup's own address, where a sign-in from the card returns.
@@ -321,11 +357,14 @@ function SetupCard({
     holder: Holder | null;
     onClock: (clock: TimeControl) => void;
     onAdjust: (clock: TimeControl) => void;
+    onLevel: (id: string) => void;
     onOpening: (opening: OpeningPlies) => void;
     onChange: () => void;
     onRefused: () => void;
 }) {
+    // The expected score is the rated one's; practice at another level has none.
     const expected = useExpectedScore(bot.name);
+    const rated = level === null;
     return (
         <div className="play-setup-lift">
             <section className="play-setup" aria-label={text.play.setup}>
@@ -352,16 +391,19 @@ function SetupCard({
                         </button>
                     </div>
                 </div>
-                {expected.kind === `ready` ? <p className="note setup-expected">{text.play.expected(bot.name, text.rundown.score(expected.score))}</p> : null}
+                {rated && expected.kind === `ready` ? <p className="note setup-expected">{text.play.expected(bot.name, text.rundown.score(expected.score))}</p> : null}
                 {/* the line's own words hold its room while the records load, so the clock below never moves */}
-                {expected.kind === `loading` ? (
+                {rated && expected.kind === `loading` ? (
                     <p className="note setup-expected setup-expected-pending" aria-hidden="true">
                         {text.play.expected(bot.name, text.rundown.score(0))}
                     </p>
                 ) : null}
+                {/* practice keeps the line's place, saying why the score is gone, so a pick never moves the row under the pointer */}
+                {level !== null && expected.kind !== `none` ? <p className="note setup-expected">{text.play.practiceScore(level.label)}</p> : null}
                 <ClockPicker bot={bot} clock={clock} last={last} onClock={onClock} onAdjust={onAdjust} />
+                <StrengthRow bot={bot} level={level} onLevel={onLevel} />
                 <OpeningRow opening={opening} onOpening={onOpening} />
-                <StartArea bot={bot} clock={clock} opening={opening} path={path} paused={paused} notice={notice} choices={choices} reads={reads} onRefused={onRefused} reserved={reserved} holder={holder} />
+                <StartArea bot={bot} clock={clock} level={level} opening={opening} path={path} paused={paused} notice={notice} choices={choices} reads={reads} onRefused={onRefused} reserved={reserved} holder={holder} />
             </section>
         </div>
     );

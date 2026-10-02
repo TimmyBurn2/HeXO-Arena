@@ -13,6 +13,7 @@ const sealbot = {
     rating: 1712,
     provisional: false,
     liveGames: 0,
+    levels: null,
     about: `A clean-room HeXO engine with a rotation opener.`,
     version: `0.3.1`,
     repoUrl: `https://github.com/quinn/sealbot`,
@@ -155,6 +156,36 @@ describe('BotScreen', () => {
         expect(within(row).queryByRole(`link`)).toBe(null);
     });
 
+    it('name itself at a level other than its default by name and level in its games, tagged unrated, the budget in the name\'s title', async () => {
+        const practice = {
+            gameId: `g-practice`,
+            players: {
+                x: { name: `sealbot`, rating: null, provisional: false, kind: `bot`, level: { id: `quick`, label: `quick`, budget: { timeMs: 200 } } },
+                o: { name: `quinn`, rating: null, provisional: false, kind: `user` },
+            },
+            winner: `o`,
+            reason: `surrender`,
+            timeControl: { mode: `unlimited` },
+            openingPlies: 1,
+            turns: 9,
+            finishedAt: new Date(Date.now() - 3_600_000).toISOString(),
+            rated: false,
+            voided: false,
+        };
+        vi.stubGlobal(
+            `fetch`,
+            vi.fn((url: string) => {
+                const body = url.startsWith(`/api/games/finished`) ? { games: [practice], page: 1, pages: 1, total: 1 } : url === `/api/games` ? [] : [sealbot];
+                return Promise.resolve(new Response(JSON.stringify(body)));
+            }),
+        );
+        render(<BotScreen name="sealbot" />);
+        const row = await screen.findByRole(`link`, { name: /sealbot @ quick/u });
+        expect(row.querySelector(`.game-row-name`)?.textContent).toBe(`sealbot @ quick`);
+        expect(row.querySelector(`.game-row-name`)?.getAttribute(`title`)).toBe(`0.2 s a turn`);
+        expect(row.querySelector(`.game-row-result`)?.textContent).toBe(`quinn won; sealbot @ quick resignedunrated`);
+    });
+
     it('head the page with the bot\'s name in its plate while the bot list loads, where the loaded page holds it', async () => {
         let answer: (response: Response) => void = () => undefined;
         vi.stubGlobal(`fetch`, vi.fn(() => new Promise<Response>((resolve) => { answer = resolve; })));
@@ -203,6 +234,32 @@ describe('BotScreen', () => {
         expect(document.querySelector(`meta[name="description"]`)?.getAttribute(`content`)).toBe(
             `HeXO bot by quinn, rated 1712, online and open for challenges. A clean-room HeXO engine with a rotation opener`,
         );
+    });
+
+    it('list its strengths weakest first with what each spends, the rated one tagged, and none for a bot without them', async () => {
+        const levels = {
+            default: `standard`,
+            list: [
+                { id: `quick`, label: `quick`, budget: { timeMs: 200 } },
+                { id: `standard`, label: `standard`, about: `The one it is rated at.`, budget: { nodes: 1_000_000 } },
+                { id: `deep`, label: `deep`, budget: { depthTurns: 8, timeMs: 5000 }, note: `slow on big boards` },
+            ],
+        };
+        stubDirectory([{ ...sealbot, levels }]);
+        render(<BotScreen name="sealbot" />);
+        const card = await screen.findByRole(`region`, { name: `Strength` });
+        const items = within(card).getAllByRole(`listitem`);
+        expect(items.map((item) => [...item.querySelectorAll(`p`)].map((line) => line.textContent))).toEqual([
+            [`quick`, `0.2 s a turn`],
+            [`standardrated`, `1M nodes`, `The one it is rated at.`],
+            [`deep`, `depth 8 turns, 5 s a turn; slow on big boards`],
+        ]);
+        expect(within(card).getByText(`Weakest first; any strength but the rated one plays unrated practice.`)).toBeTruthy();
+        cleanup();
+        stubDirectory([sealbot]);
+        render(<BotScreen name="sealbot" />);
+        await screen.findByRole(`region`, { name: `Accepts` });
+        expect(screen.queryByRole(`region`, { name: `Strength` })).toBe(null);
     });
 
     it('lead to the report form about the bot from the foot of its page', async () => {

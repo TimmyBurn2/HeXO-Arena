@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState, type MouseEvent, type ReactNode } from 'react';
-import { humanGameCooldownSeconds, type BotListing, type OpeningPlies, type TimeControl } from '@hexo-arena/contract';
+import { humanGameCooldownSeconds, type BotListing, type Level, type OpeningPlies, type TimeControl } from '@hexo-arena/contract';
 import { ApiError, createGame, limitedFor } from '../api/client';
 import { DiscordButton } from '../components/DiscordButton';
+import { seatName } from '../components/player';
 import { WaitText } from '../components/wait';
 import { useLegalSlots } from '../legal/links';
 import { meStore, useMe } from '../me';
@@ -25,22 +26,23 @@ type Outcome =
     | { kind: `wait`; until: number; seconds: number; line: (seconds: number) => string }
     | { kind: `stale`; was: `guest` | `user` };
 
-const botSideCodes = [`bot_busy`, `clock_not_accepted`, `not_open`, `delisted`, `not_found`] as const;
+const botSideCodes = [`bot_busy`, `clock_not_accepted`, `unknown_level`, `not_open`, `delisted`, `not_found`] as const;
 type BotSideCode = (typeof botSideCodes)[number];
 
 function isBotSide(code: string | null): code is BotSideCode {
     return botSideCodes.some((known) => known === code);
 }
 
-// A refusal on the bot's side: the bot and clock it was for, and the list reads done when it came.
+// A refusal on the bot's side: the bot, clock, and level it was for, why, and the list reads done when it came.
 // It stands until a read after the one it asks for shows that bot ready.
 interface Refused {
     bot: string;
     setup: string;
+    code: BotSideCode;
     reads: number;
 }
 
-const setupOf = (bot: BotListing, clock: TimeControl) => `${bot.name}:${JSON.stringify(clock)}`;
+const setupOf = (bot: BotListing, clock: TimeControl, level: Level | null) => `${bot.name}:${JSON.stringify(clock)}:${level?.id ?? ``}`;
 
 // A second click of a double click never lands on a control that appeared under the pointer;
 // keys click with no detail and pass.
@@ -56,6 +58,7 @@ function secondClick(event: MouseEvent): boolean {
 export function StartArea({
     bot,
     clock,
+    level,
     opening,
     path,
     paused,
@@ -71,6 +74,8 @@ export function StartArea({
     reserved: ReadonlySet<string>;
     holder: Holder | null;
     clock: TimeControl;
+    // The bot's level picked, null at its default.
+    level: Level | null;
     opening: OpeningPlies;
     path: string;
     paused: boolean;
@@ -117,7 +122,7 @@ export function StartArea({
     // A line about the bot goes once a later read shows that setup's bot ready,
     // skipping the read the refusal asks for, which may lag the server's own count.
     const refused = outcome.kind === `line` ? outcome.refused : null;
-    const moved = refused !== null && refused.setup !== setupOf(bot, clock);
+    const moved = refused !== null && refused.setup !== setupOf(bot, clock, level);
     if (refused !== null && !moved && reads > refused.reads + 1 && readinessOf(bot, reserved) === `ready`) setOutcome({ kind: `idle` });
 
     const visitor = me.status === `loading` ? null : me.me;
@@ -153,7 +158,7 @@ export function StartArea({
             }
         }
         try {
-            const snapshot = await createGame({ bot: bot.name, timeControl: clock, openingPlies: opening });
+            const snapshot = await createGame({ bot: bot.name, timeControl: clock, openingPlies: opening, ...(level === null ? {} : { level: level.id }) });
             writePlayed(bot.name, clock);
             navigate(`/game/${encodeURIComponent(snapshot.gameId)}`);
         } catch (cause) {
@@ -202,13 +207,13 @@ export function StartArea({
                     ? errors[code]()
                     : code === `bot_busy` && reserved.has(bot.name)
                       ? text.play.unavailable.tournament(bot.name, held)
-                      : code === `bot_busy` || code === `clock_not_accepted` || code === `not_open` || code === `delisted` || code === `not_found` || code === `own_bot`
+                      : code === `bot_busy` || code === `clock_not_accepted` || code === `unknown_level` || code === `not_open` || code === `delisted` || code === `not_found` || code === `own_bot`
                       ? errors[code](bot.name)
                       : text.play.failed;
             setOutcome({
                 kind: `line`,
                 text: line,
-                refused: isBotSide(code) ? { bot: bot.name, setup: setupOf(bot, clock), reads: readsNow.current } : null,
+                refused: isBotSide(code) ? { bot: bot.name, setup: setupOf(bot, clock, level), code, reads: readsNow.current } : null,
             });
         }
     }
@@ -224,13 +229,14 @@ export function StartArea({
             : text.play.unavailable[state](bot.name);
     const cooling = outcome.kind === `wait` ? Math.max(1, Math.ceil((outcome.until - now) / 1000)) : null;
     const blocked = paused || unavailable !== null || cooling !== null || moved || outcome.kind === `sending` || (stale && visitor !== null);
-    // Where the list kept the bot and moved its clock, the line says so, whatever the refusal was.
+    // Where the list kept the bot and moved its clock, the line says so, whatever the refusal was;
+    // a level the bot no longer offers moves the setup to its default, which that refusal's own line says.
     const outcomeLine =
         outcome.kind === `capped`
             ? text.play.errors.human_busy()
             : outcome.kind !== `line`
               ? null
-              : moved && refused.bot === bot.name
+              : moved && refused.bot === bot.name && refused.code !== `unknown_level`
                 ? text.play.errors.clock_not_accepted(bot.name)
                 : outcome.text;
     // A refusal the page then explains, by the bot's state or its absence from the list, is said once.
@@ -261,7 +267,7 @@ export function StartArea({
                     {outcome.was === `guest` ? text.play.guestStale : text.play.stale}
                 </p>
             ) : null}
-            {visitor === null && !stale && !paused ? <p className="note">{text.play.signedOutLead}</p> : null}
+            {visitor === null && !stale && !paused ? <p className="note">{level === null ? text.play.signedOutLead : text.play.signedOutPractice}</p> : null}
             <div role="status" className="start-lines">
                 {outcome.kind === `sending` ? <p className="sr-only">{text.play.starting}</p> : null}
                 {lines.map((line) => (
@@ -274,7 +280,7 @@ export function StartArea({
                         {visitor.liveGames.map((game) => (
                             <li key={game.gameId}>
                                 <Link to={`/game/${encodeURIComponent(game.gameId)}`}>
-                                    {text.play.yourGame(game.players[game.players.x.name === visitor.name ? `o` : `x`].name)}
+                                    {text.play.yourGame(seatName(game.players[game.players.x.name === visitor.name ? `o` : `x`]))}
                                 </Link>
                             </li>
                         ))}
@@ -299,7 +305,7 @@ export function StartArea({
                 <>
                     <div className="start-actions">{primary(text.play.start, false)}</div>
                     <p className="note">
-                        {paused ? text.play.paused : visitor.kind === `user` ? text.play.rated : text.play.guestNote(visitor.name)}
+                        {paused ? text.play.paused : visitor.kind === `guest` ? text.play.guestNote(visitor.name) : level === null ? text.play.rated : text.play.practice}
                     </p>
                 </>
             )}

@@ -1,6 +1,6 @@
 import type { BotListing, FinishedGameEntry, GamePlayer, LeaderboardEntry, Side, TournamentList } from '@hexo-arena/contract';
 import { clockText, resultSentence } from '@hexo-arena/contract';
-import { BotBadge, OpenTag, PlayerName, PresenceDot, Rating, Swatch } from '../components/player';
+import { BotBadge, OpenTag, PlayerName, PresenceDot, Rating, seatLevelFacts, seatName, Swatch } from '../components/player';
 import { Rungs } from '../components/Rungs';
 import { LiveGameGrid } from '../live/LiveGameCard';
 import { LiveGameRows } from '../live/LiveGameRow';
@@ -166,7 +166,7 @@ export function RecentResults({ games, failed, now, retry }: { games: readonly F
                                 <RecentSeat side="o" player={game.players.o} />
                             </span>
                             <span className="recent-meta">
-                                <span>{resultSentence(game, { x: game.players.x.name, o: game.players.o.name })}</span>
+                                <span>{resultSentence(game, { x: seatName(game.players.x), o: seatName(game.players.o) })}</span>
                                 <span>{text.time.ago(Math.max(0, Math.floor((now - Date.parse(game.finishedAt)) / 1000)))}</span>
                             </span>
                         </Link>
@@ -182,7 +182,9 @@ function RecentSeat({ side, player }: { side: Side; player: GamePlayer }) {
         <span className="live-seat">
             <span className="live-seat-who">
                 <Swatch side={side} />
-                <span className={player.deleted === true ? `live-name deleted-name` : `live-name`}>{player.name}</span>
+                <span className={player.deleted === true ? `live-name deleted-name` : `live-name`} title={seatLevelFacts(player)}>
+                    {seatName(player)}
+                </span>
             </span>
             {player.kind === `bot` ? <BotBadge /> : null}
         </span>

@@ -1,14 +1,16 @@
-import type { FinishReason, Side, StreamEvent } from '@hexo-arena/contract';
+import type { FinishReason, Levels, Side, StreamEvent } from '@hexo-arena/contract';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { ApiError, type ArenaClient } from './client';
+import { paceAt } from './levels';
 import { playGame, type EngineSession, type Strategy } from './player';
 
 const streamRetryMs = 2_000;
 
-/** A bot held online: its stream open for challenges, each game it is dealt played by its strategy. */
+/** A bot held online: its stream open for challenges, each game it is dealt played by its strategy, at the level it names when it declares levels. */
 export interface HostedBot {
     readonly name: string;
     readonly strategy: Strategy;
+    readonly levels?: Levels;
     token: string;
 }
 
@@ -78,7 +80,7 @@ export function hostBots(bots: readonly HostedBot[], options: HostOptions): BotH
                     url: client.engineUrl(event.engine.socketUrl, event.engine.token),
                     strategy: bot.strategy,
                     random: options.random,
-                    thinkMs: options.thinkMs,
+                    thinkMs: bot.levels === undefined ? options.thinkMs : paceAt(bot.levels, event.level, options.thinkMs),
                     log: (line) => {
                         log(`${bot.name} ${event.gameId}: ${line}`);
                     },
@@ -87,7 +89,7 @@ export function hostBots(bots: readonly HostedBot[], options: HostOptions): BotH
                     },
                 });
                 games.set(event.gameId, session);
-                log(`${bot.name} plays ${event.opponent.name} as ${event.side} in ${event.gameId}`);
+                log(`${bot.name} plays ${event.opponent.name} as ${event.side} in ${event.gameId}${event.level === null ? `` : ` at ${event.level}`}`);
                 return;
             }
             case `gameFinish`: {

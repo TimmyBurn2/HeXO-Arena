@@ -254,7 +254,7 @@ function registerSharedComponents(registry: OpenAPIRegistry, surface: `site` | `
         badRequest: response(`BadRequest`, `The request fails validation.`, badRequestError),
         gameOver: response(`GameOver`, `The game is already finished (game_over).`, gameOverError),
         paused: registry.registerComponent('responses', 'Paused', {
-            description: `The site is paused: no new stream, challenge, or game starts, and open streams and live games continue. Retry after Retry-After.`,
+            description: `The site is paused: no new stream, challenge, or game starts, and open streams and live games continue. A bot with a live game, or with a place in a running tournament, still opens its stream. Retry after Retry-After.`,
             headers: { 'Retry-After': retryAfter },
             content: json(pausedError),
         }).ref,
@@ -666,7 +666,7 @@ function registerSiteSurface(registry: OpenAPIRegistry, shared: SharedComponents
                 content: { 'application/json': { schema: gameSnapshotSchema } },
             },
             400: {
-                description: `Validation failed (bad_request), the caller is at its live-game cap (human_busy), or the bot is not open (not_open), excludes the clock (clock_not_accepted), or is at its game cap or playing a tournament (bot_busy).`,
+                description: `Validation failed (bad_request), the caller is at its live-game cap (human_busy), or the bot is not open (not_open), excludes the clock (clock_not_accepted), declares no such level (unknown_level), or is at its game cap or playing a tournament (bot_busy).`,
                 content: {
                     'application/json': {
                         schema: gameCreateError,
@@ -676,7 +676,7 @@ function registerSiteSurface(registry: OpenAPIRegistry, shared: SharedComponents
             401: shared.unauthorized,
             403: shared.gameCreateForbidden,
             429: {
-                description: `The caller is inside the creation cooldown (game_cooldown); or a signed-in caller has played this bot ${String(pairDailyCap)} times this UTC day (daily_pair_cap), until 00:00 UTC; Retry-After says how long either has left; or too many requests (rate_limited).`,
+                description: `The caller is inside the creation cooldown (game_cooldown); or a signed-in caller has played this bot at its default level ${String(pairDailyCap)} times this UTC day (daily_pair_cap), until 00:00 UTC; Retry-After says how long either has left; or too many requests (rate_limited).`,
                 headers: { 'Retry-After': shared.retryAfter },
                 content: { 'application/json': { schema: gameLimitError } },
             },
@@ -1051,11 +1051,14 @@ function registerBotSurface(registry: OpenAPIRegistry, shared: SharedComponents)
     registry.registerPath({
         method: 'patch',
         path: botAccountPath,
-        summary: `Declare the bot's about, version, repo, and what it accepts.`,
+        summary: `Declare the bot's about, version, repo, what it accepts, and its levels.`,
         operationId: 'updateAccount',
         tags: ['Account'],
         security: [{ bearerAuth: [] }],
-        description: `Each present field replaces the stored one; an empty string clears a text field, and accepts is replaced whole. An unknown key answers 400. A challenge or game outside accepts answers clock_not_accepted.`,
+        description: [
+            `Each present field replaces the stored one; an empty string clears a text field, accepts and levels are replaced whole, and levels null clears them. An unknown key answers 400. A challenge or game outside accepts answers clock_not_accepted.`,
+            `A player on the website picks a declared level, which gameStart.level names; challenges and tournaments play the default.`,
+        ].join(` `),
         request: {
             body: {
                 required: true,

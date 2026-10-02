@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { namePattern, type Accepts, type Side } from '@hexo-arena/contract';
+import { levelFacts, nameAtLevel, namePattern, type Accepts, type GamePlayer, type Side } from '@hexo-arena/contract';
 import { Link } from '../router/Link';
 import { text } from '../text';
 import { cellPoints, cellSize, hexPoints } from '../board/geometry';
@@ -74,6 +74,22 @@ export function PlayerName({ name, kind, deleted = false }: { name: string; kind
             {name}
         </Link>
     );
+}
+
+/** A seat's name as a game shows it: the plain name, or `name @ label` for a bot at a level other than its default. */
+export function seatName(player: Pick<GamePlayer, `name` | `level`>): string {
+    return nameAtLevel(player.name, player.level);
+}
+
+/** A seat's level budget and note on one line, a title where no second line fits; undefined at the default level or one that states neither. */
+export function seatLevelFacts(player: Pick<GamePlayer, `level`>): string | undefined {
+    const facts = player.level === undefined ? `` : levelFacts(player.level);
+    return facts === `` ? undefined : facts;
+}
+
+/** Whether a game rates nobody for who sat in it: a guest seat, or a bot at a level other than its default. */
+export function seatsRateNobody(players: Readonly<Record<Side, Pick<GamePlayer, `kind` | `level`>>>): boolean {
+    return [players.x, players.o].some((player) => player.kind === `guest` || player.level !== undefined);
 }
 
 /**

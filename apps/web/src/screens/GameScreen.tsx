@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type RefObject } from 'react';
-import { clockText, gameMeta, turnsOnBoard, type FinishedGamesRecord, type GameHeadline, type GameSnapshot } from '@hexo-arena/contract';
+import { clockText, gameMeta, levelFacts, turnsOnBoard, type FinishedGamesRecord, type GameHeadline, type GameSnapshot } from '@hexo-arena/contract';
 import { fetchFinishedGames } from '../api/client';
-import { BotBadge, PlayerName, Swatch } from '../components/player';
+import { BotBadge, PlayerName, seatName, seatsRateNobody, Swatch } from '../components/player';
 import { useWait, WaitText } from '../components/wait';
 import { gamesPathOf } from '../games/filters';
 import { Link } from '../router/Link';
@@ -20,7 +20,7 @@ import { useRundown } from '../game/rundown';
 import { useDrawer } from '../game/use-drawer';
 import { selfName, useMe } from '../me';
 import { useGame, type GameLink, type GameSend, type Refusal } from '../game/use-game';
-import { feedOf, matchName, otherSide, positionOf, resultLine, stonesOf, winLineOf } from '../game/snapshot-views';
+import { feedOf, matchName, otherSide, positionOf, resultLine, seatNames, stonesOf, winLineOf } from '../game/snapshot-views';
 import { NotFoundScreen } from './NotFoundScreen';
 import './GameScreen.css';
 
@@ -328,7 +328,7 @@ function GameView({ snapshot, send, link }: { snapshot: GameSnapshot; send: Game
                 <Swatch side={bottom} />
                 {you === null ? (
                     <span className="hud-name">
-                        <span className={snapshot.players[bottom].deleted === true ? `deleted-name` : undefined}>{snapshot.players[bottom].name}</span>
+                        <span className={snapshot.players[bottom].deleted === true ? `deleted-name` : undefined}>{seatName(snapshot.players[bottom])}</span>
                         {snapshot.players[bottom].kind === `bot` ? <BotBadge /> : null}
                     </span>
                 ) : (
@@ -473,15 +473,21 @@ function factsOf(snapshot: GameSnapshot): (readonly [string, string])[] {
     const facts: (readonly [string, string])[] =
         snapshot.clock === undefined ? [] : [[text.drawer.clock, text.drawer.clockValue(clockText(snapshot.clock.mode))]];
     facts.push([text.drawer.opening, text.drawer.openingStones(snapshot.openingPlies)]);
+    for (const player of [snapshot.players.x, snapshot.players.o]) {
+        if (player.level !== undefined) facts.push([text.drawer.strength, text.drawer.strengthValue(player.level.label, levelFacts(player.level))]);
+    }
     const voided = snapshot.status === `finished` && snapshot.voided;
+    const guest = snapshot.players.x.kind === `guest` || snapshot.players.o.kind === `guest`;
+    const practice = !guest && seatsRateNobody(snapshot.players);
     if (snapshot.you === undefined) {
-        const guest = snapshot.players.x.kind === `guest` || snapshot.players.o.kind === `guest`;
         const unratedGuest = snapshot.status === `finished` ? text.drawer.ratedNoGuestPlayed : text.drawer.ratedNoGuest;
-        facts.push([text.drawer.rated, guest ? unratedGuest : voided ? text.drawer.ratedNoVoided : text.drawer.ratedYes]);
+        facts.push([text.drawer.rated, guest ? unratedGuest : practice ? text.drawer.ratedNoPractice : voided ? text.drawer.ratedNoVoided : text.drawer.ratedYes]);
     } else {
         facts.push([text.drawer.yourSide, snapshot.you]);
-        // A seated player's own game needs no Rated row until the operator voids it.
-        if (voided) facts.push([text.drawer.rated, text.drawer.ratedNoVoided]);
+        // A seated player's own game needs no Rated row until the operator
+        // voids it, unless a bot level made it practice.
+        if (practice) facts.push([text.drawer.rated, text.drawer.ratedNoPractice]);
+        else if (voided) facts.push([text.drawer.rated, text.drawer.ratedNoVoided]);
     }
     if (snapshot.status === `finished`) facts.push([text.drawer.result, resultLine(snapshot)]);
     return facts;
@@ -492,7 +498,7 @@ function factsOf(snapshot: GameSnapshot): (readonly [string, string])[] {
 function headingOf(snapshot: GameSnapshot): string {
     const you = snapshot.you;
     if (you === undefined) return matchName(snapshot);
-    const opponent = snapshot.players[otherSide(you)].name;
+    const opponent = seatName(snapshot.players[otherSide(you)]);
     return you === `x` ? text.game.vs(text.game.you, opponent) : text.game.vs(opponent, text.game.you);
 }
 
@@ -501,15 +507,15 @@ function idleLabelOf(snapshot: GameSnapshot): string {
         snapshot.status === `finished`
             ? text.drawer.boardFinished
             : snapshot.you === undefined
-              ? text.drawer.boardToMove(snapshot.players[snapshot.toMove].name)
-              : text.drawer.boardWaiting(snapshot.players[snapshot.toMove].name);
+              ? text.drawer.boardToMove(seatName(snapshot.players[snapshot.toMove]))
+              : text.drawer.boardWaiting(seatName(snapshot.players[snapshot.toMove]));
     return snapshot.you === undefined ? text.drawer.boardWatching(matchName(snapshot), state) : state;
 }
 
 // The game as its preview reads it: names only, then the live state or
 // the result; the snapshot names the clock's mode, not its settings.
 function headlineOf(snapshot: GameSnapshot): GameHeadline {
-    const names = { x: snapshot.players.x.name, o: snapshot.players.o.name };
+    const names = seatNames(snapshot);
     return snapshot.status === `finished`
         ? { status: `finished`, names, winner: snapshot.winner, reason: snapshot.reason, turns: turnsOnBoard(snapshot.board.cells.length) }
         : { status: `live`, names, toMove: snapshot.toMove, timeControl: snapshot.timeControl };

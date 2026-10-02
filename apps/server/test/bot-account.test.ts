@@ -44,8 +44,19 @@ async function patch(
     return { statusCode: response.statusCode, body: response.json() };
 }
 
-// An unrated bot sits at the bot seed, provisional until it has played.
-const seed = { rating: 1500, provisional: true };
+// An unrated bot sits at the bot seed, provisional until it has played,
+// and has declared no levels.
+const seed = { rating: 1500, provisional: true, levels: null };
+
+// The owner's alpha-beta engine, as the Bot API readme declares it.
+const levels = {
+    default: `standard`,
+    list: [
+        { id: `quick`, label: `quick`, budget: { timeMs: 200 } },
+        { id: `standard`, label: `standard`, about: `the rated strength`, budget: { nodes: 1_000_000 } },
+        { id: `deep`, label: `deep`, budget: { depthTurns: 8 }, note: `slow on big boards` },
+    ],
+};
 
 describe('GET /api/bot/account', () => {
     it('reads the seed rating and the declaration as stored', async () => {
@@ -75,7 +86,7 @@ describe('GET /api/bot/account', () => {
             url: botAccountPath,
             headers: { authorization: `Bearer ${token}` },
         });
-        expect(response.json()).toEqual({ name: `Rated`, rating: 1623, provisional: false });
+        expect(response.json()).toEqual({ name: `Rated`, rating: 1623, provisional: false, levels: null });
         await app.close();
     });
 
@@ -137,6 +148,42 @@ describe('PATCH /api/bot/account', () => {
         await app.close();
     });
 
+    it('declares levels weakest first, reads them back, and clears them with null', async () => {
+        const { app } = await createTestApp();
+        const owner = await devLogin(app, `owner`);
+        const token = await mintBotToken(app, owner, `Leveled`);
+        const declared = await patch(app, token, { levels });
+        expect(declared.statusCode).toBe(200);
+        expect(declared.body).toEqual({ name: `Leveled`, ...seed, levels });
+        const read = await app.inject({ method: 'GET', url: botAccountPath, headers: { authorization: `Bearer ${token}` } });
+        expect(read.json()).toEqual({ name: `Leveled`, ...seed, levels });
+        expect((await patch(app, token, { about: `still leveled` })).body).toEqual({ name: `Leveled`, ...seed, about: `still leveled`, levels });
+        expect((await patch(app, token, { levels: null })).body).toEqual({ name: `Leveled`, ...seed, about: `still leveled` });
+        await app.close();
+    });
+
+    it('cleans about and version rather than refusing them, storing the cleaned text', async () => {
+        const { app } = await createTestApp();
+        const owner = await devLogin(app, `owner`);
+        const token = await mintBotToken(app, owner, `Messy`);
+        const result = await patch(app, token, { about: `line one\nline two\u202e\u200b, bell\u0007`, version: `\u2066 1.0\t` });
+        expect(result.statusCode).toBe(200);
+        expect(result.body).toEqual({ name: `Messy`, ...seed, about: `line one line two, bell`, version: `1.0` });
+        const listed = await app.inject({ method: 'GET', url: botsPath });
+        expect(listed.json()).toMatchObject([{ name: `Messy`, about: `line one line two, bell`, version: `1.0` }]);
+        await app.close();
+    });
+
+    it('replaces levels wholesale', async () => {
+        const { app } = await createTestApp();
+        const owner = await devLogin(app, `owner`);
+        const token = await mintBotToken(app, owner, `Relevel`);
+        await patch(app, token, { levels });
+        const two = { default: `b`, list: [{ id: `a`, label: `weak` }, { id: `b`, label: `strong` }] };
+        expect((await patch(app, token, { levels: two })).body).toEqual({ name: `Relevel`, ...seed, levels: two });
+        await app.close();
+    });
+
     it('replaces accepts wholesale', async () => {
         const { app } = await createTestApp();
         const owner = await devLogin(app, `owner`);
@@ -170,9 +217,12 @@ describe('PATCH /api/bot/account', () => {
         [`accepts with an inverted window`, { accepts: { turnMs: [30_000, 5_000], match: true, unlimited: true } }],
         [`accepts with a three-number window`, { accepts: { turnMs: [1, 2, 3], match: true, unlimited: true } }],
         [`an unknown field`, { nope: true }],
-        [`about with a right-to-left override`, { about: `evil\u202egnp.exe` }],
-        [`about with a control character`, { about: `bell\u0007` }],
-        [`version with an isolate`, { version: `1.0\u2066` }],
+        [`a single level`, { levels: { default: `a`, list: [{ id: `a`, label: `a` }] } }],
+        [`a default outside the list`, { levels: { default: `c`, list: [{ id: `a`, label: `a` }, { id: `b`, label: `b` }] } }],
+        [`a level id twice`, { levels: { default: `a`, list: [{ id: `a`, label: `a` }, { id: `a`, label: `b` }] } }],
+        [`a level label with a right-to-left override`, { levels: { default: `a`, list: [{ id: `a`, label: `\u202equick` }, { id: `b`, label: `b` }] } }],
+        [`a budget key outside the closed set`, { levels: { default: `a`, list: [{ id: `a`, label: `a`, budget: { movetimeMs: 200 } }, { id: `b`, label: `b` }] } }],
+        [`an empty budget`, { levels: { default: `a`, list: [{ id: `a`, label: `a`, budget: {} }, { id: `b`, label: `b` }] } }],
     ])('rejects %j with bad_request', async (_name, payload) => {
         const { app } = await createTestApp();
         const owner = await devLogin(app, `owner`);
@@ -192,6 +242,7 @@ describe('PATCH /api/bot/account', () => {
             version: `9.9.9`,
             repoUrl: `https://example.com/visible`,
             accepts: { turnMs: null, match: true, unlimited: true },
+            levels,
         });
         const response = await app.inject({ method: 'GET', url: botsPath });
         expect(response.statusCode).toBe(200);
@@ -208,6 +259,7 @@ describe('PATCH /api/bot/account', () => {
                 version: `9.9.9`,
                 repoUrl: `https://example.com/visible`,
                 accepts: { turnMs: null, match: true, unlimited: true },
+                levels,
             },
         ]);
         await app.close();
@@ -219,7 +271,7 @@ describe('PATCH /api/bot/account', () => {
         await mintBotToken(app, owner, `Quiet`);
         const response = await app.inject({ method: 'GET', url: botsPath });
         expect(response.json()).toEqual([
-            { name: `Quiet`, ownerName: `owner`, online: false, openForChallenges: false, rating: 1500, provisional: true, liveGames: 0 },
+            { name: `Quiet`, ownerName: `owner`, online: false, openForChallenges: false, rating: 1500, provisional: true, liveGames: 0, levels: null },
         ]);
         await app.close();
     });

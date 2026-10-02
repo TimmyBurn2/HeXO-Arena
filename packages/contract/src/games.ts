@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import type { Accepts } from './api';
 import { axialCoordSchema } from './board';
+import { levelIdSchema, seatLevelSchema } from './levels';
 import { deletedMarkSchema, nameSyntaxSchema } from './names';
 import {
     finishReasonSchema,
@@ -40,6 +41,9 @@ export const createGameRequestSchema = z.object({
     bot: nameSyntaxSchema,
     timeControl: timeControlSchema,
     openingPlies: openingPliesSchema.default(defaultHumanOpeningPlies).meta({ id: `OpeningPlies`, default: defaultHumanOpeningPlies }),
+    level: levelIdSchema
+        .optional()
+        .meta({ description: `One of the bot's declared levels, its default when absent; at any other level the game is unrated and counts toward no daily cap.` }),
 });
 export type CreateGameRequest = z.infer<typeof createGameRequestSchema>;
 
@@ -65,10 +69,15 @@ export type GameCell = z.infer<typeof gameCellSchema>;
 export const gameBoardSchema = z.object({ cells: z.array(gameCellSchema) }).meta({ id: `GameBoard` });
 
 // Bots and users share one name namespace, so the kind is what tells a
-// watcher which seat is the bot; a guest seat has no rating.
+// watcher which seat is the bot; a guest seat has no rating, and neither
+// has a bot at a level other than its default, since its rating belongs
+// to the default.
 export const gamePlayerSchema = seatPlayerSchema
-    .extend({ kind: z.enum([`bot`, `user`, `guest`]), deleted: deletedMarkSchema.optional() })
-    .meta({ id: `GamePlayer` });
+    .extend({ kind: z.enum([`bot`, `user`, `guest`]), deleted: deletedMarkSchema.optional(), level: seatLevelSchema.optional() })
+    .meta({
+        id: `GamePlayer`,
+        description: `level is present on a bot seat played at a level other than the bot's default, whose rating is then null.`,
+    });
 export type GamePlayer = z.infer<typeof gamePlayerSchema>;
 
 export const gamePlayersSchema = z.object({ x: gamePlayerSchema, o: gamePlayerSchema }).meta({ id: `GamePlayers` });
@@ -129,7 +138,7 @@ export const liveGameEntrySchema = z
     })
     .meta({
         id: `LiveGameEntry`,
-        description: `A game in progress, its board and clock as its snapshot states them; a game with a guest seat is unrated.`,
+        description: `A game in progress, its board and clock as its snapshot states them; a game with a guest seat, or a bot at a level other than its default, is unrated.`,
     });
 export type LiveGameEntry = z.infer<typeof liveGameEntrySchema>;
 
@@ -141,7 +150,7 @@ export const humanMoveRequestSchema = z.object({
 export type HumanMoveRequest = z.infer<typeof humanMoveRequestSchema>;
 
 // Caller-side bounds on the human: the live-game cap, then bot-side gates.
-export const gameCreateErrorCodes = [`human_busy`, `not_open`, `clock_not_accepted`, `bot_busy`] as const;
+export const gameCreateErrorCodes = [`human_busy`, `not_open`, `clock_not_accepted`, `unknown_level`, `bot_busy`] as const;
 
 // The creation cooldown, so a browser cannot farm the create route, and
 // the daily pair cap one human and one bot share; waiting lifts either,

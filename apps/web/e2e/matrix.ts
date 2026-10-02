@@ -59,6 +59,13 @@ export interface Shot {
 
 const signedOut = world({ me: null });
 const playing = (overrides: Partial<World> = {}) => world({ bots: playBots, ...overrides });
+// The top chip carries a level beside the clock, down to the narrowest phone.
+const levelChipViewports: readonly Viewport[] = [
+    { name: `laptop`, width: 1280, height: 900 },
+    { name: `phone`, width: 390, height: 844 },
+    { name: `narrow`, width: 360, height: 740 },
+    { name: `small`, width: 320, height: 640 },
+];
 const phones: readonly Viewport[] = [
     { name: `phone`, width: 390, height: 844 },
     { name: `narrow`, width: 360, height: 740 },
@@ -350,6 +357,16 @@ export const shots: readonly Shot[] = [
     { name: `game-your-move`, path: `/game/running`, world: world(), ready: `svg polygon.cell`, framed: false, board: true },
     { name: `game-waiting`, path: `/game/waiting`, world: world(), ready: `svg polygon.cell`, framed: false, board: true },
     { name: `game-rundown`, path: `/game/fresh`, world: world(), ready: `.hud-rundown .rundown-expected`, framed: false, board: true },
+    ...[`practice`, `practice-long`].map(
+        (game): Shot => ({
+            name: `game-${game}`,
+            path: `/game/${game}`,
+            world: world(),
+            ready: `.hud-rundown .rundown-form`,
+            framed: false,
+            viewports: levelChipViewports,
+        }),
+    ),
     {
         name: `game-rundown-drawer`,
         path: `/game/waiting`,
@@ -581,6 +598,7 @@ export const shots: readonly Shot[] = [
     { name: `play-named-closed`, path: `/play?bot=pebble`, world: playing(), ready: `.play-setup`, framed: true },
     { name: `play-named-busy`, path: `/play?bot=sealbot`, world: playing(), ready: `.play-setup`, framed: true },
     { name: `play-limited`, path: `/play?bot=quietlake`, world: playing(), ready: `.play-setup`, framed: true },
+    { name: `play-strength`, path: `/play?bot=hextide&level=deep`, world: playing(), ready: `.strength-chips`, framed: true },
     {
         name: `play-custom-turn`,
         path: `/play?bot=devbot-c`,

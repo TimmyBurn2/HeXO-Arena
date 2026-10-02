@@ -6,9 +6,9 @@ import { ProfileScreen } from '../src/screens/ProfileScreen';
 import { meStore } from '../src/me';
 
 const roster = [
-    { name: `sealbot`, ownerName: `quinn`, online: true, openForChallenges: true, rating: 1712, provisional: false, liveGames: 0 },
-    { name: `quietlake`, ownerName: `quinn`, online: false, openForChallenges: false, rating: 1461, provisional: true, liveGames: 0 },
-    { name: `hextide`, ownerName: `ana`, online: true, openForChallenges: false, rating: 1690, provisional: false, liveGames: 0 },
+    { name: `sealbot`, ownerName: `quinn`, online: true, openForChallenges: true, rating: 1712, provisional: false, liveGames: 0, levels: null },
+    { name: `quietlake`, ownerName: `quinn`, online: false, openForChallenges: false, rating: 1461, provisional: true, liveGames: 0, levels: null },
+    { name: `hextide`, ownerName: `ana`, online: true, openForChallenges: false, rating: 1690, provisional: false, liveGames: 0, levels: null },
 ];
 
 function serve(me: Me, posts: string[] = []): void {

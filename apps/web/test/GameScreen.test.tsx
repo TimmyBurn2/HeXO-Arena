@@ -839,6 +839,43 @@ describe('GameScreen for a watcher', () => {
         expect(screen.getByText(`No, a guest is playing`, { selector: `.facts dd` })).toBeTruthy();
     });
 
+    it('name a bot at a level other than its default by name and level, without its rating, and say the game is practice', async () => {
+        const quick = { id: `quick`, label: `quick`, budget: { timeMs: 200 } };
+        const practice = { ...watched(runningSnapshot), players: { ...players, x: { name: `hextide`, rating: null, provisional: false, kind: `bot` as const, level: quick } } } as GameSnapshot;
+        stubGame(practice);
+        render(<GameScreen gameId="g-run" />);
+        await screen.findByRole(`heading`, { name: `hextide @ quick vs quinn` });
+        expect(document.title).toBe(`hextide @ quick vs quinn - HeXO Arena`);
+        // A watcher reads the game from x, so the bot's chip is the bottom one.
+        const chip = document.querySelector(`.hud-bottom-left`);
+        // The name keeps its line whole; the level stands in the line under it.
+        expect(chip?.querySelector(`.hud-name`)?.textContent).toBe(`hextideBOT`);
+        expect([...(chip?.querySelector(`.hud-meta`)?.children ?? [])].map((part) => part.textContent)).toEqual([`@ quick`, `unrated`]);
+        expect(chip?.querySelector(`.hud-level`)?.getAttribute(`title`)).toBe(`0.2 s a turn`);
+        await openWithM();
+        fireEvent.click(screen.getByRole(`tab`, { name: `Game` }));
+        expect(screen.getByText(`quick: 0.2 s a turn`, { selector: `.facts dd` })).toBeTruthy();
+        expect(screen.getByText(`No, practice`, { selector: `.facts dd` })).toBeTruthy();
+    });
+
+    it('say practice in the rundown, with the level in place of the bot\'s rating and no expected score', async () => {
+        const deep = { id: `deep`, label: `deep`, budget: { depthTurns: 8 } };
+        const practice = { ...freshSnapshot, players: { ...players, x: { name: `hextide`, rating: null, provisional: false, kind: `bot` as const, level: deep } } } as GameSnapshot;
+        stubRundown(watched(practice));
+        render(<GameScreen gameId="g-new" />);
+        const card = await screen.findByRole(`region`, { name: `Rundown` });
+        await within(card).findByText(`deviation 96`);
+        expect(card.querySelector(`.rundown-practice`)?.textContent).toBe(`practice, unrated`);
+        const [bot, human] = [...card.querySelectorAll(`.rundown-side`)];
+        expect(bot?.querySelector(`.rundown-name`)?.textContent).toBe(`hextide @ deepBOT`);
+        expect(bot?.querySelector(`.rundown-at`)?.textContent).toBe(`@ deep`);
+        expect(bot?.querySelector(`.rundown-level`)?.textContent).toBe(`depth 8 turns`);
+        expect(bot?.querySelector(`.rundown-rating`)).toBe(null);
+        expect(bot?.textContent).toContain(`unrated`);
+        expect(human?.querySelector(`.rundown-rating`)?.textContent).toBe(`1503?`);
+        expect(card.querySelectorAll(`.rundown-expected`)).toHaveLength(0);
+    });
+
     it('say a finished guest game was unrated because a guest played', async () => {
         const guestGame = {
             ...watched(finishedSnapshot),

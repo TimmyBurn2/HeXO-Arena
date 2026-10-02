@@ -18,6 +18,7 @@ const bot = (name: string, rating: number, extra: Partial<BotListing> = {}): Bot
     rating,
     provisional: false,
     liveGames: 0,
+    levels: null,
     accepts: full,
     ...extra,
 });
@@ -30,6 +31,17 @@ const roster: BotListing[] = [
     bot(`pebble`, 1388, { openForChallenges: false }),
     bot(`lantern`, 1500, { online: false, openForChallenges: false }),
 ];
+
+// hextide offers three strengths, the middle one rated.
+const levels = {
+    default: `standard`,
+    list: [
+        { id: `quick`, label: `quick`, budget: { timeMs: 200 } },
+        { id: `standard`, label: `standard`, budget: { nodes: 1_000_000 } },
+        { id: `deep`, label: `deep`, about: `Slow and careful.`, budget: { depthTurns: 8 } },
+    ],
+};
+const withLevels = roster.map((listed) => (listed.name === `hextide` ? { ...listed, levels } : listed));
 
 const quinn: Me = { kind: `user`, name: `quinn`, rating: 1503, provisional: false, discord: null, liveGames: [] };
 const snapshot = {
@@ -1205,5 +1217,78 @@ describe('PlayScreen', () => {
         });
         expect(await screen.findByText(`hextide is no longer listed; pick another bot`)).toBeTruthy();
         expect(title()).toBe(`Play devbot-c`);
+    });
+
+    it('offer a bot\'s strengths beside the clock, the rated default picked, and what the picked one spends under the row', async () => {
+        window.history.replaceState(null, ``, `/play?bot=hextide`);
+        const served = serve({ bots: withLevels, records: { quinn: { rating: 1503, deviation: 60 }, hextide: { rating: 1690, deviation: 52 } } });
+        render(<PlayScreen />);
+        const card = await ready();
+        const group = within(card).getByRole(`radiogroup`, { name: `Strength` });
+        expect(within(group).getAllByRole(`radio`).map((chip) => chip.closest(`label`)?.textContent)).toEqual([`quick`, `standardrated`, `deep`]);
+        expect(within(group).getByRole(`radio`, { name: `standard rated` })).toHaveProperty(`checked`, true);
+        expect(within(card).getByText(`1M nodes`)).toBeTruthy();
+        expect(within(card).getByText(`Rated; sides are drawn at random`)).toBeTruthy();
+        expect(await within(card).findByText(/^Your expected score against hextide/u)).toBeTruthy();
+        fireEvent.click(within(group).getByRole(`radio`, { name: `deep` }));
+        expect(within(card).getByText(`depth 8 turns`)).toBeTruthy();
+        expect(within(card).getByText(`Slow and careful.`)).toBeTruthy();
+        expect(within(card).getByText(`Practice, unrated; sides are drawn at random`)).toBeTruthy();
+        expect(within(card).queryByText(/^Your expected score/u)).toBe(null);
+        // The note keeps the score's place, so the row under the pointer stays put.
+        expect(within(card).getByText(`No expected score at deep; practice is unrated`).className).toBe(`note setup-expected`);
+        expect(window.location.search).toBe(`?bot=hextide&clock=t10&level=deep`);
+        fireEvent.click(screen.getByRole(`button`, { name: `Start game` }), { detail: 1 });
+        await waitFor(() => {
+            expect(served.posts).toHaveLength(1);
+        });
+        expect(served.posts[0]?.body).toEqual({ bot: `hextide`, timeControl: { mode: `turn`, turnTimeMs: 10_000 }, openingPlies: 1, level: `deep` });
+    });
+
+    it('show no strength row for a bot that declares none, and send no level for the default', async () => {
+        const served = serve({ bots: withLevels });
+        render(<PlayScreen />);
+        const card = await ready();
+        expect(title()).toBe(`Play devbot-c`);
+        expect(within(card).queryByRole(`radiogroup`, { name: `Strength` })).toBe(null);
+        fireEvent.click(screen.getByRole(`radio`, { name: /^hextide/u }));
+        fireEvent.click(screen.getByRole(`button`, { name: `Start game` }), { detail: 1 });
+        await waitFor(() => {
+            expect(served.posts).toHaveLength(1);
+        });
+        expect(served.posts[0]?.body).toEqual({ bot: `hextide`, timeControl: { mode: `turn`, turnTimeMs: 10_000 }, openingPlies: 1 });
+    });
+
+    it('open on the strength a link names for its bot, and leave it behind with that bot', async () => {
+        window.history.replaceState(null, ``, `/play?bot=hextide&level=quick`);
+        serve({ bots: withLevels });
+        render(<PlayScreen />);
+        const card = await ready();
+        expect(within(card).getByRole(`radio`, { name: `quick` })).toHaveProperty(`checked`, true);
+        expect(within(card).getByText(`0.2 s a turn`)).toBeTruthy();
+        fireEvent.click(screen.getByRole(`radio`, { name: /^devbot-c/u }));
+        expect(window.location.search).toBe(`?bot=devbot-c&clock=t10`);
+        fireEvent.click(screen.getByRole(`radio`, { name: /^hextide/u }));
+        expect(within(card).getByRole(`radio`, { name: `standard rated` })).toHaveProperty(`checked`, true);
+    });
+
+    it('tell a visitor at a practice strength that signing in keeps it unrated', async () => {
+        window.history.replaceState(null, ``, `/play?bot=hextide&level=quick`);
+        serve({ bots: withLevels, me: null });
+        render(<PlayScreen />);
+        const card = await ready();
+        expect(within(card).getByText(`Play as a guest or sign in; at this strength either is unrated practice.`)).toBeTruthy();
+        expect(within(card).queryByText(/No expected score/u)).toBe(null);
+        fireEvent.click(within(card).getByRole(`radio`, { name: `standard rated` }));
+        expect(within(card).getByText(`Play as a guest, unrated, or sign in for a rated game.`)).toBeTruthy();
+    });
+
+    it('say so when the server refuses a strength the bot no longer offers', async () => {
+        window.history.replaceState(null, ``, `/play?bot=hextide&level=deep`);
+        serve({ bots: withLevels, start: refused(400, `unknown_level`) });
+        render(<PlayScreen />);
+        const card = await ready();
+        fireEvent.click(screen.getByRole(`button`, { name: `Start game` }), { detail: 1 });
+        expect(await within(card).findByText(`hextide no longer offers that strength; pick another`)).toBeTruthy();
     });
 });

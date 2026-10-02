@@ -1,5 +1,5 @@
 import { resultSentence, type BotListing, type FinishedGameEntry, type LiveGameEntry, type Me } from '@hexo-arena/contract';
-import { Rating } from '../components/player';
+import { Rating, seatName } from '../components/player';
 import { rosterOf } from '../play/setup';
 import { Link } from '../router/Link';
 import { text } from '../text';
@@ -59,9 +59,9 @@ export function PlayPanel({ me, roster, yours, latest }: {
                 <p className="play-panel-last">
                     {text.home.lastGame(
                         (words) => <Link to={`/game/${encodeURIComponent(latest.gameId)}`}>{words}</Link>,
-                        latest.players.x.name,
-                        latest.players.o.name,
-                        resultSentence(latest, { x: latest.players.x.name, o: latest.players.o.name }),
+                        seatName(latest.players.x),
+                        seatName(latest.players.o),
+                        resultSentence(latest, { x: seatName(latest.players.x), o: seatName(latest.players.o) }),
                     )}
                 </p>
             )}
@@ -84,9 +84,9 @@ function YourGames({ games, me }: { games: readonly LiveGameEntry[]; me: Me | un
                     return (
                         <li key={game.gameId}>
                             <Link to={`/game/${encodeURIComponent(game.gameId)}`} className="your-game">
-                                <span className="your-game-who">{text.home.against(opponent.name)}</span>
+                                <span className="your-game-who">{text.home.against(seatName(opponent))}</span>
                                 <span className={game.toMove === yourSide ? `your-game-turn yours` : `your-game-turn`}>
-                                    {game.toMove === yourSide ? text.home.yourTurn : text.home.toMove(opponent.name)}
+                                    {game.toMove === yourSide ? text.home.yourTurn : text.home.toMove(seatName(opponent))}
                                 </span>
                             </Link>
                         </li>

@@ -125,6 +125,25 @@ describe('stored ratings', () => {
         expect(storedRatings(query).size).toBe(0);
     });
 
+    it('rates a game at a bot level other than its default for nobody, and widens a deviation from the rated game before it, live as folded', () => {
+        vi.useFakeTimers({ toFake: [`Date`] });
+        vi.setSystemTime(new Date(`2026-10-01T00:00:00Z`));
+        const [userId = ``] = humans;
+        const [botId = ``] = bots;
+        recordFinish(query, humanGame(userId, botId, `x`), { winner: `x`, reason: `six-in-a-row` });
+        vi.setSystemTime(Date.now() + 10 * 86_400_000);
+        const practice = insertGame(query, { userId, botId, userSide: `x`, timeControl: unlimited, opening: origin, level: { id: `quick`, label: `quick` } });
+        recordFinish(query, practice, { winner: `x`, reason: `six-in-a-row` });
+        const afterPractice = readRating(query, { kind: `human`, id: userId });
+        vi.setSystemTime(Date.now() + 10 * 86_400_000);
+        recordFinish(query, humanGame(userId, botId, `x`), { winner: `x`, reason: `six-in-a-row` });
+        expect(finishedGameLog(query).map((game) => game.id)).not.toContain(practice);
+        expect(sqlite.prepare(`select count(*) as n from game_ratings where game_id = ?`).get(practice)).toEqual({ n: 0 });
+        expect(readRating(query, { kind: `human`, id: userId })).not.toEqual(afterPractice);
+        expect(foldRatings(finishedGameLog(query))).toEqual(storedRatings(query));
+        expect(recomputeRatings(query)).toBe(2);
+    });
+
     // Games finish out of creation order, as concurrent games do, hours or
     // weeks apart, and some are voided while live; the live path must widen
     // each deviation exactly as the fold does.

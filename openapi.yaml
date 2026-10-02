@@ -95,7 +95,8 @@ components:
           schema:
             $ref: "#/components/schemas/PausedError"
       description: "The site is paused: no new stream, challenge, or game starts, and open streams and
-        live games continue. Retry after Retry-After."
+        live games continue. A bot with a live game, or with a place in a running tournament, still
+        opens its stream. Retry after Retry-After."
       headers:
         Retry-After:
           $ref: "#/components/headers/RetryAfter"
@@ -150,12 +151,15 @@ components:
         - unlimited
       type: object
     Account:
+      description: levels is null until the bot declares them.
       properties:
         about:
           maxLength: 280
           type: string
         accepts:
           $ref: "#/components/schemas/Accepts"
+        levels:
+          $ref: "#/components/schemas/Levels"
         name:
           type: string
         provisional:
@@ -177,15 +181,22 @@ components:
         - name
         - rating
         - provisional
+        - levels
       type: object
     AccountDeclaration:
       additionalProperties: false
+      description: "Text is cleaned, never refused for what it holds: a line break or tab becomes a space,
+        other control and format characters (bidirectional marks, zero-width characters, soft
+        hyphens) are dropped, whitespace runs collapse, and the ends are trimmed. A level's about
+        and note are cleaned the same way."
       properties:
         about:
-          maxLength: 280
+          description: At most 280 characters once cleaned; empty clears it.
           type: string
         accepts:
           $ref: "#/components/schemas/Accepts"
+        levels:
+          $ref: "#/components/schemas/Levels"
         repoUrl:
           anyOf:
             - format: uri
@@ -195,7 +206,7 @@ components:
                 - ""
               type: string
         version:
-          maxLength: 64
+          description: At most 64 characters once cleaned; empty clears it.
           type: string
       type: object
     AccountExport:
@@ -245,6 +256,8 @@ components:
                 type: string
               id:
                 type: string
+              levels:
+                $ref: "#/components/schemas/Levels"
               name:
                 type: string
               rating:
@@ -263,6 +276,7 @@ components:
               - version
               - repoUrl
               - accepts
+              - levels
               - delistedAt
               - deletedAt
               - rating
@@ -619,13 +633,15 @@ components:
         - code
       type: object
     BotListing:
-      description: The declaration fields are absent until the bot declares them.
+      description: The declaration fields are absent until the bot declares them, and levels is null.
       properties:
         about:
           maxLength: 280
           type: string
         accepts:
           $ref: "#/components/schemas/Accepts"
+        levels:
+          $ref: "#/components/schemas/Levels"
         liveGames:
           description: The games the bot is playing now; at 4 it takes no new one.
           maximum: 4
@@ -665,6 +681,7 @@ components:
         - rating
         - provisional
         - liveGames
+        - levels
       type: object
     BotNameError:
       properties:
@@ -901,6 +918,8 @@ components:
             - user
             - guest
           type: string
+        level:
+          $ref: "#/components/schemas/SeatLevel"
         name:
           type: string
         yours:
@@ -941,7 +960,8 @@ components:
         players:
           $ref: "#/components/schemas/GamePlayers"
         rated:
-          description: False for a game without a winner, a voided one, and a guest's.
+          description: False for a game without a winner, a voided one, a guest's, and one with a bot at a
+            level other than its default.
           type: boolean
         reason:
           $ref: "#/components/schemas/FinishReason"
@@ -1135,6 +1155,7 @@ components:
             - human_busy
             - not_open
             - clock_not_accepted
+            - unknown_level
             - bot_busy
           type: string
         error:
@@ -1268,6 +1289,8 @@ components:
         - code
       type: object
     GamePlayer:
+      description: level is present on a bot seat played at a level other than the bot's default, whose
+        rating is then null.
       properties:
         deleted:
           $ref: "#/components/schemas/Deleted"
@@ -1277,6 +1300,8 @@ components:
             - user
             - guest
           type: string
+        level:
+          $ref: "#/components/schemas/SeatLevel"
         name:
           type: string
         provisional:
@@ -1399,6 +1424,12 @@ components:
           $ref: "#/components/schemas/EngineSession"
         gameId:
           type: string
+        level:
+          description: The declared level the bot plays this game at, by id; null at its default. A bot that
+            no longer declares the level plays its default.
+          nullable: true
+          pattern: ^[a-z0-9-]{1,16}$
+          type: string
         openingPlies:
           $ref: "#/components/schemas/OpeningPlies"
         opponent:
@@ -1426,6 +1457,7 @@ components:
         - timeControl
         - openingPlies
         - rated
+        - level
         - engine
       type: object
     GameTournament:
@@ -1619,9 +1651,83 @@ components:
         - lastPlayedAt
         - kind
       type: object
+    Level:
+      additionalProperties: false
+      properties:
+        about:
+          description: At most 120 characters once cleaned.
+          type: string
+        budget:
+          $ref: "#/components/schemas/LevelBudget"
+        id:
+          $ref: "#/components/schemas/LevelId"
+        label:
+          description: The name a player picks the level by, 24 printable ASCII characters at most, starting
+            and ending on a visible one.
+          pattern: ^[!-~](?:[ -~]{0,22}[!-~])?$
+          type: string
+        note:
+          description: Anything about the level the budget keys cannot say, at most 80 characters once cleaned.
+          type: string
+      required:
+        - id
+        - label
+      type: object
+    LevelBudget:
+      additionalProperties: false
+      description: What a level spends per turn, as the bot states it, for display only; at least one key.
+      minProperties: 1
+      properties:
+        depthTurns:
+          description: Search depth in HeXO turns, not stones.
+          maximum: 64
+          minimum: 1
+          type: integer
+        nodes:
+          description: Search nodes per turn.
+          maximum: 1000000000000
+          minimum: 1
+          type: integer
+        playouts:
+          description: Simulations or visits per turn.
+          maximum: 1000000000
+          minimum: 1
+          type: integer
+        timeMs:
+          description: Think time per turn, in milliseconds.
+          maximum: 600000
+          minimum: 1
+          type: integer
+      type: object
+    LevelId:
+      description: "A level's id: lowercase letters, digits, and hyphens, unique in the bot's list."
+      pattern: ^[a-z0-9-]{1,16}$
+      type: string
+    Levels:
+      additionalProperties: false
+      description: The strengths a player on the website may pick, 2 to 8, weakest first, each id unique;
+        default names one of them. A game at any level but the default is unrated for both sides.
+        Null until the bot declares levels, and once it clears them.
+      nullable: true
+      properties:
+        default:
+          description: "The level the bot plays unless a player picks another: the one its rating belongs to."
+          pattern: ^[a-z0-9-]{1,16}$
+          type: string
+        list:
+          description: Weakest first.
+          items:
+            $ref: "#/components/schemas/Level"
+          maxItems: 8
+          minItems: 2
+          type: array
+      required:
+        - default
+        - list
+      type: object
     LiveGameEntry:
       description: A game in progress, its board and clock as its snapshot states them; a game with a
-        guest seat is unrated.
+        guest seat, or a bot at a level other than its default, is unrated.
       properties:
         cells:
           description: Every stone in ply order, the opening included.
@@ -2113,6 +2219,25 @@ components:
         - name
         - rating
         - provisional
+      type: object
+    SeatLevel:
+      additionalProperties: false
+      description: The level a bot plays this game at, as it was declared when the game began.
+      properties:
+        budget:
+          $ref: "#/components/schemas/LevelBudget"
+        id:
+          $ref: "#/components/schemas/LevelId"
+        label:
+          pattern: ^[!-~](?:[ -~]{0,22}[!-~])?$
+          type: string
+        note:
+          maxLength: 80
+          minLength: 1
+          type: string
+      required:
+        - id
+        - label
       type: object
     SignInFailure:
       description: Why a Discord sign-in did not finish.
@@ -2737,7 +2862,7 @@ components:
       type: apiKey
 info:
   title: HeXO Arena
-  version: 0.37.0
+  version: 0.38.0
 openapi: 3.0.3
 paths:
   /api/auth/discord/callback:
@@ -2871,9 +2996,11 @@ paths:
       tags:
         - Account
     patch:
-      description: Each present field replaces the stored one; an empty string clears a text field, and
-        accepts is replaced whole. An unknown key answers 400. A challenge or game outside accepts
-        answers clock_not_accepted.
+      description: Each present field replaces the stored one; an empty string clears a text field,
+        accepts and levels are replaced whole, and levels null clears them. An unknown key answers
+        400. A challenge or game outside accepts answers clock_not_accepted. A player on the website
+        picks a declared level, which gameStart.level names; challenges and tournaments play the
+        default.
       operationId: updateAccount
       requestBody:
         content:
@@ -2900,7 +3027,7 @@ paths:
           $ref: "#/components/responses/RateLimited"
       security:
         - bearerAuth: []
-      summary: Declare the bot's about, version, repo, and what it accepts.
+      summary: Declare the bot's about, version, repo, what it accepts, and its levels.
       tags:
         - Account
   /api/bot/challenge/{challengeId}/accept:
@@ -3381,6 +3508,11 @@ paths:
                 bot:
                   pattern: ^[A-Za-z][A-Za-z0-9_-]{0,28}[A-Za-z0-9]$
                   type: string
+                level:
+                  description: One of the bot's declared levels, its default when absent; at any other level the game
+                    is unrated and counts toward no daily cap.
+                  pattern: ^[a-z0-9-]{1,16}$
+                  type: string
                 openingPlies:
                   allOf:
                     - $ref: "#/components/schemas/OpeningPlies"
@@ -3405,8 +3537,8 @@ paths:
               schema:
                 $ref: "#/components/schemas/GameCreateError"
           description: Validation failed (bad_request), the caller is at its live-game cap (human_busy), or
-            the bot is not open (not_open), excludes the clock (clock_not_accepted), or is at its
-            game cap or playing a tournament (bot_busy).
+            the bot is not open (not_open), excludes the clock (clock_not_accepted), declares no
+            such level (unknown_level), or is at its game cap or playing a tournament (bot_busy).
         "401":
           $ref: "#/components/responses/Unauthorized"
         "403":
@@ -3419,8 +3551,8 @@ paths:
               schema:
                 $ref: "#/components/schemas/GameLimitError"
           description: The caller is inside the creation cooldown (game_cooldown); or a signed-in caller has
-            played this bot 20 times this UTC day (daily_pair_cap), until 00:00 UTC; Retry-After
-            says how long either has left; or too many requests (rate_limited).
+            played this bot at its default level 20 times this UTC day (daily_pair_cap), until 00:00
+            UTC; Retry-After says how long either has left; or too many requests (rate_limited).
           headers:
             Retry-After:
               $ref: "#/components/headers/RetryAfter"

@@ -1,5 +1,6 @@
 import {
     acceptsSchema,
+    levelsSchema,
     challengeStatusSchema,
     firstPlayerSchema,
     nameKeyOf,
@@ -23,8 +24,13 @@ const isoOf = (seconds: number) => new Date(seconds * 1000).toISOString().replac
 const isoOrNull = (seconds: number | null) => (seconds === null ? null : isoOf(seconds));
 
 function seatsOf(record: GameRecord, own: (botId: string) => boolean, userId: string): AccountExport[`games`][number][`players`] {
-    const seated = (side: Side, first: AccountExport[`games`][number][`players`][`x`], second: typeof first) =>
-        side === `x` ? { x: first, o: second } : { x: second, o: first };
+    type Exported = AccountExport[`games`][number][`players`][`x`];
+    const leveled = (side: Side, seat: Exported): Exported => {
+        const level = record.levels[side];
+        return level === null ? seat : { ...seat, level };
+    };
+    const seated = (side: Side, first: Exported, second: Exported) =>
+        side === `x` ? { x: leveled(`x`, first), o: leveled(`o`, second) } : { x: leveled(`x`, second), o: leveled(`o`, first) };
     if (record.kind === `human`) {
         return seated(record.userSide, { name: record.user.name, kind: `user`, yours: record.userId === userId }, { name: record.bot.name, kind: `bot`, yours: own(record.botId) });
     }
@@ -119,6 +125,7 @@ export function accountExport(query: Query, userId: string, nowMs: number): Acco
             version: bot.version,
             repoUrl: bot.repoUrl,
             accepts: bot.accepts === null ? null : acceptsSchema.parse(JSON.parse(bot.accepts)),
+            levels: bot.levels === null ? null : levelsSchema.parse(JSON.parse(bot.levels)),
             delistedAt: isoOrNull(bot.delistedAt),
             deletedAt: isoOrNull(bot.deletedAt),
             rating: ratingOf(ratings.botId, bot.id),

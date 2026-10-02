@@ -16,6 +16,7 @@ function listing(name: string, rating: number, online = true): BotListing {
         rating,
         provisional: true,
         liveGames: 0,
+        levels: null,
         accepts: { turnMs: [5_000, 60_000], match: true, unlimited: true },
     };
 }

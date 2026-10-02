@@ -19,6 +19,7 @@ import {
     type FinishedGamesRecord,
     type GamePlayer,
     type OpeningPlies,
+    type SeatLevel,
     type Side,
 } from '@hexo-arena/contract';
 import { and, desc, eq, inArray, isNotNull, isNull, lt, lte, sql, type SQL, type SQLWrapper } from 'drizzle-orm';
@@ -26,7 +27,9 @@ import { alias } from 'drizzle-orm/sqlite-core';
 import type { FastifyInstance } from 'fastify';
 import type { Query } from './db';
 import { bots, gameRatings, games, moves, users } from './db/schema';
+import { seatLevelsOf } from './game-store';
 import type { PlayerRef } from './rating';
+import { ratesSomebody } from './rating-store';
 import { shownBot, shownUser, type ShownName } from './shown-names';
 
 // Distinct queries remembered at once; past it the oldest leaves first.
@@ -241,12 +244,14 @@ const destBots = alias(bots, `dest_bot`);
 const xRatings = alias(gameRatings, `x_rating`);
 const oRatings = alias(gameRatings, `o_rating`);
 
-function seatOf(shown: ShownName, kind: GamePlayer[`kind`], before: number | null, deviation: number | null): GamePlayer {
+// A game that rates nobody keeps no rating rows, so its seats read none.
+function seatOf(shown: ShownName, kind: GamePlayer[`kind`], before: number | null, deviation: number | null, level: SeatLevel | null): GamePlayer {
     return {
         ...shown,
         kind,
         rating: before === null ? null : Math.round(before),
         provisional: deviation !== null && deviation > rankableDeviation,
+        ...(level === null ? {} : { level }),
     };
 }
 
@@ -266,6 +271,8 @@ function entriesOf(query: Query, ids: readonly string[]): FinishedGameEntry[] {
             destName: destBots.name,
             destDeletedAt: destBots.deletedAt,
             challengerSide: games.challengerSide,
+            xLevel: games.xLevel,
+            oLevel: games.oLevel,
             timeControl: games.timeControl,
             openingCells: games.openingCells,
             winner: games.winner,
@@ -315,11 +322,12 @@ function entriesOf(query: Query, ids: readonly string[]): FinishedGameEntry[] {
                   : null;
         if (seats === null || row.finishedAt === null) throw new Error(`stored game row seats nobody or never finished: ${row.id}`);
         const openingPlies = boardCellSchema.array().parse(JSON.parse(row.openingCells)).length;
+        const levels = seatLevelsOf(row);
         return {
             gameId: row.id,
             players: {
-                x: seatOf(seats.x.shown, seats.x.kind, row.xBefore, row.xDeviation),
-                o: seatOf(seats.o.shown, seats.o.kind, row.oBefore, row.oDeviation),
+                x: seatOf(seats.x.shown, seats.x.kind, row.xBefore, row.xDeviation, levels.x),
+                o: seatOf(seats.o.shown, seats.o.kind, row.oBefore, row.oDeviation, levels.o),
             },
             winner,
             reason,
@@ -328,7 +336,7 @@ function entriesOf(query: Query, ids: readonly string[]): FinishedGameEntry[] {
             openingPlies: openingPlies as OpeningPlies,
             turns: turnsOnBoard(openingPlies) + row.moves,
             finishedAt: new Date(row.finishedAt * 1000).toISOString().replace(/\.\d{3}Z$/u, `Z`),
-            rated: winner !== null && row.voidedAt === null && row.guestName === null,
+            rated: winner !== null && row.voidedAt === null && ratesSomebody(row),
             voided: row.voidedAt !== null,
         };
     });

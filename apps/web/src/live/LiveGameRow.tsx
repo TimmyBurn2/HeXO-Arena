@@ -1,5 +1,5 @@
 import { clockText, type GamePlayer, type LiveGameEntry, type Side } from '@hexo-arena/contract';
-import { BotBadge, Swatch } from '../components/player';
+import { BotBadge, seatLevelFacts, seatName, Swatch } from '../components/player';
 import { Link } from '../router/Link';
 import { text } from '../text';
 import './LiveGameRow.css';
@@ -31,7 +31,7 @@ function LiveGameRow({ entry }: { entry: LiveGameEntry }) {
             <span className="live-meta">
                 {entry.rated ? null : <span className="tag muted">{text.ladder.live.unrated}</span>}
                 <span>{clockText(entry.timeControl)}</span>
-                <span>{text.ladder.live.toMove(entry.players[entry.toMove].name)}</span>
+                <span>{text.ladder.live.toMove(seatName(entry.players[entry.toMove]))}</span>
             </span>
         </Link>
     );
@@ -42,7 +42,9 @@ function LiveSeat({ side, player }: { side: Side; player: GamePlayer }) {
         <span className="live-seat">
             <span className="live-seat-who">
                 <Swatch side={side} />
-                <span className="live-name">{player.name}</span>
+                <span className="live-name" title={seatLevelFacts(player)}>
+                    {seatName(player)}
+                </span>
             </span>
             {player.kind === `bot` ? <BotBadge /> : null}
         </span>

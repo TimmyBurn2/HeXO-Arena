@@ -92,6 +92,7 @@ export function registerBotApi(app: FastifyInstance, deps: BotApiDeps): void {
                 ...(row.version !== undefined && { version: row.version }),
                 ...(row.repoUrl !== undefined && { repoUrl: row.repoUrl }),
                 ...(row.accepts !== undefined && { accepts: row.accepts }),
+                levels: row.levels,
             }));
         return reply.code(200).send(botListingSchema.array().parse(listed));
     });
