@@ -1,6 +1,6 @@
 # Impressum / Legal notice
 
-Last updated 1 October 2026
+Last updated 2 October 2026
 
 ## Provider
 
@@ -21,5 +21,5 @@ Write in English or German.
 
 ## Reporting content
 
-Report unlawful content or abuse to [{{operator.email}}](mailto:{{operator.email}});
+Report unlawful content or abuse with the [report form](/report), or to [{{operator.email}}](mailto:{{operator.email}});
 [Reporting](/legal/terms#reporting) in the Terms of use says what to include.

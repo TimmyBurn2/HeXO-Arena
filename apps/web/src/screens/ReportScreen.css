@@ -1,0 +1,62 @@
+@layer screens {
+    .report-lead {
+        max-width: var(--measure);
+    }
+
+    .report-form {
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-5);
+        max-width: var(--measure);
+        margin-top: var(--space-5);
+    }
+
+    .report-field {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+        gap: var(--space-2);
+        min-width: 0;
+        margin: 0;
+        padding: 0;
+        border: none;
+    }
+
+    .report-field .note {
+        margin: 0;
+    }
+
+    .report-field input[type='text'],
+    .report-field input[type='email'],
+    .report-field textarea {
+        align-self: stretch;
+    }
+
+    .report-field legend {
+        padding: 0;
+        margin-bottom: var(--space-2);
+    }
+
+    /* The statement reads in full, wrapping beside its box. */
+    .report-good-faith {
+        align-items: flex-start;
+        color: var(--c-text);
+        font-size: var(--text-base);
+    }
+
+    .report-good-faith input {
+        margin-top: var(--space-half);
+    }
+
+    .report-contact .field-label {
+        flex-basis: auto;
+    }
+
+    .report-form .card-actions {
+        margin: 0;
+    }
+
+    .report-sent {
+        max-width: var(--measure);
+    }
+}

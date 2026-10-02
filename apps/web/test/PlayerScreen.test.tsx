@@ -71,6 +71,31 @@ describe('PlayerScreen', () => {
         expect(screen.queryByRole(`region`, { name: `Tournaments` })).toBeNull();
     });
 
+    it('lists deleted opponents by their labels, set apart, with no page and no games to lead to', async () => {
+        stubPlayer({
+            ...record,
+            opponents: [
+                { name: `deleted bot`, kind: `bot`, deleted: true, games: 9, won: 5, lost: 4 },
+                { name: `deleted bot`, kind: `bot`, deleted: true, games: 3, won: 1, lost: 2 },
+                { name: `quinn`, kind: `human`, games: 2, won: 1, lost: 1 },
+            ],
+        });
+        render(<PlayerScreen name="ana" />);
+        const opponents = await screen.findByRole(`region`, { name: `Most played` });
+        const rows = within(opponents).getAllByRole(`listitem`);
+        expect(rows.map((row) => row.textContent)).toEqual([`deleted botBOT9 games: 5 won, 4 lost`, `deleted botBOT3 games: 1 won, 2 lost`, `quinn2 games: 1 won, 1 lost`]);
+        expect(rows.slice(0, 2).map((row) => within(row).queryAllByRole(`link`).length)).toEqual([0, 0]);
+        expect(rows[0]?.querySelector(`.deleted-name`)?.textContent).toBe(`deleted bot`);
+        expect(within(rows[2] as HTMLElement).getAllByRole(`link`)).toHaveLength(2);
+    });
+
+    it('leads to the report form about the player from the foot of the page', async () => {
+        stubPlayer(record);
+        render(<PlayerScreen name="ana" />);
+        const link = await screen.findByRole(`link`, { name: `Report ana` });
+        expect(link.getAttribute(`href`)).toBe(`/report?subject=%2Fplayers%2Fana`);
+    });
+
     it('reads the history for the period chosen, a year at first', async () => {
         const reads = stubPlayer(record);
         render(<PlayerScreen name="ana" />);

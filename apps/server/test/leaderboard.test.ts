@@ -139,6 +139,16 @@ describe('GET /api/leaderboard', () => {
         ]);
     });
 
+    it('counts a guest\'s game as no game and no latest play', async () => {
+        const gameId = insertGame(query, { guestName: `Guest k3f9`, botId: idOf(`bots`, `Beta`), userSide: `o`, timeControl: { mode: `unlimited` }, opening: [{ x: 0, y: 0, player: 0 }] });
+        finish(gameId, `o`, 0);
+        settle();
+        expect((await board()).map((entry) => [entry.name, entry.games, entry.lastPlayedAt])).toEqual([
+            [`alpha`, 3, `2026-09-29T12:00:00Z`],
+            [`Beta`, 1, `2026-09-29T12:00:00Z`],
+        ]);
+    });
+
     it('lists no more than the cap', async () => {
         world.sqlite.transaction(() => {
             for (let n = 0; n < leaderboardCap + 5; n++) {

@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { nameSyntaxSchema } from './names';
+import { reportReasonSchema } from './reports';
 import { openingPliesSchema } from './stream';
 import {
     adminTournamentRuleSchema,
@@ -86,6 +87,8 @@ export const adminRequestSchema = z.discriminatedUnion(`op`, [
     }),
     z.strictObject({ op: z.literal(`tournament-schedule-list`) }),
     z.strictObject({ op: z.literal(`tournament-schedule-remove`), id: tournamentRuleIdSchema, reason: adminReasonSchema }),
+    // The reason is the closing note the report keeps.
+    z.strictObject({ op: z.literal(`report-close`), id: z.number().int().min(1), reason: adminReasonSchema }),
 ]);
 export type AdminRequest = z.infer<typeof adminRequestSchema>;
 export type AdminMutation = Exclude<AdminRequest, { op: `status` | `backup` | `tournament-schedule-list` }>;
@@ -98,6 +101,20 @@ export const adminActionSchema = z.object({
     at: z.number().int(),
 });
 export type AdminAction = z.infer<typeof adminActionSchema>;
+
+/** Open reports the status shows, the oldest first. */
+export const adminOpenReportsShown = 20;
+
+export const adminReportSchema = z.object({
+    id: z.number().int().min(1),
+    subject: z.string(),
+    reason: reportReasonSchema,
+    details: z.string(),
+    name: z.string().nullable(),
+    email: z.string().nullable(),
+    at: z.number().int(),
+});
+export type AdminReport = z.infer<typeof adminReportSchema>;
 
 export const adminStatusSchema = z.object({
     uptimeSeconds: z.number().int().min(0),
@@ -112,6 +129,8 @@ export const adminStatusSchema = z.object({
     tournaments: z.array(adminTournamentSchema),
     tournamentRules: z.array(adminTournamentRuleSchema),
     recentActions: z.array(adminActionSchema).max(10),
+    openReportCount: z.number().int().min(0),
+    openReports: z.array(adminReportSchema).max(adminOpenReportsShown),
 });
 export type AdminStatus = z.infer<typeof adminStatusSchema>;
 

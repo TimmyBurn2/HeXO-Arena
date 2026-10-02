@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { TournamentDetail, TournamentGame, TournamentList } from '@hexo-arena/contract';
+import type { TournamentBot, TournamentDetail, TournamentGame, TournamentList } from '@hexo-arena/contract';
 import { meStore } from '../src/me';
 import { TournamentScreen } from '../src/screens/TournamentScreen';
 import { TournamentsScreen } from '../src/screens/TournamentsScreen';
@@ -10,8 +10,13 @@ import { currentRound, meeting, roundStates } from '../src/tournaments/view';
 
 const hour = 3_600_000;
 
+// Each bot's number in its tournament, its place among the entries, which the pages key it by.
+const keys: Readonly<Record<string, number>> = { hextide: 1, quietlake: 2, tern: 3, alpha: 1, beta: 2, gamma: 3, delta: 4 };
+const key = (bot: string) => keys[bot] ?? 0;
+const seat = (bot: string) => ({ key: key(bot), name: bot });
+
 function game(x: string, outcome: TournamentGame[`outcome`], point: string | null = null, gameId: string | null = null, missing: string[] = []): TournamentGame {
-    return { x, gameId, outcome, point, missing };
+    return { x: key(x), gameId, outcome, point: point === null ? null : key(point), missing: missing.map(key) };
 }
 
 const base: TournamentDetail = {
@@ -25,30 +30,30 @@ const base: TournamentDetail = {
     openingPlies: 5,
     maxEntrants: 12,
     entries: [
-        { bot: `hextide`, ownerName: `ana`, online: true, ratingAtStart: null, state: `entered` },
-        { bot: `quietlake`, ownerName: `dmitri`, online: false, ratingAtStart: null, state: `entered` },
+        { key: 1, bot: `hextide`, ownerName: `ana`, online: true, ratingAtStart: null, state: `entered` },
+        { key: 2, bot: `quietlake`, ownerName: `dmitri`, online: false, ratingAtStart: null, state: `entered` },
     ],
     rounds: [],
     standings: [],
     live: [],
 };
 
-const playing = (bot: string, owner: string, rating: number) => ({ bot, ownerName: owner, online: true, ratingAtStart: rating, state: `playing` as const });
+const playing = (bot: string, owner: string, rating: number) => ({ key: key(bot), bot, ownerName: owner, online: true, ratingAtStart: rating, state: `playing` as const });
 
 const running: TournamentDetail = {
     ...base,
     status: `running`,
     startedAt: `2026-10-01T18:00:00Z`,
-    entries: [playing(`alpha`, `ann`, 1600), playing(`beta`, `bob`, 1550), playing(`gamma`, `cid`, 1500), { bot: `delta`, ownerName: `dee`, online: false, ratingAtStart: null, state: `absent` }],
+    entries: [playing(`alpha`, `ann`, 1600), playing(`beta`, `bob`, 1550), playing(`gamma`, `cid`, 1500), { key: 4, bot: `delta`, ownerName: `dee`, online: false, ratingAtStart: null, state: `absent` }],
     rounds: [
-        { round: 1, pairings: [{ first: `alpha`, second: `beta`, games: [game(`alpha`, `played`, `alpha`, `g_1`), game(`beta`, `played`, `beta`, `g_2`)] }], rest: `gamma` },
-        { round: 2, pairings: [{ first: `gamma`, second: `alpha`, games: [game(`gamma`, `live`, null, `g_3`), game(`alpha`, `pending`)] }], rest: `beta` },
-        { round: 3, pairings: [{ first: `beta`, second: `gamma`, games: [game(`beta`, `pending`), game(`gamma`, `pending`)] }], rest: `alpha` },
+        { round: 1, pairings: [{ first: seat(`alpha`), second: seat(`beta`), games: [game(`alpha`, `played`, `alpha`, `g_1`), game(`beta`, `played`, `beta`, `g_2`)] }], rest: seat(`gamma`) },
+        { round: 2, pairings: [{ first: seat(`gamma`), second: seat(`alpha`), games: [game(`gamma`, `live`, null, `g_3`), game(`alpha`, `pending`)] }], rest: seat(`beta`) },
+        { round: 3, pairings: [{ first: seat(`beta`), second: seat(`gamma`), games: [game(`beta`, `pending`), game(`gamma`, `pending`)] }], rest: seat(`alpha`) },
     ],
     standings: [
-        { rank: 1, bot: `alpha`, ownerName: `ann`, points: 1, asX: 1, asO: 0, withdrawn: false },
-        { rank: 1, bot: `beta`, ownerName: `bob`, points: 1, asX: 1, asO: 0, withdrawn: false },
-        { rank: 3, bot: `gamma`, ownerName: `cid`, points: 0, asX: 0, asO: 0, withdrawn: false },
+        { rank: 1, key: key(`alpha`), bot: `alpha`, ownerName: `ann`, points: 1, asX: 1, asO: 0, withdrawn: false },
+        { rank: 1, key: key(`beta`), bot: `beta`, ownerName: `bob`, points: 1, asX: 1, asO: 0, withdrawn: false },
+        { rank: 3, key: key(`gamma`), bot: `gamma`, ownerName: `cid`, points: 0, asX: 0, asO: 0, withdrawn: false },
     ],
 };
 
@@ -56,15 +61,15 @@ const finished: TournamentDetail = {
     ...running,
     status: `finished`,
     endedAt: `2026-10-01T19:00:00Z`,
-    entries: [...running.entries.slice(0, 3), { bot: `delta`, ownerName: `dee`, online: false, ratingAtStart: null, state: `left_out`, reason: `daily_cap` }],
+    entries: [...running.entries.slice(0, 3), { key: 4, bot: `delta`, ownerName: `dee`, online: false, ratingAtStart: null, state: `left_out`, reason: `daily_cap` }],
     rounds: running.rounds.map((round) => ({
         ...round,
-        pairings: round.pairings.map((pairing) => ({ ...pairing, games: pairing.games.map((entry, index) => ({ ...entry, outcome: `played` as const, gameId: entry.gameId ?? `g_${String(round.round)}${String(index)}`, point: entry.point ?? pairing.first })) })),
+        pairings: round.pairings.map((pairing) => ({ ...pairing, games: pairing.games.map((entry, index) => ({ ...entry, outcome: `played` as const, gameId: entry.gameId ?? `g_${String(round.round)}${String(index)}`, point: entry.point ?? pairing.first.key })) })),
     })),
     standings: [
-        { rank: 1, bot: `alpha`, ownerName: `ann`, points: 3, asX: 2, asO: 1, withdrawn: false },
-        { rank: 2, bot: `gamma`, ownerName: `cid`, points: 2, asX: 1, asO: 1, withdrawn: false },
-        { rank: 3, bot: `beta`, ownerName: `bob`, points: 1, asX: 1, asO: 0, withdrawn: false },
+        { rank: 1, key: key(`alpha`), bot: `alpha`, ownerName: `ann`, points: 3, asX: 2, asO: 1, withdrawn: false },
+        { rank: 2, key: key(`gamma`), bot: `gamma`, ownerName: `cid`, points: 2, asX: 1, asO: 1, withdrawn: false },
+        { rank: 3, key: key(`beta`), bot: `beta`, ownerName: `bob`, points: 1, asX: 1, asO: 0, withdrawn: false },
     ],
 };
 
@@ -123,7 +128,7 @@ describe('TournamentScreen', () => {
 
     it('let an owner enter another of their bots in place of the entered one, and withdraw it', async () => {
         let current = base;
-        const calls = serve(() => current, ana, () => new Response(JSON.stringify({ bot: `pebble`, ownerName: `ana`, online: true, ratingAtStart: null, state: `entered` })));
+        const calls = serve(() => current, ana, () => new Response(JSON.stringify({ key: 1, bot: `pebble`, ownerName: `ana`, online: true, ratingAtStart: null, state: `entered` })));
         render(<TournamentScreen id={base.id} />);
         expect(await screen.findByText(`hextide is entered.`)).toBeTruthy();
         const select = await screen.findByLabelText(`Your bot`);
@@ -190,7 +195,7 @@ describe('TournamentScreen', () => {
     });
 
     it('say a called-off tournament could not start, with the counts', async () => {
-        serve(() => ({ ...base, status: `called_off`, endedAt: base.startsAt, entries: [base.entries[0], { ...base.entries[1], state: `absent` }, { bot: `tern`, ownerName: `fern`, online: true, ratingAtStart: null, state: `entered` }] as TournamentDetail[`entries`] }));
+        serve(() => ({ ...base, status: `called_off`, endedAt: base.startsAt, entries: [base.entries[0], { ...base.entries[1], state: `absent` }, { key: 3, bot: `tern`, ownerName: `fern`, online: true, ratingAtStart: null, state: `entered` }] as TournamentDetail[`entries`] }));
         render(<TournamentScreen id={base.id} />);
         expect(await screen.findByText(`Called off: 2 of 3 entered bots could play at the start; 3 are needed.`)).toBeTruthy();
         // Today's presence says nothing of a tournament that is over.
@@ -222,13 +227,44 @@ describe('TournamentScreen', () => {
         expect(list?.isConnected).toBe(false);
     });
 
-    it('leave a deleted owner\'s placeholder as plain text, a name with no page to lead to', async () => {
-        serve(() => ({ ...base, entries: [base.entries[0], { ...base.entries[1], ownerName: `deleted-7` }] as TournamentDetail[`entries`] }));
+    it('leave a deleted owner\'s label as plain text, a name with no page to lead to', async () => {
+        serve(() => ({ ...base, entries: [base.entries[0], { ...base.entries[1], ownerName: `deleted player` }] as TournamentDetail[`entries`] }));
         render(<TournamentScreen id={base.id} />);
         const entries = (await screen.findByRole(`heading`, { name: `Entered (2 of 12)` })).closest(`section`) as HTMLElement;
-        expect(within(entries).getAllByRole(`listitem`).map((item) => item.textContent)).toEqual([`hextideBOTby ana`, `quietlakeBOTby deleted-7`]);
-        expect(within(entries).queryByRole(`link`, { name: `deleted-7` })).toBe(null);
+        expect(within(entries).getAllByRole(`listitem`).map((item) => item.textContent)).toEqual([`hextideBOTby ana`, `quietlakeBOTby deleted player`]);
+        expect(within(entries).queryByRole(`link`, { name: `deleted player` })).toBe(null);
+        expect(within(entries).getByText(`deleted player`).classList.contains(`deleted-name`)).toBe(true);
         expect(within(entries).getByRole(`link`, { name: `ana` })).toBeTruthy();
+    });
+
+    it('read every deleted bot by the plain label, set apart on the podium, in the standings, and on the round lines', async () => {
+        const gone = new Set([key(`alpha`), key(`beta`)]);
+        const label = (bot: TournamentBot): TournamentBot => (gone.has(bot.key) ? { ...bot, name: `deleted bot`, deleted: true } : bot);
+        const deleted: TournamentDetail = {
+            ...finished,
+            entries: finished.entries.map((entry) => (gone.has(entry.key) ? { ...entry, bot: `deleted bot`, ownerName: `deleted player`, deleted: true } : entry)),
+            rounds: finished.rounds.map((round) => ({
+                ...round,
+                pairings: round.pairings.map((pairing) => ({ ...pairing, first: label(pairing.first), second: label(pairing.second) })),
+                rest: round.rest === null ? null : label(round.rest),
+            })),
+            standings: finished.standings.map((line) => (gone.has(line.key) ? { ...line, bot: `deleted bot`, ownerName: `deleted player`, deleted: true } : line)),
+        };
+        serve(() => deleted);
+        render(<TournamentScreen id={deleted.id} />);
+        expect(await screen.findAllByRole(`img`, { name: `Podium: first deleted bot, 3 points; second gamma, 2 points; third deleted bot, 1 point` })).toHaveLength(2);
+        const podium = screen.getByRole(`region`, { name: `Podium` });
+        expect(within(podium).getAllByText(`deleted bot`).map((name) => name.classList.contains(`deleted-name`))).toEqual([true, true]);
+        const standings = screen.getByRole(`heading`, { name: `Standings` }).closest(`section`) as HTMLElement;
+        expect([...standings.querySelectorAll(`tbody tr`)].map((row) => [...row.querySelectorAll(`td`)].map((cell) => cell.textContent))).toEqual([
+            [`1`, `deleted botBOTby deleted player`, `1600`, `3`, `2, 1`],
+            [`2`, `gammaBOTby cid`, `1500`, `2`, `1, 1`],
+            [`3`, `deleted botBOTby deleted player`, `1550`, `1`, `1, 0`],
+        ]);
+        const rounds = screen.getByRole(`heading`, { name: `Rounds` }).closest(`section`) as HTMLElement;
+        expect([...rounds.querySelectorAll(`.round-names`)].map((line) => line.textContent)).toEqual([`deleted bot vs gamma`, `gamma vs deleted bot`, `deleted bot vs deleted bot`]);
+        expect([...rounds.querySelectorAll(`.round-rest`)].map((line) => line.textContent)).toEqual([`deleted bot rests`, `deleted bot rests`, `gamma rests`]);
+        expect(rounds.querySelectorAll(`:is(.round-names, .round-rest) .deleted-name`)).toHaveLength(6);
     });
 
     it('say when no tournament has the id', async () => {
@@ -278,18 +314,18 @@ describe('the tournament views', () => {
     });
 
     it('read two bots\' meeting from either side, and nothing on the diagonal', () => {
-        expect(meeting(running, `beta`, `alpha`)).toEqual({ x: { state: `won`, gameId: `g_2` }, o: { state: `lost`, gameId: `g_1` } });
-        expect(meeting(running, `alpha`, `gamma`)).toEqual({ x: { state: `pending`, gameId: null }, o: { state: `live`, gameId: `g_3` } });
-        expect(meeting(running, `alpha`, `alpha`)).toBeNull();
+        expect(meeting(running, key(`beta`), key(`alpha`))).toEqual({ x: { state: `won`, gameId: `g_2` }, o: { state: `lost`, gameId: `g_1` } });
+        expect(meeting(running, key(`alpha`), key(`gamma`))).toEqual({ x: { state: `pending`, gameId: null }, o: { state: `live`, gameId: `g_3` } });
+        expect(meeting(running, key(`alpha`), key(`alpha`))).toBeNull();
     });
 
     it('dash a no-show in the absent bot\'s row alone, the scorer\'s cell won', () => {
         const noShow: TournamentDetail = {
             ...running,
-            rounds: [{ round: 1, pairings: [{ first: `alpha`, second: `beta`, games: [game(`alpha`, `no_show`, `alpha`, null, [`beta`]), game(`beta`, `not_played`, null, null, [`alpha`, `beta`])] }], rest: null }],
+            rounds: [{ round: 1, pairings: [{ first: seat(`alpha`), second: seat(`beta`), games: [game(`alpha`, `no_show`, `alpha`, null, [`beta`]), game(`beta`, `not_played`, null, null, [`alpha`, `beta`])] }], rest: null }],
         };
-        expect(meeting(noShow, `alpha`, `beta`)).toEqual({ x: { state: `won`, gameId: null }, o: { state: `missing`, gameId: null } });
-        expect(meeting(noShow, `beta`, `alpha`)).toEqual({ x: { state: `missing`, gameId: null }, o: { state: `missing`, gameId: null } });
+        expect(meeting(noShow, key(`alpha`), key(`beta`))).toEqual({ x: { state: `won`, gameId: null }, o: { state: `missing`, gameId: null } });
+        expect(meeting(noShow, key(`beta`), key(`alpha`))).toEqual({ x: { state: `missing`, gameId: null }, o: { state: `missing`, gameId: null } });
     });
 
     it('spell a wait out in prose to the minute, then in days and hours past a day', () => {

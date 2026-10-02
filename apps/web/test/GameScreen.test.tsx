@@ -411,8 +411,9 @@ describe('GameScreen', () => {
         expect(rated.nextElementSibling?.textContent).toBe(`No, the operator voided it`);
     });
 
-    it('foot the drawer under either tab with the standing links, then the legal ones, each opening a new tab', async () => {
+    it('foot the drawer under either tab with the standing links, then the legal ones and the report form about the game, each opening a new tab', async () => {
         stubGame(runningSnapshot);
+        window.history.replaceState(null, ``, `/game/g-run`);
         render(<GameScreen gameId="g-run" />);
         await screen.findByRole(`heading`, { name: `hextide vs you` });
         await openWithM();
@@ -428,6 +429,7 @@ describe('GameScreen', () => {
                 [`Privacy, opens in a new tab`, `/legal/privacy`, `_blank`],
                 [`Terms, opens in a new tab`, `/legal/terms`, `_blank`],
                 [`Licenses, opens in a new tab`, `/third-party-licenses.txt`, `_blank`],
+                [`Report, opens in a new tab`, `/report?subject=%2Fgame%2Fg-run`, `_blank`],
             ]);
             expect(links.every((link) => link.getAttribute(`rel`) === `noreferrer`)).toBe(true);
         }
@@ -440,7 +442,7 @@ describe('GameScreen', () => {
         await screen.findByRole(`heading`, { name: `hextide vs you` });
         await openWithM();
         const legal = [...document.querySelectorAll(`#drawer-body .drawer-foot .legal-links a`)];
-        expect(legal.map((link) => link.getAttribute(`href`))).toEqual([`/legal/privacy`, `/third-party-licenses.txt`]);
+        expect(legal.map((link) => link.getAttribute(`href`))).toEqual([`/legal/privacy`, `/third-party-licenses.txt`, `/report?subject=%2F`]);
     });
 
     it('open the Game tab at its top, whatever the Moves tab had scrolled to', async () => {
@@ -506,7 +508,7 @@ describe('GameScreen', () => {
         stubGame(runningSnapshot, 404);
         render(<GameScreen gameId="g-x" />);
         expect(await screen.findByRole(`heading`, { level: 1, name: `No such game` })).toBeTruthy();
-        expect(screen.getByText(`That game does not exist; guest games are gone once their session ends.`)).toBeTruthy();
+        expect(screen.getByText(`That game does not exist.`)).toBeTruthy();
         expect(screen.getByRole(`link`, { name: `Home` }).getAttribute(`href`)).toBe(`/`);
         await waitFor(() => {
             expect(document.title).toBe(`Not found - HeXO Arena`);
@@ -837,6 +839,19 @@ describe('GameScreen for a watcher', () => {
         expect(screen.getByText(`No, a guest is playing`, { selector: `.facts dd` })).toBeTruthy();
     });
 
+    it('say a finished guest game was unrated because a guest played', async () => {
+        const guestGame = {
+            ...watched(finishedSnapshot),
+            players: { ...players, o: { name: `Guest k3f9`, rating: null, provisional: false, kind: `guest` as const } },
+        } as GameSnapshot;
+        stubGame(guestGame);
+        render(<GameScreen gameId="g-end" />);
+        await screen.findByRole(`heading`, { name: `hextide vs Guest k3f9` });
+        await openWithM();
+        fireEvent.click(screen.getByRole(`tab`, { name: `Game` }));
+        expect(screen.getByText(`No, a guest played`, { selector: `.facts dd` })).toBeTruthy();
+    });
+
     it('hold the frame a stepped-back watcher left as stones land, and leave the record closed at the finish', async () => {
         stubGame(watched(runningSnapshot));
         render(<GameScreen gameId="g-run" />);
@@ -1013,7 +1028,21 @@ describe('GameScreen for a watcher', () => {
         expect(line.closest(`.facts-row`)?.querySelector(`dt`)?.textContent).toBe(`Tournament`);
     });
 
-    it('leave the head-to-head out of a game a guest sits in, which is never kept', async () => {
+    it('name a deleted player by the label, set apart and unlinked, and read no head-to-head for it', async () => {
+        const kept = { ...watched(finishedSnapshot), you: undefined, players: { ...players, o: { name: `deleted player`, rating: 1503, provisional: false, kind: `user` as const, deleted: true as const } } } as GameSnapshot;
+        stubGame(kept);
+        render(<GameScreen gameId="g-end" />);
+        await screen.findByRole(`heading`, { name: `hextide vs deleted player` });
+        const label = screen.getAllByText(`deleted player`).find((element) => element.classList.contains(`deleted-name`));
+        expect(label).toBeTruthy();
+        expect(screen.queryByRole(`link`, { name: `deleted player` })).toBe(null);
+        await openWithM();
+        fireEvent.click(screen.getByRole(`tab`, { name: `Game` }));
+        expect(screen.queryByText(`Head to head`)).toBe(null);
+        expect(vi.mocked(fetch).mock.calls.some(([url]) => typeof url === `string` && url.startsWith(`/api/games/finished`))).toBe(false);
+    });
+
+    it('leave the head-to-head out of a game a guest sits in, who is no name the history takes', async () => {
         const guestGame = { ...watched(finishedSnapshot), players: { ...players, o: { name: `Guest k3f9`, rating: null, provisional: false, kind: `guest` as const } } } as GameSnapshot;
         stubGame(guestGame);
         render(<GameScreen gameId="g-end" />);

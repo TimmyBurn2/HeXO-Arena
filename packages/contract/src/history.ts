@@ -26,7 +26,10 @@ export const finishedGamesQuerySchema = z
     .strictObject({
         player: playerName.optional().meta({ param: { description: `A player's name, matched case-folded, in either seat.` } }),
         vs: playerName.optional().meta({ param: { description: `The opponent's name; needs player.` } }),
-        kind: z.enum([`bot-bot`, `human-bot`]).optional().meta({ param: { description: `Who sat: two bots, or a human and a bot.` } }),
+        kind: z
+            .enum([`bot-bot`, `human-bot`, `guest-bot`])
+            .optional()
+            .meta({ param: { description: `Who sat: two bots, a signed-in human and a bot, or a guest and a bot.` } }),
         result: z
             .enum([`won`, `lost`, `none`])
             .optional()
@@ -61,7 +64,7 @@ export const finishedGameEntrySchema = z
         openingPlies: openingPliesSchema,
         turns: z.number().int().min(0).meta({ description: `Turns on the board at the finish, the opening's included.` }),
         finishedAt: z.iso.datetime(),
-        rated: z.boolean().meta({ description: `False for a game without a winner and for a voided one.` }),
+        rated: z.boolean().meta({ description: `False for a game without a winner, a voided one, and a guest's.` }),
         voided: z.boolean().meta({ description: `Taken out by the operator: still listed, and counted in no record and no rating.` }),
     })
     .meta({

@@ -1,7 +1,6 @@
 import {
     gameEventSchema,
     gameTurnCap,
-    guestSessionCap,
     internalToWire,
     orphanForfeitMs,
     sessionHeartbeatMs,
@@ -29,11 +28,11 @@ import { createUserWithExactName } from '../src/users';
 import { abortUnfinishedGames, findGame } from '../src/game-store';
 import {
     finishedBoardMemoCap,
-    finishedGuestGamesPerGuest,
     GameRegistry,
     wirePresence,
     type EngineSocket,
 } from '../src/game-registry';
+import { deleteUser } from '../src/moderation';
 import { PresenceRegistry } from '../src/presence';
 import { readRating } from '../src/rating-store';
 import { randomFloat } from '../src/random';
@@ -369,8 +368,8 @@ describe('game creation', () => {
         expect(world.games.snapshotFor(created.gameId, user)?.you).toBe(created.snapshot.you);
     });
 
-    it('shows a guest seat without a rating to watchers, and its side to the guest alone', () => {
-        const guest = { kind: `guest` as const, id: `guest-1`, name: `Guest a1b2` };
+    it('shows a guest seat without a rating to watchers, and its side to the guest alone, after the finish too', () => {
+        const guest = { kind: `guest` as const, id: `guest-1`, name: `Guest a1b2`, since: Math.floor(Date.now() / 1000) };
         const created = world.games.createGame({ person: guest, bot, timeControl: unlimitedControl, openingPlies: 1 });
         const side = created.snapshot.you;
         if (side === undefined) throw new Error(`the guest holds no seat`);
@@ -381,9 +380,22 @@ describe('game creation', () => {
         const finished = world.games.snapshotFor(created.gameId, null);
         expect(finished?.status).toBe(`finished`);
         expect(finished?.you).toBeUndefined();
+        expect(finished?.players[side]).toEqual({ name: `Guest a1b2`, rating: null, provisional: false, kind: `guest` });
         expect(world.games.snapshotFor(created.gameId, guest)?.you).toBe(side);
         world.games.endGuest(guest.id);
-        expect(world.games.snapshotFor(created.gameId, null)).toBeNull();
+        expect(world.games.snapshotFor(created.gameId, null)?.status).toBe(`finished`);
+    });
+
+    it('tells a later holder of the same label from the guest who played, by when each session began', () => {
+        const since = Math.floor(Date.now() / 1000);
+        const guest = { kind: `guest` as const, id: `guest-1`, name: `Guest a1b2`, since };
+        const created = world.games.createGame({ person: guest, bot, timeControl: unlimitedControl, openingPlies: 1 });
+        world.games.humanResign(created.gameId, guest);
+        const later = { kind: `guest` as const, id: `guest-2`, name: `Guest a1b2`, since: since + 60 };
+        expect(world.games.snapshotFor(created.gameId, later)?.you).toBeUndefined();
+        expect(world.games.snapshotFor(created.gameId, { kind: `guest`, id: `guest-3`, name: `Guest zzzz`, since })?.you).toBeUndefined();
+        expect(world.games.humanResign(created.gameId, later)).toEqual({ kind: `unknown` });
+        expect(world.games.humanResign(created.gameId, guest)).toEqual({ kind: `rejected`, code: `game_over` });
     });
 
     it('answers an unknown game id with nothing', () => {
@@ -866,27 +878,37 @@ describe('persistence', () => {
         expect(stones(kept)).toBe(1);
     }, 30_000);
 
-    // This many games or turns take seconds on a loaded machine.
-    it(`keeps the last ${String(finishedGuestGamesPerGuest)} finished games of each guest, and ${String(finishedGuestGamesPerGuest)} for each guest the site holds`, () => {
-        const finished = (guest: number) => {
-            const person = { kind: `guest` as const, id: `guest-${String(guest)}`, name: `Guest ${String(guest)}` };
-            const created = world.games.createGame({ person, bot, timeControl: unlimitedControl, openingPlies: 1 });
-            world.games.humanResign(created.gameId, person);
-            return created.gameId;
-        };
-        const first = finished(0);
-        const own = Array.from({ length: finishedGuestGamesPerGuest }, () => finished(0));
-        expect(world.games.snapshotFor(first, null)).toBe(null);
-        expect(own.every((gameId) => world.games.snapshotFor(gameId, null) !== null)).toBe(true);
-        // Every other guest the site can hold fills its own share, pushing out the oldest games held.
-        for (let guest = 1; guest < guestSessionCap; guest += 1) {
-            for (let game = 0; game < finishedGuestGamesPerGuest; game += 1) finished(guest);
-        }
-        expect(world.games.snapshotFor(own[0] ?? ``, null)).not.toBe(null);
-        finished(guestSessionCap);
-        expect(world.games.snapshotFor(own[0] ?? ``, null)).toBe(null);
-        expect(world.games.snapshotFor(own[1] ?? ``, null)).not.toBe(null);
-    }, 30_000);
+    it('stores a guest game whole under the label, and rates nobody, the bot included', () => {
+        const guest = { kind: `guest` as const, id: `guest-1`, name: `Guest a1b2`, since: Math.floor(Date.now() / 1000) };
+        const created = world.games.createGame({ person: guest, bot, timeControl: unlimitedControl, openingPlies: 1 });
+        world.games.humanMove(created.gameId, guest, [
+            { x: 3, y: 0 },
+            { x: 4, y: 0 },
+        ]);
+        world.games.humanResign(created.gameId, guest);
+        const row = world.sqlite.prepare(`select user_id as userId, guest_name as guest, winner, finish_reason as reason from games where id = ?`).get(created.gameId);
+        expect(row).toEqual({ userId: null, guest: `Guest a1b2`, winner: expect.stringMatching(/^[xo]$/u) as string, reason: `surrender` });
+        expect(world.sqlite.prepare(`select count(*) as n from moves where game_id = ?`).get(created.gameId)).toEqual({ n: 1 });
+        expect(world.sqlite.prepare(`select count(*) as n from game_ratings`).get()).toEqual({ n: 0 });
+        expect(readRating(createQuery(world.sqlite), { kind: `bot`, id: bot.id }).rating).toBe(1500);
+        expect(world.games.headline(created.gameId)).toMatchObject({ status: `finished`, reason: `surrender` });
+        expect(Object.values(world.games.headline(created.gameId)?.names ?? {})).toContain(`Guest a1b2`);
+    });
+
+    it('names a deleted person and their deleted bot in a stored game by the labels and the mark', () => {
+        const created = world.games.createGame({ person: user, bot, timeControl: unlimitedControl, openingPlies: 1 });
+        world.games.humanResign(created.gameId, user);
+        deleteUser(createQuery(world.sqlite), user.id);
+        const snapshot = world.games.snapshotFor(created.gameId, null);
+        expect(JSON.stringify(snapshot)).not.toMatch(/deleted-[0-9]/u);
+        expect([snapshot?.players.x, snapshot?.players.o]).toEqual(
+            expect.arrayContaining([
+                expect.objectContaining({ name: `deleted player`, kind: `user`, deleted: true }),
+                expect.objectContaining({ name: `deleted bot`, kind: `bot`, deleted: true }),
+            ]),
+        );
+        expect(Object.values(world.games.headline(created.gameId)?.names ?? {}).sort()).toEqual([`deleted bot`, `deleted player`]);
+    });
 
     it('rates the person alone when a game against a bot ends with a winner', () => {
         const created = world.games.createGame({

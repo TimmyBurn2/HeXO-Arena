@@ -11,6 +11,7 @@ import {
     challengeCancelPath,
     challengeDeclinePath,
     botConcurrentGameCap,
+    defaultHumanOpeningPlies,
     defaultOpeningPlies,
     devAccountsPath,
     discordCallbackPath,
@@ -163,15 +164,20 @@ describe('openapi document', () => {
         expect(dig(component, `default`)).toBeUndefined();
     });
 
-    it('defaults the opening length to five plies on both creation requests', () => {
+    it('defaults the opening length to five plies on a bot challenge and to the origin alone on a person\'s game', () => {
         const document = buildOpenApiDocument();
-        for (const path of [botChallengePath, gamesPath]) {
+        for (const [path, plies] of [
+            [botChallengePath, defaultOpeningPlies],
+            [gamesPath, defaultHumanOpeningPlies],
+        ] as const) {
             const field = dig(document, `paths`, path, `post`, `requestBody`, `content`, `application/json`, `schema`, `properties`, `openingPlies`);
             const parts = arrayOfUnknown(dig(field, `allOf`));
             const refs = parts.map((part): unknown => (typeof part === `object` && part !== null ? Reflect.get(part, `$ref`) : undefined));
             expect(refs).toContain(`#/components/schemas/OpeningPlies`);
-            expect(parts.map((part) => dig(part, `default`))).toContain(defaultOpeningPlies);
+            expect(parts.map((part) => dig(part, `default`))).toContain(plies);
         }
+        expect(defaultOpeningPlies).toBe(5);
+        expect(defaultHumanOpeningPlies).toBe(1);
     });
 
     it('carries the site name as its title and on the session cookie as TLS names it', () => {

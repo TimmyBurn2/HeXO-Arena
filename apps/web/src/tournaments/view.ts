@@ -33,8 +33,8 @@ export function roundBegun(detail: TournamentDetail): boolean {
     return roundStates(detail).find((entry) => entry.round === round)?.state === `live`;
 }
 
-// A game as one of its two bots met it.
-function hexOf(game: TournamentGame, bot: string): HexView {
+// A game as one of its two bots met it; a bot is its key in the tournament.
+function hexOf(game: TournamentGame, bot: number): HexView {
     const gameId = game.gameId;
     switch (game.outcome) {
         case `pending`:
@@ -56,13 +56,13 @@ function hexOf(game: TournamentGame, bot: string): HexView {
 }
 
 /**
- * The two games one bot played against another, as x and as o; null where
- * the two never met, the diagonal included.
+ * The two games one bot played against another, each named by its key,
+ * as x and as o; null where the two never met, the diagonal included.
  */
-export function meeting(detail: TournamentDetail, bot: string, opponent: string): Readonly<Record<Side, HexView>> | null {
+export function meeting(detail: TournamentDetail, bot: number, opponent: number): Readonly<Record<Side, HexView>> | null {
     for (const round of detail.rounds) {
         for (const pairing of round.pairings) {
-            const pair = [pairing.first, pairing.second];
+            const pair = [pairing.first.key, pairing.second.key];
             if (!pair.includes(bot) || !pair.includes(opponent) || bot === opponent) continue;
             const asX = pairing.games.find((game) => game.x === bot);
             const asO = pairing.games.find((game) => game.x !== bot);
@@ -75,14 +75,14 @@ export function meeting(detail: TournamentDetail, bot: string, opponent: string)
 
 /** Each bot's points in one pairing, as the round lists show them. */
 export function pairingScore(pairing: TournamentDetail[`rounds`][number][`pairings`][number]): readonly [number, number] {
-    const points = (bot: string) => pairing.games.filter((game) => game.point === bot).length;
-    return [points(pairing.first), points(pairing.second)];
+    const points = (bot: number) => pairing.games.filter((game) => game.point === bot).length;
+    return [points(pairing.first.key), points(pairing.second.key)];
 }
 
-/** Whether a bot played a game of the tournament, whatever came of it. */
-export function playedAny(detail: TournamentDetail, bot: string): boolean {
+/** Whether a bot, by its key, played a game of the tournament, whatever came of it. */
+export function playedAny(detail: TournamentDetail, bot: number): boolean {
     return detail.rounds.some((round) =>
-        round.pairings.some((pairing) => pairing.games.some((game) => (game.outcome === `played` || game.outcome === `aborted`) && (pairing.first === bot || pairing.second === bot))),
+        round.pairings.some((pairing) => pairing.games.some((game) => (game.outcome === `played` || game.outcome === `aborted`) && (pairing.first.key === bot || pairing.second.key === bot))),
     );
 }
 
@@ -92,6 +92,6 @@ export function playedAny(detail: TournamentDetail, bot: string): boolean {
  */
 export function absentees(detail: TournamentDetail): Record<`never` | `withdrew`, TournamentDetail[`entries`]> {
     const gone = detail.entries.filter((entry) => entry.state === `absent` || entry.state === `left_out` || entry.state === `withdrawn`);
-    const withdrew = (entry: (typeof gone)[number]) => entry.state === `withdrawn` && playedAny(detail, entry.bot);
+    const withdrew = (entry: (typeof gone)[number]) => entry.state === `withdrawn` && playedAny(detail, entry.key);
     return { never: gone.filter((entry) => !withdrew(entry)), withdrew: gone.filter(withdrew) };
 }

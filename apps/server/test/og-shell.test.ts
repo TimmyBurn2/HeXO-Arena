@@ -15,11 +15,15 @@ import {
     tournamentsMeta,
     logoutPath,
     profileMeta,
+    reportMeta,
 } from '@hexo-arena/contract';
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { findBot } from '../src/bots';
+import { createQuery } from '../src/db';
+import { deleteBotByPolicy } from '../src/moderation';
 import { renderShell, shellRoutes } from '../src/og-shell';
 import { createTestApp, FakeStreamSocket, loginAs, mintBot, type TestApp } from './helpers';
 
@@ -129,6 +133,7 @@ describe('the og shell routes', () => {
             [`/connect`, connectMeta],
             [`/profile`, profileMeta],
             [`/credits`, creditsMeta],
+            [`/report`, reportMeta],
             ...legalPages.map((page) => [legalPagePath(page), legalPageMeta[page]] as const),
         ] as const;
         for (const [url, meta] of pages) {
@@ -181,7 +186,7 @@ describe('the og shell routes', () => {
         expect((await shell(`/bots/sealbot`)).status).toBe(404);
     });
 
-    it('previews a live guest game, then forgets it once the guest leaves', async () => {
+    it('previews a live guest game, and its result once the guest leaves', async () => {
         await openBot(`sealbot`);
         const minted = await arena.app.inject({ method: `POST`, url: guestPath });
         const guest = minted.cookies.find((cookie) => cookie.name === `hexo_arena_session`)?.value ?? ``;
@@ -198,7 +203,10 @@ describe('the og shell routes', () => {
         expect(live.meta.ogTitle).toMatch(/^(sealbot vs Guest [a-z0-9]{4}|Guest [a-z0-9]{4} vs sealbot) - HeXO Arena$/);
         expect(live.meta.ogDescription).toMatch(/^Live; (sealbot|Guest [a-z0-9]{4}) to move; turn clock 30 s$/);
         await arena.app.inject({ method: `POST`, url: logoutPath, cookies: { hexo_arena_session: guest } });
-        expect((await shell(`/game/${snapshot.gameId}`)).status).toBe(404);
+        const stored = await shell(`/game/${snapshot.gameId}`);
+        expect(stored.status).toBe(200);
+        expect(stored.meta.ogTitle).toBe(live.meta.ogTitle);
+        expect(stored.meta.ogDescription).toBe(`No winner; the game was aborted`);
     });
 
     it('previews a stored bot-vs-bot result and answers 404 for an unknown game', async () => {
@@ -215,6 +223,11 @@ describe('the og shell routes', () => {
         expect(done.meta.ogTitle).toBe(`beta vs alpha - HeXO Arena`);
         expect(done.meta.ogDescription).toBe(`alpha won; beta resigned`);
         expect((await shell(`/game/g_nothing`)).status).toBe(404);
+        const query = createQuery(arena.sqlite);
+        deleteBotByPolicy(query, findBot(query, `alpha`)?.id ?? ``);
+        const kept = await shell(`/game/g_done`);
+        expect(kept.meta.ogTitle).toBe(`beta vs deleted bot - HeXO Arena`);
+        expect(kept.meta.ogDescription).toBe(`deleted bot won; beta resigned`);
     });
 
     it('previews a human player by rating and games, and answers 404 for a bot\'s name or an unknown one', async () => {

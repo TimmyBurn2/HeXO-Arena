@@ -26,8 +26,10 @@
     .theme-tile,
     .chip,
     input[type='text'],
+    input[type='email'],
     input[type='date'],
-    select {
+    select,
+    textarea {
         clip-path: var(--cut-sm-path);
     }
 
@@ -180,8 +182,10 @@
     .featured-link:focus-visible,
     .skip:focus-visible,
     input[type='text']:focus-visible,
+    input[type='email']:focus-visible,
     input[type='date']:focus-visible,
     select:focus-visible,
+    textarea:focus-visible,
     .opt input:focus-visible + label {
         outline: var(--focus-w) solid var(--c-focus);
         outline-offset: calc(-1 * var(--focus-w));

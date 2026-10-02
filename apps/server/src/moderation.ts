@@ -1,7 +1,7 @@
 import { adminGameIdSchema, nameKeyOf } from '@hexo-arena/contract';
 import { and, count, eq, inArray, isNotNull, isNull, like, or, type SQL } from 'drizzle-orm';
 import { nowSeconds, type Query } from './db';
-import { bots, games, nameReservations, sessions, tournamentEntries, users } from './db/schema';
+import { adminActions, bots, games, nameReservations, sessions, tournamentEntries, users } from './db/schema';
 import { randomToken, sha256Hex } from './tokens';
 
 export type ModerationChange = { kind: `changed`; id: string } | { kind: `unchanged` } | { kind: `not_found` };
@@ -57,8 +57,9 @@ export function claimPlaceholderName(query: Query): string {
     }
 }
 
+// A guest's game is in no rating, so it keeps no bot on the record.
 function hasDecidedGame(query: Query, seat: SQL | undefined): boolean {
-    return query.select({ id: games.id }).from(games).where(and(seat, isNotNull(games.winner))).limit(1).get() !== undefined;
+    return query.select({ id: games.id }).from(games).where(and(seat, isNotNull(games.winner), isNull(games.guestName))).limit(1).get() !== undefined;
 }
 
 // An entry left after the bot's waiting entries are removed is a
@@ -71,6 +72,9 @@ function botSeat(botId: string): SQL | undefined {
     return or(eq(games.botId, botId), eq(games.challengerBotId, botId), eq(games.destBotId, botId));
 }
 
+/** What became of a deleted bot: kept under a placeholder, or gone with its name freed. */
+export type BotDeletion = { kind: `anonymized`; placeholder: string } | { kind: `deleted` };
+
 /**
  * Deletes a bot under the recorded policy: with rated games or a
  * tournament it took part in, it is anonymized and kept, so the fold stays exact and no opponent's rating
@@ -78,7 +82,7 @@ function botSeat(botId: string): SQL | undefined {
  * outright, its unrated games with it, and its name is freed.
  * Callers end its live games first.
  */
-export function deleteBotByPolicy(query: Query, botId: string): `anonymized` | `deleted` {
+export function deleteBotByPolicy(query: Query, botId: string): BotDeletion {
     const bot = query.select({ nameKey: bots.nameKey }).from(bots).where(eq(bots.id, botId)).get();
     if (bot === undefined) throw new Error(`deleting a bot that does not exist: ${botId}`);
     if (hasDecidedGame(query, botSeat(botId)) || hasTournamentEntry(query, botId)) {
@@ -96,11 +100,11 @@ export function deleteBotByPolicy(query: Query, botId: string): `anonymized` | `
             .where(eq(bots.id, botId))
             .run();
         killBotToken(query, botId);
-        return `anonymized`;
+        return { kind: `anonymized`, placeholder };
     }
     query.delete(bots).where(eq(bots.id, botId)).run();
     query.delete(nameReservations).where(eq(nameReservations.nameKey, bot.nameKey)).run();
-    return `deleted`;
+    return { kind: `deleted` };
 }
 
 export function revokeBot(query: Query, nameKey: string): ModerationChange {
@@ -195,32 +199,64 @@ export function findUserId(query: Query, nameKey: string): string | undefined {
 
 export interface UserDeletion {
     readonly user: `anonymized` | `deleted`;
-    readonly placeholder: string | null;
+    /** The name the account's audit rows now carry, and its row too when it is kept. */
+    readonly placeholder: string;
     readonly bots: Record<`anonymized` | `deleted`, number>;
+}
+
+// The actions whose target is a player's name, or a list of names and game
+// ids; every other action targets an id or a tournament's own name.
+export const namedTargetActions = [`ban-user`, `unban-user`, `delete-user`, `delist-bot`, `relist-bot`, `revoke-bot`, `abort-game`, `recompute-ratings`];
+
+// Each name in a named target is rewritten by its fold, so the audit keeps
+// what happened and to whom by placeholder, and no longer by name.
+function pseudonymizeAudit(query: Query, placeholders: ReadonlyMap<string, string>): void {
+    const rows = query
+        .select({ id: adminActions.id, target: adminActions.target })
+        .from(adminActions)
+        .where(and(isNotNull(adminActions.target), inArray(adminActions.action, namedTargetActions)))
+        .all();
+    for (const row of rows) {
+        const target = row.target ?? ``;
+        const rewritten = target
+            .split(` `)
+            .map((word) => placeholders.get(nameKeyOf(word)) ?? word)
+            .join(` `);
+        if (rewritten !== target) query.update(adminActions).set({ target: rewritten }).where(eq(adminActions.id, row.id)).run();
+    }
 }
 
 /**
  * Forgets a user: every bot goes under the bot policy, and the user row is
  * deleted outright unless games or kept bots still point at it, in which
  * case it is renamed to a placeholder and loses its Discord identity.
- * The user's own name is freed either way; nothing that could identify
- * them stays behind. Callers end the user's live games first.
+ * The user's own name is freed either way, and every audit row naming the
+ * user or one of their bots names a placeholder instead: a kept bot's own,
+ * else the user's, which is claimed even when no row keeps it.
+ * Callers end the user's live games first.
  */
 export function deleteUser(query: Query, userId: string): UserDeletion {
     const user = query.select({ nameKey: users.nameKey }).from(users).where(eq(users.id, userId)).get();
     if (user === undefined) throw new Error(`deleting a user that does not exist: ${userId}`);
+    const placeholder = claimPlaceholderName(query);
+    const placeholders = new Map([[user.nameKey, placeholder]]);
     const botOutcomes = { anonymized: 0, deleted: 0 };
-    for (const botId of liveBotIdsOf(query, userId)) botOutcomes[deleteBotByPolicy(query, botId)] += 1;
+    for (const botId of liveBotIdsOf(query, userId)) {
+        const nameKey = query.select({ nameKey: bots.nameKey }).from(bots).where(eq(bots.id, botId)).get()?.nameKey ?? ``;
+        const outcome = deleteBotByPolicy(query, botId);
+        botOutcomes[outcome.kind] += 1;
+        placeholders.set(nameKey, outcome.kind === `anonymized` ? outcome.placeholder : placeholder);
+    }
     query.delete(sessions).where(eq(sessions.userId, userId)).run();
+    pseudonymizeAudit(query, placeholders);
     const kept =
         query.select({ id: games.id }).from(games).where(eq(games.userId, userId)).limit(1).get() !== undefined ||
         botIdsOf(query, userId).length > 0;
     if (!kept) {
         query.delete(users).where(eq(users.id, userId)).run();
         query.delete(nameReservations).where(eq(nameReservations.nameKey, user.nameKey)).run();
-        return { user: `deleted`, placeholder: null, bots: botOutcomes };
+        return { user: `deleted`, placeholder, bots: botOutcomes };
     }
-    const placeholder = claimPlaceholderName(query);
     query.update(users)
         .set({ name: placeholder, nameKey: placeholder, discordId: `deleted:${placeholder}`, deletedAt: nowSeconds() })
         .where(eq(users.id, userId))

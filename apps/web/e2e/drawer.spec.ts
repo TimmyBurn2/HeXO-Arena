@@ -145,6 +145,7 @@ for (const layout of [
                 `Privacy, opens in a new tab`,
                 `Terms, opens in a new tab`,
                 `Licenses, opens in a new tab`,
+                `Report, opens in a new tab`,
             ]) {
                 await expect(foot.getByRole(`link`, { name })).toBeInViewport({ ratio: 1 });
             }
@@ -196,7 +197,7 @@ test('the drawer foot keeps every link inside a 320 px phone at 175 and 200% tex
         const foot = page.locator(`#drawer-body .drawer-foot`);
         await foot.waitFor();
         const rights = await foot.locator(`a`).evaluateAll((links) => links.map((link) => link.getBoundingClientRect().right));
-        expect(rights.length).toBe(8);
+        expect(rights.length).toBe(9);
         for (const right of rights) expect(right).toBeLessThanOrEqual(320);
     }
 });

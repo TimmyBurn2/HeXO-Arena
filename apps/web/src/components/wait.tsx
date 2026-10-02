@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { text } from '../text';
 
 /** A wait the server named: the seconds it began with and the seconds left, whole and at least 1. */
 export interface Wait {
@@ -41,6 +42,22 @@ export function useWait(): { wait: Wait | null; start: (seconds: number) => void
         [running, now],
     );
     return { wait, start, clear };
+}
+
+/** Why an action did not go through: the wait a limit named, counting down, or the failure's own line. */
+export function ActionFailure({ failure, wait }: { failure: string | null; wait: Wait | null }) {
+    if (wait !== null) {
+        return (
+            <p className="field-error" role="alert">
+                <WaitText wait={wait} line={text.states.tooMany} />
+            </p>
+        );
+    }
+    return failure === null ? null : (
+        <p className="field-error" role="alert">
+            {failure}
+        </p>
+    );
 }
 
 /**

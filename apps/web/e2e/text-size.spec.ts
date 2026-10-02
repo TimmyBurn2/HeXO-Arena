@@ -31,6 +31,7 @@ const screens: readonly { name: string; path: string; world?: Partial<World> }[]
     { name: `profile`, path: `/profile` },
     { name: `a player page`, path: `/players/ana` },
     { name: `credits`, path: `/credits` },
+    { name: `the report form`, path: `/report?subject=%2Fbots%2Fsealbot` },
     { name: `the first sign-in`, path: `/welcome` },
     { name: `the legal notice`, path: `/legal/imprint` },
     { name: `privacy`, path: `/legal/privacy` },

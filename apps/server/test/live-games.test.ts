@@ -20,7 +20,7 @@ describe('GET /api/games', () => {
             method: `POST`,
             url: `/api/games`,
             cookies: { [sessionCookieName]: cookie },
-            payload: { bot, timeControl: { mode: `unlimited` } },
+            payload: { bot, timeControl: { mode: `unlimited` }, openingPlies: 5 },
         });
         if (created.statusCode !== 201) throw new Error(`game creation failed: ${created.body}`);
         return created.json<{ gameId: string }>().gameId;

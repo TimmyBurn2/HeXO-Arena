@@ -74,6 +74,10 @@
         overflow-wrap: break-word;
     }
 
+    .game-row-name.deleted-name {
+        font-weight: var(--weight-regular);
+    }
+
     .game-row-seat .badge-bot {
         margin-left: 0;
     }

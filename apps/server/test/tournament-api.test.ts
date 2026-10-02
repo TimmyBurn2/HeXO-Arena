@@ -89,7 +89,7 @@ describe('the tournament reads and entries', () => {
 
     it('enters an owner\'s bot, replaces it with another of theirs, and withdraws it', async () => {
         const first = await enter(`ann`, `alpha`);
-        expect(tournamentEntrySchema.parse(first.json())).toEqual({ bot: `alpha`, ownerName: `ann`, online: false, ratingAtStart: null, state: `entered` });
+        expect(tournamentEntrySchema.parse(first.json())).toEqual({ key: 1, bot: `alpha`, ownerName: `ann`, online: false, ratingAtStart: null, state: `entered` });
         const token = await mintBot(world.app, sessions.get(`ann`) ?? ``, `alpha2`);
         await world.app.inject({ method: `PATCH`, url: `/api/bot/account`, headers: { authorization: `Bearer ${token}` }, payload: { accepts } });
         expect((await enter(`ann`, `alpha2`)).statusCode).toBe(200);
@@ -144,9 +144,15 @@ describe('the tournament reads and entries', () => {
         const [pairing] = round?.pairings ?? [];
         expect(round?.rest).not.toBeNull();
         expect(pairing?.games.map((game) => [game.x, game.outcome])).toEqual([
-            [pairing?.first, `live`],
-            [pairing?.second, `pending`],
+            [pairing?.first.key, `live`],
+            [pairing?.second.key, `pending`],
         ]);
+        expect(read.entries.map((entry) => [entry.key, entry.bot])).toEqual([
+            [1, `alpha`],
+            [2, `beta`],
+            [3, `gamma`],
+        ]);
+        expect(pairing?.first.name).toBe(read.entries.find((entry) => entry.key === pairing?.first.key)?.bot);
         const gameId = pairing?.games[0]?.gameId ?? ``;
         expect(read.live.map((game) => game.gameId)).toEqual([gameId]);
         expect(read.standings.map((line) => [line.rank, line.points])).toEqual([
@@ -157,15 +163,40 @@ describe('the tournament reads and entries', () => {
         const snapshot = gameSnapshotSchema.parse((await world.app.inject({ method: `GET`, url: `/api/games/${gameId}` })).json());
         expect(snapshot.tournament).toEqual({ id, name: `Autumn round robin`, round: 1, game: 1 });
         // The x bot resigns: the point goes to the second bot, as o.
-        const start = (streams.get(pairing?.first ?? ``)?.writes ?? []).map((line) => line.trim()).filter((line) => line.includes(`gameStart`));
+        const start = (streams.get(pairing?.first.name ?? ``)?.writes ?? []).map((line) => line.trim()).filter((line) => line.includes(`gameStart`));
         const token = (JSON.parse(start.at(-1) ?? `{}`) as { engine: { token: string } }).engine.token;
         await world.app.inject({ method: `POST`, url: `/api/bot/game/${gameId}/resign`, headers: { authorization: `Bearer ${token}` } });
         clock += 2_000;
         const after = await detail();
-        expect(after.rounds[0]?.pairings[0]?.games[0]).toMatchObject({ outcome: `played`, point: pairing?.second, missing: [] });
-        expect(after.standings[0]).toMatchObject({ rank: 1, bot: pairing?.second, points: 1, asX: 0, asO: 1 });
+        expect(after.rounds[0]?.pairings[0]?.games[0]).toMatchObject({ outcome: `played`, point: pairing?.second.key, missing: [] });
+        expect(after.standings[0]).toMatchObject({ rank: 1, key: pairing?.second.key, bot: pairing?.second.name, points: 1, asX: 0, asO: 1 });
         const finished = gameSnapshotSchema.parse((await world.app.inject({ method: `GET`, url: `/api/games/${gameId}` })).json());
         expect(finished.tournament).toEqual({ id, name: `Autumn round robin`, round: 1, game: 1 });
+    });
+
+    it('names every deleted bot and owner by the plain label, told apart by key alone, and never by a placeholder', async () => {
+        for (const [owner, bot] of people.slice(0, 3)) await enter(owner, bot);
+        online(`alpha`, `beta`, `gamma`);
+        clock += 120_000;
+        world.tournaments.tick();
+        for (const name of [`ann`, `bob`]) expect(world.admin({ op: `delete-user`, name, reason: `test` })).toMatchObject({ kind: `done` });
+        clock += 5_000;
+        const answer = await world.app.inject({ method: `GET`, url: `/api/tournaments/${id}` });
+        expect(answer.body).not.toMatch(/deleted-[0-9]/u);
+        const read = tournamentDetailSchema.parse(answer.json());
+        expect(read.entries.map((entry) => [entry.key, entry.bot, entry.ownerName, entry.deleted])).toEqual([
+            [1, `deleted bot`, `deleted player`, true],
+            [2, `deleted bot`, `deleted player`, true],
+            [3, `gamma`, `cid`, undefined],
+        ]);
+        const seats = read.rounds.flatMap((round) => round.pairings.flatMap((pairing) => [pairing.first, pairing.second]));
+        expect(new Set(seats.map((seat) => `${String(seat.key)} ${seat.name} ${String(seat.deleted)}`))).toEqual(
+            new Set([`1 deleted bot true`, `2 deleted bot true`, `3 gamma undefined`]),
+        );
+        expect(read.standings.filter((line) => line.deleted === true).map((line) => [line.key, line.bot]).sort()).toEqual([
+            [1, `deleted bot`],
+            [2, `deleted bot`],
+        ]);
     });
 
     it('answers 404 for an unknown or malformed id', async () => {

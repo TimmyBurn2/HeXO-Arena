@@ -31,13 +31,13 @@ export interface RundownSide {
     readonly form: readonly FormResult[];
 }
 
-/** Both seats' sides; a guest's, never kept, is null. */
+/** Both seats' sides; a guest's, or a deleted player's, who has no record to read, is null. */
 export type RundownSides = Readonly<Record<Side, RundownSide | null>>;
 
-async function sideOf(name: string, kind: GamePlayer[`kind`]): Promise<RundownSide | null> {
-    if (kind === `guest`) return null;
-    const [record, page] = await Promise.all([fetchPlayerRecord(name), fetchFinishedGames({ player: name })]);
-    return { record, form: formOf(page.games, name) };
+async function sideOf(player: GamePlayer): Promise<RundownSide | null> {
+    if (player.kind === `guest` || player.deleted === true) return null;
+    const [record, page] = await Promise.all([fetchPlayerRecord(player.name), fetchFinishedGames({ player: player.name })]);
+    return { record, form: formOf(page.games, player.name) };
 }
 
 /**
@@ -52,7 +52,7 @@ export function useRundown(players: GamePlayers, wanted: boolean): RundownSides 
     useEffect(() => {
         if (!wanted) return;
         let cancelled = false;
-        Promise.all([sideOf(x.name, x.kind), sideOf(o.name, o.kind)]).then(
+        Promise.all([sideOf(x), sideOf(o)]).then(
             ([xSide, oSide]) => {
                 if (!cancelled) setSides({ key, sides: { x: xSide, o: oSide } });
             },

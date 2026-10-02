@@ -1,6 +1,6 @@
 import { useSyncExternalStore } from 'react';
 import type { Me } from '@hexo-arena/contract';
-import { fetchMe, signOut, startGuest } from './api/client';
+import { deleteAccount, fetchMe, signOut, startGuest } from './api/client';
 import { text } from './text';
 
 export type MeState = { status: `loading` } | { status: `ready`; me: Me };
@@ -53,6 +53,15 @@ export const meStore = {
     },
     async signOut(): Promise<void> {
         await signOut();
+        await refresh();
+    },
+    /**
+     * Delete the signed-in account, then read who the browser is: no one.
+     * `deleted` runs between the two, so a page can say so before it reads as signed out.
+     */
+    async deleteAccount(name: string, deleted: () => void): Promise<void> {
+        await deleteAccount(name);
+        deleted();
         await refresh();
     },
     /** Become a guest, or keep the guest this browser already is. */

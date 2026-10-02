@@ -1,6 +1,7 @@
 import {
     archiveReadGlobalLimit,
     archiveReadLimit,
+    accountExportLimit,
     botManagementLimit,
     clientRequestLimit,
     discordExchangeLimit,
@@ -9,6 +10,9 @@ import {
     guestMintPrefixLimit,
     principalRequestLimit,
     publicRequestLimit,
+    reportGlobalLimit,
+    reportLimit,
+    reportPrefixLimit,
     signInStartLimit,
     signInStartPrefixLimit,
     streamOpenLimit,
@@ -54,6 +58,10 @@ export interface LimitTable {
     discordExchange: RateLimit;
     archiveRead: RateLimit;
     archiveReadGlobal: RateLimit;
+    report: RateLimit;
+    reportPrefix: RateLimit;
+    reportGlobal: RateLimit;
+    accountExport: RateLimit;
 }
 
 export const defaultLimits: LimitTable = {
@@ -70,13 +78,17 @@ export const defaultLimits: LimitTable = {
     discordExchange: discordExchangeLimit,
     archiveRead: archiveReadLimit,
     archiveReadGlobal: archiveReadGlobalLimit,
+    report: reportLimit,
+    reportPrefix: reportPrefixLimit,
+    reportGlobal: reportGlobalLimit,
+    accountExport: accountExportLimit,
 };
 
 /** The limits a client is held to for one kind of anonymous act. */
-export type ClientLimit = `guestMint` | `signInStart`;
+export type ClientLimit = `guestMint` | `signInStart` | `report`;
 
 /** The limits a credential is held to, each spent once the credential is known. */
-export type CredentialLimit = `principal` | `botManagement` | `streamOpen` | `engineDial`;
+export type CredentialLimit = `principal` | `botManagement` | `streamOpen` | `engineDial` | `accountExport`;
 
 /** The part of the limits a route handler spends after authentication. */
 export interface CredentialLimits {
@@ -88,6 +100,7 @@ export interface ClientLimits {
     wait(limit: ClientLimit, request: FastifyRequest): number | null;
     refuseArchive(reply: FastifyReply, request: FastifyRequest): boolean;
     takeDiscordExchange(): boolean;
+    takeReport(): number | null;
 }
 
 // One client map holds at most this many keys, about a megabyte and a half.
@@ -114,6 +127,7 @@ export class RequestLimits {
     readonly #perPrefix: Record<ClientLimit, RateBuckets>;
     readonly #archive: RateBuckets;
     readonly #discordExchange: RateBuckets;
+    readonly #reportGlobal: RateBuckets;
 
     constructor(deps: { table: LimitTable; now: () => number; trustedProxy: string | null }) {
         this.keys = new ClientKeys({ trustedProxy: deps.trustedProxy, now: deps.now });
@@ -124,18 +138,22 @@ export class RequestLimits {
             botManagement: new RateBuckets(deps.table.botManagement, deps.now),
             streamOpen: new RateBuckets(deps.table.streamOpen, deps.now),
             engineDial: new RateBuckets(deps.table.engineDial, deps.now),
+            accountExport: new RateBuckets(deps.table.accountExport, deps.now),
         };
         this.#perClient = {
             guestMint: new RateBuckets(deps.table.guestMint, deps.now, clientKeyCap),
             signInStart: new RateBuckets(deps.table.signInStart, deps.now, clientKeyCap),
+            report: new RateBuckets(deps.table.report, deps.now, clientKeyCap),
             archiveRead: new RateBuckets(deps.table.archiveRead, deps.now, clientKeyCap),
         };
         this.#perPrefix = {
             guestMint: new RateBuckets(deps.table.guestMintPrefix, deps.now, clientKeyCap),
             signInStart: new RateBuckets(deps.table.signInStartPrefix, deps.now, clientKeyCap),
+            report: new RateBuckets(deps.table.reportPrefix, deps.now, clientKeyCap),
         };
         this.#archive = new RateBuckets(deps.table.archiveReadGlobal, deps.now);
         this.#discordExchange = new RateBuckets(deps.table.discordExchange, deps.now);
+        this.#reportGlobal = new RateBuckets(deps.table.reportGlobal, deps.now);
         this.keys.onRekey(() => {
             this.#client.clear();
             for (const buckets of [...Object.values(this.#perClient), ...Object.values(this.#perPrefix)]) buckets.clear();
@@ -154,6 +172,7 @@ export class RequestLimits {
         for (const buckets of [...Object.values(this.#perClient), ...Object.values(this.#perPrefix)]) buckets.sweep();
         this.#archive.sweep();
         this.#discordExchange.sweep();
+        this.#reportGlobal.sweep();
     }
 
     /**
@@ -169,6 +188,11 @@ export class RequestLimits {
     /** Spends one of the Discord exchanges every caller shares; false once they are spent. */
     takeDiscordExchange(): boolean {
         return this.#discordExchange.take(`all`) === null;
+    }
+
+    /** Spends one of the reports every caller shares: null when admitted, else whole seconds until one returns. */
+    takeReport(): number | null {
+        return this.#reportGlobal.take(`all`);
     }
 
     /**

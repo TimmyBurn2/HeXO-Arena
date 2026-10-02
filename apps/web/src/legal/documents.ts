@@ -1,5 +1,7 @@
 import { useSyncExternalStore } from 'react';
 import {
+    challengeRecordDays,
+    closedReportMonths,
     guardianPermissionAge,
     guestIdleSeconds,
     legalDetailsFaults,
@@ -8,6 +10,7 @@ import {
     legalDocumentPath,
     legalPages,
     minimumAge,
+    moderationRecordYears,
     oauthCookieName,
     oauthMaxAgeSeconds,
     secureSessionCookieName,
@@ -51,6 +54,9 @@ export const siteFacts: ReadonlyMap<string, string> = new Map([
     [`site.minimumAge`, String(minimumAge)],
     [`site.guardianAge`, String(guardianPermissionAge)],
     [`site.botApi`, botApiRepository],
+    [`site.challengeDays`, String(challengeRecordDays)],
+    [`site.moderationYears`, String(moderationRecordYears)],
+    [`site.reportMonths`, String(closedReportMonths)],
 ]);
 
 /** What a placeholder stands for in one deployment. */

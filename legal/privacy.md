@@ -52,18 +52,18 @@ For each bot, {{site.name}} stores its name, about text, version, repository lin
 All but the token is public, with your name as owner, and so is whether the bot is connected, whether it is open to challenges, and how many games it is playing, which shows when you run it.
 
 Each challenge between bots records both bots, the clock, the opening, the outcome, and the times.
-These records are not public, count toward the daily challenge limits, and have no set end yet.
+These records are not public, count toward the daily challenge limits, and are deleted {{site.challengeDays}} days after the challenge was sent.
 
 A bot you enter in a tournament is listed there with you as its owner, its rating at the start, its results, and its standing, all public.
 
 A bot is kept until you delete it.
-A bot with a game that has a winner then stays in the public record under a placeholder (see [Deleting your account](#deleting-your-account)); any other bot is deleted with its games and challenges.
+A bot that won or lost a game against an account or a bot, or played in a tournament, then stays in the public record as "deleted bot" (see [Deleting your account](#deleting-your-account)); any other bot is deleted with its games and challenges.
 
 Legal basis: Art. 6(1)(b) GDPR; for the challenge records, Art. 6(1)(f) GDPR, legitimate interest: enforcing fair challenge limits.
 
 ## Games and ratings
 
-{{site.name}} stores every game except guest games: the players, the moves with their times, the clock, the result, and each player's rating before and after.
+{{site.name}} stores every game, guest games included: the players, the moves with their times, the clock, the result, and each rated player's rating before and after.
 Games, ratings, and the rating history are public, and anyone can watch games live.
 The ladder shows each player's rating, rated games played, and when the last one finished; by default it lists only players with a game in the last 30 days.
 
@@ -75,9 +75,12 @@ Legal basis: Art. 6(1)(b) GDPR, and Art. 6(1)(f) GDPR, legitimate interest: runn
 ## Playing as a guest
 
 A guest gets a random label, "Guest" and four characters, and a session cookie.
-Guest games stay in the server's memory, never in the database, and are gone when the guest session ends: when you end it or sign in with Discord, when the server restarts, or after {{site.guestIdleHours}} hours without a request while no game runs.
+The session stays in the server's memory, never in the database, and ends when you end it or sign in with Discord, when the server restarts, or after {{site.guestIdleHours}} hours without a request while no game runs.
 
-Legal basis: Art. 6(1)(b) GDPR.
+Guest games are unrated and join the public record like every other game, shown and kept under the random label, which is all a game keeps of a guest: no session reference and nothing else that could identify you.
+A guest has no player page and cannot be searched for.
+
+Legal basis: Art. 6(1)(b) GDPR; for keeping guest games, Art. 6(1)(f) GDPR, legitimate interest: a complete public record of each bot's games.
 
 ## Cookies and browser storage
 
@@ -95,8 +98,9 @@ You can delete them in your browser.
 
 ## Moderation records
 
-When the operator acts on an account, a bot, or a game, or pauses the site, the action, the affected name if any, a reason, and the time are recorded.
-The records have no set end yet and keep the name after the account is deleted.
+When the operator acts on an account, a bot, a game, or a report, or pauses the site, the action, the affected name if any, a reason, and the time are recorded; so is the deletion of an account by its owner.
+The records are kept for the rest of the year of the action and the {{site.moderationYears}} calendar years after it, then deleted.
+When an account is deleted, every record naming it or one of its bots names a placeholder instead, such as deleted-12, which only the operator sees.
 
 Legal basis: Art. 6(1)(f) GDPR; legitimate interest: fair, documented moderation and defending legal claims (Art. 17(3)(e) GDPR).
 
@@ -105,17 +109,22 @@ Legal basis: Art. 6(1)(f) GDPR; legitimate interest: fair, documented moderation
 A copy of the database is made every night and kept for 14 days; copies off the server are encrypted and kept for at most 14 days.
 Deleted data leaves every backup within 14 days.
 
+So that restoring a backup never brings back a deleted account, each deletion is also noted, by account ID and time alone, in a file kept apart from the database; after a restore, the account is deleted again.
+A note is kept one day longer than the oldest backup, then removed.
+
 Legal basis: Art. 6(1)(f) GDPR; legitimate interest: keeping the service available.
 
 ## Deleting your account
 
-Write to [{{operator.email}}](mailto:{{operator.email}}) and name your account; the operator deletes it within one month.
+Use Delete account on your Profile page and type your public name to confirm; the deletion takes effect at once.
+If you sit in a live game, finish or resign it first.
+You can also write to [{{operator.email}}](mailto:{{operator.email}}) and name your account; the operator deletes it within one month.
 
 Your account, sessions, and bots are deleted, and your name becomes free.
-Your games, and the games of each bot of yours with a game that has a winner, stay in the public record, your name and those bots' names replaced by placeholders such as deleted-12.
-A bot without a game that has a winner is deleted with its games, yours against it included.
+Your games, and those of each bot of yours that won or lost a game against an account or a bot, or played in a tournament, stay in the public record, where you read as "deleted player" and those bots as "deleted bot".
+Any other bot of yours is deleted with its games, guest games and yours against it included.
 
-Nothing the site shows links a placeholder to you; the operator's record of the deletion keeps your name.
+Nothing the site shows links "deleted player" or "deleted bot" to you, and the operator's moderation records name a placeholder instead of your name.
 
 Legal basis for keeping the games: Art. 6(1)(f) GDPR; legitimate interest: keeping your opponents' histories and ratings whole.
 You can object; see [Right to object](#right-to-object).
@@ -125,6 +134,15 @@ You can object; see [Right to object](#right-to-object).
 If you write, your email address, name, and message are used to answer you or to handle your report, and deleted 12 months after the matter is closed.
 
 Legal basis: Art. 6(1)(b) GDPR, or Art. 6(1)(f) GDPR, legitimate interest: answering messages and handling reports.
+
+## Reports
+
+Anyone may report a name, a bot, a game, or anything else on the site with the [report form](/report), linked at the foot of every page.
+A report stores the page address, the reason and description you give, your name and email address if you give them, your statement that the report is accurate and in good faith, and the time.
+It is not linked to your account, even when you are signed in.
+Only the operator reads reports, to act on them and to write back to you; a report is deleted {{site.reportMonths}} months after the operator closes it.
+
+Legal basis: Art. 6(1)(f) GDPR; legitimate interest: acting on unlawful content and abuse, and keeping the service safe.
 
 ## Who receives data
 
@@ -137,7 +155,8 @@ Nobody else receives data, and {{site.name}} transfers no data outside the EU.
 ## Your rights
 
 You have the right of access (Art. 15), rectification (Art. 16), erasure (Art. 17), restriction (Art. 18), data portability (Art. 20), and objection (Art. 21 GDPR).
-Write to [{{operator.email}}](mailto:{{operator.email}}); you get an answer within one month.
+Download my data on your Profile page hands you, at once, every record of your account and your bots as one file.
+For anything else, write to [{{operator.email}}](mailto:{{operator.email}}); you get an answer within one month.
 
 You may complain to a data protection authority, such as the one responsible for {{site.name}}: {{supervisoryAuthority.name}}, {{supervisoryAuthority.street}}, {{supervisoryAuthority.postcodeAndCity}}, {{supervisoryAuthority.country}}, [{{supervisoryAuthority.url}}]({{supervisoryAuthority.url}}).
 

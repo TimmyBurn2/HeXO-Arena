@@ -1,4 +1,4 @@
-import { legalPagePath, type LegalPage } from '@hexo-arena/contract';
+import { legalPagePath, reportPagePath, reportSubjectParam, type LegalPage } from '@hexo-arena/contract';
 import { text } from './text';
 
 /** The Hexo-Bot-Api repository: the bot API's spec, its examples, and the readme. */
@@ -44,3 +44,14 @@ export const legalPageLinks: Readonly<Record<LegalPage, SiteLink>> = {
 
 /** The licenses as a standing link, the last of the legal group. */
 export const licensesLink: SiteLink = { kind: `external`, label: text.shell.links.licenses, href: thirdPartyLicensesPath };
+
+/** The report form with the page a report is about filled in; from the form itself, the form alone. */
+export function reportPathOf(subject: string): string {
+    if (subject === reportPagePath || subject.startsWith(`${reportPagePath}?`)) return reportPagePath;
+    return `${reportPagePath}?${new URLSearchParams({ [reportSubjectParam]: subject }).toString()}`;
+}
+
+/** The report form as a standing link, about the page it stands on. */
+export function reportLinkOf(subject: string): SiteLink {
+    return { kind: `page`, label: text.shell.links.report, to: reportPathOf(subject) };
+}

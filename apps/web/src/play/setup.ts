@@ -1,7 +1,7 @@
 import {
     acceptsCovers,
     botConcurrentGameCap,
-    defaultOpeningPlies,
+    defaultHumanOpeningPlies,
     humanSeedRating,
     nameKeyOf,
     openingPliesSchema,
@@ -177,7 +177,7 @@ export function clockFromParam(param: string | null): TimeControl | null {
 /** The opening an address names, or the default. */
 export function openingFromParam(param: string | null): OpeningPlies {
     const parsed = openingPliesSchema.safeParse(param === null ? undefined : Number(param));
-    return parsed.success ? parsed.data : defaultOpeningPlies;
+    return parsed.success ? parsed.data : defaultHumanOpeningPlies;
 }
 
 /** The setup as the page's address carries it, so a sign-in returns to it and a link shares it. */
@@ -185,14 +185,14 @@ export function playPath(bot: string | null, clock: TimeControl | null, opening:
     const params = new URLSearchParams();
     if (bot !== null) params.set(`bot`, bot);
     if (clock !== null) params.set(`clock`, clockParam(clock));
-    if (opening !== defaultOpeningPlies) params.set(`opening`, String(opening));
+    if (opening !== defaultHumanOpeningPlies) params.set(`opening`, String(opening));
     const query = params.toString();
     return query === `` ? `/play` : `/play?${query}`;
 }
 
 /** The Play page opened on a bot, as the bot page and the Bots rows link to it. */
 export function playBotPath(bot: string): string {
-    return playPath(bot, null, defaultOpeningPlies);
+    return playPath(bot, null, defaultHumanOpeningPlies);
 }
 
 /** Where this browser keeps the last opponent and clock a game started with. */

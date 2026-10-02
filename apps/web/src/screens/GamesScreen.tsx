@@ -26,7 +26,7 @@ import './GamesScreen.css';
 const resultOptions = [`won`, `lost`, `none`] as const;
 const sideOptions = [`x`, `o`] as const;
 const clockOptions = [`turn`, `match`, `unlimited`] as const;
-const kindOptions = [`bot-bot`, `human-bot`] as const;
+const kindOptions = [`bot-bot`, `human-bot`, `guest-bot`] as const;
 const openingOptions = [`1`, `3`, `5`, `7`, `9`] as const;
 
 /** A list's page, a name no player holds, or a read that failed. */

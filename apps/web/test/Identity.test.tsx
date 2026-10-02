@@ -180,10 +180,10 @@ describe('Identity', () => {
         expect(panel()?.contains(signIn)).toBe(true);
         expect(document.activeElement).toBe(signIn);
         expect(panel()?.querySelector(`.discord-sign-in .note`)?.textContent).toBe(
-            `Signing in ends this guest session and its games. Your email stays with Discord; see\u00a0Privacy.`,
+            `Signing in ends this guest session and its live games. Your email stays with Discord; see\u00a0Privacy.`,
         );
         const end = screen.getByRole(`button`, { name: `End guest session` });
-        expect(document.getElementById(end.getAttribute(`aria-describedby`) ?? ``)?.textContent).toBe(`Your guest games end with it.`);
+        expect(document.getElementById(end.getAttribute(`aria-describedby`) ?? ``)?.textContent).toBe(`Your live guest games end with it.`);
         expect(signIn.compareDocumentPosition(end) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     });
 

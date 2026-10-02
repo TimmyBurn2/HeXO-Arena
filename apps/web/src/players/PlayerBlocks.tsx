@@ -75,7 +75,7 @@ function Record({ record }: { record: PlayerRecord }) {
             <h2 id="player-record-title" className="card-title">
                 {words.title}
             </h2>
-            {record.games === 0 ? <p className="note">{words.empty}</p> : <Figures record={record} />}
+            {record.games === 0 && (record.guests?.games ?? 0) === 0 ? <p className="note">{words.empty}</p> : <Figures record={record} />}
         </section>
     );
 }
@@ -110,6 +110,12 @@ function Figures({ record }: { record: PlayerRecord }) {
                         <dd>{words.span(dateOf(record.firstGameAt), dateOf(record.lastGameAt))}</dd>
                     </>
                 )}
+                {record.guests === undefined || record.guests.games === 0 ? null : (
+                    <>
+                        <dt>{words.guests}</dt>
+                        <dd>{words.guestLine(record.guests.games, record.guests.won, record.guests.lost)}</dd>
+                    </>
+                )}
                 {record.rank === null ? null : (
                     <>
                         <dt>{words.ladder}</dt>
@@ -135,15 +141,20 @@ function MostPlayed({ record }: { record: PlayerRecord }) {
                 <p className="note">{words.none}</p>
             ) : (
                 <ul className="player-opponent-list">
-                    {record.opponents.map((opponent) => (
-                        <li key={`${opponent.kind} ${opponent.name}`}>
+                    {/* Two deleted opponents share a label, so the place in the list keys each. */}
+                    {record.opponents.map((opponent, index) => (
+                        <li key={`${String(index)} ${opponent.kind} ${opponent.name}`}>
                             <span className="player-cell">
-                                <PlayerName name={opponent.name} kind={opponent.kind} />
+                                <PlayerName name={opponent.name} kind={opponent.kind} deleted={opponent.deleted} />
                                 {opponent.kind === `bot` ? <BotBadge /> : null}
                             </span>
-                            <Link to={gamesPathOf(record.name, opponent.name)} className="player-meetings">
-                                {words.meetings(opponent.games, opponent.won, opponent.lost)}
-                            </Link>
+                            {opponent.deleted === true ? (
+                                <span className="player-meetings">{words.meetings(opponent.games, opponent.won, opponent.lost)}</span>
+                            ) : (
+                                <Link to={gamesPathOf(record.name, opponent.name)} className="player-meetings">
+                                    {words.meetings(opponent.games, opponent.won, opponent.lost)}
+                                </Link>
+                            )}
                         </li>
                     ))}
                 </ul>

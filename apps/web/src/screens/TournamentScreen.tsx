@@ -1,13 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import {
-    clockText,
-    tournamentMeta,
-    tournamentMinPresent,
-    tournamentRunningPollMs,
-    tournamentWaitingPollMs,
-    type TournamentDetail,
-    type TournamentSummary,
-} from '@hexo-arena/contract';
+import { clockText, deletedPlayerName, tournamentMeta, tournamentMinPresent, tournamentRunningPollMs, tournamentWaitingPollMs, type TournamentDetail, type TournamentSummary } from '@hexo-arena/contract';
 import { ApiError, fetchTournament, limitedFor } from '../api/client';
 import { BotBadge, PlayerName, PresenceDot } from '../components/player';
 import { ErrorFrame, SkeletonRows } from '../components/states';
@@ -198,7 +190,7 @@ function Running({ detail, readAt }: { detail: TournamentDetail; readAt: number 
 
 function Finished({ detail }: { detail: TournamentDetail }) {
     const top = detail.standings.slice(0, 3);
-    const places = top.map((line) => ({ name: line.bot, kind: `bot` as const, figure: String(line.points), meta: text.tournaments.plateMeta(line.points, <PlayerName name={line.ownerName} kind="human" />), play: null, rank: line.rank }));
+    const places = top.map((line) => ({ name: line.bot, kind: `bot` as const, deleted: line.deleted, figure: String(line.points), meta: text.tournaments.plateMeta(line.points, <PlayerName name={line.ownerName} kind="human" deleted={line.ownerName === deletedPlayerName} />), play: null, rank: line.rank }));
     return (
         <>
             {detail.status === `finished` && top.length > 0 ? (
@@ -233,12 +225,12 @@ function Entries({ detail }: { detail: TournamentDetail }) {
             ) : (
                 <ul className="tournament-entries">
                     {detail.entries.map((entry) => (
-                        <li key={entry.bot}>
+                        <li key={entry.key}>
                             {/* Presence is today's, which says nothing of a tournament that is over. */}
                             {detail.status === `scheduled` || detail.status === `running` ? <PresenceDot online={entry.online} /> : null}
-                            <PlayerName name={entry.bot} kind="bot" />
+                            <PlayerName name={entry.bot} kind="bot" deleted={entry.deleted} />
                             <BotBadge />
-                            <span className="tournament-owner">{text.ladder.byOwner(<PlayerName name={entry.ownerName} kind="human" />)}</span>
+                            <span className="tournament-owner">{text.ladder.byOwner(<PlayerName name={entry.ownerName} kind="human" deleted={entry.ownerName === deletedPlayerName} />)}</span>
                             {entry.state === `absent` || entry.state === `left_out` ? (
                                 <span className="tournament-reason">{text.tournaments.reasons[entry.reason ?? `absent`]}</span>
                             ) : null}
@@ -269,10 +261,10 @@ function Gone({ entries, title, id }: { entries: TournamentDetail[`entries`]; ti
             </h2>
             <ul className="tournament-entries">
                 {entries.map((entry) => (
-                    <li key={entry.bot}>
-                        <PlayerName name={entry.bot} kind="bot" />
+                    <li key={entry.key}>
+                        <PlayerName name={entry.bot} kind="bot" deleted={entry.deleted} />
                         <BotBadge />
-                        <span className="tournament-owner">{text.ladder.byOwner(<PlayerName name={entry.ownerName} kind="human" />)}</span>
+                        <span className="tournament-owner">{text.ladder.byOwner(<PlayerName name={entry.ownerName} kind="human" deleted={entry.ownerName === deletedPlayerName} />)}</span>
                         <span className="tournament-reason">{text.tournaments.reasons[entry.reason ?? `absent`]}</span>
                     </li>
                 ))}

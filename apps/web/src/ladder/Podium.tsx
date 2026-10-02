@@ -27,6 +27,8 @@ export interface PodiumPlace {
     readonly play: { readonly to: string; readonly label: string } | null;
     /** The place the plate names when it differs from the tower's, as a shared second does. */
     readonly rank?: number;
+    /** Set for a deleted player or bot, whose label reads apart from the names. */
+    readonly deleted?: boolean | undefined;
 }
 
 /**
@@ -128,7 +130,7 @@ function Plate({ entry, place }: { entry: PodiumPlace; place: Place }) {
             <span className="podium-who">
                 <span className={(entry.rank ?? place) === 1 ? `podium-rank first` : `podium-rank`}>{String(entry.rank ?? place)}</span>
                 <span className="podium-name">
-                    <PlayerName name={entry.name} kind={entry.kind} />
+                    <PlayerName name={entry.name} kind={entry.kind} deleted={entry.deleted} />
                 </span>
                 {entry.kind === `bot` ? <BotBadge /> : null}
             </span>

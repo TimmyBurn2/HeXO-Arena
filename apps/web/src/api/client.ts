@@ -1,4 +1,11 @@
 import {
+    deleteAccountRequestSchema,
+    meExportPath,
+    reportReceiptSchema,
+    reportRequestSchema,
+    reportsPath,
+    type ReportReceipt,
+    type ReportRequest,
     botDirectoryQuerySchema,
     botListingSchema,
     botWithTokenSchema,
@@ -142,6 +149,48 @@ export function fetchMe(): Promise<Me> {
 /** End the session, account or guest; idempotent. */
 export function signOut(): Promise<void> {
     return sendEmpty(logoutPath, `POST`);
+}
+
+/** Delete the signed-in account, named as the person typed it; a seat in a live game answers in_live_game. */
+export async function deleteAccount(name: string): Promise<void> {
+    let response: Response;
+    try {
+        response = await fetch(mePath, {
+            method: `DELETE`,
+            headers: { 'content-type': `application/json`, accept: `application/json` },
+            body: JSON.stringify(deleteAccountRequestSchema.parse({ name })),
+            cache: `no-store`,
+        });
+    } catch (cause) {
+        throw new ApiError(0, null, cause instanceof Error ? cause.message : `network`);
+    }
+    if (!response.ok) throw await failureOf(response);
+}
+
+// The file name the server gives the download, or one of the same shape.
+function attachmentName(response: Response): string {
+    const named = /filename="([^"]+)"/u.exec(response.headers.get(`content-disposition`) ?? ``)?.[1];
+    return named ?? `hexo-arena-data.json`;
+}
+
+/**
+ * The signed-in account's data as the file the server words it: passed on
+ * to the person byte for byte, so the page never reads into it.
+ */
+export async function fetchAccountData(): Promise<{ file: Blob; name: string }> {
+    let response: Response;
+    try {
+        response = await fetch(meExportPath, { headers: { accept: `application/json` }, cache: `no-store` });
+    } catch (cause) {
+        throw new ApiError(0, null, cause instanceof Error ? cause.message : `network`);
+    }
+    if (!response.ok) throw await failureOf(response);
+    return { file: await response.blob(), name: attachmentName(response) };
+}
+
+/** Send a report to the operator; anyone may, signed in or not. */
+export function sendReport(report: ReportRequest): Promise<ReportReceipt> {
+    return sendJson(reportsPath, `POST`, reportRequestSchema.parse(report), reportReceiptSchema);
 }
 
 /** Start an anonymous, unrated session, or rejoin the one this browser holds. */

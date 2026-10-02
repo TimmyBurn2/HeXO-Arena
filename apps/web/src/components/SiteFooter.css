@@ -89,7 +89,18 @@
         }
     }
 
-    /* Where one row cannot hold the four legal links, they stand two to a
+    /* Where one row cannot hold five legal links, they stand three to a
+       row, then two; the count sits in :where() so the narrower rules below
+       still win. */
+    @media (width < 27.5rem) {
+        .site-footer .legal-links:where(:has(> :nth-child(5))) {
+            display: grid;
+            grid-template-columns: repeat(3, auto);
+            justify-content: start;
+        }
+    }
+
+    /* Where one row cannot hold four legal links, they stand two to a
        row. */
     @media (width < 23.5rem) {
         .site-footer .legal-links {

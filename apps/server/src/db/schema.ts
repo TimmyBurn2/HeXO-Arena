@@ -1,7 +1,16 @@
 import { check, foreignKey, index, integer, primaryKey, real, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core';
 import { sql } from 'drizzle-orm';
 import type { AnySQLiteColumn } from 'drizzle-orm/sqlite-core';
-import { discordNameMaxLength, nextPathMaxLength, signupAttemptCap } from '@hexo-arena/contract';
+import {
+    discordNameMaxLength,
+    nextPathMaxLength,
+    reportDetailsMaxLength,
+    reportEmailMaxLength,
+    reportNameMaxLength,
+    reportReasons,
+    reportSubjectMaxLength,
+    signupAttemptCap,
+} from '@hexo-arena/contract';
 // One global namespace shared by users and bots: a SQLite unique index
 // cannot span two tables, so the fold key is reserved here first and both
 // tables reference it.
@@ -139,9 +148,11 @@ export const bots = sqliteTable(
 // finished_at is null; finish_seq numbers finishes in the order they
 // happened, which finished_at cannot, since two games share a second.
 // A game seats two players in one row: a human game
-// sets the human's id, the facing bot, and the human's side; a bot-vs-bot
-// game sets the challenger, the challenged bot, and the challenger's side.
-// The seats constraint pins exactly one of the two groups.
+// sets the human's id, the facing bot, and the human's side; a guest game
+// sets the guest's random label in place of the id, and nothing else of
+// the guest; a bot-vs-bot game sets the challenger, the challenged bot,
+// and the challenger's side.
+// The seats constraint pins exactly one of the three groups.
 export const games = sqliteTable(
     `games`,
     {
@@ -149,6 +160,7 @@ export const games = sqliteTable(
         userId: text(`user_id`).references(() => users.id, { onDelete: `cascade` }),
         botId: text(`bot_id`).references(() => bots.id, { onDelete: `cascade` }),
         userSide: text(`user_side`),
+        guestName: text(`guest_name`),
         challengerBotId: text(`challenger_bot_id`).references(() => bots.id, {
             onDelete: `cascade`,
         }),
@@ -178,6 +190,7 @@ export const games = sqliteTable(
         index(`games_challenger_finish_idx`).on(table.challengerBotId, table.finishSeq),
         index(`games_dest_finish_idx`).on(table.destBotId, table.finishSeq),
         index(`games_human_finish_idx`).on(table.finishSeq).where(sql`${table.userId} is not null`),
+        index(`games_guests_finish_idx`).on(table.finishSeq).where(sql`${table.guestName} is not null`),
         index(`games_bots_finish_idx`).on(table.finishSeq).where(sql`${table.challengerBotId} is not null`),
         index(`games_undecided_finish_idx`).on(table.finishSeq).where(sql`${table.winner} is null`),
         index(`games_reason_finish_idx`).on(table.finishReason, table.finishSeq),
@@ -191,6 +204,8 @@ export const games = sqliteTable(
             `games_pairing_check`,
             sql`(${table.pairingId} is null and ${table.pairingGame} is null) or (${table.pairingId} is not null and coalesce(${table.pairingGame}, 0) in (1, 2) and ${table.challengerBotId} is not null)`,
         ),
+        // The label a guest session is minted with, and nothing that could find the guest again.
+        check(`games_guest_name_check`, sql`${table.guestName} is null or ${table.guestName} glob 'Guest [a-z0-9][a-z0-9][a-z0-9][a-z0-9]'`),
         check(
             `games_user_side_check`,
             sql`${table.userSide} is null or ${table.userSide} in ('x', 'o')`,
@@ -218,10 +233,13 @@ export const games = sqliteTable(
         check(
             `games_seats_check`,
             sql`(
-                ${table.userId} is not null and ${table.botId} is not null and ${table.userSide} is not null
+                ${table.userId} is not null and ${table.guestName} is null and ${table.botId} is not null and ${table.userSide} is not null
                 and ${table.challengerBotId} is null and ${table.destBotId} is null and ${table.challengerSide} is null
             ) or (
-                ${table.userId} is null and ${table.botId} is null and ${table.userSide} is null
+                ${table.userId} is null and ${table.guestName} is not null and ${table.botId} is not null and ${table.userSide} is not null
+                and ${table.challengerBotId} is null and ${table.destBotId} is null and ${table.challengerSide} is null
+            ) or (
+                ${table.userId} is null and ${table.guestName} is null and ${table.botId} is null and ${table.userSide} is null
                 and ${table.challengerBotId} is not null and ${table.destBotId} is not null and ${table.challengerSide} is not null
                 and ${table.challengerBotId} <> ${table.destBotId}
             )`,
@@ -383,7 +401,7 @@ export const adminActions = sqliteTable(
     (table) => [
         check(
             `admin_actions_action_check`,
-            sql`${table.action} in ('pause', 'resume', 'ban-user', 'unban-user', 'delete-user', 'delist-bot', 'relist-bot', 'revoke-bot', 'abort-game', 'recompute-ratings', 'tournament-create', 'tournament-cancel', 'tournament-schedule-add', 'tournament-schedule-remove')`,
+            sql`${table.action} in ('pause', 'resume', 'ban-user', 'unban-user', 'delete-user', 'delist-bot', 'relist-bot', 'revoke-bot', 'abort-game', 'recompute-ratings', 'tournament-create', 'tournament-cancel', 'tournament-schedule-add', 'tournament-schedule-remove', 'report-close')`,
         ),
         check(`admin_actions_reason_check`, sql`length(${table.reason}) > 0`),
     ],
@@ -532,5 +550,51 @@ export const tournamentPairings = sqliteTable(
         ),
         // Game 2 waits for game 1 to be over.
         check(`tournament_pairings_order_check`, sql`${table.game2} = 'pending' or ${table.game1} not in ('pending', 'live')`),
+    ],
+);
+
+const reasons = sql.raw(reportReasons.map((reason) => `'${reason}'`).join(`, `));
+
+// A report someone sent from the form, open until the operator closes it
+// with a note.
+// Signed-out visitors report too, so nothing ties a report to an account;
+// the name and email are what the reporter chose to give.
+// The good-faith statement is a required box, kept as given.
+export const reports = sqliteTable(
+    `reports`,
+    {
+        id: integer(`id`).primaryKey({ autoIncrement: true }),
+        subject: text(`subject`).notNull(),
+        reason: text(`reason`).notNull(),
+        details: text(`details`).notNull(),
+        reporterName: text(`reporter_name`),
+        reporterEmail: text(`reporter_email`),
+        goodFaith: integer(`good_faith`).notNull(),
+        status: text(`status`).notNull().default(`open`),
+        createdAt: integer(`created_at`).notNull(),
+        closedAt: integer(`closed_at`),
+        note: text(`note`),
+    },
+    (table) => [
+        index(`reports_status_created_idx`).on(table.status, table.createdAt),
+        index(`reports_closed_at_idx`).on(table.closedAt),
+        check(
+            `reports_subject_check`,
+            sql`length(${table.subject}) between 1 and ${sql.raw(String(reportSubjectMaxLength))} and substr(${table.subject}, 1, 1) = '/'`,
+        ),
+        check(`reports_reason_check`, sql`${table.reason} in (${reasons})`),
+        check(`reports_details_check`, sql`length(${table.details}) between 1 and ${sql.raw(String(reportDetailsMaxLength))}`),
+        check(
+            `reports_name_check`,
+            sql`${table.reporterName} is null or length(${table.reporterName}) between 1 and ${sql.raw(String(reportNameMaxLength))}`,
+        ),
+        check(
+            `reports_email_check`,
+            sql`${table.reporterEmail} is null or (length(${table.reporterEmail}) between 3 and ${sql.raw(String(reportEmailMaxLength))} and ${table.reporterEmail} like '%_@_%')`,
+        ),
+        check(`reports_good_faith_check`, sql`${table.goodFaith} = 1`),
+        check(`reports_status_check`, sql`${table.status} in ('open', 'closed')`),
+        check(`reports_closed_check`, sql`(${table.status} = 'closed') = (${table.closedAt} is not null)`),
+        check(`reports_note_check`, sql`(${table.status} = 'closed') = (${table.note} is not null) and (${table.note} is null or length(${table.note}) between 1 and 500)`),
     ],
 );

@@ -20,6 +20,7 @@ const screens: readonly { name: string; path: string }[] = [
     { name: `build a bot`, path: `/connect` },
     { name: `profile`, path: `/profile` },
     { name: `credits`, path: `/credits` },
+    { name: `the report form`, path: `/report` },
     { name: `a missing page`, path: `/nowhere` },
     { name: `a missing game`, path: `/game/nope` },
 ];

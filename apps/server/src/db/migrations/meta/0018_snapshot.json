@@ -1,0 +1,2147 @@
+{
+  "version": "6",
+  "dialect": "sqlite",
+  "id": "2806a5b7-7f88-488b-a1a1-10227f14d454",
+  "prevId": "dd741d84-2cf2-4901-a7c2-fbc3d2403a5b",
+  "tables": {
+    "admin_actions": {
+      "name": "admin_actions",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "integer",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": true
+        },
+        "actor": {
+          "name": "actor",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "action": {
+          "name": "action",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "target": {
+          "name": "target",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "reason": {
+          "name": "reason",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "at": {
+          "name": "at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "admin_actions_action_check": {
+          "name": "admin_actions_action_check",
+          "value": "\"admin_actions\".\"action\" in ('pause', 'resume', 'ban-user', 'unban-user', 'delete-user', 'delist-bot', 'relist-bot', 'revoke-bot', 'abort-game', 'recompute-ratings', 'tournament-create', 'tournament-cancel', 'tournament-schedule-add', 'tournament-schedule-remove', 'report-close')"
+        },
+        "admin_actions_reason_check": {
+          "name": "admin_actions_reason_check",
+          "value": "length(\"admin_actions\".\"reason\") > 0"
+        }
+      }
+    },
+    "auth_states": {
+      "name": "auth_states",
+      "columns": {
+        "state": {
+          "name": "state",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "nonce": {
+          "name": "nonce",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "expires_at": {
+          "name": "expires_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "next": {
+          "name": "next",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'/'"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "auth_states_next_check": {
+          "name": "auth_states_next_check",
+          "value": "length(\"auth_states\".\"next\") between 1 and 256 and substr(\"auth_states\".\"next\", 1, 1) = '/'"
+        }
+      }
+    },
+    "bots": {
+      "name": "bots",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "owner_id": {
+          "name": "owner_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "name_key": {
+          "name": "name_key",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "token_hash": {
+          "name": "token_hash",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "scope": {
+          "name": "scope",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "about": {
+          "name": "about",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "version": {
+          "name": "version",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "repo_url": {
+          "name": "repo_url",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "accepts": {
+          "name": "accepts",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "delisted_at": {
+          "name": "delisted_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "deleted_at": {
+          "name": "deleted_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "bots_name_key_unique": {
+          "name": "bots_name_key_unique",
+          "columns": [
+            "name_key"
+          ],
+          "isUnique": true
+        },
+        "bots_token_hash_unique": {
+          "name": "bots_token_hash_unique",
+          "columns": [
+            "token_hash"
+          ],
+          "isUnique": true
+        },
+        "bots_owner_id_idx": {
+          "name": "bots_owner_id_idx",
+          "columns": [
+            "owner_id"
+          ],
+          "isUnique": false
+        },
+        "bots_id_owner_idx": {
+          "name": "bots_id_owner_idx",
+          "columns": [
+            "id",
+            "owner_id"
+          ],
+          "isUnique": true
+        }
+      },
+      "foreignKeys": {
+        "bots_owner_id_users_id_fk": {
+          "name": "bots_owner_id_users_id_fk",
+          "tableFrom": "bots",
+          "tableTo": "users",
+          "columnsFrom": [
+            "owner_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "bots_name_key_name_reservations_name_key_fk": {
+          "name": "bots_name_key_name_reservations_name_key_fk",
+          "tableFrom": "bots",
+          "tableTo": "name_reservations",
+          "columnsFrom": [
+            "name_key"
+          ],
+          "columnsTo": [
+            "name_key"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "bots_scope_check": {
+          "name": "bots_scope_check",
+          "value": "\"bots\".\"scope\" in ('bot:play')"
+        }
+      }
+    },
+    "challenges": {
+      "name": "challenges",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "challenger_bot_id": {
+          "name": "challenger_bot_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "dest_bot_id": {
+          "name": "dest_bot_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "request_key": {
+          "name": "request_key",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "time_control": {
+          "name": "time_control",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "opening_plies": {
+          "name": "opening_plies",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "first_player": {
+          "name": "first_player",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "game_id": {
+          "name": "game_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "decided_at": {
+          "name": "decided_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "challenges_challenger_request_idx": {
+          "name": "challenges_challenger_request_idx",
+          "columns": [
+            "challenger_bot_id",
+            "request_key"
+          ],
+          "isUnique": true
+        },
+        "challenges_challenger_created_idx": {
+          "name": "challenges_challenger_created_idx",
+          "columns": [
+            "challenger_bot_id",
+            "created_at"
+          ],
+          "isUnique": false
+        },
+        "challenges_dest_bot_id_idx": {
+          "name": "challenges_dest_bot_id_idx",
+          "columns": [
+            "dest_bot_id"
+          ],
+          "isUnique": false
+        },
+        "challenges_game_id_idx": {
+          "name": "challenges_game_id_idx",
+          "columns": [
+            "game_id"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "challenges_challenger_bot_id_bots_id_fk": {
+          "name": "challenges_challenger_bot_id_bots_id_fk",
+          "tableFrom": "challenges",
+          "tableTo": "bots",
+          "columnsFrom": [
+            "challenger_bot_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "challenges_dest_bot_id_bots_id_fk": {
+          "name": "challenges_dest_bot_id_bots_id_fk",
+          "tableFrom": "challenges",
+          "tableTo": "bots",
+          "columnsFrom": [
+            "dest_bot_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "challenges_game_id_games_id_fk": {
+          "name": "challenges_game_id_games_id_fk",
+          "tableFrom": "challenges",
+          "tableTo": "games",
+          "columnsFrom": [
+            "game_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "challenges_status_check": {
+          "name": "challenges_status_check",
+          "value": "\"challenges\".\"status\" in ('created', 'accepted', 'declined', 'canceled', 'expired')"
+        },
+        "challenges_first_player_check": {
+          "name": "challenges_first_player_check",
+          "value": "\"challenges\".\"first_player\" in ('challenger', 'challenged', 'random')"
+        },
+        "challenges_opening_check": {
+          "name": "challenges_opening_check",
+          "value": "\"challenges\".\"opening_plies\" in (1, 3, 5, 7, 9)"
+        },
+        "challenges_pair_check": {
+          "name": "challenges_pair_check",
+          "value": "\"challenges\".\"challenger_bot_id\" <> \"challenges\".\"dest_bot_id\""
+        },
+        "challenges_decided_check": {
+          "name": "challenges_decided_check",
+          "value": "(\"challenges\".\"status\" = 'created') = (\"challenges\".\"decided_at\" is null)"
+        },
+        "challenges_game_check": {
+          "name": "challenges_game_check",
+          "value": "(\"challenges\".\"status\" = 'accepted') = (\"challenges\".\"game_id\" is not null)"
+        }
+      }
+    },
+    "game_ratings": {
+      "name": "game_ratings",
+      "columns": {
+        "game_id": {
+          "name": "game_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "side": {
+          "name": "side",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "rating_before": {
+          "name": "rating_before",
+          "type": "real",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "rating_after": {
+          "name": "rating_after",
+          "type": "real",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "deviation_after": {
+          "name": "deviation_after",
+          "type": "real",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "game_ratings_game_id_games_id_fk": {
+          "name": "game_ratings_game_id_games_id_fk",
+          "tableFrom": "game_ratings",
+          "tableTo": "games",
+          "columnsFrom": [
+            "game_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "game_ratings_game_id_side_pk": {
+          "columns": [
+            "game_id",
+            "side"
+          ],
+          "name": "game_ratings_game_id_side_pk"
+        }
+      },
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "game_ratings_side_check": {
+          "name": "game_ratings_side_check",
+          "value": "\"game_ratings\".\"side\" in ('x', 'o')"
+        },
+        "game_ratings_rating_check": {
+          "name": "game_ratings_rating_check",
+          "value": "\"game_ratings\".\"rating_before\" >= 400 and \"game_ratings\".\"rating_after\" >= 400"
+        },
+        "game_ratings_deviation_check": {
+          "name": "game_ratings_deviation_check",
+          "value": "\"game_ratings\".\"deviation_after\" >= 45 and \"game_ratings\".\"deviation_after\" <= 500"
+        }
+      }
+    },
+    "games": {
+      "name": "games",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "user_id": {
+          "name": "user_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "bot_id": {
+          "name": "bot_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "user_side": {
+          "name": "user_side",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "guest_name": {
+          "name": "guest_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "challenger_bot_id": {
+          "name": "challenger_bot_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "dest_bot_id": {
+          "name": "dest_bot_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "challenger_side": {
+          "name": "challenger_side",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "time_control": {
+          "name": "time_control",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "opening_cells": {
+          "name": "opening_cells",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "winner": {
+          "name": "winner",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "finish_reason": {
+          "name": "finish_reason",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "finished_at": {
+          "name": "finished_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "finish_seq": {
+          "name": "finish_seq",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "voided_at": {
+          "name": "voided_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "pairing_id": {
+          "name": "pairing_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "pairing_game": {
+          "name": "pairing_game",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "games_finish_seq_idx": {
+          "name": "games_finish_seq_idx",
+          "columns": [
+            "finish_seq"
+          ],
+          "isUnique": true
+        },
+        "games_user_finish_idx": {
+          "name": "games_user_finish_idx",
+          "columns": [
+            "user_id",
+            "finish_seq"
+          ],
+          "isUnique": false
+        },
+        "games_bot_finish_idx": {
+          "name": "games_bot_finish_idx",
+          "columns": [
+            "bot_id",
+            "finish_seq"
+          ],
+          "isUnique": false
+        },
+        "games_challenger_finish_idx": {
+          "name": "games_challenger_finish_idx",
+          "columns": [
+            "challenger_bot_id",
+            "finish_seq"
+          ],
+          "isUnique": false
+        },
+        "games_dest_finish_idx": {
+          "name": "games_dest_finish_idx",
+          "columns": [
+            "dest_bot_id",
+            "finish_seq"
+          ],
+          "isUnique": false
+        },
+        "games_human_finish_idx": {
+          "name": "games_human_finish_idx",
+          "columns": [
+            "finish_seq"
+          ],
+          "isUnique": false,
+          "where": "\"games\".\"user_id\" is not null"
+        },
+        "games_guests_finish_idx": {
+          "name": "games_guests_finish_idx",
+          "columns": [
+            "finish_seq"
+          ],
+          "isUnique": false,
+          "where": "\"games\".\"guest_name\" is not null"
+        },
+        "games_bots_finish_idx": {
+          "name": "games_bots_finish_idx",
+          "columns": [
+            "finish_seq"
+          ],
+          "isUnique": false,
+          "where": "\"games\".\"challenger_bot_id\" is not null"
+        },
+        "games_undecided_finish_idx": {
+          "name": "games_undecided_finish_idx",
+          "columns": [
+            "finish_seq"
+          ],
+          "isUnique": false,
+          "where": "\"games\".\"winner\" is null"
+        },
+        "games_reason_finish_idx": {
+          "name": "games_reason_finish_idx",
+          "columns": [
+            "finish_reason",
+            "finish_seq"
+          ],
+          "isUnique": false
+        },
+        "games_clock_finish_idx": {
+          "name": "games_clock_finish_idx",
+          "columns": [
+            "\"time_control\" ->> '$.mode'",
+            "finish_seq"
+          ],
+          "isUnique": false
+        },
+        "games_opening_finish_idx": {
+          "name": "games_opening_finish_idx",
+          "columns": [
+            "json_array_length(\"opening_cells\")",
+            "finish_seq"
+          ],
+          "isUnique": false
+        },
+        "games_finished_at_idx": {
+          "name": "games_finished_at_idx",
+          "columns": [
+            "finished_at"
+          ],
+          "isUnique": false
+        },
+        "games_pairing_idx": {
+          "name": "games_pairing_idx",
+          "columns": [
+            "pairing_id",
+            "pairing_game"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "games_user_id_users_id_fk": {
+          "name": "games_user_id_users_id_fk",
+          "tableFrom": "games",
+          "tableTo": "users",
+          "columnsFrom": [
+            "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "games_bot_id_bots_id_fk": {
+          "name": "games_bot_id_bots_id_fk",
+          "tableFrom": "games",
+          "tableTo": "bots",
+          "columnsFrom": [
+            "bot_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "games_challenger_bot_id_bots_id_fk": {
+          "name": "games_challenger_bot_id_bots_id_fk",
+          "tableFrom": "games",
+          "tableTo": "bots",
+          "columnsFrom": [
+            "challenger_bot_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "games_dest_bot_id_bots_id_fk": {
+          "name": "games_dest_bot_id_bots_id_fk",
+          "tableFrom": "games",
+          "tableTo": "bots",
+          "columnsFrom": [
+            "dest_bot_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "games_pairing_id_tournament_pairings_id_fk": {
+          "name": "games_pairing_id_tournament_pairings_id_fk",
+          "tableFrom": "games",
+          "tableTo": "tournament_pairings",
+          "columnsFrom": [
+            "pairing_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "games_pairing_check": {
+          "name": "games_pairing_check",
+          "value": "(\"games\".\"pairing_id\" is null and \"games\".\"pairing_game\" is null) or (\"games\".\"pairing_id\" is not null and coalesce(\"games\".\"pairing_game\", 0) in (1, 2) and \"games\".\"challenger_bot_id\" is not null)"
+        },
+        "games_guest_name_check": {
+          "name": "games_guest_name_check",
+          "value": "\"games\".\"guest_name\" is null or \"games\".\"guest_name\" glob 'Guest [a-z0-9][a-z0-9][a-z0-9][a-z0-9]'"
+        },
+        "games_user_side_check": {
+          "name": "games_user_side_check",
+          "value": "\"games\".\"user_side\" is null or \"games\".\"user_side\" in ('x', 'o')"
+        },
+        "games_challenger_side_check": {
+          "name": "games_challenger_side_check",
+          "value": "\"games\".\"challenger_side\" is null or \"games\".\"challenger_side\" in ('x', 'o')"
+        },
+        "games_winner_check": {
+          "name": "games_winner_check",
+          "value": "\"games\".\"winner\" is null or \"games\".\"winner\" in ('x', 'o')"
+        },
+        "games_finish_reason_check": {
+          "name": "games_finish_reason_check",
+          "value": "\"games\".\"finish_reason\" is null or \"games\".\"finish_reason\" in ('aborted', 'disconnect', 'surrender', 'timeout', 'terminated', 'six-in-a-row')"
+        },
+        "games_finish_pair_check": {
+          "name": "games_finish_pair_check",
+          "value": "(\"games\".\"finished_at\" is null) = (\"games\".\"finish_reason\" is null)"
+        },
+        "games_finish_seq_check": {
+          "name": "games_finish_seq_check",
+          "value": "(\"games\".\"finished_at\" is null) = (\"games\".\"finish_seq\" is null)"
+        },
+        "games_seats_check": {
+          "name": "games_seats_check",
+          "value": "(\n                \"games\".\"user_id\" is not null and \"games\".\"guest_name\" is null and \"games\".\"bot_id\" is not null and \"games\".\"user_side\" is not null\n                and \"games\".\"challenger_bot_id\" is null and \"games\".\"dest_bot_id\" is null and \"games\".\"challenger_side\" is null\n            ) or (\n                \"games\".\"user_id\" is null and \"games\".\"guest_name\" is not null and \"games\".\"bot_id\" is not null and \"games\".\"user_side\" is not null\n                and \"games\".\"challenger_bot_id\" is null and \"games\".\"dest_bot_id\" is null and \"games\".\"challenger_side\" is null\n            ) or (\n                \"games\".\"user_id\" is null and \"games\".\"guest_name\" is null and \"games\".\"bot_id\" is null and \"games\".\"user_side\" is null\n                and \"games\".\"challenger_bot_id\" is not null and \"games\".\"dest_bot_id\" is not null and \"games\".\"challenger_side\" is not null\n                and \"games\".\"challenger_bot_id\" <> \"games\".\"dest_bot_id\"\n            )"
+        }
+      }
+    },
+    "moves": {
+      "name": "moves",
+      "columns": {
+        "game_id": {
+          "name": "game_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "seq": {
+          "name": "seq",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "side": {
+          "name": "side",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "first_x": {
+          "name": "first_x",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "first_y": {
+          "name": "first_y",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "second_x": {
+          "name": "second_x",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "second_y": {
+          "name": "second_y",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "moves_game_id_games_id_fk": {
+          "name": "moves_game_id_games_id_fk",
+          "tableFrom": "moves",
+          "tableTo": "games",
+          "columnsFrom": [
+            "game_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "moves_game_id_seq_pk": {
+          "columns": [
+            "game_id",
+            "seq"
+          ],
+          "name": "moves_game_id_seq_pk"
+        }
+      },
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "moves_side_check": {
+          "name": "moves_side_check",
+          "value": "\"moves\".\"side\" in ('x', 'o')"
+        },
+        "moves_seq_check": {
+          "name": "moves_seq_check",
+          "value": "\"moves\".\"seq\" >= 1"
+        }
+      }
+    },
+    "name_reservations": {
+      "name": "name_reservations",
+      "columns": {
+        "name_key": {
+          "name": "name_key",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "pending_signups": {
+      "name": "pending_signups",
+      "columns": {
+        "token_hash": {
+          "name": "token_hash",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "discord_id": {
+          "name": "discord_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "discord_username": {
+          "name": "discord_username",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "discord_display_name": {
+          "name": "discord_display_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "next": {
+          "name": "next",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "attempts": {
+          "name": "attempts",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        },
+        "expires_at": {
+          "name": "expires_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "pending_signups_discord_id_unique": {
+          "name": "pending_signups_discord_id_unique",
+          "columns": [
+            "discord_id"
+          ],
+          "isUnique": true
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "pending_signups_discord_id_check": {
+          "name": "pending_signups_discord_id_check",
+          "value": "length(\"pending_signups\".\"discord_id\") between 1 and 64"
+        },
+        "pending_signups_discord_username_check": {
+          "name": "pending_signups_discord_username_check",
+          "value": "length(\"pending_signups\".\"discord_username\") between 1 and 32"
+        },
+        "pending_signups_discord_display_name_check": {
+          "name": "pending_signups_discord_display_name_check",
+          "value": "\"pending_signups\".\"discord_display_name\" is null or length(\"pending_signups\".\"discord_display_name\") between 1 and 32"
+        },
+        "pending_signups_next_check": {
+          "name": "pending_signups_next_check",
+          "value": "length(\"pending_signups\".\"next\") between 1 and 256 and substr(\"pending_signups\".\"next\", 1, 1) = '/'"
+        },
+        "pending_signups_attempts_check": {
+          "name": "pending_signups_attempts_check",
+          "value": "\"pending_signups\".\"attempts\" between 0 and 10"
+        }
+      }
+    },
+    "ratings": {
+      "name": "ratings",
+      "columns": {
+        "user_id": {
+          "name": "user_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "bot_id": {
+          "name": "bot_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "rating": {
+          "name": "rating",
+          "type": "real",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "deviation": {
+          "name": "deviation",
+          "type": "real",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "volatility": {
+          "name": "volatility",
+          "type": "real",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "ratings_user_id_idx": {
+          "name": "ratings_user_id_idx",
+          "columns": [
+            "user_id"
+          ],
+          "isUnique": true
+        },
+        "ratings_bot_id_idx": {
+          "name": "ratings_bot_id_idx",
+          "columns": [
+            "bot_id"
+          ],
+          "isUnique": true
+        }
+      },
+      "foreignKeys": {
+        "ratings_user_id_users_id_fk": {
+          "name": "ratings_user_id_users_id_fk",
+          "tableFrom": "ratings",
+          "tableTo": "users",
+          "columnsFrom": [
+            "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "ratings_bot_id_bots_id_fk": {
+          "name": "ratings_bot_id_bots_id_fk",
+          "tableFrom": "ratings",
+          "tableTo": "bots",
+          "columnsFrom": [
+            "bot_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "ratings_player_check": {
+          "name": "ratings_player_check",
+          "value": "(\"ratings\".\"user_id\" is null) <> (\"ratings\".\"bot_id\" is null)"
+        },
+        "ratings_rating_check": {
+          "name": "ratings_rating_check",
+          "value": "\"ratings\".\"rating\" >= 400"
+        },
+        "ratings_deviation_check": {
+          "name": "ratings_deviation_check",
+          "value": "\"ratings\".\"deviation\" >= 45 and \"ratings\".\"deviation\" <= 500"
+        },
+        "ratings_volatility_check": {
+          "name": "ratings_volatility_check",
+          "value": "\"ratings\".\"volatility\" > 0 and \"ratings\".\"volatility\" <= 0.1"
+        }
+      }
+    },
+    "reports": {
+      "name": "reports",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "integer",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": true
+        },
+        "subject": {
+          "name": "subject",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "reason": {
+          "name": "reason",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "details": {
+          "name": "details",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "reporter_name": {
+          "name": "reporter_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "reporter_email": {
+          "name": "reporter_email",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "good_faith": {
+          "name": "good_faith",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'open'"
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "closed_at": {
+          "name": "closed_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "note": {
+          "name": "note",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "reports_status_created_idx": {
+          "name": "reports_status_created_idx",
+          "columns": [
+            "status",
+            "created_at"
+          ],
+          "isUnique": false
+        },
+        "reports_closed_at_idx": {
+          "name": "reports_closed_at_idx",
+          "columns": [
+            "closed_at"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "reports_subject_check": {
+          "name": "reports_subject_check",
+          "value": "length(\"reports\".\"subject\") between 1 and 512 and substr(\"reports\".\"subject\", 1, 1) = '/'"
+        },
+        "reports_reason_check": {
+          "name": "reports_reason_check",
+          "value": "\"reports\".\"reason\" in ('illegal', 'abuse', 'name', 'cheating', 'other')"
+        },
+        "reports_details_check": {
+          "name": "reports_details_check",
+          "value": "length(\"reports\".\"details\") between 1 and 2000"
+        },
+        "reports_name_check": {
+          "name": "reports_name_check",
+          "value": "\"reports\".\"reporter_name\" is null or length(\"reports\".\"reporter_name\") between 1 and 100"
+        },
+        "reports_email_check": {
+          "name": "reports_email_check",
+          "value": "\"reports\".\"reporter_email\" is null or (length(\"reports\".\"reporter_email\") between 3 and 254 and \"reports\".\"reporter_email\" like '%_@_%')"
+        },
+        "reports_good_faith_check": {
+          "name": "reports_good_faith_check",
+          "value": "\"reports\".\"good_faith\" = 1"
+        },
+        "reports_status_check": {
+          "name": "reports_status_check",
+          "value": "\"reports\".\"status\" in ('open', 'closed')"
+        },
+        "reports_closed_check": {
+          "name": "reports_closed_check",
+          "value": "(\"reports\".\"status\" = 'closed') = (\"reports\".\"closed_at\" is not null)"
+        },
+        "reports_note_check": {
+          "name": "reports_note_check",
+          "value": "(\"reports\".\"status\" = 'closed') = (\"reports\".\"note\" is not null) and (\"reports\".\"note\" is null or length(\"reports\".\"note\") between 1 and 500)"
+        }
+      }
+    },
+    "sessions": {
+      "name": "sessions",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "token_hash": {
+          "name": "token_hash",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "user_id": {
+          "name": "user_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "expires_at": {
+          "name": "expires_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "discord_username": {
+          "name": "discord_username",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "discord_display_name": {
+          "name": "discord_display_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "sessions_token_hash_unique": {
+          "name": "sessions_token_hash_unique",
+          "columns": [
+            "token_hash"
+          ],
+          "isUnique": true
+        },
+        "sessions_user_id_idx": {
+          "name": "sessions_user_id_idx",
+          "columns": [
+            "user_id"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "sessions_user_id_users_id_fk": {
+          "name": "sessions_user_id_users_id_fk",
+          "tableFrom": "sessions",
+          "tableTo": "users",
+          "columnsFrom": [
+            "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "sessions_discord_username_check": {
+          "name": "sessions_discord_username_check",
+          "value": "\"sessions\".\"discord_username\" is null or length(\"sessions\".\"discord_username\") between 1 and 32"
+        },
+        "sessions_discord_display_name_check": {
+          "name": "sessions_discord_display_name_check",
+          "value": "\"sessions\".\"discord_display_name\" is null or (\"sessions\".\"discord_username\" is not null and length(\"sessions\".\"discord_display_name\") between 1 and 32)"
+        }
+      }
+    },
+    "site_state": {
+      "name": "site_state",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "integer",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "paused_at": {
+          "name": "paused_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "generation": {
+          "name": "generation",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "site_state_single_row_check": {
+          "name": "site_state_single_row_check",
+          "value": "\"site_state\".\"id\" = 1"
+        }
+      }
+    },
+    "tournament_entries": {
+      "name": "tournament_entries",
+      "columns": {
+        "tournament_id": {
+          "name": "tournament_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "bot_id": {
+          "name": "bot_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "owner_id": {
+          "name": "owner_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "state": {
+          "name": "state",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'entered'"
+        },
+        "reason": {
+          "name": "reason",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "rating_at_start": {
+          "name": "rating_at_start",
+          "type": "real",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "entered_at": {
+          "name": "entered_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "tournament_entries_owner_idx": {
+          "name": "tournament_entries_owner_idx",
+          "columns": [
+            "tournament_id",
+            "owner_id"
+          ],
+          "isUnique": true
+        },
+        "tournament_entries_bot_idx": {
+          "name": "tournament_entries_bot_idx",
+          "columns": [
+            "bot_id",
+            "owner_id"
+          ],
+          "isUnique": false
+        },
+        "tournament_entries_owner_id_idx": {
+          "name": "tournament_entries_owner_id_idx",
+          "columns": [
+            "owner_id"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "tournament_entries_tournament_id_tournaments_id_fk": {
+          "name": "tournament_entries_tournament_id_tournaments_id_fk",
+          "tableFrom": "tournament_entries",
+          "tableTo": "tournaments",
+          "columnsFrom": [
+            "tournament_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "tournament_entries_bot_id_owner_id_bots_id_owner_id_fk": {
+          "name": "tournament_entries_bot_id_owner_id_bots_id_owner_id_fk",
+          "tableFrom": "tournament_entries",
+          "tableTo": "bots",
+          "columnsFrom": [
+            "bot_id",
+            "owner_id"
+          ],
+          "columnsTo": [
+            "id",
+            "owner_id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "tournament_entries_owner_id_users_id_fk": {
+          "name": "tournament_entries_owner_id_users_id_fk",
+          "tableFrom": "tournament_entries",
+          "tableTo": "users",
+          "columnsFrom": [
+            "owner_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "tournament_entries_tournament_id_bot_id_pk": {
+          "columns": [
+            "tournament_id",
+            "bot_id"
+          ],
+          "name": "tournament_entries_tournament_id_bot_id_pk"
+        }
+      },
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "tournament_entries_state_check": {
+          "name": "tournament_entries_state_check",
+          "value": "\"tournament_entries\".\"state\" in ('entered', 'playing', 'absent', 'left_out', 'withdrawn')"
+        },
+        "tournament_entries_reason_check": {
+          "name": "tournament_entries_reason_check",
+          "value": "(\"tournament_entries\".\"state\" = 'left_out' and coalesce(\"tournament_entries\".\"reason\", '') in ('daily_cap', 'clock')) or (\"tournament_entries\".\"state\" = 'withdrawn' and coalesce(\"tournament_entries\".\"reason\", '') in ('missed', 'banned', 'delisted', 'deleted')) or (\"tournament_entries\".\"state\" not in ('left_out', 'withdrawn') and \"tournament_entries\".\"reason\" is null)"
+        },
+        "tournament_entries_rating_check": {
+          "name": "tournament_entries_rating_check",
+          "value": "\"tournament_entries\".\"rating_at_start\" is null or \"tournament_entries\".\"rating_at_start\" >= 400"
+        }
+      }
+    },
+    "tournament_pairings": {
+      "name": "tournament_pairings",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "tournament_id": {
+          "name": "tournament_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "round": {
+          "name": "round",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "first_bot_id": {
+          "name": "first_bot_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "second_bot_id": {
+          "name": "second_bot_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "opening_cells": {
+          "name": "opening_cells",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "game1": {
+          "name": "game1",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'pending'"
+        },
+        "game1_seat": {
+          "name": "game1_seat",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "game2": {
+          "name": "game2",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'pending'"
+        },
+        "game2_seat": {
+          "name": "game2_seat",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "tournament_pairings_round_idx": {
+          "name": "tournament_pairings_round_idx",
+          "columns": [
+            "tournament_id",
+            "round"
+          ],
+          "isUnique": false
+        },
+        "tournament_pairings_first_idx": {
+          "name": "tournament_pairings_first_idx",
+          "columns": [
+            "first_bot_id"
+          ],
+          "isUnique": false
+        },
+        "tournament_pairings_second_idx": {
+          "name": "tournament_pairings_second_idx",
+          "columns": [
+            "second_bot_id"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "tournament_pairings_tournament_id_tournaments_id_fk": {
+          "name": "tournament_pairings_tournament_id_tournaments_id_fk",
+          "tableFrom": "tournament_pairings",
+          "tableTo": "tournaments",
+          "columnsFrom": [
+            "tournament_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "tournament_pairings_first_bot_id_bots_id_fk": {
+          "name": "tournament_pairings_first_bot_id_bots_id_fk",
+          "tableFrom": "tournament_pairings",
+          "tableTo": "bots",
+          "columnsFrom": [
+            "first_bot_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "tournament_pairings_second_bot_id_bots_id_fk": {
+          "name": "tournament_pairings_second_bot_id_bots_id_fk",
+          "tableFrom": "tournament_pairings",
+          "tableTo": "bots",
+          "columnsFrom": [
+            "second_bot_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "tournament_pairings_round_check": {
+          "name": "tournament_pairings_round_check",
+          "value": "\"tournament_pairings\".\"round\" >= 1"
+        },
+        "tournament_pairings_pair_check": {
+          "name": "tournament_pairings_pair_check",
+          "value": "\"tournament_pairings\".\"first_bot_id\" <> \"tournament_pairings\".\"second_bot_id\""
+        },
+        "tournament_pairings_game1_check": {
+          "name": "tournament_pairings_game1_check",
+          "value": "(\"tournament_pairings\".\"game1\" in ('pending', 'live', 'not_played', 'aborted') and \"tournament_pairings\".\"game1_seat\" is null) or (\"tournament_pairings\".\"game1\" = 'played' and (\"tournament_pairings\".\"game1_seat\" is null or \"tournament_pairings\".\"game1_seat\" in ('first', 'second'))) or (\"tournament_pairings\".\"game1\" in ('no_show', 'forfeit') and coalesce(\"tournament_pairings\".\"game1_seat\", '') in ('first', 'second', 'both'))"
+        },
+        "tournament_pairings_game2_check": {
+          "name": "tournament_pairings_game2_check",
+          "value": "(\"tournament_pairings\".\"game2\" in ('pending', 'live', 'not_played', 'aborted') and \"tournament_pairings\".\"game2_seat\" is null) or (\"tournament_pairings\".\"game2\" = 'played' and (\"tournament_pairings\".\"game2_seat\" is null or \"tournament_pairings\".\"game2_seat\" in ('first', 'second'))) or (\"tournament_pairings\".\"game2\" in ('no_show', 'forfeit') and coalesce(\"tournament_pairings\".\"game2_seat\", '') in ('first', 'second', 'both'))"
+        },
+        "tournament_pairings_order_check": {
+          "name": "tournament_pairings_order_check",
+          "value": "\"tournament_pairings\".\"game2\" = 'pending' or \"tournament_pairings\".\"game1\" not in ('pending', 'live')"
+        }
+      }
+    },
+    "tournament_rules": {
+      "name": "tournament_rules",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "integer",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": true
+        },
+        "weekday": {
+          "name": "weekday",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "minute_of_day": {
+          "name": "minute_of_day",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "name_pattern": {
+          "name": "name_pattern",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "time_control": {
+          "name": "time_control",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "opening_plies": {
+          "name": "opening_plies",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "max_entrants": {
+          "name": "max_entrants",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "days_ahead": {
+          "name": "days_ahead",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "tournament_rules_slot_idx": {
+          "name": "tournament_rules_slot_idx",
+          "columns": [
+            "weekday",
+            "minute_of_day"
+          ],
+          "isUnique": true
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "tournament_rules_weekday_check": {
+          "name": "tournament_rules_weekday_check",
+          "value": "\"tournament_rules\".\"weekday\" between 0 and 6"
+        },
+        "tournament_rules_minute_check": {
+          "name": "tournament_rules_minute_check",
+          "value": "\"tournament_rules\".\"minute_of_day\" between 0 and 1439"
+        },
+        "tournament_rules_name_check": {
+          "name": "tournament_rules_name_check",
+          "value": "length(replace(\"tournament_rules\".\"name_pattern\", '{date}', 'YYYY-MM-DD')) between 3 and 40 and \"tournament_rules\".\"name_pattern\" not glob '*[^ -~]*'"
+        },
+        "tournament_rules_opening_check": {
+          "name": "tournament_rules_opening_check",
+          "value": "\"tournament_rules\".\"opening_plies\" in (1, 3, 5, 7, 9)"
+        },
+        "tournament_rules_max_check": {
+          "name": "tournament_rules_max_check",
+          "value": "\"tournament_rules\".\"max_entrants\" between 3 and 12"
+        },
+        "tournament_rules_days_check": {
+          "name": "tournament_rules_days_check",
+          "value": "\"tournament_rules\".\"days_ahead\" between 1 and 14"
+        }
+      }
+    },
+    "tournaments": {
+      "name": "tournaments",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "starts_at": {
+          "name": "starts_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "time_control": {
+          "name": "time_control",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "opening_plies": {
+          "name": "opening_plies",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "max_entrants": {
+          "name": "max_entrants",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "started_at": {
+          "name": "started_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "ended_at": {
+          "name": "ended_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "rule_id": {
+          "name": "rule_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "tournaments_status_starts_idx": {
+          "name": "tournaments_status_starts_idx",
+          "columns": [
+            "status",
+            "starts_at"
+          ],
+          "isUnique": false
+        },
+        "tournaments_rule_starts_idx": {
+          "name": "tournaments_rule_starts_idx",
+          "columns": [
+            "rule_id",
+            "starts_at"
+          ],
+          "isUnique": true
+        }
+      },
+      "foreignKeys": {
+        "tournaments_rule_id_tournament_rules_id_fk": {
+          "name": "tournaments_rule_id_tournament_rules_id_fk",
+          "tableFrom": "tournaments",
+          "tableTo": "tournament_rules",
+          "columnsFrom": [
+            "rule_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "tournaments_status_check": {
+          "name": "tournaments_status_check",
+          "value": "\"tournaments\".\"status\" in ('scheduled', 'running', 'finished', 'called_off', 'canceled')"
+        },
+        "tournaments_name_check": {
+          "name": "tournaments_name_check",
+          "value": "length(\"tournaments\".\"name\") between 3 and 40 and \"tournaments\".\"name\" not glob '*[^ -~]*'"
+        },
+        "tournaments_opening_check": {
+          "name": "tournaments_opening_check",
+          "value": "\"tournaments\".\"opening_plies\" in (1, 3, 5, 7, 9)"
+        },
+        "tournaments_max_check": {
+          "name": "tournaments_max_check",
+          "value": "\"tournaments\".\"max_entrants\" between 3 and 12"
+        },
+        "tournaments_started_check": {
+          "name": "tournaments_started_check",
+          "value": "\"tournaments\".\"status\" = 'canceled' or (\"tournaments\".\"status\" in ('running', 'finished')) = (\"tournaments\".\"started_at\" is not null)"
+        },
+        "tournaments_ended_check": {
+          "name": "tournaments_ended_check",
+          "value": "(\"tournaments\".\"status\" in ('finished', 'called_off', 'canceled')) = (\"tournaments\".\"ended_at\" is not null)"
+        }
+      }
+    },
+    "users": {
+      "name": "users",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "discord_id": {
+          "name": "discord_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "name_key": {
+          "name": "name_key",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "banned_at": {
+          "name": "banned_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "deleted_at": {
+          "name": "deleted_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "users_discord_id_unique": {
+          "name": "users_discord_id_unique",
+          "columns": [
+            "discord_id"
+          ],
+          "isUnique": true
+        },
+        "users_name_key_unique": {
+          "name": "users_name_key_unique",
+          "columns": [
+            "name_key"
+          ],
+          "isUnique": true
+        }
+      },
+      "foreignKeys": {
+        "users_name_key_name_reservations_name_key_fk": {
+          "name": "users_name_key_name_reservations_name_key_fk",
+          "tableFrom": "users",
+          "tableTo": "name_reservations",
+          "columnsFrom": [
+            "name_key"
+          ],
+          "columnsTo": [
+            "name_key"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    }
+  },
+  "views": {},
+  "enums": {},
+  "_meta": {
+    "schemas": {},
+    "tables": {},
+    "columns": {}
+  },
+  "internal": {
+    "indexes": {
+      "games_clock_finish_idx": {
+        "columns": {
+          "\"time_control\" ->> '$.mode'": {
+            "isExpression": true
+          }
+        }
+      },
+      "games_opening_finish_idx": {
+        "columns": {
+          "json_array_length(\"opening_cells\")": {
+            "isExpression": true
+          }
+        }
+      }
+    }
+  }
+}

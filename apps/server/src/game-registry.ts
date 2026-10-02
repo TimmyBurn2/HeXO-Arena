@@ -10,10 +10,8 @@ import {
     sessionHeartbeatMs,
     sessionTokenTtlMs,
     sideOf,
-    turnsOnBoard,
     engineStrayFrameCap,
     gameTurnCap,
-    guestSessionCap,
     orphanForfeitMs,
     streamBacklogLimitBytes,
     unlimitedWallCapMs,
@@ -33,7 +31,6 @@ import {
     type StreamEvent,
     type TimeControl,
 } from '@hexo-arena/contract';
-import { randomUUID } from 'node:crypto';
 import {
     drawOpening,
     place,
@@ -58,6 +55,7 @@ import {
 } from './game-store';
 import type { PresenceRegistry } from './presence';
 import { randomFloat, randomIndex } from './random';
+import type { ShownName } from './shown-names';
 import { streamPlayerOf } from './rating-store';
 import { isCurrentGeneration } from './site-state';
 import { randomToken } from './tokens';
@@ -130,7 +128,18 @@ export interface PersonRef {
 
 export interface Person extends PersonRef {
     readonly name: string;
+    /** When a guest's session began, in epoch seconds; a user's needs none. */
+    readonly since?: number;
 }
+
+/**
+ * Who reads a game.
+ * A stored guest game keeps the guest's label alone, so a guest reads its
+ * seat there when the label is its own and its session began by the
+ * game's start: a label is never minted twice at once, and a later holder
+ * of it began after the game.
+ */
+export type Viewer = PersonRef & Partial<Pick<Person, `name` | `since`>>;
 
 interface HumanSeat {
     readonly kind: `human`;
@@ -238,6 +247,21 @@ function samePerson(one: PersonRef, other: PersonRef): boolean {
     return one.kind === other.kind && one.id === other.id;
 }
 
+// A stored seat is the viewer's by account for a user, and for a guest by
+// its label and a session that began by the game's start.
+function storedSeatOf(record: GameRecord, viewer: Viewer): Side | undefined {
+    switch (record.kind) {
+        case `human`:
+            return samePerson(viewer, { kind: `user`, id: record.userId }) ? record.userSide : undefined;
+        case `guest`:
+            return viewer.kind === `guest` && viewer.name === record.guestName && viewer.since !== undefined && viewer.since <= record.createdAt
+                ? record.guestSide
+                : undefined;
+        case `bots`:
+            return undefined;
+    }
+}
+
 function botSeat(bot: { id: string; name: string }): BotSeat {
     return { kind: `bot`, botId: bot.id, name: bot.name, session: null, sessionToken: null, orphanTimer: null };
 }
@@ -249,8 +273,7 @@ function humanSide(game: LiveGame): { side: Side; seat: HumanSeat } | null {
     return null;
 }
 
-// A game against a guest lives in memory alone: no row, no moves, no
-// finish, so neither the rating fold nor a recompute can ever see it.
+// A game against a guest rates nobody: neither the fold nor a recompute counts it.
 function isGuestGame(game: LiveGame): boolean {
     return humanSide(game)?.seat.person.kind === `guest`;
 }
@@ -375,25 +398,11 @@ function moveErrorCode(rejection: Rejection): MoveErrorCode {
 /** Finished boards the registry keeps replayed, least recently read dropped first. */
 export const finishedBoardMemoCap = 256;
 
-/**
- * Finished games a guest can still read, its oldest dropped first;
- * the site keeps as many for every guest it can hold.
- */
-export const finishedGuestGamesPerGuest = 10;
-
 export class GameRegistry {
     readonly #games = new Map<string, LiveGame>();
     // A finished board never changes, so a read replays it once;
     // the names beside it are read fresh, so renames and deletions show.
     readonly #finishedBoards = new Map<string, ReturnType<typeof boardCells>>();
-    // Finished guest games answer from here while their guest session lives,
-    // up to their bound; the session's end forgets them.
-    readonly #finishedGuestGames = new Map<
-        string,
-        { guestId: string; guestSide: Side; snapshot: GameSnapshot; headline: GameHeadline }
-    >();
-    // Each guest's finished games, oldest first.
-    readonly #guestGameIds = new Map<string, string[]>();
     readonly #query: Query;
     readonly #presence: PresenceRegistry;
     readonly #watchers: GameWatchers;
@@ -442,20 +451,17 @@ export class GameRegistry {
     }): { gameId: string; snapshot: GameSnapshot } {
         const userSide: Side = this.#random() < 0.5 ? `x` : `o`;
         const { position, turns } = this.#placeOpening(input.openingPlies);
-        const gameId =
-            input.person.kind === `guest`
-                ? `g_${randomUUID()}`
-                : insertGame(this.#query, {
-                      userId: input.person.id,
-                      botId: input.bot.id,
-                      userSide,
-                      timeControl: input.timeControl,
-                      opening: position.stones.map((stone) => ({
-                          x: stone.x,
-                          y: stone.y,
-                          player: stone.player,
-                      })),
-                  });
+        const gameId = insertGame(this.#query, {
+            ...(input.person.kind === `guest` ? { guestName: input.person.name } : { userId: input.person.id }),
+            botId: input.bot.id,
+            userSide,
+            timeControl: input.timeControl,
+            opening: position.stones.map((stone) => ({
+                x: stone.x,
+                y: stone.y,
+                player: stone.player,
+            })),
+        });
         const game: LiveGame = {
             id: gameId,
             seats:
@@ -602,7 +608,7 @@ export class GameRegistry {
         if (live !== undefined) {
             return { status: `live`, names: seatNames(live), toMove: sideToMove(live), timeControl: live.timeControl };
         }
-        return this.#finishedGuestGames.get(gameId)?.headline ?? findFinishedHeadline(this.#query, gameId) ?? null;
+        return findFinishedHeadline(this.#query, gameId) ?? null;
     }
 
     /** Whether the game is live in this process, so its read costs no replay. */
@@ -652,24 +658,15 @@ export class GameRegistry {
     /**
      * Any game by id, as the viewer reads it: every game is public, and
      * `you` is present exactly when the viewer holds a seat.
-     * A guest's games answer while the guest's session lives.
      */
-    snapshotFor(gameId: string, viewer: PersonRef | null): GameSnapshot | null {
+    snapshotFor(gameId: string, viewer: Viewer | null): GameSnapshot | null {
         const live = this.#games.get(gameId);
         if (live !== undefined) return this.#liveSnapshot(live, viewer);
-        const guestGame = this.#finishedGuestGames.get(gameId);
-        if (guestGame !== undefined) {
-            const seated = viewer !== null && samePerson(viewer, { kind: `guest`, id: guestGame.guestId });
-            return seated ? { ...guestGame.snapshot, you: guestGame.guestSide } : guestGame.snapshot;
-        }
         const record = findGame(this.#query, gameId);
         // An unfinished game without a live registry entry belongs to an
         // earlier process, and its boot sweep has yet to close it.
         if (record?.finishReason === undefined || record.finishReason === null) return null;
-        const you =
-            record.kind === `human` && viewer !== null && samePerson(viewer, { kind: `user`, id: record.userId })
-                ? record.userSide
-                : undefined;
+        const you = viewer === null ? undefined : storedSeatOf(record, viewer);
         const tournament = record.kind === `bots` ? findGameTournament(this.#query, gameId) : undefined;
         return {
             gameId: record.id,
@@ -687,7 +684,7 @@ export class GameRegistry {
         };
     }
 
-    humanMove(gameId: string, person: PersonRef, cells: readonly [Coord, Coord]): HumanMoveResult {
+    humanMove(gameId: string, person: Viewer, cells: readonly [Coord, Coord]): HumanMoveResult {
         const game = this.#games.get(gameId);
         if (game === undefined) return this.#finishedReject(gameId, person);
         const human = humanSide(game);
@@ -701,7 +698,7 @@ export class GameRegistry {
         return { kind: `moved`, snapshot: this.requireSnapshot(gameId, person) };
     }
 
-    humanResign(gameId: string, person: PersonRef): ResignResult {
+    humanResign(gameId: string, person: Viewer): ResignResult {
         const game = this.#games.get(gameId);
         if (game === undefined) return this.#finishedReject(gameId, person);
         const human = humanSide(game);
@@ -713,10 +710,7 @@ export class GameRegistry {
     botResign(gameId: string, token: string): BotResignResult {
         const holder = this.claimSession(gameId, token);
         if (holder === null) {
-            const known =
-                this.#games.has(gameId) ||
-                this.#finishedGuestGames.has(gameId) ||
-                findGame(this.#query, gameId) !== undefined;
+            const known = this.#games.has(gameId) || findGame(this.#query, gameId) !== undefined;
             return known ? { kind: `unauthorized` } : { kind: `unknown` };
         }
         this.#finish(holder.game, opponentOf(holder.side), `surrender`);
@@ -725,13 +719,13 @@ export class GameRegistry {
 
     // A finished game still answers its own players' actions with its
     // result instead of a 404, so a player can tell stale from unknown.
-    #finishedReject(gameId: string, person: PersonRef): { kind: `rejected`; code: `game_over` } | { kind: `unknown` } {
+    #finishedReject(gameId: string, person: Viewer): { kind: `rejected`; code: `game_over` } | { kind: `unknown` } {
         return this.snapshotFor(gameId, person)?.you === undefined
             ? { kind: `unknown` }
             : { kind: `rejected`, code: `game_over` };
     }
 
-    requireSnapshot(gameId: string, person: PersonRef): GameSnapshot {
+    requireSnapshot(gameId: string, person: Viewer): GameSnapshot {
         const found = this.snapshotFor(gameId, person);
         // Every caller finishes the game first, so the record exists.
         if (found === null) throw new Error(`finished game left no record: ${gameId}`);
@@ -862,7 +856,7 @@ export class GameRegistry {
         game.pending = null;
         game.position = applied.position;
         game.turnLog = [...game.turnLog, { side, cells }];
-        if (!isGuestGame(game)) insertMove(this.#query, { gameId: game.id, seq: game.nextSeq, side, cells });
+        insertMove(this.#query, { gameId: game.id, seq: game.nextSeq, side, cells });
         game.nextSeq += 1;
         if (applied.win === null) this.#advanceClock(game, side);
         this.#watchers.publish(game.id, {
@@ -989,12 +983,10 @@ export class GameRegistry {
         return seated.length;
     }
 
-    // A guest session's end takes its games along: the live ones abort,
-    // unrated as they always were, and the finished ones are forgotten.
+    // A guest session's end aborts its live games, unrated as they always
+    // were; its finished games stay in the record under its label.
     endGuest(guestId: string): void {
         this.abortForPerson({ kind: `guest`, id: guestId });
-        for (const gameId of this.#guestGameIds.get(guestId) ?? []) this.#finishedGuestGames.delete(gameId);
-        this.#guestGameIds.delete(guestId);
     }
 
     abortForBot(botId: string): number {
@@ -1064,8 +1056,6 @@ export class GameRegistry {
             }
         }
         this.#games.clear();
-        this.#finishedGuestGames.clear();
-        this.#guestGameIds.clear();
     }
 
     replayForBot(botId: string): StreamEvent[] {
@@ -1138,19 +1128,7 @@ export class GameRegistry {
             clearTimeout(game.wallTimer);
             game.wallTimer = null;
         }
-        const human = humanSide(game);
-        let voided = false;
-        if (human?.seat.person.kind === `guest`) {
-            this.#finishedGuestGames.set(game.id, {
-                guestId: human.seat.person.id,
-                guestSide: human.side,
-                snapshot: { ...this.#publicView(game), status: `finished`, winner, reason, voided },
-                headline: { status: `finished`, names: seatNames(game), winner, reason, turns: turnsOnBoard(game.position.stones.length) },
-            });
-            this.#boundFinishedGuestGames(human.seat.person.id, game.id);
-        } else {
-            voided = recordFinish(this.#query, game.id, { winner, reason }).voided;
-        }
+        const { voided } = recordFinish(this.#query, game.id, { winner, reason });
         // The watchers learn a game the operator voided while it ran with its result.
         this.#watchers.end(game.id, { event: `finish`, data: { winner, reason, voided, clock } });
         for (const side of [`x`, `o`] as const) {
@@ -1177,28 +1155,6 @@ export class GameRegistry {
         seat.session = null;
         clearInterval(session.heartbeat);
         session.socket.close(code, reason);
-    }
-
-    // A guest session lives as long as it is used,
-    // so its finished games are held to a count,
-    // and all of them to that count for every guest the site holds;
-    // the map keeps finishing order, so the first entries are the oldest.
-    #boundFinishedGuestGames(guestId: string, gameId: string): void {
-        const own = this.#guestGameIds.get(guestId) ?? [];
-        own.push(gameId);
-        this.#guestGameIds.set(guestId, own);
-        if (own.length > finishedGuestGamesPerGuest) this.#forgetOldestGuestGame(guestId);
-        const oldest = this.#finishedGuestGames.values().next();
-        if (this.#finishedGuestGames.size > guestSessionCap * finishedGuestGamesPerGuest && oldest.done !== true) {
-            this.#forgetOldestGuestGame(oldest.value.guestId);
-        }
-    }
-
-    #forgetOldestGuestGame(guestId: string): void {
-        const own = this.#guestGameIds.get(guestId) ?? [];
-        const gameId = own.shift();
-        if (gameId !== undefined) this.#finishedGuestGames.delete(gameId);
-        if (own.length === 0) this.#guestGameIds.delete(guestId);
     }
 
     #finishedBoard(record: GameRecord): ReturnType<typeof boardCells> {
@@ -1256,26 +1212,30 @@ export class GameRegistry {
         return { ...this.#playerOf(seat), kind: seat.kind === `bot` ? `bot` : seat.person.kind };
     }
 
-    // Guest games never reach the log, so every stored seat is a user or a bot.
     #storedPlayers(record: GameRecord): GamePlayers {
-        const bot = (id: string, name: string): GamePlayer => ({
-            ...streamPlayerOf(this.#query, { kind: `bot`, id }, name),
+        const bot = (id: string, shown: ShownName): GamePlayer => ({
+            ...streamPlayerOf(this.#query, { kind: `bot`, id }, shown.name),
             kind: `bot`,
+            ...(shown.deleted === undefined ? {} : { deleted: shown.deleted }),
         });
         const seated = (side: Side, first: GamePlayer, second: GamePlayer): GamePlayers =>
             side === `x` ? { x: first, o: second } : { x: second, o: first };
         if (record.kind === `bots`) {
             return seated(
                 record.challengerSide,
-                bot(record.challengerBotId, record.challengerName),
-                bot(record.destBotId, record.destName),
+                bot(record.challengerBotId, record.challenger),
+                bot(record.destBotId, record.dest),
             );
         }
+        if (record.kind === `guest`) {
+            return seated(record.guestSide, { name: record.guestName, rating: null, provisional: false, kind: `guest` }, bot(record.botId, record.bot));
+        }
         const user: GamePlayer = {
-            ...streamPlayerOf(this.#query, { kind: `human`, id: record.userId }, record.userName),
+            ...streamPlayerOf(this.#query, { kind: `human`, id: record.userId }, record.user.name),
             kind: `user`,
+            ...(record.user.deleted === undefined ? {} : { deleted: record.user.deleted }),
         };
-        return seated(record.userSide, user, bot(record.botId, record.botName));
+        return seated(record.userSide, user, bot(record.botId, record.bot));
     }
 
     #seatsBot(game: LiveGame, botId: string): Side | null {

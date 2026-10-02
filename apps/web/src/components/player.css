@@ -23,6 +23,14 @@
         color: var(--c-accent);
     }
 
+    /* A deleted player's or bot's label is no name: it reads quieter than
+       the names beside it, and links nowhere. */
+    .deleted-name,
+    :is(.ladder-owner, .rung-owner, .podium-meta, .standings-owner, .tournament-owner) .deleted-name {
+        color: var(--c-text-dim);
+        font-weight: var(--weight-regular);
+    }
+
     /* An owner named in a "by" line takes the line's color, so the name
        it follows stays the one that stands out; the weight marks the link. */
     :is(.ladder-owner, .rung-owner, .podium-meta, .standings-owner, .tournament-owner) .player-name {

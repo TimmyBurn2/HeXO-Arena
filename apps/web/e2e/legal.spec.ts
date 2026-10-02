@@ -101,7 +101,7 @@ test('a legal document the deployment lacks leaves no link in the footer or the 
     await serve(page, world({ me: null, legalMissing: [`imprint`, `privacy`] }));
     await page.goto(`/connect`);
     const legal = page.locator(`footer.site-footer .legal-links`);
-    await expect(legal).toHaveText(`TermsLicenses`);
+    await expect(legal).toHaveText(`TermsLicensesReport`);
     await expect(page.locator(`.discord-sign-in .note`).first()).toHaveText(`Your email stays with Discord, and a first sign-in asks for your public name.`);
     await page.goto(`/legal/imprint`);
     await expect(page.getByRole(`heading`, { level: 1, name: `Not found` })).toBeVisible();

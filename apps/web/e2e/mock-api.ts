@@ -1,5 +1,8 @@
 import type { Page, Route } from '@playwright/test';
 import {
+    accountExportSchema,
+    deleteAccountRequestSchema,
+    reportRequestSchema,
     botListingSchema,
     devAccountSchema,
     gameSnapshotSchema,
@@ -37,7 +40,9 @@ import {
     type Side,
     type Signup,
     type TournamentDetail,
+    type TournamentEntry,
     type TournamentGame,
+    type TournamentStanding,
     type TournamentSummary,
 } from '@hexo-arena/contract';
 
@@ -169,6 +174,7 @@ const seat = {
     quinn: { name: `quinn`, rating: 1503, provisional: false, kind: `user` },
     ana: { name: `ana`, rating: 1402, provisional: false, kind: `user` },
     guest: { name: `Guest k3f9`, rating: null, provisional: false, kind: `guest` },
+    gone: { name: `deleted player`, rating: 1460, provisional: false, kind: `user`, deleted: true },
 } as const;
 
 const clocks = [
@@ -258,7 +264,44 @@ export const liveGames: LiveGameEntry[] = (
     };
 });
 
-const tGame = (x: string, outcome: TournamentGame[`outcome`], point: string | null = null, gameId: string | null = null, missing: string[] = []): TournamentGame => ({
+// Fixtures name the bots; a detail keys them by their place among its
+// entries, as the server does, and its pairings carry the names.
+// A bot in `gone` was deleted with its owner since, so the detail reads
+// both by their labels, as the server writes them.
+type NamedGame = Omit<TournamentGame, `x` | `point` | `missing`> & { x: string; point: string | null; missing: string[] };
+interface NamedTournament extends Omit<TournamentDetail, `entries` | `rounds` | `standings`> {
+    entries: Omit<TournamentEntry, `key`>[];
+    rounds: { round: number; pairings: { first: string; second: string; games: NamedGame[] }[]; rest: string | null }[];
+    standings: Omit<TournamentStanding, `key`>[];
+    gone?: readonly string[];
+}
+
+function keyed({ gone = [], ...named }: NamedTournament): TournamentDetail {
+    const keyOf = (bot: string) => {
+        const index = named.entries.findIndex((entry) => entry.bot === bot);
+        if (index === -1) throw new Error(`a fixture names a bot it never entered: ${bot}`);
+        return index + 1;
+    };
+    const seatOf = (bot: string) => (gone.includes(bot) ? { key: keyOf(bot), name: `deleted bot`, deleted: true as const } : { key: keyOf(bot), name: bot });
+    const shown = <Line extends { bot: string; ownerName: string }>(line: Line) =>
+        gone.includes(line.bot) ? { ...line, bot: `deleted bot`, ownerName: `deleted player`, deleted: true as const } : line;
+    return {
+        ...named,
+        entries: named.entries.map((entry, index) => shown({ key: index + 1, ...entry })),
+        rounds: named.rounds.map((round) => ({
+            round: round.round,
+            pairings: round.pairings.map((pairing) => ({
+                first: seatOf(pairing.first),
+                second: seatOf(pairing.second),
+                games: pairing.games.map((game) => ({ ...game, x: keyOf(game.x), point: game.point === null ? null : keyOf(game.point), missing: game.missing.map(keyOf) })),
+            })),
+            rest: round.rest === null ? null : seatOf(round.rest),
+        })),
+        standings: named.standings.map((line) => shown({ ...line, key: keyOf(line.bot) })),
+    };
+}
+
+const tGame = (x: string, outcome: TournamentGame[`outcome`], point: string | null = null, gameId: string | null = null, missing: string[] = []): NamedGame => ({
     x,
     gameId,
     outcome,
@@ -270,7 +313,7 @@ const hoursFromNow = (hours: number) => new Date(Date.now() + hours * 3_600_000)
 
 // A running round robin of four, the second round under way with one
 // game live; one entrant missed the start.
-const runningTournament: TournamentDetail = {
+const runningTournament: NamedTournament = {
     id: `t_autumnrobin1`,
     name: `Autumn round robin`,
     status: `running`,
@@ -323,7 +366,7 @@ const runningTournament: TournamentDetail = {
 };
 
 // Every game of the running one played out, sealbot first.
-const finishedTournament: TournamentDetail = {
+const finishedTournament: NamedTournament = {
     ...runningTournament,
     id: `t_summercup202`,
     name: `Summer cup`,
@@ -346,12 +389,13 @@ const finishedTournament: TournamentDetail = {
         { rank: 2, bot: `hextide`, ownerName: `ana`, points: 3, asX: 2, asO: 1, withdrawn: false },
         { rank: 4, bot: `ember`, ownerName: `cleo`, points: 2, asX: 1, asO: 1, withdrawn: true },
     ],
+    gone: [`driftwood`, `ember`],
     entries: [...runningTournament.entries.slice(0, 3), { bot: `ember`, ownerName: `cleo`, online: false, ratingAtStart: 1320, state: `withdrawn`, reason: `missed` }, { bot: `lantern`, ownerName: `dmitri`, online: false, ratingAtStart: null, state: `left_out`, reason: `daily_cap` }],
     live: [],
 };
 
 // One waiting a few hours, two bots entered; quinn, signed in by default, has entered none.
-const waitingTournament: TournamentDetail = {
+const waitingTournament: NamedTournament = {
     ...runningTournament,
     id: `t_wintercup202`,
     name: `Winter cup`,
@@ -367,7 +411,7 @@ const waitingTournament: TournamentDetail = {
     live: [],
 };
 
-const calledOffTournament: TournamentDetail = {
+const calledOffTournament: NamedTournament = {
     ...waitingTournament,
     id: `t_raincup20261`,
     name: `Rain cup`,
@@ -381,7 +425,7 @@ const calledOffTournament: TournamentDetail = {
     ],
 };
 
-export const tournaments: TournamentDetail[] = [runningTournament, waitingTournament, finishedTournament, calledOffTournament];
+export const tournaments: TournamentDetail[] = [runningTournament, waitingTournament, finishedTournament, calledOffTournament].map(keyed);
 
 function summaryOf(detail: TournamentDetail): TournamentSummary {
     const top = detail.standings[0];
@@ -596,6 +640,18 @@ export const games: Record<string, GameSnapshot> = {
         toMove: `o`,
         clock: { mode: `turn`, remainingTurnMs: 38_000 },
     },
+    // A finished game whose human seat deleted the account since.
+    gone: {
+        gameId: `gone`,
+        players: { x: seat.sealbot, o: seat.gone },
+        openingPlies: 1,
+        board: { cells: originCells },
+        timeControl: { mode: `turn`, turnTimeMs: 30_000 },
+        status: `finished`,
+        winner: `x`,
+        reason: `six-in-a-row`,
+        voided: false,
+    },
     'nine-finished': {
         gameId: `nine-finished`,
         players: facing(`sealbot`, 1712),
@@ -642,6 +698,13 @@ export const recentGames: FinishedGameEntry[] = [
         rated: winner !== null,
         voided: false,
     })),
+];
+
+/** The latest results with a deleted player's game and a guest's on top, as the list names them. */
+export const keptNames: FinishedGameEntry[] = [
+    { gameId: `gone`, players: { x: seat.sealbot, o: seat.gone }, winner: `x`, reason: `six-in-a-row`, timeControl: { mode: `turn`, turnTimeMs: 30_000 }, openingPlies: 1, turns: 14, finishedAt: finishedAt(1), rated: true, voided: false },
+    { gameId: `guest-finished`, players: { x: { ...seat.sealbot, rating: null }, o: seat.guest }, winner: `o`, reason: `surrender`, timeControl: { mode: `turn`, turnTimeMs: 30_000 }, openingPlies: 1, turns: 9, finishedAt: finishedAt(2), rated: false, voided: false },
+    ...recentGames,
 ];
 
 /**
@@ -933,6 +996,43 @@ export async function serve(page: Page, state: World): Promise<void> {
             await route.fulfill({ status: 204 });
             return;
         }
+        if (path === `/api/me` && method === `DELETE` && state.me?.kind === `user`) {
+            const body = deleteAccountRequestSchema.parse(request.postDataJSON());
+            if (body.name !== state.me.name) {
+                await json(route, 400, { error: `the name is not the account's`, code: `name_mismatch` });
+            } else if (state.me.liveGames.length > 0) {
+                await json(route, 409, { error: `the account is seated in a live game`, code: `in_live_game` });
+            } else {
+                state.me = null;
+                await route.fulfill({ status: 204 });
+            }
+            return;
+        }
+        if (path === `/api/reports` && method === `POST`) {
+            reportRequestSchema.parse(request.postDataJSON());
+            await json(route, 201, { id: 12 });
+            return;
+        }
+        if (path === `/api/me/export` && method === `GET` && state.me?.kind === `user`) {
+            const exported = accountExportSchema.parse({
+                exportedAt: finishedAt(0),
+                account: { id: `u_quinn`, name: state.me.name, discordId: `100000000000000001`, createdAt: finishedAt(60 * 24 * 90), bannedAt: null },
+                sessions: [],
+                rating: null,
+                bots: [],
+                games: [],
+                tournamentEntries: [],
+                challenges: [],
+                moderation: [],
+            });
+            await route.fulfill({
+                status: 200,
+                contentType: `application/json`,
+                headers: { 'content-disposition': `attachment; filename="hexo-arena-${state.me.name}-2026-10-02.json"` },
+                body: JSON.stringify(exported),
+            });
+            return;
+        }
         if (path === `/api/auth/guest` && method === `POST`) {
             if (state.guestLimit) {
                 await route.fulfill({
@@ -1011,7 +1111,7 @@ export async function serve(page: Page, state: World): Promise<void> {
                 return;
             }
             const { bot } = tournamentEntryRequestSchema.parse(request.postDataJSON());
-            const entry = { bot, ownerName: owner, online: state.bots.find((listed) => listed.name === bot)?.online ?? false, ratingAtStart: null, state: `entered` as const };
+            const entry = { key: detail.entries.length + 1, bot, ownerName: owner, online: state.bots.find((listed) => listed.name === bot)?.online ?? false, ratingAtStart: null, state: `entered` as const };
             detail.entries.push(entry);
             await json(route, 200, entry);
             return;

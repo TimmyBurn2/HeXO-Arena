@@ -22,6 +22,7 @@ import type { Ladder } from './ladder';
 import { activeSince } from './leaderboard-api';
 import { isProvisional, type PlayerRef } from './rating';
 import { readRating } from './rating-store';
+import { shownBot, shownUser, type ShownName } from './shown-names';
 import { standingsOf, storedSlot } from './round-robin';
 
 const isoOf = (seconds: number) => new Date(seconds * 1000).toISOString().replace(/\.\d{3}Z$/u, `Z`);
@@ -66,20 +67,40 @@ interface PlayedRow {
     readonly finishedAt: number;
 }
 
-// Every finished game the player sat in, aborted and voided ones left
-// out, as the rating leaves them.
+// The finished games a record counts: aborted and voided ones left out, as
+// the rating leaves them.
+const counted = sql`${games.finishedAt} is not null and ${games.finishReason} <> 'aborted' and ${games.voidedAt} is null`;
+
+// Every counted game the player sat in against an account or a bot; a
+// bot's games against guests are counted apart.
 function playedRows(query: Query, player: PlayerRef): PlayedRow[] {
     const arms = seatsOf(player).map(
         (seat) =>
-            sql`select ${seat.side} as side, ${games.winner} as winner, ${games.finishReason} as reason, ${seat.opponent} as opponent, ${seat.opponentKind} as opponentKind, ${games.finishedAt} as finishedAt from ${games} where ${seat.column} = ${player.id} and ${games.finishedAt} is not null and ${games.finishReason} <> 'aborted' and ${games.voidedAt} is null`,
+            sql`select ${seat.side} as side, ${games.winner} as winner, ${games.finishReason} as reason, ${seat.opponent} as opponent, ${seat.opponentKind} as opponentKind, ${games.finishedAt} as finishedAt from ${games} where ${seat.column} = ${player.id} and ${games.guestName} is null and ${counted}`,
     );
     return query.all<PlayedRow>(sql.join(arms, sql` union all `));
 }
 
-function opponentNames(query: Query, ids: { human: readonly string[]; bot: readonly string[] }): Map<string, string> {
-    const named = new Map<string, string>();
-    if (ids.human.length > 0) for (const row of query.select({ id: users.id, name: users.name }).from(users).where(inArray(users.id, [...ids.human])).all()) named.set(row.id, row.name);
-    if (ids.bot.length > 0) for (const row of query.select({ id: bots.id, name: bots.name }).from(bots).where(inArray(bots.id, [...ids.bot])).all()) named.set(row.id, row.name);
+// A bot's counted games against guests: unrated, and in no other figure.
+function guestRecord(query: Query, botId: string): NonNullable<PlayerRecord[`guests`]> {
+    const row = query.get<{ games: number; won: number | null; lost: number | null }>(
+        sql`select count(*) as games, sum(${games.winner} = ${otherUserSide}) as won, sum(${games.winner} = ${games.userSide}) as lost from ${games} where ${games.botId} = ${botId} and ${games.guestName} is not null and ${counted}`,
+    );
+    return { games: row.games, won: row.won ?? 0, lost: row.lost ?? 0 };
+}
+
+function opponentNames(query: Query, ids: { human: readonly string[]; bot: readonly string[] }): Map<string, ShownName> {
+    const named = new Map<string, ShownName>();
+    if (ids.human.length > 0) {
+        for (const row of query.select({ id: users.id, name: users.name, deletedAt: users.deletedAt }).from(users).where(inArray(users.id, [...ids.human])).all()) {
+            named.set(row.id, shownUser(row.name, row.deletedAt));
+        }
+    }
+    if (ids.bot.length > 0) {
+        for (const row of query.select({ id: bots.id, name: bots.name, deletedAt: bots.deletedAt }).from(bots).where(inArray(bots.id, [...ids.bot])).all()) {
+            named.set(row.id, shownBot(row.name, row.deletedAt));
+        }
+    }
     return named;
 }
 
@@ -158,8 +179,9 @@ export function playerRecord(query: Query, ladder: Pick<Ladder, `read`>, name: s
         human: [...met.entries()].filter(([, entry]) => entry.kind === `human`).map(([id]) => id),
         bot: [...met.entries()].filter(([, entry]) => entry.kind === `bot`).map(([id]) => id),
     });
-    const nameOf = (id: string) => names.get(id) ?? id;
-    const mostPlayed = [...met.entries()].sort((one, two) => two[1].games - one[1].games || nameOf(one[0]).localeCompare(nameOf(two[0]))).slice(0, playerOpponentsCap);
+    // Every id came from a stored game, whose seats name rows that exist.
+    const shownOf = (id: string): ShownName => names.get(id) ?? { name: id };
+    const mostPlayed = [...met.entries()].sort((one, two) => two[1].games - one[1].games || shownOf(one[0]).name.localeCompare(shownOf(two[0]).name)).slice(0, playerOpponentsCap);
     const rating = readRating(query, player);
     const rank = ladder.read(`all`, activeSince(nowMs)).findIndex((entry) => entry.kind === player.kind && entry.name === player.name);
     const times = rows.map((row) => row.finishedAt);
@@ -177,10 +199,10 @@ export function playerRecord(query: Query, ladder: Pick<Ladder, `read`>, name: s
         asX,
         asO,
         forfeits,
-        opponents: mostPlayed.map(([id, entry]) => ({ name: nameOf(id), kind: entry.kind, games: entry.games, won: entry.won, lost: entry.lost })),
+        opponents: mostPlayed.map(([id, entry]) => ({ ...shownOf(id), kind: entry.kind, games: entry.games, won: entry.won, lost: entry.lost })),
         firstGameAt: times.length === 0 ? null : isoOf(Math.min(...times)),
         lastGameAt: times.length === 0 ? null : isoOf(Math.max(...times)),
-        ...(player.kind === `bot` ? { placings: placingsOf(query, player.id) } : {}),
+        ...(player.kind === `bot` ? { placings: placingsOf(query, player.id), guests: guestRecord(query, player.id) } : {}),
     };
 }
 

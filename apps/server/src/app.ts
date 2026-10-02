@@ -32,10 +32,13 @@ import { Ladder } from './ladder';
 import { registerLeaderboardApi } from './leaderboard-api';
 import type { DiscordOAuth } from './discord';
 import { drain } from './drain';
+import { ErasureJournal, reapplyErasures } from './erasure';
 import { deleteBotByPolicy, ownedBotId } from './moderation';
 import type { PresenceRegistry } from './presence';
 import { GuestSessions } from './guests';
 import { registerOgShell } from './og-shell';
+import { schedulePurges } from './purge';
+import { registerReportApi } from './reports';
 import { defaultLimits, RequestLimits, type LimitTable } from './request-limits';
 import { logClientError, loggingOptions, type LogTarget } from './request-log';
 import { registerSessionApi, registerSessionCookie } from './session-api';
@@ -76,6 +79,10 @@ export interface AppDeps {
     tournamentTickMs?: number;
     // Where backups go and how many stay; without it the admin socket writes none.
     backup?: Pick<BackupPolicy, `dir` | `keep`>;
+    // The erasure journal's file, and how long an entry stays: a day past the oldest backup.
+    erasures?: { path: string; keepDays: number };
+    // The UTC hour the nightly purge runs at; without it none runs, as in tests that move their own clock.
+    purgeHourUtc?: number;
 }
 
 export interface BuiltApp {
@@ -205,6 +212,16 @@ export async function buildApp(deps: AppDeps): Promise<BuiltApp> {
         // A finish moves ratings, which the ladder shows at once rather than in ten seconds.
         ladder.clear();
     });
+    // A restored database may hold accounts deleted since its backup was
+    // taken; they go again before any request can read them.
+    const erasures =
+        deps.erasures === undefined ? null : new ErasureJournal({ ...deps.erasures, log: app.log, ...(deps.now === undefined ? {} : { now: deps.now }) });
+    if (erasures !== null) {
+        erasures.prune();
+        const applied = reapplyErasures({ games, presence, challenges, tournaments }, query, erasures);
+        if (applied > 0) app.log.warn({ applied }, `deletions applied again after a restore`);
+    }
+    const purges = deps.purgeHourUtc === undefined ? null : schedulePurges({ query, journal: erasures, hourUtc: deps.purgeHourUtc, log: app.log });
     if ((deps.tournamentTickMs ?? tournamentTickMs) > 0) tournaments.start(deps.tournamentTickMs ?? tournamentTickMs);
     const guests = new GuestSessions({
         seated: (guestId) => games.activeHumanGameCount({ kind: `guest`, id: guestId }) > 0,
@@ -224,6 +241,7 @@ export async function buildApp(deps: AppDeps): Promise<BuiltApp> {
     });
     app.addHook(`onClose`, () => {
         clearInterval(sweep);
+        purges?.stop();
         tournaments.stop();
         challenges.stop();
         games.stop();
@@ -236,7 +254,18 @@ export async function buildApp(deps: AppDeps): Promise<BuiltApp> {
     registerTournamentApi(app, { query, presence, games, limits, now: deps.now ?? Date.now });
     const playerReads = createPlayerReads({ query, ladder, now: deps.now ?? Date.now });
     registerPlayerApi(app, { reads: playerReads });
-    registerSessionApi(app, { query, guests, games, secureCookies: deps.secureCookies, limits });
+    registerSessionApi(app, {
+        query,
+        guests,
+        games,
+        secureCookies: deps.secureCookies,
+        limits,
+        erasure: { presence, challenges, tournaments },
+        erasures,
+        ladder,
+        now: deps.now ?? Date.now,
+    });
+    registerReportApi(app, { query, limits });
     registerSignInApi(app, { query, guests, discord: deps.discord, secureCookies: deps.secureCookies, devLogin: deps.devLogin, limits });
     if (deps.devLogin) registerDevAccountsApi(app, { query });
     if (deps.webIndexPath !== undefined) {
@@ -253,6 +282,7 @@ export async function buildApp(deps: AppDeps): Promise<BuiltApp> {
         ladder,
         actor: deps.adminActor,
         backup: backupPolicy === undefined ? null : () => backupNow(deps.sqlite, backupPolicy, new Date()),
+        erasures,
         tournamentLeadMs: leadMs,
         ...(deps.now === undefined ? {} : { now: deps.now }),
     });

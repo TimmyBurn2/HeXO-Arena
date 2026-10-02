@@ -11,6 +11,7 @@ import {
     playerMeta,
     playMeta,
     profileMeta,
+    reportMeta,
     siteDescription,
     siteMeta,
     tournamentsMeta,
@@ -58,6 +59,8 @@ export function routeMeta(route: Route): PageMeta {
             return creditsMeta;
         case `welcome`:
             return welcomeMeta;
+        case `report`:
+            return reportMeta;
         case `legal`:
             return legalPageMeta[route.page];
         case `game`:

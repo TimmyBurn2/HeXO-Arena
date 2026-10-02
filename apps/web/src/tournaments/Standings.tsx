@@ -1,5 +1,5 @@
 import { Fragment, useId, useState } from 'react';
-import type { TournamentDetail } from '@hexo-arena/contract';
+import { deletedPlayerName, type TournamentDetail } from '@hexo-arena/contract';
 import { BotBadge, PlayerName } from '../components/player';
 import { text } from '../text';
 import { BotPairings } from './Rounds';
@@ -11,8 +11,8 @@ import { BotPairings } from './Rounds';
  * pairings under it.
  */
 export function Standings({ detail }: { detail: TournamentDetail }) {
-    const ratings = new Map(detail.entries.map((entry) => [entry.bot, entry.ratingAtStart]));
-    const [open, setOpen] = useState<string | null>(null);
+    const ratings = new Map(detail.entries.map((entry) => [entry.key, entry.ratingAtStart]));
+    const [open, setOpen] = useState<number | null>(null);
     const ids = useId();
     const played = detail.rounds.length > 0;
     const columns = text.tournaments.columns;
@@ -42,17 +42,17 @@ export function Standings({ detail }: { detail: TournamentDetail }) {
                     </thead>
                     <tbody>
                         {detail.standings.map((line, index) => {
-                            const shown = open === line.bot;
+                            const shown = open === line.key;
                             const pairingsId = `${ids}-${String(index)}`;
                             return (
-                                <Fragment key={line.bot}>
+                                <Fragment key={line.key}>
                                     <tr>
                                         <td className="num rank-col">{String(line.rank)}</td>
                                         <td>
                                             <span className="player-cell">
-                                                <PlayerName name={line.bot} kind="bot" />
+                                                <PlayerName name={line.bot} kind="bot" deleted={line.deleted} />
                                                 <BotBadge />
-                                                <span className="standings-owner">{text.ladder.byOwner(<PlayerName name={line.ownerName} kind="human" />)}</span>
+                                                <span className="standings-owner">{text.ladder.byOwner(<PlayerName name={line.ownerName} kind="human" deleted={line.ownerName === deletedPlayerName} />)}</span>
                                                 {line.withdrawn ? <span className="tag muted">{text.tournaments.withdrawn}</span> : null}
                                                 {played ? (
                                                     <button
@@ -62,7 +62,7 @@ export function Standings({ detail }: { detail: TournamentDetail }) {
                                                         aria-controls={shown ? pairingsId : undefined}
                                                         aria-label={text.tournaments.pairingsOf(line.bot)}
                                                         onClick={() => {
-                                                            setOpen(shown ? null : line.bot);
+                                                            setOpen(shown ? null : line.key);
                                                         }}
                                                     >
                                                         <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -72,14 +72,14 @@ export function Standings({ detail }: { detail: TournamentDetail }) {
                                                 ) : null}
                                             </span>
                                         </td>
-                                        <td className="num standings-rating">{String(ratings.get(line.bot) ?? ``)}</td>
+                                        <td className="num standings-rating">{String(ratings.get(line.key) ?? ``)}</td>
                                         <td className="num standings-points">{String(line.points)}</td>
                                         <td className="num standings-sides">{`${String(line.asX)}, ${String(line.asO)}`}</td>
                                     </tr>
                                     {shown ? (
                                         <tr className="standings-pairings">
                                             <td colSpan={5}>
-                                                <BotPairings detail={detail} bot={line.bot} id={pairingsId} />
+                                                <BotPairings detail={detail} bot={line.key} id={pairingsId} />
                                             </td>
                                         </tr>
                                     ) : null}

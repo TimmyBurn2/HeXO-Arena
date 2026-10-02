@@ -1,4 +1,4 @@
-import type { TournamentDetail } from '@hexo-arena/contract';
+import type { TournamentBot, TournamentDetail } from '@hexo-arena/contract';
 import { Link } from '../router/Link';
 import { text } from '../text';
 import { pairingScore } from './view';
@@ -18,10 +18,10 @@ export function Rounds({ detail, only, except }: { detail: TournamentDetail; onl
             {only === undefined ? <h3 className="round-title">{text.tournaments.round(round.round)}</h3> : null}
             <ul className="round-pairings">
                 {round.pairings.map((pairing) => (
-                    <PairingItem key={`${pairing.first} ${pairing.second}`} pairing={pairing} />
+                    <PairingItem key={`${String(pairing.first.key)} ${String(pairing.second.key)}`} pairing={pairing} />
                 ))}
             </ul>
-            {round.rest === null ? null : <p className="note round-rest">{text.tournaments.rest(round.rest)}</p>}
+            {round.rest === null ? null : <p className="note round-rest">{text.tournaments.rest(<BotLabel bot={round.rest} />)}</p>}
         </div>
     ));
     if (only !== undefined) return <>{body}</>;
@@ -35,10 +35,10 @@ export function Rounds({ detail, only, except }: { detail: TournamentDetail; onl
     );
 }
 
-/** One bot's pairings, a round to a line, newest first, as a standings row opens them on a phone. */
-export function BotPairings({ detail, bot, id }: { detail: TournamentDetail; bot: string; id: string }) {
+/** One bot's pairings, by its key, a round to a line, newest first, as a standings row opens them on a phone. */
+export function BotPairings({ detail, bot, id }: { detail: TournamentDetail; bot: number; id: string }) {
     const met = detail.rounds.flatMap((round) =>
-        round.pairings.filter((pairing) => pairing.first === bot || pairing.second === bot).map((pairing) => ({ round: round.round, pairing })),
+        round.pairings.filter((pairing) => pairing.first.key === bot || pairing.second.key === bot).map((pairing) => ({ round: round.round, pairing })),
     );
     return (
         <ul className="round-pairings bot-pairings" id={id}>
@@ -51,12 +51,17 @@ export function BotPairings({ detail, bot, id }: { detail: TournamentDetail; bot
 
 type Pairing = TournamentDetail[`rounds`][number][`pairings`][number];
 
+// A bot in a round line; a deleted one reads apart, as everywhere a name renders.
+function BotLabel({ bot }: { bot: TournamentBot }) {
+    return bot.deleted === true ? <span className="deleted-name">{bot.name}</span> : <>{bot.name}</>;
+}
+
 function PairingItem({ pairing, round }: { pairing: Pairing; round?: number }) {
     const [first, second] = pairingScore(pairing);
     return (
         <li className="round-pairing">
             {round === undefined ? null : <span className="round-of">{text.tournaments.round(round)}</span>}
-            <span className="round-names">{text.tournaments.pairingLine(pairing.first, pairing.second)}</span>
+            <span className="round-names">{text.tournaments.pairingLine(<BotLabel bot={pairing.first} />, <BotLabel bot={pairing.second} />)}</span>
             <span className="round-score">{text.tournaments.score(first, second)}</span>
             <span className="round-games">
                 {pairing.games.map((game, index) =>
@@ -66,7 +71,7 @@ function PairingItem({ pairing, round }: { pairing: Pairing; round?: number }) {
                         </span>
                     ) : (
                         <Link key={index} to={`/game/${encodeURIComponent(game.gameId)}`} className="round-game">
-                            {gameWords(game, index)}
+                            {gameWords(pairing, game, index)}
                         </Link>
                     ),
                 )}
@@ -76,12 +81,13 @@ function PairingItem({ pairing, round }: { pairing: Pairing; round?: number }) {
 }
 
 // A game's link names it by its number and how it stands.
-function gameWords(game: Pairing[`games`][number], index: number): string {
+function gameWords(pairing: Pairing, game: Pairing[`games`][number], index: number): string {
+    const winner = game.point === pairing.first.key ? pairing.first : pairing.second;
     const outcome =
         game.outcome === `played`
             ? game.point === null
                 ? text.tournaments.outcomes.none
-                : `${game.point} ${text.tournaments.outcomes.won}`
+                : `${winner.name} ${text.tournaments.outcomes.won}`
             : text.tournaments.outcomes[game.outcome === `aborted` ? `none` : game.outcome];
     return text.tournaments.gameLine(index + 1, outcome);
 }

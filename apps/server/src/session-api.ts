@@ -1,7 +1,10 @@
 import {
+    accountExportSchema,
+    deleteAccountRequestSchema,
     guestPath,
     guestRetryAfterSeconds,
     logoutPath,
+    meExportPath,
     mePath,
     sessionCookieNameFor,
     sessionMaxAgeSeconds,
@@ -9,19 +12,35 @@ import {
     type Me,
 } from '@hexo-arena/contract';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
+import { accountExport } from './account-export';
+import { recordAdminAction } from './admin-store';
 import type { Query } from './db';
+import { eraseUser, type ErasureDeps, type ErasureJournal } from './erasure';
 import type { GameRegistry, Person } from './game-registry';
 import type { GuestSessions } from './guests';
-import { refuseRate, type ClientLimits } from './request-limits';
+import type { Ladder } from './ladder';
+import { refuseRate, type ClientLimits, type CredentialLimits } from './request-limits';
 import { streamPlayerOf } from './rating-store';
-import { deleteSession, findSessionUser } from './sessions';
+import { deleteSession, findSessionUser, sessionUser } from './sessions';
 
 export interface SessionApiDeps {
     query: Query;
     guests: GuestSessions;
     games: GameRegistry;
     secureCookies: boolean;
-    limits: ClientLimits;
+    limits: ClientLimits & CredentialLimits;
+    // What a person's own deletion ends and withdraws, as the operator's does.
+    erasure: Omit<ErasureDeps, `games`>;
+    erasures: Pick<ErasureJournal, `record`> | null;
+    ladder: Pick<Ladder, `clear`>;
+    now: () => number;
+}
+
+/** The audit actor of a deletion the person asked for themselves. */
+export const selfActor = `self`;
+
+function clearSessionCookie(reply: FastifyReply, secure: boolean): void {
+    reply.clearCookie(sessionCookieNameFor(secure), { path: `/`, httpOnly: true, sameSite: `lax`, secure });
 }
 
 // An account session outlives the browser; a guest session ends with it,
@@ -75,7 +94,7 @@ export function sessionPerson(query: Query, guests: GuestSessions, request: Fast
     const token = request.sessionToken;
     if (token === undefined) return null;
     const guest = guests.find(token);
-    if (guest !== null) return { kind: `guest`, id: guest.id, name: guest.name };
+    if (guest !== null) return { kind: `guest`, id: guest.id, name: guest.name, since: guest.since };
     const user = findSessionUser(query, token);
     return user === null ? null : { kind: `user`, id: user.id, name: user.name };
 }
@@ -106,8 +125,44 @@ export function registerSessionApi(app: FastifyInstance, deps: SessionApiDeps): 
             guests.end(token);
             deleteSession(query, token);
         }
-        reply.clearCookie(sessionCookieNameFor(secureCookies), { path: `/`, httpOnly: true, sameSite: `lax`, secure: secureCookies });
+        clearSessionCookie(reply, secureCookies);
         return reply.code(204).send();
+    });
+
+    // The typed name guards against a stray request; a seat in a live game
+    // is refused, since ending the game would hand its owner an unrated exit.
+    app.delete(mePath, { config: { limit: `principal` } }, async (request, reply) => {
+        const user = sessionUser(query, request);
+        if (user === null) return reply.code(401).send({ error: `no session`, code: `unauthorized` });
+        if (limits.refuse(reply, `principal`, `user:${user.id}`)) return reply;
+        const parsed = deleteAccountRequestSchema.safeParse(request.body);
+        if (!parsed.success) return reply.code(400).send({ error: `the request fails validation`, code: `bad_request` });
+        if (parsed.data.name !== user.name) return reply.code(400).send({ error: `the name is not the account's`, code: `name_mismatch` });
+        if (games.activeHumanGameCount({ kind: `user`, id: user.id }) > 0) {
+            return reply.code(409).send({ error: `the account is seated in a live game`, code: `in_live_game` });
+        }
+        query.transaction((tx) => {
+            const deletion = eraseUser({ ...deps.erasure, games }, tx, user.id);
+            recordAdminAction(tx, { actor: selfActor, action: `delete-user`, target: deletion.placeholder, reason: `deleted their own account` });
+        });
+        deps.erasures?.record(user.id);
+        deps.ladder.clear();
+        clearSessionCookie(reply, secureCookies);
+        return reply.code(204).send();
+    });
+
+    app.get(meExportPath, { config: { limit: `principal` } }, async (request, reply) => {
+        const user = sessionUser(query, request);
+        if (user === null) return reply.code(401).send({ error: `no session`, code: `unauthorized` });
+        if (limits.refuse(reply, `accountExport`, `user:${user.id}`)) return reply;
+        const now = deps.now();
+        const body = JSON.stringify(accountExportSchema.parse(accountExport(query, user.id, now)));
+        const day = new Date(now).toISOString().slice(0, 10);
+        return reply
+            .code(200)
+            .header(`content-type`, `application/json; charset=utf-8`)
+            .header(`content-disposition`, `attachment; filename="hexo-arena-${user.name}-${day}.json"`)
+            .send(body);
     });
 
     app.post(guestPath, { config: { limit: `public` } }, async (request, reply) => {

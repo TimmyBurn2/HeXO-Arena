@@ -28,7 +28,7 @@ const outcomeWords: Readonly<Record<HexState, string>> = {
  * A played game's cell links to it.
  */
 export function Crosstable({ detail }: { detail: TournamentDetail }) {
-    const bots = detail.standings.map((line) => line.bot);
+    const bots = detail.standings;
     return (
         <div className="xt-frame" tabIndex={0} role="region" aria-label={text.tournaments.crosstable}>
             <table className="xt">
@@ -38,9 +38,9 @@ export function Crosstable({ detail }: { detail: TournamentDetail }) {
                             {text.tournaments.columns.bot}
                         </th>
                         {bots.map((bot, index) => (
-                            <th key={bot} scope="col" className="xt-col">
+                            <th key={bot.key} scope="col" className="xt-col">
                                 <span aria-hidden="true">{String(index + 1)}</span>
-                                <span className="sr-only">{bot}</span>
+                                <span className="sr-only">{bot.bot}</span>
                             </th>
                         ))}
                         <th scope="col" className="num">
@@ -50,22 +50,22 @@ export function Crosstable({ detail }: { detail: TournamentDetail }) {
                 </thead>
                 <tbody>
                     {detail.standings.map((line, row) => (
-                        <tr key={line.bot}>
+                        <tr key={line.key}>
                             <th scope="row" className="xt-name">
                                 <span className="xt-rank" aria-hidden="true">
                                     {String(row + 1)}
                                 </span>
-                                <PlayerName name={line.bot} kind="bot" />
+                                <PlayerName name={line.bot} kind="bot" deleted={line.deleted} />
                                 <BotBadge />
                             </th>
                             {bots.map((opponent) => {
-                                const met = meeting(detail, line.bot, opponent);
+                                const met = meeting(detail, line.key, opponent.key);
                                 return (
-                                    <td key={opponent} className={met === null ? `xt-cell xt-self` : `xt-cell`}>
+                                    <td key={opponent.key} className={met === null ? `xt-cell xt-self` : `xt-cell`}>
                                         {met === null ? null : (
                                             <span className="xt-pair">
-                                                <Hex view={met.x} side="x" bot={line.bot} opponent={opponent} />
-                                                <Hex view={met.o} side="o" bot={line.bot} opponent={opponent} />
+                                                <Hex view={met.x} side="x" bot={line.bot} opponent={opponent.bot} />
+                                                <Hex view={met.o} side="o" bot={line.bot} opponent={opponent.bot} />
                                             </span>
                                         )}
                                     </td>

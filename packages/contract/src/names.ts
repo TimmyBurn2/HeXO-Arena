@@ -48,3 +48,18 @@ export function isReservedName(name: string): boolean {
     const key = nameKeyOf(name);
     return reservedNames.includes(key) || placeholderNamePattern.test(key);
 }
+
+// A placeholder's number would let a reader follow one deleted person
+// across games, so no public answer carries it: a deleted participant is
+// named by one of these, and the space keeps either off every real name.
+
+/** How a deleted account reads wherever a public answer names it. */
+export const deletedPlayerName = `deleted player`;
+
+/** How a deleted bot reads wherever a public answer names it. */
+export const deletedBotName = `deleted bot`;
+
+/** The mark a public answer sets on a deleted participant; optional wherever it is used, absent for everyone else. */
+export const deletedMarkSchema = z
+    .literal(true)
+    .meta({ id: `Deleted`, description: `Present when the account or bot was deleted: the name then reads ${deletedPlayerName} or ${deletedBotName}, and has no page.` });

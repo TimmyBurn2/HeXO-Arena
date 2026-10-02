@@ -1,10 +1,9 @@
 import { z } from 'zod';
 import type { Accepts } from './api';
 import { axialCoordSchema } from './board';
-import { nameSyntaxSchema } from './names';
+import { deletedMarkSchema, nameSyntaxSchema } from './names';
 import {
     finishReasonSchema,
-    openingPliesRequestSchema,
     openingPliesSchema,
     seatPlayerSchema,
     sideSchema,
@@ -33,10 +32,14 @@ export const liveGameListCap = 12;
 // so a crowd of pollers costs one serialization a window.
 export const liveGameListMemoMs = 1_000;
 
+/** A person's game opens on the origin alone unless the request asks for more; bot challenges and tournaments keep five. */
+export const defaultHumanOpeningPlies = 1;
+
+// Restating the component id keeps the $ref and renders this default beside it.
 export const createGameRequestSchema = z.object({
     bot: nameSyntaxSchema,
     timeControl: timeControlSchema,
-    openingPlies: openingPliesRequestSchema,
+    openingPlies: openingPliesSchema.default(defaultHumanOpeningPlies).meta({ id: `OpeningPlies`, default: defaultHumanOpeningPlies }),
 });
 export type CreateGameRequest = z.infer<typeof createGameRequestSchema>;
 
@@ -64,7 +67,7 @@ export const gameBoardSchema = z.object({ cells: z.array(gameCellSchema) }).meta
 // Bots and users share one name namespace, so the kind is what tells a
 // watcher which seat is the bot; a guest seat has no rating.
 export const gamePlayerSchema = seatPlayerSchema
-    .extend({ kind: z.enum([`bot`, `user`, `guest`]) })
+    .extend({ kind: z.enum([`bot`, `user`, `guest`]), deleted: deletedMarkSchema.optional() })
     .meta({ id: `GamePlayer` });
 export type GamePlayer = z.infer<typeof gamePlayerSchema>;
 

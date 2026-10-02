@@ -99,6 +99,62 @@ describe('BotScreen', () => {
         expect(reads).toContain(`/api/games/finished?player=sealbot`);
     });
 
+    it('count its games against guests apart in its record, and tag a guest\'s game in its list unrated', async () => {
+        const record = {
+            name: `sealbot`,
+            kind: `bot`,
+            rating: 1712,
+            deviation: 60,
+            provisional: false,
+            rank: null,
+            games: 4,
+            won: 3,
+            lost: 1,
+            undecided: 0,
+            asX: { games: 2, won: 2 },
+            asO: { games: 2, won: 1 },
+            forfeits: { disconnect: 0, terminated: 0 },
+            opponents: [],
+            firstGameAt: `2026-09-20T10:00:00Z`,
+            lastGameAt: `2026-10-01T10:00:00Z`,
+            placings: [],
+            guests: { games: 3, won: 2, lost: 1 },
+        };
+        const guestGame = {
+            gameId: `g-guest`,
+            players: { x: { name: `sealbot`, rating: null, provisional: false, kind: `bot` }, o: { name: `Guest k3f9`, rating: null, provisional: false, kind: `guest` } },
+            winner: `x`,
+            reason: `six-in-a-row`,
+            timeControl: { mode: `unlimited` },
+            openingPlies: 1,
+            turns: 12,
+            finishedAt: new Date(Date.now() - 3_600_000).toISOString(),
+            rated: false,
+            voided: false,
+        };
+        vi.stubGlobal(
+            `fetch`,
+            vi.fn((url: string) => {
+                const body = url.startsWith(`/api/games/finished`)
+                    ? { games: [guestGame], page: 1, pages: 1, total: 1, record: { games: 1, won: 1, lost: 0, undecided: 0, voided: 0, asX: { games: 1, won: 1, lost: 0 }, asO: { games: 0, won: 0, lost: 0 } } }
+                    : url.startsWith(`/api/players/sealbot/rating`)
+                      ? []
+                      : url.startsWith(`/api/players/`)
+                        ? record
+                        : url === `/api/games`
+                          ? []
+                          : [sealbot];
+                return Promise.resolve(new Response(JSON.stringify(body)));
+            }),
+        );
+        render(<BotScreen name="sealbot" />);
+        const card = await screen.findByRole(`region`, { name: `Record` });
+        expect(within(card).getByText(`Against guests`).nextElementSibling?.textContent).toBe(`3 games, 2 won, 1 lost; unrated, and counted apart`);
+        const row = await screen.findByRole(`link`, { name: /Guest k3f9/u });
+        expect(row.querySelector(`.tag`)?.textContent).toBe(`unrated`);
+        expect(within(row).queryByRole(`link`)).toBe(null);
+    });
+
     it('head the page with the bot\'s name in its plate while the bot list loads, where the loaded page holds it', async () => {
         let answer: (response: Response) => void = () => undefined;
         vi.stubGlobal(`fetch`, vi.fn(() => new Promise<Response>((resolve) => { answer = resolve; })));
@@ -147,6 +203,13 @@ describe('BotScreen', () => {
         expect(document.querySelector(`meta[name="description"]`)?.getAttribute(`content`)).toBe(
             `HeXO bot by quinn, rated 1712, online and open for challenges. A clean-room HeXO engine with a rotation opener`,
         );
+    });
+
+    it('lead to the report form about the bot from the foot of its page', async () => {
+        stubDirectory([sealbot]);
+        render(<BotScreen name="sealbot" />);
+        const link = await screen.findByRole(`link`, { name: `Report sealbot` });
+        expect(link.getAttribute(`href`)).toBe(`/report?subject=%2Fbots%2Fsealbot`);
     });
 
     it('match the name on the case-insensitive fold', async () => {

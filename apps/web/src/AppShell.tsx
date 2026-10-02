@@ -71,6 +71,10 @@ const WelcomeScreen = lazy(async () => {
     const module = await loadScreen(async () => import(`./screens/WelcomeScreen`));
     return { default: module.WelcomeScreen };
 });
+const ReportScreen = lazy(async () => {
+    const module = await loadScreen(async () => import(`./screens/ReportScreen`));
+    return { default: module.ReportScreen };
+});
 const LegalScreen = lazy(async () => {
     const module = await loadScreen(async () => import(`./screens/LegalScreen`));
     return { default: module.LegalScreen };
@@ -256,6 +260,8 @@ function RouteView({ route }: { route: Route }) {
             return <WelcomeScreen />;
         case `legal`:
             return <LegalScreen page={route.page} />;
+        case `report`:
+            return <ReportScreen />;
         case `game`:
             return <GameScreen gameId={route.gameId} />;
         case `not-found`:

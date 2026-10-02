@@ -1,4 +1,4 @@
-import { legalPagePath, legalPages, welcomePath, type LegalPage } from '@hexo-arena/contract';
+import { legalPagePath, legalPages, reportPagePath, welcomePath, type LegalPage } from '@hexo-arena/contract';
 
 export type Route =
     | { readonly name: `home` }
@@ -15,6 +15,7 @@ export type Route =
     | { readonly name: `profile` }
     | { readonly name: `credits` }
     | { readonly name: `welcome` }
+    | { readonly name: `report` }
     | { readonly name: `legal`; readonly page: LegalPage }
     | { readonly name: `game`; readonly gameId: string }
     | { readonly name: `not-found` };
@@ -40,6 +41,7 @@ export function parseRoute(pathname: string): Route {
     if (head === `profile` && segments.length === 1) return { name: `profile` };
     if (head === `credits` && segments.length === 1) return { name: `credits` };
     if (head === `welcome` && segments.length === 1) return { name: `welcome` };
+    if (head === `report` && segments.length === 1) return { name: `report` };
     if (head === `legal` && segments.length === 2) {
         const page = legalPages.find((candidate) => candidate === second);
         if (page !== undefined) return { name: `legal`, page };
@@ -80,6 +82,8 @@ export function routePath(route: Route): string {
             return `/credits`;
         case `welcome`:
             return welcomePath;
+        case `report`:
+            return reportPagePath;
         case `legal`:
             return legalPagePath(route.page);
         case `game`:

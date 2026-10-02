@@ -2,7 +2,7 @@ import { existsSync, mkdtempSync, rmSync } from 'node:fs';
 import http from 'node:http';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { orphanForfeitMs } from '@hexo-arena/contract';
+import { orphanForfeitMs, type AdminRequest } from '@hexo-arena/contract';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createTestApp, fakeDiscord, FakeStreamSocket, loginAs, mintBot, startDiscordSignIn, type TestApp } from './helpers';
 import { findBot } from '../src/bots';
@@ -631,7 +631,7 @@ describe('delete-user', () => {
         return world.sqlite.prepare(sql).get();
     }
 
-    it('keeps rated history under placeholders, frees the user name, and keeps the audit row', async () => {
+    it('keeps rated history under placeholders, frees the user name, and audits the deletion under the placeholder', async () => {
         const ann = await loginAs(world.app, `ann`);
         await mintBot(world.app, ann, `alpha`);
         await mintBot(world.app, ann, `spare`);
@@ -659,11 +659,11 @@ describe('delete-user', () => {
 
         expect(world.admin({ op: `delete-user`, name: `ann`, reason: `asked to be forgotten` })).toEqual({
             kind: `done`,
-            summary: `forgot ann: user kept as deleted-2; 1 bots kept anonymized, 1 deleted; 0 live games aborted`,
+            summary: `forgot ann as deleted-1: user kept; 1 bots kept anonymized, 1 deleted; 0 live games aborted`,
         });
         expect(count(`select name, discord_id as discordId from users where name like 'deleted-%'`)).toEqual({
-            name: `deleted-2`,
-            discordId: `deleted:deleted-2`,
+            name: `deleted-1`,
+            discordId: `deleted:deleted-1`,
         });
         expect(count(`select count(*) as n from games`)).toEqual({ n: 2 });
         expect(count(`select count(*) as n from sessions where user_id not in (select id from users where name = 'bob')`)).toEqual({ n: 0 });
@@ -681,21 +681,58 @@ describe('delete-user', () => {
         expect(fresh.statusCode).toBe(200);
         expect(count(`select count(*) as n from users where name = 'ann' and deleted_at is null`)).toEqual({ n: 1 });
         expect(auditRows(world)).toEqual([
-            { actor: `operator`, action: `delete-user`, target: `ann`, reason: `asked to be forgotten` },
+            { actor: `operator`, action: `delete-user`, target: `deleted-1`, reason: `asked to be forgotten` },
         ]);
-        expect(world.admin({ op: `recompute-ratings`, exclude: [`deleted-2`], reason: `sybil` })).toMatchObject({
+        expect(world.admin({ op: `recompute-ratings`, exclude: [`deleted-1`], reason: `sybil` })).toMatchObject({
             summary: `re-folded 1 rated games; voided 1 more`,
         });
     });
 
-    it('deletes a user without games outright', async () => {
+    it('deletes a user without games outright, the audit keeping only the placeholder it claimed', async () => {
         await mintBot(world.app, await loginAs(world.app, `ann`), `alpha`);
         expect(world.admin({ op: `delete-user`, name: `ann`, reason: `spam account` })).toMatchObject({
-            summary: `forgot ann: user deleted; 0 bots kept anonymized, 1 deleted; 0 live games aborted`,
+            summary: `forgot ann as deleted-1: user deleted; 0 bots kept anonymized, 1 deleted; 0 live games aborted`,
         });
         expect(count(`select count(*) as n from users`)).toEqual({ n: 0 });
-        expect(count(`select count(*) as n from name_reservations`)).toEqual({ n: 0 });
-        expect(auditRows(world)).toHaveLength(1);
+        expect(world.sqlite.prepare(`select name_key as nameKey from name_reservations`).all()).toEqual([{ nameKey: `deleted-1` }]);
+        expect(auditRows(world)).toEqual([{ actor: `operator`, action: `delete-user`, target: `deleted-1`, reason: `spam account` }]);
+    });
+
+    it('rewrites every earlier audit row naming the user or a bot of theirs to a placeholder, and no other', async () => {
+        const ann = await loginAs(world.app, `ann`);
+        await mintBot(world.app, ann, `alpha`);
+        await mintBot(world.app, ann, `spare`);
+        await mintBot(world.app, await loginAs(world.app, `bob`), `beta`);
+        const query = createQuery(world.sqlite);
+        const game = insertBotGame(query, {
+            challengerBotId: botId(world, `alpha`),
+            destBotId: botId(world, `beta`),
+            challengerSide: `x`,
+            timeControl: { mode: `unlimited` },
+            opening: [{ x: 0, y: 0, player: 0 }],
+        });
+        recordFinish(query, game, { winner: `x`, reason: `six-in-a-row` });
+        const requests: AdminRequest[] = [
+            { op: `ban-user`, name: `Ann`, reason: `spam` },
+            { op: `unban-user`, name: `ann`, reason: `appeal` },
+            { op: `delist-bot`, name: `alpha`, reason: `name` },
+            { op: `relist-bot`, name: `alpha`, reason: `renamed` },
+            { op: `revoke-bot`, name: `spare`, reason: `leaked` },
+            { op: `recompute-ratings`, exclude: [`beta`, `ann`, game], reason: `check` },
+            { op: `tournament-create`, name: `ann alpha cup`, startsAt: new Date(Date.now() + 7_200_000).toISOString(), timeControl: { mode: `turn`, turnTimeMs: 10_000 }, openingPlies: 5, maxEntrants: 12, reason: `weekly` },
+        ];
+        for (const request of requests) expect(world.admin(request)).toMatchObject({ kind: `done` });
+        world.admin({ op: `delete-user`, name: `ann`, reason: `asked to be forgotten` });
+        expect(auditRows(world)).toEqual([
+            { actor: `operator`, action: `ban-user`, target: `deleted-1`, reason: `spam` },
+            { actor: `operator`, action: `unban-user`, target: `deleted-1`, reason: `appeal` },
+            { actor: `operator`, action: `delist-bot`, target: `deleted-2`, reason: `name` },
+            { actor: `operator`, action: `relist-bot`, target: `deleted-2`, reason: `renamed` },
+            { actor: `operator`, action: `revoke-bot`, target: `deleted-1`, reason: `leaked` },
+            { actor: `operator`, action: `recompute-ratings`, target: `beta deleted-1 ${game}`, reason: `check` },
+            { actor: `operator`, action: `tournament-create`, target: `ann alpha cup`, reason: `weekly` },
+            { actor: `operator`, action: `delete-user`, target: `deleted-1`, reason: `asked to be forgotten` },
+        ]);
     });
 
     it('aborts the live games of the user and their bots first', async () => {
@@ -710,7 +747,7 @@ describe('delete-user', () => {
         });
         expect(created.statusCode).toBe(201);
         expect(world.admin({ op: `delete-user`, name: `ann`, reason: `abuse` })).toMatchObject({
-            summary: `forgot ann: user deleted; 0 bots kept anonymized, 1 deleted; 1 live games aborted`,
+            summary: `forgot ann as deleted-1: user deleted; 0 bots kept anonymized, 1 deleted; 1 live games aborted`,
         });
         expect(stream.ended).toBe(true);
         expect(world.admin({ op: `status` })).toMatchObject({ status: { activeGames: 0 } });

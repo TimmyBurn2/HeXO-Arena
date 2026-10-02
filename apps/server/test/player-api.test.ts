@@ -106,11 +106,26 @@ describe('the player reads', () => {
         expect((await record(`cid`)).body).toMatchObject({ games: 0, won: 0, lost: 0, firstGameAt: null });
     });
 
+    it('counts a bot\'s games against guests apart, unrated, and in no other figure', async () => {
+        bots(`alpha`, `beta`, `x`, `x`);
+        for (const [guestSide, winner] of [[`o`, `x`], [`x`, `x`], [`o`, null]] as const) {
+            const gameId = insertGame(query, { guestName: `Guest k3f9`, botId: id(`alpha`), userSide: guestSide, timeControl: unlimited, opening: origin });
+            recordFinish(query, gameId, { winner, reason: winner === null ? `terminated` : `six-in-a-row` });
+        }
+        const aborted = insertGame(query, { guestName: `Guest zz99`, botId: id(`alpha`), userSide: `x`, timeControl: unlimited, opening: origin });
+        recordFinish(query, aborted, { winner: null, reason: `aborted` });
+        const { body } = await record(`alpha`);
+        expect(body).toMatchObject({ games: 1, won: 1, lost: 0, guests: { games: 3, won: 1, lost: 1 } });
+        expect(body?.opponents).toEqual([{ name: `beta`, kind: `bot`, games: 1, won: 1, lost: 0 }]);
+        expect((await history(`alpha`, `all`)).body).toHaveLength(1);
+    });
+
     it('reads a human\'s record too, with no placings', async () => {
         human(`ann`, `beta`, `x`, `x`);
         const { body } = await record(`ann`);
         expect(body).toMatchObject({ name: `ann`, kind: `human`, games: 1, won: 1, asX: { games: 1, won: 1 } });
         expect(body).not.toHaveProperty(`placings`);
+        expect(body).not.toHaveProperty(`guests`);
     });
 
     it('answers 404 for an unknown name and for a deleted player\'s placeholder', async () => {
@@ -122,6 +137,18 @@ describe('the player reads', () => {
         expect(placeholder).toMatch(/^deleted-/u);
         expect((await record(placeholder)).status).toBe(404);
         expect((await history(placeholder)).status).toBe(404);
+    });
+
+    it('names deleted opponents by the label and the mark, never by the placeholder', async () => {
+        bots(`alpha`, `beta`, `x`, `x`);
+        human(`bob`, `alpha`, `o`, `x`);
+        deleteUser(query, id(`bob`));
+        const answer = await world.app.inject({ method: `GET`, url: `/api/players/alpha` });
+        expect(answer.body).not.toMatch(/deleted-[0-9]/u);
+        expect(playerRecordSchema.parse(answer.json()).opponents).toEqual([
+            { name: `deleted bot`, deleted: true, kind: `bot`, games: 1, won: 1, lost: 0 },
+            { name: `deleted player`, deleted: true, kind: `human`, games: 1, won: 1, lost: 0 },
+        ]);
     });
 
     it('carries the rating\'s deviation, as the last rated game left it, the seed\'s before any', async () => {
