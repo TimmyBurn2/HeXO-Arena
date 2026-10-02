@@ -119,14 +119,14 @@ describe('POST /api/bots', () => {
             });
             expect(response.statusCode).toBe(201);
         }
-        const fourth = await app.inject({
+        const past = await app.inject({
             method: 'POST',
             url: botsPath,
-            payload: { name: `bot-3` },
+            payload: { name: `bot-${botCapPerUser.toString()}` },
             cookies: { hexo_arena_session: session },
         });
-        expect(fourth.statusCode).toBe(403);
-        expect(fourth.json()).toMatchObject({ code: `bot_limit` });
+        expect(past.statusCode).toBe(403);
+        expect(past.json()).toMatchObject({ code: `bot_limit` });
         await app.close();
     });
 });

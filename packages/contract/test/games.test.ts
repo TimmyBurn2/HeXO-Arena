@@ -40,6 +40,14 @@ describe('createGameRequestSchema', () => {
         expect(defaultHumanOpeningPlies).toBe(1);
     });
 
+    it('lets a request leave rated out, as every caller before it did, and takes it only as a boolean', () => {
+        const request = { bot: `opponentbot`, timeControl: turnControl };
+        expect(createGameRequestSchema.parse(request)).not.toHaveProperty(`rated`);
+        expect(createGameRequestSchema.parse({ ...request, rated: true }).rated).toBe(true);
+        expect(createGameRequestSchema.parse({ ...request, rated: false }).rated).toBe(false);
+        expect(createGameRequestSchema.safeParse({ ...request, rated: `no` }).success).toBe(false);
+    });
+
     it('keeps the time-control floors from the stream contract', () => {
         expect(
             createGameRequestSchema.safeParse({
@@ -102,6 +110,24 @@ describe('gameSnapshotSchema', () => {
         expect(finished.status).toBe(`finished`);
         expect(`clock` in finished && finished.clock !== undefined).toBe(false);
         expect(finished.you).toBeUndefined();
+    });
+
+    it('marks a game its player started unrated, and only with true', () => {
+        const live = {
+            gameId: `g1`,
+            status: `in-progress`,
+            players,
+            openingPlies: 1,
+            board: { cells: [{ x: 0, y: 0, side: `x` }] },
+            timeControl: { mode: `unlimited` },
+            toMove: `o`,
+            clock: { mode: `unlimited` },
+        };
+        expect(gameSnapshotSchema.parse(live).unratedByChoice).toBeUndefined();
+        expect(gameSnapshotSchema.parse({ ...live, unratedByChoice: true }).unratedByChoice).toBe(true);
+        expect(gameSnapshotSchema.safeParse({ ...live, unratedByChoice: false }).success).toBe(false);
+        const finished = { ...live, status: `finished`, winner: `x`, reason: `six-in-a-row`, voided: false, unratedByChoice: true };
+        expect(gameSnapshotSchema.parse(finished).unratedByChoice).toBe(true);
     });
 
     it('names both seats and rejects a seat of unknown kind', () => {

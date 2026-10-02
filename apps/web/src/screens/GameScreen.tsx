@@ -412,6 +412,7 @@ function GameView({ snapshot, send, link }: { snapshot: GameSnapshot; send: Game
                         <div className="hud-chip">
                             <Rundown
                                 players={snapshot.players}
+                                unratedByChoice={snapshot.unratedByChoice === true}
                                 data={rundown}
                                 meetings={
                                     meetings === null ? null : meetings.record.games === 0 ? (
@@ -462,7 +463,7 @@ function GameView({ snapshot, send, link }: { snapshot: GameSnapshot; send: Game
                     }
                     facts={factsOf(snapshot)}
                     meetings={meetingsLine}
-                    rundown={running && !rundownShown ? <Rundown players={snapshot.players} data={rundown} meetings={null} /> : null}
+                    rundown={running && !rundownShown ? <Rundown players={snapshot.players} unratedByChoice={snapshot.unratedByChoice === true} data={rundown} meetings={null} /> : null}
                     tournament={snapshot.tournament === undefined ? null : (
                         <Link to={`/tournaments/${encodeURIComponent(snapshot.tournament.id)}`}>
                             {text.drawer.tournamentGame(snapshot.tournament.name, snapshot.tournament.round, snapshot.tournament.game)}
@@ -534,14 +535,16 @@ function factsOf(snapshot: GameSnapshot): (readonly [string, string])[] {
     const voided = snapshot.status === `finished` && snapshot.voided;
     const guest = snapshot.players.x.kind === `guest` || snapshot.players.o.kind === `guest`;
     const practice = !guest && seatsRateNobody(snapshot.players);
+    // Only one reason holds at a time: a guest's game and practice never carry the choice.
+    const unrated = practice ? text.drawer.ratedNoPractice : snapshot.unratedByChoice === true ? text.drawer.ratedNoChoice : null;
     if (snapshot.you === undefined) {
         const unratedGuest = snapshot.status === `finished` ? text.drawer.ratedNoGuestPlayed : text.drawer.ratedNoGuest;
-        facts.push([text.drawer.rated, guest ? unratedGuest : practice ? text.drawer.ratedNoPractice : voided ? text.drawer.ratedNoVoided : text.drawer.ratedYes]);
+        facts.push([text.drawer.rated, guest ? unratedGuest : (unrated ?? (voided ? text.drawer.ratedNoVoided : text.drawer.ratedYes))]);
     } else {
         facts.push([text.drawer.yourSide, snapshot.you]);
         // A seated player's own game needs no Rated row until the operator
-        // voids it, unless a bot level made it practice.
-        if (practice) facts.push([text.drawer.rated, text.drawer.ratedNoPractice]);
+        // voids it, unless a bot level or the player's choice made it unrated.
+        if (unrated !== null) facts.push([text.drawer.rated, unrated]);
         else if (voided) facts.push([text.drawer.rated, text.drawer.ratedNoVoided]);
     }
     if (snapshot.status === `finished`) facts.push([text.drawer.result, resultLine(snapshot)]);

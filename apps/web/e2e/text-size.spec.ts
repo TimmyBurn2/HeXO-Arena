@@ -1,7 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
 import type { Me } from '@hexo-arena/contract';
 import { looks, wear } from './matrix';
-import { analyzerBots, bots, liveGames, longReadings, playBots, rivalry, serve, signup, tournaments, world, type World } from './mock-api';
+import { analyzerBots, bots, heldBots, liveGames, longReadings, playBots, rivalry, serve, signup, tournaments, world, type World } from './mock-api';
 
 const visitors: readonly { name: string; me: Me }[] = [
     { name: `signed-out`, me: null },
@@ -42,6 +42,14 @@ const screens: readonly { name: string; path: string; world?: Partial<World>; th
     { name: `an analyzer's page`, path: `/bots/kestrel`, world: { bots: [...bots, ...analyzerBots] } },
     { name: `build a bot`, path: `/connect` },
     { name: `profile`, path: `/profile` },
+    {
+        name: `profile at the bot cap, or with no bots for the long name`,
+        path: `/profile`,
+        world: { bots: [...bots.filter((bot) => bot.ownerName !== `quinn`), ...heldBots] },
+        then: async (page) => {
+            await page.locator(`.bot-rows-foot`).waitFor();
+        },
+    },
     { name: `a player page`, path: `/players/ana` },
     { name: `credits`, path: `/credits` },
     { name: `the report form`, path: `/report?subject=%2Fbots%2Fsealbot` },

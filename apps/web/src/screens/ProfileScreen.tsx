@@ -1,5 +1,5 @@
-import { useCallback, useState } from 'react';
-import { botCapPerUser, nameKeyOf, type GuestMe, type UserMe } from '@hexo-arena/contract';
+import { useCallback, useId, useState } from 'react';
+import { botCapPerUser, nameKeyOf, type BotListing, type GuestMe, type UserMe } from '@hexo-arena/contract';
 import { fetchBots } from '../api/client';
 import { useAsync } from '../api/use-async';
 import { AccountPanel } from '../components/AccountPanel';
@@ -164,41 +164,83 @@ function GuestIdentity({ me }: { me: GuestMe }) {
 
 // The account's bots from the public directory; a bot the operator has
 // delisted is absent there, so it is absent here too, and the note says so.
+// The heading stands while they load, so the page below does not move when
+// they land.
 function YourBots({ owner }: { owner: string }) {
     const load = useCallback(async () => fetchBots(false), []);
     const { data, error, limited, loading, reload } = useAsync(load);
-
-    if (loading && data === null) return <SkeletonRows />;
-    if (error && data === null) return <ErrorFrame sentence={text.profile.botsFailed} onRetry={reload} wait={limited} />;
+    const titleId = useId();
+    const words = text.profile;
     const mine = (data ?? []).filter((bot) => bot.ownerName === owner);
 
     return (
-        <>
+        <section className="your-bots" aria-labelledby={titleId}>
             <div className="section-head">
-                <h2 className="section-title">{text.profile.yourBots}</h2>
-                <span className="note">{text.profile.botCount(mine.length)}</span>
+                <h2 id={titleId} className="section-title">
+                    {words.yourBots}
+                </h2>
+                {mine.length === 0 ? null : <span className="note">{words.botCount(mine.length)}</span>}
             </div>
-            <div className="bot-cards">
-                {mine.map((bot) => (
-                    <Link key={bot.name} to={`/bots/${encodeURIComponent(bot.name)}`} className="bot-card">
-                        <span className="bot-card-name">
-                            <PresenceDot online={bot.online} />
-                            {bot.name}
-                            <BotBadge />
-                        </span>
-                        <span className="bot-card-rating">
-                            <Rating value={bot.rating} provisional={bot.provisional} />
-                        </span>
+            {loading && data === null ? (
+                <SkeletonRows />
+            ) : error && data === null ? (
+                <ErrorFrame sentence={words.botsFailed} onRetry={reload} wait={limited} />
+            ) : (
+                <>
+                    {mine.length === 0 ? (
+                        <p className="note bot-rows-none">{words.noBots}</p>
+                    ) : (
+                        <ul className="bot-rows">
+                            {mine.map((bot) => (
+                                <BotRow key={bot.name} bot={bot} />
+                            ))}
+                        </ul>
+                    )}
+                    {mine.length < botCapPerUser ? (
+                        <p className="bot-rows-foot">
+                            <Link to="/connect" className={mine.length === 0 ? `btn btn-primary` : `btn btn-ghost`}>
+                                {words.build}
+                            </Link>
+                            <span className="note">{words.delistedNote}</span>
+                        </p>
+                    ) : (
+                        // Every bot the cap allows is listed, so none is delisted for the note to explain.
+                        <p className="note bot-rows-foot">{words.atCap}</p>
+                    )}
+                </>
+            )}
+        </section>
+    );
+}
+
+// The owner's token rotation and deletion live on the bot's page, so a row
+// carries no actions of its own and leads there.
+function BotRow({ bot }: { bot: BotListing }) {
+    const words = text.profile;
+    return (
+        <li>
+            <Link to={`/bots/${encodeURIComponent(bot.name)}`} className="bot-row">
+                <span className="bot-row-name">
+                    <span className="player-name">{bot.name}</span>
+                    <BotBadge />
+                </span>
+                <span className="bot-row-state">
+                    <span className="bot-row-presence">
+                        <PresenceDot online={bot.online} />
+                        {bot.online ? words.online : words.offline}
+                    </span>
+                    <span className="bot-row-open">
                         <OpenTag open={bot.openForChallenges} />
-                    </Link>
-                ))}
-                {mine.length < botCapPerUser ? (
-                    <Link to="/connect" className="bot-card bot-card-new">
-                        <span className="bot-card-name">{text.profile.build}</span>
-                    </Link>
-                ) : null}
-            </div>
-            <p className="note">{text.profile.delistedNote}</p>
-        </>
+                    </span>
+                    <span className="bot-row-facts">
+                        {bot.analyzer === null ? null : <span>{words.analyzer}</span>}
+                        {bot.levels === null ? null : <span>{words.strengths(bot.levels.list.length)}</span>}
+                    </span>
+                </span>
+                <span className="bot-row-rating">
+                    <Rating value={bot.rating} provisional={bot.provisional} />
+                </span>
+            </Link>
+        </li>
     );
 }

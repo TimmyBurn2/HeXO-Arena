@@ -289,10 +289,11 @@ describe('PlayScreen', () => {
         expect(window.location.search).toBe(`?bot=devbot-c&clock=t10&opening=5`);
     });
 
-    it('give a signed-in player their expected score against the bot on the card', async () => {
+    it('give a signed-in player with Rated on their expected score against the bot on the card', async () => {
         serve({ records: { quinn: { rating: 1503, deviation: 60 }, 'devbot-c': { rating: 1514, deviation: 52 }, 'devbot-a': { rating: 1310, deviation: 200 } } });
         render(<PlayScreen />);
         const card = await ready();
+        fireEvent.click(within(card).getByRole(`switch`, { name: `Rated` }));
         expect(await within(card).findByText(`Your expected score against devbot-c: 0.48`)).toBeTruthy();
     });
 
@@ -306,17 +307,51 @@ describe('PlayScreen', () => {
         expect(within(card).queryByText(/expected score/u)).toBe(null);
     });
 
-    it('start a rated game for someone signed in and remember the opponent and clock, not the opening', async () => {
-        const served = serve();
+    it('start an unrated game for someone signed in while Rated is off, as it is at first, and remember the opponent and clock, not the opening', async () => {
+        const served = serve({ records: { quinn: { rating: 1503, deviation: 60 }, 'devbot-c': { rating: 1514, deviation: 52 } } });
         render(<PlayScreen />);
-        await ready();
-        expect(screen.getByText(`Rated; sides are drawn at random`)).toBeTruthy();
+        const card = await ready();
+        expect(within(card).getByRole(`switch`, { name: `Rated` })).toHaveProperty(`checked`, false);
+        expect(screen.getByText(`Unrated; sides are drawn at random`)).toBeTruthy();
+        // The note keeps the score's place, so the switch under the pointer stays put.
+        expect((await within(card).findByText(`No expected score; Rated is off`)).className).toBe(`note setup-expected`);
+        expect(within(card).queryByText(/^Your expected score/u)).toBe(null);
         fireEvent.click(screen.getByRole(`button`, { name: `Start game` }), { detail: 1 });
         await waitFor(() => {
             expect(window.location.pathname).toBe(`/game/g1`);
         });
-        expect(served.posts).toEqual([{ url: `/api/games`, body: { bot: `devbot-c`, timeControl: { mode: `turn`, turnTimeMs: 10_000 }, openingPlies: 1 } }]);
-        expect(JSON.parse(window.localStorage.getItem(playStorageKey) ?? ``)).toEqual({ opponent: `devbot-c`, clock: `t10` });
+        expect(served.posts).toEqual([{ url: `/api/games`, body: { bot: `devbot-c`, timeControl: { mode: `turn`, turnTimeMs: 10_000 }, openingPlies: 1, rated: false } }]);
+        expect(JSON.parse(window.localStorage.getItem(playStorageKey) ?? ``)).toEqual({ opponent: `devbot-c`, clock: `t10`, rated: false });
+    });
+
+    it('start a rated game once Rated is on, and keep the switch on for the next visit in this browser', async () => {
+        const served = serve();
+        const first = render(<PlayScreen />);
+        let card = await ready();
+        fireEvent.click(within(card).getByRole(`switch`, { name: `Rated` }));
+        expect(within(card).getByRole(`switch`, { name: `Rated` })).toHaveProperty(`checked`, true);
+        expect(within(card).getByText(`Rated; sides are drawn at random`)).toBeTruthy();
+        expect(JSON.parse(window.localStorage.getItem(playStorageKey) ?? ``)).toEqual({ opponent: null, clock: null, rated: true });
+        first.unmount();
+        render(<PlayScreen />);
+        card = await ready();
+        expect(within(card).getByRole(`switch`, { name: `Rated` })).toHaveProperty(`checked`, true);
+        fireEvent.click(screen.getByRole(`button`, { name: `Start game` }), { detail: 1 });
+        await waitFor(() => {
+            expect(served.posts).toHaveLength(1);
+        });
+        expect(served.posts[0]?.body).toEqual({ bot: `devbot-c`, timeControl: { mode: `turn`, turnTimeMs: 10_000 }, openingPlies: 1, rated: true });
+        expect(JSON.parse(window.localStorage.getItem(playStorageKey) ?? ``)).toEqual({ opponent: `devbot-c`, clock: `t10`, rated: true });
+    });
+
+    it('show the Rated switch to no guest and no signed-out visitor, whose games are unrated', async () => {
+        serve({ me: { kind: `guest`, name: `Guest k3f9`, liveGames: [] } });
+        const guest = render(<PlayScreen />);
+        expect(within(await ready()).queryByRole(`switch`)).toBe(null);
+        guest.unmount();
+        serve({ me: null });
+        render(<PlayScreen />);
+        expect(within(await ready()).queryByRole(`switch`)).toBe(null);
     });
 
     it('offer a signed-out visitor a guest game or a sign-in, with one notice under both', async () => {
@@ -376,15 +411,19 @@ describe('PlayScreen', () => {
         });
     });
 
-    it('say when the day\'s games against the bot are used up, holding nothing but that bot', async () => {
+    it('say when the day\'s rated games against the bot are used up, holding nothing, and drop the line once Rated goes off', async () => {
+        window.localStorage.setItem(playStorageKey, JSON.stringify({ rated: true }));
         serve({ start: refused(429, `daily_pair_cap`, { 'retry-after': `7200` }) });
         render(<PlayScreen />);
         const card = await ready();
         const start = screen.getByRole(`button`, { name: `Start game` });
         fireEvent.click(start, { detail: 1 });
-        expect(await within(card).findByText(`You have played devbot-c 20 times today, the most one day allows; pick another bot, or play it again after 00:00 UTC`)).toBeTruthy();
+        const line = `You have played devbot-c rated 20 times today, the most one day allows; turn off Rated, pick another bot, or wait until 00:00 UTC`;
+        expect(await within(card).findByText(line)).toBeTruthy();
         expect(start.getAttribute(`aria-disabled`)).toBe(null);
         expect(screen.queryByText(/Too many tries/u)).toBe(null);
+        fireEvent.click(within(card).getByRole(`switch`, { name: `Rated` }));
+        expect(within(card).queryByText(line)).toBe(null);
     });
 
     it('count a cooldown down on the disabled start, then let it go', async () => {
@@ -1222,6 +1261,7 @@ describe('PlayScreen', () => {
 
     it('offer a bot\'s strengths beside the clock, the rated default picked, and what the picked one spends under the row', async () => {
         window.history.replaceState(null, ``, `/play?bot=hextide`);
+        window.localStorage.setItem(playStorageKey, JSON.stringify({ rated: true }));
         const served = serve({ bots: withLevels, records: { quinn: { rating: 1503, deviation: 60 }, hextide: { rating: 1690, deviation: 52 } } });
         render(<PlayScreen />);
         const card = await ready();
@@ -1243,7 +1283,40 @@ describe('PlayScreen', () => {
         await waitFor(() => {
             expect(served.posts).toHaveLength(1);
         });
-        expect(served.posts[0]?.body).toEqual({ bot: `hextide`, timeControl: { mode: `turn`, turnTimeMs: 10_000 }, openingPlies: 1, level: `deep` });
+        expect(served.posts[0]?.body).toEqual({ bot: `hextide`, timeControl: { mode: `turn`, turnTimeMs: 10_000 }, openingPlies: 1, level: `deep`, rated: false });
+    });
+
+    it('hold Rated off and disabled on arriving at a strength other than the default, as a bot page\'s link opens it, though it was left on', async () => {
+        window.history.replaceState(null, ``, `/play?bot=hextide&clock=t10&level=deep`);
+        window.localStorage.setItem(playStorageKey, JSON.stringify({ rated: true }));
+        const served = serve({ bots: withLevels });
+        render(<PlayScreen />);
+        const card = await ready();
+        const rated = within(card).getByRole(`switch`, { name: `Rated` });
+        expect(rated).toHaveProperty(`checked`, false);
+        expect(rated).toHaveProperty(`disabled`, true);
+        fireEvent.click(screen.getByRole(`button`, { name: `Start game` }), { detail: 1 });
+        await waitFor(() => {
+            expect(served.posts).toHaveLength(1);
+        });
+        expect(served.posts[0]?.body).toMatchObject({ bot: `hextide`, level: `deep`, rated: false });
+    });
+
+    it('hold Rated off and disabled at a strength other than the default, and give it back at the default', async () => {
+        window.history.replaceState(null, ``, `/play?bot=hextide`);
+        window.localStorage.setItem(playStorageKey, JSON.stringify({ rated: true }));
+        serve({ bots: withLevels });
+        render(<PlayScreen />);
+        const card = await ready();
+        const rated = within(card).getByRole(`switch`, { name: `Rated` });
+        expect(rated).toHaveProperty(`checked`, true);
+        fireEvent.click(within(card).getByRole(`radio`, { name: `quick` }));
+        expect(rated).toHaveProperty(`checked`, false);
+        expect(rated).toHaveProperty(`disabled`, true);
+        fireEvent.click(within(card).getByRole(`radio`, { name: `standard rated` }));
+        expect(rated).toHaveProperty(`checked`, true);
+        expect(rated).toHaveProperty(`disabled`, false);
+        expect(JSON.parse(window.localStorage.getItem(playStorageKey) ?? ``)).toMatchObject({ rated: true });
     });
 
     it('show no strength row for a bot that declares none, and send no level for the default', async () => {
@@ -1257,7 +1330,7 @@ describe('PlayScreen', () => {
         await waitFor(() => {
             expect(served.posts).toHaveLength(1);
         });
-        expect(served.posts[0]?.body).toEqual({ bot: `hextide`, timeControl: { mode: `turn`, turnTimeMs: 10_000 }, openingPlies: 1 });
+        expect(served.posts[0]?.body).toEqual({ bot: `hextide`, timeControl: { mode: `turn`, turnTimeMs: 10_000 }, openingPlies: 1, rated: false });
     });
 
     it('open on the strength a link names for its bot, and leave it behind with that bot', async () => {

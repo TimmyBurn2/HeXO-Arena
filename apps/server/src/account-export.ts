@@ -79,6 +79,7 @@ function gamesOf(query: Query, userId: string, botIds: readonly string[]): Accou
                     createdAt: isoOf(row.createdAt),
                     finishedAt: isoOrNull(row.finishedAt),
                     voided: record.voided,
+                    ...(record.kind === `human` && record.unratedByChoice ? { unratedByChoice: true as const } : {}),
                     ratings: query
                         .select({ side: gameRatings.side, before: gameRatings.ratingBefore, after: gameRatings.ratingAfter, deviationAfter: gameRatings.deviationAfter })
                         .from(gameRatings)

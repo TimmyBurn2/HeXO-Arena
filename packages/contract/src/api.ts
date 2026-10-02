@@ -104,7 +104,7 @@ export const guestRetryAfterSeconds = 60;
 export const guestIdleSeconds = 24 * 60 * 60;
 
 // Bots one account may hold at once; creating past it answers bot_limit.
-export const botCapPerUser = 3;
+export const botCapPerUser = 5;
 
 export const createBotRequestSchema = z.object({ name: nameSyntaxSchema });
 

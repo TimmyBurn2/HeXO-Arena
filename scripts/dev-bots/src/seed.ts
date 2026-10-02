@@ -85,11 +85,17 @@ export async function seedDevData(options: SeedOptions): Promise<SeedReport> {
         }
     }
 
+    // Each create or rotation spends the owner's bot management limit,
+    // which a persona at the bot cap would run out of on a quick rerun:
+    // a bot already held is rotated with no create tried first,
+    // and an offline one, declared when made and connecting to nothing, is left alone.
     const online: HostedBot[] = [];
     for (const bot of personaBots) {
         const cookie = cookies.get(bot.owner);
         if (cookie === undefined) continue;
-        const token = await client.claimBot(cookie, bot.name);
+        const held = standing.get(bot.owner)?.bots.some((each) => each.name === bot.name) === true;
+        if (held && !bot.online) continue;
+        const token = held ? await client.rotateToken(cookie, bot.name) : await client.createBot(cookie, bot.name);
         if (bot.declaration !== null) await client.declare(token, bot.declaration);
         if (bot.online) online.push({ name: bot.name, strategy: bot.strategy, token });
     }

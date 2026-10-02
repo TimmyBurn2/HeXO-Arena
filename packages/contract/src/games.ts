@@ -44,8 +44,21 @@ export const createGameRequestSchema = z.object({
     level: levelIdSchema
         .optional()
         .meta({ description: `One of the bot's declared levels, its default when absent; at any other level the game is unrated and counts toward no daily cap.` }),
+    // Optional rather than defaulted: the server reads it absent as rated, and a caller that never sets it keeps type-checking.
+    rated: z
+        .boolean()
+        .optional()
+        .meta({
+            default: true,
+            description: `False starts a signed-in caller's game unrated for both seats, and it counts toward no daily cap; a guest's game, or one at a level other than the bot's default, is unrated either way.`,
+        }),
 });
 export type CreateGameRequest = z.infer<typeof createGameRequestSchema>;
+
+/** The mark on a game its signed-in player started unrated; a guest's game and practice at another level are unrated by their seats and never carry it. */
+export const unratedByChoiceSchema = z
+    .literal(true)
+    .meta({ id: `UnratedByChoice`, description: `Present when the person who started the game chose to play it unrated: it moves no rating and counts toward no daily cap.` });
 
 // The clock at the moment of the read, mirroring the time-control modes.
 // Match clocks are keyed by side; remaining values never go below zero.
@@ -96,6 +109,7 @@ const snapshotBase = {
     board: gameBoardSchema,
     timeControl: timeControlSchema,
     tournament: gameTournamentSchema.optional(),
+    unratedByChoice: unratedByChoiceSchema.optional(),
 };
 
 export const gameSnapshotSchema = z
@@ -138,7 +152,7 @@ export const liveGameEntrySchema = z
     })
     .meta({
         id: `LiveGameEntry`,
-        description: `A game in progress, its board and clock as its snapshot states them; a game with a guest seat, or a bot at a level other than its default, is unrated.`,
+        description: `A game in progress, its board and clock as its snapshot states them; a game with a guest seat, a bot at a level other than its default, or its player's choice to play unrated, is unrated.`,
     });
 export type LiveGameEntry = z.infer<typeof liveGameEntrySchema>;
 

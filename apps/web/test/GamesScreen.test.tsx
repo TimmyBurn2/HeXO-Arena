@@ -112,6 +112,20 @@ describe('GamesScreen', () => {
         expect(within(screen.getByRole(`group`, { name: `Active filters` })).getAllByRole(`button`)[0]?.getAttribute(`aria-label`)).toBe(`Remove guest vs bot`);
     });
 
+    it('tag a game its player started unrated, aborted or decided, and leave a rated one untagged', async () => {
+        const quinn: GamePlayer = { name: `quinn`, rating: null, provisional: false, kind: `user` };
+        const chosen = { players: { x: hextide, o: quinn }, rated: false, unratedByChoice: true } as const;
+        serve(() => ({
+            games: [game(0, chosen), game(1, { ...chosen, winner: null, reason: `aborted` }), game(2, { players: { x: hextide, o: { ...quinn, rating: 1503 } } })],
+            page: 1,
+            pages: 1,
+            total: 3,
+        }));
+        open(`/games`);
+        const rows = await screen.findAllByRole(`link`, { name: /quinn/u });
+        expect(rows.map((row) => row.querySelector(`.tag`)?.textContent ?? null)).toEqual([`unrated`, `unrated`, null]);
+    });
+
     it('hold Player beside one Filters button, Against and Side waiting in its panel for a player and Result offering No winner alone', async () => {
         const fetch = serve(() => ({ games: [game(0)], page: 1, pages: 1, total: 1 }));
         open(`/games`);

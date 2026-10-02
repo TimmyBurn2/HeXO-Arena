@@ -743,7 +743,7 @@ function registerSiteSurface(registry: OpenAPIRegistry, shared: SharedComponents
             401: shared.unauthorized,
             403: shared.gameCreateForbidden,
             429: {
-                description: `The caller is inside the creation cooldown (game_cooldown); or a signed-in caller has played this bot at its default level ${String(pairDailyCap)} times this UTC day (daily_pair_cap), until 00:00 UTC; Retry-After says how long either has left; or too many requests (rate_limited).`,
+                description: `The caller is inside the creation cooldown (game_cooldown); or a signed-in caller has played this bot rated ${String(pairDailyCap)} times this UTC day (daily_pair_cap), until 00:00 UTC; Retry-After says how long either has left; or too many requests (rate_limited).`,
                 headers: { 'Retry-After': shared.retryAfter },
                 content: { 'application/json': { schema: gameLimitError } },
             },

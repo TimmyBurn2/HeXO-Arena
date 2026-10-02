@@ -17,10 +17,12 @@ const glyphBox = `${String(-halfWidth)} ${String(-cellSize)} ${String(2 * halfWi
  * A guest's game is unrated, so it shows no expected score on either side;
  * nor does a game against a bot at a level other than its default, which
  * says it is practice, and that bot's seat shows its level, since its
- * rating belongs to its default.
+ * rating belongs to its default; nor does a game its player started
+ * unrated, which says so.
  */
-export function Rundown({ players, data, meetings, onHide }: {
+export function Rundown({ players, unratedByChoice, data, meetings, onHide }: {
     players: GamePlayers;
+    unratedByChoice: boolean;
     // Null while the records load; the names and the seats' ratings stand meanwhile.
     data: RundownSides | null;
     // The two players' meetings, or null where another line already says them.
@@ -29,15 +31,16 @@ export function Rundown({ players, data, meetings, onHide }: {
     onHide?: () => void;
 }) {
     const titleId = useId();
-    const rated = !seatsRateNobody(players);
+    const rated = !seatsRateNobody(players) && !unratedByChoice;
     const practice = [players.x, players.o].some((player) => player.level !== undefined);
+    const unrated = practice ? text.rundown.practice : unratedByChoice ? text.rundown.unratedByChoice : null;
     return (
         <section className="rundown" aria-labelledby={titleId}>
             <div className="rundown-head">
                 <h2 id={titleId} className="rundown-title">
                     {text.rundown.title}
                 </h2>
-                {practice ? <span className="tag muted rundown-practice">{text.rundown.practice}</span> : null}
+                {unrated === null ? null : <span className="tag muted rundown-unrated">{unrated}</span>}
                 {onHide === undefined ? null : (
                     <button type="button" className="rundown-hide" aria-label={text.rundown.hide} onClick={onHide}>
                         <svg viewBox="0 0 24 24" aria-hidden="true">

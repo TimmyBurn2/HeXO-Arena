@@ -865,7 +865,7 @@ describe('GameScreen for a watcher', () => {
         render(<GameScreen gameId="g-new" />);
         const card = await screen.findByRole(`region`, { name: `Rundown` });
         await within(card).findByText(`deviation 96`);
-        expect(card.querySelector(`.rundown-practice`)?.textContent).toBe(`practice, unrated`);
+        expect(card.querySelector(`.rundown-unrated`)?.textContent).toBe(`practice, unrated`);
         const [bot, human] = [...card.querySelectorAll(`.rundown-side`)];
         expect(bot?.querySelector(`.rundown-name`)?.textContent).toBe(`hextide @ deepBOT`);
         expect(bot?.querySelector(`.rundown-at`)?.textContent).toBe(`@ deep`);
@@ -874,6 +874,47 @@ describe('GameScreen for a watcher', () => {
         expect(bot?.textContent).toContain(`unrated`);
         expect(human?.querySelector(`.rundown-rating`)?.textContent).toBe(`1503?`);
         expect(card.querySelectorAll(`.rundown-expected`)).toHaveLength(0);
+    });
+
+    it('say in the rundown that a game its player started is unrated by choice, both ratings kept and no expected score', async () => {
+        stubRundown(watched({ ...freshSnapshot, unratedByChoice: true }));
+        render(<GameScreen gameId="g-new" />);
+        const card = await screen.findByRole(`region`, { name: `Rundown` });
+        await within(card).findByText(`deviation 96`);
+        expect(card.querySelector(`.rundown-unrated`)?.textContent).toBe(`unrated by choice`);
+        expect([...card.querySelectorAll(`.rundown-side`)].map((side) => side.querySelector(`.rundown-rating`)?.textContent)).toEqual([`1690`, `1503?`]);
+        expect(card.querySelectorAll(`.rundown-expected`)).toHaveLength(0);
+    });
+
+    it('tag the person who started a game unrated beside their rating, and tell a watcher why it is unrated', async () => {
+        stubGame(watched({ ...runningSnapshot, unratedByChoice: true }));
+        render(<GameScreen gameId="g-run" />);
+        await screen.findByRole(`heading`, { name: `hextide vs quinn` });
+        // A watcher reads the game from x, so the person's chip is the top one.
+        const meta = (corner: string) => [...(document.querySelector(`.hud-${corner}-left .hud-meta`)?.children ?? [])].map((part) => part.textContent);
+        expect(meta(`top`)).toEqual([`1503`, `unrated`, `turn clock`]);
+        expect(meta(`bottom`)).toEqual([`1690`]);
+        await openWithM();
+        fireEvent.click(screen.getByRole(`tab`, { name: `Game` }));
+        expect(screen.getByText(`No, by choice`, { selector: `.facts dd` })).toBeTruthy();
+    });
+
+    it('tag a seated person\'s own chip in a game they started unrated, and say why in their facts', async () => {
+        const quinn = { kind: `user`, name: `quinn`, rating: 1503, provisional: false, discord: null, liveGames: [], analysisOptOut: false, analysisLeft: { positions: 300, games: 10 } };
+        const chosen = { ...runningSnapshot, unratedByChoice: true } as GameSnapshot;
+        vi.stubGlobal(`fetch`, vi.fn((url: string) => Promise.resolve(new Response(JSON.stringify(url === `/api/me` ? quinn : chosen)))));
+        stubEventSource(chosen);
+        meStore.reset();
+        meStore.start();
+        render(<GameScreen gameId="g-run" />);
+        await waitFor(() => {
+            expect(document.querySelector(`.hud-bottom-left .hud-rating`)?.textContent).toBe(`1503`);
+        });
+        expect(document.querySelector(`.hud-bottom-left .tag`)?.textContent).toBe(`unrated`);
+        await openWithM();
+        fireEvent.click(screen.getByRole(`tab`, { name: `Game` }));
+        expect(screen.getByText(`No, by choice`, { selector: `.facts dd` })).toBeTruthy();
+        meStore.reset();
     });
 
     it('say a finished guest game was unrated because a guest played', async () => {

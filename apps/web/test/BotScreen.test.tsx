@@ -22,6 +22,27 @@ const sealbot = {
     accepts: { turnMs: [5000, 60000], match: true, unlimited: true },
 };
 
+// Three strengths, weakest first, the middle one rated.
+const levels = {
+    default: `standard`,
+    list: [
+        { id: `quick`, label: `quick`, budget: { timeMs: 200 } },
+        { id: `standard`, label: `standard`, about: `The one it is rated at.`, budget: { nodes: 1_000_000 } },
+        { id: `deep`, label: `deep`, budget: { depthTurns: 8, timeMs: 5000 }, note: `slow on big boards` },
+    ],
+};
+
+function plate(): HTMLElement {
+    const found = document.querySelector<HTMLElement>(`.bot-plate`);
+    if (found === null) throw new Error(`no plate on the page`);
+    return found;
+}
+
+// Each term with the description after it, as the reader meets them.
+function pairs(list: HTMLElement): (string | null | undefined)[][] {
+    return [...list.querySelectorAll(`dt`)].map((term) => [term.textContent, term.nextElementSibling?.textContent]);
+}
+
 function stubDirectory(rows: unknown[], status = 200): void {
     vi.stubGlobal(
         `fetch`,
@@ -218,21 +239,26 @@ describe('BotScreen', () => {
         expect(within(section).queryByRole(`link`)).toBe(null);
     });
 
-    it('show the declaration, accepts table, and Play linking to the Play page', async () => {
+    it('head its plate with Play and the clocks it accepts, Play linking to the Play page', async () => {
         stubDirectory([sealbot]);
         render(<BotScreen name="sealbot" />);
         expect(await screen.findByRole(`heading`, { name: `sealbot` })).toBeTruthy();
         expect(screen.getByText(`A clean-room HeXO engine with a rotation opener.`)).toBeTruthy();
-        expect(screen.getByText(`5 to 60 s`)).toBeTruthy();
         const owner = screen.getByRole(`link`, { name: `quinn` });
         expect(owner.parentElement?.textContent).toBe(`By quinn`);
         expect(owner.getAttribute(`href`)).toBe(`/players/quinn`);
         expect(document.querySelector(`.bot-rating-number`)?.textContent).toBe(`1712`);
+        expect(within(plate()).getByRole(`link`, { name: `Play sealbot` }).getAttribute(`href`)).toBe(`/play?bot=sealbot`);
+        expect(pairs(within(plate()).getByRole(`group`, { name: `Accepts` }))).toEqual([
+            [`Turn clock`, `5 to 60 s`],
+            [`Match clock`, `Yes`],
+            [`Unlimited`, `Yes`],
+        ]);
+        expect(screen.queryByRole(`region`, { name: `Accepts` })).toBe(null);
         // The repository reads whole and may break only after a slash.
         const repo = document.querySelector(`a[href="https://github.com/quinn/sealbot"]`);
         expect(repo?.textContent).toBe(`github.com/quinn/sealbot`);
         expect(repo?.querySelectorAll(`wbr`)).toHaveLength(2);
-        expect(screen.getByRole(`link`, { name: `Play sealbot` }).getAttribute(`href`)).toBe(`/play?bot=sealbot`);
         await waitFor(() => {
             expect(document.title).toBe(`sealbot - HeXO Arena`);
         });
@@ -241,49 +267,75 @@ describe('BotScreen', () => {
         );
     });
 
-    it('list its strengths weakest first with what each spends, the rated one tagged, and none for a bot without them', async () => {
-        const levels = {
-            default: `standard`,
-            list: [
-                { id: `quick`, label: `quick`, budget: { timeMs: 200 } },
-                { id: `standard`, label: `standard`, about: `The one it is rated at.`, budget: { nodes: 1_000_000 } },
-                { id: `deep`, label: `deep`, budget: { depthTurns: 8, timeMs: 5000 }, note: `slow on big boards` },
-            ],
-        };
+    it('list its strengths weakest first, each a row with what it spends and a Play link at that strength, the rated one tagged and linking to plain Play', async () => {
         stubDirectory([{ ...sealbot, levels }]);
         render(<BotScreen name="sealbot" />);
-        const card = await screen.findByRole(`region`, { name: `Strength` });
-        const items = within(card).getAllByRole(`listitem`);
-        expect(items.map((item) => [...item.querySelectorAll(`p`)].map((line) => line.textContent))).toEqual([
-            [`quick`, `0.2 s a turn`],
-            [`standardrated`, `1M nodes`, `The one it is rated at.`],
-            [`deep`, `depth 8 turns, 5 s a turn; slow on big boards`],
+        const rows = within(await screen.findByRole(`region`, { name: `Strength` })).getAllByRole(`listitem`);
+        expect(rows.map((row) => [...row.children].map((cell) => cell.textContent))).toEqual([
+            [`quick`, `0.2 s a turn`, `Play`],
+            [`standardrated`, `1M nodes`, `The one it is rated at.`, `Play`],
+            [`deep`, `depth 8 turns, 5 s a turn; slow on big boards`, `Play`],
         ]);
-        expect(within(card).getByText(`Weakest first; any strength but the rated one plays unrated practice.`)).toBeTruthy();
-        cleanup();
-        stubDirectory([sealbot]);
-        render(<BotScreen name="sealbot" />);
-        await screen.findByRole(`region`, { name: `Accepts` });
-        expect(screen.queryByRole(`region`, { name: `Strength` })).toBe(null);
+        expect(rows.map((row) => within(row).getByRole(`link`)).map((link) => [link.getAttribute(`aria-label`), link.getAttribute(`href`)])).toEqual([
+            [`Play sealbot at quick`, `/play?bot=sealbot&level=quick`],
+            [`Play sealbot at standard`, `/play?bot=sealbot`],
+            [`Play sealbot at deep`, `/play?bot=sealbot&level=deep`],
+        ]);
+        expect(screen.getByText(`Weakest first; any strength but the rated one plays unrated practice.`)).toBeTruthy();
     });
 
-    it('say what an analyzer reads for, whether during its games and now, and lead to the analysis board, and nothing for a bot that reads none', async () => {
+    it('keep its strengths without their Play links while it cannot start a game', async () => {
+        stubDirectory([{ ...sealbot, levels, online: false }]);
+        render(<BotScreen name="sealbot" />);
+        const card = await screen.findByRole(`region`, { name: `Strength` });
+        expect(within(card).getAllByRole(`listitem`)).toHaveLength(3);
+        expect(within(card).queryByRole(`link`)).toBe(null);
+        expect(within(plate()).getByRole(`button`, { name: `Play sealbot` }).hasAttribute(`disabled`)).toBe(true);
+        expect(within(plate()).getByText(`Offline`, { selector: `.play-reason` })).toBeTruthy();
+    });
+
+    it('go to the Play page at a strength from its row', async () => {
+        stubDirectory([{ ...sealbot, levels }]);
+        window.history.replaceState(null, ``, `/bots/sealbot`);
+        render(<BotScreen name="sealbot" />);
+        fireEvent.click(await screen.findByRole(`link`, { name: `Play sealbot at deep` }));
+        expect(window.location.pathname + window.location.search).toBe(`/play?bot=sealbot&level=deep`);
+        window.history.replaceState(null, ``, `/`);
+    });
+
+    it('show Strength, Analyzer, and Source in that order for a bot declaring all three, and only the groups each other bot declares', async () => {
+        const analyzer = { maxSeconds: 10, lines: 1, whilePlaying: true, ready: true };
+        const kinds = [
+            { bot: { ...sealbot, levels, analyzer }, groups: [`Strength`, `Analyzer`, `Source`] },
+            { bot: sealbot, groups: [`Source`] },
+            { bot: { ...sealbot, analyzer, version: undefined, repoUrl: undefined }, groups: [`Analyzer`] },
+            { bot: { ...sealbot, repoUrl: `` }, groups: [`Source`] },
+            { bot: { ...sealbot, version: undefined, repoUrl: undefined }, groups: [] },
+        ];
+        for (const kind of kinds) {
+            stubDirectory([kind.bot]);
+            render(<BotScreen name="sealbot" />);
+            await screen.findByRole(`heading`, { level: 1, name: `sealbot` });
+            const groups = [`Strength`, `Analyzer`, `Source`];
+            const shown = screen.getAllByRole(`region`).map((region) => region.querySelector(`h2`)?.textContent ?? ``).filter((name) => groups.includes(name));
+            expect(shown).toEqual(kind.groups);
+            // A bot with neither analyzer nor source leaves no empty row for them.
+            expect(document.querySelector(`.bot-details`) !== null).toBe(kind.groups.some((name) => name !== `Strength`));
+            cleanup();
+        }
+    });
+
+    it('say what an analyzer reads for, whether during its games and now, and lead to the analysis board', async () => {
         stubDirectory([{ ...sealbot, analyzer: { maxSeconds: 5, lines: 3, whilePlaying: true, ready: false } }]);
         render(<BotScreen name="sealbot" />);
         const card = await screen.findByRole(`region`, { name: `Analyzer` });
-        const facts = [...card.querySelectorAll(`dt`)].map((term) => [term.textContent, term.nextElementSibling?.textContent]);
-        expect(facts).toEqual([
+        expect(pairs(card)).toEqual([
             [`Time`, `Up to 5 s a position`],
             [`Lines`, `Up to 3`],
             [`When`, `Also during its games`],
             [`Now`, `Not reading`],
         ]);
         expect(within(card).getByRole(`link`, { name: `analysis board` }).getAttribute(`href`)).toBe(`/analysis`);
-        cleanup();
-        stubDirectory([sealbot]);
-        render(<BotScreen name="sealbot" />);
-        await screen.findByRole(`region`, { name: `Accepts` });
-        expect(screen.queryByRole(`region`, { name: `Analyzer` })).toBe(null);
     });
 
     it('lead to the report form about the bot from the foot of its page', async () => {
@@ -324,14 +376,15 @@ describe('BotScreen', () => {
         expect(screen.getByText(`In 4 games; try again shortly`, { selector: `.play-reason` })).toBeTruthy();
     });
 
-    it('explain an absent declaration and disable play', async () => {
+    it('explain an absent declaration in its plate and disable play', async () => {
         const bare = { ...sealbot, about: undefined, version: undefined, repoUrl: undefined, accepts: undefined };
         stubDirectory([bare]);
         render(<BotScreen name="sealbot" />);
-        // The card and the reason beside the disabled button say it the same way.
-        await screen.findByText(`Nothing yet`, { selector: `.card .note` });
-        expect(document.querySelector(`.btn-primary`)?.hasAttribute(`disabled`)).toBe(true);
-        expect(screen.getByText(`Accepts nothing yet`, { selector: `.play-reason` })).toBeTruthy();
+        // The plate's accepts and the reason beside the disabled button say it the same way.
+        const accepts = await screen.findByRole(`group`, { name: `Accepts` });
+        expect(pairs(accepts)).toEqual([[`Accepts`, `Nothing yet`]]);
+        expect(within(plate()).getByRole(`button`, { name: `Play sealbot` }).hasAttribute(`disabled`)).toBe(true);
+        expect(within(plate()).getByText(`Accepts nothing yet`, { selector: `.play-reason` })).toBeTruthy();
     });
 
     it('show the owner of a bot that accepts nothing where that is set', async () => {
@@ -345,7 +398,7 @@ describe('BotScreen', () => {
         meStore.reset();
         meStore.start();
         render(<BotScreen name="sealbot" />);
-        const note = await screen.findByText(/^Nothing yet; your bot lists/u, { selector: `.card .note` });
+        const note = await screen.findByText(/^Nothing yet; your bot lists/u, { selector: `.accepts-line p` });
         expect(note.textContent).toBe(`Nothing yet; your bot lists the clocks it accepts through the Bot API.`);
         expect(within(note).getByRole(`link`, { name: `Bot API` }).getAttribute(`href`)).toBe(botApiRepository);
     });

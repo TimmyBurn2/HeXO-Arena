@@ -180,6 +180,13 @@ describe('openapi document', () => {
         expect(defaultHumanOpeningPlies).toBe(1);
     });
 
+    it('documents a person\'s game as rated unless the request says rated is false', () => {
+        const body = dig(buildOpenApiDocument(), `paths`, gamesPath, `post`, `requestBody`, `content`, `application/json`, `schema`);
+        expect(dig(body, `properties`, `rated`, `type`)).toBe(`boolean`);
+        expect(dig(body, `properties`, `rated`, `default`)).toBe(true);
+        expect(arrayOfUnknown(dig(body, `required`))).not.toContain(`rated`);
+    });
+
     it('carries the site name as its title and on the session cookie as TLS names it', () => {
         const document = buildOpenApiDocument();
         expect(document.info.title).toBe(`HeXO Arena`);

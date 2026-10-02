@@ -8,7 +8,7 @@ export const devAccountsPath = `/api/dev/accounts`;
 
 /** The accounts `pnpm dev:seed` builds, each with the state it is there to show. */
 export const devPersonas = [
-    { name: `ana`, purpose: `At the bot cap: hextide, pebble, and lantern` },
+    { name: `ana`, purpose: `At the bot cap: hextide, pebble, lantern, cinder, and tarn` },
     { name: `bruno`, purpose: `About 10 rated games, no bots` },
     { name: `cleo`, purpose: `Brand new, nothing played` },
     { name: `dmitri`, purpose: `1 provisional bot, quietlake` },

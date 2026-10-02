@@ -4,6 +4,7 @@ import {
     analysisListSchema,
     analysisRequestSchema,
     communityAnalysisSchema,
+    createGameRequestSchema,
     meUpdateRequestSchema,
     positionCheckRequestSchema,
     positionReadingRequestSchema,
@@ -94,7 +95,7 @@ export interface World {
     signup: Signup | null;
     // How Create account answers: the account, or a refusal by its code.
     create: `created` | `name_taken` | `signup_limit` | `failed`;
-    // How a game start answers: the running game, or a refusal.
+    // How a game start answers: the running game, marked as the request asks, or a refusal.
     start: `created` | { status: number; code: string; retryAfter?: number };
     // Whether minting a guest session finds the guest limit full.
     guestLimit: boolean;
@@ -224,6 +225,8 @@ export const leaderboard: LeaderboardEntry[] = [
     { rank: 6, name: `driftwood`, kind: `bot`, rating: 1388, games: 71, lastPlayedAt: playedAgo(24 * 45), ownerName: `bruno`, online: false },
 ];
 
+// One bot of each kind its page shows: sealbot declares everything, hextide
+// only its source, and quietlake nothing while offline.
 export const bots: BotListing[] = [
     {
         name: `sealbot`,
@@ -234,7 +237,7 @@ export const bots: BotListing[] = [
         provisional: false,
         liveGames: 0,
         levels: strengths,
-        analyzer: null,
+        analyzer: { maxSeconds: 10, lines: 1, whilePlaying: true, ready: true },
         about: `A clean-room HeXO engine with a rotation opener.`,
         version: `0.3.1`,
         repoUrl: `https://github.com/quinn/sealbot`,
@@ -244,13 +247,14 @@ export const bots: BotListing[] = [
         name: `hextide`,
         ownerName: `ana`,
         online: true,
-        openForChallenges: false,
+        openForChallenges: true,
         rating: 1690,
         provisional: false,
         liveGames: 0,
         levels: null,
         analyzer: null,
         version: `2.0.0`,
+        repoUrl: `https://example.com/ana/hextide`,
         accepts: { turnMs: null, match: true, unlimited: true },
     },
     {
@@ -263,6 +267,30 @@ export const bots: BotListing[] = [
         liveGames: 0,
         levels: null,
         analyzer: null,
+    },
+];
+
+/**
+ * As many bots as an account holds, all quinn's, in the server's name
+ * order: one never connected, one reading positions and closed for
+ * challenges, the two of `bots`, and one under a long name that reads
+ * positions and plays at three strengths.
+ */
+export const heldBots: BotListing[] = [
+    { name: `alder`, ownerName: `quinn`, online: false, openForChallenges: false, rating: 1500, provisional: true, liveGames: 0, levels: null, analyzer: null },
+    { name: `marsh`, ownerName: `quinn`, online: true, openForChallenges: false, rating: 1588, provisional: false, liveGames: 0, levels: null, version: `0.4.0`, analyzer: { maxSeconds: 5, lines: 3, whilePlaying: false, ready: true } },
+    ...bots.filter((bot) => bot.ownerName === `quinn`),
+    {
+        name: `tidewater-alphabeta-v2`,
+        ownerName: `quinn`,
+        online: true,
+        openForChallenges: true,
+        rating: 1634,
+        provisional: false,
+        liveGames: 1,
+        levels: strengths,
+        analyzer: { maxSeconds: 2, lines: 2, whilePlaying: true, ready: true },
+        accepts: { turnMs: [5000, 120000], match: true, unlimited: false },
     },
 ];
 
@@ -655,6 +683,18 @@ export const games: Record<string, GameSnapshot> = {
         status: `in-progress`,
         toMove: `o`,
         clock: { mode: `turn`, remainingTurnMs: 28_000 },
+    },
+    // quinn against sealbot at its default, started with Rated off, before the first turn.
+    unrated: {
+        gameId: `unrated`,
+        players: facing(`sealbot`, 1712),
+        openingPlies: 5,
+        board: { cells: midCells.slice(0, 5) },
+        timeControl: { mode: `turn`, turnTimeMs: 30_000 },
+        status: `in-progress`,
+        toMove: `o`,
+        clock: { mode: `turn`, remainingTurnMs: 28_000 },
+        unratedByChoice: true,
     },
     // A long label and name, the top chip's hardest case.
     'practice-long': {
@@ -1621,7 +1661,15 @@ export async function serve(page: Page, state: World): Promise<void> {
                 });
                 return;
             }
-            if (state.games.running !== undefined) await json(route, 201, viewOf(state.games.running, state.me));
+            // As the server does, the mark goes on a signed-in person's game at the bot's default level alone.
+            const asked = createGameRequestSchema.parse(request.postDataJSON());
+            const running = state.games.running;
+            if (running !== undefined) {
+                const { unratedByChoice: _mark, ...unmarked } = running;
+                const chose = state.me?.kind === `user` && asked.level === undefined && asked.rated === false;
+                state.games.running = chose ? { ...unmarked, unratedByChoice: true } : unmarked;
+                await json(route, 201, viewOf(state.games.running, state.me));
+            }
             return;
         }
         const token = /^\/api\/bots\/([^/]+)\/token$/.exec(path);

@@ -199,6 +199,9 @@ export const bots = sqliteTable(
 // The seats constraint pins exactly one of the three groups.
 // A bot seat played at a level other than its bot's default keeps that
 // level as declared at creation, by side; no person's seat has one.
+// unrated_by_choice is 1 on a signed-in person's game they started unrated;
+// a guest's game and practice at another level are unrated by their seats,
+// so the mark names one reason only.
 export const games = sqliteTable(
     `games`,
     {
@@ -214,6 +217,7 @@ export const games = sqliteTable(
         challengerSide: text(`challenger_side`),
         xLevel: text(`x_level`),
         oLevel: text(`o_level`),
+        unratedByChoice: integer(`unrated_by_choice`).notNull().default(0),
         timeControl: text(`time_control`).notNull(),
         openingCells: text(`opening_cells`).notNull(),
         winner: text(`winner`),
@@ -263,6 +267,10 @@ export const games = sqliteTable(
         check(
             `games_level_seat_check`,
             sql`${table.userSide} is null or (case ${table.userSide} when 'x' then ${table.xLevel} else ${table.oLevel} end) is null`,
+        ),
+        check(
+            `games_unrated_by_choice_check`,
+            sql`${table.unratedByChoice} in (0, 1) and (${table.unratedByChoice} = 0 or (${table.userId} is not null and ${table.xLevel} is null and ${table.oLevel} is null))`,
         ),
         check(
             `games_challenger_side_check`,

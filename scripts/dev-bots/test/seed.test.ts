@@ -86,7 +86,7 @@ describe('the dev seed', () => {
         const report = await seed(booted);
         expect(report.accounts.map((account) => account.name)).toEqual([`ana`, `bruno`, `cleo`, `dmitri`, `eve`]);
         const byName = new Map(report.accounts.map((account) => [account.name, account]));
-        expect(byName.get(`ana`)?.bots.map((bot) => bot.name).sort()).toEqual([`hextide`, `lantern`, `pebble`]);
+        expect(byName.get(`ana`)?.bots.map((bot) => bot.name).sort()).toEqual([`cinder`, `hextide`, `lantern`, `pebble`, `tarn`]);
         expect(byName.get(`dmitri`)?.bots.map((bot) => bot.name)).toEqual([`quietlake`]);
         expect(byName.get(`cleo`)).toMatchObject({ games: 0, bots: [] });
         expect(byName.get(`eve`)).toMatchObject({ banned: true, games: 1 });

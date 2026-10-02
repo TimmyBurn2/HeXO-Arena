@@ -103,6 +103,7 @@
         --rundown-glyph-w: 0.875rem;
         --games-field-min: 9.5rem;
         --facts-term-w: 6.5rem;
+        --level-facts-w: 14rem;
         --skeleton-line-w: 24rem;
         --skeleton-short-w: 16rem;
         --round-step-w: 1.75rem;
@@ -115,6 +116,8 @@
         --chart-dot: 0.875rem;
         --chart-band-opacity: 0.08;
         --rung-rank-w: 3.5rem;
+        /* a provisional rating's question mark, at the rating's own size */
+        --prov-mark-w: 0.6em;
         --game-max: 90rem;
         --topbar-h: 4rem;
         --topbar-h-sm: 3.75rem;

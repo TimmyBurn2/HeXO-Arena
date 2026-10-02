@@ -7,7 +7,7 @@ import { serve, world, type World } from './mock-api';
 test.skip(process.env.E2E_BUILD === `1`, `the dev pill ships only in the dev server's bundle`);
 
 const standing: Record<string, Omit<DevAccount, `name` | `purpose`>> = {
-    ana: { rating: 1220, provisional: true, banned: false, games: 4, bots: [`hextide`, `pebble`, `lantern`].map((name) => ({ name, rating: 1500, provisional: true, vsBots: 0 })) },
+    ana: { rating: 1220, provisional: true, banned: false, games: 4, bots: [`hextide`, `pebble`, `lantern`, `cinder`, `tarn`].map((name) => ({ name, rating: 1500, provisional: true, vsBots: 0 })) },
     bruno: { rating: 855, provisional: true, banned: false, games: 10, bots: [] },
     cleo: { rating: 1000, provisional: true, banned: false, games: 0, bots: [] },
     dmitri: { rating: 891, provisional: true, banned: false, games: 2, bots: [{ name: `quietlake`, rating: 1420, provisional: true, vsBots: 20 }] },

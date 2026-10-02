@@ -2,10 +2,12 @@ import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { accountExportLimit, accountExportSchema, guestPath, meExportPath, mePath, meSchema } from '@hexo-arena/contract';
+import { eq } from 'drizzle-orm';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { findBot } from '../src/bots';
 import { createQuery } from '../src/db';
-import { insertBotGame, insertMove, recordFinish } from '../src/game-store';
+import { users } from '../src/db/schema';
+import { insertBotGame, insertGame, insertMove, recordFinish } from '../src/game-store';
 import { createTestApp, FakeStreamSocket, loginAs, mintBot, signUpWithDiscord, type TestApp } from './helpers';
 
 const accepts = { turnMs: [5_000, 600_000], match: true, unlimited: true };
@@ -138,6 +140,25 @@ describe('the account routes', () => {
             const tokenHashes = world.sqlite.prepare(`select token_hash as hash from sessions union all select token_hash from bots`).all() as { hash: string }[];
             for (const secret of [ann, token, betaToken, ...tokenHashes.map((row) => row.hash)]) expect(answer.body).not.toContain(secret);
             expect(answer.body).not.toMatch(/token|nonce/iu);
+        });
+
+        it('marks a game the account started unrated, and no other', async () => {
+            const ann = await loginAs(world.app, `ann`);
+            await mintBot(world.app, await loginAs(world.app, `bob`), `beta`);
+            const query = createQuery(world.sqlite);
+            const userId = query.select({ id: users.id }).from(users).where(eq(users.name, `ann`)).get()?.id ?? ``;
+            const botId = findBot(query, `beta`)?.id ?? ``;
+            const seat = { userId, botId, userSide: `x` as const, timeControl: { mode: `unlimited` as const }, opening: [{ x: 0, y: 0, player: 0 as const }] };
+            const unrated = insertGame(query, { ...seat, unratedByChoice: true });
+            const rated = insertGame(query, seat);
+            const data = accountExportSchema.parse((await world.app.inject({ method: `GET`, url: meExportPath, ...cookie(ann) })).json());
+            expect(data.games).toHaveLength(2);
+            expect(data.games.map((game) => [game.id, game.unratedByChoice])).toEqual(
+                expect.arrayContaining([
+                    [unrated, true],
+                    [rated, undefined],
+                ]),
+            );
         });
 
         it(`gives one account ${String(accountExportLimit.burst)} downloads at once`, async () => {

@@ -2,6 +2,7 @@ import { adminGameIdSchema, nameKeyOf } from '@hexo-arena/contract';
 import { and, count, eq, inArray, isNotNull, isNull, like, or, type SQL } from 'drizzle-orm';
 import { nowSeconds, type Query } from './db';
 import { adminActions, analyses, bots, games, nameReservations, sessions, tournamentEntries, users } from './db/schema';
+import { ratable } from './rating-store';
 import { randomToken, sha256Hex } from './tokens';
 
 export type ModerationChange = { kind: `changed`; id: string } | { kind: `unchanged` } | { kind: `not_found` };
@@ -57,14 +58,14 @@ export function claimPlaceholderName(query: Query): string {
     }
 }
 
-// A guest's game is in no rating, nor is one against a bot at a level
-// other than its default, so neither keeps a bot on the record.
+// A game that rates nobody, a guest's, practice at another level, or one
+// started unrated, keeps no bot on the record.
 function hasDecidedGame(query: Query, seat: SQL | undefined): boolean {
     return (
         query
             .select({ id: games.id })
             .from(games)
-            .where(and(seat, isNotNull(games.winner), isNull(games.guestName), isNull(games.xLevel), isNull(games.oLevel)))
+            .where(and(seat, isNotNull(games.winner), ratable))
             .limit(1)
             .get() !== undefined
     );

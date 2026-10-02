@@ -160,6 +160,7 @@ type Seat = BotSeat | HumanSeat;
 export interface LiveGame {
     readonly id: string;
     readonly seats: { readonly x: Seat; readonly o: Seat };
+    readonly unratedByChoice: boolean;
     readonly timeControl: TimeControl;
     readonly openingPlies: OpeningPlies;
     position: Position;
@@ -285,9 +286,14 @@ function humanSide(game: LiveGame): { side: Side; seat: HumanSeat } | null {
 }
 
 // A game against a guest rates nobody, nor does one against a bot at a
-// level other than its default: neither the fold nor a recompute counts it.
+// level other than its default, or one started unrated: neither the fold
+// nor a recompute counts it.
 function ratesNobody(game: LiveGame): boolean {
-    return humanSide(game)?.seat.person.kind === `guest` || [game.seats.x, game.seats.o].some((seat) => seat.kind === `bot` && seat.level !== null);
+    return (
+        game.unratedByChoice ||
+        humanSide(game)?.seat.person.kind === `guest` ||
+        [game.seats.x, game.seats.o].some((seat) => seat.kind === `bot` && seat.level !== null)
+    );
 }
 
 function secondsFromMs(ms: number): number {
@@ -458,19 +464,24 @@ export class GameRegistry {
         return count;
     }
 
-    /** A person's game against a bot, at the bot's `level`, absent for its default. */
+    /**
+     * A person's game against a bot, at the bot's `level`, absent for its
+     * default; `unratedByChoice` holds only for a user at the default.
+     */
     createGame(input: {
         person: Person;
         bot: { id: string; name: string };
         level?: SeatLevel;
+        unratedByChoice?: boolean;
         timeControl: TimeControl;
         openingPlies: OpeningPlies;
     }): { gameId: string; snapshot: GameSnapshot } {
         const level = input.level ?? null;
+        const unratedByChoice = input.unratedByChoice === true;
         const userSide: Side = this.#random() < 0.5 ? `x` : `o`;
         const { position, turns } = this.#placeOpening(input.openingPlies);
         const gameId = insertGame(this.#query, {
-            ...(input.person.kind === `guest` ? { guestName: input.person.name } : { userId: input.person.id }),
+            ...(input.person.kind === `guest` ? { guestName: input.person.name } : { userId: input.person.id, unratedByChoice }),
             botId: input.bot.id,
             userSide,
             timeControl: input.timeControl,
@@ -487,6 +498,7 @@ export class GameRegistry {
                 userSide === `x`
                     ? { x: humanSeat(input.person), o: botSeat(input.bot, level) }
                     : { x: botSeat(input.bot, level), o: humanSeat(input.person) },
+            unratedByChoice,
             timeControl: input.timeControl,
             openingPlies: input.openingPlies,
             position,
@@ -543,6 +555,7 @@ export class GameRegistry {
                 challengerSide === `x`
                     ? { x: botSeat(input.challenger), o: botSeat(input.dest) }
                     : { x: botSeat(input.dest), o: botSeat(input.challenger) },
+            unratedByChoice: false,
             timeControl: input.timeControl,
             openingPlies: input.openingPlies,
             position,
@@ -590,6 +603,7 @@ export class GameRegistry {
         const game: LiveGame = {
             id: gameId,
             seats: { x: botSeat(input.x), o: botSeat(input.o) },
+            unratedByChoice: false,
             timeControl: input.timeControl,
             openingPlies: input.openingPlies,
             position,
@@ -714,6 +728,7 @@ export class GameRegistry {
             reason: record.finishReason,
             voided: record.voided,
             ...(tournament === undefined ? {} : { tournament }),
+            ...(record.kind === `human` && record.unratedByChoice ? { unratedByChoice: true } : {}),
         };
     }
 
@@ -1232,6 +1247,7 @@ export class GameRegistry {
             board: { cells: boardCells(game.position) },
             timeControl: game.timeControl,
             ...(game.tournament === undefined ? {} : { tournament: game.tournament }),
+            ...(game.unratedByChoice ? { unratedByChoice: true as const } : {}),
         };
     }
 
