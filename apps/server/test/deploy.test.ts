@@ -2,9 +2,12 @@ import { readFileSync } from 'node:fs';
 import { BlockList } from 'node:net';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { parseEnv as parseEnvFile } from 'node:util';
 import { describe, expect, it } from 'vitest';
+import { envKeys } from '../src/env';
 
-const compose = readFileSync(join(dirname(fileURLToPath(import.meta.url)), `../../../docker/prod/compose.yml`), `utf8`);
+const prod = join(dirname(fileURLToPath(import.meta.url)), `../../../docker/prod`);
+const compose = readFileSync(join(prod, `compose.yml`), `utf8`);
 
 // A service's block in the compose file, up to the next top-level entry.
 function service(name: string): string {
@@ -21,5 +24,28 @@ describe('the production stack', () => {
         const internal = new BlockList();
         internal.addSubnet(subnet?.[1] ?? ``, Number(subnet?.[2]), `ipv4`);
         expect(internal.check(trusted ?? ``, `ipv4`)).toBe(true);
+    });
+});
+
+describe('the production env examples', () => {
+    const placeholder = /<[^>]+>/u;
+
+    it('give compose exactly the variables its file requires, each a placeholder to replace', () => {
+        const example = parseEnvFile(readFileSync(join(prod, `env.example`), `utf8`));
+        const required = new Set([...compose.matchAll(/\$\{(\w+):\?/gu)].map((match) => match[1]));
+        expect(Object.keys(example).sort()).toEqual([...required].sort());
+        for (const value of Object.values(example)) expect(value).toMatch(placeholder);
+    });
+
+    it('give the app only variables it reads, none the image or the compose file sets, and the required ones as placeholders', () => {
+        const example = parseEnvFile(readFileSync(join(prod, `hexo-arena.env.example`), `utf8`));
+        const image = /\nENV ([\s\S]*?)\n\n/u.exec(readFileSync(join(prod, `Dockerfile`), `utf8`))?.[1] ?? ``;
+        const composed = /\n {8}environment:\n((?: {12}.*\n)+)/u.exec(service(`app`))?.[1] ?? ``;
+        const setElsewhere = [...image.matchAll(/(\w+)=/gu), ...composed.matchAll(/^ {12}(\w+):/gmu)].map((match) => match[1]);
+        expect(setElsewhere).toEqual(expect.arrayContaining([`NODE_ENV`, `DATABASE_PATH`, `TRUSTED_PROXY`, `WEB_INDEX_PATH`]));
+        const keys = Object.keys(example);
+        expect(keys.filter((key) => !(envKeys as readonly string[]).includes(key))).toEqual([]);
+        expect(keys.filter((key) => setElsewhere.includes(key) || key.startsWith(`DEV_`))).toEqual([]);
+        for (const key of [`PUBLIC_ORIGIN`, `DISCORD_CLIENT_ID`, `DISCORD_CLIENT_SECRET`]) expect(example[key]).toMatch(placeholder);
     });
 });

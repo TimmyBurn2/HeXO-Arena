@@ -25,6 +25,8 @@ per package later; the nearest one wins.
 - Browser suite: `pnpm e2e` (Playwright against Vite with the API mocked;
   every screen in every look and viewport, contrast, motion, six-key play;
   screenshots land in `apps/web/e2e/shots`)
+- Browser suite against the production build: `pnpm e2e:build` (the same
+  suite on `vite build` served by `vite preview`; dev-only tests skip)
 - Prod build: `pnpm build` (bundled server and admin CLI in `apps/server/dist`,
   static site in `apps/web/dist`)
 - Type-check + lint: `pnpm check`
@@ -94,8 +96,7 @@ Every task ends green: type-check, lint, tests.
 
 ## Commits
 
-- Conventional one-liners, subject only: `feat(admin): pause kill switch`.
-- One concern per commit, atomic: the commit builds, tests, and lints on its
-  own; a change and its test land together; fix or churn gets squashed away
-  before review, never committed as separate iterations.
-- Every commit message ASCII, lowercase subject, no body, no trailers.
+- One commit per feature or milestone, squashed before it lands; its tip is
+  green: type-check, lint, tests.
+- A conventional one-liner, subject only: `feat(admin): pause kill switch`;
+  ASCII, lowercase subject, no body, no trailers.

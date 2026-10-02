@@ -281,7 +281,7 @@ export async function buildApp(deps: AppDeps): Promise<BuiltApp> {
         limits,
         ladder,
         actor: deps.adminActor,
-        backup: backupPolicy === undefined ? null : () => backupNow(deps.sqlite, backupPolicy, new Date()),
+        backup: backupPolicy === undefined ? null : (label) => backupNow(deps.sqlite, backupPolicy, new Date(), label),
         erasures,
         tournamentLeadMs: leadMs,
         ...(deps.now === undefined ? {} : { now: deps.now }),

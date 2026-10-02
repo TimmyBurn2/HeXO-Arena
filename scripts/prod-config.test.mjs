@@ -60,6 +60,10 @@ describe(`the production compose file`, () => {
         assert.match(caddy, /healthcheck:\n\s+test: \[CMD, nc, -z, 127\.0\.0\.1, '443'\]/u);
     });
 
+    it(`names its project, so volume and container names hold in any folder`, () => {
+        assert.match(compose, /^name: hexo-arena\n/mu);
+    });
+
     it(`publishes the site on IPv6 as well`, () => {
         assert.match(compose, /\n {4}edge:\n {8}enable_ipv6: true\n/u);
     });
@@ -102,6 +106,14 @@ describe(`the CI workflow`, () => {
         const image = workflow.slice(workflow.indexOf(`\n    image:\n`));
         assert.equal(workflow.match(/packages: write/gu)?.length, 1);
         assert.match(image, /\n {8}permissions:\n {12}contents: read\n {12}packages: write\n/u);
+    });
+
+    it(`publishes the image from main alone, on a push or a run started by hand`, () => {
+        assert.match(workflow, /\non:\n {4}push:\n {4}pull_request:\n(?: {4}#.*\n)* {4}workflow_dispatch:\n/u);
+        const main = `(github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/main'`;
+        assert.ok(workflow.includes(`if: ${main}\n`));
+        assert.ok(workflow.includes(`push: \${{ ${main} }}\n`));
+        assert.doesNotMatch(workflow, /github\.event_name == 'push' &&/u);
     });
 
     it(`leaves the token out of every checkout`, () => {

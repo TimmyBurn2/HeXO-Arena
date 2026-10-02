@@ -15,6 +15,7 @@
         "build": "pnpm -r --if-present build",
         "test": "node --test scripts/*.test.mjs && pnpm -r --if-present test",
         "e2e": "pnpm --filter @hexo-arena/web e2e",
+        "e2e:build": "E2E_BUILD=1 pnpm --filter @hexo-arena/web e2e",
         "typecheck": "pnpm -r --if-present typecheck",
         "lint": "eslint .",
         "check": "pnpm typecheck && pnpm lint && node scripts/check-planning-refs.mjs && node scripts/check-ascii.mjs && node scripts/check-ui-literals.mjs && node scripts/check-ui-text.mjs && node scripts/check-contrast.mjs",

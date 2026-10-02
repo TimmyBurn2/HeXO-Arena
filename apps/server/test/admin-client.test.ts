@@ -23,6 +23,7 @@ describe('parseAdminArgs', () => {
     it.each([
         [[`status`], { op: `status` }],
         [[`backup`], { op: `backup` }],
+        [[`backup`, `pre-update`], { op: `backup`, label: `pre-update` }],
         [[`pause`, `--reason`, `incident`], { op: `pause`, reason: `incident` }],
         [[`ban-user`, `ann`, `--reason`, `cheating`], { op: `ban-user`, name: `ann`, reason: `cheating` }],
         [[`abort-game`, `--bot`, `alpha`, `--reason`, `rogue`], { op: `abort-game`, bot: `alpha`, reason: `rogue` }],
@@ -131,6 +132,7 @@ describe('parseAdminArgs', () => {
         [`a removal without an id`, [`tournament-schedule`, `remove`, `--reason`, `r`]],
         [`a removal by an id that is no number`, [`tournament-schedule`, `remove`, `third`, `--reason`, `r`]],
         [`a stray argument after the rule id`, [`tournament-schedule`, `remove`, `3`, `4`, `--reason`, `r`]],
+        [`a backup label with a capital`, [`backup`, `Pre-update`]],
         [`a report closed without a note`, [`report-close`, `12`]],
         [`a report closed by an id that is no number`, [`report-close`, `first`, `--reason`, `r`]],
     ])('refuses %s with usage', (_label, argv) => {

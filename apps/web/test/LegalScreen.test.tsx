@@ -95,6 +95,33 @@ describe('LegalScreen', () => {
         expect(section(`Who receives data`).querySelectorAll(`li`)).toHaveLength(2);
     });
 
+    it('leave out the server location and name no authority when the deployment gives neither, keeping the right to complain', async () => {
+        const { supervisoryAuthority: _authority, ...rest } = details;
+        const { serverLocation: _location, ...host } = details.host;
+        deploy({ ...rest, host });
+        render(<LegalScreen page="privacy" />);
+        await screen.findByRole(`heading`, { name: `Who receives data` });
+        const recipients = section(`Who receives data`);
+        expect(recipients.querySelectorAll(`li`)).toHaveLength(3);
+        expect(recipients.textContent).toContain(`Example Hosting GmbH, Serverstrasse 1, 54321 Rechenburg, Germany, hosts the server under a data processing agreement (Art. 28 GDPR).`);
+        expect(recipients.textContent).not.toContain(`stands in`);
+        const rights = section(`Your rights`);
+        expect(rights.textContent).toContain(`You may complain to a supervisory authority, in particular where you live or work or where the law was broken (Art. 77 GDPR).`);
+        expect(rights.textContent).not.toContain(`authority responsible`);
+        expect(document.body.textContent).not.toMatch(/\{\{|\}\}/u);
+    });
+
+    it('open every document with a note to the operator on the law it was written for, which the page never shows', async () => {
+        for (const page of [`imprint`, `privacy`, `terms`] as const) {
+            expect(template(page)).toMatch(/^<!--\n[^]*?German and EU law[^]*?adapts[^]*?\n-->\n\n# /u);
+            deploy(details);
+            const { unmount } = render(<LegalScreen page={page} />);
+            await screen.findAllByRole(`heading`, { level: 2 });
+            expect(document.body.textContent).not.toContain(`adapts`);
+            unmount();
+        }
+    });
+
     it('name the operator and a mail link in the privacy policy when the deployment gives no postal address', async () => {
         const { street: _street, postcodeAndCity: _city, country: _country, ...operator } = details.operator;
         deploy({ ...details, operator });
@@ -115,9 +142,10 @@ describe('LegalScreen', () => {
         expect(entries.map((entry) => entry.getAttribute(`href`))).toEqual(sections.map((section) => `#${section.id}`));
         expect(entries.map((entry) => entry.textContent)).toEqual(sections.map((section) => section.querySelector(`h2`)?.textContent));
         const text = document.body.textContent;
-        expect(text).toContain(`Example Hosting GmbH, Serverstrasse 1, 54321 Rechenburg, Germany, hosts the server under a data processing agreement (Art. 28 GDPR); the server stands in Rechenburg, Germany.`);
+        expect(text).toContain(`Example Hosting GmbH, Serverstrasse 1, 54321 Rechenburg, Germany, hosts the server under a data processing agreement (Art. 28 GDPR).`);
         expect(text).toContain(`Example Mail AG, Postfach 3, 22222 Briefstadt, Germany, hosts the contact mailbox.`);
-        expect(text).toContain(`Example Authority, Aufsichtsplatz 2, 11111 Landeshausen, Germany, https://authority.example/.`);
+        expect(section(`Who receives data`).textContent).toContain(`The server stands in Rechenburg, Germany.`);
+        expect(text).toContain(`The authority responsible for HeXO Arena is Example Authority, Aufsichtsplatz 2, 11111 Landeshausen, Germany, https://authority.example/.`);
         expect(screen.getByRole(`link`, { name: `https://authority.example/` }).getAttribute(`href`)).toBe(`https://authority.example/`);
         expect(text).not.toMatch(/\{\{|\}\}/u);
         // Every processing on a legitimate interest names that interest.
