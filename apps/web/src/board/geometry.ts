@@ -81,6 +81,26 @@ export function lineMarkPoints(): string {
     return hexPoints(cellSize * lineMarkScale);
 }
 
+// A judgment's tag hangs off a stone's upper right, clear of its number,
+// on a plate as wide as two glyphs with a cell's pointed ends.
+const tagHalfWidth = cellSize * 0.55;
+const tagHalfHeight = cellSize * 0.38;
+const tagOffset = { x: cellSize * 0.7, y: -cellSize * 0.95 };
+
+/** The plate a judgment's tag sits on, centered at the origin. */
+export function tagPoints(): string {
+    const w = tagHalfWidth;
+    const h = tagHalfHeight;
+    const tip = w + h * Math.tan(Math.PI / 6);
+    return [`${String(-w)},${String(-h)}`, `${String(w)},${String(-h)}`, `${tip.toFixed(2)},0`, `${String(w)},${String(h)}`, `${String(-w)},${String(h)}`, `${(-tip).toFixed(2)},0`].join(` `);
+}
+
+/** Where a judgment's tag stands for the stone at a coordinate. */
+export function tagCenter(coord: AxialCoord): { cx: number; cy: number } {
+    const { cx, cy } = hexCenter(coord);
+    return { cx: cx + tagOffset.x, cy: cy + tagOffset.y };
+}
+
 /** The inset hexagon a theme may edge a stone with. */
 export function markPoints(flat = false): string {
     return hexPoints(cellSize * markScale, flat);

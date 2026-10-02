@@ -239,6 +239,41 @@
         fill: var(--board-stone-o);
     }
 
+    /* A judged turn's tag: an inaccuracy and a mistake in their color on
+       the overlay, a blunder on its filled plate, as the feed's chips. */
+    .board-tag {
+        pointer-events: none;
+    }
+
+    .board-tag-plate {
+        fill: var(--c-bg-overlay);
+        stroke: var(--board-bg);
+        stroke-width: var(--board-tag-edge-w);
+    }
+
+    .board-tag.jd-blunder .board-tag-plate {
+        fill: var(--c-bad-solid);
+    }
+
+    .board-tag-glyph {
+        font-family: var(--font-mono);
+        font-size: var(--board-tag-size);
+        font-weight: var(--weight-display);
+        text-anchor: middle;
+    }
+
+    .board-tag.jd-inaccuracy .board-tag-glyph {
+        fill: var(--c-warn);
+    }
+
+    .board-tag.jd-mistake .board-tag-glyph {
+        fill: var(--c-bad);
+    }
+
+    .board-tag.jd-blunder .board-tag-glyph {
+        fill: var(--c-text-on-accent);
+    }
+
     .theme-swatch {
         display: block;
         width: 100%;

@@ -561,6 +561,18 @@
         transform: translateY(-50%);
     }
 
+    /* A stored game's reading under the lines: its graph, then each side's marks. */
+    .an-game-reading {
+        flex: none;
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-2);
+    }
+
+    .an-game-reading p {
+        margin: 0;
+    }
+
     .an-tree-host {
         flex: 1 1 auto;
         min-height: 0;
@@ -571,7 +583,7 @@
     }
 
     .an-tree,
-    .an-line {
+    .an-var-line {
         list-style: none;
         margin: 0;
         padding: 0;
@@ -626,8 +638,32 @@
 
     /* Dim text on the accent tint falls under AA in some themes, so the
        current row's number takes the full text color. */
-    .an-row.current .feed-n {
+    .an-row.current .feed-n,
+    .an-row.current .an-row-value {
         color: var(--c-text);
+    }
+
+    /* Once a reading speaks of the turns, every row keeps a column for the mark and one for the value, so both line up. */
+    .an-tree[data-facts] .an-row-go {
+        grid-template-columns: var(--analysis-turn-w) minmax(0, 1fr) var(--judgment-w) var(--analysis-row-value-w);
+    }
+
+    .an-tree[data-facts] .an-opening .an-move {
+        grid-column: 2 / -1;
+    }
+
+    .an-row-mark {
+        grid-column: 3;
+        display: inline-flex;
+    }
+
+    .an-row-value {
+        grid-column: 4;
+        color: var(--c-text-dim);
+        font-size: var(--text-xs);
+        font-variant-numeric: tabular-nums;
+        text-align: right;
+        white-space: nowrap;
     }
 
     .an-move {
@@ -644,10 +680,28 @@
     }
 
     /* Large text on a phone leaves an opening group no row of its own, so
-       it breaks between its cells rather than push the page sideways. */
+       it breaks between its cells rather than push the page sideways;
+       a row's mark and value go under its cells. */
     @media (max-width: 15rem) {
         .an-move .feed-group {
             white-space: normal;
+        }
+
+        .an-tree[data-facts] .an-row-go {
+            grid-template-columns: var(--analysis-turn-w) minmax(0, 1fr);
+        }
+
+        .an-row-mark,
+        .an-row-value {
+            grid-column: 2;
+            justify-self: start;
+            text-align: left;
+            white-space: normal;
+        }
+
+        /* Each side's marks go under its name. */
+        .an-game-reading .dr-marks {
+            grid-template-columns: minmax(0, 1fr);
         }
     }
 
@@ -876,6 +930,11 @@
     @media (41rem < width <= 60rem) {
         .an-screen {
             grid-template-columns: minmax(0, 1fr) var(--analysis-panel-narrow-w);
+        }
+
+        /* The narrow panel gives the turn's cells the room; the mark and the value keep only their own. */
+        .an-tree[data-facts] .an-row-go {
+            grid-template-columns: var(--analysis-turn-w) minmax(0, 1fr) auto auto;
         }
     }
 

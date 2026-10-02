@@ -1,7 +1,9 @@
 import { memo, useEffect, useRef, useState, type ReactNode } from 'react';
-import type { Side } from '@hexo-arena/contract';
+import type { Judgment, Side } from '@hexo-arena/contract';
 import type { TurnCells } from '@hexo-arena/rules';
 import { text } from '../text';
+import { JudgmentChip } from './Judgment';
+import type { RowFact } from './row-facts';
 import { cellText } from './notation';
 import { deletable, floorOf } from './state';
 import { isMainLine, mainLine, nodeAt, openingTurns, rootId, type MoveTree as Tree, type NodeId } from './tree';
@@ -20,16 +22,18 @@ const longPressMs = 500;
  * The move tree as rows, one a turn: the main line down the list, each
  * variation indented under the turn it leaves, a stored game's drawn opening
  * as one row.
+ * A row says, where a reading does, the verdict on its turn and the value after it.
  * A row's menu, from its "more" button, a right click, or a long press,
  * promotes, deletes, or copies the line through it.
  */
-export function MoveTree({ tree, gameTurns, at, onGo, actions }: {
+export function MoveTree({ tree, gameTurns, at, onGo, actions, facts }: {
     tree: Tree;
     // A stored game's own turns, which stay in the tree; none for any other root.
     gameTurns: readonly TurnCells[];
     at: NodeId;
     onGo: (id: NodeId) => void;
     actions: RowActions;
+    facts: ReadonlyMap<NodeId, RowFact>;
 }) {
     const [menu, setMenu] = useState<NodeId | null>(null);
     const listRef = useRef<HTMLOListElement>(null);
@@ -74,12 +78,15 @@ export function MoveTree({ tree, gameTurns, at, onGo, actions }: {
             const node = nodeAt(tree, id);
             if (node?.kind !== `turn`) break;
             const nodeId = id;
+            const fact = facts.get(nodeId);
             rows.push(
                 <Row
                     key={nodeId}
                     id={nodeId}
                     turn={node.turn}
                     move={moveText(node.side, node.cells)}
+                    judgment={fact?.judgment ?? null}
+                    value={fact?.value ?? null}
                     current={nodeId === at}
                     menuOpen={menuShown === nodeId}
                     onGo={onGo}
@@ -115,7 +122,7 @@ export function MoveTree({ tree, gameTurns, at, onGo, actions }: {
                 rows.push(
                     <li key={`var-${String(nodeId)}`} className="an-var">
                         {siblings.slice(1).map((variation) => (
-                            <ol key={variation} className="an-line">
+                            <ol key={variation} className="an-var-line">
                                 {rowsOf(variation)}
                             </ol>
                         ))}
@@ -128,7 +135,7 @@ export function MoveTree({ tree, gameTurns, at, onGo, actions }: {
     };
 
     return (
-        <ol className="an-tree" ref={listRef} aria-label={text.analysis.tree.label}>
+        <ol className="an-tree" ref={listRef} aria-label={text.analysis.tree.label} data-facts={facts.size === 0 ? undefined : ``}>
             {opening.length > 0 ? (
                 <OpeningRow tree={tree} ids={opening} current={at === floor} onGo={onGo} floor={floor} />
             ) : null}
@@ -173,10 +180,12 @@ function OpeningRow({ tree, ids, floor, current, onGo }: { tree: Tree; ids: read
     );
 }
 
-const Row = memo(function Row({ id, turn, move, current, menuOpen, onGo, onMenu }: {
+const Row = memo(function Row({ id, turn, move, judgment, value, current, menuOpen, onGo, onMenu }: {
     id: NodeId;
     turn: number;
     move: string;
+    judgment: Judgment | null;
+    value: string | null;
     current: boolean;
     menuOpen: boolean;
     onGo: (id: NodeId) => void;
@@ -225,6 +234,13 @@ const Row = memo(function Row({ id, turn, move, current, menuOpen, onGo, onMenu 
             >
                 <span className="feed-n">{String(turn)}</span>
                 <span className="an-move">{move}</span>
+                {judgment === null ? null : (
+                    <span className="an-row-mark" title={text.analysis.judged.verdict(judgment.severity, judgment.reason)}>
+                        <JudgmentChip severity={judgment.severity} spoken={false} />
+                        <span className="sr-only">{`${text.analysis.judged.verdict(judgment.severity, judgment.reason)};`}</span>
+                    </span>
+                )}
+                {value === null ? null : <span className="an-row-value">{value}</span>}
             </button>
             {current || menuOpen ? (
                 <button

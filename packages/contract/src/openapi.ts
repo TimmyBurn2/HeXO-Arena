@@ -30,6 +30,8 @@ import {
     meUpdateRequestSchema,
     positionBusyRetryAfterSeconds,
     positionCheckErrorCodes,
+    positionCheckLimit,
+    positionCheckPrefixLimit,
     positionCheckRequestSchema,
     positionHoldMs,
     positionReadingConflictErrorCodes,
@@ -993,7 +995,7 @@ function registerAnalysisPaths(registry: OpenAPIRegistry, shared: SharedComponen
         operationId: 'checkPosition',
         tags: ['Analysis'],
         security: [{ sessionCookie: [] }, {}],
-        description: `For an engine the browser runs itself: the same refusal a position request meets, without asking any analyzer. A caller without a session meets only the position's.`,
+        description: `For an engine the browser runs itself: the same refusal a position request meets, without asking any analyzer. A caller without a session meets only the position's. One client clears ${rateText(positionCheckLimit)}, and one IPv6 /48 ${rateText(positionCheckPrefixLimit)}.`,
         request: {
             body: { required: true, content: { 'application/json': { schema: positionCheckRequestSchema } } },
         },
@@ -1003,6 +1005,11 @@ function registerAnalysisPaths(registry: OpenAPIRegistry, shared: SharedComponen
             409: {
                 description: `The position is a live game's, or leads on from one (live_position); or the caller sits in a live game (seated).`,
                 content: { 'application/json': { schema: positionCheckError } },
+            },
+            429: {
+                description: `The client cleared more than ${rateText(positionCheckLimit)}, or its IPv6 /48 more than ${rateText(positionCheckPrefixLimit)} (rate_limited); or too many requests. Retry after Retry-After.`,
+                headers: { 'Retry-After': shared.retryAfter },
+                content: { 'application/json': { schema: rateLimitedError } },
             },
         },
     });

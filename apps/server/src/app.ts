@@ -277,7 +277,7 @@ export async function buildApp(deps: AppDeps): Promise<BuiltApp> {
         analyzers.stop();
     });
     registerBotApi(app, { query, presence, gate, games, limits, reservations: tournaments, analyzers, analysis });
-    registerAnalysisApi(app, { query, analysis, analyzers, guard, games, gate, limits });
+    registerAnalysisApi(app, { query, analysis, analyzers, guard, games, guests, gate, limits });
     registerChallengeApi(app, { query, presence, games, challenges, gate, limits, reservations: tournaments });
     registerGameApi(app, { query, presence, games, watchers, gate, guests, limits, reservations: tournaments });
     registerFinishedGamesApi(app, { query, now: deps.now ?? Date.now });

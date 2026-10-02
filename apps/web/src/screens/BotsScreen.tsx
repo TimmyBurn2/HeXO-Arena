@@ -11,6 +11,7 @@ import './BotsScreen.css';
 
 export function BotsScreen() {
     const [onlineOnly, setOnlineOnly] = useState(false);
+    const [analyzersOnly, setAnalyzersOnly] = useState(false);
     // Day one's empty state leads with Build a bot itself, so the head leaves it out then.
     const [dayOne, setDayOne] = useState(false);
     return (
@@ -23,7 +24,7 @@ export function BotsScreen() {
                     </Link>
                 )}
             </div>
-            <div className="toolbar">
+            <div className="toolbar bots-filters">
                 <label className="checkline">
                     <input
                         type="checkbox"
@@ -34,16 +35,26 @@ export function BotsScreen() {
                     />
                     {text.bots.onlineOnly}
                 </label>
+                <label className="checkline">
+                    <input
+                        type="checkbox"
+                        checked={analyzersOnly}
+                        onChange={(event) => {
+                            setAnalyzersOnly(event.target.checked);
+                        }}
+                    />
+                    {text.bots.analyzersOnly}
+                </label>
             </div>
-            <Directory key={onlineOnly ? `online` : `all`} onlineOnly={onlineOnly} onDayOne={setDayOne} />
+            <Directory key={`${String(onlineOnly)}-${String(analyzersOnly)}`} onlineOnly={onlineOnly} analyzersOnly={analyzersOnly} onDayOne={setDayOne} />
         </>
     );
 }
 
-function Directory({ onlineOnly, onDayOne }: { onlineOnly: boolean; onDayOne: (dayOne: boolean) => void }) {
-    const load = useCallback(async () => fetchBots(onlineOnly), [onlineOnly]);
+function Directory({ onlineOnly, analyzersOnly, onDayOne }: { onlineOnly: boolean; analyzersOnly: boolean; onDayOne: (dayOne: boolean) => void }) {
+    const load = useCallback(async () => fetchBots(onlineOnly, analyzersOnly), [onlineOnly, analyzersOnly]);
     const { data, error, limited, loading, reload } = useAsync(load);
-    const dayOne = data !== null && data.length === 0 && !onlineOnly;
+    const dayOne = data !== null && data.length === 0 && !onlineOnly && !analyzersOnly;
     useEffect(() => {
         onDayOne(dayOne);
     }, [dayOne, onDayOne]);
@@ -84,7 +95,7 @@ function Directory({ onlineOnly, onDayOne }: { onlineOnly: boolean; onDayOne: (d
                         {data.length === 0 ? (
                             <tr>
                                 <td className="table-note" colSpan={7}>
-                                    {text.bots.noneOnline}
+                                    {analyzersOnly ? (onlineOnly ? text.bots.noAnalyzerOnline : text.bots.noAnalyzer) : text.bots.noneOnline}
                                 </td>
                             </tr>
                         ) : (
@@ -103,6 +114,7 @@ function Directory({ onlineOnly, onDayOne }: { onlineOnly: boolean; onDayOne: (d
                     {text.bots.offline}
                 </span>
                 <span>{text.bots.openKey}</span>
+                <span>{text.bots.analyzerKey}</span>
                 <span>{text.bots.provisionalKey}</span>
             </div>
             {error ? <ErrorFrame sentence={text.bots.failed} onRetry={reload} wait={limited} /> : null}
@@ -118,6 +130,7 @@ function BotRow({ bot }: { bot: BotListing }) {
                     <PresenceDot online={bot.online} />
                     <PlayerName name={bot.name} kind="bot" />
                     <BotBadge />
+                    {bot.analyzer === null ? null : <span className="tag tag-analyzer">{text.bots.analyzerTag}</span>}
                 </span>
             </td>
             <td className="col-optional">{bot.ownerName === null ? null : <PlayerName name={bot.ownerName} kind="human" />}</td>

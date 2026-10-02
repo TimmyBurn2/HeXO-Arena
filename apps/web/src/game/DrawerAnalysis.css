@@ -1,0 +1,317 @@
+@layer screens {
+    /* A finished game's Moves head: the readings, who read the one shown,
+       the board's switches, the graph and the marks, and the card that
+       says where a requested reading stands. */
+    .dr-reading {
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-2);
+        font-size: var(--text-sm);
+    }
+
+    .dr-reading p {
+        margin: 0;
+    }
+
+    /* A head as tall as a request card makes it scrolls on its own past
+       half the panel, so the feed under it keeps lines in view. */
+    @media (width > 40rem) {
+        .moves-head.dr-head {
+            max-height: max(50%, var(--drawer-head-max-h));
+            overflow-y: auto;
+            overscroll-behavior: contain;
+        }
+    }
+
+    /* The card a request lands on takes focus in place of its button. */
+    .dr-status {
+        display: flex;
+        flex-direction: column;
+    }
+
+    .dr-pills {
+        align-self: flex-start;
+    }
+
+    .dr-by {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: var(--space-1) var(--space-2);
+    }
+
+    .dr-lens {
+        flex: none;
+        width: var(--text-base);
+        height: var(--text-base);
+        fill: none;
+        stroke: var(--c-text-dim);
+        stroke-width: 2;
+        stroke-linecap: round;
+    }
+
+    .dr-by-name {
+        display: inline-flex;
+        align-items: center;
+        font-weight: var(--weight-strong);
+        overflow-wrap: anywhere;
+    }
+
+    .dr-by-meta,
+    .dr-quiet {
+        color: var(--c-text-dim);
+    }
+
+    .dr-toggles {
+        display: flex;
+        flex-wrap: wrap;
+        column-gap: var(--space-4);
+    }
+
+    .dr-toggles .board-toggles {
+        display: contents;
+    }
+
+    .dr-failed {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: var(--space-2);
+    }
+
+    .dr-graph {
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-1);
+    }
+
+    .dr-graph-label {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: space-between;
+        gap: 0 var(--space-2);
+        color: var(--c-text-dim);
+        font-size: var(--text-xs);
+    }
+
+    .dr-own-key {
+        display: inline-flex;
+        flex-wrap: wrap;
+        gap: 0 var(--space-3);
+    }
+
+    .dr-own-key > span,
+    .dr-marks dt {
+        display: inline-flex;
+        align-items: center;
+        gap: var(--space-1);
+    }
+
+    .dr-marks {
+        display: grid;
+        grid-template-columns: auto minmax(0, 1fr);
+        gap: var(--space-1) var(--space-3);
+        margin: 0;
+        font-size: var(--text-xs);
+    }
+
+    .dr-marks-row {
+        display: grid;
+        grid-column: 1 / -1;
+        grid-template-columns: subgrid;
+        align-items: center;
+    }
+
+    .dr-marks dt {
+        min-width: 0;
+        font-weight: var(--weight-strong);
+    }
+
+    .dr-marks-name {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .dr-marks dd {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: var(--space-1) var(--space-3);
+        margin: 0;
+        color: var(--c-text-dim);
+        font-variant-numeric: tabular-nums;
+    }
+
+    .dr-mark-count {
+        display: inline-flex;
+        align-items: center;
+        gap: var(--space-1);
+    }
+
+    .dr-card {
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-2);
+        padding: var(--space-3);
+        background: var(--c-bg-overlay);
+    }
+
+    .dr-card-title {
+        margin: 0;
+        font-size: var(--text-sm);
+        font-weight: var(--weight-strong);
+    }
+
+    .dr-card .card-actions {
+        margin: 0;
+    }
+
+    .dr-pick {
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-1);
+    }
+
+    .dr-pick select {
+        width: 100%;
+    }
+
+    .dr-sign-in {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+        gap: var(--space-2);
+    }
+
+    /* How far a running reading has come, in the accent on the input's ground. */
+    .dr-progress {
+        height: var(--progress-h);
+        background: var(--c-bg-input);
+    }
+
+    .dr-progress span {
+        display: block;
+        width: var(--progress);
+        height: 100%;
+        background: var(--c-accent-solid);
+        transition: width var(--dur-slow) var(--ease);
+    }
+
+    /* The feed with a reading: a turn's mark and its value after it join
+       each line, and a judged line shown on the board says what the
+       analyzer preferred under it. */
+    /* Two more columns share the drawer's width, so the record's text
+       steps down a size; where large text leaves no room, a turn's cells
+       and its value break between words, and the cells' column never
+       narrows under them, so no mark covers them. */
+    .feed[data-notes] {
+        grid-template-columns: max-content minmax(min-content, 1fr) auto auto;
+        column-gap: var(--space-2);
+        font-size: var(--text-xs);
+    }
+
+    .feed[data-notes] .feed-group {
+        white-space: normal;
+    }
+
+    .feed[data-notes] .feed-line {
+        align-items: center;
+        min-height: calc(var(--judgment-h) + 2 * var(--space-1));
+        cursor: pointer;
+    }
+
+    .feed[data-notes] .feed-line:hover {
+        background: var(--c-bg-hover);
+    }
+
+    .feed[data-notes] .feed-line.latest {
+        background: var(--c-accent-bg);
+    }
+
+    .feed-mark {
+        display: inline-flex;
+        justify-content: center;
+        min-width: var(--judgment-w);
+    }
+
+    .feed-value {
+        color: var(--c-text-dim);
+        font-family: var(--font-sans);
+        font-size: var(--text-xs);
+        text-align: right;
+        white-space: normal;
+    }
+
+    /* Dim text falls under AA on the accent tint in some themes. */
+    .feed-line.latest .feed-value,
+    .feed-note {
+        color: var(--c-text);
+    }
+
+    /* The note continues the line it explains, under its stones. */
+    .feed-note {
+        display: grid;
+        grid-column: 1 / -1;
+        grid-template-columns: subgrid;
+        padding: 0 var(--space-2) var(--space-2);
+        background: var(--c-accent-bg);
+        font-family: var(--font-sans);
+    }
+
+    .feed-note-text {
+        grid-column: 2 / -1;
+    }
+
+    .peek-readout,
+    .peek-graph {
+        display: none;
+    }
+
+    @media (max-width: 40rem) {
+        /* The open sheet keeps its peek to the steps; the head scrolls
+           with the feed, and the closed sheet's peek carries the graph. */
+        .moves-head.dr-head {
+            position: static;
+        }
+
+        .moves-head .dr-graph {
+            display: none;
+        }
+
+        /* The sheet is the overlay, so its cards step down to stand apart. */
+        .dr-card {
+            background: var(--c-bg-raised);
+        }
+
+        .drawer:not([data-visible]) .peek-readout {
+            display: flex;
+            flex-basis: 100%;
+            align-items: center;
+            gap: var(--space-2);
+            min-width: 0;
+            color: var(--c-text-dim);
+            font-size: var(--text-xs);
+        }
+
+        .peek-readout-words {
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .drawer:not([data-visible]) .peek-graph {
+            display: block;
+            margin-top: var(--space-1);
+        }
+
+        /* The stage keeps the taller peek clear for the chip and the camera. */
+        .stage[data-replay][data-peek-reading='line'] {
+            --sheet-peek-h: var(--sheet-peek-readout-h);
+        }
+
+        .stage[data-replay][data-peek-reading='graph'] {
+            --sheet-peek-h: var(--sheet-peek-reading-h);
+        }
+    }
+}

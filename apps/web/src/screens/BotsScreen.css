@@ -12,6 +12,11 @@
         margin: 0;
     }
 
+    .bots-filters {
+        justify-content: flex-start;
+        column-gap: var(--space-5);
+    }
+
     @media (max-width: 48rem) {
         .col-optional {
             display: none;

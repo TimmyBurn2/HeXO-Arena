@@ -1,5 +1,6 @@
 import {
     accountExportSchema,
+    analysisCheckPath,
     analysisListSchema,
     analysisPositionsPath,
     botAccountPath,
@@ -10,6 +11,7 @@ import {
     gameSnapshotSchema,
     internalToWire,
     meSchema,
+    positionCheckLimit,
     positionReadingSchema,
     streamEventSchema,
     wireToInternal,
@@ -218,6 +220,71 @@ describe('position readings', () => {
         const refused = await world.app.inject({ method: `POST`, url: analysisPositionsPath, cookies: { hexo_arena_session: asker }, payload: { ...body, cells: turned, toMove: `x` } });
         expect(refused.statusCode).toBe(409);
         expect(refused.json()).toMatchObject({ code: `live_position` });
+    });
+});
+
+describe('clearing a position for an engine in the browser', () => {
+    const check = (payload: object, cookie?: string) =>
+        world.app.inject({ method: `POST`, url: analysisCheckPath, payload, ...(cookie === undefined ? {} : { cookies: { hexo_arena_session: cookie } }) });
+
+    async function seatedIn(): Promise<{ user: string; cells: readonly GameCell[] }> {
+        const opponent = await mintBot(world.app, await loginAs(world.app, `opponentowner`), `opponent`);
+        await declare(opponent, { accepts: { turnMs: null, match: false, unlimited: true } });
+        stream(`opponent`);
+        const user = await loginAs(world.app, `seated`);
+        const created = await world.app.inject({ method: `POST`, url: `/api/games`, cookies: { hexo_arena_session: user }, payload: { bot: `opponent`, timeControl: { mode: `unlimited` }, openingPlies: 9 } });
+        expect(created.statusCode).toBe(201);
+        return { user, cells: gameSnapshotSchema.parse(created.json()).board.cells };
+    }
+
+    it('clears a position no live game holds for anyone, signed in or not, and refuses one that cannot be played from', async () => {
+        const body = { cells: quiet, toMove: `x` };
+        const cleared = await check(body);
+        expect(cleared.statusCode).toBe(204);
+        expect(cleared.body).toBe(``);
+        expect((await check(body, await loginAs(world.app, `asker`))).statusCode).toBe(204);
+        const six = Array.from({ length: 6 }, (_, x): GameCell => ({ x, y: 0, side: `x` }));
+        expect((await check({ cells: six, toMove: `o` })).json()).toMatchObject({ code: `bad_request` });
+        expect((await check({ cells: quiet, toMove: `x`, analyzer: null })).statusCode).toBe(204);
+        expect((await check({ cells: [], toMove: `x` })).json()).toMatchObject({ code: `bad_request` });
+    });
+
+    it('refuses everything to a person seated in a live game, and to anyone a live game\'s position, however turned', async () => {
+        const { user, cells } = await seatedIn();
+        expect((await check({ cells: quiet, toMove: `x` }, user)).json()).toMatchObject({ code: `seated` });
+        const turned = cells.map((cell): GameCell => ({ x: cell.x + cell.y + 20, y: -cell.x - 7, side: cell.side === `x` ? `o` : `x` }));
+        const refused = await check({ cells: turned, toMove: `x` });
+        expect(refused.statusCode).toBe(409);
+        expect(refused.json()).toMatchObject({ code: `live_position` });
+    });
+
+    it('refuses a guest seated in a live game', async () => {
+        const opponent = await mintBot(world.app, await loginAs(world.app, `opponentowner`), `opponent`);
+        await declare(opponent, { accepts: { turnMs: null, match: false, unlimited: true } });
+        stream(`opponent`);
+        const guest = await world.app.inject({ method: `POST`, url: `/api/auth/guest` });
+        const cookie = guest.cookies.find((each) => each.name === `hexo_arena_session`)?.value ?? ``;
+        expect((await check({ cells: quiet, toMove: `x` }, cookie)).statusCode).toBe(204);
+        const created = await world.app.inject({ method: `POST`, url: `/api/games`, cookies: { hexo_arena_session: cookie }, payload: { bot: `opponent`, timeControl: { mode: `unlimited` }, openingPlies: 1 } });
+        expect(created.statusCode).toBe(201);
+        expect((await check({ cells: quiet, toMove: `x` }, cookie)).json()).toMatchObject({ code: `seated` });
+    });
+
+    it(`holds one client to ${String(positionCheckLimit.burst)} at once, then refuses with the wait, apart from other clients`, async () => {
+        // Behind a proxy the forwarded address names the client, as in a deployment.
+        const proxied = await createTestApp({ logger: false, trustedProxy: `127.0.0.1` });
+        try {
+            const from = (address: string) => proxied.app.inject({ method: `POST`, url: analysisCheckPath, payload: { cells: quiet, toMove: `x` }, headers: { 'x-forwarded-for': address } });
+            for (let sent = 0; sent < positionCheckLimit.burst; sent += 1) expect((await from(`203.0.113.9`)).statusCode).toBe(204);
+            const refused = await from(`203.0.113.9`);
+            expect(refused.statusCode).toBe(429);
+            expect(refused.json()).toMatchObject({ code: `rate_limited` });
+            expect(Number(refused.headers[`retry-after`])).toBeGreaterThan(0);
+            expect((await from(`198.51.100.4`)).statusCode).toBe(204);
+        } finally {
+            await proxied.app.close();
+            proxied.sqlite.close();
+        }
     });
 });
 

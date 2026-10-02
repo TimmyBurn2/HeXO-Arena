@@ -61,6 +61,13 @@ describe('fetchBots', () => {
         expect(calls[0]).toBe(`/api/bots?online=1`);
     });
 
+    it('ask for analyzers only, alone or beside online-only', async () => {
+        stubJson([]);
+        await fetchBots(false, true);
+        await fetchBots(true, true);
+        expect(calls).toEqual([`/api/bots?analyzer=1`, `/api/bots?online=1&analyzer=1`]);
+    });
+
     it('parse one full listing', async () => {
         const listing = [
             {

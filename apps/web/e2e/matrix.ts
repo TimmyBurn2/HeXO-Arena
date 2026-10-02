@@ -1,6 +1,6 @@
 import type { Page } from '@playwright/test';
 import { themes } from '../src/theme/themes';
-import { keptNames, leaderboard, liveGames, playBots, rivalry, signup, tournaments, world, type World } from './mock-api';
+import { analyzerBots, bots, keptNames, leaderboard, liveGames, longReadings, playBots, rivalry, signup, tournaments, world, type World } from './mock-api';
 
 /** A named look the whole site can wear. */
 export interface Look {
@@ -58,6 +58,7 @@ export interface Shot {
 }
 
 const signedOut = world({ me: null });
+const analysedLong = world({ analyses: { 'long-finished': { analyses: [longReadings.kestrel, longReadings.driftwood, ...longReadings.own], optedOut: false } } });
 const playing = (overrides: Partial<World> = {}) => world({ bots: playBots, ...overrides });
 // The top chip carries a level beside the clock, down to the narrowest phone.
 const levelChipViewports: readonly Viewport[] = [
@@ -419,6 +420,37 @@ export const shots: readonly Shot[] = [
     },
     { name: `analysis-live`, path: `/analysis?game=running`, world: world(), ready: `.empty`, framed: true },
     {
+        name: `analysis-game-reading`,
+        path: `/analysis?game=long-finished&turn=17`,
+        world: analysedLong,
+        ready: `.an-game-reading .graph`,
+        framed: true,
+        board: true,
+    },
+    {
+        name: `analysis-own-view`,
+        path: `/analysis?game=long-finished&turn=17`,
+        world: analysedLong,
+        ready: `.an-game-reading .graph`,
+        framed: true,
+        after: async (page) => {
+            await page.getByRole(`group`, { name: `Readings` }).getByRole(`button`, { name: `Own view` }).click();
+            await page.locator(`.dr-own-key`).waitFor();
+        },
+    },
+    {
+        name: `bots-analyzers`,
+        path: `/bots`,
+        world: world({ bots: [...bots, ...analyzerBots] }),
+        ready: `table`,
+        framed: true,
+        after: async (page) => {
+            await page.getByRole(`checkbox`, { name: `Analyzers only` }).check();
+            await page.locator(`.tag-analyzer`).first().waitFor();
+        },
+    },
+    { name: `bot-analyzer`, path: `/bots/kestrel`, world: world({ bots: [...bots, ...analyzerBots] }), ready: `#analyzer-title`, framed: true },
+    {
         name: `analysis-reading`,
         path: `/analysis?game=long-finished&turn=12`,
         world: world(),
@@ -647,6 +679,22 @@ export const shots: readonly Shot[] = [
     },
     { name: `watch-deleted`, path: `/game/gone`, world: signedOut, ready: `.hud-result`, framed: false, board: true },
     { name: `watch-finished`, path: `/game/finished`, world: signedOut, ready: `svg polygon.cell`, framed: false, board: true },
+    // A finished game read by two analyzers, at x's blunder: its line A and mark on the board, the head and the feed open.
+    {
+        name: `game-analysis`,
+        path: `/game/long-finished?turn=22`,
+        world: analysedLong,
+        ready: `svg polygon.cell`,
+        framed: false,
+        board: true,
+        viewports: panelViewports,
+        after: async (page) => {
+            if ((page.viewportSize()?.width ?? 0) > 640) await page.keyboard.press(`m`);
+            else await page.getByRole(`button`, { name: `Open the game panel` }).click();
+            await page.locator(`.dr-marks`).waitFor();
+        },
+    },
+    { name: `game-analysis-peek`, path: `/game/long-finished?turn=22`, world: analysedLong, ready: `.peek-graph .graph`, framed: false, board: true, viewports: phones },
     ...(
         [
             [`watch-drawer`, `/game/running`],

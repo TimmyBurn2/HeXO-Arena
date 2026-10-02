@@ -19,6 +19,8 @@ import {
     signInStartLimit,
     signInStartPrefixLimit,
     streamOpenLimit,
+    positionCheckLimit,
+    positionCheckPrefixLimit,
     positionRequestLimit,
 } from '@hexo-arena/contract';
 import { mkdtempSync, writeFileSync } from 'node:fs';
@@ -181,6 +183,8 @@ describe('request limits', () => {
             reportGlobal: reportGlobalLimit,
             accountExport: accountExportLimit,
             positionRequest: positionRequestLimit,
+            positionCheck: positionCheckLimit,
+            positionCheckPrefix: positionCheckPrefixLimit,
         });
     });
 
@@ -265,6 +269,7 @@ describe('request limits', () => {
             'GET /api/bot/game/:gameId/socket': `engine`,
             'POST /api/bot/game/:gameId/resign': `principal`,
             'POST /api/analysis/positions': `principal`,
+            'POST /api/analysis/check': `public`,
             'POST /api/games/:gameId/analyses': `principal`,
             'GET /api/games/:gameId/analyses': `public`,
             'GET /api/bot/analysis/socket': `engine`,

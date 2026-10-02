@@ -3502,7 +3502,8 @@ paths:
   /api/analysis/check:
     post:
       description: "For an engine the browser runs itself: the same refusal a position request meets,
-        without asking any analyzer. A caller without a session meets only the position's."
+        without asking any analyzer. A caller without a session meets only the position's. One
+        client clears 20 at once, then 1 a second, and one IPv6 /48 80 at once, then 4 a second."
       operationId: checkPosition
       requestBody:
         content:
@@ -3525,7 +3526,15 @@ paths:
         "413":
           $ref: "#/components/responses/PayloadTooLarge"
         "429":
-          $ref: "#/components/responses/RateLimited"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RateLimitedError"
+          description: The client cleared more than 20 at once, then 1 a second, or its IPv6 /48 more than 80
+            at once, then 4 a second (rate_limited); or too many requests. Retry after Retry-After.
+          headers:
+            Retry-After:
+              $ref: "#/components/headers/RetryAfter"
       security:
         - sessionCookie: []
         - {}

@@ -29,7 +29,9 @@
     input[type='email'],
     input[type='date'],
     select,
-    textarea {
+    textarea,
+    .jd,
+    .graph-svg {
         clip-path: var(--cut-sm-path);
     }
 
@@ -41,7 +43,8 @@
     .empty,
     .token-box,
     .credit-rows,
-    .skip {
+    .skip,
+    .dr-card {
         clip-path: var(--cut-md-path);
     }
 

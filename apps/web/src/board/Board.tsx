@@ -1,5 +1,5 @@
 import { memo, useId, useMemo, useRef } from 'react';
-import type { AxialCoord, Side } from '@hexo-arena/contract';
+import { judgmentGlyphs, type AxialCoord, type JudgmentSeverity, type Side } from '@hexo-arena/contract';
 import type { BoardSettings } from './board-settings';
 import {
     cellPoints,
@@ -11,6 +11,8 @@ import {
     markPoints,
     ringPoints,
     stonePoints,
+    tagCenter,
+    tagPoints,
     viewBoxOf,
     type Frame,
 } from './geometry';
@@ -38,6 +40,8 @@ export interface BoardOverlays {
     lines?: BoardLines | undefined;
     // A candidate turn shown as the stones it would place, while its line is pointed at.
     preview?: { readonly side: Side; readonly cells: readonly AxialCoord[] } | undefined;
+    // A judged turn's mark, hung beside the stone it names.
+    judgment?: { readonly cell: AxialCoord; readonly severity: JudgmentSeverity } | undefined;
 }
 
 export interface BoardProps {
@@ -192,6 +196,7 @@ export function Board({ stones, settings, label, overlays, scale, frame, edge = 
     const pending = overlays?.pending;
     const lines = overlays?.lines;
     const preview = overlays?.preview;
+    const judgment = overlays?.judgment;
     return (
         <div className="board-frame" {...(settings.numbers ? { 'data-numbers': `` } : {})}>
             <svg
@@ -284,6 +289,14 @@ export function Board({ stones, settings, label, overlays, scale, frame, edge = 
                         <StoneNumber key={`${String(stone.x)},${String(stone.y)}`} stone={stone} />
                     ))}
                 </g>
+                {judgment === undefined ? null : (
+                    <g className={`board-tag jd-${judgment.severity}`} transform={translate(tagCenter(judgment.cell).cx, tagCenter(judgment.cell).cy)}>
+                        <polygon className="board-tag-plate" points={tagPoints()} />
+                        <text className="board-tag-glyph" dy="0.35em">
+                            {judgmentGlyphs[judgment.severity]}
+                        </text>
+                    </g>
+                )}
             </svg>
         </div>
     );

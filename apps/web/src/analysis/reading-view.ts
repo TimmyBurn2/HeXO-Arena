@@ -1,7 +1,7 @@
 import { forcedWinner, valueWords, type AxialCoord, type HtttxPositionEvaluation, type Side } from '@hexo-arena/contract';
 import { playTurn, type Setup } from '@hexo-arena/rules';
 import { cellText } from './notation';
-import type { Reading } from './sources';
+import type { Reading, ReadingLine } from './sources';
 
 /** The letters lines go by, best first. */
 export const lineLetters = [`A`, `B`, `C`] as const;
@@ -22,7 +22,12 @@ export interface ShownLine {
  * each value read for the side to move, who plays the line.
  */
 export function shownLines(reading: Reading, position: Setup, mover: Side, count: number): ShownLine[] {
-    return reading.lines.slice(0, Math.min(count, lineLetters.length)).map((line, index) => {
+    return shownLinesOf(reading.lines, position, mover, count);
+}
+
+/** Lines as they show at a position, at most `count` of them, best first, whoever read them. */
+export function shownLinesOf(lines: readonly ReadingLine[], position: Setup, mover: Side, count: number): ShownLine[] {
+    return lines.slice(0, Math.min(count, lineLetters.length)).map((line, index) => {
         const [first, second] = line.cells;
         const completesSix = playTurn(position, [first]).ok;
         const cells: ShownLine[`cells`] = completesSix ? [first] : [first, second];

@@ -292,6 +292,28 @@ describe('the readings store', () => {
         await tick(0);
         expect(readings.at(`a`)).not.toBe(thinking);
     });
+
+    it('keeps stored readings under each id that holds none yet, never over a reading in hand, telling its listeners once', () => {
+        const readings = store();
+        const asked = reading(`kestrel`, 0.4);
+        readings.put(`bot:kestrel`, `a`, asked, three);
+        const heard = vi.fn();
+        readings.subscribe(heard);
+        const before = readings.snapshot();
+        const stored = { ...reading(`kestrel`), elapsedMs: null };
+        readings.keep([
+            { ids: [`bot:kestrel`, `bot:*`], key: `a`, reading: stored, ask: three },
+            { ids: [`bot:kestrel`, `bot:*`], key: `b`, reading: stored, ask: three },
+        ]);
+        expect(heard).toHaveBeenCalledTimes(1);
+        expect(readings.snapshot()).not.toBe(before);
+        expect(readings.entry(`bot:kestrel`, `a`)?.read?.reading).toBe(asked);
+        expect(readings.entry(`bot:*`, `a`)?.read?.reading).toBe(stored);
+        expect(readings.entry(`bot:kestrel`, `b`)?.read?.reading).toBe(stored);
+        readings.keep([{ ids: [`bot:kestrel`], key: `b`, reading: asked, ask: three }]);
+        expect(heard).toHaveBeenCalledTimes(1);
+        expect(readings.entry(`bot:kestrel`, `b`)?.read?.reading).toBe(stored);
+    });
 });
 
 describe('a reading in hand', () => {

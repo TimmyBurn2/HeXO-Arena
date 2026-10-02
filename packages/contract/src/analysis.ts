@@ -70,6 +70,15 @@ export const positionReadingsPerUserDay = 300;
 /** Position requests one user may send. */
 export const positionRequestLimit: RateLimit = { burst: 10, refillMs: 2_000 };
 
+/**
+ * Positions one client, by network address, may clear against live games before its engine reads them:
+ * signed in or not, since the engine runs in the browser.
+ */
+export const positionCheckLimit: RateLimit = { burst: 20, refillMs: 1_000 };
+
+/** Positions one IPv6 /48 may clear against live games. */
+export const positionCheckPrefixLimit: RateLimit = { burst: 4 * positionCheckLimit.burst, refillMs: positionCheckLimit.refillMs / 4 };
+
 /** How long a position request is held open waiting for its reading before it answers queued. */
 export const positionHoldMs = 10_000;
 

@@ -1,0 +1,91 @@
+@layer components {
+    /* The graph sits on the board's own plate, so its colors are the stones'. */
+    .graph {
+        height: var(--graph-h);
+    }
+
+    .graph-mini {
+        height: var(--graph-mini-h);
+    }
+
+    .graph-svg {
+        display: block;
+        width: 100%;
+        height: 100%;
+    }
+
+    .graph-svg[data-turns] {
+        cursor: pointer;
+    }
+
+    .graph-plate {
+        fill: var(--board-bg);
+    }
+
+    .graph-wash {
+        opacity: var(--graph-wash-opacity);
+    }
+
+    .graph-wash-x {
+        fill: var(--board-stone-x);
+    }
+
+    .graph-wash-o {
+        fill: var(--board-stone-o);
+    }
+
+    .graph-mid {
+        stroke: var(--board-frontier);
+        stroke-width: var(--graph-line-w);
+    }
+
+    .graph-cursor {
+        stroke: var(--board-last);
+        stroke-width: var(--graph-trace-w);
+    }
+
+    .graph-trace {
+        fill: none;
+        stroke: var(--board-focus);
+        stroke-width: var(--graph-trace-w);
+        stroke-linejoin: round;
+    }
+
+    .graph-trace-x {
+        stroke: var(--board-stone-x);
+    }
+
+    .graph-trace-o {
+        stroke: var(--board-stone-o);
+    }
+
+    .graph-forced {
+        stroke: var(--board-bg);
+        stroke-width: var(--graph-line-w);
+    }
+
+    .graph-forced-x {
+        fill: var(--board-stone-x);
+    }
+
+    .graph-forced-o {
+        fill: var(--board-stone-o);
+    }
+
+    .graph-mark {
+        stroke: var(--board-bg);
+        stroke-width: var(--graph-mark-edge-w);
+    }
+
+    .graph-mark.jd-inaccuracy {
+        fill: var(--c-warn);
+    }
+
+    .graph-mark.jd-mistake {
+        fill: var(--c-bad);
+    }
+
+    .graph-mark.jd-blunder {
+        fill: var(--c-bad-solid);
+    }
+}

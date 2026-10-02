@@ -1,7 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
 import type { Me } from '@hexo-arena/contract';
 import { looks, wear } from './matrix';
-import { liveGames, playBots, rivalry, serve, signup, tournaments, world, type World } from './mock-api';
+import { analyzerBots, bots, liveGames, longReadings, playBots, rivalry, serve, signup, tournaments, world, type World } from './mock-api';
 
 const visitors: readonly { name: string; me: Me }[] = [
     { name: `signed-out`, me: null },
@@ -24,6 +24,7 @@ const screens: readonly { name: string; path: string; world?: Partial<World>; th
     { name: `live games`, path: `/games/live` },
     { name: `the analysis board`, path: `/analysis` },
     { name: `a game on the analysis board`, path: `/analysis?game=long-finished&turn=12` },
+    { name: `a game read whole on the analysis board`, path: `/analysis?game=long-finished&turn=17`, world: { analyses: { 'long-finished': { analyses: [longReadings.kestrel, longReadings.driftwood, ...longReadings.own], optedOut: false } } } },
     {
         name: `an analyzer's lines on the analysis board`,
         path: `/analysis?game=long-finished&turn=12`,
@@ -38,6 +39,7 @@ const screens: readonly { name: string; path: string; world?: Partial<World>; th
     { name: `a waiting tournament`, path: `/tournaments/t_wintercup202` },
     { name: `bots`, path: `/bots` },
     { name: `a bot page`, path: `/bots/sealbot` },
+    { name: `an analyzer's page`, path: `/bots/kestrel`, world: { bots: [...bots, ...analyzerBots] } },
     { name: `build a bot`, path: `/connect` },
     { name: `profile`, path: `/profile` },
     { name: `a player page`, path: `/players/ana` },

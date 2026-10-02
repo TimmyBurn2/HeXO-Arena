@@ -21,6 +21,7 @@ import {
     type TreeNode,
     type TreeRefusal,
     type TreeRoot,
+    type TurnNode,
 } from './tree';
 
 /**
@@ -326,19 +327,25 @@ export function restoreBoard(stored: StoredBoard, root: TreeRoot, gameTurns: rea
     return marked.state.at === at && marked.state.mark !== null ? marked.state : state;
 }
 
-// A stored game's own turns, wherever promotions have moved them among
-// their siblings: from the root, the child playing the game's next turn.
-function gameLineIds(tree: MoveTree, gameTurns: readonly TurnCells[]): Set<NodeId> {
-    const ids = new Set<NodeId>();
-    if (tree.root.kind !== `game`) return ids;
+/**
+ * A stored game's own turns in order, wherever promotions have moved them among their siblings:
+ * from the root, the child playing the game's next turn; none for any other root.
+ */
+export function gameLine(tree: MoveTree, gameTurns: readonly TurnCells[]): TurnNode[] {
+    const line: TurnNode[] = [];
+    if (tree.root.kind !== `game`) return line;
     let node = nodeAt(tree, rootId);
     for (const turn of gameTurns) {
         const next: TreeNode | undefined = node?.children.map((child) => nodeAt(tree, child)).find((child) => child?.kind === `turn` && sameTurn(child.cells, turn));
-        if (next === undefined) break;
-        ids.add(next.id);
+        if (next?.kind !== `turn`) break;
+        line.push(next);
         node = next;
     }
-    return ids;
+    return line;
+}
+
+function gameLineIds(tree: MoveTree, gameTurns: readonly TurnCells[]): Set<NodeId> {
+    return new Set(gameLine(tree, gameTurns).map((node) => node.id));
 }
 
 function sameTurn(a: TurnCells, b: TurnCells): boolean {

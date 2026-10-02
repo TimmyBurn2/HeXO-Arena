@@ -267,6 +267,25 @@ describe('BotScreen', () => {
         expect(screen.queryByRole(`region`, { name: `Strength` })).toBe(null);
     });
 
+    it('say what an analyzer reads for, whether during its games and now, and lead to the analysis board, and nothing for a bot that reads none', async () => {
+        stubDirectory([{ ...sealbot, analyzer: { maxSeconds: 5, lines: 3, whilePlaying: true, ready: false } }]);
+        render(<BotScreen name="sealbot" />);
+        const card = await screen.findByRole(`region`, { name: `Analyzer` });
+        const facts = [...card.querySelectorAll(`dt`)].map((term) => [term.textContent, term.nextElementSibling?.textContent]);
+        expect(facts).toEqual([
+            [`Time`, `Up to 5 s a position`],
+            [`Lines`, `Up to 3`],
+            [`When`, `Also during its games`],
+            [`Now`, `Not reading`],
+        ]);
+        expect(within(card).getByRole(`link`, { name: `analysis board` }).getAttribute(`href`)).toBe(`/analysis`);
+        cleanup();
+        stubDirectory([sealbot]);
+        render(<BotScreen name="sealbot" />);
+        await screen.findByRole(`region`, { name: `Accepts` });
+        expect(screen.queryByRole(`region`, { name: `Analyzer` })).toBe(null);
+    });
+
     it('lead to the report form about the bot from the foot of its page', async () => {
         stubDirectory([sealbot]);
         render(<BotScreen name="sealbot" />);

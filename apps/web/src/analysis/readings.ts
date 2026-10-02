@@ -94,10 +94,32 @@ export class ReadingsStore {
         return this.entries.get(key)?.get(sourceId);
     }
 
+    /** Every position's entries, by key; a new map whenever any entry changes. */
+    snapshot(): ReadonlyMap<string, ReadonlyMap<string, ReadingEntry>> {
+        return this.entries;
+    }
+
     /** File a reading that came from elsewhere, such as one stored with a game. */
     put(sourceId: string, key: string, reading: Reading, ask: ReadingAsk): void {
         this.file(sourceId, key, reading, ask);
         this.changed();
+    }
+
+    /**
+     * File readings stored with a game, each under every one of its ids that holds none for its position yet:
+     * a reading in hand, asked for on this board, is never displaced by a stored one.
+     */
+    keep(readings: readonly { readonly ids: readonly string[]; readonly key: string; readonly reading: Reading; readonly ask: ReadingAsk }[]): void {
+        let filed = false;
+        for (const { ids, key, reading, ask } of readings) {
+            for (const id of ids) {
+                const entry = this.entry(id, key);
+                if (entry?.read !== null && entry?.read !== undefined) continue;
+                this.write(key, id, { read: { reading, ask }, state: entry?.state ?? idle });
+                filed = true;
+            }
+        }
+        if (filed) this.changed();
     }
 
     /**
@@ -183,7 +205,8 @@ export class ReadingsStore {
                         this.setState(source.id, key, { kind: `queued`, ahead: event.ahead, by: event.by });
                         break;
                     case `reading`:
-                        this.file(source.id, key, event.reading, ask);
+                        // A deepening reading on its way answers only as long a look as it has had.
+                        this.file(source.id, key, event.reading, event.reading.final ? ask : { ...ask, seconds: Math.min(ask.seconds, event.reading.seconds) });
                         this.setState(source.id, key, idle);
                         break;
                     case `refused`:
@@ -259,5 +282,11 @@ export const readings = new ReadingsStore();
 /** Every source's entry for a position, read from a store. */
 export function useReadingsAt(store: ReadingsStore, key: string): ReadonlyMap<string, ReadingEntry> {
     const read = useCallback(() => store.at(key), [store, key]);
+    return useSyncExternalStore(store.subscribe, read, read);
+}
+
+/** Every position's entries a store holds, read again whenever one changes. */
+export function useReadingsSnapshot(store: ReadingsStore): ReadonlyMap<string, ReadonlyMap<string, ReadingEntry>> {
+    const read = useCallback(() => store.snapshot(), [store]);
     return useSyncExternalStore(store.subscribe, read, read);
 }

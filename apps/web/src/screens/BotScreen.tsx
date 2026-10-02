@@ -1,5 +1,5 @@
 import { Fragment, useCallback } from 'react';
-import { botMeta, levelFacts, nameKeyOf, notFoundMeta, type BotListing, type Levels, type LiveGameEntry } from '@hexo-arena/contract';
+import { analysisPagePath, botMeta, levelFacts, nameKeyOf, notFoundMeta, type Analyzer, type BotListing, type Levels, type LiveGameEntry } from '@hexo-arena/contract';
 import { fetchBots } from '../api/client';
 import { useAsync } from '../api/use-async';
 import { OwnerPanel } from '../components/OwnerPanel';
@@ -139,6 +139,7 @@ function BotProfile({ bot }: { bot: BotListing }) {
                     )}
                 </section>
                 {bot.levels === null ? null : <StrengthCard levels={bot.levels} />}
+                {bot.analyzer === null ? null : <AnalyzerCard analyzer={bot.analyzer} />}
                 {bot.version !== undefined || (bot.repoUrl !== undefined && bot.repoUrl !== ``) ? (
                     <section className="card" aria-labelledby="build-title">
                         <h2 id="build-title" className="card-title">
@@ -186,6 +187,29 @@ function BotProfile({ bot }: { bot: BotListing }) {
             {owned ? <OwnerPanel bot={bot.name} /> : null}
             <ReportLine subject={`/bots/${encodeURIComponent(bot.name)}`} name={bot.name} />
         </>
+    );
+}
+
+/** What the bot reads for the analysis board: how long and how many lines at most, whether during its own games, and whether it can read now. */
+function AnalyzerCard({ analyzer }: { analyzer: Analyzer }) {
+    const words = text.bot.analyzer;
+    return (
+        <section className="card" aria-labelledby="analyzer-title">
+            <h2 id="analyzer-title" className="card-title">
+                {words.title}
+            </h2>
+            <dl className="kv">
+                <dt>{words.time}</dt>
+                <dd>{words.timeValue(analyzer.maxSeconds)}</dd>
+                <dt>{words.lines}</dt>
+                <dd>{words.linesValue(analyzer.lines)}</dd>
+                <dt>{words.when}</dt>
+                <dd>{analyzer.whilePlaying ? words.whilePlaying : words.betweenGames}</dd>
+                <dt>{words.now}</dt>
+                <dd>{analyzer.ready ? words.ready : words.notReady}</dd>
+            </dl>
+            <p className="note">{words.note((board) => <Link to={analysisPagePath}>{board}</Link>)}</p>
+        </section>
     );
 }
 
