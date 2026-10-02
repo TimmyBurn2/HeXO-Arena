@@ -6,6 +6,7 @@ import {
     botGameSocketPath,
     htttxMoveRequestSchema,
     internalToWire,
+    nameAtLevel,
     openingPliesSchema,
     sessionHeartbeatMs,
     sessionTokenTtlMs,
@@ -26,6 +27,7 @@ import {
     type GameSnapshot,
     type LiveGameEntry,
     type OpeningPlies,
+    type SeatLevel,
     type SeatPlayer,
     type Side,
     type StreamEvent,
@@ -109,12 +111,13 @@ type Clock =
       };
 
 // A bot seat holds the engine-session machinery: one live session, one
-// short-lived token, one orphan countdown. A human seat holds nothing the
-// server drives.
+// short-lived token, one orphan countdown; and the level it plays at, null
+// at its default. A human seat holds nothing the server drives.
 interface BotSeat {
     readonly kind: `bot`;
     readonly botId: string;
     readonly name: string;
+    readonly level: SeatLevel | null;
     session: Session | null;
     sessionToken: SessionToken | null;
     orphanTimer: Timer | null;
@@ -236,7 +239,7 @@ function humanSeat(person: Person): HumanSeat {
 }
 
 function seatName(seat: Seat): string {
-    return seat.kind === `bot` ? seat.name : seat.person.name;
+    return seat.kind === `bot` ? nameAtLevel(seat.name, seat.level) : seat.person.name;
 }
 
 function seatNames(game: LiveGame): Record<Side, string> {
@@ -262,8 +265,8 @@ function storedSeatOf(record: GameRecord, viewer: Viewer): Side | undefined {
     }
 }
 
-function botSeat(bot: { id: string; name: string }): BotSeat {
-    return { kind: `bot`, botId: bot.id, name: bot.name, session: null, sessionToken: null, orphanTimer: null };
+function botSeat(bot: { id: string; name: string }, level: SeatLevel | null = null): BotSeat {
+    return { kind: `bot`, botId: bot.id, name: bot.name, level, session: null, sessionToken: null, orphanTimer: null };
 }
 
 // A human game seats its human on one side; bot-vs-bot games answer null.
@@ -273,9 +276,10 @@ function humanSide(game: LiveGame): { side: Side; seat: HumanSeat } | null {
     return null;
 }
 
-// A game against a guest rates nobody: neither the fold nor a recompute counts it.
-function isGuestGame(game: LiveGame): boolean {
-    return humanSide(game)?.seat.person.kind === `guest`;
+// A game against a guest rates nobody, nor does one against a bot at a
+// level other than its default: neither the fold nor a recompute counts it.
+function ratesNobody(game: LiveGame): boolean {
+    return humanSide(game)?.seat.person.kind === `guest` || [game.seats.x, game.seats.o].some((seat) => seat.kind === `bot` && seat.level !== null);
 }
 
 function secondsFromMs(ms: number): number {
@@ -443,12 +447,15 @@ export class GameRegistry {
         return count;
     }
 
+    /** A person's game against a bot, at the bot's `level`, absent for its default. */
     createGame(input: {
         person: Person;
         bot: { id: string; name: string };
+        level?: SeatLevel;
         timeControl: TimeControl;
         openingPlies: OpeningPlies;
     }): { gameId: string; snapshot: GameSnapshot } {
+        const level = input.level ?? null;
         const userSide: Side = this.#random() < 0.5 ? `x` : `o`;
         const { position, turns } = this.#placeOpening(input.openingPlies);
         const gameId = insertGame(this.#query, {
@@ -461,13 +468,14 @@ export class GameRegistry {
                 y: stone.y,
                 player: stone.player,
             })),
+            ...(level === null ? {} : { level }),
         });
         const game: LiveGame = {
             id: gameId,
             seats:
                 userSide === `x`
-                    ? { x: humanSeat(input.person), o: botSeat(input.bot) }
-                    : { x: botSeat(input.bot), o: humanSeat(input.person) },
+                    ? { x: humanSeat(input.person), o: botSeat(input.bot, level) }
+                    : { x: botSeat(input.bot, level), o: humanSeat(input.person) },
             timeControl: input.timeControl,
             openingPlies: input.openingPlies,
             position,
@@ -649,7 +657,7 @@ export class GameRegistry {
             players: this.#playersOf(game),
             timeControl: game.timeControl,
             toMove: sideToMove(game),
-            rated: !isGuestGame(game),
+            rated: !ratesNobody(game),
             cells: boardCells(game.position),
             clock: liveClockView(game),
         };
@@ -1094,6 +1102,7 @@ export class GameRegistry {
             // Bots anchor humans: a game against a person moves the bot's
             // rating never, only the person's.
             rated: humanSide(game) === null,
+            level: seat.level?.id ?? null,
             engine: {
                 socketUrl: botGameSocketPath.replace(`{gameId}`, game.id),
                 token: seat.sessionToken.token,
@@ -1196,8 +1205,12 @@ export class GameRegistry {
         };
     }
 
+    // A bot's rating belongs to its default level, so a seat at any other
+    // level shows none.
     #playerOf(seat: Seat): SeatPlayer {
-        if (seat.kind === `bot`) return streamPlayerOf(this.#query, { kind: `bot`, id: seat.botId }, seat.name);
+        if (seat.kind === `bot`) {
+            return seat.level === null ? streamPlayerOf(this.#query, { kind: `bot`, id: seat.botId }, seat.name) : { name: seat.name, rating: null, provisional: false };
+        }
         const person = seat.person;
         return person.kind === `guest`
             ? { name: person.name, rating: null, provisional: false }
@@ -1209,33 +1222,40 @@ export class GameRegistry {
     }
 
     #gamePlayerOf(seat: Seat): GamePlayer {
-        return { ...this.#playerOf(seat), kind: seat.kind === `bot` ? `bot` : seat.person.kind };
+        if (seat.kind === `human`) return { ...this.#playerOf(seat), kind: seat.person.kind };
+        return { ...this.#playerOf(seat), kind: `bot`, ...(seat.level === null ? {} : { level: seat.level }) };
     }
 
     #storedPlayers(record: GameRecord): GamePlayers {
-        const bot = (id: string, shown: ShownName): GamePlayer => ({
-            ...streamPlayerOf(this.#query, { kind: `bot`, id }, shown.name),
+        const bot = (id: string, shown: ShownName, level: SeatLevel | null): GamePlayer => ({
+            ...(level === null ? streamPlayerOf(this.#query, { kind: `bot`, id }, shown.name) : { name: shown.name, rating: null, provisional: false }),
             kind: `bot`,
             ...(shown.deleted === undefined ? {} : { deleted: shown.deleted }),
+            ...(level === null ? {} : { level }),
         });
         const seated = (side: Side, first: GamePlayer, second: GamePlayer): GamePlayers =>
             side === `x` ? { x: first, o: second } : { x: second, o: first };
+        const other = (side: Side): Side => (side === `x` ? `o` : `x`);
         if (record.kind === `bots`) {
             return seated(
                 record.challengerSide,
-                bot(record.challengerBotId, record.challenger),
-                bot(record.destBotId, record.dest),
+                bot(record.challengerBotId, record.challenger, record.levels[record.challengerSide]),
+                bot(record.destBotId, record.dest, record.levels[other(record.challengerSide)]),
             );
         }
         if (record.kind === `guest`) {
-            return seated(record.guestSide, { name: record.guestName, rating: null, provisional: false, kind: `guest` }, bot(record.botId, record.bot));
+            return seated(
+                record.guestSide,
+                { name: record.guestName, rating: null, provisional: false, kind: `guest` },
+                bot(record.botId, record.bot, record.levels[other(record.guestSide)]),
+            );
         }
         const user: GamePlayer = {
             ...streamPlayerOf(this.#query, { kind: `human`, id: record.userId }, record.user.name),
             kind: `user`,
             ...(record.user.deleted === undefined ? {} : { deleted: record.user.deleted }),
         };
-        return seated(record.userSide, user, bot(record.botId, record.bot));
+        return seated(record.userSide, user, bot(record.botId, record.bot, record.levels[other(record.userSide)]));
     }
 
     #seatsBot(game: LiveGame, botId: string): Side | null {

@@ -1,4 +1,4 @@
-import { botAccountPath, botListingSchema, botsPath } from '@hexo-arena/contract';
+import { botAccountPath, botListingSchema, botsPath, gamesPath } from '@hexo-arena/contract';
 import { existsSync, mkdtempSync, readFileSync, rmSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -7,6 +7,7 @@ import { z } from 'zod';
 import { createQuery } from '../../../apps/server/src/db';
 import { games } from '../../../apps/server/src/db/schema';
 import { createTestApp, loginAs, mintBot, type TestApp } from '../../../apps/server/test/helpers';
+import { devLevels } from '../src/levels';
 import { NotADevServer, saveTokens, startDevBots, type DevBots } from '../src/runner';
 
 // mulberry32, so a failing game replays move for move.
@@ -154,6 +155,27 @@ describe('the dev bot runner', () => {
         }
         expect(online).toContain(`hextide`);
         expect(online).not.toContain(`lantern`);
+    });
+
+    it('declares three strengths, and plays a game at the strength a person picks', async () => {
+        const booted = await boot(true);
+        await start();
+        const listing = botListingSchema.array().parse(await (await fetch(`${origin}${botsPath}`)).json());
+        for (const bot of listing) expect(bot.levels).toEqual(devLevels);
+        const quinn = await loginAs(booted.app, `quinn`);
+        let online: string[] = [];
+        while (!online.includes(`devbot-a`)) {
+            online = botListingSchema.array().parse(await (await fetch(`${origin}${botsPath}?online=1`)).json()).map((bot) => bot.name);
+            await new Promise((resolve) => setTimeout(resolve, 20));
+        }
+        const created = await booted.app.inject({
+            method: `POST`,
+            url: gamesPath,
+            cookies: { hexo_arena_session: quinn },
+            payload: { bot: `devbot-a`, timeControl: { mode: `unlimited` }, level: `quick` },
+        });
+        expect(created.statusCode).toBe(201);
+        await until(() => lines.some((line) => /^devbot-a plays quinn as [xo] in g_\S+ at quick$/u.test(line)), 5_000);
     });
 
     it('refuses a target without the dev login route and creates nothing', async () => {

@@ -209,6 +209,26 @@ describe('the og shell routes', () => {
         expect(stored.meta.ogDescription).toBe(`No winner; the game was aborted`);
     });
 
+    it('names a bot at a level other than its default by name and level, live and stored', async () => {
+        await openBot(`sealbot`);
+        arena.sqlite.prepare(`update bots set levels = ? where name = 'sealbot'`).run(JSON.stringify({ default: `b`, list: [{ id: `a`, label: `fast one` }, { id: `b`, label: `b` }] }));
+        const human = await loginAs(arena.app, `quinn`);
+        const created = await arena.app.inject({
+            method: `POST`,
+            url: gamesPath,
+            cookies: { hexo_arena_session: human },
+            payload: { bot: `sealbot`, timeControl: { mode: `turn`, turnTimeMs: 30_000 }, openingPlies: 1, level: `a` },
+        });
+        expect(created.statusCode).toBe(201);
+        const { gameId } = gameSnapshotSchema.parse(created.json());
+        const live = await shell(`/game/${gameId}`);
+        expect(live.meta.ogTitle).toMatch(/^(sealbot @ fast one vs quinn|quinn vs sealbot @ fast one) - HeXO Arena$/);
+        await arena.app.inject({ method: `POST`, url: `/api/games/${gameId}/resign`, cookies: { hexo_arena_session: human } });
+        const stored = await shell(`/game/${gameId}`);
+        expect(stored.meta.ogTitle).toBe(live.meta.ogTitle);
+        expect(stored.meta.ogDescription).toBe(`sealbot @ fast one won; quinn resigned`);
+    });
+
     it('previews a stored bot-vs-bot result and answers 404 for an unknown game', async () => {
         await openBot(`alpha`);
         await openBot(`beta`);

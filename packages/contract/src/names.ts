@@ -1,5 +1,25 @@
 import { z } from 'zod';
 
+/** Control characters, and the marks that reorder text around them: never shown back as a player wrote them. */
+export const controlOrBidiPattern = /[\p{Cc}\u061c\u200e\u200f\u202a-\u202e\u2066-\u2069]/u;
+
+// Control characters (Cc) and format characters (Cf): bidirectional marks,
+// zero-width spaces and joiners, soft hyphens, the byte order mark.
+const hiddenCharacters = /[\p{Cc}\p{Cf}]/gu;
+const breakOrTab = /[\t\n\v\f\r\u0085]/u;
+
+/**
+ * Text as the site stores and shows it, whatever the sender wrote: a line
+ * break or tab becomes a space, every other control or format character
+ * goes, whitespace runs collapse to one space, and the ends are trimmed.
+ */
+export function cleanText(text: string): string {
+    return text
+        .replace(hiddenCharacters, (character) => (breakOrTab.test(character) ? ` ` : ``))
+        .replace(/\s+/gu, ` `)
+        .trim();
+}
+
 /** The fewest characters a name may have: its two anchors. */
 export const nameMinLength = 2;
 

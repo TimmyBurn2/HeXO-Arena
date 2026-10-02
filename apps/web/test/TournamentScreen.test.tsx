@@ -75,9 +75,9 @@ const finished: TournamentDetail = {
 
 const ana = { kind: `user`, name: `ana`, rating: 1503, provisional: false, discord: null, liveGames: [] };
 const anaBots = [
-    { name: `hextide`, ownerName: `ana`, online: true, openForChallenges: true, rating: 1690, provisional: false, liveGames: 0 },
-    { name: `pebble`, ownerName: `ana`, online: true, openForChallenges: true, rating: 1400, provisional: true, liveGames: 0 },
-    { name: `quietlake`, ownerName: `dmitri`, online: false, openForChallenges: false, rating: 1123, provisional: true, liveGames: 0 },
+    { name: `hextide`, ownerName: `ana`, online: true, openForChallenges: true, rating: 1690, provisional: false, liveGames: 0, levels: null },
+    { name: `pebble`, ownerName: `ana`, online: true, openForChallenges: true, rating: 1400, provisional: true, liveGames: 0, levels: null },
+    { name: `quietlake`, ownerName: `dmitri`, online: false, openForChallenges: false, rating: 1123, provisional: true, liveGames: 0, levels: null },
 ];
 
 interface Call {

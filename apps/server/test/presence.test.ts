@@ -12,6 +12,7 @@ const gameStart = (gameId: string): StreamEvent => ({
     timeControl: { mode: `unlimited` },
     openingPlies: 5,
     rated: false,
+    level: null,
     engine: { socketUrl: `/api/bot/game/${gameId}/socket`, token: `hgs_token` },
 });
 

@@ -19,6 +19,11 @@
         font-weight: var(--weight-strong);
     }
 
+    /* The practice tag follows the title; the hide button keeps the far edge. */
+    .rundown-practice {
+        margin-right: auto;
+    }
+
     .rundown-hide {
         display: grid;
         flex: none;
@@ -75,11 +80,20 @@
     }
 
     .rundown-name .badge-bot {
+        flex: none;
         margin-left: 0;
     }
 
     .rundown-side > .tag {
         justify-self: start;
+    }
+
+    .rundown-level {
+        color: var(--c-text-dim);
+    }
+
+    .rundown-at {
+        white-space: nowrap;
     }
 
     .rundown-figures,

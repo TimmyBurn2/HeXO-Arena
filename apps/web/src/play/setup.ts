@@ -7,6 +7,7 @@ import {
     openingPliesSchema,
     type Accepts,
     type BotListing,
+    type Level,
     type OpeningPlies,
     type TimeControl,
 } from '@hexo-arena/contract';
@@ -174,17 +175,33 @@ export function clockFromParam(param: string | null): TimeControl | null {
     return null;
 }
 
+/** A strength the person picked, by the bot it was picked for and the level's id. */
+export interface PickedLevel {
+    readonly bot: string;
+    readonly id: string;
+}
+
+/**
+ * The level a game against the bot plays at: the one picked for this bot,
+ * if it still declares it and it is not its default; null for the default.
+ */
+export function levelFor(bot: BotListing, picked: PickedLevel | null): Level | null {
+    if (picked === null || bot.levels === null || nameKeyOf(picked.bot) !== nameKeyOf(bot.name) || picked.id === bot.levels.default) return null;
+    return bot.levels.list.find((level) => level.id === picked.id) ?? null;
+}
+
 /** The opening an address names, or the default. */
 export function openingFromParam(param: string | null): OpeningPlies {
     const parsed = openingPliesSchema.safeParse(param === null ? undefined : Number(param));
     return parsed.success ? parsed.data : defaultHumanOpeningPlies;
 }
 
-/** The setup as the page's address carries it, so a sign-in returns to it and a link shares it. */
-export function playPath(bot: string | null, clock: TimeControl | null, opening: OpeningPlies): string {
+/** The setup as the page's address carries it, so a sign-in returns to it and a link shares it; a level but the default included. */
+export function playPath(bot: string | null, clock: TimeControl | null, opening: OpeningPlies, level: Level | null = null): string {
     const params = new URLSearchParams();
     if (bot !== null) params.set(`bot`, bot);
     if (clock !== null) params.set(`clock`, clockParam(clock));
+    if (level !== null) params.set(`level`, level.id);
     if (opening !== defaultHumanOpeningPlies) params.set(`opening`, String(opening));
     const query = params.toString();
     return query === `` ? `/play` : `/play?${query}`;

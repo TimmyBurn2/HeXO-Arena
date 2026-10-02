@@ -1,5 +1,5 @@
 import { Fragment, useCallback } from 'react';
-import { botMeta, nameKeyOf, notFoundMeta, type BotListing, type LiveGameEntry } from '@hexo-arena/contract';
+import { botMeta, levelFacts, nameKeyOf, notFoundMeta, type BotListing, type Levels, type LiveGameEntry } from '@hexo-arena/contract';
 import { fetchBots } from '../api/client';
 import { useAsync } from '../api/use-async';
 import { OwnerPanel } from '../components/OwnerPanel';
@@ -138,6 +138,7 @@ function BotProfile({ bot }: { bot: BotListing }) {
                         </dl>
                     )}
                 </section>
+                {bot.levels === null ? null : <StrengthCard levels={bot.levels} />}
                 {bot.version !== undefined || (bot.repoUrl !== undefined && bot.repoUrl !== ``) ? (
                     <section className="card" aria-labelledby="build-title">
                         <h2 id="build-title" className="card-title">
@@ -185,6 +186,33 @@ function BotProfile({ bot }: { bot: BotListing }) {
             {owned ? <OwnerPanel bot={bot.name} /> : null}
             <ReportLine subject={`/bots/${encodeURIComponent(bot.name)}`} name={bot.name} />
         </>
+    );
+}
+
+/** The strengths a person may pick, weakest first, the rated one tagged, each with what it spends a turn as the bot states it. */
+function StrengthCard({ levels }: { levels: Levels }) {
+    return (
+        <section className="card" aria-labelledby="strength-title">
+            <h2 id="strength-title" className="card-title">
+                {text.bot.strength}
+            </h2>
+            <ol className="strength-list">
+                {levels.list.map((level) => {
+                    const facts = levelFacts(level);
+                    return (
+                        <li key={level.id}>
+                            <p className="strength-name">
+                                <span>{level.label}</span>
+                                {level.id === levels.default ? <span className="tag">{text.bot.strengthRated}</span> : null}
+                            </p>
+                            {facts === `` ? null : <p className="note">{facts}</p>}
+                            {level.about === undefined ? null : <p className="note">{level.about}</p>}
+                        </li>
+                    );
+                })}
+            </ol>
+            <p className="note">{text.bot.strengthNote}</p>
+        </section>
     );
 }
 

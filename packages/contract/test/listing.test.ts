@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { botConcurrentGameCap, botListingSchema, humanSeedRating } from '../src/index';
 
-const listing = { name: `sealbot`, ownerName: `quinn`, online: true, openForChallenges: true, rating: 1712, provisional: false };
+const listing = { name: `sealbot`, ownerName: `quinn`, online: true, openForChallenges: true, rating: 1712, provisional: false, levels: null };
 
 describe('botListingSchema', () => {
     it(`carries the bot's live games, from none to its cap of ${String(botConcurrentGameCap)}`, () => {
@@ -12,6 +12,14 @@ describe('botListingSchema', () => {
             expect(botListingSchema.safeParse({ ...listing, liveGames }).success).toBe(false);
         }
         expect(botListingSchema.safeParse(listing).success).toBe(false);
+    });
+
+    it(`carries the bot's levels, null until it declares them`, () => {
+        const levels = { default: `b`, list: [{ id: `a`, label: `a` }, { id: `b`, label: `b` }] };
+        expect(botListingSchema.parse({ ...listing, liveGames: 0, levels }).levels).toEqual(levels);
+        expect(botListingSchema.parse({ ...listing, liveGames: 0 }).levels).toBeNull();
+        const { levels: _omitted, ...withoutLevels } = listing;
+        expect(botListingSchema.safeParse({ ...withoutLevels, liveGames: 0 }).success).toBe(false);
     });
 });
 

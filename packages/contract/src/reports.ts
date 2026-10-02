@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { controlOrBidiPattern } from './api';
+import { controlOrBidiPattern } from './names';
 import { pageTitle, siteName, type PageMeta } from './meta';
 
 export const reportsPath = `/api/reports`;

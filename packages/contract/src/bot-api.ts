@@ -154,6 +154,7 @@ export const streamExamples: readonly StreamEvent[] = [
         timeControl: { mode: `turn`, turnTimeMs: 45_000 },
         openingPlies: 5,
         rated: true,
+        level: null,
         engine: { socketUrl: `/api/bot/game/g_7Qm2Kx/socket`, token: `hgs_3nV8qLw0cR` },
     },
     {

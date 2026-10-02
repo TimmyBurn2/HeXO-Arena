@@ -1,7 +1,7 @@
 import { useId, type ReactNode } from 'react';
-import { expectedScore, type GamePlayer, type GamePlayers, type Side } from '@hexo-arena/contract';
+import { atLevel, expectedScore, levelFacts, type GamePlayer, type GamePlayers, type Side } from '@hexo-arena/contract';
 import { cellPoints, cellSize, hexPoints } from '../board/geometry';
-import { BotBadge, Rating, Swatch } from '../components/player';
+import { BotBadge, Rating, seatsRateNobody, Swatch } from '../components/player';
 import { text } from '../text';
 import type { FormResult, RundownSide, RundownSides } from './rundown';
 import './Rundown.css';
@@ -14,7 +14,10 @@ const glyphBox = `${String(-halfWidth)} ${String(-cellSize)} ${String(2 * halfWi
  * The pre-game rundown: each player's rating and deviation, their
  * expected score from the rating fold's own function, and their last
  * results, with the two players' meetings under them.
- * A guest's game is unrated, so it shows no expected score on either side.
+ * A guest's game is unrated, so it shows no expected score on either side;
+ * nor does a game against a bot at a level other than its default, which
+ * says it is practice, and that bot's seat shows its level, since its
+ * rating belongs to its default.
  */
 export function Rundown({ players, data, meetings, onHide }: {
     players: GamePlayers;
@@ -26,13 +29,15 @@ export function Rundown({ players, data, meetings, onHide }: {
     onHide?: () => void;
 }) {
     const titleId = useId();
-    const rated = players.x.kind !== `guest` && players.o.kind !== `guest`;
+    const rated = !seatsRateNobody(players);
+    const practice = [players.x, players.o].some((player) => player.level !== undefined);
     return (
         <section className="rundown" aria-labelledby={titleId}>
             <div className="rundown-head">
                 <h2 id={titleId} className="rundown-title">
                     {text.rundown.title}
                 </h2>
+                {practice ? <span className="tag muted rundown-practice">{text.rundown.practice}</span> : null}
                 {onHide === undefined ? null : (
                     <button type="button" className="rundown-hide" aria-label={text.rundown.hide} onClick={onHide}>
                         <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -56,15 +61,27 @@ export function Rundown({ players, data, meetings, onHide }: {
 }
 
 function SideFacts({ side, player, own, expected }: { side: Side; player: GamePlayer; own: RundownSide | null; expected: number | null }) {
-    const rating = own?.record.rating ?? player.rating;
+    const leveled = player.level !== undefined;
+    const rating = leveled ? null : (own?.record.rating ?? player.rating);
     const provisional = own?.record.provisional ?? player.provisional;
+    const facts = player.level === undefined ? `` : levelFacts(player.level);
     return (
         <div className="rundown-side">
             <p className="rundown-name">
                 <Swatch side={side} />
-                <span>{player.name}</span>
+                {/* The level holds together, so a narrow column breaks the line before the @. */}
+                <span>
+                    {player.name}
+                    {player.level === undefined ? null : (
+                        <>
+                            {` `}
+                            <span className="rundown-at">{atLevel(player.level)}</span>
+                        </>
+                    )}
+                </span>
                 {player.kind === `bot` ? <BotBadge /> : null}
             </p>
+            {facts === `` ? null : <p className="rundown-level">{facts}</p>}
             {rating === null ? (
                 <span className="tag muted">{text.game.unrated}</span>
             ) : (

@@ -25,8 +25,8 @@ afterEach(() => {
 });
 
 const roster = [
-    { name: `sealbot`, ownerName: `quinn`, online: true, openForChallenges: true, rating: 1712, provisional: false, liveGames: 0, accepts: { turnMs: [5000, 60000], match: true, unlimited: true } },
-    { name: `hextide`, ownerName: `ana`, online: false, openForChallenges: false, rating: 1690, provisional: false, liveGames: 0 },
+    { name: `sealbot`, ownerName: `quinn`, online: true, openForChallenges: true, rating: 1712, provisional: false, liveGames: 0, levels: null, accepts: { turnMs: [5000, 60000], match: true, unlimited: true } },
+    { name: `hextide`, ownerName: `ana`, online: false, openForChallenges: false, rating: 1690, provisional: false, liveGames: 0, levels: null },
 ];
 
 // The board answers by its query, the roster and the session by path.
@@ -159,8 +159,8 @@ describe('LadderScreen', () => {
                         JSON.stringify(
                             url.startsWith(`/api/bots`)
                                 ? [
-                                      { name: `sealbot`, ownerName: `quinn`, online: true, openForChallenges: true, rating: 1712, provisional: false, liveGames: 0 },
-                                      { name: `hextide`, ownerName: `ana`, online: true, openForChallenges: false, rating: 1690, provisional: false, liveGames: 0 },
+                                      { name: `sealbot`, ownerName: `quinn`, online: true, openForChallenges: true, rating: 1712, provisional: false, liveGames: 0, levels: null },
+                                      { name: `hextide`, ownerName: `ana`, online: true, openForChallenges: false, rating: 1690, provisional: false, liveGames: 0, levels: null },
                                   ]
                                 : board,
                         ),

@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { acceptsSchema } from './api';
 import { axialCoordSchema } from './board';
 import { gameCellSchema } from './games';
+import { levelsSchema, seatLevelSchema } from './levels';
 import { nameMaxLength } from './names';
 import { finishReasonSchema, firstPlayerSchema, openingPliesSchema, sideSchema, timeControlSchema, challengeStatusSchema } from './stream';
 import { tournamentEntryReasonSchema, tournamentEntryStateSchema } from './tournaments';
@@ -32,6 +33,7 @@ const exportedSeatSchema = z
         name: z.string(),
         kind: z.enum([`bot`, `user`, `guest`]),
         yours: z.boolean().meta({ description: `True for the account itself and for its own bots.` }),
+        level: seatLevelSchema.optional(),
     })
     .meta({ id: `ExportedSeat` });
 
@@ -73,6 +75,7 @@ export const accountExportSchema = z
                 version: z.string().nullable(),
                 repoUrl: z.string().nullable(),
                 accepts: acceptsSchema.nullable(),
+                levels: levelsSchema.nullable(),
                 delistedAt: time.nullable(),
                 deletedAt: time.nullable(),
                 rating: exportedRatingSchema.nullable(),

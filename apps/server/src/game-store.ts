@@ -1,10 +1,13 @@
 import {
     boardCellSchema,
+    nameAtLevel,
+    seatLevelSchema,
     timeControlSchema,
     turnsOnBoard,
     type FinishReason,
     type GameHeadline,
     type GameTournament,
+    type SeatLevel,
     type Side,
     type TimeControl,
 } from '@hexo-arena/contract';
@@ -14,7 +17,7 @@ import { replay, type Coord, type Position } from '@hexo-arena/rules';
 import { nowSeconds, type Query } from './db';
 import { alias } from 'drizzle-orm/sqlite-core';
 import { bots, games, moves, tournamentPairings, tournaments, users } from './db/schema';
-import { applyFinishedGame, countedGameOf, seatColumns } from './rating-store';
+import { applyFinishedGame, countedGameOf, ratesSomebody, seatColumns } from './rating-store';
 import { shownBot, shownUser, type ShownName } from './shown-names';
 
 // The position a game starts from: the origin stone plus the server-placed
@@ -29,6 +32,9 @@ export interface StoredMove {
     readonly cells: readonly [Coord, Coord];
 }
 
+/** Each side's level, null at the bot's default and on a person's seat. */
+export type SeatLevels = Readonly<Record<Side, SeatLevel | null>>;
+
 export interface HumanGameRecord {
     readonly kind: `human`;
     readonly id: string;
@@ -39,6 +45,7 @@ export interface HumanGameRecord {
     readonly userSide: Side;
     readonly timeControl: TimeControl;
     readonly opening: readonly OpeningCell[];
+    readonly levels: SeatLevels;
     readonly winner: Side | null;
     readonly finishReason: FinishReason | null;
     readonly voided: boolean;
@@ -55,6 +62,7 @@ export interface GuestGameRecord {
     readonly createdAt: number;
     readonly timeControl: TimeControl;
     readonly opening: readonly OpeningCell[];
+    readonly levels: SeatLevels;
     readonly winner: Side | null;
     readonly finishReason: FinishReason | null;
     readonly voided: boolean;
@@ -70,6 +78,7 @@ export interface BotGameRecord {
     readonly challengerSide: Side;
     readonly timeControl: TimeControl;
     readonly opening: readonly OpeningCell[];
+    readonly levels: SeatLevels;
     readonly winner: Side | null;
     readonly finishReason: FinishReason | null;
     readonly voided: boolean;
@@ -77,7 +86,10 @@ export interface BotGameRecord {
 
 export type GameRecord = HumanGameRecord | GuestGameRecord | BotGameRecord;
 
-/** A game a person plays against a bot: a user by id, a guest by its label alone. */
+/**
+ * A game a person plays against a bot: a user by id, a guest by its label
+ * alone; `level` is the bot's, absent at its default.
+ */
 export function insertGame(
     query: Query,
     game: ({ userId: string } | { guestName: string }) & {
@@ -85,15 +97,18 @@ export function insertGame(
         userSide: Side;
         timeControl: TimeControl;
         opening: readonly OpeningCell[];
+        level?: SeatLevel;
     },
 ): string {
     const id = `g_${randomUUID()}`;
+    const level = game.level === undefined ? null : JSON.stringify(game.level);
     query.insert(games)
         .values({
             id,
             ...(`userId` in game ? { userId: game.userId } : { guestName: game.guestName }),
             botId: game.botId,
             userSide: game.userSide,
+            ...(game.userSide === `x` ? { oLevel: level } : { xLevel: level }),
             timeControl: JSON.stringify(game.timeControl),
             openingCells: JSON.stringify(game.opening),
             createdAt: nowSeconds(),
@@ -162,11 +177,12 @@ export function recordFinish(
             .update(games)
             .set({ winner: finish.winner, finishReason: finish.reason, finishedAt: nowSeconds(), finishSeq: nextFinishSeq })
             .where(and(eq(games.id, gameId), isNull(games.finishedAt)))
-            .returning({ ...seatColumns, voidedAt: games.voidedAt, guestName: games.guestName })
+            .returning({ ...seatColumns, voidedAt: games.voidedAt, guestName: games.guestName, xLevel: games.xLevel, oLevel: games.oLevel })
             .all();
         // A game voided while live finishes on the record but never rates,
-        // and a guest's game rates nobody, the bot included.
-        if (finished?.finishSeq != null && finished.guestName === null) applyFinishedGame(tx, gameId, finished.finishSeq, countedGameOf(finished));
+        // and a guest's game, or one against a bot at a level other than its
+        // default, rates nobody.
+        if (finished?.finishSeq != null && ratesSomebody(finished)) applyFinishedGame(tx, gameId, finished.finishSeq, countedGameOf(finished));
         return { voided: finished?.voidedAt != null };
     });
 }
@@ -182,6 +198,12 @@ export function abortUnfinishedGames(query: Query): void {
 
 const challengerBots = alias(bots, `challenger_bot`);
 const destBots = alias(bots, `dest_bot`);
+
+/** A stored game's seat levels; written through the schema that reads them back. */
+export function seatLevelsOf(row: { xLevel: string | null; oLevel: string | null }): SeatLevels {
+    const read = (stored: string | null) => (stored === null ? null : seatLevelSchema.parse(JSON.parse(stored)));
+    return { x: read(row.xLevel), o: read(row.oLevel) };
+}
 
 export function findGame(query: Query, gameId: string): GameRecord | undefined {
     const row = query
@@ -203,6 +225,8 @@ export function findGame(query: Query, gameId: string): GameRecord | undefined {
             destName: destBots.name,
             destDeletedAt: destBots.deletedAt,
             challengerSide: games.challengerSide,
+            xLevel: games.xLevel,
+            oLevel: games.oLevel,
             timeControl: games.timeControl,
             openingCells: games.openingCells,
             winner: games.winner,
@@ -222,6 +246,7 @@ export function findGame(query: Query, gameId: string): GameRecord | undefined {
     // failure means the store itself is broken.
     const timeControl = timeControlSchema.parse(JSON.parse(row.timeControl));
     const opening = boardCellSchema.array().parse(JSON.parse(row.openingCells));
+    const levels = seatLevelsOf(row);
     const winner = (row.winner as Side | null) ?? null;
     const finishReason = (row.finishReason as FinishReason | null) ?? null;
     if (
@@ -242,6 +267,7 @@ export function findGame(query: Query, gameId: string): GameRecord | undefined {
             userSide: row.userSide as Side,
             timeControl,
             opening,
+            levels,
             winner,
             finishReason,
             voided,
@@ -259,6 +285,7 @@ export function findGame(query: Query, gameId: string): GameRecord | undefined {
             createdAt: row.createdAt,
             timeControl,
             opening,
+            levels,
             winner,
             finishReason,
             voided,
@@ -282,6 +309,7 @@ export function findGame(query: Query, gameId: string): GameRecord | undefined {
             challengerSide: row.challengerSide as Side,
             timeControl,
             opening,
+            levels,
             winner,
             finishReason,
             voided,
@@ -306,6 +334,8 @@ export function findFinishedHeadline(query: Query, gameId: string): GameHeadline
             destName: destBots.name,
             destDeletedAt: destBots.deletedAt,
             challengerSide: games.challengerSide,
+            xLevel: games.xLevel,
+            oLevel: games.oLevel,
             winner: games.winner,
             finishReason: games.finishReason,
             openingCells: games.openingCells,
@@ -334,9 +364,10 @@ export function findFinishedHeadline(query: Query, gameId: string): GameHeadline
                 )
               : undefined;
     if (names === undefined) throw new Error(`stored game row seats nobody: ${gameId}`);
+    const levels = seatLevelsOf(row);
     return {
         status: `finished`,
-        names,
+        names: { x: nameAtLevel(names.x, levels.x), o: nameAtLevel(names.o, levels.o) },
         winner: (row.winner as Side | null) ?? null,
         reason: row.finishReason as FinishReason,
         turns: turnsOnBoard(boardCellSchema.array().parse(JSON.parse(row.openingCells)).length) + row.moves,
@@ -357,12 +388,13 @@ export function lastHumanGameCreatedAt(query: Query, userId: string): number | n
 }
 
 // A signed-in human's games against one bot since an epoch second, which
-// the daily pair cap counts as it counts two bots'.
+// the daily pair cap counts as it counts two bots'; a game at a level
+// other than the bot's default rates nobody, so it counts toward no cap.
 export function countHumanPairGamesSince(query: Query, pair: { userId: string; botId: string }, sinceSeconds: number): number {
     const [row] = query
         .select({ n: count() })
         .from(games)
-        .where(and(eq(games.userId, pair.userId), eq(games.botId, pair.botId), gte(games.createdAt, sinceSeconds)))
+        .where(and(eq(games.userId, pair.userId), eq(games.botId, pair.botId), gte(games.createdAt, sinceSeconds), isNull(games.xLevel), isNull(games.oLevel)))
         .all();
     return row?.n ?? 0;
 }

@@ -78,6 +78,31 @@
         gap: var(--space-3);
     }
 
+    .strength-list {
+        display: grid;
+        gap: var(--space-3);
+        margin: 0 0 var(--space-3);
+        padding: 0;
+        list-style: none;
+    }
+
+    .strength-list p {
+        margin: 0;
+    }
+
+    .strength-list + .note {
+        margin: 0;
+    }
+
+    .strength-name {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: var(--space-2);
+        font-weight: var(--weight-strong);
+        overflow-wrap: anywhere;
+    }
+
     .play-row {
         margin-top: var(--space-5);
     }

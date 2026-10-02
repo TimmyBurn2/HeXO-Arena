@@ -2,6 +2,7 @@ import { useMemo } from 'react';
 import { Board, type BoardStone } from '../board/Board';
 import { defaultBoardSettings } from '../board/board-settings';
 import { stonesFrame } from '../board/geometry';
+import { seatName } from '../components/player';
 import { text } from '../text';
 import type { LiveView } from './use-live-replay';
 import './MiniBoard.css';
@@ -30,7 +31,7 @@ export function MiniBoard({ game }: { game: LiveView }) {
             <Board
                 stones={stones}
                 settings={miniSettings}
-                label={text.live.board(x.name, o.name, entry.players[toMove].name)}
+                label={text.live.board(seatName(x), seatName(o), seatName(entry.players[toMove]))}
                 overlays={{ lastMove: stones.slice(stones.length % 2 === 0 ? -1 : -2) }}
                 frame={frame}
             />

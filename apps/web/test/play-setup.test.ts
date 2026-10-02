@@ -5,6 +5,7 @@ import {
     clockFor,
     clockFromParam,
     clockParam,
+    levelFor,
     openingFromParam,
     playPath,
     playStorageKey,
@@ -26,6 +27,7 @@ const bot = (name: string, rating: number, extra: Partial<BotListing> = {}): Bot
     rating,
     provisional: false,
     liveGames: 0,
+    levels: null,
     accepts: full,
     ...extra,
 });
@@ -160,5 +162,27 @@ describe('what this browser remembers', () => {
         expect(readPlayed()).toEqual({ opponent: `hextide`, clock: { mode: `turn`, turnTimeMs: 20_000 } });
         window.localStorage.setItem(playStorageKey, `{not json`);
         expect(readPlayed()).toEqual({ opponent: null, clock: null });
+    });
+});
+
+describe('levelFor', () => {
+    const levels = { default: `b`, list: [{ id: `a`, label: `weak` }, { id: `b`, label: `strong` }] };
+    const leveled = bot(`hextide`, 1690, { levels });
+
+    it('answers the picked level of the bot it was picked for, and null for the default', () => {
+        expect(levelFor(leveled, { bot: `HEXTIDE`, id: `a` })).toEqual({ id: `a`, label: `weak` });
+        expect(levelFor(leveled, { bot: `hextide`, id: `b` })).toBe(null);
+        expect(levelFor(leveled, null)).toBe(null);
+    });
+
+    it('answers null for another bot\'s pick, an id the bot no longer declares, and a bot without levels', () => {
+        expect(levelFor(leveled, { bot: `sealbot`, id: `a` })).toBe(null);
+        expect(levelFor(leveled, { bot: `hextide`, id: `gone` })).toBe(null);
+        expect(levelFor(bot(`plain`, 1500), { bot: `plain`, id: `a` })).toBe(null);
+    });
+
+    it('writes a level other than the default into the address after the clock', () => {
+        expect(playPath(`hextide`, presets[0].clock, 3, { id: `a`, label: `weak` })).toBe(`/play?bot=hextide&clock=t10&level=a&opening=3`);
+        expect(playPath(`hextide`, presets[0].clock, 1, null)).toBe(`/play?bot=hextide&clock=t10`);
     });
 });

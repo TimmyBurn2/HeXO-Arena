@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
-import { clockText, type GameSnapshot, type Side } from '@hexo-arena/contract';
-import { BotBadge, Rating, Swatch } from '../components/player';
+import { atLevel, clockText, type GameSnapshot, type Side } from '@hexo-arena/contract';
+import { BotBadge, Rating, seatLevelFacts, seatName, Swatch } from '../components/player';
 import { WaitText } from '../components/wait';
 import { selfName, type MeState } from '../me';
 import { Link } from '../router/Link';
@@ -36,8 +36,9 @@ function Chip({ className, children }: { className: string; children: ReactNode 
 }
 
 /**
- * One seat as a chip: swatch, name with its BOT badge, rating or the
- * unrated tag of a guest, and its clock.
+ * One seat as a chip: swatch, name with its BOT badge, then any level, whose
+ * budget is its title, and the rating or the unrated tag of a guest or a
+ * bot at a level, and its clock.
  * The top chip also carries the exit and, while running, the clock mode.
  */
 export function SeatChip({ snapshot, side, corner }: { snapshot: GameSnapshot; side: Side; corner: `top` | `bottom` }) {
@@ -58,7 +59,13 @@ export function SeatChip({ snapshot, side, corner }: { snapshot: GameSnapshot; s
                     <span className={player.deleted === true ? `deleted-name` : undefined}>{player.name}</span>
                     {player.kind === `bot` ? <BotBadge /> : null}
                 </span>
+                {/* The level sits on the second line, so the name keeps the first whole beside the clock. */}
                 <span className="hud-meta">
+                    {player.level === undefined ? null : (
+                        <span className="hud-level" title={seatLevelFacts(player)}>
+                            {atLevel(player.level)}
+                        </span>
+                    )}
                     {player.rating === null ? (
                         <span className="tag muted">{text.game.unrated}</span>
                     ) : (
@@ -66,7 +73,7 @@ export function SeatChip({ snapshot, side, corner }: { snapshot: GameSnapshot; s
                             <Rating value={player.rating} provisional={player.provisional} />
                         </span>
                     )}
-                    {top && snapshot.status === `in-progress` ? <span>{clockText(snapshot.clock.mode)}</span> : null}
+                    {top && snapshot.status === `in-progress` ? <span className="hud-mode">{clockText(snapshot.clock.mode)}</span> : null}
                 </span>
             </span>
             {clockOf(snapshot, side)}
@@ -161,7 +168,7 @@ export function TurnChip({ snapshot, you, status, link, replay }: {
                 <span className="hud-replay-line">
                     <span className="tag muted">{text.game.watching}</span>
                     <span className="hud-turn" role="status">
-                        {text.game.thinking(snapshot.players[snapshot.toMove].name)}
+                        {text.game.thinking(seatName(snapshot.players[snapshot.toMove]))}
                     </span>
                     <LiveSwitch replay={replay} />
                 </span>
@@ -173,7 +180,7 @@ export function TurnChip({ snapshot, you, status, link, replay }: {
             <Chip className="hud-bottom-center">
                 {you === null ? <span className="tag muted">{text.game.watching}</span> : null}
                 <span className="hud-turn" role="status">
-                    {text.game.thinking(snapshot.players[snapshot.toMove].name)}
+                    {text.game.thinking(seatName(snapshot.players[snapshot.toMove]))}
                 </span>
             </Chip>
         );

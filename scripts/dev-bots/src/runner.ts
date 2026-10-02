@@ -5,6 +5,7 @@ import { dirname } from 'node:path';
 import { z } from 'zod';
 import { ApiError, ArenaClient } from './client';
 import { hostBots, message, type HostedBot } from './host';
+import { devLevels } from './levels';
 import { personaBots } from './personas';
 
 // The play dialog spans its turn slider over this window, so it stays in
@@ -90,7 +91,7 @@ export async function startDevBots(options: DevBotsOptions): Promise<DevBots> {
             throw error;
         }
         const token = await client.claimBot(cookie, name);
-        await client.declare(token, { accepts: devAccepts, about });
+        await client.declare(token, { accepts: devAccepts, about, levels: devLevels });
         return token;
     }
 
@@ -100,7 +101,7 @@ export async function startDevBots(options: DevBotsOptions): Promise<DevBots> {
         owners.set(name, `devowner-${seat}`);
         const token = await claim(`devowner-${seat}`, name);
         tokens.set(name, token);
-        devBots.push({ name, strategy: `random`, token });
+        devBots.push({ name, strategy: `random`, levels: devLevels, token });
     }
     saveTokens(options.tokenFile, tokens);
 

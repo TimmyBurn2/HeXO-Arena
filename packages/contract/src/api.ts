@@ -1,7 +1,8 @@
 import { z } from 'zod';
 import { botConcurrentGameCap, humanConcurrentGameCap, liveGameEntrySchema } from './games';
 import { provisionalSchema, ratingSchema } from './leaderboard';
-import { nameSyntaxSchema } from './names';
+import { levelsSchema } from './levels';
+import { cleanText, nameSyntaxSchema } from './names';
 import { discordNamesSchema, nextPathSchema } from './sign-in';
 
 export const devLoginPath = `/api/dev/login`;
@@ -166,8 +167,9 @@ export const botListingSchema = z
         version: botVersionSchema.optional(),
         repoUrl: botRepoUrlSchema.optional(),
         accepts: acceptsSchema.optional(),
+        levels: levelsSchema.nullable(),
     })
-    .meta({ id: `BotListing`, description: `The declaration fields are absent until the bot declares them.` });
+    .meta({ id: `BotListing`, description: `The declaration fields are absent until the bot declares them, and levels is null.` });
 export type BotListing = z.infer<typeof botListingSchema>;
 
 // The Hexo-Bot-Api error shape: `error` is human-readable prose, `code` is
@@ -180,25 +182,30 @@ export const botCreateErrorCodes = [
     `name_taken`,
 ] as const;
 
-/** Control characters, and the marks that reorder text around them: never shown back as a player wrote them. */
-export const controlOrBidiPattern = /[\p{Cc}\u061c\u200e\u200f\u202a-\u202e\u2066-\u2069]/u;
-
-// A declaration is shown on the bot's pages as written, so it refuses what
-// would hide or reorder the text around it. A refinement publishes no
-// pattern, and a value stored before it still reads back.
-const shownAsWritten = { check: (text: string) => !controlOrBidiPattern.test(text), message: `control and bidirectional characters are refused` };
+// A declaration is shown on the bot's pages, so its text is cleaned rather
+// than refused: a bot written against an earlier contract keeps declaring,
+// and nothing that hides or reorders the text around it is ever stored.
+// The cap counts the cleaned text.
+const cleanedTo = (capped: z.ZodString) => z.string().transform(cleanText).pipe(capped);
 
 // The self-declaration the token-holding process sends; every field
 // optional, each present field replacing the stored one. Strict, so a
 // typo'd key answers 400 instead of silently declaring nothing.
 export const accountDeclarationSchema = z
     .strictObject({
-        about: botAboutSchema.refine(shownAsWritten.check, shownAsWritten.message).optional(),
-        version: botVersionSchema.refine(shownAsWritten.check, shownAsWritten.message).optional(),
+        about: cleanedTo(botAboutSchema).optional().meta({ description: `At most 280 characters once cleaned; empty clears it.` }),
+        version: cleanedTo(botVersionSchema).optional().meta({ description: `At most 64 characters once cleaned; empty clears it.` }),
         repoUrl: botRepoUrlSchema.optional(),
         accepts: acceptsSchema.optional(),
+        levels: levelsSchema.nullable().optional(),
     })
-    .meta({ id: `AccountDeclaration` });
+    .meta({
+        id: `AccountDeclaration`,
+        description: [
+            `Text is cleaned, never refused for what it holds: a line break or tab becomes a space, other control and format characters (bidirectional marks, zero-width characters, soft hyphens) are dropped, whitespace runs collapse, and the ends are trimmed.`,
+            `A level's about and note are cleaned the same way.`,
+        ].join(` `),
+    });
 export type AccountDeclaration = z.infer<typeof accountDeclarationSchema>;
 
 // The bot's own view of itself: identity and rating as the directory
@@ -212,8 +219,9 @@ export const botAccountSchema = z
         version: botVersionSchema.optional(),
         repoUrl: botRepoUrlSchema.optional(),
         accepts: acceptsSchema.optional(),
+        levels: levelsSchema.nullable(),
     })
-    .meta({ id: `Account` });
+    .meta({ id: `Account`, description: `levels is null until the bot declares them.` });
 export type BotAccount = z.infer<typeof botAccountSchema>;
 
 export const unauthorizedErrorCodes = [`unauthorized`] as const;

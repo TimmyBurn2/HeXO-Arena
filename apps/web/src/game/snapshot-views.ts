@@ -1,4 +1,4 @@
-import { resultSentence, turnsOnBoard, type GameSnapshot, type Side } from '@hexo-arena/contract';
+import { nameAtLevel, resultSentence, turnsOnBoard, type GameSnapshot, type Side } from '@hexo-arena/contract';
 import { winner, type Position, type Rejection, type Stone } from '@hexo-arena/rules';
 import type { BoardStone } from '../board/Board';
 import type { AxialCoord } from '@hexo-arena/contract';
@@ -69,14 +69,21 @@ export function resultLine(snapshot: GameSnapshot): string {
     if (snapshot.status !== `finished`) return ``;
     return resultSentence(
         { ...snapshot, turns: turnsOnBoard(snapshot.board.cells.length) },
-        { x: snapshot.players.x.name, o: snapshot.players.o.name },
+        seatNames(snapshot),
         snapshot.you,
     );
 }
 
+/** Each seat's name as the game shows it, a bot's level included. */
+export function seatNames(snapshot: GameSnapshot): Record<Side, string> {
+    const { x, o } = snapshot.players;
+    return { x: nameAtLevel(x.name, x.level), o: nameAtLevel(o.name, o.level) };
+}
+
 /** Both seats by name, x first. */
 export function matchName(snapshot: GameSnapshot): string {
-    return text.game.vs(snapshot.players.x.name, snapshot.players.o.name);
+    const names = seatNames(snapshot);
+    return text.game.vs(names.x, names.o);
 }
 
 /** The side across the board. */

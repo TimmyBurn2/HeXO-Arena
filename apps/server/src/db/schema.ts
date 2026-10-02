@@ -1,9 +1,10 @@
 import { check, foreignKey, index, integer, primaryKey, real, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core';
-import { sql } from 'drizzle-orm';
+import { sql, type SQL } from 'drizzle-orm';
 import type { AnySQLiteColumn } from 'drizzle-orm/sqlite-core';
 import {
     discordNameMaxLength,
     nextPathMaxLength,
+    requestBodyLimitBytes,
     reportDetailsMaxLength,
     reportEmailMaxLength,
     reportNameMaxLength,
@@ -106,6 +107,14 @@ export const pendingSignups = sqliteTable(
     ],
 );
 
+// A stored level is a json object, held to a bound: a declaration's levels
+// never outgrow the body that carried them, and a game seat keeps one
+// level without its about, well under a kilobyte.
+const levelsMax = sql.raw(String(requestBodyLimitBytes));
+const seatLevelMax = sql.raw(`1024`);
+const jsonObject = (column: AnySQLiteColumn, max: SQL) =>
+    sql`${column} is null or (json_valid(${column}) and substr(${column}, 1, 1) = '{' and length(${column}) <= ${max})`;
+
 // The scope column exists from day one so adding scopes later is not a
 // breaking change; v0 mints `bot:play` only.
 // The declaration columns are bot-written only (PATCH /api/bot/account);
@@ -129,6 +138,7 @@ export const bots = sqliteTable(
         version: text(`version`),
         repoUrl: text(`repo_url`),
         accepts: text(`accepts`),
+        levels: text(`levels`),
         delistedAt: integer(`delisted_at`),
         // Set when a bot with rated games is deleted: the row stays so the
         // game log stays whole, under a deleted-<n> placeholder name.
@@ -139,6 +149,7 @@ export const bots = sqliteTable(
         // A tournament entry names the bot with its owner, held to this pair.
         uniqueIndex(`bots_id_owner_idx`).on(table.id, table.ownerId),
         check(`bots_scope_check`, sql`${table.scope} in ('bot:play')`),
+        check(`bots_levels_check`, jsonObject(table.levels, levelsMax)),
     ],
 );
 
@@ -153,6 +164,8 @@ export const bots = sqliteTable(
 // the guest; a bot-vs-bot game sets the challenger, the challenged bot,
 // and the challenger's side.
 // The seats constraint pins exactly one of the three groups.
+// A bot seat played at a level other than its bot's default keeps that
+// level as declared at creation, by side; no person's seat has one.
 export const games = sqliteTable(
     `games`,
     {
@@ -166,6 +179,8 @@ export const games = sqliteTable(
         }),
         destBotId: text(`dest_bot_id`).references(() => bots.id, { onDelete: `cascade` }),
         challengerSide: text(`challenger_side`),
+        xLevel: text(`x_level`),
+        oLevel: text(`o_level`),
         timeControl: text(`time_control`).notNull(),
         openingCells: text(`opening_cells`).notNull(),
         winner: text(`winner`),
@@ -209,6 +224,12 @@ export const games = sqliteTable(
         check(
             `games_user_side_check`,
             sql`${table.userSide} is null or ${table.userSide} in ('x', 'o')`,
+        ),
+        check(`games_x_level_check`, jsonObject(table.xLevel, seatLevelMax)),
+        check(`games_o_level_check`, jsonObject(table.oLevel, seatLevelMax)),
+        check(
+            `games_level_seat_check`,
+            sql`${table.userSide} is null or (case ${table.userSide} when 'x' then ${table.xLevel} else ${table.oLevel} end) is null`,
         ),
         check(
             `games_challenger_side_check`,

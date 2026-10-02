@@ -135,6 +135,21 @@ describe('LiveGameGrid', () => {
         expect(within(card).queryByRole(`timer`)).not.toBe(null);
     });
 
+    it('name a bot at a level other than its default by name and level, on the card and its board, tagged unrated', () => {
+        const base = game([...opening, ...turn], `x`);
+        const entry: LiveGameEntry = {
+            ...base,
+            players: { x: { name: `sealbot`, rating: null, provisional: false, kind: `bot`, level: { id: `deep`, label: `deep`, budget: { depthTurns: 8 } } }, o: { name: `quinn`, rating: 1503, provisional: false, kind: `user` } },
+        };
+        render(<LiveGameGrid games={[{ entry, cells: entry.cells, toMove: `x`, readAt: Date.now() }]} level={2} />);
+        const card = screen.getByRole(`article`);
+        expect(within(card).getByRole(`link`).textContent).toBe(`Watch sealbot @ deepBOTvsquinn`);
+        expect(card.querySelector(`.live-name`)?.getAttribute(`title`)).toBe(`depth 8 turns`);
+        expect(card.textContent).toContain(`sealbot @ deep to move`);
+        expect(card.querySelector(`.live-card-meta .tag`)?.textContent).toBe(`unrated`);
+        expect(within(card).getByRole(`img`, { name: `Board, sealbot @ deep vs quinn, sealbot @ deep to move` })).toBeTruthy();
+    });
+
     it('count the clock from its read, however late the board lands', () => {
         const entry = game([...opening, ...turn], `x`);
         render(<LiveGameGrid games={[{ entry, cells: entry.cells, toMove: `x`, readAt: Date.now() - 4_000 }]} level={2} />);

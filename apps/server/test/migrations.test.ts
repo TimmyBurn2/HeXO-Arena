@@ -321,3 +321,52 @@ describe('the guest games migration', () => {
         expect(indexes).toHaveLength(14);
     });
 });
+
+describe('the bot levels migration', () => {
+    let sqlite: Sqlite;
+    let folder: string;
+
+    afterEach(() => {
+        sqlite.close();
+        rmSync(folder, { recursive: true, force: true });
+    });
+
+    it('keeps every bot and game without a level, and holds a level to a bounded object on a bot seat', () => {
+        sqlite = openDatabase(`:memory:`);
+        folder = migrationsUpTo(19);
+        migrate(drizzle(sqlite), { migrationsFolder: folder });
+        sqlite.exec(`
+            insert into name_reservations (name_key) values ('owner'), ('alpha'), ('beta');
+            insert into users (id, discord_id, name, name_key, created_at) values ('u1', 'd1', 'owner', 'owner', 1);
+            insert into bots (id, owner_id, name, name_key, token_hash, scope, created_at, accepts)
+                values ('b1', 'u1', 'alpha', 'alpha', 'h1', 'bot:play', 1, '{"turnMs":null,"match":true,"unlimited":true}'), ('b2', 'u1', 'beta', 'beta', 'h2', 'bot:play', 1, null);
+            insert into games (id, user_id, bot_id, user_side, time_control, opening_cells, winner, finish_reason, created_at, finished_at, finish_seq)
+                values ('human', 'u1', 'b1', 'x', '{"mode":"unlimited"}', '[]', 'x', 'surrender', 1, 2, 1);
+            insert into game_ratings (game_id, side, rating_before, rating_after, deviation_after) values ('human', 'x', 1000, 1100, 300), ('human', 'o', 1500, 1500, 500);
+        `);
+        runMigrations(sqlite);
+        expect(sqlite.prepare(`select id, levels from bots order by id`).all()).toEqual([
+            { id: `b1`, levels: null },
+            { id: `b2`, levels: null },
+        ]);
+        expect(sqlite.prepare(`select id, x_level as x, o_level as o from games`).all()).toEqual([{ id: `human`, x: null, o: null }]);
+        expect(sqlite.prepare(`select count(*) as n from game_ratings`).get()).toEqual({ n: 2 });
+        expect(sqlite.pragma(`foreign_key_check`)).toEqual([]);
+
+        const declare = sqlite.prepare(`update bots set levels = ? where id = 'b2'`);
+        expect(() => declare.run(`{"default":"a","list":[]}`)).not.toThrow();
+        expect(() => declare.run(`{"default":`)).toThrow(/CHECK/);
+        expect(() => declare.run(`"a"`)).toThrow(/CHECK/);
+        expect(() => declare.run(`{"x":"${`a`.repeat(16_384)}"}`)).toThrow(/CHECK/);
+
+        const level = `{"id":"quick","label":"quick"}`;
+        const game = sqlite.prepare(`insert into games (id, user_id, bot_id, user_side, x_level, o_level, time_control, opening_cells, created_at) values (?, 'u1', 'b1', ?, ?, ?, '{}', '[]', 5)`);
+        expect(() => game.run(`g1`, `x`, null, level)).not.toThrow();
+        expect(() => game.run(`g2`, `o`, level, null)).not.toThrow();
+        expect(() => game.run(`g3`, `x`, level, null)).toThrow(/CHECK/);
+        expect(() => game.run(`g4`, `o`, null, level)).toThrow(/CHECK/);
+        expect(() => game.run(`g5`, `x`, null, `{"id":`)).toThrow(/CHECK/);
+        expect(() => game.run(`g6`, `x`, null, `["quick"]`)).toThrow(/CHECK/);
+        expect(() => game.run(`g7`, `x`, null, `{"note":"${`n`.repeat(1024)}"}`)).toThrow(/CHECK/);
+    });
+});

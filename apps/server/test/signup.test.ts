@@ -270,6 +270,8 @@ describe('discordNameOf', () => {
         [`Mi\u0000ra\u0007`, `Mira`],
         [`\u202eariM`, `ariM`],
         [`\u2067Mira\u2069\u200e`, `Mira`],
+        [`Mi\u200bra\u00ad\ufeff`, `Mira`],
+        [`Mira\nHex\t Arena`, `Mira Hex Arena`],
         [`Cafe\u0301`, `Caf\u00e9`],
         [`\u{1f3b2}`.repeat(40), `\u{1f3b2}`.repeat(32)],
         [`M`.repeat(40), `M`.repeat(32)],

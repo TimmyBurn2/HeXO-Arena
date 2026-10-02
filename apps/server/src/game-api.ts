@@ -1,5 +1,6 @@
 import {
     acceptsCovers,
+    seatLevelOf,
     botConcurrentGameCap,
     createGameRequestSchema,
     humanConcurrentGameCap,
@@ -126,6 +127,13 @@ export function registerGameApi(app: FastifyInstance, deps: GameApiDeps): void {
                 code: `clock_not_accepted`,
             });
         }
+        // The default named by its id is the default: a game without a level.
+        const requested = parsed.data.level;
+        const declared = requested === undefined ? undefined : bot.levels?.list.find((level) => level.id === requested);
+        if (requested !== undefined && declared === undefined) {
+            return reply.code(400).send({ error: `the bot declares no such level`, code: `unknown_level` });
+        }
+        const level = declared === undefined || declared.id === bot.levels?.default ? null : seatLevelOf(declared);
         if (games.activeGameCount(bot.id) >= botConcurrentGameCap || deps.reservations.isReserved(bot.id)) {
             return reply.code(400).send({
                 error: `the bot is at its concurrent-game cap or playing a tournament`,
@@ -133,8 +141,9 @@ export function registerGameApi(app: FastifyInstance, deps: GameApiDeps): void {
             });
         }
         // A signed-in human and a bot share the pair cap two bots have, counted
-        // from the log like theirs; a guest's games are unrated and count toward no cap.
-        if (person.kind === `user`) {
+        // from the log like theirs; a guest's games and practice at another
+        // level are unrated and count toward no cap.
+        if (person.kind === `user` && level === null) {
             const now = nowSeconds();
             const dayStart = now - (now % 86_400);
             if (countHumanPairGamesSince(query, { userId: person.id, botId: bot.id }, dayStart) >= pairDailyCap) {
@@ -147,6 +156,7 @@ export function registerGameApi(app: FastifyInstance, deps: GameApiDeps): void {
         const created = games.createGame({
             person,
             bot: { id: bot.id, name: bot.name },
+            ...(level === null ? {} : { level }),
             timeControl: parsed.data.timeControl,
             openingPlies: parsed.data.openingPlies,
         });

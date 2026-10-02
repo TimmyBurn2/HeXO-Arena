@@ -3,7 +3,7 @@ import { clockText, type GamePlayer, type GameSnapshot, type LiveGameEntry, type
 import { Board } from '../board/Board';
 import { defaultBoardSettings } from '../board/board-settings';
 import { stonesFrame } from '../board/geometry';
-import { BotBadge, Rating, Swatch } from '../components/player';
+import { BotBadge, Rating, seatLevelFacts, seatName, Swatch } from '../components/player';
 import { Clock } from '../game/Clock';
 import { lastMoveOf, resultLine, stonesOf, winLineOf } from '../game/snapshot-views';
 import { MiniBoard } from '../live/MiniBoard';
@@ -36,7 +36,7 @@ function FeaturedLive({ view }: { view: LiveView }) {
     const landed = view.cells.length === entry.cells.length;
     return (
         <article className="featured" aria-label={text.home.featured}>
-            <Link to={`/game/${encodeURIComponent(entry.gameId)}`} className="featured-link" ariaLabel={text.home.watch(x.name, o.name)}>
+            <Link to={`/game/${encodeURIComponent(entry.gameId)}`} className="featured-link" ariaLabel={text.home.watch(seatName(x), seatName(o))}>
                 <MiniBoard game={view} />
             </Link>
             <div className="featured-bar featured-top">
@@ -45,7 +45,7 @@ function FeaturedLive({ view }: { view: LiveView }) {
             <div className="featured-bar featured-bottom">
                 <SeatChip side="x" player={x} />
                 <p className="featured-chip">
-                    <span>{text.ladder.live.toMove(entry.players[view.toMove].name)}</span>
+                    <span>{text.ladder.live.toMove(seatName(entry.players[view.toMove]))}</span>
                     {landed ? <RunningClock entry={entry} side={view.toMove} since={view.readAt} /> : <span>{clockText(entry.timeControl)}</span>}
                 </p>
             </div>
@@ -63,7 +63,7 @@ function FeaturedFinished({ snapshot, ended }: { snapshot: GameSnapshot; ended: 
     }, [snapshot]);
     return (
         <article className="featured" aria-label={text.home.featured}>
-            <Link to={`/game/${encodeURIComponent(snapshot.gameId)}`} className="featured-link" ariaLabel={text.home.replay(x.name, o.name)}>
+            <Link to={`/game/${encodeURIComponent(snapshot.gameId)}`} className="featured-link" ariaLabel={text.home.replay(seatName(x), seatName(o))}>
                 <div className="mini-board">
                     <Board stones={stones} settings={featuredSettings} label={resultLine(snapshot)} overlays={overlays} frame={frame} />
                 </div>
@@ -86,7 +86,9 @@ function SeatChip({ side, player }: { side: Side; player: GamePlayer }) {
     return (
         <p className="featured-chip">
             <Swatch side={side} />
-            <span className="featured-name">{player.name}</span>
+            <span className="featured-name" title={seatLevelFacts(player)}>
+                {seatName(player)}
+            </span>
             {player.kind === `bot` ? <BotBadge /> : null}
             {player.rating === null ? (
                 <span className="tag muted">{text.ladder.live.unrated}</span>

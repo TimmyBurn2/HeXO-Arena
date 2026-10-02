@@ -57,9 +57,17 @@ export function claimPlaceholderName(query: Query): string {
     }
 }
 
-// A guest's game is in no rating, so it keeps no bot on the record.
+// A guest's game is in no rating, nor is one against a bot at a level
+// other than its default, so neither keeps a bot on the record.
 function hasDecidedGame(query: Query, seat: SQL | undefined): boolean {
-    return query.select({ id: games.id }).from(games).where(and(seat, isNotNull(games.winner), isNull(games.guestName))).limit(1).get() !== undefined;
+    return (
+        query
+            .select({ id: games.id })
+            .from(games)
+            .where(and(seat, isNotNull(games.winner), isNull(games.guestName), isNull(games.xLevel), isNull(games.oLevel)))
+            .limit(1)
+            .get() !== undefined
+    );
 }
 
 // An entry left after the bot's waiting entries are removed is a

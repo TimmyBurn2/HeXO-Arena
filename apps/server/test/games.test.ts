@@ -1,5 +1,7 @@
 import {
     botListingSchema,
+    finishedGamesPageSchema,
+    liveGameEntrySchema,
     engineDialLimit,
     engineFrameLimitBytes,
     engineStrayFrameCap,
@@ -197,6 +199,19 @@ class Arena {
         return botWithTokenSchema.parse(json(result)).token;
     }
 
+    async declareLevels(token: string, levels: unknown): Promise<void> {
+        const result = await this.#call(`PATCH`, `/api/bot/account`, { authorization: `Bearer ${token}`, 'content-type': `application/json` }, { levels });
+        expect(result.status).toBe(200);
+    }
+
+    liveGames(): Promise<HttpResult> {
+        return this.#call(`GET`, `/api/games`);
+    }
+
+    finishedGames(): Promise<HttpResult> {
+        return this.#call(`GET`, `/api/games/finished`);
+    }
+
     readAccount(token: string): Promise<HttpResult> {
         return this.#call(`GET`, `/api/bot/account`, { authorization: `Bearer ${token}` });
     }
@@ -383,11 +398,13 @@ async function startGame(
     cookie: string,
     timeControl: unknown = turnControl,
     openingPlies = 1,
+    level?: string,
 ): Promise<{ gameId: string; snapshot: GameSnapshot }> {
     const response = await arena.createGame(cookie, {
         bot: `opponentbot`,
         timeControl,
         openingPlies,
+        ...(level === undefined ? {} : { level }),
     });
     expect(response.status).toBe(201);
     const snapshot = snapshotOf(response);
@@ -971,6 +988,111 @@ describe('a guest plays a connected bot', () => {
         expect(arena.count(`games`)).toBe(pairDailyCap);
         expect(countBotBotGamesSince(arena.query, findBot(arena.query, `opponentbot`)?.id ?? ``, 0)).toBe(0);
         await startGame(arena, bot.cookie);
+    });
+});
+
+// Three strengths, the middle one rated; the bot sits on x, since the
+// human circles.
+const botLevels = {
+    default: `standard`,
+    list: [
+        { id: `quick`, label: `quick`, about: `plays fast`, budget: { timeMs: 200 }, note: `no opening book` },
+        { id: `standard`, label: `standard`, budget: { nodes: 1_000_000 } },
+        { id: `deep`, label: `deep`, budget: { depthTurns: 8 } },
+    ],
+};
+const quickSeat = { id: `quick`, label: `quick`, budget: { timeMs: 200 }, note: `no opening book` };
+
+describe('a person picks a bot level', () => {
+    let arena: Arena;
+    let bot: Fixture;
+
+    beforeEach(async () => {
+        vi.useFakeTimers(timerFakes);
+        arena = await startArena();
+        bot = await standardBot(arena);
+        await arena.declareLevels(bot.token, botLevels);
+    });
+
+    afterEach(async () => {
+        bot.dispose();
+        await arena.close();
+        vi.useRealTimers();
+    });
+
+    it('plays any level but the default as practice: the bot hears it, the seat shows it without a rating, and nobody is rated', async () => {
+        const { gameId, snapshot } = await startGame(arena, bot.cookie, turnControl, 1, `quick`);
+        expect(snapshot.players.x).toEqual({ name: `opponentbot`, rating: null, provisional: false, kind: `bot`, level: quickSeat });
+        expect(snapshot.players.o.level).toBeUndefined();
+        expect((await gameStartOn(bot.stream)).level).toBe(`quick`);
+        const [live] = liveGameEntrySchema.array().parse(json(await arena.liveGames()));
+        expect(live).toMatchObject({ gameId, rated: false, players: { x: { rating: null, level: quickSeat } } });
+        expect((await arena.humanResign(bot.cookie, gameId)).status).toBe(200);
+        expect(await finishOn(bot.stream)).toMatchObject({ gameId, winner: `x`, reason: `surrender` });
+        expect(arena.count(`ratings`)).toBe(0);
+        expect(arena.count(`game_ratings`)).toBe(0);
+        expect(recomputeRatings(arena.query)).toBe(0);
+        expect(arena.count(`ratings`)).toBe(0);
+        expect(finished(await arena.snapshot(``, gameId)).players.x).toEqual({ name: `opponentbot`, rating: null, provisional: false, kind: `bot`, level: quickSeat });
+        const [entry] = finishedGamesPageSchema.parse(json(await arena.finishedGames())).games;
+        expect(entry).toMatchObject({ gameId, rated: false, players: { x: { rating: null, level: quickSeat } } });
+    });
+
+    it('plays the default named by its id as a game without a level, rated as ever', async () => {
+        const { gameId, snapshot } = await startGame(arena, bot.cookie, turnControl, 1, `standard`);
+        expect(snapshot.players.x).toEqual({ name: `opponentbot`, rating: 1500, provisional: true, kind: `bot` });
+        expect((await gameStartOn(bot.stream)).level).toBeNull();
+        await arena.humanResign(bot.cookie, gameId);
+        expect(arena.count(`game_ratings`)).toBe(2);
+        const [entry] = finishedGamesPageSchema.parse(json(await arena.finishedGames())).games;
+        expect(entry?.rated).toBe(true);
+        expect(entry?.players.x.level).toBeUndefined();
+    });
+
+    it('refuses a level the bot does not declare, and any level from a bot that declares none', async () => {
+        const unknown = await arena.createGame(bot.cookie, { bot: `opponentbot`, timeControl: turnControl, level: `blitz` });
+        expect(unknown.status).toBe(400);
+        expect(json(unknown)).toMatchObject({ code: `unknown_level` });
+        await arena.declareLevels(bot.token, null);
+        const cleared = await arena.createGame(bot.cookie, { bot: `opponentbot`, timeControl: turnControl, level: `quick` });
+        expect(cleared.status).toBe(400);
+        expect(json(cleared)).toMatchObject({ code: `unknown_level` });
+        expect(arena.count(`games`)).toBe(0);
+    });
+
+    it('keeps the level a game began with when the bot declares new ones, and replays it on a stream reconnect', async () => {
+        const { gameId } = await startGame(arena, bot.cookie, turnControl, 1, `quick`);
+        await gameStartOn(bot.stream);
+        await arena.declareLevels(bot.token, { default: `b`, list: [{ id: `quick`, label: `blitz`, budget: { nodes: 10 } }, { id: `b`, label: `b` }] });
+        expect(inProgress(await arena.snapshot(``, gameId)).players.x.level).toEqual(quickSeat);
+        bot.stream.close();
+        const reopened = arena.openStream(bot.token);
+        bot.stream = reopened;
+        expect((await gameStartOn(reopened)).level).toBe(`quick`);
+        await arena.humanResign(bot.cookie, gameId);
+        expect(finished(await arena.snapshot(``, gameId)).players.x.level).toEqual(quickSeat);
+    });
+
+    it('lets a guest pick a level as a signed-in person does', async () => {
+        const guest = await arena.guest();
+        const { snapshot } = await startGame(arena, guest, turnControl, 1, `deep`);
+        expect(snapshot.players.x.level).toEqual({ id: `deep`, label: `deep`, budget: { depthTurns: 8 } });
+        expect((await gameStartOn(bot.stream)).level).toBe(`deep`);
+    });
+
+    it('counts practice toward no daily pair cap, and toward the live-game cap', async () => {
+        const now = Math.floor(Date.now() / 1000);
+        arena.seedPairGames(`humanplayer`, `opponentbot`, pairDailyCap - 1, now - (now % 86_400));
+        expect((await arena.createGame(bot.cookie, { bot: `opponentbot`, timeControl: unlimitedControl, level: `quick` })).status).toBe(201);
+        await vi.advanceTimersByTimeAsync(60_000);
+        expect((await arena.createGame(bot.cookie, { bot: `opponentbot`, timeControl: unlimitedControl })).status).toBe(201);
+        await vi.advanceTimersByTimeAsync(60_000);
+        expect(json(await arena.createGame(bot.cookie, { bot: `opponentbot`, timeControl: unlimitedControl }))).toMatchObject({ code: `daily_pair_cap` });
+        expect((await arena.createGame(bot.cookie, { bot: `opponentbot`, timeControl: unlimitedControl, level: `deep` })).status).toBe(201);
+        await vi.advanceTimersByTimeAsync(60_000);
+        const fourth = await arena.createGame(bot.cookie, { bot: `opponentbot`, timeControl: unlimitedControl, level: `quick` });
+        expect(fourth.status).toBe(400);
+        expect(json(fourth)).toMatchObject({ code: `human_busy` });
     });
 });
 
