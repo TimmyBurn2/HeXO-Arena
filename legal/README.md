@@ -21,7 +21,7 @@ The files here are templates; one details file fills them in.
 Caddy serves `imprint.md`, `privacy.md`, `terms.md`, and `details.json` from the copy, mounted read-only, and nothing else in it.
 An edit shows on the next page load; nothing restarts.
 The site links only the documents the folder has: a deleted one leaves no link, and its page is not found.
-The app reads the folder too, read-only, and its boot log names the documents missing from it.
+The app reads the folder too, read-only, and its boot log names the documents missing from it and a `details.json` that is missing or invalid.
 
 `pnpm dev` serves the repository's templates with `details.example.json`.
 

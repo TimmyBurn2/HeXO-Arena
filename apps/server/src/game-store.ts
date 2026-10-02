@@ -305,6 +305,17 @@ export function lastHumanGameCreatedAt(query: Query, userId: string): number | n
     return row === undefined ? null : row.createdAt;
 }
 
+// A signed-in human's games against one bot since an epoch second, which
+// the daily pair cap counts as it counts two bots'.
+export function countHumanPairGamesSince(query: Query, pair: { userId: string; botId: string }, sinceSeconds: number): number {
+    const [row] = query
+        .select({ n: count() })
+        .from(games)
+        .where(and(eq(games.userId, pair.userId), eq(games.botId, pair.botId), gte(games.createdAt, sinceSeconds)))
+        .all();
+    return row?.n ?? 0;
+}
+
 // Bot-vs-bot caps count games the log already holds, from the start of
 // the current UTC day.
 export function countPairBotGamesSince(

@@ -55,7 +55,7 @@ interface Served {
 type Answer = (body: unknown) => Response;
 
 // The API as one test sees it: who is here, the bot list, and how a start answers.
-function serve(options: { me?: Me; bots?: BotListing[] | (() => BotListing[]); start?: Answer; guest?: Answer; tournament?: string[] } = {}): Served {
+function serve(options: { me?: Me; bots?: BotListing[] | (() => BotListing[]); start?: Answer; guest?: Answer; tournament?: string[]; records?: Record<string, { rating: number; deviation: number }> } = {}): Served {
     const served: Served = { posts: [], listReads: 0 };
     let me = options.me === undefined ? tom : options.me;
     vi.stubGlobal(
@@ -63,6 +63,13 @@ function serve(options: { me?: Me; bots?: BotListing[] | (() => BotListing[]); s
         vi.fn((url: string, init?: RequestInit) => {
             const body: unknown = typeof init?.body === `string` ? JSON.parse(init.body) : undefined;
             if (url === `/api/me`) return Promise.resolve(new Response(JSON.stringify(me)));
+            const player = /^\/api\/players\/([^/]+)$/u.exec(url)?.[1];
+            const record = player === undefined ? undefined : options.records?.[decodeURIComponent(player)];
+            if (player !== undefined && record !== undefined) {
+                const name = decodeURIComponent(player);
+                const body = { name, kind: name === `tom` ? `human` : `bot`, ...record, provisional: record.deviation > 75, rank: null, games: 10, won: 5, lost: 5, undecided: 0, asX: { games: 5, won: 3 }, asO: { games: 5, won: 2 }, forfeits: { disconnect: 0, terminated: 0 }, opponents: [], firstGameAt: null, lastGameAt: null };
+                return Promise.resolve(new Response(JSON.stringify(body)));
+            }
             if (url.startsWith(`/api/bots`)) {
                 served.listReads += 1;
                 const bots = typeof options.bots === `function` ? options.bots() : (options.bots ?? roster);
@@ -245,11 +252,28 @@ describe('PlayScreen', () => {
             row?.dispatchEvent(new Event(`toggle`));
         });
         expect(screen.getByRole(`img`, { name: `An example opening of 5 stones` }).querySelectorAll(`.stone-art`)).toHaveLength(5);
-        expect(screen.getByText(`The origin and 4 random stones near it; each game draws its own.`)).toBeTruthy();
+        expect(screen.getByText(`Before the first turn the server places the origin stone and a few random stones near it, so games start differently; 5 means the origin and 4 more.`)).toBeTruthy();
         fireEvent.click(screen.getByRole(`radio`, { name: `1` }));
         expect(screen.getByRole(`img`, { name: `An example opening of 1 stone` }).querySelectorAll(`.stone-art`)).toHaveLength(1);
-        expect(screen.getByText(`Only the origin; no random stones.`)).toBeTruthy();
+        expect(screen.getByText(`Before the first turn the server places the origin stone and a few random stones near it, so games start differently; 1 means the origin alone.`)).toBeTruthy();
         expect(window.location.search).toBe(`?bot=devbot-c&clock=t10&opening=1`);
+    });
+
+    it('give a signed-in player their expected score against the bot on the card', async () => {
+        serve({ records: { tom: { rating: 1503, deviation: 60 }, 'devbot-c': { rating: 1514, deviation: 52 }, 'devbot-a': { rating: 1310, deviation: 200 } } });
+        render(<PlayScreen />);
+        const card = await ready();
+        expect(await within(card).findByText(`Your expected score against devbot-c: 0.48`)).toBeTruthy();
+    });
+
+    it('give a guest no expected score, since a guest game is unrated', async () => {
+        const served = serve({ me: { kind: `guest`, name: `Guest k3f9`, liveGames: [] }, records: { quietlake: { rating: 1420, deviation: 52 }, 'devbot-c': { rating: 1514, deviation: 52 } } });
+        render(<PlayScreen />);
+        const card = await ready();
+        await waitFor(() => {
+            expect(served.listReads).toBeGreaterThan(0);
+        });
+        expect(within(card).queryByText(/expected score/u)).toBe(null);
     });
 
     it('start a rated game for someone signed in and remember the opponent and clock, not the opening', async () => {
@@ -320,6 +344,17 @@ describe('PlayScreen', () => {
         await waitFor(() => {
             expect(served.posts).toHaveLength(1);
         });
+    });
+
+    it('say when the day\'s games against the bot are used up, holding nothing but that bot', async () => {
+        serve({ start: refused(429, `daily_pair_cap`, { 'retry-after': `7200` }) });
+        render(<PlayScreen />);
+        const card = await ready();
+        const start = screen.getByRole(`button`, { name: `Start game` });
+        fireEvent.click(start, { detail: 1 });
+        expect(await within(card).findByText(`You have played devbot-c 20 times today, the most one day allows; pick another bot, or play it again after 00:00 UTC`)).toBeTruthy();
+        expect(start.getAttribute(`aria-disabled`)).toBe(null);
+        expect(screen.queryByText(/Too many tries/u)).toBe(null);
     });
 
     it('count a cooldown down on the disabled start, then let it go', async () => {

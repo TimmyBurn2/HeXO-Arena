@@ -3,6 +3,7 @@ import {
     acceptsSchema,
     botConcurrentGameCap,
     botDailyCap,
+    expandTournamentName,
     openingPliesSchema,
     pairDailyCap,
     timeControlSchema,
@@ -14,6 +15,7 @@ import {
 } from '@hexo-arena/contract';
 import { randomUUID } from 'node:crypto';
 import { and, asc, eq, inArray, isNotNull, sql } from 'drizzle-orm';
+import { recordAdminAction } from './admin-store';
 import type { Query } from './db';
 import { bots, games, tournamentEntries, tournamentPairings, tournaments, users } from './db/schema';
 import type { FinishedGameNote, GameRegistry } from './game-registry';
@@ -22,7 +24,8 @@ import type { PresenceRegistry } from './presence';
 import { readRating } from './rating-store';
 import { missedTwoInARow, roundRobin, slotDone, storedSlot, xSeatOf, type PairingSeat, type ScoredPairing, type SlotResult } from './round-robin';
 import { isCurrentGeneration, isPaused } from './site-state';
-import { cancelTournament } from './tournament-store';
+import { dueRuleStarts, hasRuleTournament, readTournamentRules } from './tournament-rules';
+import { cancelTournament, createTournament } from './tournament-store';
 
 /** Why an entry is left out at the start or withdrawn later. */
 export type WithdrawReason = `banned` | `delisted` | `deleted`;
@@ -54,6 +57,11 @@ export interface SchedulerDeps {
     readonly generation: number;
     // Whether this process is draining for a deploy, so it starts nothing.
     readonly draining: () => boolean;
+    // How soon a weekly rule's tournament may start, as tournament-create
+    // holds the operator to.
+    readonly leadMs: number;
+    // Who the audit rows of a weekly rule's tournaments name.
+    readonly actor: string;
     readonly now?: () => number;
 }
 
@@ -75,11 +83,13 @@ function utcDayStart(seconds: number): number {
 }
 
 /**
- * Runs the operator's round robins in this process: starts each when it is
- * due, plays its rounds as ordinary rated bot games announced on the
- * bots' streams, scores no-shows and withdrawals, and picks up where it
- * stood after a restart. Its state lives in the database; only grace
- * deadlines and round gaps are held in memory, and restart afresh at boot.
+ * Runs the operator's round robins in this process:
+ * creates each weekly rule's tournaments in time for entries,
+ * starts each when it is due,
+ * plays its rounds as ordinary rated bot games announced on the bots' streams,
+ * scores no-shows and withdrawals, and picks up where it stood after a restart.
+ * Its state lives in the database; only grace deadlines and round gaps are
+ * held in memory, and restart afresh at boot.
  */
 export class TournamentScheduler {
     readonly #deps: SchedulerDeps;
@@ -90,6 +100,7 @@ export class TournamentScheduler {
     constructor(deps: SchedulerDeps) {
         this.#deps = deps;
         this.#resume();
+        this.#createFromRules(this.#now());
     }
 
     get #query(): Query {
@@ -113,10 +124,11 @@ export class TournamentScheduler {
         this.#timer = null;
     }
 
-    /** One pass: start what is due, then move the running tournament on. */
+    /** One pass: create what the weekly rules call for, start what is due, then move the running tournament on. */
     tick(): void {
         if (this.#deps.draining()) return;
         const now = this.#now();
+        this.#createFromRules(now);
         // A start is a pass of its own; the first round begins on the next.
         if (this.#running() === null) {
             this.#startDue(now);
@@ -213,6 +225,28 @@ export class TournamentScheduler {
         const xSeat = xSeatOf(game);
         const seat: PairingSeat | null = winner === null ? null : winner === `x` ? xSeat : xSeat === `first` ? `second` : `first`;
         return { state: `played`, seat };
+    }
+
+    // A start whose tournament exists in any state is done with,
+    // so a restart or a clock step creates no week twice;
+    // a full waiting cap leaves the start to a later pass.
+    #createFromRules(now: number): void {
+        for (const rule of readTournamentRules(this.#query)) {
+            for (const startsAt of dueRuleStarts(rule, now, this.#deps.leadMs)) {
+                this.#query.transaction((tx) => {
+                    if (hasRuleTournament(tx, rule.id, startsAt)) return;
+                    const name = expandTournamentName(rule.namePattern, startsAt * 1000);
+                    const created = createTournament(
+                        tx,
+                        { name, startsAt, timeControl: rule.timeControl, openingPlies: rule.openingPlies, maxEntrants: rule.maxEntrants, ruleId: rule.id },
+                        Math.floor(now / 1000),
+                        this.#deps.leadMs,
+                    );
+                    if (created.kind !== `created`) return;
+                    recordAdminAction(tx, { actor: this.#deps.actor, action: `tournament-create`, target: name, reason: `weekly rule ${String(rule.id)}` });
+                });
+            }
+        }
     }
 
     #running(): RunningTournament | null {

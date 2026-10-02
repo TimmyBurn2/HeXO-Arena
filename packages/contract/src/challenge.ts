@@ -11,7 +11,9 @@ export const challengeDeclinePath = `/api/bot/challenge/{challengeId}/decline`;
 export const challengeCancelPath = `/api/bot/challenge/{challengeId}/cancel`;
 
 // A pending challenge expires after this; the target's inbox holds at most
-// the cap, and the daily caps count bot-vs-bot games per UTC day.
+// the cap, and the daily caps count games per UTC day: the pair cap a
+// pair's, two bots or a signed-in human and a bot, the bot cap a bot's
+// bot-vs-bot games.
 export const challengeTtlMs = 60_000;
 export const challengeInboxCap = 10;
 export const pairDailyCap = 20;

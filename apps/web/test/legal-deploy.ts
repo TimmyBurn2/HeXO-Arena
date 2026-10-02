@@ -1,8 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { legalDetailsPath, legalDocumentFile, legalDocumentPath, legalPages, type LegalPage } from '@hexo-arena/contract';
+import { legalDetailsPath, legalDocumentFile, legalDocumentPath, legalPages, type LegalDetails, type LegalPage } from '@hexo-arena/contract';
 import { vi } from 'vitest';
-import type { LegalDetails } from '../src/legal/details';
 import { legalStore } from '../src/legal/documents';
 
 const folder = join(import.meta.dirname, `../../../legal`);

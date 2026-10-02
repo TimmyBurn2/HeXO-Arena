@@ -37,9 +37,9 @@ describe('finishedGamesQuerySchema', () => {
             clock: `turn`,
             opening: `5`,
             before: `2026-10-01`,
-            cursor: `2.381`,
+            page: `3`,
         });
-        expect(parsed).toMatchObject({ player: `hextide`, opening: `5`, cursor: `2.381` });
+        expect(parsed).toMatchObject({ player: `hextide`, opening: `5`, page: `3` });
     });
 
     it.each([
@@ -62,27 +62,30 @@ describe('finishedGamesQuerySchema', () => {
         [{ clock: `blitz` }],
         [{ before: `2026-13-01` }],
         [{ before: `yesterday` }],
-        [{ cursor: `1.20` }],
-        [{ cursor: `11.20` }],
-        [{ cursor: `2.0` }],
-        [{ cursor: `abc` }],
+        [{ page: `0` }],
+        [{ page: `11` }],
+        [{ page: `02` }],
+        [{ page: `2.5` }],
+        [{ cursor: `2.40` }],
     ])('refuses %j', (filters) => {
         expect(finishedGamesQuerySchema.safeParse(filters).success).toBe(false);
     });
 });
 
 describe('finishedGamesPageSchema', () => {
-    it('holds a page of entries, its next and previous cursors, and its number', () => {
-        const page = { games: Array.from({ length: finishedGamesPageSize }, () => entry), next: `4.381`, previous: `2.425`, page: 3 };
+    it('holds a page of entries, its number, the pages the filters reach, and every game they select', () => {
+        const page = { games: Array.from({ length: finishedGamesPageSize }, () => entry), page: 3, pages: 7, total: 134 };
         expect(finishedGamesPageSchema.parse(page)).toEqual(page);
         expect(finishedGamesPageSchema.safeParse({ ...page, games: [...page.games, entry] }).success).toBe(false);
-        expect(finishedGamesPageSchema.safeParse({ ...page, previous: `1.425` }).success).toBe(false);
-        expect(finishedGamesPageSchema.safeParse({ games: [], next: null, previous: null, page: finishedGamesPageCap + 1 }).success).toBe(false);
+        expect(finishedGamesPageSchema.safeParse({ ...page, page: finishedGamesPageCap + 1 }).success).toBe(false);
+        expect(finishedGamesPageSchema.safeParse({ ...page, pages: finishedGamesPageCap + 1 }).success).toBe(false);
+        expect(finishedGamesPageSchema.parse({ games: [], page: 1, pages: 0, total: 0 })).toEqual({ games: [], page: 1, pages: 0, total: 0 });
+        expect(finishedGamesPageSchema.safeParse({ ...page, total: -1 }).success).toBe(false);
     });
 
     it('carries the record of the player named, counted past the cap and split by side', () => {
-        const record = { games: 41, won: 24, lost: 15, undecided: 2, asX: { games: 21, won: 14, lost: 6 }, asO: { games: 20, won: 10, lost: 9 } };
-        const page = { games: [entry], next: null, previous: null, page: 1, record };
+        const record = { games: 41, won: 24, lost: 15, undecided: 2, voided: 0, asX: { games: 21, won: 14, lost: 6 }, asO: { games: 20, won: 10, lost: 9 } };
+        const page = { games: [entry], page: 1, pages: 3, total: 41, record };
         expect(finishedGamesPageSchema.parse(page)).toEqual(page);
         expect(finishedGamesPageSchema.safeParse({ ...page, record: { ...record, won: -1 } }).success).toBe(false);
         expect(finishedGamesPageSchema.safeParse({ ...page, record: { ...record, asO: { games: 20, won: 10 } } }).success).toBe(false);
@@ -100,7 +103,7 @@ describe('listFinishedGames in the document', () => {
         expect(operation?.operationId).toBe(`listFinishedGames`);
         expect(operation?.security).toEqual([]);
         const names = (operation?.parameters ?? []).map((parameter) => (`name` in parameter ? parameter.name : ``));
-        expect(names.sort()).toEqual([`before`, `clock`, `cursor`, `kind`, `opening`, `player`, `reason`, `result`, `side`, `vs`]);
+        expect(names.sort()).toEqual([`before`, `clock`, `kind`, `opening`, `page`, `player`, `reason`, `result`, `side`, `vs`]);
         expect(Object.keys(operation?.responses ?? {}).sort()).toEqual([`200`, `400`, `404`, `429`]);
     });
 });

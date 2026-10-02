@@ -9,7 +9,7 @@ const sheetQuery = `(max-width: 30rem)`;
 // not one.
 const controls = `a[href], button, input, select, textarea, summary, label, [tabindex]:not([tabindex="-1"])`;
 
-type PanelId = `settings` | `identity`;
+type PanelId = `settings` | `identity` | `games-filters`;
 type OpenMode = `popover` | `sheet`;
 
 /** Whether a top-bar panel is shut, or open and in which form. */
@@ -49,8 +49,8 @@ export interface PanelControl {
 }
 
 /**
- * The open state of a top-bar button's panel, shared so that opening one
- * panel shuts any other.
+ * The open state of a button's panel, a top-bar one or the games list's
+ * filters, shared so that opening one panel shuts any other.
  */
 export function usePanel(id: PanelId): PanelControl {
     const current = useSyncExternalStore(subscribe, read, read);
@@ -97,8 +97,8 @@ export function usePanel(id: PanelId): PanelControl {
 }
 
 /**
- * A top-bar panel: a non-modal popover hanging under the bar, or a modal
- * bottom sheet on phones.
+ * A panel under the button that opens it: a non-modal popover hanging
+ * under its row, or a modal bottom sheet on phones.
  * Esc, a click elsewhere, or focus leaving shuts the popover; focus goes
  * back to the button unless it landed on another control.
  * Opening puts focus on the first element matching `initialFocus`.
@@ -163,12 +163,16 @@ function OpenPanel({ id, className, mode, button, onClose, labelledBy, head, clo
     // does focus reaching one past the button, as Shift+Tab does.
     useEffect(() => {
         if (mode !== `popover`) return;
+        // A press elsewhere that opened the panel is still on its way up
+        // when these listen, so a click from before the panel opened passes.
+        const openedAt = performance.now();
         function onKey(event: KeyboardEvent) {
             if (event.key !== `Escape`) return;
             event.preventDefault();
             onClose(true);
         }
         function onClick(event: MouseEvent) {
+            if (event.timeStamp < openedAt) return;
             const target = event.target;
             if (!(target instanceof Element) || ref.current?.contains(target) || button.current?.contains(target)) return;
             onClose(target.closest(controls) === null);

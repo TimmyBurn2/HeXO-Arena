@@ -1,4 +1,4 @@
-import { botDailyCap, pairDailyCap, tournamentMinPresent } from '@hexo-arena/contract';
+import { botDailyCap, pairDailyCap, tournamentMinPresent, type OpeningPlies, type TournamentWeekday } from '@hexo-arena/contract';
 import { ApiError, type ArenaClient } from './client';
 
 /** The name the dev tournament goes by, so a rerun finds the one already waiting. */
@@ -6,6 +6,33 @@ export const devTournamentName = `Dev round robin`;
 
 /** How far ahead the seed schedules it: time to restart pnpm dev:bots first. */
 export const devTournamentLeadMs = 3 * 60_000;
+
+/** A weekly rule in the admin client's terms: its UTC slot, name pattern, and clock as the flags take them. */
+export interface DevWeeklyRule {
+    readonly weekday: TournamentWeekday;
+    readonly time: string;
+    readonly namePattern: string;
+    readonly clock: string;
+    readonly openingPlies: OpeningPlies;
+    readonly maxEntrants: number;
+    readonly daysAhead: number;
+}
+
+/**
+ * The weekly rule the seed adds, sized to the daily caps:
+ * a full field of five, the dev bots and one online bot each of ana and dmitri,
+ * plays 2(5-1) = 8 games a bot and 2 a pair,
+ * minutes into the UTC day, before the dev bots' own challenges spend their pair caps.
+ */
+export const devWeeklyRule: DevWeeklyRule = {
+    weekday: `mon`,
+    time: `00:10`,
+    namePattern: `Dev weekly {date}`,
+    clock: `turn:10`,
+    openingPlies: 5,
+    maxEntrants: 5,
+    daysAhead: 7,
+};
 
 /** A bot the seed may enter, with the owner who enters it. */
 export interface Candidate {

@@ -80,57 +80,56 @@ describe('GET /api/games/finished', () => {
         return (await page(search)).games.map((game) => game.gameId);
     }
 
-    it('lists finished games newest first, twenty a page, the cursor leading on', async () => {
+    it('lists finished games newest first, twenty a page, any page reached by its number', async () => {
         const finished: string[] = [];
         for (let n = 0; n < 45; n++) finished.push(finish(bots(`alpha`, `beta`, n % 2 === 0 ? `x` : `o`), `x`));
         human(`ann`, `beta`, `x`);
         const newest = [...finished].reverse();
         const first = await page();
-        expect(first.page).toBe(1);
+        expect(first).toMatchObject({ page: 1, pages: 3, total: 45 });
         expect(first.games.map((game) => game.gameId)).toEqual(newest.slice(0, 20));
-        expect(first.next).not.toBeNull();
-        const second = await page(`?cursor=${first.next ?? ``}`);
-        expect(second.page).toBe(2);
-        expect(second.games.map((game) => game.gameId)).toEqual(newest.slice(20, 40));
-        const third = await page(`?cursor=${second.next ?? ``}`);
-        expect(third).toMatchObject({ page: 3, next: null });
-        expect(third.games.map((game) => game.gameId)).toEqual(newest.slice(40));
+        expect(await gameIds(`?page=3`)).toEqual(newest.slice(40));
+        expect(await gameIds(`?page=2`)).toEqual(newest.slice(20, 40));
+        expect(await page(`?page=4`)).toMatchObject({ games: [], page: 4, pages: 3, total: 45 });
     });
 
-    it('leads back from any page to the one before, a linked page included', async () => {
-        for (let n = 0; n < 85; n++) finish(n % 2 === 0 ? bots(`alpha`, `beta`, `x`) : human(`ann`, `alpha`, `o`), `x`);
-        for (const filter of [``, `player=alpha&`]) {
-            const read: FinishedGamesPage[] = [await page(`?${filter}`)];
-            for (let next = read.at(-1)?.next ?? null; next !== null; next = read.at(-1)?.next ?? null) read.push(await page(`?${filter}cursor=${next}`));
-            expect(read).toHaveLength(5);
-            expect(read.slice(0, 2).map((answer) => answer.previous)).toEqual([null, null]);
-            for (const [at, answer] of read.entries()) {
-                if (at < 2) continue;
-                const back = await page(`?${filter}cursor=${answer.previous ?? ``}`);
-                expect(back.page).toBe(at);
-                expect(back.games.map((game) => game.gameId)).toEqual(read[at - 1]?.games.map((game) => game.gameId));
-            }
-        }
+    it('reads the pages of a player\'s games, every seat merged in finish order', async () => {
+        const finished: string[] = [];
+        for (let n = 0; n < 85; n++) finished.push(finish(n % 2 === 0 ? bots(n % 4 === 0 ? `alpha` : `beta`, n % 4 === 0 ? `beta` : `alpha`, `x`) : human(`ann`, `alpha`, `o`), `x`));
+        finish(bots(`beta`, `gamma`, `x`), `x`);
+        const newest = [...finished].reverse();
+        const listed: string[] = [];
+        for (let number = 1; number <= 5; number++) listed.push(...(await gameIds(`?player=alpha&page=${String(number)}`)));
+        expect(listed).toEqual(newest);
+        expect(await page(`?player=alpha`)).toMatchObject({ pages: 5, total: 85 });
     });
 
-    it('stops at ten pages for one set of filters', async () => {
+    it('stops at ten pages for one set of filters, and counts every game past them', async () => {
         for (let n = 0; n < 205; n++) finish(bots(`alpha`, `beta`, `x`), `o`);
-        const read: FinishedGamesPage[] = [await page()];
-        for (let next = read.at(-1)?.next ?? null; next !== null; next = read.at(-1)?.next ?? null) read.push(await page(`?cursor=${next}`));
-        expect(read.map((answer) => answer.page)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
-        expect(read.flatMap((answer) => answer.games)).toHaveLength(200);
-        expect(read.every((answer) => answer.record === undefined)).toBe(true);
+        const pages: FinishedGamesPage[] = [];
+        for (let number = 1; number <= 10; number++) pages.push(await page(`?page=${String(number)}`));
+        expect(pages.map((answer) => [answer.page, answer.pages, answer.total])).toEqual(pages.map((_, at) => [at + 1, 10, 205]));
+        expect(new Set(pages.flatMap((answer) => answer.games.map((game) => game.gameId))).size).toBe(200);
+        expect(pages.every((answer) => answer.record === undefined)).toBe(true);
+        expect((await read(`?page=11`)).status).toBe(400);
     });
 
     it('counts the record of the player named over every game past the cap, on every page', async () => {
         for (let n = 0; n < 205; n++) finish(bots(`alpha`, `beta`, n % 5 === 0 ? `x` : `o`), n % 3 === 0 ? null : `x`, n % 3 === 0 ? `aborted` : `six-in-a-row`);
         const first = await page(`?player=beta`);
-        const tenth = await page(`?player=beta&cursor=10.20`);
+        const tenth = await page(`?player=beta&page=10`);
         // alpha sits x in 41 games, so beta sits x in the other 164, winning those it does not lose.
-        const record = { games: 205, won: 109, lost: 27, undecided: 69, asX: { games: 164, won: 109, lost: 0 }, asO: { games: 41, won: 0, lost: 27 } };
+        const record = { games: 205, won: 109, lost: 27, undecided: 69, voided: 0, asX: { games: 164, won: 109, lost: 0 }, asO: { games: 41, won: 0, lost: 27 } };
         expect(first.record).toEqual(record);
-        expect(tenth.page).toBe(10);
-        expect(tenth.record).toEqual(record);
+        expect(tenth).toMatchObject({ page: 10, pages: 10, total: 205, record });
+    });
+
+    it('counts voided games in the total the pages reach', async () => {
+        const voided = finish(bots(`alpha`, `beta`, `x`), `x`);
+        finish(bots(`alpha`, `beta`, `o`), `o`);
+        expect(voidGames(query, [voided])).toMatchObject({ kind: `voided`, count: 1 });
+        expect(await page(`?player=alpha`)).toMatchObject({ pages: 1, total: 2, record: { games: 1, voided: 1 } });
+        expect(await page()).toMatchObject({ pages: 1, total: 2 });
     });
 
     it('says who sat where at the rating each stood at before, and how the game went', async () => {
@@ -169,7 +168,7 @@ describe('GET /api/games/finished', () => {
         expect([rated.get(aborted), rated.get(voided), rated.get(kept)]).toEqual([false, false, true]);
     });
 
-    it('lists a voided game marked voided and counts it in no record, head to head included', async () => {
+    it('lists a voided game marked voided and counts it in no record but its own, head to head included', async () => {
         const voided = finish(bots(`alpha`, `beta`, `x`), `x`);
         finish(bots(`alpha`, `beta`, `o`), `o`);
         finish(bots(`beta`, `alpha`, `x`), `x`);
@@ -180,7 +179,7 @@ describe('GET /api/games/finished', () => {
             [false, false],
             [true, true],
         ]);
-        const record = { games: 2, won: 1, lost: 1, undecided: 0, asX: { games: 0, won: 0, lost: 0 }, asO: { games: 2, won: 1, lost: 1 } };
+        const record = { games: 2, won: 1, lost: 1, undecided: 0, voided: 1, asX: { games: 0, won: 0, lost: 0 }, asO: { games: 2, won: 1, lost: 1 } };
         expect(listed.record).toEqual(record);
         expect((await page(`?player=alpha&vs=beta`)).record).toEqual(record);
     });
@@ -240,7 +239,8 @@ describe('GET /api/games/finished', () => {
             [`?player=alpha&vs=Alpha`],
             [`?opening=4`],
             [`?before=2026-02-30`],
-            [`?cursor=11.4`],
+            [`?page=11`],
+            [`?cursor=2.40`],
             [`?analysed=1`],
             [`?player=ann&player=bob`],
         ])('refuses %s as a bad request', async (search) => {
@@ -248,11 +248,11 @@ describe('GET /api/games/finished', () => {
         });
 
         it.each([
-            [`?player=alpha`, { games: 4, won: 1, lost: 2, undecided: 1, asX: { games: 1, won: 0, lost: 0 }, asO: { games: 3, won: 1, lost: 2 } }],
-            [`?player=alpha&vs=gamma`, { games: 1, won: 0, lost: 1, undecided: 0, asX: { games: 0, won: 0, lost: 0 }, asO: { games: 1, won: 0, lost: 1 } }],
-            [`?player=alpha&result=won`, { games: 1, won: 1, lost: 0, undecided: 0, asX: { games: 0, won: 0, lost: 0 }, asO: { games: 1, won: 1, lost: 0 } }],
-            [`?player=ann&vs=bob`, { games: 0, won: 0, lost: 0, undecided: 0, asX: { games: 0, won: 0, lost: 0 }, asO: { games: 0, won: 0, lost: 0 } }],
-            [`?player=alpha&before=2026-01-01`, { games: 0, won: 0, lost: 0, undecided: 0, asX: { games: 0, won: 0, lost: 0 }, asO: { games: 0, won: 0, lost: 0 } }],
+            [`?player=alpha`, { games: 4, won: 1, lost: 2, undecided: 1, voided: 0, asX: { games: 1, won: 0, lost: 0 }, asO: { games: 3, won: 1, lost: 2 } }],
+            [`?player=alpha&vs=gamma`, { games: 1, won: 0, lost: 1, undecided: 0, voided: 0, asX: { games: 0, won: 0, lost: 0 }, asO: { games: 1, won: 0, lost: 1 } }],
+            [`?player=alpha&result=won`, { games: 1, won: 1, lost: 0, undecided: 0, voided: 0, asX: { games: 0, won: 0, lost: 0 }, asO: { games: 1, won: 1, lost: 0 } }],
+            [`?player=ann&vs=bob`, { games: 0, won: 0, lost: 0, undecided: 0, voided: 0, asX: { games: 0, won: 0, lost: 0 }, asO: { games: 0, won: 0, lost: 0 } }],
+            [`?player=alpha&before=2026-01-01`, { games: 0, won: 0, lost: 0, undecided: 0, voided: 0, asX: { games: 0, won: 0, lost: 0 }, asO: { games: 0, won: 0, lost: 0 } }],
         ])('counts the record for %s', async (search, record) => {
             expect((await page(search)).record).toEqual(record);
         });
@@ -287,8 +287,8 @@ describe('GET /api/games/finished', () => {
 
     it.each([
         [{}, [`games_finish_seq_idx`]],
-        [{ cursor: `2.40` }, [`games_finish_seq_idx`]],
-        [{ cursor: `5.40`, player: `alpha` }, [`games_bot_finish_idx`, `games_challenger_finish_idx`, `games_dest_finish_idx`]],
+        [{ page: `2` }, [`games_finish_seq_idx`]],
+        [{ page: `5`, player: `alpha` }, [`games_bot_finish_idx`, `games_challenger_finish_idx`, `games_dest_finish_idx`]],
         [{ player: `ann` }, [`games_user_finish_idx`]],
         [{ player: `alpha` }, [`games_bot_finish_idx`, `games_challenger_finish_idx`, `games_dest_finish_idx`]],
         [{ player: `alpha`, vs: `beta` }, [`games_dest_finish_idx`]],

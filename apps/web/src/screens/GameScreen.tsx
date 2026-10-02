@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type RefObject } from 'react';
 import { clockText, gameMeta, turnsOnBoard, type FinishedGamesRecord, type GameHeadline, type GameSnapshot } from '@hexo-arena/contract';
 import { fetchFinishedGames } from '../api/client';
 import { BotBadge, PlayerName, Swatch } from '../components/player';
@@ -15,6 +15,8 @@ import { FeedLabel, GameDrawer } from '../game/GameDrawer';
 import { clockOf, Pips, SeatChip, TurnChip, YouChip } from '../game/GameHud';
 import { lastTurnOf, turnOf, useReplay, type Replay } from '../game/replay';
 import { Scrubber } from '../game/Scrubber';
+import { Rundown } from '../game/Rundown';
+import { useRundown } from '../game/rundown';
 import { useDrawer } from '../game/use-drawer';
 import { selfName, useMe } from '../me';
 import { useGame, type GameLink, type GameSend, type Refusal } from '../game/use-game';
@@ -135,6 +137,38 @@ function useResultReach(finished: boolean) {
     return ref;
 }
 
+// The rundown's card floats under the top chips before the first turn, so
+// the camera measures where it ends and keeps the position below it.
+// A card reaching past half the stage, as large text makes it, would
+// leave the board too little room, so it gives the stage up.
+// The reach lands a frame later, so the board's own observer never sees
+// its camera change inside the frame that measured the card.
+function useRundownReach(host: RefObject<HTMLDivElement | null>, shown: boolean, crowded: () => void) {
+    useLayoutEffect(() => {
+        const stage = host.current;
+        if (!shown || stage === null || typeof ResizeObserver === `undefined`) return;
+        const card = stage.querySelector(`.hud-rundown`);
+        if (card === null) return;
+        let frame = 0;
+        const observer = new ResizeObserver(() => {
+            const area = stage.getBoundingClientRect();
+            const reach = card.getBoundingClientRect().bottom - area.top;
+            cancelAnimationFrame(frame);
+            frame = requestAnimationFrame(() => {
+                if (reach > area.height / 2) crowded();
+                else stage.style.setProperty(`--rundown-reach`, `${String(Math.ceil(reach))}px`);
+            });
+        });
+        observer.observe(stage);
+        observer.observe(card);
+        return () => {
+            observer.disconnect();
+            cancelAnimationFrame(frame);
+            stage.style.removeProperty(`--rundown-reach`);
+        };
+    }, [host, shown, crowded]);
+}
+
 // Typing into a field never opens the drawer.
 function typingInto(target: EventTarget | null): boolean {
     return target instanceof HTMLElement && (target.isContentEditable || [`INPUT`, `TEXTAREA`, `SELECT`].includes(target.tagName));
@@ -171,6 +205,28 @@ function GameView({ snapshot, send, link }: { snapshot: GameSnapshot; send: Game
     const finishedShown = useRef(!running);
     const host = useResultReach(!running);
     const meetings = useMeetings(snapshot);
+    const rundown = useRundown(snapshot.players, running);
+    const [rundownHidden, setRundownHidden] = useState(false);
+    // Before the first turn only the opening stands on the board.
+    const rundownShown = running && total <= opening && !rundownHidden;
+    const crowdRundown = useCallback(() => {
+        setRundownHidden(true);
+    }, []);
+    useRundownReach(host, rundownShown, crowdRundown);
+    const meetingsLine =
+        meetings === null || meetings.record.games === 0 ? null : (
+            <>
+                {text.games.meetings(
+                    <PlayerName name={meetings.x.name} kind={meetings.x.kind} />,
+                    <PlayerName name={meetings.o.name} kind={meetings.o.kind} />,
+                    meetings.record.won,
+                    meetings.record.lost,
+                    (words) => <Link to={gamesPathOf(meetings.x.name, meetings.o.name)}>{words}</Link>,
+                    meetings.record.games,
+                )}
+                {meetings.record.voided === 0 ? null : `; ${text.games.voidedLeftOut(meetings.record.voided)}`}
+            </>
+        );
 
     const meta = gameMeta(headlineOf(snapshot));
     useDocumentMeta(route, meta.title, meta.description);
@@ -293,7 +349,7 @@ function GameView({ snapshot, send, link }: { snapshot: GameSnapshot; send: Game
             data-replay={replaying ? `` : undefined}
         >
             <h1 className="sr-only">{headingOf(snapshot)}</h1>
-            <div className="board-host" ref={host}>
+            <div className="board-host" ref={host} data-rundown={rundownShown ? `` : undefined}>
                 <GameBoard
                     stones={shownStones}
                     frameStones={replaying ? frameStones : undefined}
@@ -329,6 +385,31 @@ function GameView({ snapshot, send, link }: { snapshot: GameSnapshot; send: Game
                     <YouChip snapshot={snapshot} you={you} me={me} />
                 )}
                 <TurnChip snapshot={snapshot} you={you} link={link} status={yourMove ? status : idleStatus} replay={replaying ? replay : null} />
+                {rundownShown ? (
+                    <div className="hud-lift hud-rundown">
+                        <div className="hud-chip">
+                            <Rundown
+                                players={snapshot.players}
+                                data={rundown}
+                                meetings={
+                                    meetings === null ? null : meetings.record.games === 0 ? (
+                                        text.rundown.firstMeeting(
+                                            <PlayerName name={meetings.x.name} kind={meetings.x.kind} />,
+                                            <PlayerName name={meetings.o.name} kind={meetings.o.kind} />,
+                                        )
+                                    ) : (
+                                        meetingsLine
+                                    )
+                                }
+                                onHide={() => {
+                                    // The button leaves with the card, so the keyboard goes back to the board.
+                                    host.current?.querySelector<HTMLElement>(`.board-control`)?.focus({ preventScroll: true });
+                                    setRundownHidden(true);
+                                }}
+                            />
+                        </div>
+                    </div>
+                ) : null}
                 <div className="hot-edge" aria-hidden="true" onMouseEnter={hoverEdge} onMouseLeave={leaveEdge} />
             </div>
             <div className="drawer-slot" onMouseLeave={leaveDrawer}>
@@ -337,16 +418,8 @@ function GameView({ snapshot, send, link }: { snapshot: GameSnapshot; send: Game
                     feed={feed}
                     current={replaying ? currentLine : feed.length - 1}
                     facts={factsOf(snapshot)}
-                    meetings={meetings === null ? null : (
-                        text.games.meetings(
-                            <PlayerName name={meetings.x.name} kind={meetings.x.kind} />,
-                            <PlayerName name={meetings.o.name} kind={meetings.o.kind} />,
-                            meetings.record.won,
-                            meetings.record.lost,
-                            (words) => <Link to={gamesPathOf(meetings.x.name, meetings.o.name)}>{words}</Link>,
-                            meetings.record.games,
-                        )
-                    )}
+                    meetings={meetingsLine}
+                    rundown={running && !rundownShown ? <Rundown players={snapshot.players} data={rundown} meetings={null} /> : null}
                     tournament={snapshot.tournament === undefined ? null : (
                         <Link to={`/tournaments/${encodeURIComponent(snapshot.tournament.id)}`}>
                             {text.drawer.tournamentGame(snapshot.tournament.name, snapshot.tournament.round, snapshot.tournament.game)}
@@ -382,7 +455,7 @@ function useMeetings(snapshot: GameSnapshot): Meetings | null {
         let cancelled = false;
         fetchFinishedGames({ player: x.name, vs: o.name }).then(
             (page) => {
-                if (!cancelled && page.record !== undefined && page.record.games > 0) setMeetings({ x: seated(x), o: seated(o), record: page.record });
+                if (!cancelled && page.record !== undefined) setMeetings({ x: seated(x), o: seated(o), record: page.record });
             },
             // The line is extra; a read that fails leaves it out.
             () => undefined,
@@ -398,16 +471,15 @@ function factsOf(snapshot: GameSnapshot): (readonly [string, string])[] {
     // A finished game whose clock went with its process has no clock to name.
     const facts: (readonly [string, string])[] =
         snapshot.clock === undefined ? [] : [[text.drawer.clock, text.drawer.clockValue(clockText(snapshot.clock.mode))]];
-    facts.push([
-        text.drawer.opening,
-        snapshot.openingPlies === 1 ? text.drawer.originOnly : text.drawer.openingStones(snapshot.openingPlies),
-    ]);
+    facts.push([text.drawer.opening, text.drawer.openingStones(snapshot.openingPlies)]);
+    const voided = snapshot.status === `finished` && snapshot.voided;
     if (snapshot.you === undefined) {
         const guest = snapshot.players.x.kind === `guest` || snapshot.players.o.kind === `guest`;
-        const voided = snapshot.status === `finished` && snapshot.voided;
         facts.push([text.drawer.rated, guest ? text.drawer.ratedNoGuest : voided ? text.drawer.ratedNoVoided : text.drawer.ratedYes]);
     } else {
         facts.push([text.drawer.yourSide, snapshot.you]);
+        // A seated player's own game needs no Rated row until the operator voids it.
+        if (voided) facts.push([text.drawer.rated, text.drawer.ratedNoVoided]);
     }
     if (snapshot.status === `finished`) facts.push([text.drawer.result, resultLine(snapshot)]);
     return facts;

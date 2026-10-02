@@ -49,7 +49,7 @@ function history(player: string): unknown {
         rated: true,
         voided: false,
     }));
-    return { games, next: null, previous: null, page: 1, record: { games: 12, won: 6, lost: 6, undecided: 0, asX: { games: 12, won: 6, lost: 6 }, asO: { games: 0, won: 0, lost: 0 } } };
+    return { games, page: 1, pages: 1, total: 12, record: { games: 12, won: 6, lost: 6, undecided: 0, voided: 0, asX: { games: 12, won: 6, lost: 6 }, asO: { games: 0, won: 0, lost: 0 } } };
 }
 
 // The owner panel needs a session, so these serve me beside the directory
@@ -99,18 +99,24 @@ describe('BotScreen', () => {
         expect(reads).toContain(`/api/games/finished?player=sealbot`);
     });
 
-    it('head the page with the bot\'s name while the bot list loads', () => {
-        vi.stubGlobal(`fetch`, vi.fn(() => new Promise<Response>(() => undefined)));
+    it('head the page with the bot\'s name in its plate while the bot list loads, where the loaded page holds it', async () => {
+        let answer: (response: Response) => void = () => undefined;
+        vi.stubGlobal(`fetch`, vi.fn(() => new Promise<Response>((resolve) => { answer = resolve; })));
         render(<BotScreen name="sealbot" />);
-        expect(screen.getByRole(`heading`, { level: 1, name: `sealbot` })).toBeTruthy();
+        const pending = screen.getByRole(`heading`, { level: 1, name: `sealbot` });
+        expect(pending.closest(`.bot-plate .bot-title`)).toBeTruthy();
+        expect(pending.closest(`.bot-plate`)?.querySelector(`.badge-bot`)).toBeTruthy();
         expect(document.querySelector(`.skeleton`)).toBeTruthy();
+        answer(new Response(JSON.stringify([sealbot])));
+        await screen.findByText(`A clean-room HeXO engine with a rotation opener.`);
+        expect(screen.getByRole(`heading`, { level: 1, name: `sealbot` }).closest(`.bot-plate .bot-title`)).toBeTruthy();
     });
 
     it('say a bot that has finished no game has none yet', async () => {
         vi.stubGlobal(
             `fetch`,
             vi.fn((url: string) => {
-                const body = url.startsWith(`/api/games/finished`) ? { games: [], next: null, previous: null, page: 1, record: { games: 0, won: 0, lost: 0, undecided: 0, asX: { games: 0, won: 0, lost: 0 }, asO: { games: 0, won: 0, lost: 0 } } } : url === `/api/games` ? [] : [sealbot];
+                const body = url.startsWith(`/api/games/finished`) ? { games: [], page: 1, pages: 0, total: 0, record: { games: 0, won: 0, lost: 0, undecided: 0, voided: 0, asX: { games: 0, won: 0, lost: 0 }, asO: { games: 0, won: 0, lost: 0 } } } : url === `/api/games` ? [] : [sealbot];
                 return Promise.resolve(new Response(JSON.stringify(body)));
             }),
         );

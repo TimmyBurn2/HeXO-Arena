@@ -43,6 +43,13 @@
         align-items: flex-end;
     }
 
+    /* The rating's own height, held while it loads. */
+    .bot-rating-pending {
+        width: 4ch;
+        height: calc(var(--text-rung-1) * var(--leading-tight));
+        background: var(--c-bg-active);
+    }
+
     .bot-rating-number {
         font-size: var(--text-rung-1);
         font-weight: var(--weight-display);
@@ -87,6 +94,10 @@
         .bot-title h1,
         .bot-rating-number {
             font-size: var(--text-xl);
+        }
+
+        .bot-rating-pending {
+            height: calc(var(--text-xl) * var(--leading-tight));
         }
     }
 

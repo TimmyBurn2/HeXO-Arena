@@ -35,7 +35,7 @@ import {
     challengeDailyCap,
     challengePairPendingCap,
     challengeQuotaErrorCodes,
-    gameCooldownErrorCodes,
+    gameLimitErrorCodes,
     archiveReadGlobalLimit,
     archiveReadLimit,
     clientWatcherCap,
@@ -175,7 +175,7 @@ const signupExpiredError = errorBodySchema(signupExpiredErrorCodes).meta({ id: `
 const botLimitError = errorBodySchema([`bot_limit`]).meta({ id: `BotLimitError` });
 const nameTakenError = errorBodySchema([`name_taken`]).meta({ id: `NameTakenError` });
 const inGameError = errorBodySchema(botDeleteConflictErrorCodes).meta({ id: `InGameError` });
-const gameCooldownError = errorBodySchema([...gameCooldownErrorCodes, ...rateLimitedErrorCodes]).meta({ id: `GameCooldownError` });
+const gameLimitError = errorBodySchema([...gameLimitErrorCodes, ...rateLimitedErrorCodes]).meta({ id: `GameLimitError` });
 const challengeQuotaError = errorBodySchema([...challengeQuotaErrorCodes, ...rateLimitedErrorCodes]).meta({ id: `ChallengeQuotaError` });
 const signupEndedError = errorBodySchema([...signupExpiredErrorCodes, ...signupLimitErrorCodes]).meta({ id: `SignupEndedError` });
 const gameCreateError = errorBodySchema([...badRequestErrorCodes, ...gameCreateErrorCodes]).meta({
@@ -613,9 +613,9 @@ function registerSiteSurface(registry: OpenAPIRegistry, shared: SharedComponents
             401: shared.unauthorized,
             403: shared.delisted,
             429: {
-                description: `The caller is inside the creation cooldown (game_cooldown), and Retry-After says how long it has left; or too many requests (rate_limited).`,
+                description: `The caller is inside the creation cooldown (game_cooldown); or a signed-in caller has played this bot ${String(pairDailyCap)} times this UTC day (daily_pair_cap), until 00:00 UTC; Retry-After says how long either has left; or too many requests (rate_limited).`,
                 headers: { 'Retry-After': shared.retryAfter },
-                content: { 'application/json': { schema: gameCooldownError } },
+                content: { 'application/json': { schema: gameLimitError } },
             },
             503: shared.paused,
         },

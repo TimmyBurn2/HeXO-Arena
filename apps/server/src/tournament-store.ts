@@ -25,6 +25,7 @@ export interface NewTournament {
     readonly timeControl: TimeControl;
     readonly openingPlies: OpeningPlies;
     readonly maxEntrants: number;
+    readonly ruleId?: number;
 }
 
 export type CreateTournamentResult =
@@ -54,6 +55,7 @@ export function createTournament(query: Query, tournament: NewTournament, now: n
             openingPlies: tournament.openingPlies,
             maxEntrants: tournament.maxEntrants,
             createdAt: now,
+            ruleId: tournament.ruleId ?? null,
         })
         .run();
     return { kind: `created`, id };

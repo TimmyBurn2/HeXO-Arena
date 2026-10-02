@@ -7,6 +7,18 @@ import { formatAdminResponse, parseAdminArgs, sendAdminRequest } from '../src/ad
 import { listenAdminSocket } from '../src/admin-socket';
 import { createTestApp, type TestApp } from './helpers';
 
+const sundayRule = {
+    id: 2,
+    weekday: `sun`,
+    time: `18:00`,
+    namePattern: `Sunday cup {date}`,
+    timeControl: { mode: `match`, mainTimeMs: 180_000, incrementMs: 2_000 },
+    openingPlies: 5,
+    maxEntrants: 12,
+    daysAhead: 7,
+    nextStartsAt: Date.UTC(2026, 9, 4, 18) / 1000,
+} as const;
+
 describe('parseAdminArgs', () => {
     it.each([
         [[`status`], { op: `status` }],
@@ -43,6 +55,55 @@ describe('parseAdminArgs', () => {
             },
         ],
         [[`tournament-cancel`, `t_abcdefghijk2`, `--reason`, `rain`], { op: `tournament-cancel`, id: `t_abcdefghijk2`, reason: `rain` }],
+        [
+            [`tournament-schedule`, `add`, `--weekday`, `sun`, `--time`, `18:00`, `--name`, `Sunday cup {date}`, `--clock`, `turn:10`, `--reason`, `weekly`],
+            {
+                op: `tournament-schedule-add`,
+                weekday: `sun`,
+                time: `18:00`,
+                namePattern: `Sunday cup {date}`,
+                timeControl: { mode: `turn`, turnTimeMs: 10_000 },
+                openingPlies: 5,
+                maxEntrants: 12,
+                daysAhead: 7,
+                reason: `weekly`,
+            },
+        ],
+        [
+            [
+                `tournament-schedule`,
+                `add`,
+                `--weekday`,
+                `wed`,
+                `--time`,
+                `06:30`,
+                `--name`,
+                `Blitz`,
+                `--clock`,
+                `match:3+2`,
+                `--opening`,
+                `3`,
+                `--max`,
+                `6`,
+                `--ahead`,
+                `2`,
+                `--reason`,
+                `r`,
+            ],
+            {
+                op: `tournament-schedule-add`,
+                weekday: `wed`,
+                time: `06:30`,
+                namePattern: `Blitz`,
+                timeControl: { mode: `match`, mainTimeMs: 180_000, incrementMs: 2_000 },
+                openingPlies: 3,
+                maxEntrants: 6,
+                daysAhead: 2,
+                reason: `r`,
+            },
+        ],
+        [[`tournament-schedule`, `list`], { op: `tournament-schedule-list` }],
+        [[`tournament-schedule`, `remove`, `3`, `--reason`, `done`], { op: `tournament-schedule-remove`, id: 3, reason: `done` }],
     ])('turns %j into the socket request', (argv, request) => {
         expect(parseAdminArgs(argv)).toEqual({ kind: `request`, request });
     });
@@ -60,6 +121,14 @@ describe('parseAdminArgs', () => {
         [`an even opening`, [`tournament-create`, `--name`, `Odd`, `--start`, `2026-10-05T18:00:00Z`, `--clock`, `turn:10`, `--opening`, `4`, `--reason`, `r`]],
         [`a start that is no time`, [`tournament-create`, `--name`, `Soon`, `--start`, `tomorrow`, `--clock`, `turn:10`, `--reason`, `r`]],
         [`a name with a tab`, [`tournament-create`, `--name`, `Tab\tcup`, `--start`, `2026-10-05T18:00:00Z`, `--clock`, `turn:10`, `--reason`, `r`]],
+        [`a schedule op without its action`, [`tournament-schedule`]],
+        [`an unknown schedule action`, [`tournament-schedule`, `pause`, `--reason`, `r`]],
+        [`a weekday that is no weekday`, [`tournament-schedule`, `add`, `--weekday`, `someday`, `--time`, `18:00`, `--name`, `Cup`, `--clock`, `turn:10`, `--reason`, `r`]],
+        [`a time past midnight`, [`tournament-schedule`, `add`, `--weekday`, `sun`, `--time`, `24:30`, `--name`, `Cup`, `--clock`, `turn:10`, `--reason`, `r`]],
+        [`entries opening past the horizon`, [`tournament-schedule`, `add`, `--weekday`, `sun`, `--time`, `18:00`, `--name`, `Cup`, `--clock`, `turn:10`, `--ahead`, `15`, `--reason`, `r`]],
+        [`a removal without an id`, [`tournament-schedule`, `remove`, `--reason`, `r`]],
+        [`a removal by an id that is no number`, [`tournament-schedule`, `remove`, `third`, `--reason`, `r`]],
+        [`a stray argument after the rule id`, [`tournament-schedule`, `remove`, `3`, `4`, `--reason`, `r`]],
     ])('refuses %s with usage', (_label, argv) => {
         expect(parseAdminArgs(argv).kind).toBe(`usage`);
     });
@@ -77,6 +146,7 @@ describe('formatAdminResponse', () => {
                 clientKeys: 12,
                 keylessRequests: 5,
                 tournaments: [{ id: `t_abcdefghijk2`, name: `Autumn round robin`, status: `scheduled`, startsAt: 0, entrants: 4 }],
+                tournamentRules: [sundayRule],
                 recentActions: [{ actor: `operator`, action: `pause`, target: null, reason: `incident`, at: 0 }],
             },
         });
@@ -90,11 +160,24 @@ describe('formatAdminResponse', () => {
                 `keyless       5`,
                 `tournaments:`,
                 `  t_abcdefghijk2  scheduled  1970-01-01T00:00:00.000Z  4 entered  Autumn round robin`,
+                `weekly rules:`,
+                `  2  sun 18:00  next 2026-10-04T18:00:00.000Z  match:3+2  opening 5  max 12  ahead 7  Sunday cup {date}`,
                 `recent admin actions:`,
                 `  1970-01-01T00:00:00.000Z  operator  pause  -  incident`,
             ].join(`\n`),
         );
         expect(formatAdminResponse({ kind: `error`, code: `not_found`, error: `no such user` })).toBe(`not_found: no such user`);
+    });
+
+    it('renders the weekly rules with their next starts, or says there are none', () => {
+        expect(formatAdminResponse({ kind: `tournament-rules`, rules: [sundayRule, { ...sundayRule, id: 3, weekday: `mon`, time: `06:05`, timeControl: { mode: `turn`, turnTimeMs: 10_000 }, namePattern: `Monday` }] })).toBe(
+            [
+                `weekly rules:`,
+                `  2  sun 18:00  next 2026-10-04T18:00:00.000Z  match:3+2  opening 5  max 12  ahead 7  Sunday cup {date}`,
+                `  3  mon 06:05  next 2026-10-04T18:00:00.000Z  turn:10  opening 5  max 12  ahead 7  Monday`,
+            ].join(`\n`),
+        );
+        expect(formatAdminResponse({ kind: `tournament-rules`, rules: [] })).toBe([`weekly rules:`, `  none`].join(`\n`));
     });
 });
 

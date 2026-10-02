@@ -167,6 +167,7 @@ export function playerRecord(query: Query, name: string, nowMs: number): PlayerR
         name: player.name,
         kind: player.kind,
         rating: Math.round(rating.rating),
+        deviation: Math.round(rating.deviation),
         provisional: isProvisional(rating),
         rank: rank === -1 ? null : rank + 1,
         games: rows.length,

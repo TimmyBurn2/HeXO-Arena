@@ -75,7 +75,7 @@ function serve(reads: Reads): void {
                         : path === `/api/leaderboard`
                           ? ((url.includes(`active=all`) ? reads.allTime : undefined) ?? reads.ladder ?? [])
                           : path === `/api/games/finished`
-                            ? { games: reads.finished ?? [], next: null, previous: null, page: 1 }
+                            ? { games: reads.finished ?? [], page: 1, pages: 1, total: (reads.finished ?? []).length }
                             : path === `/api/tournaments`
                               ? (reads.tournaments ?? { running: null, scheduled: [], past: [] })
                               : undefined;

@@ -1,16 +1,17 @@
 import { describe, expect, it } from 'vitest';
-import { activeKeys, gamesPathOf, searchOf, viewOf, withFilter } from '../src/games/filters';
+import { activeKeys, gamesPathOf, pagePathOf, searchOf, viewOf, withFilter } from '../src/games/filters';
 
 describe('viewOf', () => {
-    it('read every filter and the cursor from an address', () => {
-        expect(viewOf(`?player=hextide&vs=quietlake&result=won&side=x&reason=timeout&clock=turn&kind=bot-bot&opening=5&before=2026-09-01&cursor=2.381`)).toEqual({
+    it('read every filter and the page from an address', () => {
+        expect(viewOf(`?player=hextide&vs=quietlake&result=won&side=x&reason=timeout&clock=turn&kind=bot-bot&opening=5&before=2026-09-01&page=2`)).toEqual({
             filters: { player: `hextide`, vs: `quietlake`, result: `won`, side: `x`, reason: `timeout`, clock: `turn`, kind: `bot-bot`, opening: `5`, before: `2026-09-01` },
-            cursor: `2.381`,
+            page: 2,
         });
     });
 
-    it('drop each value its filter does not take, and keep the rest', () => {
-        expect(viewOf(`?clock=blitz&opening=4&before=yesterday&cursor=11.2&reason=timeout&utm=x`)).toEqual({ filters: { reason: `timeout` }, cursor: null });
+    it('drop each value its filter does not take, and keep the rest, on the first page', () => {
+        expect(viewOf(`?clock=blitz&opening=4&before=yesterday&page=11&reason=timeout&utm=x`)).toEqual({ filters: { reason: `timeout` }, page: 1 });
+        expect(viewOf(`?cursor=2.40`)).toEqual({ filters: {}, page: 1 });
     });
 
     it('drop what needs a player while none is named, keeping a game without a winner', () => {
@@ -24,9 +25,17 @@ describe('viewOf', () => {
 });
 
 describe('searchOf', () => {
-    it('write the filters in a fixed order with the cursor last, and nothing for none', () => {
-        expect(searchOf({ filters: { clock: `match`, player: `ana` }, cursor: `3.9` })).toBe(`?player=ana&clock=match&cursor=3.9`);
-        expect(searchOf({ filters: {}, cursor: null })).toBe(``);
+    it('write the filters in a fixed order with the page last, the first page and no filter writing nothing', () => {
+        expect(searchOf({ filters: { clock: `match`, player: `ana` }, page: 3 })).toBe(`?player=ana&clock=match&page=3`);
+        expect(searchOf({ filters: { clock: `match` }, page: 1 })).toBe(`?clock=match`);
+        expect(searchOf({ filters: {}, page: 1 })).toBe(``);
+    });
+});
+
+describe('pagePathOf', () => {
+    it('lead to another page of the same filters', () => {
+        expect(pagePathOf({ player: `ana` }, 4)).toBe(`/games?player=ana&page=4`);
+        expect(pagePathOf({ player: `ana` }, 1)).toBe(`/games?player=ana`);
     });
 });
 

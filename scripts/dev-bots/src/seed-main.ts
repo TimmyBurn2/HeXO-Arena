@@ -6,6 +6,7 @@ import { z } from 'zod';
 import { seedPlan } from './personas';
 import { NotADevServer, seats } from './runner';
 import { seedDevData } from './seed';
+import type { DevWeeklyRule } from './tournament';
 
 const envSchema = z.object({
     PORT: z.coerce.number().int().min(1).max(65535).default(3000),
@@ -21,16 +22,43 @@ function log(line: string): void {
     console.log(`${new Date().toTimeString().slice(0, 8)} ${line}`);
 }
 
-// The admin client answers `unchanged` with exit status 1 for a persona a
-// rerun finds banned already, which is the state the seed wants.
-async function ban(name: string): Promise<void> {
-    const args = [`--silent`, `--filter`, `@hexo-arena/server`, `admin`, `ban-user`, name, `--reason`, `dev seed persona`];
+// The admin client answers `unchanged` with exit status 1 when a rerun
+// finds what the op would make already standing, which is the state the
+// seed wants.
+async function adminSettles(args: readonly string[]): Promise<void> {
     try {
-        await run(`pnpm`, args, { cwd: repoRoot });
+        await run(`pnpm`, [`--silent`, `--filter`, `@hexo-arena/server`, `admin`, ...args], { cwd: repoRoot });
     } catch (error) {
         const output = error instanceof Error && `stderr` in error ? String(error.stderr) : ``;
         if (!output.includes(`unchanged`)) throw error;
     }
+}
+
+async function ban(name: string): Promise<void> {
+    await adminSettles([`ban-user`, name, `--reason`, `dev seed persona`]);
+}
+
+async function addWeeklyRule(rule: DevWeeklyRule): Promise<void> {
+    await adminSettles([
+        `tournament-schedule`,
+        `add`,
+        `--weekday`,
+        rule.weekday,
+        `--time`,
+        rule.time,
+        `--name`,
+        rule.namePattern,
+        `--clock`,
+        rule.clock,
+        `--opening`,
+        String(rule.openingPlies),
+        `--max`,
+        String(rule.maxEntrants),
+        `--ahead`,
+        String(rule.daysAhead),
+        `--reason`,
+        `dev seed weekly rule`,
+    ]);
 }
 
 // The admin client schedules the tournament; its answer names the id.
@@ -54,6 +82,7 @@ try {
         random: Math.random,
         log,
         scheduleTournament,
+        addWeeklyRule,
         tournamentCandidates: seats.map((seat) => ({ owner: `devowner-${seat}`, bot: `devbot-${seat}` })),
     });
     log(`played ${String(report.played)} games`);

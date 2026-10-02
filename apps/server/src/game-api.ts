@@ -9,6 +9,7 @@ import {
     liveGameListMemoMs,
     nameKeyOf,
     nameSyntaxSchema,
+    pairDailyCap,
     watcherRetryAfterSeconds,
     type GameEvent,
 } from '@hexo-arena/contract';
@@ -22,7 +23,7 @@ import {
     type MoveErrorCode,
     type Person,
 } from './game-registry';
-import { lastHumanGameCreatedAt } from './game-store';
+import { countHumanPairGamesSince, lastHumanGameCreatedAt } from './game-store';
 import type { GuestSessions } from './guests';
 import type { PresenceRegistry } from './presence';
 import type { ClientLimits, CredentialLimits } from './request-limits';
@@ -126,6 +127,18 @@ export function registerGameApi(app: FastifyInstance, deps: GameApiDeps): void {
                 error: `the bot is at its concurrent-game cap or playing a tournament`,
                 code: `bot_busy`,
             });
+        }
+        // A signed-in human and a bot share the pair cap two bots have, counted
+        // from the log like theirs; a guest's games are unrated and kept in no log.
+        if (person.kind === `user`) {
+            const now = nowSeconds();
+            const dayStart = now - (now % 86_400);
+            if (countHumanPairGamesSince(query, { userId: person.id, botId: bot.id }, dayStart) >= pairDailyCap) {
+                return reply.code(429).header(`retry-after`, String(dayStart + 86_400 - now)).send({
+                    error: `this pair reached its daily game cap`,
+                    code: `daily_pair_cap`,
+                });
+            }
         }
         const created = games.createGame({
             person,

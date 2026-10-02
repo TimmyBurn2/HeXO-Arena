@@ -140,8 +140,10 @@ export type HumanMoveRequest = z.infer<typeof humanMoveRequestSchema>;
 // Caller-side bounds on the human: the live-game cap, then bot-side gates.
 export const gameCreateErrorCodes = [`human_busy`, `not_open`, `clock_not_accepted`, `bot_busy`] as const;
 
-// The creation cooldown, so a browser cannot farm the create route; waiting lifts it, so it answers 429.
-export const gameCooldownErrorCodes = [`game_cooldown`] as const;
+// The creation cooldown, so a browser cannot farm the create route, and
+// the daily pair cap one human and one bot share; waiting lifts either,
+// so both answer 429.
+export const gameLimitErrorCodes = [`game_cooldown`, `daily_pair_cap`] as const;
 // A delisted bot takes no new games from humans either.
 export const gameCreateForbiddenErrorCodes = [`delisted`] as const;
 export const gameMoveErrorCodes = [

@@ -129,7 +129,7 @@ function Tournament({ detail, readAt, onEntry }: { detail: TournamentDetail; rea
                     <StatusSentence detail={detail} readAt={readAt} />
                 </p>
                 <p className="note">
-                    {text.tournaments.rules(field, clockText(detail.timeControl), detail.openingPlies)} {text.tournaments.pairing}
+                    {text.tournaments.rules(field, clockText(detail.timeControl), detail.openingPlies)} {text.tournaments.pairing(detail.openingPlies)}
                 </p>
                 {detail.rounds.length > 0 ? <RoundSteps detail={detail} /> : null}
             </div>
@@ -255,7 +255,7 @@ function Absentees({ detail }: { detail: TournamentDetail }) {
     return (
         <>
             <Gone entries={never} title={text.tournaments.didNotPlay} id="tournament-absent-title" />
-            <Gone entries={withdrew} title={text.tournaments.withdrew} id="tournament-withdrew-title" />
+            <Gone entries={withdrew} title={text.tournaments.withdrawnTitle} id="tournament-withdrawn-title" />
         </>
     );
 }

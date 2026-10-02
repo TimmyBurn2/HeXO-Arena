@@ -6,6 +6,7 @@ import { BotBadge, Rating } from '../components/player';
 import { ErrorFrame, SkeletonRows } from '../components/states';
 import { useMe } from '../me';
 import { ClockPicker } from '../play/ClockPicker';
+import { useExpectedScore } from '../play/expected';
 import { OpeningRow } from '../play/OpeningRow';
 import { OpponentSheet, RosterList, type PickedBy } from '../play/Roster';
 import { StartArea } from '../play/StartArea';
@@ -324,6 +325,7 @@ function SetupCard({
     onChange: () => void;
     onRefused: () => void;
 }) {
+    const expected = useExpectedScore(bot.name);
     return (
         <div className="play-setup-lift">
             <section className="play-setup" aria-label={text.play.setup}>
@@ -350,6 +352,13 @@ function SetupCard({
                         </button>
                     </div>
                 </div>
+                {expected.kind === `ready` ? <p className="note setup-expected">{text.play.expected(bot.name, text.rundown.score(expected.score))}</p> : null}
+                {/* the line's own words hold its room while the records load, so the clock below never moves */}
+                {expected.kind === `loading` ? (
+                    <p className="note setup-expected setup-expected-pending" aria-hidden="true">
+                        {text.play.expected(bot.name, text.rundown.score(0))}
+                    </p>
+                ) : null}
                 <ClockPicker bot={bot} clock={clock} last={last} onClock={onClock} onAdjust={onAdjust} />
                 <OpeningRow opening={opening} onOpening={onOpening} />
                 <StartArea bot={bot} clock={clock} opening={opening} path={path} paused={paused} notice={notice} choices={choices} reads={reads} onRefused={onRefused} reserved={reserved} holder={holder} />

@@ -142,12 +142,15 @@ export async function buildApp(deps: AppDeps): Promise<BuiltApp> {
     );
     const challenges = new ChallengeRegistry({ query, presence, games });
     wirePresence(presence, games);
+    const leadMs = deps.devLogin ? tournamentDevLeadMs : tournamentLeadMs;
     const tournaments = new TournamentScheduler({
         query,
         presence,
         games,
         generation,
         draining: () => gate.draining,
+        leadMs,
+        actor: deps.adminActor,
         ...(deps.now === undefined ? {} : { now: deps.now }),
     });
     games.onFinish((finished) => {
@@ -198,7 +201,7 @@ export async function buildApp(deps: AppDeps): Promise<BuiltApp> {
         tournaments,
         limits,
         actor: deps.adminActor,
-        tournamentLeadMs: deps.devLogin ? tournamentDevLeadMs : tournamentLeadMs,
+        tournamentLeadMs: leadMs,
         ...(deps.now === undefined ? {} : { now: deps.now }),
     });
 

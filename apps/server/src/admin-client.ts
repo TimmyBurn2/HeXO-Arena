@@ -5,6 +5,8 @@ import {
     type AdminRequest,
     type AdminResponse,
     type AdminStatus,
+    type AdminTournamentRule,
+    type TimeControl,
 } from '@hexo-arena/contract';
 import { connect } from 'node:net';
 import { parseArgs } from 'node:util';
@@ -24,7 +26,10 @@ export const adminUsage = `usage: hexo-arena-admin <op> [target] [--reason <text
   abort-game --bot <name> --reason <text>
   recompute-ratings [--exclude <gameId|name>]... --reason <text>
   tournament-create --name <text> --start <ISO time> --clock turn:<s>|match:<min>+<s> [--opening <plies>] [--max <bots>] --reason <text>
-  tournament-cancel <tournamentId> --reason <text>`;
+  tournament-cancel <tournamentId> --reason <text>
+  tournament-schedule add --weekday mon|tue|wed|thu|fri|sat|sun --time <HH:MM UTC> --name <text; {date} becomes the start's date> --clock turn:<s>|match:<min>+<s> [--opening <plies>] [--max <bots>] [--ahead <days>] --reason <text>
+  tournament-schedule list
+  tournament-schedule remove <ruleId> --reason <text>`;
 
 export type ParsedArgs = { kind: `request`; request: AdminRequest } | { kind: `usage`; error: string };
 
@@ -39,12 +44,19 @@ interface Flags {
     clock?: string | undefined;
     opening?: string | undefined;
     max?: string | undefined;
+    weekday?: string | undefined;
+    time?: string | undefined;
+    ahead?: string | undefined;
 }
 
 // A number flag the schema then bounds; text that is no number fails there.
 function numberFlag(value: string | undefined): number | string | undefined {
     if (value === undefined) return undefined;
     return /^\d+$/.test(value) ? Number(value) : value;
+}
+
+function clockFlag(value: string | undefined): TimeControl | string | undefined {
+    return value === undefined ? undefined : (parseClockArg(value) ?? value);
 }
 
 function requestBody(op: string, target: string | undefined, flags: Flags): Record<string, unknown> {
@@ -62,13 +74,30 @@ function requestBody(op: string, target: string | undefined, flags: Flags): Reco
             op,
             name: flags.name,
             startsAt: flags.start,
-            timeControl: flags.clock === undefined ? undefined : (parseClockArg(flags.clock) ?? flags.clock),
+            timeControl: clockFlag(flags.clock),
             ...(opening !== undefined && { openingPlies: opening }),
             ...(max !== undefined && { maxEntrants: max }),
             ...reason,
         };
     }
     if (op === `tournament-cancel`) return { op, id: target, ...reason };
+    if (op === `tournament-schedule-add`) {
+        const opening = numberFlag(flags.opening);
+        const max = numberFlag(flags.max);
+        const ahead = numberFlag(flags.ahead);
+        return {
+            op,
+            weekday: flags.weekday,
+            time: flags.time,
+            namePattern: flags.name,
+            timeControl: clockFlag(flags.clock),
+            ...(opening !== undefined && { openingPlies: opening }),
+            ...(max !== undefined && { maxEntrants: max }),
+            ...(ahead !== undefined && { daysAhead: ahead }),
+            ...reason,
+        };
+    }
+    if (op === `tournament-schedule-remove`) return { op, id: numberFlag(target), ...reason };
     return { op, ...reason };
 }
 
@@ -93,13 +122,20 @@ export function parseAdminArgs(argv: readonly string[]): ParsedArgs {
                 clock: { type: `string` },
                 opening: { type: `string` },
                 max: { type: `string` },
+                weekday: { type: `string` },
+                time: { type: `string` },
+                ahead: { type: `string` },
             },
         });
     } catch (error) {
         return { kind: `usage`, error: error instanceof Error ? error.message : String(error) };
     }
-    const [op, target, ...extra] = parsed.positionals;
-    if (op === undefined) return { kind: `usage`, error: `no op given` };
+    const [first, ...rest] = parsed.positionals;
+    if (first === undefined) return { kind: `usage`, error: `no op given` };
+    // The schedule ops name their action as a word of their own, which the
+    // socket takes as part of the op.
+    if (first === `tournament-schedule` && rest[0] === undefined) return { kind: `usage`, error: `name add, list, or remove` };
+    const [op, target, ...extra] = first === `tournament-schedule` ? [`${first}-${rest[0] ?? ``}`, ...rest.slice(1)] : [first, ...rest];
     if (extra.length > 0) return { kind: `usage`, error: `unexpected arguments: ${extra.join(` `)}` };
     const request = adminRequestSchema.safeParse(requestBody(op, target, parsed.values));
     if (!request.success) {
@@ -111,6 +147,28 @@ export function parseAdminArgs(argv: readonly string[]): ParsedArgs {
         };
     }
     return { kind: `request`, request: request.data };
+}
+
+function clockArg(clock: TimeControl): string {
+    switch (clock.mode) {
+        case `turn`:
+            return `turn:${String(clock.turnTimeMs / 1_000)}`;
+        case `match`:
+            return `match:${String(clock.mainTimeMs / 60_000)}+${String(clock.incrementMs / 1_000)}`;
+        case `unlimited`:
+            return `unlimited`;
+    }
+}
+
+function ruleLines(rules: readonly AdminTournamentRule[]): string[] {
+    const lines = [`weekly rules:`];
+    if (rules.length === 0) lines.push(`  none`);
+    for (const rule of rules) {
+        const next = new Date(rule.nextStartsAt * 1000).toISOString();
+        const settings = `${clockArg(rule.timeControl)}  opening ${String(rule.openingPlies)}  max ${String(rule.maxEntrants)}  ahead ${String(rule.daysAhead)}`;
+        lines.push(`  ${String(rule.id)}  ${rule.weekday} ${rule.time}  next ${next}  ${settings}  ${rule.namePattern}`);
+    }
+    return lines;
 }
 
 function formatStatus(status: AdminStatus): string {
@@ -128,6 +186,7 @@ function formatStatus(status: AdminStatus): string {
         const at = new Date(tournament.startsAt * 1000).toISOString();
         lines.push(`  ${tournament.id}  ${tournament.status}  ${at}  ${String(tournament.entrants)} entered  ${tournament.name}`);
     }
+    lines.push(...ruleLines(status.tournamentRules));
     lines.push(`recent admin actions:`);
     if (status.recentActions.length === 0) lines.push(`  none`);
     for (const action of status.recentActions) {
@@ -141,6 +200,8 @@ export function formatAdminResponse(response: AdminResponse): string {
     switch (response.kind) {
         case `status`:
             return formatStatus(response.status);
+        case `tournament-rules`:
+            return ruleLines(response.rules).join(`\n`);
         case `done`:
             return response.summary;
         case `error`:

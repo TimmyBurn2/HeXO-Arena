@@ -580,26 +580,22 @@ components:
         - voided
       type: object
     FinishedGamesPage:
+      description: A page past the last one the filters reach lists no game.
       properties:
         games:
           items:
             $ref: "#/components/schemas/FinishedGameEntry"
           maxItems: 20
           type: array
-        next:
-          description: The cursor of the next page; null on the last one.
-          nullable: true
-          pattern: ^(?:[2-9]|10)\.[1-9][0-9]{0,14}$
-          type: string
         page:
           maximum: 10
           minimum: 1
           type: integer
-        previous:
-          description: The cursor of the page before; null when that page is the first, or on the first.
-          nullable: true
-          pattern: ^(?:[2-9]|10)\.[1-9][0-9]{0,14}$
-          type: string
+        pages:
+          description: The pages the filters reach, at most 10; 0 when no game matches.
+          maximum: 10
+          minimum: 0
+          type: integer
         record:
           description: Present when the query names a player.
           properties:
@@ -645,6 +641,10 @@ components:
               description: Games that ended without a winner.
               minimum: 0
               type: integer
+            voided:
+              description: Voided games the filters select, which no other count holds.
+              minimum: 0
+              type: integer
             won:
               minimum: 0
               type: integer
@@ -653,14 +653,19 @@ components:
             - won
             - lost
             - undecided
+            - voided
             - asX
             - asO
           type: object
+        total:
+          description: Every game the filters select, past the page cap, voided ones included.
+          minimum: 0
+          type: integer
       required:
         - games
-        - next
-        - previous
         - page
+        - pages
+        - total
       type: object
     GameBoard:
       properties:
@@ -728,19 +733,6 @@ components:
             - mode
             - remainingMainMs
           type: object
-    GameCooldownError:
-      properties:
-        code:
-          enum:
-            - game_cooldown
-            - rate_limited
-          type: string
-        error:
-          type: string
-      required:
-        - error
-        - code
-      type: object
     GameCreateError:
       properties:
         code:
@@ -841,6 +833,20 @@ components:
         - gameId
         - winner
         - reason
+      type: object
+    GameLimitError:
+      properties:
+        code:
+          enum:
+            - game_cooldown
+            - daily_pair_cap
+            - rate_limited
+          type: string
+        error:
+          type: string
+      required:
+        - error
+        - code
       type: object
     GameOverError:
       properties:
@@ -1407,6 +1413,11 @@ components:
             - games
             - won
           type: object
+        deviation:
+          description: The rating's deviation as the player's last rated game left it, rounded; the rating is
+            likely within this many points.
+          minimum: 0
+          type: integer
         firstGameAt:
           format: date-time
           nullable: true
@@ -1520,6 +1531,7 @@ components:
         - name
         - kind
         - rating
+        - deviation
         - provisional
         - rank
         - games
@@ -2172,7 +2184,7 @@ components:
       type: apiKey
 info:
   title: HeXO Arena
-  version: 0.32.0
+  version: 0.36.0
 openapi: 3.0.3
 paths:
   /api/auth/discord/callback:
@@ -2848,9 +2860,10 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/GameCooldownError"
-          description: The caller is inside the creation cooldown (game_cooldown), and Retry-After says how
-            long it has left; or too many requests (rate_limited).
+                $ref: "#/components/schemas/GameLimitError"
+          description: The caller is inside the creation cooldown (game_cooldown); or a signed-in caller has
+            played this bot 20 times this UTC day (daily_pair_cap), until 00:00 UTC; Retry-After
+            says how long either has left; or too many requests (rate_limited).
           headers:
             Retry-After:
               $ref: "#/components/headers/RetryAfter"
@@ -2955,12 +2968,12 @@ paths:
           schema:
             format: date
             type: string
-        - description: The page after the last one read, as its next said.
+        - description: The page, from 1 to 10; the first when absent.
           in: query
-          name: cursor
+          name: page
           required: false
           schema:
-            pattern: ^(?:[2-9]|10)\.[1-9][0-9]{0,14}$
+            pattern: ^(?:[1-9]|10)$
             type: string
       responses:
         "200":

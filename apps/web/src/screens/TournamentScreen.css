@@ -232,8 +232,8 @@
     .standings-open {
         align-items: center;
         justify-content: center;
-        min-width: var(--control-sm);
-        min-height: var(--control-sm);
+        min-width: var(--control-lg);
+        min-height: var(--control-lg);
         margin-left: auto;
         padding: 0;
         border: 0;

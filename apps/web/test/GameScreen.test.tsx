@@ -58,6 +58,44 @@ const finishedSnapshot = {
     voided: false,
 } as GameSnapshot;
 
+// A game before its first turn: the opening alone on the board.
+const freshSnapshot = { ...runningSnapshot, gameId: `g-new`, toMove: `x` } as GameSnapshot;
+
+const records: Record<string, unknown> = {
+    hextide: { name: `hextide`, kind: `bot`, rating: 1690, deviation: 48, provisional: false, rank: 2, games: 120, won: 70, lost: 48, undecided: 2, asX: { games: 60, won: 36 }, asO: { games: 60, won: 34 }, forfeits: { disconnect: 0, terminated: 0 }, opponents: [], firstGameAt: `2026-09-01T10:00:00Z`, lastGameAt: `2026-10-01T10:00:00Z`, placings: [] },
+    tom: { name: `tom`, kind: `human`, rating: 1503, deviation: 96, provisional: true, rank: null, games: 14, won: 6, lost: 8, undecided: 0, asX: { games: 7, won: 3 }, asO: { games: 7, won: 3 }, forfeits: { disconnect: 0, terminated: 0 }, opponents: [], firstGameAt: `2026-09-20T10:00:00Z`, lastGameAt: `2026-10-01T10:00:00Z` },
+};
+
+// One finished game of a player's history, against pebble, won or lost from their seat.
+function past(name: string, index: number, won: boolean) {
+    const seat = { name, rating: 1500, provisional: false, kind: name === `tom` ? `user` : `bot` };
+    const other = { name: `pebble`, rating: 1500, provisional: false, kind: `bot` };
+    return { gameId: `g-${name}-${String(index)}`, players: { x: seat, o: other }, winner: won ? `x` : `o`, reason: `six-in-a-row`, timeControl: { mode: `unlimited` }, openingPlies: 1, turns: 20, finishedAt: `2026-10-01T10:00:00Z`, rated: true, voided: false };
+}
+
+// The game, both players' records and histories, and their meetings, as the rundown reads them.
+function stubRundown(snapshot: GameSnapshot, meetings = { games: 41, won: 24, lost: 15, undecided: 2, voided: 0, asX: { games: 21, won: 14, lost: 6 }, asO: { games: 20, won: 10, lost: 9 } }): void {
+    vi.stubGlobal(
+        `fetch`,
+        vi.fn((url: string) => {
+            const [path = ``, search = ``] = url.split(`?`);
+            const params = new URLSearchParams(search);
+            if (path.startsWith(`/api/players/`)) {
+                const record = records[decodeURIComponent(path.slice(`/api/players/`.length))];
+                return Promise.resolve(record === undefined ? new Response(null, { status: 404 }) : new Response(JSON.stringify(record)));
+            }
+            if (path === `/api/games/finished`) {
+                const player = params.get(`player`) ?? ``;
+                if (params.has(`vs`)) return Promise.resolve(new Response(JSON.stringify({ games: [], page: 1, pages: 3, total: 41, record: meetings })));
+                const results = player === `hextide` ? [true, true, false, true, false, true] : [false, true];
+                return Promise.resolve(new Response(JSON.stringify({ games: results.map((won, index) => past(player, index, won)), page: 1, pages: 1, total: results.length })));
+            }
+            return Promise.resolve(new Response(JSON.stringify(snapshot)));
+        }),
+    );
+    stubEventSource(snapshot);
+}
+
 function stubGame(snapshot: GameSnapshot, status = 200): void {
     vi.stubGlobal(
         `fetch`,
@@ -168,6 +206,15 @@ describe('GameScreen', () => {
         await openWithM();
         fireEvent.click(screen.getByRole(`tab`, { name: `Game` }));
         expect([...document.querySelectorAll(`.facts dt`)].map((term) => term.textContent)).toEqual([`Opening`, `Your side`, `Result`]);
+    });
+
+    it('say on the Game tab what the opening placed before the first turn', async () => {
+        stubGame(runningSnapshot);
+        render(<GameScreen gameId="g-run" />);
+        await screen.findByRole(`heading`, { level: 1 });
+        await openWithM();
+        fireEvent.click(screen.getByRole(`tab`, { name: `Game` }));
+        expect(screen.getByText(`Opening`, { selector: `.facts dt` }).nextElementSibling?.textContent).toBe(`The origin and 2 random stones near it, placed before the first turn`);
     });
 
     it('offer a retry and the way home when the game does not load', async () => {
@@ -397,6 +444,17 @@ describe('GameScreen', () => {
         expect(legal.map((link) => link.getAttribute(`href`))).toEqual([`/legal/privacy`, `/third-party-licenses.txt`]);
     });
 
+    it('open the Game tab at its top, whatever the Moves tab had scrolled to', async () => {
+        stubGame(finishedSnapshot);
+        render(<GameScreen gameId="g-end" />);
+        await screen.findByText(`hextide won with six in a row`, { selector: `.hud-result` });
+        await openWithM();
+        const moves = document.getElementById(`drawer-panel-moves`) as HTMLElement;
+        moves.scrollTop = 55;
+        fireEvent.click(screen.getByRole(`tab`, { name: `Game` }));
+        expect((document.getElementById(`drawer-panel-game`) as HTMLElement).scrollTop).toBe(0);
+    });
+
     it('keep two tabs, Moves and Game, both reached by arrow keys either way', async () => {
         stubGame(runningSnapshot);
         render(<GameScreen gameId="g-run" />);
@@ -434,7 +492,7 @@ describe('GameScreen', () => {
         for (const snapshot of [runningSnapshot, finishedSnapshot, watched(runningSnapshot)]) {
             stubGame(snapshot);
             render(<GameScreen gameId="g-any" />);
-            await screen.findByRole(`heading`);
+            await screen.findByRole(`heading`, { level: 1 });
             await openWithM();
             for (const tab of [`Moves`, `Game`]) {
                 fireEvent.click(screen.getByRole(`tab`, { name: tab }));
@@ -823,14 +881,109 @@ describe('GameScreen for a watcher', () => {
         });
     });
 
+    it('tell a seated player when the operator voided the game', async () => {
+        if (finishedSnapshot.status !== `finished`) throw new Error(`the finished snapshot is not finished`);
+        stubGame({ ...finishedSnapshot, voided: true });
+        render(<GameScreen gameId="g-end" />);
+        await screen.findByText(`hextide won with six in a row`, { selector: `.hud-result` });
+        await openWithM();
+        fireEvent.click(screen.getByRole(`tab`, { name: `Game` }));
+        expect(screen.getByText(`Your side`, { selector: `.facts dt` }).nextElementSibling?.textContent).toBe(`o`);
+        expect(screen.getByText(`Rated`, { selector: `.facts dt` }).nextElementSibling?.textContent).toBe(`No, the operator voided it`);
+    });
+
+    it('say on the Game tab how many voided games the two players\' record leaves out', async () => {
+        const record = { games: 41, won: 24, lost: 15, undecided: 2, voided: 2, asX: { games: 21, won: 14, lost: 6 }, asO: { games: 20, won: 10, lost: 9 } };
+        vi.stubGlobal(
+            `fetch`,
+            vi.fn((url: string) => Promise.resolve(new Response(JSON.stringify(url.startsWith(`/api/games/finished`) ? { games: [], page: 1, pages: 3, total: 43, record } : watched(finishedSnapshot))))),
+        );
+        stubEventSource(watched(finishedSnapshot));
+        render(<GameScreen gameId="g-end" />);
+        await screen.findByRole(`heading`, { name: `hextide vs tom` });
+        await openWithM();
+        fireEvent.click(screen.getByRole(`tab`, { name: `Game` }));
+        const row = (await screen.findByRole(`link`, { name: `41 games` })).closest<HTMLElement>(`.facts-row`);
+        expect(row?.querySelector(`dd`)?.textContent).toBe(`hextide won 24 and tom 15 of their 41 games; 2 voided games are left out`);
+    });
+
+    it('lay a rundown above the board before the first turn: each player\'s rating and deviation, expected score, and last five results, and their head to head', async () => {
+        stubRundown(watched(freshSnapshot));
+        render(<GameScreen gameId="g-new" />);
+        const card = await screen.findByRole(`region`, { name: `Rundown` });
+        await within(card).findByText(`0.74`);
+        const sides = [...card.querySelectorAll(`.rundown-side`)];
+        expect(sides.map((side) => side.querySelector(`.rundown-name`)?.textContent)).toEqual([`hextideBOT`, `tom`]);
+        expect(sides.map((side) => side.querySelector(`.rundown-rating`)?.textContent)).toEqual([`1690`, `1503?`]);
+        expect(sides.map((side) => side.querySelector(`.rundown-deviation`)?.textContent)).toEqual([`deviation 48`, `deviation 96`]);
+        // Each side's E from the contract's function: the opponent's deviation is what counts.
+        expect(sides.map((side) => side.querySelector(`.rundown-expected`)?.textContent)).toEqual([`Expected score0.74`, `Expected score0.26`]);
+        expect(sides.map((side) => side.querySelector(`.rundown-form`)?.getAttribute(`aria-label`))).toEqual([`Last 5: won, won, lost, won, lost`, `Last 2: lost, won`]);
+        expect(card.querySelector(`.rundown-meetings`)?.textContent).toBe(`hextide won 24 and tom 15 of their 41 games`);
+        expect(within(card).getByRole(`link`, { name: `41 games` }).getAttribute(`href`)).toBe(`/games?player=hextide&vs=tom`);
+        // The card keeps its own room above the position, which the camera leaves clear.
+        expect(document.querySelector<HTMLElement>(`.board-host`)?.hasAttribute(`data-rundown`)).toBe(true);
+    });
+
+    it('take the rundown off the board at the first turn and keep it on the Game tab while the game runs', async () => {
+        stubRundown(watched(freshSnapshot));
+        render(<GameScreen gameId="g-new" />);
+        await screen.findByRole(`region`, { name: `Rundown` });
+        act(() => {
+            FakeEventSource.latest().emit(`turn`, { turn: 2, side: `x`, cells: [{ x: 3, y: 3 }, { x: 4, y: 4 }], toMove: `o`, clock: { mode: `turn`, remainingTurnMs: 50_000 } });
+        });
+        await waitFor(() => {
+            expect(document.querySelector(`.hud-rundown`)).toBe(null);
+        });
+        await openWithM();
+        fireEvent.click(screen.getByRole(`tab`, { name: `Game` }));
+        const card = within(document.getElementById(`drawer-panel-game`) as HTMLElement).getByRole(`region`, { name: `Rundown` });
+        await within(card).findByText(`0.74`);
+        expect(card.querySelector(`.rundown-meetings`)).toBe(null);
+    });
+
+    it('hide the rundown on request, leaving the board as it was', async () => {
+        stubRundown(watched(freshSnapshot));
+        render(<GameScreen gameId="g-new" />);
+        const card = await screen.findByRole(`region`, { name: `Rundown` });
+        fireEvent.click(within(card).getByRole(`button`, { name: `Hide the rundown` }));
+        expect(screen.queryByRole(`region`, { name: `Rundown` })).toBe(null);
+        expect(document.querySelector<HTMLElement>(`.board-host`)?.hasAttribute(`data-rundown`)).toBe(false);
+    });
+
+    it('lay no rundown over a game already under way, nor one that is over', async () => {
+        stubRundown(watched({ ...runningSnapshot, board: { cells: [...runningSnapshot.board.cells, { x: 3, y: 3, side: `o` }, { x: 4, y: 4, side: `o` }] } }));
+        render(<GameScreen gameId="g-run" />);
+        await screen.findByRole(`heading`, { level: 1 });
+        expect(screen.queryByRole(`region`, { name: `Rundown` })).toBe(null);
+        cleanup();
+        stubRundown(watched(finishedSnapshot));
+        render(<GameScreen gameId="g-end" />);
+        await screen.findByText(`hextide won with six in a row`, { selector: `.hud-result` });
+        await openWithM();
+        fireEvent.click(screen.getByRole(`tab`, { name: `Game` }));
+        expect(screen.queryByRole(`region`, { name: `Rundown` })).toBe(null);
+    });
+
+    it('leave the expected scores out of a rundown with a guest, whose game is unrated', async () => {
+        const guest = { ...freshSnapshot, players: { x: players.x, o: { name: `Guest k3f9`, rating: null, provisional: false, kind: `guest` } } } as GameSnapshot;
+        stubRundown(watched(guest));
+        render(<GameScreen gameId="g-new" />);
+        const card = await screen.findByRole(`region`, { name: `Rundown` });
+        await within(card).findByText(`deviation 48`);
+        expect(card.querySelectorAll(`.rundown-expected`)).toHaveLength(0);
+        expect(card.querySelector(`.rundown-meetings`)).toBe(null);
+        expect(card.querySelectorAll(`.rundown-side`)[1]?.textContent).toContain(`unrated`);
+    });
+
     it('lead from the Game tab to the two players\' games, with their record', async () => {
-        const record = { games: 41, won: 24, lost: 15, undecided: 2, asX: { games: 21, won: 14, lost: 6 }, asO: { games: 20, won: 10, lost: 9 } };
+        const record = { games: 41, won: 24, lost: 15, undecided: 2, voided: 0, asX: { games: 21, won: 14, lost: 6 }, asO: { games: 20, won: 10, lost: 9 } };
         const reads: string[] = [];
         vi.stubGlobal(
             `fetch`,
             vi.fn((url: string) => {
                 reads.push(url);
-                return Promise.resolve(new Response(JSON.stringify(url.startsWith(`/api/games/finished`) ? { games: [], next: null, previous: null, page: 1, record } : watched(finishedSnapshot))));
+                return Promise.resolve(new Response(JSON.stringify(url.startsWith(`/api/games/finished`) ? { games: [], page: 1, pages: 3, total: 41, record } : watched(finishedSnapshot))));
             }),
         );
         stubEventSource(watched(finishedSnapshot));

@@ -28,8 +28,9 @@ const envShape = z.object({
     // Empty leaves the og shell routes off; Vite serves the page in dev.
     WEB_INDEX_PATH: z.string().default(``),
     // The deployment's legal folder, which Caddy serves; the boot only
-    // names the documents it lacks. The default is the repository's own,
-    // seen from apps/server, where a bare `pnpm dev` runs.
+    // names the documents it lacks and details it cannot use. The default
+    // is the repository's own, seen from apps/server, where a bare
+    // `pnpm dev` runs.
     LEGAL_DIR: z.string().min(1).default(`../../legal`),
     // Empty leaves nightly backups off, which suits a bare `pnpm dev`.
     BACKUP_DIR: z.string().default(``),

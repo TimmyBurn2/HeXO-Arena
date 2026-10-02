@@ -31,6 +31,7 @@ import type { PresenceRegistry } from './presence';
 import type { RequestLimits } from './request-limits';
 import { isPaused, setPaused } from './site-state';
 import type { TournamentScheduler } from './tournament-scheduler';
+import { addTournamentRule, adminTournamentRules, nextRuleStart, removeTournamentRule, ruleSlot } from './tournament-rules';
 import { createTournament, openTournaments } from './tournament-store';
 
 export interface AdminDeps {
@@ -58,6 +59,7 @@ function statusOf(deps: AdminDeps): AdminStatus {
         clientKeys: deps.limits.clientCount,
         keylessRequests: deps.limits.keys.keyless,
         tournaments: openTournaments(deps.query),
+        tournamentRules: adminTournamentRules(deps.query, nowOf(deps), deps.tournamentLeadMs),
         recentActions: recentAdminActions(deps.query, recentActionCount),
     };
 }
@@ -79,10 +81,12 @@ function badRequest(error: string): AdminResponse {
 }
 
 // What a mutation answers, plus the effect on live streams and games that
-// may only run once the change is committed.
+// may only run once the change is committed,
+// and the audit target when only the change knows it, such as a new row's id.
 interface Outcome {
     response: AdminResponse;
     live?: () => void;
+    target?: string;
 }
 
 // The change and its audit row commit together, so no mutation lands
@@ -96,7 +100,7 @@ function audited(
     const outcome = deps.query.transaction((tx) => {
         const result = change(tx);
         if (result.response.kind === `done`) {
-            recordAdminAction(tx, { actor: deps.actor, action: mutation.op, target, reason: mutation.reason });
+            recordAdminAction(tx, { actor: deps.actor, action: mutation.op, target: result.target ?? target, reason: mutation.reason });
         }
         return result;
     });
@@ -168,8 +172,12 @@ function recompute(tx: Query, exclude: readonly string[]): Outcome {
     return { response: done(`re-folded ${String(rated)} rated games; voided ${String(voided.count)} more`) };
 }
 
+function nowOf(deps: AdminDeps): number {
+    return (deps.now ?? Date.now)();
+}
+
 function nowSecondsOf(deps: AdminDeps): number {
-    return Math.floor((deps.now ?? Date.now)() / 1000);
+    return Math.floor(nowOf(deps) / 1000);
 }
 
 function scheduleTournament(deps: AdminDeps, tx: Query, request: Extract<AdminRequest, { op: `tournament-create` }>): Outcome {
@@ -190,6 +198,43 @@ function scheduleTournament(deps: AdminDeps, tx: Query, request: Extract<AdminRe
         case `waiting_full`:
             return { response: badRequest(`${String(tournamentWaitingCap)} tournaments are already waiting`) };
     }
+}
+
+function addRule(deps: AdminDeps, tx: Query, request: Extract<AdminRequest, { op: `tournament-schedule-add` }>): Outcome {
+    const rule = {
+        ...ruleSlot(request.weekday, request.time),
+        namePattern: request.namePattern,
+        timeControl: request.timeControl,
+        openingPlies: request.openingPlies,
+        maxEntrants: request.maxEntrants,
+        daysAhead: request.daysAhead,
+    };
+    const added = addTournamentRule(tx, rule, nowSecondsOf(deps));
+    const slot = `${request.weekday} ${request.time} UTC`;
+    switch (added.kind) {
+        case `added`: {
+            const next = nextRuleStart(tx, { ...rule, id: added.id }, nowOf(deps), deps.tournamentLeadMs);
+            return {
+                response: done(
+                    `added rule ${String(added.id)}: ${slot}, next start ${new Date(next * 1000).toISOString()}; each tournament opens for entries ${String(request.daysAhead)} days ahead`,
+                ),
+                target: String(added.id),
+            };
+        }
+        case `same`:
+            return { response: unchanged(`rule ${String(added.id)} is already this rule`) };
+        case `slot_taken`:
+            return { response: badRequest(`rule ${String(added.id)} already starts a tournament ${slot}; remove it first`) };
+    }
+}
+
+function removeRule(tx: Query, id: number): Outcome {
+    const removed = removeTournamentRule(tx, id);
+    if (removed.kind === `not_found`) return { response: notFound(`no such rule`) };
+    const stay = `removed rule ${String(id)}; the tournaments it created stay`;
+    return {
+        response: done(removed.waiting.length === 0 ? stay : `${stay}; cancel a waiting one with tournament-cancel: ${removed.waiting.join(`, `)}`),
+    };
 }
 
 function endTournament(deps: AdminDeps, id: string): Outcome {
@@ -293,6 +338,12 @@ export function createAdminHandler(deps: AdminDeps): AdminHandler {
                 return audited(deps, request, request.name, (tx) => scheduleTournament(deps, tx, request));
             case `tournament-cancel`:
                 return audited(deps, request, request.id, () => endTournament(deps, request.id));
+            case `tournament-schedule-add`:
+                return audited(deps, request, null, (tx) => addRule(deps, tx, request));
+            case `tournament-schedule-list`:
+                return { kind: `tournament-rules`, rules: adminTournamentRules(deps.query, nowOf(deps), deps.tournamentLeadMs) };
+            case `tournament-schedule-remove`:
+                return audited(deps, request, String(request.id), (tx) => removeRule(tx, request.id));
         }
     };
 }

@@ -33,6 +33,7 @@ export const playerRecordSchema = z
         name: z.string(),
         kind: z.enum([`bot`, `human`]),
         rating: ratingSchema,
+        deviation: count.meta({ description: `The rating's deviation as the player's last rated game left it, rounded; the rating is likely within this many points.` }),
         provisional: provisionalSchema,
         rank: z.number().int().min(1).nullable().meta({ description: `The place on the ladder of the last 30 days, or null off it.` }),
         games: count,

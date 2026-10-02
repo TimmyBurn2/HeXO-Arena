@@ -214,3 +214,31 @@ describe('the sign-up migration', () => {
         expect(sqlite.prepare(`select count(*) as n from pending_signups`).get()).toEqual({ n: 0 });
     });
 });
+
+describe('the weekly rules migration', () => {
+    let sqlite: Sqlite;
+    let folder: string;
+
+    afterEach(() => {
+        sqlite.close();
+        rmSync(folder, { recursive: true, force: true });
+    });
+
+    it('keeps every tournament without a rule and every audit row, and audits the rule ops', () => {
+        sqlite = openDatabase(`:memory:`);
+        folder = migrationsUpTo(16);
+        migrate(drizzle(sqlite), { migrationsFolder: folder });
+        sqlite.exec(`
+            insert into tournaments (id, name, status, starts_at, time_control, opening_plies, max_entrants, created_at)
+                values ('t_aaaaaaaaaaaa', 'Autumn', 'scheduled', 100, '{}', 5, 12, 1);
+            insert into admin_actions (actor, action, target, reason, at) values ('operator', 'tournament-create', 'Autumn', 'weekly', 1);
+        `);
+        runMigrations(sqlite);
+        expect(sqlite.prepare(`select id, rule_id as ruleId from tournaments`).all()).toEqual([{ id: `t_aaaaaaaaaaaa`, ruleId: null }]);
+        expect(sqlite.prepare(`select id, action, target from admin_actions`).all()).toEqual([{ id: 1, action: `tournament-create`, target: `Autumn` }]);
+        const audit = sqlite.prepare(`insert into admin_actions (actor, action, target, reason, at) values ('operator', ?, '1', 'weekly', 2)`);
+        expect(() => audit.run(`tournament-schedule-add`)).not.toThrow();
+        expect(() => audit.run(`tournament-schedule-remove`)).not.toThrow();
+        expect(() => audit.run(`tournament-schedule-list`)).toThrow(/CHECK/);
+    });
+});

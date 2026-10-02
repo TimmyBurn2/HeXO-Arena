@@ -2,13 +2,19 @@ import { z } from 'zod';
 import { nameSyntaxSchema } from './names';
 import { openingPliesSchema } from './stream';
 import {
+    adminTournamentRuleSchema,
     adminTournamentSchema,
     defaultTournamentOpening,
     tournamentClockSchema,
+    tournamentDaysAhead,
     tournamentIdSchema,
     tournamentMaxEntrants,
     tournamentMinPresent,
+    tournamentNamePatternSchema,
     tournamentNameSchema,
+    tournamentRuleIdSchema,
+    tournamentTimeOfDaySchema,
+    tournamentWeekdaySchema,
 } from './tournaments';
 
 // The admin socket speaks one JSON request per connection, ended by a
@@ -23,6 +29,8 @@ export const adminGameIdSchema = z.string().regex(/^g_[0-9a-f]{8}-[0-9a-f]{4}-[0
 
 // Every mutation carries its reason into the audit row.
 export const adminReasonSchema = z.string().trim().min(1).max(500);
+
+const tournamentEntrantsSchema = z.number().int().min(tournamentMinPresent).max(tournamentMaxEntrants);
 
 export const adminRequestSchema = z.discriminatedUnion(`op`, [
     z.strictObject({ op: z.literal(`status`) }),
@@ -60,13 +68,26 @@ export const adminRequestSchema = z.discriminatedUnion(`op`, [
         startsAt: z.iso.datetime({ offset: true }),
         timeControl: tournamentClockSchema,
         openingPlies: openingPliesSchema.default(defaultTournamentOpening),
-        maxEntrants: z.number().int().min(tournamentMinPresent).max(tournamentMaxEntrants).default(tournamentMaxEntrants),
+        maxEntrants: tournamentEntrantsSchema.default(tournamentMaxEntrants),
         reason: adminReasonSchema,
     }),
     z.strictObject({ op: z.literal(`tournament-cancel`), id: tournamentIdSchema, reason: adminReasonSchema }),
+    z.strictObject({
+        op: z.literal(`tournament-schedule-add`),
+        weekday: tournamentWeekdaySchema,
+        time: tournamentTimeOfDaySchema,
+        namePattern: tournamentNamePatternSchema,
+        timeControl: tournamentClockSchema,
+        openingPlies: openingPliesSchema.default(defaultTournamentOpening),
+        maxEntrants: tournamentEntrantsSchema.default(tournamentMaxEntrants),
+        daysAhead: z.number().int().min(tournamentDaysAhead.min).max(tournamentDaysAhead.max).default(tournamentDaysAhead.default),
+        reason: adminReasonSchema,
+    }),
+    z.strictObject({ op: z.literal(`tournament-schedule-list`) }),
+    z.strictObject({ op: z.literal(`tournament-schedule-remove`), id: tournamentRuleIdSchema, reason: adminReasonSchema }),
 ]);
 export type AdminRequest = z.infer<typeof adminRequestSchema>;
-export type AdminMutation = Exclude<AdminRequest, { op: `status` }>;
+export type AdminMutation = Exclude<AdminRequest, { op: `status` | `tournament-schedule-list` }>;
 
 export const adminActionSchema = z.object({
     actor: z.string(),
@@ -88,6 +109,7 @@ export const adminStatusSchema = z.object({
     clientKeys: z.number().int().min(0),
     keylessRequests: z.number().int().min(0),
     tournaments: z.array(adminTournamentSchema),
+    tournamentRules: z.array(adminTournamentRuleSchema),
     recentActions: z.array(adminActionSchema).max(10),
 });
 export type AdminStatus = z.infer<typeof adminStatusSchema>;
@@ -99,6 +121,7 @@ export type AdminErrorCode = (typeof adminErrorCodes)[number];
 
 export const adminResponseSchema = z.discriminatedUnion(`kind`, [
     z.object({ kind: z.literal(`status`), status: adminStatusSchema }),
+    z.object({ kind: z.literal(`tournament-rules`), rules: z.array(adminTournamentRuleSchema) }),
     z.object({ kind: z.literal(`done`), summary: z.string() }),
     z.object({ kind: z.literal(`error`), error: z.string(), code: z.enum(adminErrorCodes) }),
 ]);

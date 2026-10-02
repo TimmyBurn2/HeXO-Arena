@@ -113,6 +113,13 @@
       "when": 1790873804400,
       "tag": "0015_tournament_checks",
       "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "6",
+      "when": 1790919532152,
+      "tag": "0016_tournament_rules",
+      "breakpoints": true
     }
   ]
 }

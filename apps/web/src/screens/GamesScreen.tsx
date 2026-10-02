@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode, type SyntheticEvent } from 'react';
 import {
     finishReasonLabels,
     finishReasonSchema,
@@ -14,7 +14,8 @@ import {
 import { ApiError, fetchFinishedGames, limitedFor } from '../api/client';
 import { BotBadge, PlayerName } from '../components/player';
 import { ErrorFrame, SkeletonRows } from '../components/states';
-import { activeKeys, gamesPathOf, searchOf, viewOf, withFilter, type FilterKey, type GameFilters, type GamesView } from '../games/filters';
+import { TopbarPanel, usePanel } from '../components/TopbarPanel';
+import { activeKeys, gamesPathOf, pagePathOf, searchOf, viewOf, withFilter, type FilterKey, type GameFilters, type GamesView } from '../games/filters';
 import { GameRows } from '../games/GameRows';
 import { GamesHead } from '../games/GamesHead';
 import { Link } from '../router/Link';
@@ -22,17 +23,11 @@ import { navigate, useSearch } from '../router/use-route';
 import { text } from '../text';
 import './GamesScreen.css';
 
-// Where the filter row gives way to the Filters button and its sheet.
-const phoneQuery = `(max-width: 40rem)`;
-
 const resultOptions = [`won`, `lost`, `none`] as const;
 const sideOptions = [`x`, `o`] as const;
 const clockOptions = [`turn`, `match`, `unlimited`] as const;
 const kindOptions = [`bot-bot`, `human-bot`] as const;
 const openingOptions = [`1`, `3`, `5`, `7`, `9`] as const;
-
-// The filters a wide window keeps behind More filters.
-const moreKeys = [`kind`, `opening`, `before`] as const satisfies readonly FilterKey[];
 
 /** A list's page, a name no player holds, or a read that failed. */
 type Load =
@@ -41,21 +36,8 @@ type Load =
     | { kind: `unknown`; name: string; kept: string | null }
     | { kind: `failed`; limited: number | null };
 
-function subscribeMedia(listener: () => void): () => void {
-    if (typeof window.matchMedia !== `function`) return () => undefined;
-    const list = window.matchMedia(phoneQuery);
-    list.addEventListener(`change`, listener);
-    return () => {
-        list.removeEventListener(`change`, listener);
-    };
-}
-
-function phoneNow(): boolean {
-    return typeof window.matchMedia === `function` && window.matchMedia(phoneQuery).matches;
-}
-
 function queryOf(view: GamesView) {
-    return { ...view.filters, ...(view.cursor === null ? {} : { cursor: view.cursor }) };
+    return { ...view.filters, ...(view.page === 1 ? {} : { page: String(view.page) }) };
 }
 
 // A refusal does not say which name no player holds, so with two set,
@@ -105,33 +87,43 @@ function useGamesPage(search: string): { load: Load; busy: boolean; retry: () =>
     return { load, busy, retry };
 }
 
+// Every field applies as it changes, so a form's submit goes nowhere.
+const keepHere = (event: SyntheticEvent) => {
+    event.preventDefault();
+};
+
 /** Every finished game, newest first, narrowed by filters the address holds. */
 export function GamesScreen() {
     const search = useSearch();
     const view = useMemo(() => viewOf(search), [search]);
     const { load, busy, retry } = useGamesPage(search);
-    const phone = useSyncExternalStore(subscribeMedia, phoneNow, phoneNow);
-    const [more, setMore] = useState(() => moreKeys.some((key) => view.filters[key] !== undefined));
-    const [sheet, setSheet] = useState(false);
+    const panel = usePanel(`games-filters`);
     const [seekBefore, setSeekBefore] = useState(false);
     const [turned, setTurned] = useState(false);
     const { filters } = view;
 
-    // A page turned by Newer or Older takes the keyboard to its list once it lands,
-    // where the window has scrolled, so the steps never leave focus below the fold or on nothing.
+    // A page turned by its links takes the keyboard to its list once it lands,
+    // where the window has scrolled, so the links never leave focus below the fold or on nothing.
     useLayoutEffect(() => {
         if (!turned || busy || load.kind !== `ready`) return;
         setTurned(false);
         document.querySelector<HTMLElement>(`.games-list .game-rows`)?.focus({ preventScroll: true });
     }, [turned, busy, load]);
 
-    // A hand-made or stale address loses what the list cannot take, in place.
+    // A hand-made or stale address loses what the list cannot take, in place,
+    // and a page past the last the filters reach becomes that last page.
     useEffect(() => {
         const clean = searchOf(view);
-        if (clean !== search) navigate(`/games${clean}`, { replace: true });
-    }, [view, search]);
+        if (clean !== search) {
+            navigate(`/games${clean}`, { replace: true });
+            return;
+        }
+        if (busy || load.kind !== `ready`) return;
+        const last = Math.max(1, load.page.pages);
+        if (load.view.page > last) navigate(pagePathOf(load.view.filters, last), { replace: true });
+    }, [view, search, busy, load]);
 
-    // Pick a date opens wherever Before lives at this width, then puts the keyboard in it.
+    // Pick a date opens the filters wherever they show at this width, then puts the keyboard in Before.
     useLayoutEffect(() => {
         if (!seekBefore) return;
         const field = document.getElementById(`games-before`);
@@ -145,65 +137,63 @@ export function GamesScreen() {
     }, []);
 
     function pickBefore() {
-        if (phone) setSheet(true);
-        else setMore(true);
+        if (panel.mode === `closed`) panel.toggle();
         setSeekBefore(true);
     }
 
     const fields = { filters, set };
+    const counted = activeKeys(filters).filter((key) => key !== `player`).length;
     return (
         <>
             <GamesHead view="finished" />
-            {phone ? (
-                <div className="games-phone-bar">
-                    <button
-                        type="button"
-                        className="btn btn-ghost"
-                        aria-haspopup="dialog"
-                        onClick={() => {
-                            setSheet(true);
-                        }}
-                    >
-                        {text.games.filters(activeKeys(filters).filter((key) => key !== `player`).length)}
-                    </button>
-                    <form className="games-filters" role="search" aria-label={text.games.search} onSubmit={(event) => { event.preventDefault(); }}>
-                        <PlayerField {...fields} />
-                    </form>
-                </div>
-            ) : (
-                <form className="games-filters" role="search" aria-label={text.games.search} onSubmit={(event) => { event.preventDefault(); }}>
+            <div className="games-search">
+                <form className="games-filters" role="search" aria-label={text.games.search} onSubmit={keepHere}>
                     <PlayerField {...fields} />
-                    <MainFields {...fields} />
                     <button
+                        ref={panel.button}
                         type="button"
-                        className="btn btn-ghost games-more"
-                        aria-expanded={more}
-                        aria-controls="games-more"
-                        onClick={() => {
-                            setMore(!more);
-                        }}
+                        className="btn btn-ghost games-filters-button"
+                        aria-haspopup="dialog"
+                        aria-expanded={panel.mode !== `closed`}
+                        aria-controls={panel.mode === `closed` ? undefined : `games-filters-panel`}
+                        onClick={panel.toggle}
                     >
-                        {text.games.moreFilters}
+                        {text.games.filters(counted)}
                     </button>
-                    {more ? (
-                        <div id="games-more" className="games-more-fields">
-                            <MoreFields {...fields} />
-                        </div>
-                    ) : null}
                 </form>
-            )}
-            {phone && sheet ? (
-                <FilterSheet
-                    onClose={() => {
-                        setSheet(false);
-                    }}
+                <TopbarPanel
+                    id="games-filters-panel"
+                    className="games-panel"
+                    control={panel}
+                    labelledBy="games-panel-title"
+                    head={
+                        <h2 id="games-panel-title" className="games-panel-title">
+                            {text.games.filters(0)}
+                        </h2>
+                    }
+                    closeLabel={text.games.closeSheet}
+                    initialFocus="input:not(:disabled), select:not(:disabled)"
                 >
-                    <form className="games-sheet-fields" onSubmit={(event) => { event.preventDefault(); }}>
-                        <MainFields {...fields} />
-                        <MoreFields {...fields} />
+                    {filters.player === undefined ? <p className="note games-panel-note">{text.games.needPlayer}</p> : null}
+                    <form className="games-panel-fields" onSubmit={keepHere}>
+                        <FilterFields {...fields} />
                     </form>
-                </FilterSheet>
-            ) : null}
+                    <p id="games-opening-note" className="note games-panel-note">
+                        {text.games.openingNote}
+                    </p>
+                    <div className="games-panel-foot">
+                        <button
+                            type="button"
+                            className="btn btn-primary"
+                            onClick={() => {
+                                panel.close(true);
+                            }}
+                        >
+                            {text.games.show}
+                        </button>
+                    </div>
+                </TopbarPanel>
+            </div>
             <Chips filters={filters} />
             <p className="note games-note">{text.games.note}</p>
             <div aria-busy={busy}>
@@ -238,8 +228,11 @@ function PlayerField({ filters, set }: FieldsProps) {
     );
 }
 
-function MainFields({ filters, set }: FieldsProps) {
+// Against, Side, and a won or lost result read from a player's seat, so they wait for one;
+// a game without a winner needs none.
+function FilterFields({ filters, set }: FieldsProps) {
     const alone = filters.player === undefined;
+    const results = alone ? ([`none`] as const) : resultOptions;
     return (
         <>
             <NameField
@@ -255,8 +248,7 @@ function MainFields({ filters, set }: FieldsProps) {
                 id="games-result"
                 label={text.games.result}
                 value={filters.result}
-                options={resultOptions.map((value) => [value, text.games.results[value]] as const)}
-                disabled={alone}
+                options={results.map((value) => [value, text.games.results[value]] as const)}
                 onChange={(value) => {
                     set(`result`, value);
                 }}
@@ -289,13 +281,16 @@ function MainFields({ filters, set }: FieldsProps) {
                     set(`clock`, value);
                 }}
             />
-        </>
-    );
-}
-
-function MoreFields({ filters, set }: FieldsProps) {
-    return (
-        <>
+            <Choice
+                id="games-opening"
+                label={text.games.opening}
+                describedBy="games-opening-note"
+                value={filters.opening}
+                options={openingOptions.map((value) => [value, text.games.openingValue(Number(value))] as const)}
+                onChange={(value) => {
+                    set(`opening`, value);
+                }}
+            />
             <Choice
                 id="games-kind"
                 label={text.games.kind}
@@ -303,15 +298,6 @@ function MoreFields({ filters, set }: FieldsProps) {
                 options={kindOptions.map((value) => [value, text.games.kinds[value]] as const)}
                 onChange={(value) => {
                     set(`kind`, value);
-                }}
-            />
-            <Choice
-                id="games-opening"
-                label={text.games.opening}
-                value={filters.opening}
-                options={openingOptions.map((value) => [value, text.games.openingValue(Number(value))] as const)}
-                onChange={(value) => {
-                    set(`opening`, value);
                 }}
             />
             <div className="games-field">
@@ -374,9 +360,10 @@ function NameField({ id, label, value, disabled = false, onCommit }: {
     );
 }
 
-function Choice<V extends string>({ id, label, value, options, disabled = false, onChange }: {
+function Choice<V extends string>({ id, label, describedBy, value, options, disabled = false, onChange }: {
     id: string;
     label: string;
+    describedBy?: string;
     value: V | undefined;
     options: readonly (readonly [V, string])[];
     disabled?: boolean;
@@ -389,6 +376,7 @@ function Choice<V extends string>({ id, label, value, options, disabled = false,
                 id={id}
                 value={value ?? ``}
                 disabled={disabled}
+                aria-describedby={describedBy}
                 onChange={(event) => {
                     onChange(options.find(([option]) => option === event.target.value)?.[0]);
                 }}
@@ -512,7 +500,7 @@ function Results({ page, view, now, onPickBefore, onTurn }: { page: FinishedGame
     const { filters } = view;
     const keys = activeKeys(filters);
     if (page.games.length === 0) {
-        if (keys.length === 0 && view.cursor === null) {
+        if (keys.length === 0 && page.total === 0) {
             return (
                 <div className="empty">
                     <h2>{text.games.dayOne.heading}</h2>
@@ -528,6 +516,8 @@ function Results({ page, view, now, onPickBefore, onTurn }: { page: FinishedGame
                 </div>
             );
         }
+        // A page past the last one the filters reach is on its way to that page.
+        if (page.total > 0) return <SkeletonRows />;
         return (
             <div className="empty">
                 <h2>{text.games.noMatch.heading}</h2>
@@ -538,22 +528,17 @@ function Results({ page, view, now, onPickBefore, onTurn }: { page: FinishedGame
     }
     const player = filters.player === undefined ? undefined : seatNamed(page.games, filters.player);
     const vs = filters.vs === undefined ? undefined : seatNamed(page.games, filters.vs);
-    // A count of the games tells a full last page from the cap; without a player named, a full tenth page is the cap.
-    const capped =
-        page.page === finishedGamesPageCap &&
-        page.next === null &&
-        page.games.length === finishedGamesPageSize &&
-        (page.record === undefined || page.record.games > finishedGamesPageCap * finishedGamesPageSize);
+    const reach = finishedGamesPageCap * finishedGamesPageSize;
     return (
         <>
             {player !== undefined && vs !== undefined && page.record !== undefined ? <HeadToHead player={player} vs={vs} record={page.record} /> : null}
             <div className="games-list">
                 <GameRows games={page.games} now={now} label={text.games.listed(page.page)} />
             </div>
-            <Paging page={page} view={view} onTurn={onTurn} />
-            {capped ? (
+            <Paging page={page} filters={filters} onTurn={onTurn} />
+            {page.total > reach ? (
                 <p className="games-cap">
-                    <span className="note">{text.games.cap(finishedGamesPageCap * finishedGamesPageSize)}</span>
+                    <span className="note">{text.games.cap(reach, page.total)}</span>
                     <button type="button" className="btn btn-ghost btn-sm" onClick={onPickBefore}>
                         {text.games.pickBefore}
                     </button>
@@ -602,106 +587,54 @@ function HeadToHead({ player, vs, record }: { player: GamePlayer; vs: GamePlayer
                     <span className="games-h2h-label">{text.games.noWinner}</span>
                 </li>
             </ul>
-            <p className="games-h2h-split">{text.games.split(player.name, record.games, record.asX, record.asO)}</p>
+            <p className="games-h2h-split">
+                {text.games.split(player.name, record.games, record.asX, record.asO)}
+                {record.voided === 0 ? null : ` ${text.games.voidedLeftOut(record.voided)}.`}
+            </p>
         </section>
     );
 }
 
-function Paging({ page, view, onTurn }: { page: FinishedGamesPage; view: GamesView; onTurn: () => void }) {
-    const next = page.next;
+/**
+ * The list's place among its pages, then a link to each page the filters
+ * reach between Previous and Next; the current page is marked, not linked
+ * away from, and an end's step stays in place without a link.
+ */
+function Paging({ page, filters, onTurn }: { page: FinishedGamesPage; filters: GameFilters; onTurn: () => void }) {
+    if (page.pages <= 1) return <p className="note games-paging-line">{text.games.count(page.total)}</p>;
+    const numbers = Array.from({ length: page.pages }, (_, index) => index + 1);
+    const step = (to: number, words: string, rel: `prev` | `next`) =>
+        to < 1 || to > page.pages ? (
+            <span className="btn btn-ghost games-page-end" aria-disabled="true">
+                {words}
+            </span>
+        ) : (
+            <Link to={pagePathOf(filters, to)} className="btn btn-ghost" rel={rel} onNavigate={onTurn}>
+                {words}
+            </Link>
+        );
     return (
         <nav className="games-paging" aria-label={text.games.paging}>
-            <span className="note">{text.games.page(page.page)}</span>
-            <span className="games-paging-steps">
-                <button
-                    type="button"
-                    className="btn btn-ghost"
-                    disabled={page.page === 1}
-                    onClick={() => {
-                        onTurn();
-                        navigate(`/games${searchOf({ filters: view.filters, cursor: page.previous })}`);
-                    }}
-                >
-                    {text.games.newer}
-                </button>
-                <button
-                    type="button"
-                    className="btn btn-ghost"
-                    disabled={next === null}
-                    onClick={() => {
-                        if (next === null) return;
-                        onTurn();
-                        navigate(`/games${searchOf({ filters: view.filters, cursor: next })}`);
-                    }}
-                >
-                    {text.games.older}
-                </button>
-            </span>
-        </nav>
-    );
-}
-
-/**
- * The phone's filters, a modal sheet from the foot of the window; every
- * change applies at once, and Show games closes it on the list.
- */
-function FilterSheet({ onClose, children }: { onClose: () => void; children: ReactNode }) {
-    const ref = useRef<HTMLDialogElement>(null);
-    const [opener] = useState(() => document.activeElement);
-    useLayoutEffect(() => {
-        const dialog = ref.current;
-        if (dialog === null || dialog.open) return;
-        dialog.showModal();
-        dialog.querySelector<HTMLElement>(`input:not(:disabled), select:not(:disabled)`)?.focus();
-    }, []);
-    // A window widened past the phone shows the row the sheet stands in for.
-    useEffect(() => {
-        if (typeof window.matchMedia !== `function`) return;
-        const phone = window.matchMedia(phoneQuery);
-        function onChange() {
-            if (!phone.matches) onClose();
-        }
-        phone.addEventListener(`change`, onChange);
-        return () => {
-            phone.removeEventListener(`change`, onChange);
-        };
-    }, [onClose]);
-    // The sheet leaves the page rather than closing, so focus goes back by hand to what opened it.
-    useEffect(
-        () => () => {
-            if (opener instanceof HTMLElement && opener.isConnected) opener.focus();
-        },
-        [opener],
-    );
-    return (
-        <dialog
-            ref={ref}
-            className="topbar-panel games-sheet"
-            data-mode="sheet"
-            aria-labelledby="games-sheet-title"
-            onClose={onClose}
-            onClick={(event) => {
-                if (event.target === event.currentTarget) onClose();
-            }}
-        >
-            <div className="topbar-panel-body">
-                <div className="topbar-panel-head">
-                    <h2 id="games-sheet-title" className="games-sheet-title">
-                        {text.games.filters(0)}
-                    </h2>
-                    <button type="button" className="topbar-panel-close" aria-label={text.games.closeSheet} onClick={onClose}>
-                        <svg viewBox="0 0 24 24" aria-hidden="true">
-                            <path d="M6 6l12 12M18 6L6 18" />
-                        </svg>
-                    </button>
-                </div>
-                {children}
-                <div className="games-sheet-foot">
-                    <button type="button" className="btn btn-primary" onClick={onClose}>
-                        {text.games.show}
-                    </button>
-                </div>
+            <p className="note games-paging-line">{text.games.pageOf(page.page, page.pages, page.total)}</p>
+            <div className="games-pages">
+                {step(page.page - 1, text.games.previous, `prev`)}
+                <ol className="games-page-numbers">
+                    {numbers.map((number) => (
+                        <li key={number}>
+                            <Link
+                                to={pagePathOf(filters, number)}
+                                className="btn btn-ghost games-page-number"
+                                ariaCurrent={number === page.page}
+                                ariaLabel={text.games.pageLink(number)}
+                                onNavigate={onTurn}
+                            >
+                                {String(number)}
+                            </Link>
+                        </li>
+                    ))}
+                </ol>
+                {step(page.page + 1, text.games.next, `next`)}
             </div>
-        </dialog>
+        </nav>
     );
 }

@@ -7,6 +7,7 @@ const record = {
     name: `ana`,
     kind: `human`,
     rating: 1402,
+    deviation: 58,
     provisional: false,
     rank: 5,
     games: 49,
@@ -30,7 +31,7 @@ const points = [
     { gameId: `g-3`, at: `2026-09-30T18:00:00Z`, rating: 1402, deviation: 60, provisional: false },
 ];
 
-const page = { games: [], next: null, previous: null, page: 1 };
+const page = { games: [], page: 1, pages: 0, total: 0 };
 
 function stubPlayer(body: unknown, status = 200): string[] {
     const reads: string[] = [];
@@ -132,6 +133,13 @@ describe('PlayerScreen', () => {
         render(<PlayerScreen name="ana" />);
         const card = await screen.findByRole(`region`, { name: `Record` });
         expect(card.textContent).toBe(`RecordNo finished games yet.`);
+    });
+
+    it('heads the page with the name in its plate while the record loads', () => {
+        vi.stubGlobal(`fetch`, vi.fn(() => new Promise<Response>(() => undefined)));
+        render(<PlayerScreen name="ana" />);
+        expect(screen.getByRole(`heading`, { level: 1, name: `ana` }).closest(`.bot-plate .bot-title`)).toBeTruthy();
+        expect(document.querySelector(`.skeleton`)).toBeTruthy();
     });
 
     it('answers a name no player holds as missing', async () => {

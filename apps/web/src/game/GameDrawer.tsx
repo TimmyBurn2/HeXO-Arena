@@ -22,7 +22,7 @@ const tabs: readonly { id: DrawerTab; label: string }[] = [
  * A right-hand drawer on wide screens, a bottom sheet on phones whose peek
  * keeps the player's own chip in reach.
  */
-export function GameDrawer({ drawer, feed, current, facts, meetings, tournament, running, timed, onResign, peek }: {
+export function GameDrawer({ drawer, feed, current, facts, meetings, rundown, tournament, running, timed, onResign, peek }: {
     drawer: Drawer;
     feed: readonly FeedLine[];
     // The feed line the board shows; a replay may stand before the newest.
@@ -30,6 +30,8 @@ export function GameDrawer({ drawer, feed, current, facts, meetings, tournament,
     facts: readonly (readonly [string, string])[];
     // The two players' record against each other, leading to their games; null before it is known or when they have none.
     meetings: ReactNode;
+    // The pre-game rundown, kept on the Game tab while the game runs; null otherwise.
+    rundown: ReactNode;
     // The tournament game's place, leading to its tournament; null for any other game.
     tournament: ReactNode;
     running: boolean;
@@ -138,7 +140,9 @@ export function GameDrawer({ drawer, feed, current, facts, meetings, tournament,
                         </button>
                     )}
                 </div>
+                {/* keyed by its tab, so each tab opens at its own top */}
                 <div
+                    key={drawer.tab}
                     className="drawer-panel"
                     role="tabpanel"
                     tabIndex={0}
@@ -156,7 +160,12 @@ export function GameDrawer({ drawer, feed, current, facts, meetings, tournament,
                             <MoveFeed feed={feed} current={current} visible={drawer.visible} />
                         </>
                     ) : null}
-                    {drawer.tab === `game` ? <GameFacts facts={facts} meetings={meetings} tournament={tournament} running={running} timed={timed} onResign={onResign} /> : null}
+                    {drawer.tab === `game` ? (
+                        <>
+                            {rundown}
+                            <GameFacts facts={facts} meetings={meetings} tournament={tournament} running={running} timed={timed} onResign={onResign} />
+                        </>
+                    ) : null}
                 </div>
                 {/* under either tab, so a standing link is the drawer and one
                     press away from the board */}

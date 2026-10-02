@@ -75,6 +75,8 @@ the first seed.
 The seed ends by scheduling the dev tournament three minutes out, unless one
 runs or waits, and enters one bot per owner with games left today: the
 personas' online bots, then the dev bots.
+It also adds one weekly rule, `Dev weekly {date}` on Mondays at 00:10 UTC for
+up to five bots, so the next week's tournament always waits for entries.
 
 The dev pill at the bottom left of framed screens signs in as a persona, any
 name, a first sign-in, or a guest; in dev the Discord button opens the same

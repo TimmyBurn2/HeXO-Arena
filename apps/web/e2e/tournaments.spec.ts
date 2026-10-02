@@ -43,3 +43,10 @@ test('the crosstable scrolls inside its frame on a phone, the names held in plac
     expect(Math.abs((name?.x ?? 0) - (box?.x ?? 0))).toBeLessThan(2);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
 });
+
+test('a standings row opens its pairings from a 44 px target on a phone', async ({ page }) => {
+    await open(page, `/tournaments/t_autumnrobin1`, 390);
+    const box = await page.getByRole(`button`, { name: /^Pairings of /u }).first().boundingBox();
+    expect(Math.round(box?.width ?? 0)).toBeGreaterThanOrEqual(44);
+    expect(Math.round(box?.height ?? 0)).toBeGreaterThanOrEqual(44);
+});

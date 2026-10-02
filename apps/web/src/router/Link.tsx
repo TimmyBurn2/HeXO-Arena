@@ -7,12 +7,13 @@ import { navigate } from './use-route';
  * `onNavigate` runs just before an in-app navigation, so a popover can
  * close before the next screen takes focus.
  */
-export function Link({ to, className, children, ariaCurrent, ariaLabel, onNavigate }: {
+export function Link({ to, className, children, ariaCurrent, ariaLabel, rel, onNavigate }: {
     to: string;
     className?: string;
     children: ReactNode;
     ariaCurrent?: boolean;
     ariaLabel?: string;
+    rel?: string;
     onNavigate?: () => void;
 }) {
     function handleClick(event: MouseEvent<HTMLAnchorElement>) {
@@ -30,6 +31,7 @@ export function Link({ to, className, children, ariaCurrent, ariaLabel, onNaviga
             className={className}
             aria-current={ariaCurrent ? `page` : undefined}
             aria-label={ariaLabel}
+            rel={rel}
             onClick={handleClick}
         >
             {children}

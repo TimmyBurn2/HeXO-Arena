@@ -5,10 +5,12 @@ import {
     gameSnapshotSchema,
     leaderboardActiveDays,
     legalDetailsPath,
+    legalDetailsSchema,
     legalDocumentPath,
     legalPages,
     leaderboardQuerySchema,
     leaderboardSchema,
+    finishedGamesPageCap,
     finishedGamesPageSchema,
     finishedGamesQuerySchema,
     liveGameEntrySchema,
@@ -22,6 +24,7 @@ import {
     type BotListing,
     type DevAccount,
     type GameSnapshot,
+    type LegalDetails,
     type LegalPage,
     type LeaderboardEntry,
     type FinishedGameEntry,
@@ -37,7 +40,6 @@ import {
     type TournamentGame,
     type TournamentSummary,
 } from '@hexo-arena/contract';
-import { legalDetailsSchema, type LegalDetails } from '../src/legal/details';
 
 /**
  * The world one browser test sees; every answer is parsed with the
@@ -484,6 +486,28 @@ export const games: Record<string, GameSnapshot> = {
         toMove: `x`,
         clock: { mode: `match`, remainingMainMs: { x: 227_000, o: 252_000 } },
     },
+    // Games before their first turn, the opening alone on the board, so
+    // the rundown stands over the stage: one the bot opens, one tom opens.
+    fresh: {
+        gameId: `fresh`,
+        players: facing(`sealbot`, 1712),
+        openingPlies: 5,
+        board: { cells: midCells.slice(0, 5) },
+        timeControl: { mode: `turn`, turnTimeMs: 30_000 },
+        status: `in-progress`,
+        toMove: `o`,
+        clock: { mode: `turn`, remainingTurnMs: 28_000 },
+    },
+    'fresh-yours': {
+        gameId: `fresh-yours`,
+        players: facing(`sealbot`, 1712),
+        openingPlies: 3,
+        board: { cells: midCells.slice(0, 3) },
+        timeControl: { mode: `turn`, turnTimeMs: 30_000 },
+        status: `in-progress`,
+        toMove: `x`,
+        clock: { mode: `turn`, remainingTurnMs: 28_000 },
+    },
     waiting: {
         gameId: `waiting`,
         players: facing(`sealbot`, 1712),
@@ -677,11 +701,10 @@ function finishedPage(state: World, params: URLSearchParams): { status: 200; bod
         if (query.opening !== undefined && String(game.openingPlies) !== query.opening) return false;
         return query.before === undefined || Date.parse(game.finishedAt) < Date.parse(`${query.before}T00:00:00Z`);
     });
-    const [page = 1, start = 0] = query.cursor === undefined ? [1, 0] : query.cursor.split(`.`).map(Number);
+    const page = query.page === undefined ? 1 : Number(query.page);
+    const start = (page - 1) * pageSize;
     const games = matches.slice(start, start + pageSize);
-    const next = matches.length > start + pageSize && page < 10 ? `${String(page + 1)}.${String(start + pageSize)}` : null;
-    const previous = page > 2 ? `${String(page - 1)}.${String(start - pageSize)}` : null;
-    const body: FinishedGamesPage = { games, next, previous, page };
+    const body: FinishedGamesPage = { games, page, pages: Math.min(finishedGamesPageCap, Math.ceil(matches.length / pageSize)), total: matches.length };
     if (query.player === undefined) return { status: 200, body };
     const player = query.player;
     // A voided game stays on the page and out of the record, as the server counts it.
@@ -694,7 +717,7 @@ function finishedPage(state: World, params: URLSearchParams): { status: 200; bod
     const asO = bySide(`o`);
     const won = asX.won + asO.won;
     const lost = asX.lost + asO.lost;
-    return { status: 200, body: { ...body, record: { games: counted.length, won, lost, undecided: counted.length - won - lost, asX, asO } } };
+    return { status: 200, body: { ...body, record: { games: counted.length, won, lost, undecided: counted.length - won - lost, voided: matches.length - counted.length, asX, asO } } };
 }
 
 export function world(overrides: Partial<World> = {}): World {
@@ -820,6 +843,8 @@ function recordOf(state: World, name: string): PlayerRecord | null {
         name: playerName,
         kind,
         rating: ranked?.rating ?? bot?.rating ?? 1000,
+        // A provisional player's deviation is above the ranked line, a settled one's near the floor.
+        deviation: (bot?.provisional ?? ranked === undefined) ? 140 : 52,
         provisional: bot?.provisional ?? ranked === undefined,
         rank: ranked?.rank ?? null,
         games,

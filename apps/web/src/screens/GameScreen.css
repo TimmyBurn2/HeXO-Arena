@@ -82,6 +82,27 @@
         overflow-wrap: anywhere;
     }
 
+    /* The rundown hangs under the top chips before the first turn, and
+       the camera keeps the position below its measured reach. */
+    .hud-rundown {
+        top: var(--hud-clear);
+        left: 50%;
+        transform: translateX(-50%);
+        width: min(var(--rundown-w), calc(100% - 2 * var(--space-4)));
+    }
+
+    .hud-rundown .hud-chip {
+        display: block;
+        padding: var(--space-3) var(--space-4);
+        white-space: normal;
+    }
+
+    /* A cell the keyboard walks to scrolls into view below the card, never under it. */
+    .board-host[data-rundown] .board-camera {
+        padding-top: calc(var(--rundown-reach, var(--hud-clear)) + var(--space-2));
+        scroll-padding-top: calc(var(--rundown-reach, var(--hud-clear)) + var(--space-2));
+    }
+
     /* The game screen stacks a result that would meet the seat chip. */
     .board-host[data-stacked] .hud-bottom-center {
         bottom: var(--hud-clear);
@@ -523,6 +544,12 @@
         margin: 0 0 var(--space-4);
     }
 
+    .drawer-panel > .rundown {
+        margin-bottom: var(--space-4);
+        padding-bottom: var(--space-4);
+        box-shadow: inset 0 calc(-1 * var(--border-w)) 0 var(--c-border);
+    }
+
     .facts-row {
         display: grid;
         grid-template-columns: var(--facts-term-w) minmax(0, 1fr);
@@ -640,6 +667,11 @@
         .hud-bottom-center {
             bottom: calc(var(--sheet-peek-h) + var(--space-2));
             max-width: calc(100% - 2 * var(--space-2));
+        }
+
+        .hud-rundown {
+            top: calc(var(--hud-clear) - var(--space-2));
+            width: calc(100% - 2 * var(--space-2));
         }
 
         .stage {

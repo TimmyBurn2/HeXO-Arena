@@ -1,15 +1,15 @@
 @layer screens {
-    .games-filters,
-    .games-more-fields,
-    .games-sheet-fields {
+    /* The filters' popover hangs under the search row. */
+    .games-search {
+        position: relative;
+    }
+
+    /* Large text puts the Filters button on a line of its own under Player. */
+    .games-filters {
         display: flex;
         flex-wrap: wrap;
         align-items: flex-end;
         gap: var(--space-3);
-    }
-
-    .games-more-fields {
-        flex-basis: 100%;
     }
 
     .games-field {
@@ -33,22 +33,46 @@
         color: var(--c-border-strong);
     }
 
-    /* Large text puts the player field on a line of its own under Filters. */
-    .games-phone-bar {
-        display: flex;
-        flex-wrap: wrap;
-        align-items: flex-end;
+    .games-panel[data-mode='popover'] {
+        top: calc(100% + var(--space-2));
+        right: auto;
+        left: 0;
+        width: var(--games-panel-w);
+    }
+
+    .games-panel-title {
+        margin: 0;
+        font-size: var(--text-lg);
+        font-weight: var(--weight-display);
+    }
+
+    .games-panel-note {
+        margin: var(--space-2) 0 0;
+    }
+
+    .games-panel-fields {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(min(100%, var(--games-field-min)), 1fr));
+        align-items: end;
         gap: var(--space-3);
+        margin-top: var(--space-3);
     }
 
-    .games-phone-bar .games-filters {
-        flex: 1 1 var(--games-name-w);
-        min-width: 0;
-    }
-
-    .games-phone-bar .games-field,
-    .games-phone-bar input[type='text'] {
+    .games-panel-fields .games-field,
+    .games-panel-fields .games-field input,
+    .games-panel-fields .games-field select {
         width: 100%;
+    }
+
+    .games-panel-foot {
+        display: flex;
+        justify-content: flex-end;
+        margin-top: var(--space-5);
+    }
+
+    .games-panel[data-mode='sheet'] .games-panel-foot .btn {
+        flex: 1;
+        height: var(--control-lg);
     }
 
     .games-chips {
@@ -175,19 +199,52 @@
 
     .games-paging {
         display: flex;
-        align-items: center;
-        justify-content: space-between;
-        flex-wrap: wrap;
-        gap: var(--space-3);
+        flex-direction: column;
+        gap: var(--space-2);
         margin-top: var(--space-4);
     }
 
-    /* Large text on a narrow window stacks the steps rather than push the page sideways. */
-    .games-paging-steps {
+    .games-paging-line {
+        margin: var(--space-4) 0 0;
+    }
+
+    .games-paging .games-paging-line {
+        margin: 0;
+    }
+
+    /* Large text on a narrow window wraps the page links rather than push the page sideways. */
+    .games-pages,
+    .games-page-numbers {
         display: flex;
         flex-wrap: wrap;
-        justify-content: flex-end;
+        align-items: center;
+        gap: var(--space-1);
+    }
+
+    .games-pages {
         gap: var(--space-2);
+    }
+
+    .games-page-numbers {
+        margin: 0;
+        padding: 0;
+        list-style: none;
+    }
+
+    .games-page-number {
+        min-width: var(--control-md);
+        padding: 0 var(--space-2);
+        background: transparent;
+        font-variant-numeric: tabular-nums;
+    }
+
+    .games-page-number:hover {
+        background: var(--c-bg-hover);
+    }
+
+    .games-page-number[aria-current='page'] {
+        background: var(--c-bg-active);
+        box-shadow: inset 0 calc(-1 * var(--focus-w)) 0 var(--c-accent);
     }
 
     .games-cap {
@@ -196,32 +253,6 @@
         align-items: center;
         gap: var(--space-2) var(--space-3);
         margin: var(--space-3) 0 0;
-    }
-
-    .games-sheet-title {
-        margin: 0;
-        font-size: var(--text-lg);
-        font-weight: var(--weight-display);
-    }
-
-    .games-sheet-fields {
-        margin-top: var(--space-3);
-    }
-
-    .games-sheet-fields .games-field,
-    .games-sheet-fields .games-field input,
-    .games-sheet-fields .games-field select {
-        width: 100%;
-    }
-
-    .games-sheet-foot {
-        display: flex;
-        margin-top: var(--space-5);
-    }
-
-    .games-sheet-foot .btn {
-        flex: 1;
-        height: var(--control-lg);
     }
 
     /* The figures take their own row under the names on a narrow window. */
@@ -236,14 +267,29 @@
             justify-content: space-between;
         }
 
-        .games-paging-steps {
-            flex: 1;
-            justify-content: flex-end;
-        }
-
-        .games-paging-steps .btn {
+        .games-pages .btn {
             min-width: var(--control-lg);
             height: var(--control-lg);
+        }
+
+        /* Previous and Next share the first row, the page numbers wrap under them. */
+        .games-pages {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+        }
+
+        .games-pages > :first-child {
+            justify-self: start;
+        }
+
+        .games-pages > :last-child {
+            grid-row: 1;
+            grid-column: 2;
+            justify-self: end;
+        }
+
+        .games-page-numbers {
+            grid-column: 1 / -1;
         }
     }
 }

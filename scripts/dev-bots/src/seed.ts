@@ -6,7 +6,7 @@ import { hostBots, message, type HostedBot, type HostedFinish } from './host';
 import { playHumanGame } from './human';
 import { personaBots, type BotSeries, type PersonaName, type SeedPlan } from './personas';
 import { NotADevServer, saveTokens } from './runner';
-import { seedDevTournament, type Candidate, type DevTournament } from './tournament';
+import { devWeeklyRule, seedDevTournament, type Candidate, type DevTournament, type DevWeeklyRule } from './tournament';
 
 /** How the seed reaches its target, what it plays, and how it bans. */
 export interface SeedOptions {
@@ -26,6 +26,10 @@ export interface SeedOptions {
     scheduleTournament?: (name: string, startsAt: Date) => Promise<string>;
     // Bots the dev tournament may take beside the personas' own.
     tournamentCandidates?: readonly Candidate[];
+    // Adds a weekly tournament rule through the admin client;
+    // resolves when the rule stands, newly or already.
+    // Without it the seed adds none.
+    addWeeklyRule?: (rule: DevWeeklyRule) => Promise<void>;
     now?: () => number;
 }
 
@@ -209,6 +213,11 @@ export async function seedDevData(options: SeedOptions): Promise<SeedReport> {
                   now: options.now ?? Date.now,
                   log,
               });
+
+    if (options.addWeeklyRule !== undefined) {
+        await options.addWeeklyRule(devWeeklyRule);
+        log(`weekly rule: ${devWeeklyRule.namePattern}, ${devWeeklyRule.weekday} ${devWeeklyRule.time} UTC`);
+    }
 
     const accounts = await client.devAccounts();
     const ranked = accounts.flatMap((account) => account.bots).filter((bot) => !bot.provisional).map((bot) => bot.name);

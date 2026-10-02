@@ -1,3 +1,5 @@
+import { expectedScore, glickoG, glickoScale } from '@hexo-arena/contract';
+
 /**
  * A player on the Glicko scale, where ratings are stored and shown.
  */
@@ -17,12 +19,7 @@ export interface Glicko2Result {
     readonly score: number;
 }
 
-const glickoScale = 173.7178;
 const convergenceTolerance = 0.000001;
-
-function g(phi: number): number {
-    return 1 / Math.sqrt(1 + (3 * phi * phi) / (Math.PI * Math.PI));
-}
 
 // The Illinois iteration of the paper's revised step 5: Newton's method
 // can fail to converge from a poor starting value; this bracket cannot.
@@ -87,9 +84,8 @@ export function glicko2Update(
     let information = 0;
     let improvement = 0;
     for (const result of results) {
-        const muJ = (result.opponent.rating - 1500) / glickoScale;
-        const gJ = g(result.opponent.deviation / glickoScale);
-        const expected = 1 / (1 + Math.exp(-gJ * (mu - muJ)));
+        const gJ = glickoG(result.opponent.deviation / glickoScale);
+        const expected = expectedScore(player, result.opponent);
         information += gJ * gJ * expected * (1 - expected);
         improvement += gJ * (result.score - expected);
     }

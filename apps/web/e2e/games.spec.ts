@@ -21,13 +21,33 @@ test('a name applies when its field is left, and Back returns to the list before
     await page.keyboard.press(`Tab`);
     await expect.poll(() => search(page)).toBe(`?player=quietlake`);
     await expect(page.getByRole(`button`, { name: `Remove quietlake` })).toBeVisible();
-    await page.getByLabel(`Against`).fill(`hextide`);
+    await page.getByRole(`button`, { name: `Filters`, exact: true }).click();
+    const panel = page.locator(`dialog.games-panel[open]`);
+    await panel.getByLabel(`Against`).fill(`hextide`);
     await page.keyboard.press(`Enter`);
     await expect(page.locator(`.games-h2h`)).toContainText(`quietlake`);
+    await page.keyboard.press(`Escape`);
+    await expect(panel).toHaveCount(0);
+    await expect(page.getByRole(`button`, { name: `Filters (1)` })).toBeFocused();
     await page.goBack();
     await expect.poll(() => search(page)).toBe(`?player=quietlake`);
     await expect(page.locator(`.games-h2h`)).toHaveCount(0);
-    await expect(page.getByLabel(`Against`)).toHaveValue(``);
+});
+
+test('on a wide window the filters hang under their button and leave the list live behind them', async ({ page }) => {
+    await open(page, `/games?player=hextide`, 1280);
+    const button = page.getByRole(`button`, { name: `Filters`, exact: true });
+    await button.click();
+    const panel = page.locator(`dialog.games-panel[open]`);
+    await expect(panel).toHaveAttribute(`data-mode`, `popover`);
+    await expect(panel.getByLabel(`Against`)).toBeFocused();
+    const [under, box] = await Promise.all([button.boundingBox(), panel.boundingBox()]);
+    expect((box?.y ?? 0) > (under?.y ?? 0) + (under?.height ?? 0) - 1).toBe(true);
+    await panel.getByLabel(`Clock`).selectOption(`unlimited`);
+    await expect.poll(() => search(page)).toBe(`?player=hextide&clock=unlimited`);
+    await expect(page.locator(`.game-row`).first()).toContainText(`unlimited`);
+    await page.locator(`.games-note`).click();
+    await expect(panel).toHaveCount(0);
 });
 
 test('on a phone the filters open in a sheet that applies each change at once and closes on the list', async ({ page }) => {
@@ -35,7 +55,8 @@ test('on a phone the filters open in a sheet that applies each change at once an
     await expect(page.getByLabel(`Player`)).toHaveValue(`hextide`);
     const button = page.getByRole(`button`, { name: `Filters`, exact: true });
     await button.click();
-    const sheet = page.locator(`dialog.games-sheet[open]`);
+    const sheet = page.locator(`dialog.games-panel[open]`);
+    await expect(sheet).toHaveAttribute(`data-mode`, `sheet`);
     await expect(sheet.getByLabel(`Against`)).toBeFocused();
     await sheet.getByLabel(`Clock`).selectOption(`unlimited`);
     await expect.poll(() => search(page)).toBe(`?player=hextide&clock=unlimited`);
@@ -60,17 +81,43 @@ test('the rows line up in columns on a wide window and stack as cards on a phone
     expect(Math.abs((seats?.y ?? 0) - (when?.y ?? 99))).toBeLessThan(8);
 });
 
-test('a page turned by its steps takes the keyboard to its list, at the top of the window', async ({ page }) => {
+test('a page turned by its links takes the keyboard to its list, at the top of the window', async ({ page }) => {
     await open(page, `/games`, 1280);
-    const older = page.getByRole(`button`, { name: `Older` });
-    await older.focus();
+    await expect(page.getByText(`Page 1 of 3; 60 games`)).toBeVisible();
+    await page.getByRole(`link`, { name: `Next` }).focus();
     await page.keyboard.press(`Enter`);
     const second = page.getByRole(`list`, { name: `Games, page 2` });
     await expect(second).toBeFocused();
     expect(await page.evaluate(() => window.scrollY)).toBe(0);
-    await page.getByRole(`button`, { name: `Newer` }).focus();
+    await page.getByRole(`link`, { name: `Page 3` }).focus();
+    await page.keyboard.press(`Enter`);
+    await expect(page.getByRole(`list`, { name: `Games, page 3` })).toBeFocused();
+    expect(search(page)).toBe(`?page=3`);
+    await page.getByRole(`link`, { name: `Page 1` }).focus();
     await page.keyboard.press(`Enter`);
     await expect(page.getByRole(`list`, { name: `Games, page 1` })).toBeFocused();
     await page.keyboard.press(`Tab`);
     await expect(page.locator(`.game-row`).first()).toBeFocused();
 });
+
+test('past 200 games Pick a date opens the filters on a wide window, the keyboard in Before', async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 900 });
+    const look = looks[0];
+    if (look === undefined) throw new Error(`no look registered`);
+    await wear(page, look);
+    await serve(page, world({ finished: rivalry(230) }));
+    await page.goto(`/games?player=hextide&page=10`);
+    await page.getByRole(`button`, { name: `Pick a date` }).click();
+    const panel = page.locator(`dialog.games-panel[open]`);
+    await expect(panel).toHaveAttribute(`data-mode`, `popover`);
+    await expect(panel.getByLabel(`Before`)).toBeFocused();
+});
+
+test('a page number answers the pointer as the other page links do', async ({ page }) => {
+    await open(page, `/games`, 1280);
+    const number = page.getByRole(`link`, { name: `Page 2` });
+    const resting = await number.evaluate((element) => getComputedStyle(element).backgroundColor);
+    await number.hover();
+    await expect.poll(() => number.evaluate((element) => getComputedStyle(element).backgroundColor)).not.toBe(resting);
+});
+

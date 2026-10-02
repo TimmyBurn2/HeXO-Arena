@@ -260,10 +260,18 @@ local `pnpm dev`.
 | `recompute-ratings [--exclude <gameId\|name>]...` | re-fold every rating, and the ratings around each game, from the game log; excluded games are voided for good |
 | `tournament-create --name <text> --start <ISO time> --clock turn:<s>\|match:<min>+<s> [--opening <plies>] [--max <bots>]` | schedule a bot round robin 1 hour to 14 days ahead, at most 3 waiting; turn clock 5 to 60 s, or match clock 1 to 10 min plus 0 to 10 s; opening 1, 3, 5, 7, or 9 plies, default 5; 3 to 12 entries, default 12 |
 | `tournament-cancel <tournamentId>` | end a waiting or running tournament as canceled |
+| `tournament-schedule add --weekday <mon..sun> --time <HH:MM> --name <text> --clock turn:<s>\|match:<min>+<s> [--opening <plies>] [--max <bots>] [--ahead <days>]` | a weekly rule: each week's tournament starts on that weekday at that UTC time and is created `--ahead` days before, 1 to 14, default 7, opening it for entries; `{date}` in the name becomes the start's date, YYYY-MM-DD; clock, opening, and entries as for `tournament-create`; one rule per weekday and time |
+| `tournament-schedule list` | the weekly rules with their ids and next starts |
+| `tournament-schedule remove <ruleId>` | delete a weekly rule; the tournaments it created stay, and `tournament-cancel` ends a waiting one |
 
 Every mutation takes `--reason` and writes an audit row.
-`status` lists the running and waiting tournaments with their ids.
+`status` lists the running and waiting tournaments with their ids, and the
+weekly rules.
 A development server schedules a tournament as soon as a minute ahead.
+A weekly rule's tournament counts toward the 3 waiting: while they are full,
+creation waits for a free slot.
+A week whose tournament does not exist an hour before its start, from a full
+waiting cap, downtime, or a clock step, is skipped, never created late.
 Deleting a bot, by its owner or through `delete-user`, keeps a bot that has a
 game with a winner under a placeholder, its name still reserved, and deletes
 any other bot outright, freeing the name.

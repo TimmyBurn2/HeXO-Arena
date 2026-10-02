@@ -59,7 +59,7 @@ export function OpeningRow({ opening, onOpening }: { opening: OpeningPlies; onOp
                                 ))}
                             </div>
                         </fieldset>
-                        <p className="opening-caption">{opening === 1 ? text.play.originOnly : text.play.randomStones(opening - 1)}</p>
+                        <p className="opening-caption">{text.play.openingNote(opening)}</p>
                     </div>
                 </div>
             ) : null}

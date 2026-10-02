@@ -24,7 +24,7 @@ function game(index: number, overrides: Partial<FinishedGameEntry> = {}): Finish
     };
 }
 
-const record = { games: 41, won: 24, lost: 15, undecided: 2, asX: { games: 21, won: 14, lost: 6 }, asO: { games: 20, won: 10, lost: 9 } };
+const record = { games: 41, won: 24, lost: 15, undecided: 2, voided: 0, asX: { games: 21, won: 14, lost: 6 }, asO: { games: 20, won: 10, lost: 9 } };
 
 type Answer = FinishedGamesPage | number;
 
@@ -46,6 +46,12 @@ function open(path: string): void {
     render(<GamesScreen />);
 }
 
+// The filters past Player live in the panel the Filters button opens.
+function openFilters(): HTMLElement {
+    fireEvent.click(screen.getByRole(`button`, { name: /^Filters/u }));
+    return screen.getByRole(`dialog`, { name: `Filters` });
+}
+
 function reads(fetch: ReturnType<typeof vi.fn>): string[] {
     return fetch.mock.calls.map(([url]) => String(url)).filter((url) => url.startsWith(`/api/games/finished`));
 }
@@ -58,7 +64,7 @@ afterEach(() => {
 
 describe('GamesScreen', () => {
     it('list the newest games: both seats at their rating before, the result in words, the clock, opening, length, and when', async () => {
-        serve(() => ({ games: [game(0), game(1, { winner: null, reason: `aborted`, openingPlies: 1, turns: 1, timeControl: { mode: `unlimited` } })], next: null, previous: null, page: 1 }));
+        serve(() => ({ games: [game(0), game(1, { winner: null, reason: `aborted`, openingPlies: 1, turns: 1, timeControl: { mode: `unlimited` } })], page: 1, pages: 1, total: 2 }));
         open(`/games`);
         const rows = await screen.findAllByRole(`link`, { name: /hextide/u });
         expect(rows.map((row) => row.getAttribute(`href`))).toEqual([`/game/g-0`, `/game/g-1`]);
@@ -67,11 +73,11 @@ describe('GamesScreen', () => {
         expect(aborted.textContent).toContain(`No winner; the game was aborted`);
         expect(aborted.textContent).toContain(`unlimitedOrigin only1 turn`);
         expect(screen.getByText(`Newest first; guest games are not kept, so they never show here.`)).toBeTruthy();
-        expect(screen.getByText(`Page 1`)).toBeTruthy();
+        expect(screen.getByText(`2 games`)).toBeTruthy();
     });
 
     it('keep a voided game in the list, tagged voided beside its result', async () => {
-        serve(() => ({ games: [game(0, { voided: true, rated: false }), game(1)], next: null, previous: null, page: 1 }));
+        serve(() => ({ games: [game(0, { voided: true, rated: false }), game(1)], page: 1, pages: 1, total: 2 }));
         open(`/games`);
         const rows = await screen.findAllByRole(`link`, { name: /hextide/u });
         const [voided, kept] = rows as [HTMLElement, HTMLElement];
@@ -80,25 +86,38 @@ describe('GamesScreen', () => {
         expect(kept.querySelector(`.tag`)).toBe(null);
     });
 
-    it('keep Against, Result, and Side off until a player is named, and hold every filter in the address', async () => {
-        const fetch = serve(() => ({ games: [game(0)], next: null, previous: null, page: 1 }));
+    it('hold Player beside one Filters button, Against and Side waiting in its panel for a player and Result offering No winner alone', async () => {
+        const fetch = serve(() => ({ games: [game(0)], page: 1, pages: 1, total: 1 }));
         open(`/games`);
         await screen.findAllByRole(`link`, { name: /hextide/u });
-        for (const name of [`Against`, `Result`, `Side`]) expect(screen.getByLabelText<HTMLInputElement>(name).disabled).toBe(true);
+        expect(screen.getByRole(`search`).querySelectorAll(`input, select`)).toHaveLength(1);
+        expect(screen.queryByLabelText(`Against`)).toBe(null);
+        const panel = openFilters();
+        expect(within(panel).getByText(`Against, Side, Won, and Lost wait for a name in Player.`)).toBeTruthy();
+        expect([...panel.querySelectorAll(`label`)].map((label) => label.textContent)).toEqual([`Against`, `Result`, `Side`, `Ending`, `Clock`, `Opening`, `Who played`, `Before`]);
+        expect(within(panel).getByLabelText(`Opening`).getAttribute(`aria-describedby`)).toBe(`games-opening-note`);
+        expect(document.getElementById(`games-opening-note`)?.textContent).toBe(`Opening counts the stones on the board before the first turn, the origin and random ones near it.`);
+        for (const name of [`Against`, `Side`]) expect(within(panel).getByLabelText<HTMLInputElement>(name).disabled).toBe(true);
+        const result = within(panel).getByLabelText<HTMLSelectElement>(`Result`);
+        expect(result.disabled).toBe(false);
+        expect([...result.options].map((option) => option.textContent)).toEqual([`Any`, `No winner`]);
         const player = screen.getByLabelText(`Player`);
         fireEvent.change(player, { target: { value: `hextide` } });
         expect(window.location.search).toBe(``);
         fireEvent.keyDown(player, { key: `Enter` });
         expect(window.location.search).toBe(`?player=hextide`);
         await waitFor(() => {
-            expect(screen.getByLabelText<HTMLSelectElement>(`Side`).disabled).toBe(false);
+            expect(within(panel).getByLabelText<HTMLSelectElement>(`Side`).disabled).toBe(false);
         });
-        fireEvent.change(screen.getByLabelText(`Clock`), { target: { value: `turn` } });
-        fireEvent.change(screen.getByLabelText(`Side`), { target: { value: `o` } });
+        expect(within(panel).queryByText(`Against, Side, Won, and Lost wait for a name in Player.`)).toBe(null);
+        expect([...within(panel).getByLabelText<HTMLSelectElement>(`Result`).options].map((option) => option.textContent)).toEqual([`Any`, `Won`, `Lost`, `No winner`]);
+        fireEvent.change(within(panel).getByLabelText(`Clock`), { target: { value: `turn` } });
+        fireEvent.change(within(panel).getByLabelText(`Side`), { target: { value: `o` } });
         expect(window.location.search).toBe(`?player=hextide&side=o&clock=turn`);
         await waitFor(() => {
             expect(reads(fetch).at(-1)).toBe(`/api/games/finished?player=hextide&side=o&clock=turn`);
         });
+        expect(screen.getByRole(`button`, { name: `Filters (2)` }).getAttribute(`aria-expanded`)).toBe(`true`);
         const chips = screen.getByRole(`group`, { name: `Active filters` });
         expect(within(chips).getAllByRole(`button`).map((chip) => chip.getAttribute(`aria-label`) ?? chip.textContent)).toEqual([
             `Remove hextide`,
@@ -106,10 +125,21 @@ describe('GamesScreen', () => {
             `Remove turn clock`,
             `Clear filters`,
         ]);
+        fireEvent.click(within(panel).getByRole(`button`, { name: `Show games` }));
+        expect(screen.queryByRole(`dialog`, { name: `Filters` })).toBe(null);
+    });
+
+    it('filter games without a winner with no player named', async () => {
+        serve(() => ({ games: [game(0, { winner: null, reason: `aborted` })], page: 1, pages: 1, total: 1 }));
+        open(`/games`);
+        await screen.findAllByRole(`link`, { name: /hextide/u });
+        fireEvent.change(within(openFilters()).getByLabelText(`Result`), { target: { value: `none` } });
+        expect(window.location.search).toBe(`?result=none`);
+        expect(screen.getByRole(`button`, { name: `Filters (1)` })).toBeTruthy();
     });
 
     it('take a chip away with whatever needed it, and clear every filter at once', async () => {
-        serve(() => ({ games: [game(0)], next: null, previous: null, page: 1 }));
+        serve(() => ({ games: [game(0)], page: 1, pages: 1, total: 1 }));
         open(`/games?player=hextide&vs=quietlake&side=x&clock=match`);
         await screen.findAllByRole(`link`, { name: /hextide/u });
         fireEvent.click(screen.getByRole(`button`, { name: `Remove hextide` }));
@@ -123,7 +153,7 @@ describe('GamesScreen', () => {
     });
 
     it('head two players\' meetings with three figures and the split by side', async () => {
-        serve(() => ({ games: [game(0)], next: null, previous: null, page: 1, record }));
+        serve(() => ({ games: [game(0)], page: 1, pages: 1, total: 41, record }));
         open(`/games?player=HexTide&vs=quietlake`);
         const head = await screen.findByRole(`heading`, { level: 2, name: /against/u });
         expect(head.textContent).toBe(`hextideBOT against quietlakeBOT`);
@@ -132,8 +162,16 @@ describe('GamesScreen', () => {
         expect(within(section).getByText(`41 games; hextide won 14 and lost 6 as x, and won 10 and lost 9 as o.`)).toBeTruthy();
     });
 
+    it('say under two players\' meetings how many voided games their figures leave out', async () => {
+        serve(() => ({ games: [game(0)], page: 1, pages: 1, total: 43, record: { ...record, voided: 2 } }));
+        open(`/games?player=hextide&vs=quietlake`);
+        const head = await screen.findByRole(`heading`, { level: 2, name: /against/u });
+        const section = head.closest(`section`) as HTMLElement;
+        expect(section.querySelector(`.games-h2h-split`)?.textContent).toBe(`41 games; hextide won 14 and lost 6 as x, and won 10 and lost 9 as o. 2 voided games are left out.`);
+    });
+
     it('name the one of two names no player holds', async () => {
-        const fetch = serve((search) => (search === `player=hextide` ? { games: [game(0)], next: null, previous: null, page: 1 } : 404));
+        const fetch = serve((search) => (search === `player=hextide` ? { games: [game(0)], page: 1, pages: 1, total: 1 } : 404));
         open(`/games?player=hextide&vs=nobody`);
         expect(await screen.findByRole(`heading`, { name: `No player named nobody` })).toBeTruthy();
         expect(reads(fetch)).toEqual([`/api/games/finished?player=hextide&vs=nobody`, `/api/games/finished?player=hextide`]);
@@ -148,7 +186,7 @@ describe('GamesScreen', () => {
     });
 
     it('greet day one with the way to a live game and to a bot of your own', async () => {
-        serve(() => ({ games: [], next: null, previous: null, page: 1 }));
+        serve(() => ({ games: [], page: 1, pages: 0, total: 0 }));
         open(`/games`);
         expect(await screen.findByRole(`heading`, { name: `No finished games yet` })).toBeTruthy();
         expect(screen.getByRole(`link`, { name: `Watch a live game` }).getAttribute(`href`)).toBe(`/games/live`);
@@ -156,63 +194,66 @@ describe('GamesScreen', () => {
     });
 
     it('name the filters nothing matches, and offer to clear them', async () => {
-        serve(() => ({ games: [], next: null, previous: null, page: 1, record: { ...record, games: 0, won: 0, lost: 0, undecided: 0 } }));
+        serve(() => ({ games: [], page: 1, pages: 0, total: 0, record: { ...record, games: 0, won: 0, lost: 0, undecided: 0 } }));
         open(`/games?player=hextide&reason=timeout&opening=1`);
         expect(await screen.findByRole(`heading`, { name: `No games match these filters` })).toBeTruthy();
         expect(screen.getByText(`No finished game matches hextide, on time, origin only.`)).toBeTruthy();
         expect(screen.getByRole(`link`, { name: `Clear filters` })).toBeTruthy();
     });
 
-    it('page on with Older and back with Newer, the way it came', async () => {
-        serve((search) => ({ games: [game(search === `` ? 0 : 20)], next: search === `` ? `2.40` : null, previous: null, page: search === `` ? 1 : 2 }));
-        open(`/games`);
-        await screen.findByText(`Page 1`);
-        expect(screen.getByRole<HTMLButtonElement>(`button`, { name: `Newer` }).disabled).toBe(true);
-        fireEvent.click(screen.getByRole(`button`, { name: `Older` }));
-        expect(window.location.search).toBe(`?cursor=2.40`);
-        await screen.findByText(`Page 2`);
-        expect(screen.getByRole<HTMLButtonElement>(`button`, { name: `Older` }).disabled).toBe(true);
-        // The page turned to takes the keyboard, where the window has scrolled.
-        await waitFor(() => {
-            expect(document.activeElement).toBe(screen.getByRole(`list`, { name: `Games, page 2` }));
+    it('say where the page stands, link every page between Previous and Next, and take the keyboard to the page turned to', async () => {
+        serve((search) => {
+            const page = Number(new URLSearchParams(search).get(`page`) ?? `1`);
+            return { games: [game(page * 20)], page, pages: 7, total: 134 };
         });
-        fireEvent.click(screen.getByRole(`button`, { name: `Newer` }));
+        open(`/games?page=3`);
+        await screen.findByText(`Page 3 of 7; 134 games`);
+        const nav = screen.getByRole(`navigation`, { name: `Pages` });
+        expect(within(nav).getAllByRole(`link`).map((link) => link.textContent)).toEqual([`Previous`, `1`, `2`, `3`, `4`, `5`, `6`, `7`, `Next`]);
+        expect(within(nav).getByRole(`link`, { name: `Page 3` }).getAttribute(`aria-current`)).toBe(`page`);
+        expect(within(nav).getByRole(`link`, { name: `Next` }).getAttribute(`href`)).toBe(`/games?page=4`);
+        fireEvent.click(within(nav).getByRole(`link`, { name: `Page 5` }));
+        expect(window.location.search).toBe(`?page=5`);
+        await screen.findByText(`Page 5 of 7; 134 games`);
+        await waitFor(() => {
+            expect(document.activeElement).toBe(screen.getByRole(`list`, { name: `Games, page 5` }));
+        });
+        fireEvent.click(within(screen.getByRole(`navigation`, { name: `Pages` })).getByRole(`link`, { name: `Page 1` }));
         expect(window.location.pathname + window.location.search).toBe(`/games`);
-        await screen.findByText(`Page 1`);
-        await waitFor(() => {
-            expect(document.activeElement).toBe(screen.getByRole(`list`, { name: `Games, page 1` }));
+        await screen.findByText(`Page 1 of 7; 134 games`);
+        const first = screen.getByRole(`navigation`, { name: `Pages` });
+        expect(within(first).queryByRole(`link`, { name: `Previous` })).toBe(null);
+        expect(within(first).getByText(`Previous`).getAttribute(`aria-disabled`)).toBe(`true`);
+    });
+
+    it('end at the last page, Next standing without a link, and take a page past it there', async () => {
+        serve((search) => {
+            const page = Number(new URLSearchParams(search).get(`page`) ?? `1`);
+            return { games: page > 3 ? [] : [game(page * 20)], page, pages: 3, total: 55 };
         });
+        open(`/games?clock=turn&page=9`);
+        await screen.findByText(`Page 3 of 3; 55 games`);
+        expect(window.location.search).toBe(`?clock=turn&page=3`);
+        expect(within(screen.getByRole(`navigation`, { name: `Pages` })).queryByRole(`link`, { name: `Next` })).toBe(null);
     });
 
-    it('step back from a linked tenth page to the ninth', async () => {
-        const pages: Record<string, FinishedGamesPage> = {
-            'cursor=10.40': { games: [game(180)], next: null, previous: `9.61`, page: 10 },
-            'cursor=9.61': { games: [game(160)], next: `10.40`, previous: `8.82`, page: 9 },
-        };
-        serve((search) => pages[search] ?? 404);
-        open(`/games?cursor=10.40`);
-        await screen.findByText(`Page 10`);
-        fireEvent.click(screen.getByRole(`button`, { name: `Newer` }));
-        expect(window.location.search).toBe(`?cursor=9.61`);
-        await screen.findByText(`Page 9`);
-    });
-
-    it('say at the tenth page that a Before date reaches older games, and open Before', async () => {
-        serve(() => ({ games: Array.from({ length: 20 }, (_, index) => game(index)), next: null, previous: null, page: 10 }));
-        open(`/games?player=hextide&cursor=10.400`);
-        expect(await screen.findByText(`The newest 200 games for these filters; pick a Before date to reach older games.`)).toBeTruthy();
+    it('say past 200 games that an earlier date reaches older ones, and open Before in Filters', async () => {
+        serve(() => ({ games: Array.from({ length: 20 }, (_, index) => game(index)), page: 10, pages: 10, total: 1234 }));
+        open(`/games?player=hextide&page=10`);
+        expect(await screen.findByText(`Showing the newest 200 of 1,234; pick an earlier date in Filters for older games.`)).toBeTruthy();
+        expect(screen.getByText(`Page 10 of 10; 1,234 games`)).toBeTruthy();
         expect(screen.queryByLabelText(`Before`)).toBe(null);
         fireEvent.click(screen.getByRole(`button`, { name: `Pick a date` }));
         await waitFor(() => {
             expect(document.activeElement).toBe(screen.getByLabelText(`Before`));
         });
-        expect(screen.getByRole(`button`, { name: `More filters` }).getAttribute(`aria-expanded`)).toBe(`true`);
+        expect(screen.getByRole(`button`, { name: /^Filters/u }).getAttribute(`aria-expanded`)).toBe(`true`);
         fireEvent.change(screen.getByLabelText(`Before`), { target: { value: `2026-09-01` } });
         expect(window.location.search).toBe(`?player=hextide&before=2026-09-01`);
     });
 
     it('tidy an address the list cannot take, in place', async () => {
-        serve(() => ({ games: [game(0)], next: null, previous: null, page: 1 }));
+        serve(() => ({ games: [game(0)], page: 1, pages: 1, total: 1 }));
         open(`/games?vs=quietlake&clock=blitz&reason=timeout`);
         await screen.findAllByRole(`link`, { name: /hextide/u });
         expect(window.location.search).toBe(`?reason=timeout`);
@@ -226,13 +267,14 @@ describe('GamesScreen', () => {
     });
 
     it('follow the address when Back returns to an earlier filter', async () => {
-        const fetch = serve(() => ({ games: [game(0)], next: null, previous: null, page: 1 }));
+        const fetch = serve(() => ({ games: [game(0)], page: 1, pages: 1, total: 1 }));
         open(`/games`);
         await screen.findAllByRole(`link`, { name: /hextide/u });
+        const panel = openFilters();
         act(() => {
             navigate(`/games?clock=unlimited`);
         });
-        expect(screen.getByLabelText<HTMLSelectElement>(`Clock`).value).toBe(`unlimited`);
+        expect(within(panel).getByLabelText<HTMLSelectElement>(`Clock`).value).toBe(`unlimited`);
         await waitFor(() => {
             expect(reads(fetch).at(-1)).toBe(`/api/games/finished?clock=unlimited`);
         });

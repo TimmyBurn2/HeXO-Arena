@@ -8,6 +8,7 @@ import {
     minimumAge,
     nameMaxLength,
     nameMinLength,
+    pairDailyCap,
     placementRadius,
     plural,
     siteName,
@@ -31,6 +32,9 @@ function ordinal(place: number): string {
     const suffix = tens >= 11 && tens <= 13 ? `th` : ones === 1 ? `st` : ones === 2 ? `nd` : ones === 3 ? `rd` : `th`;
     return `${String(place)}${suffix}`;
 }
+// A count in the catalog's language, its thousands grouped: 1,234.
+const countFormat = new Intl.NumberFormat(`en-US`);
+const counted = (count: number) => countFormat.format(count);
 // A wait the server named, in seconds under a minute and whole minutes, rounded up, past it.
 const inWait = (seconds: number) => (seconds < 60 ? `${String(seconds)} s` : inMinutes(Math.ceil(seconds / 60)));
 
@@ -282,7 +286,8 @@ export const en = {
         note: `Newest first; guest games are not kept, so they never show here.`,
         search: `Filter games`,
         filters: (count: number) => (count === 0 ? `Filters` : `Filters (${String(count)})`),
-        moreFilters: `More filters`,
+        needPlayer: `Against, Side, Won, and Lost wait for a name in Player.`,
+        openingNote: `Opening counts the stones on the board before the first turn, the origin and random ones near it.`,
         player: `Player`,
         vs: `Against`,
         result: `Result`,
@@ -316,12 +321,14 @@ export const en = {
         versus: `vs`,
         voided: `voided`,
         turns: (count: number) => `${String(count)} ${plural(count, `turn`, `turns`)}`,
-        page: (page: number) => `Page ${String(page)}`,
+        count: (count: number) => `${counted(count)} ${plural(count, `game`, `games`)}`,
+        pageOf: (page: number, pages: number, count: number) => `Page ${String(page)} of ${String(pages)}; ${counted(count)} ${plural(count, `game`, `games`)}`,
+        pageLink: (page: number) => `Page ${String(page)}`,
         listed: (page: number) => `Games, page ${String(page)}`,
         paging: `Pages`,
-        newer: `Newer`,
-        older: `Older`,
-        cap: (count: number) => `The newest ${String(count)} games for these filters; pick a Before date to reach older games.`,
+        previous: `Previous`,
+        next: `Next`,
+        cap: (shown: number, count: number) => `Showing the newest ${String(shown)} of ${counted(count)}; pick an earlier date in Filters for older games.`,
         pickBefore: `Pick a date`,
         failed: `The games did not load`,
         dayOne: {
@@ -346,6 +353,7 @@ export const en = {
             if (o.games === 0) return `${total}; ${player} ${line(x)}, all as x.`;
             return `${total}; ${player} ${line(x)} as x, and ${line(o)} as o.`;
         },
+        voidedLeftOut: (count: number) => `${String(count)} voided ${plural(count, `game is`, `games are`)} left out`,
         recent: `Recent games`,
         yours: `Your games`,
         none: `No finished games yet.`,
@@ -501,10 +509,11 @@ export const en = {
         opening: `Opening`,
         openingValue: (count: number) => `${String(count)} ${plural(count, `stone`, `stones`)}`,
         openingStones: `Opening stones, origin included`,
-        originOnly: `Only the origin; no random stones.`,
-        randomStones: (count: number) => `The origin and ${String(count)} random ${plural(count, `stone`, `stones`)} near it; each game draws its own.`,
+        openingNote: (stones: number) =>
+            `Before the first turn the server places the origin stone and a few random stones near it, so games start differently; ${String(stones)} means the origin ${stones === 1 ? `alone` : `and ${String(stones - 1)} more`}.`,
         openingExample: (count: number) => `An example opening of ${String(count)} ${plural(count, `stone`, `stones`)}`,
         start: `Start game`,
+        expected: (bot: string, score: string) => `Your expected score against ${bot}: ${score}`,
         rated: `Rated; sides are drawn at random`,
         guestNote: (name: ReactNode): ReactNode => rich`You play as ${name}; guest games are unrated.`,
         signedOutLead: `Play as a guest, unrated, or sign in for a rated game.`,
@@ -531,6 +540,8 @@ export const en = {
             not_open: (name: string) => `${name} is closed for challenges right now`,
             delisted: (name: string) => `${name} takes no new games`,
             not_found: (name: string) => `${name} is no longer listed; pick another bot`,
+            daily_pair_cap: (name: string) =>
+                `You have played ${name} ${String(pairDailyCap)} times today, the most one day allows; pick another bot, or play it again after 00:00 UTC`,
             paused: () => `Starting games is paused; live games continue`,
         },
         cooldown: (seconds: number) => `1 new game ${perMinutes(humanGameCooldownSeconds / 60)}; try again in ${String(seconds)} s`,
@@ -671,6 +682,18 @@ export const en = {
         twoStones: `2 stones`,
         oneStoneLeft: `1 stone left`,
     },
+    rundown: {
+        title: `Rundown`,
+        hide: `Hide the rundown`,
+        deviation: (deviation: number) => `deviation ${String(deviation)}`,
+        expected: `Expected score`,
+        score: (score: number) => score.toFixed(2),
+        form: (count: number) => `Last ${String(count)}`,
+        formSpoken: (count: number, results: readonly string[]) => `Last ${String(count)}: ${results.join(`, `)}`,
+        results: { won: `won`, lost: `lost`, none: `no winner` },
+        noGames: `No games yet`,
+        firstMeeting: (x: ReactNode, o: ReactNode): ReactNode => rich`${x} and ${o} have not met yet`,
+    },
     replay: {
         label: `Turn`,
         turn: (turn: number, last: number) => `Turn ${String(turn)} of ${String(last)}`,
@@ -696,9 +719,9 @@ export const en = {
         unpin: `Unpin`,
         clock: `Clock`,
         opening: `Opening`,
-        originOnly: `Origin only`,
         clockValue: (words: string) => `${words.charAt(0).toUpperCase()}${words.slice(1)}`,
-        openingStones: (count: number) => `${String(count)} ${plural(count, `stone`, `stones`)}, origin included`,
+        openingStones: (count: number) =>
+            count === 1 ? `The origin alone, placed before the first turn` : `The origin and ${String(count - 1)} random ${plural(count - 1, `stone`, `stones`)} near it, placed before the first turn`,
         rated: `Rated`,
         ratedYes: `Yes`,
         ratedNoGuest: `No, a guest is playing`,
@@ -735,26 +758,26 @@ export const en = {
         tooFar: `Too far; play within ${String(placementRadius)} cells of a stone`,
     },
     time: {
-        // A wait ahead, to the minute: "3 h 20 min", "45 min", "under a minute", or days past a day.
+        // A wait ahead, to the minute: "3 h 20 min", "45 min", "under a minute", or days and hours past a day.
         until: (seconds: number) => {
             if (seconds < 60) return `under a minute`;
             if (seconds < 3_600) return `${String(Math.floor(seconds / 60))} min`;
-            if (seconds < 86_400) return `${String(Math.floor(seconds / 3_600))} h ${String(Math.floor((seconds % 3_600) / 60))} min`;
+            const hours = Math.floor((seconds % 86_400) / 3_600);
+            if (seconds < 86_400) return `${String(hours)} h ${String(Math.floor((seconds % 3_600) / 60))} min`;
             const days = Math.floor(seconds / 86_400);
-            return `${String(days)} ${plural(days, `day`, `days`)}`;
+            return `${String(days)} ${plural(days, `day`, `days`)}${hours === 0 ? `` : ` ${String(hours)} h`}`;
         },
-        // The same wait in running text, every unit spelled out: "2 hours 59 minutes".
+        // The same wait in running text, every unit spelled out: "2 hours 59 minutes", "1 day 23 hours".
         untilInProse: (seconds: number) => {
             if (seconds < 60) return `under a minute`;
             const minutes = Math.floor((seconds % 3_600) / 60);
             const spelled = `${String(minutes)} ${plural(minutes, `minute`, `minutes`)}`;
             if (seconds < 3_600) return spelled;
-            if (seconds < 86_400) {
-                const hours = Math.floor(seconds / 3_600);
-                return `${String(hours)} ${plural(hours, `hour`, `hours`)}${minutes === 0 ? `` : ` ${spelled}`}`;
-            }
+            const hours = Math.floor((seconds % 86_400) / 3_600);
+            const spelledHours = `${String(hours)} ${plural(hours, `hour`, `hours`)}`;
+            if (seconds < 86_400) return `${spelledHours}${minutes === 0 ? `` : ` ${spelled}`}`;
             const days = Math.floor(seconds / 86_400);
-            return `${String(days)} ${plural(days, `day`, `days`)}`;
+            return `${String(days)} ${plural(days, `day`, `days`)}${hours === 0 ? `` : ` ${spelledHours}`}`;
         },
         ago: (seconds: number) => {
             if (seconds < 60) return `just now`;
@@ -852,14 +875,17 @@ export const en = {
         entered: (count: number, max: number) => `${String(count)} of ${String(max)} entered`,
         played: (count: number) => `${String(count)} ${plural(count, `bot`, `bots`)}`,
         starts: (when: string) => `Starts ${when}`,
-        won: (bot: ReactNode, owner: ReactNode): ReactNode => rich`${bot} by ${owner} won`,
+        winner: (bot: ReactNode): ReactNode => rich`winner ${bot}`,
         outcome: { called_off: `Called off`, canceled: `Canceled` },
         notFound: `No tournament here`,
         notFoundBody: `The address names no tournament.`,
         detailFailed: `The tournament did not load`,
         rules: (bots: number, clock: string, plies: number) =>
             `${String(bots)} ${plural(bots, `bot`, `bots`)}, one per owner; ${clock}; ${String(plies)}-stone openings; rated.`,
-        pairing: `Each pair plays one opening twice, sides swapped, one game after the other.`,
+        pairing: (stones: number) =>
+            stones === 1
+                ? `Each pair plays from the origin alone twice, sides swapped, one game after the other.`
+                : `Each pair draws one opening, the origin and ${String(stones - 1)} random ${plural(stones - 1, `stone`, `stones`)} near it, and plays it twice, sides swapped, one game after the other.`,
         status: {
             scheduled: (when: string, wait: string) => `Starts ${when}, in ${wait}.`,
             due: (when: string) => `Starts ${when}, any moment now.`,
@@ -902,7 +928,7 @@ export const en = {
         enteredTitle: (count: number, max: number) => `Entered (${String(count)} of ${String(max)})`,
         noEntries: `No bot entered yet.`,
         didNotPlay: `Did not play`,
-        withdrew: `Withdrew`,
+        withdrawnTitle: `Withdrawn`,
         reasons: {
             absent: `not online at the start`,
             daily_cap: `too few bot games left that day`,

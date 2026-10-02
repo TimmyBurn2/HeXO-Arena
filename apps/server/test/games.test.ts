@@ -9,6 +9,7 @@ import {
     type BotListing,
     gameSnapshotSchema,
     meSchema,
+    pairDailyCap,
     type BwsMoveRequestPacket,
     type BwsSetupPacket,
     type GameSnapshot,
@@ -18,6 +19,7 @@ import http from 'node:http';
 import WebSocket, { type RawData } from 'ws';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createQuery, type Query } from '../src/db';
+import { insertGame, recordFinish } from '../src/game-store';
 import { recomputeRatings } from '../src/rating-store';
 import { createTestApp, type TestApp } from './helpers';
 
@@ -169,6 +171,18 @@ class Arena {
 
     get query(): Query {
         return createQuery(this.world.sqlite);
+    }
+
+    // Games a human already played against a bot, finished without a
+    // winner, made at an epoch second the game log then holds.
+    seedPairGames(user: string, bot: string, games: number, createdAt: number): void {
+        const query = this.query;
+        const ids = this.world.sqlite.prepare(`select (select id from users where name = ?) as userId, (select id from bots where name = ?) as botId`).get(user, bot) as { userId: string; botId: string };
+        for (let made = 0; made < games; made += 1) {
+            const gameId = insertGame(query, { ...ids, userSide: `x`, timeControl: unlimitedControl, opening: [{ x: 0, y: 0, player: 0 }] });
+            recordFinish(query, gameId, { winner: null, reason: `aborted` });
+            this.world.sqlite.prepare(`update games set created_at = ? where id = ?`).run(createdAt, gameId);
+        }
     }
 
     async createBot(cookie: string, name: string): Promise<string> {
@@ -1064,6 +1078,20 @@ describe('game creation gates', () => {
             timeControl: unlimitedControl,
         });
         expect(after.status).toBe(201);
+    });
+
+    it('caps one human against one bot at the daily pair cap from the UTC day\'s start, waiting until 00:00 UTC', async () => {
+        const now = Math.floor(Date.now() / 1000);
+        const dayStart = now - (now % 86_400);
+        arena.seedPairGames(`humanplayer`, `opponentbot`, pairDailyCap - 1, dayStart);
+        arena.seedPairGames(`humanplayer`, `opponentbot`, 3, dayStart - 1);
+        expect((await arena.createGame(bot.cookie, { bot: `opponentbot`, timeControl: unlimitedControl })).status).toBe(201);
+        await vi.advanceTimersByTimeAsync(60_000);
+        const refused = await arena.createGame(bot.cookie, { bot: `opponentbot`, timeControl: unlimitedControl });
+        expect(refused.status).toBe(429);
+        expect(json(refused)).toMatchObject({ code: `daily_pair_cap` });
+        const later = Math.floor(Date.now() / 1000);
+        expect(refused.retryAfter).toBe(String(dayStart + 86_400 - later));
     });
 
     it('answers 404 for an unknown bot and rejects malformed bodies', async () => {

@@ -74,6 +74,49 @@ export const adminTournamentSchema = z.object({
 });
 export type AdminTournament = z.infer<typeof adminTournamentSchema>;
 
+/** The weekdays a weekly rule starts on, Monday first. */
+export const tournamentWeekdays = [`mon`, `tue`, `wed`, `thu`, `fri`, `sat`, `sun`] as const;
+export const tournamentWeekdaySchema = z.enum(tournamentWeekdays);
+export type TournamentWeekday = z.infer<typeof tournamentWeekdaySchema>;
+
+/** A weekly rule's UTC time of day, HH:MM on the 24-hour clock. */
+export const tournamentTimeOfDaySchema = z.string().regex(/^(?:[01]\d|2[0-3]):[0-5]\d$/);
+
+/** How many days before its start a weekly rule creates its tournament, opening it for entries, and the default. */
+export const tournamentDaysAhead = { min: 1, max: 14, default: 7 } as const;
+
+/** What a weekly rule's name pattern writes for the start's UTC date. */
+export const tournamentDateToken = `{date}`;
+
+/** A weekly rule's tournament name for one start: each date token becomes the start's UTC date, YYYY-MM-DD. */
+export function expandTournamentName(pattern: string, startsAtMs: number): string {
+    return pattern.replaceAll(tournamentDateToken, new Date(startsAtMs).toISOString().slice(0, 10));
+}
+
+// Every date expands to the same ten digits and dashes, so one sample
+// date stands for all of them.
+export const tournamentNamePatternSchema = z
+    .string()
+    .refine((pattern) => tournamentNameSchema.safeParse(expandTournamentName(pattern, 0)).success, {
+        message: `the name, with {date} written as YYYY-MM-DD, must be 3 to 40 printable ASCII characters with no space at either end`,
+    });
+
+export const tournamentRuleIdSchema = z.number().int().min(1);
+
+/** A weekly rule as the admin status and list show it, with its next start in seconds. */
+export const adminTournamentRuleSchema = z.object({
+    id: tournamentRuleIdSchema,
+    weekday: tournamentWeekdaySchema,
+    time: tournamentTimeOfDaySchema,
+    namePattern: z.string(),
+    timeControl: timeControlSchema,
+    openingPlies: openingPliesSchema,
+    maxEntrants: z.number().int().min(tournamentMinPresent).max(tournamentMaxEntrants),
+    daysAhead: z.number().int().min(tournamentDaysAhead.min).max(tournamentDaysAhead.max),
+    nextStartsAt: z.number().int(),
+});
+export type AdminTournamentRule = z.infer<typeof adminTournamentRuleSchema>;
+
 /**
  * The admin form of a clock: `turn:<seconds>` or
  * `match:<minutes>+<seconds>`; null for anything else.

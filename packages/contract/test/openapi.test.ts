@@ -277,11 +277,11 @@ describe('openapi document', () => {
         expect(dig(document, `paths`, gameResignPath, `post`, `security`)).toEqual([{ sessionCookie: [] }]);
     });
 
-    it('answers a quota with 429 and its wait: the creation cooldown and the challenge caps a day, and a spent sign-up with 410', () => {
+    it('answers a quota with 429 and its wait: the creation cooldown, the pair cap and the challenge caps a day, and a spent sign-up with 410', () => {
         const document = buildOpenApiDocument();
         const cooldown = dig(document, `paths`, gamesPath, `post`, `responses`, `429`);
         expect(dig(cooldown, `headers`, `Retry-After`)).toBeDefined();
-        expect(arrayOfUnknown(dig(cooldown, `content`, `application/json`, `schema`, `properties`, `code`, `enum`))).toEqual([`game_cooldown`, `rate_limited`]);
+        expect(arrayOfUnknown(dig(cooldown, `content`, `application/json`, `schema`, `properties`, `code`, `enum`))).toEqual([`game_cooldown`, `daily_pair_cap`, `rate_limited`]);
         expect(arrayOfUnknown(dig(document, `paths`, gamesPath, `post`, `responses`, `400`, `content`, `application/json`, `schema`, `properties`, `code`, `enum`))).not.toContain(`game_cooldown`);
         const daily = dig(document, `paths`, botChallengePath, `post`, `responses`, `429`);
         expect(dig(daily, `headers`, `Retry-After`)).toBeDefined();

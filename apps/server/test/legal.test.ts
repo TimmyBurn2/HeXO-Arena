@@ -1,14 +1,15 @@
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { copyFileSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { legalDetailsPath, legalDocumentPath, legalPages } from '@hexo-arena/contract';
+import { legalDetailsExampleFile, legalDetailsFile, legalDetailsPath, legalDocumentPath, legalPages } from '@hexo-arena/contract';
 import { describe, expect, it } from 'vitest';
 import { parseEnv } from '../src/env';
 import { reportLegalDocuments } from '../src/legal';
 import { createTestApp } from './helpers';
 
 const prod = join(dirname(fileURLToPath(import.meta.url)), `../../../docker/prod`);
+const repositoryFolder = join(dirname(fileURLToPath(import.meta.url)), `..`, parseEnv({}).LEGAL_DIR);
 const caddyfile = readFileSync(join(prod, `Caddyfile`), `utf8`);
 const compose = readFileSync(join(prod, `compose.yml`), `utf8`);
 
@@ -39,6 +40,7 @@ describe('the legal documents', () => {
             const lines: string[] = [];
             const log = { warn: (message: string) => lines.push(message) };
             writeFileSync(join(dir, `privacy.md`), `# Privacy policy\n`);
+            copyFileSync(join(repositoryFolder, legalDetailsExampleFile), join(dir, legalDetailsFile));
             reportLegalDocuments(dir, log);
             expect(lines).toEqual([`legal documents missing from ${dir}: imprint.md, terms.md`]);
             writeFileSync(join(dir, `imprint.md`), ``);
@@ -52,10 +54,45 @@ describe('the legal documents', () => {
         }
     });
 
-    it('all stand in the repository folder the dev boot reads by default', () => {
+    it('all stand in the repository folder the dev boot reads by default, the example details in place of a deployment\'s', () => {
         const lines: string[] = [];
-        reportLegalDocuments(join(dirname(fileURLToPath(import.meta.url)), `..`, parseEnv({}).LEGAL_DIR), { warn: (message) => lines.push(message) });
+        reportLegalDocuments(repositoryFolder, { warn: (message) => lines.push(message) }, legalDetailsExampleFile);
         expect(lines).toEqual([]);
+    });
+
+    it('name a details file missing, not JSON, or not matching at boot, which goes on', () => {
+        const dir = mkdtempSync(join(tmpdir(), `legal-`));
+        try {
+            const lines: string[] = [];
+            const log = { warn: (message: string) => lines.push(message) };
+            for (const page of legalPages) writeFileSync(join(dir, `${page}.md`), ``);
+            const details = join(dir, legalDetailsFile);
+            reportLegalDocuments(dir, log);
+            writeFileSync(details, `{ "operator": `);
+            reportLegalDocuments(dir, log);
+            const example: unknown = JSON.parse(readFileSync(join(repositoryFolder, legalDetailsExampleFile), `utf8`));
+            const { operator, ...rest } = example as { operator: Record<string, string> };
+            writeFileSync(details, JSON.stringify({ ...rest, operator: { ...operator, email: undefined, fax: `1` } }));
+            reportLegalDocuments(dir, log);
+            expect(lines).toEqual([
+                `legal details missing from ${dir}: ${legalDetailsFile}; the documents naming a detail stay off the site`,
+                `legal details in ${details} are not JSON; the documents naming a detail stay off the site`,
+                `legal details in ${details} do not match at operator.email, operator (unknown fax); the documents naming a detail stay off the site`,
+            ]);
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
+    it('leave the details alone when the folder holds no document', () => {
+        const lines: string[] = [];
+        const dir = mkdtempSync(join(tmpdir(), `legal-`));
+        try {
+            reportLegalDocuments(dir, { warn: (message) => lines.push(message) });
+            expect(lines).toEqual([`legal documents missing from ${dir}: imprint.md, privacy.md, terms.md`]);
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
     });
 
     it('never reach the app, which serves no legal read', async () => {

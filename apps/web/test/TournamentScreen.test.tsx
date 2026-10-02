@@ -113,6 +113,7 @@ describe('TournamentScreen', () => {
         expect(await screen.findByRole(`heading`, { level: 1, name: `Autumn round robin` })).toBeTruthy();
         expect(screen.getByText(/^Starts .*\(\d{4}-\d{2}-\d{2} \d{2}:\d{2} UTC\), in 2 hours\.$/u)).toBeTruthy();
         expect(screen.getByText(/2 bots, one per owner; turn clock 10 s; 5-stone openings; rated\./u)).toBeTruthy();
+        expect(screen.getByText(/Each pair draws one opening, the origin and 4 random stones near it, and plays it twice, sides swapped, one game after the other\.$/u)).toBeTruthy();
         const entries = screen.getByRole(`heading`, { name: `Entered (2 of 12)` }).closest(`section`) as HTMLElement;
         expect(within(entries).getAllByRole(`listitem`).map((item) => item.textContent)).toEqual([`hextideBOTby ana`, `quietlakeBOTby dmitri`]);
         expect(within(entries).getByRole(`link`, { name: `ana` }).getAttribute(`href`)).toBe(`/players/ana`);
@@ -196,11 +197,11 @@ describe('TournamentScreen', () => {
         expect(screen.getByRole(`heading`, { name: /^Entered/u }).closest(`section`)?.querySelectorAll(`.dot`)).toHaveLength(0);
     });
 
-    it('list a bot withdrawn after it played under Withdrew, apart from those that never played', async () => {
+    it('list a bot withdrawn after it played under Withdrawn, apart from those that never played', async () => {
         const withdrawn = { ...running.entries[1], state: `withdrawn`, reason: `missed` } as TournamentDetail[`entries`][number];
         serve(() => ({ ...running, entries: [running.entries[0], withdrawn, running.entries[2], running.entries[3]] as TournamentDetail[`entries`] }));
         render(<TournamentScreen id={running.id} />);
-        const withdrew = (await screen.findByRole(`heading`, { name: `Withdrew` })).closest(`section`);
+        const withdrew = (await screen.findByRole(`heading`, { name: `Withdrawn` })).closest(`section`);
         expect(withdrew?.querySelector(`li`)?.textContent).toBe(`betaBOTby bobmissed two pairings in a row`);
         const never = screen.getByRole(`heading`, { name: `Did not play` }).closest(`section`);
         expect([...(never?.querySelectorAll(`li`) ?? [])].map((item) => item.textContent)).toEqual([`deltaBOTby deenot online at the start`]);
@@ -255,9 +256,11 @@ describe('TournamentsScreen', () => {
         expect(screen.getByRole(`link`, { name: `Autumn round robin` }).getAttribute(`href`)).toBe(`/tournaments/${base.id}`);
         expect(screen.getByText(/4 of 12 entered; turn clock 10 s$/u)).toBeTruthy();
         expect(screen.getByRole(`link`, { name: `Autumn round robin` }).closest(`li`)?.querySelector(`.tournament-row-facts`)?.textContent).toBe(`Round 2 of 3; 3 bots; turn clock 10 s`);
-        const won = screen.getByRole(`link`, { name: `ana` }).parentElement;
-        expect(won?.textContent).toMatch(/hextide by ana won$/u);
-        expect(within(won ?? document.body).getByRole(`link`, { name: `hextide` }).getAttribute(`href`)).toBe(`/bots/hextide`);
+        const won = screen.getByRole(`link`, { name: `Summer cup` }).closest(`li`)?.querySelector(`.tournament-row-facts`);
+        expect(won?.textContent).toMatch(/; winner hextideBOT by ana$/u);
+        expect(within(won as HTMLElement).getByRole(`link`, { name: `hextide` }).getAttribute(`href`)).toBe(`/bots/hextide`);
+        // The owner takes the dim line's color, so the bot reads as the winner.
+        expect(screen.getByRole(`link`, { name: `ana` }).closest(`.tournament-owner`)?.textContent).toBe(`by ana`);
         expect(screen.getByRole(`link`, { name: `ana` }).getAttribute(`href`)).toBe(`/players/ana`);
         expect(screen.getByText(/Called off$/u)).toBeTruthy();
     });
@@ -289,8 +292,8 @@ describe('the tournament views', () => {
         expect(meeting(noShow, `beta`, `alpha`)).toEqual({ x: { state: `missing`, gameId: null }, o: { state: `missing`, gameId: null } });
     });
 
-    it('spell a wait out in prose to the minute, hours and days in words', () => {
-        expect([30, 60, 2 * 60, 3_600, 3_600 + 60, 2 * 3_600 + 59 * 60, 86_400, 3 * 86_400].map(text.time.untilInProse)).toEqual([
+    it('spell a wait out in prose to the minute, then in days and hours past a day', () => {
+        expect([30, 60, 2 * 60, 3_600, 3_600 + 60, 2 * 3_600 + 59 * 60, 86_400, 86_400 + 3_600 + 59 * 60, 47 * 3_600, 3 * 86_400].map(text.time.untilInProse)).toEqual([
             `under a minute`,
             `1 minute`,
             `2 minutes`,
@@ -298,7 +301,13 @@ describe('the tournament views', () => {
             `1 hour 1 minute`,
             `2 hours 59 minutes`,
             `1 day`,
+            `1 day 1 hour`,
+            `1 day 23 hours`,
             `3 days`,
         ]);
+    });
+
+    it('write a short wait in days and hours past a day', () => {
+        expect([59 * 60, 3_600 + 60, 86_400, 47 * 3_600 + 59 * 60, 3 * 86_400 + 3_600].map(text.time.until)).toEqual([`59 min`, `1 h 1 min`, `1 day`, `1 day 23 h`, `3 days 1 h`]);
     });
 });

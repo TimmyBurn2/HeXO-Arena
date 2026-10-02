@@ -4,6 +4,7 @@ import { fetchBots } from '../api/client';
 import { useAsync } from '../api/use-async';
 import { OwnerPanel } from '../components/OwnerPanel';
 import { PlayerHistory } from '../games/PlayerHistory';
+import { PendingPlate } from '../players/PendingPlate';
 import { PlayerBlocks } from '../players/PlayerBlocks';
 import { LiveGameGrid } from '../live/LiveGameCard';
 import { useLiveReplay } from '../live/use-live-replay';
@@ -33,7 +34,7 @@ export function BotScreen({ name }: { name: string }) {
     if (loading && data === null) {
         return (
             <>
-                <h1 className="screen-title">{name}</h1>
+                <PendingPlate name={name} tag={<BotBadge />} />
                 <SkeletonRows />
             </>
         );
@@ -41,7 +42,7 @@ export function BotScreen({ name }: { name: string }) {
     if (error && data === null) {
         return (
             <>
-                <h1 className="screen-title">{name}</h1>
+                <PendingPlate name={name} tag={<BotBadge />} />
                 <ErrorFrame sentence={text.bot.failed} onRetry={reload} wait={limited} />
             </>
         );

@@ -201,15 +201,15 @@ export const shots: readonly Shot[] = [
     },
     { name: `games`, path: `/games`, world: world(), ready: `.game-row`, framed: true },
     { name: `games-h2h`, path: `/games?player=hextide&vs=quietlake`, world: world({ finished: rivalry(230) }), ready: `.games-h2h`, framed: true },
-    { name: `games-cap`, path: `/games?player=hextide&cursor=10.180`, world: world({ finished: rivalry(230) }), ready: `.games-cap`, framed: true },
+    { name: `games-cap`, path: `/games?player=hextide&page=10`, world: world({ finished: rivalry(230) }), ready: `.games-cap`, framed: true },
     { name: `games-day-one`, path: `/games`, world: world({ finished: [] }), ready: `.empty`, framed: true },
     { name: `games-no-match`, path: `/games?player=hextide&reason=terminated&clock=match`, world: world(), ready: `.empty`, framed: true },
     { name: `games-unknown`, path: `/games?player=nobody`, world: world(), ready: `.empty`, framed: true },
     { name: `games-loading`, path: `/games`, world: world({ stall: true }), ready: `.skeleton`, framed: true },
     { name: `games-error`, path: `/games`, world: world({ broken: true }), ready: `.empty`, framed: true },
     {
-        name: `games-more`,
-        path: `/games?player=hextide`,
+        name: `games-filters`,
+        path: `/games?player=hextide&clock=turn`,
         world: world({ finished: rivalry(40) }),
         ready: `.game-row`,
         framed: true,
@@ -218,8 +218,20 @@ export const shots: readonly Shot[] = [
             { name: `tablet`, width: 768, height: 1024 },
         ],
         after: async (page) => {
-            await page.getByRole(`button`, { name: `More filters` }).click();
-            await page.locator(`#games-more`).waitFor();
+            await page.getByRole(`button`, { name: `Filters (1)` }).click();
+            await page.locator(`dialog.games-panel[open]`).waitFor();
+        },
+    },
+    {
+        name: `games-filters-alone`,
+        path: `/games`,
+        world: world({ finished: rivalry(40) }),
+        ready: `.game-row`,
+        framed: true,
+        viewports: [{ name: `desktop`, width: 1440, height: 900 }],
+        after: async (page) => {
+            await page.getByRole(`button`, { name: `Filters`, exact: true }).click();
+            await page.locator(`dialog.games-panel[open]`).waitFor();
         },
     },
     {
@@ -231,9 +243,10 @@ export const shots: readonly Shot[] = [
         viewports: phones,
         after: async (page) => {
             await page.getByRole(`button`, { name: `Filters (1)` }).click();
-            await page.locator(`dialog.games-sheet[open]`).waitFor();
+            await page.locator(`dialog.games-panel[open]`).waitFor();
         },
     },
+    { name: `games-pages`, path: `/games?page=4`, world: world({ finished: rivalry(150) }), ready: `.games-page-numbers`, framed: true },
     { name: `live-games`, path: `/games/live`, world: world({ live: liveGames }), ready: `.live-card`, framed: true, board: true },
     { name: `live-games-few`, path: `/games/live`, world: world({ live: liveGames.slice(0, 3) }), ready: `.live-card`, framed: true, board: true },
     { name: `live-games-empty`, path: `/games/live`, world: world({ live: [] }), ready: `.empty`, framed: true, board: true },
@@ -300,6 +313,20 @@ export const shots: readonly Shot[] = [
     { name: `profile-signed-out`, path: `/profile`, world: signedOut, ready: `h1`, framed: true },
     { name: `game-your-move`, path: `/game/running`, world: world(), ready: `svg polygon.cell`, framed: false, board: true },
     { name: `game-waiting`, path: `/game/waiting`, world: world(), ready: `svg polygon.cell`, framed: false, board: true },
+    { name: `game-rundown`, path: `/game/fresh`, world: world(), ready: `.hud-rundown .rundown-expected`, framed: false, board: true },
+    {
+        name: `game-rundown-drawer`,
+        path: `/game/waiting`,
+        world: world(),
+        ready: `svg polygon.cell`,
+        framed: false,
+        viewports: [{ name: `desktop`, width: 1440, height: 900 }],
+        after: async (page) => {
+            await page.keyboard.press(`m`);
+            await page.getByRole(`tab`, { name: `Game` }).click();
+            await page.locator(`#drawer-panel-game .rundown-expected`).first().waitFor();
+        },
+    },
     { name: `game-low-clock`, path: `/game/hurry`, world: world(), ready: `svg polygon.cell`, framed: false, board: true },
     { name: `game-finished`, path: `/game/finished`, world: world(), ready: `svg polygon.cell`, framed: false, board: true },
     {

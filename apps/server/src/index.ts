@@ -1,3 +1,4 @@
+import { legalDetailsExampleFile, legalDetailsFile } from '@hexo-arena/contract';
 import { buildApp } from './app';
 import { scheduleBackups } from './backup';
 import { listenAdminSocket } from './admin-socket';
@@ -36,7 +37,7 @@ const { app, admin, drain: drainApp } = await buildApp({
     ...(env.WEB_INDEX_PATH !== `` && { webIndexPath: env.WEB_INDEX_PATH }),
 });
 
-reportLegalDocuments(env.LEGAL_DIR, app.log);
+reportLegalDocuments(env.LEGAL_DIR, app.log, env.DEV_LOGIN ? legalDetailsExampleFile : legalDetailsFile);
 
 // An app running without its admin socket is the failure mode to avoid, so
 // the socket binds before any public traffic and its absence ends boot.

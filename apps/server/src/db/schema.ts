@@ -383,15 +383,51 @@ export const adminActions = sqliteTable(
     (table) => [
         check(
             `admin_actions_action_check`,
-            sql`${table.action} in ('pause', 'resume', 'ban-user', 'unban-user', 'delete-user', 'delist-bot', 'relist-bot', 'revoke-bot', 'abort-game', 'recompute-ratings', 'tournament-create', 'tournament-cancel')`,
+            sql`${table.action} in ('pause', 'resume', 'ban-user', 'unban-user', 'delete-user', 'delist-bot', 'relist-bot', 'revoke-bot', 'abort-game', 'recompute-ratings', 'tournament-create', 'tournament-cancel', 'tournament-schedule-add', 'tournament-schedule-remove')`,
         ),
         check(`admin_actions_reason_check`, sql`length(${table.reason}) > 0`),
+    ],
+);
+
+// A weekly rule the operator set: the scheduler creates the tournament
+// starting on its weekday (0 is Monday) at its UTC minute,
+// days_ahead days before that start.
+// One rule per weekly slot, since a second tournament starting at the same
+// moment would only queue behind the running one.
+export const tournamentRules = sqliteTable(
+    `tournament_rules`,
+    {
+        id: integer(`id`).primaryKey({ autoIncrement: true }),
+        weekday: integer(`weekday`).notNull(),
+        minuteOfDay: integer(`minute_of_day`).notNull(),
+        namePattern: text(`name_pattern`).notNull(),
+        timeControl: text(`time_control`).notNull(),
+        openingPlies: integer(`opening_plies`).notNull(),
+        maxEntrants: integer(`max_entrants`).notNull(),
+        daysAhead: integer(`days_ahead`).notNull(),
+        createdAt: integer(`created_at`).notNull(),
+    },
+    (table) => [
+        uniqueIndex(`tournament_rules_slot_idx`).on(table.weekday, table.minuteOfDay),
+        check(`tournament_rules_weekday_check`, sql`${table.weekday} between 0 and 6`),
+        check(`tournament_rules_minute_check`, sql`${table.minuteOfDay} between 0 and 1439`),
+        // The name each start gets, with its date written in, holds to the tournament name bounds.
+        check(
+            `tournament_rules_name_check`,
+            sql`length(replace(${table.namePattern}, '{date}', 'YYYY-MM-DD')) between 3 and 40 and ${table.namePattern} not glob '*[^ -~]*'`,
+        ),
+        check(`tournament_rules_opening_check`, sql`${table.openingPlies} in (1, 3, 5, 7, 9)`),
+        check(`tournament_rules_max_check`, sql`${table.maxEntrants} between 3 and 12`),
+        check(`tournament_rules_days_check`, sql`${table.daysAhead} between 1 and 14`),
     ],
 );
 
 // A round robin the operator scheduled. It waits scheduled until its start,
 // then runs, or is called off when too few bots are connected; the operator
 // may cancel it before it ends. ended_at is set exactly once it is over.
+// A weekly rule's tournament names its rule, unique per start,
+// so no restart or clock step creates a week twice;
+// the tournament outlives the rule.
 export const tournaments = sqliteTable(
     `tournaments`,
     {
@@ -405,9 +441,11 @@ export const tournaments = sqliteTable(
         createdAt: integer(`created_at`).notNull(),
         startedAt: integer(`started_at`),
         endedAt: integer(`ended_at`),
+        ruleId: integer(`rule_id`).references(() => tournamentRules.id, { onDelete: `set null` }),
     },
     (table) => [
         index(`tournaments_status_starts_idx`).on(table.status, table.startsAt),
+        uniqueIndex(`tournaments_rule_starts_idx`).on(table.ruleId, table.startsAt),
         check(`tournaments_status_check`, sql`${table.status} in ('scheduled', 'running', 'finished', 'called_off', 'canceled')`),
         check(`tournaments_name_check`, sql`length(${table.name}) between 3 and 40 and ${table.name} not glob '*[^ -~]*'`),
         check(`tournaments_opening_check`, sql`${table.openingPlies} in (1, 3, 5, 7, 9)`),

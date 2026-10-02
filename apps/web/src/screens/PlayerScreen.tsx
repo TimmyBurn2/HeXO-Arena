@@ -5,6 +5,7 @@ import { useAsync } from '../api/use-async';
 import { Rating } from '../components/player';
 import { ErrorFrame, SkeletonRows } from '../components/states';
 import { PlayerHistory } from '../games/PlayerHistory';
+import { PendingPlate } from '../players/PendingPlate';
 import { PlayerBlocks } from '../players/PlayerBlocks';
 import { Link } from '../router/Link';
 import { navigate, useRoute } from '../router/use-route';
@@ -37,10 +38,11 @@ export function PlayerScreen({ name }: { name: string }) {
         if (data?.kind === `bot`) navigate(`/bots/${encodeURIComponent(data.name)}`, { replace: true });
     }, [data]);
 
+    const tag = <span className="tag muted">{text.players.human}</span>;
     if (loading && data === null) {
         return (
             <>
-                <h1 className="screen-title">{name}</h1>
+                <PendingPlate name={name} tag={tag} />
                 <SkeletonRows />
             </>
         );
@@ -48,7 +50,7 @@ export function PlayerScreen({ name }: { name: string }) {
     if (error && data === null) {
         return (
             <>
-                <h1 className="screen-title">{name}</h1>
+                <PendingPlate name={name} tag={tag} />
                 <ErrorFrame sentence={text.players.failed} onRetry={reload} wait={limited} />
             </>
         );
@@ -61,7 +63,7 @@ export function PlayerScreen({ name }: { name: string }) {
                 <header className="bot-plate">
                     <div className="bot-title">
                         <h1>{data.name}</h1>
-                        <span className="tag muted">{text.players.human}</span>
+                        {tag}
                     </div>
                     <div className="bot-rating">
                         <span className="bot-rating-number">

@@ -2,7 +2,9 @@ import { useSyncExternalStore } from 'react';
 import {
     guardianPermissionAge,
     guestIdleSeconds,
+    legalDetailsFaults,
     legalDetailsPath,
+    legalDetailsSchema,
     legalDocumentPath,
     legalPages,
     minimumAge,
@@ -13,13 +15,12 @@ import {
     siteName,
     type LegalPage,
 } from '@hexo-arena/contract';
-import { z } from 'zod';
 import { boardSettingsStorageKey } from '../board/board-settings';
 import { drawerPinnedStorageKey } from '../game/use-drawer';
 import { playStorageKey } from '../play/setup';
 import { botApiRepository } from '../site-links';
 import { themeStorageKey } from '../theme/themes';
-import { legalDetailNames, legalDetailValues, legalDetailsSchema } from './details';
+import { legalDetailNames, legalDetailValues } from './details';
 
 /**
  * A placeholder in a legal document: a dotted name in double braces, such
@@ -111,11 +112,7 @@ async function readDetails(): Promise<Read<ReadonlyMap<string, string>>> {
     }
     const parsed = legalDetailsSchema.safeParse(json);
     if (!parsed.success) {
-        const where = parsed.error.issues.map((issue) => {
-            const at = z.core.toDotPath(issue.path) || `the top level`;
-            return issue.code === `unrecognized_keys` ? `${at} (unknown ${issue.keys.join(`, `)})` : at;
-        });
-        console.warn(`${legalDetailsPath} does not match the legal details at ${where.join(`, `)}`);
+        console.warn(`${legalDetailsPath} does not match the legal details at ${legalDetailsFaults(json).join(`, `)}`);
         return { kind: `absent` };
     }
     return { kind: `found`, value: legalDetailValues(parsed.data) };

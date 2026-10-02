@@ -16,9 +16,9 @@ export const finishedGamesPageCap = 10;
 // serialized for it.
 export const finishedGamesMemoMs = 5_000;
 
-// A page number past the first and the finish order the page starts
-// below; opaque to callers, who only hand back what `next` said.
-const cursorPattern = new RegExp(`^(?:[2-9]|10)\\.[1-9][0-9]{0,14}$`);
+// A page number from 1 to the cap, written without a leading zero, so
+// every spelling of one page is one query.
+const pagePattern = /^(?:[1-9]|10)$/;
 
 const playerName = z.string().min(1).max(nameMaxLength);
 
@@ -37,7 +37,11 @@ export const finishedGamesQuerySchema = z
         clock: z.enum([`turn`, `match`, `unlimited`]).optional().meta({ param: { description: `The time control's mode.` } }),
         opening: z.enum([`1`, `3`, `5`, `7`, `9`]).optional().meta({ param: { description: `The opening's plies.` } }),
         before: z.iso.date().optional().meta({ param: { description: `Only games finished before this UTC date, YYYY-MM-DD.` } }),
-        cursor: z.string().regex(cursorPattern).optional().meta({ param: { description: `The page after the last one read, as its next said.` } }),
+        page: z
+            .string()
+            .regex(pagePattern)
+            .optional()
+            .meta({ param: { description: `The page, from 1 to ${String(finishedGamesPageCap)}; the first when absent.` } }),
     })
     .refine((query) => query.player !== undefined || (query.vs === undefined && query.side === undefined && query.result !== `won` && query.result !== `lost`), {
         message: `vs, side, won, and lost need player`,
@@ -79,22 +83,28 @@ export const finishedGamesRecordSchema = z
         won: countSchema,
         lost: countSchema,
         undecided: countSchema.meta({ description: `Games that ended without a winner.` }),
+        voided: countSchema.meta({ description: `Voided games the filters select, which no other count holds.` }),
         asX: sideRecordSchema,
         asO: sideRecordSchema,
     })
     .meta({
         id: `FinishedGamesRecord`,
-        description: `The named player's record over every game the filters select but voided ones, past the page cap: wins, losses, and games without a winner, in all and by side.`,
+        description: `The named player's record over every game the filters select but voided ones, past the page cap: wins, losses, and games without a winner, in all and by side; and how many voided games it leaves out.`,
     });
 export type FinishedGamesRecord = z.infer<typeof finishedGamesRecordSchema>;
 
 export const finishedGamesPageSchema = z
     .object({
         games: z.array(finishedGameEntrySchema).max(finishedGamesPageSize),
-        next: z.string().regex(cursorPattern).nullable().meta({ description: `The cursor of the next page; null on the last one.` }),
-        previous: z.string().regex(cursorPattern).nullable().meta({ description: `The cursor of the page before; null when that page is the first, or on the first.` }),
         page: z.number().int().min(1).max(finishedGamesPageCap),
+        pages: z
+            .number()
+            .int()
+            .min(0)
+            .max(finishedGamesPageCap)
+            .meta({ description: `The pages the filters reach, at most ${String(finishedGamesPageCap)}; 0 when no game matches.` }),
+        total: countSchema.meta({ description: `Every game the filters select, past the page cap, voided ones included.` }),
         record: finishedGamesRecordSchema.optional().meta({ description: `Present when the query names a player.` }),
     })
-    .meta({ id: `FinishedGamesPage` });
+    .meta({ id: `FinishedGamesPage`, description: `A page past the last one the filters reach lists no game.` });
 export type FinishedGamesPage = z.infer<typeof finishedGamesPageSchema>;

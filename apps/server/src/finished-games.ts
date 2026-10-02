@@ -21,20 +21,17 @@ import {
     type OpeningPlies,
     type Side,
 } from '@hexo-arena/contract';
-import { and, asc, desc, eq, gte, inArray, isNotNull, isNull, lt, lte, sql, type SQL, type SQLWrapper } from 'drizzle-orm';
+import { and, desc, eq, inArray, isNotNull, isNull, lt, lte, sql, type SQL, type SQLWrapper } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/sqlite-core';
 import type { FastifyInstance } from 'fastify';
 import type { Query } from './db';
 import { bots, gameRatings, games, moves, users } from './db/schema';
 import type { PlayerRef } from './rating';
 
-// A page reads one row past its size, which says whether another follows.
-const readAhead = finishedGamesPageSize + 1;
-
 // Distinct queries remembered at once; past it the oldest leaves first.
 const memoCap = 500;
 
-type Filters = Omit<FinishedGamesQuery, `player` | `vs` | `cursor`>;
+type Filters = Omit<FinishedGamesQuery, `player` | `vs` | `page`>;
 
 // A before date as the page reads it: the instant, and the latest finish ahead of it.
 interface Bound {
@@ -42,16 +39,8 @@ interface Bound {
     readonly seq: number;
 }
 
-// A walk from a cursor's finish: older games below it, or newer ones from it up.
-interface Walk {
-    readonly direction: `older` | `newer`;
-    readonly seq: number;
-}
-
 /** A query with its names resolved: what the page reads, or an unknown name. */
-type Resolved =
-    | { kind: `unknown` }
-    | { kind: `page`; player: PlayerRef | null; vs: PlayerRef | null; filters: Filters; page: number; below: number | null };
+type Resolved = { kind: `unknown` } | { kind: `page`; player: PlayerRef | null; vs: PlayerRef | null; filters: Filters; page: number };
 
 // A deleted player's placeholder names no one a reader can ask for.
 function resolveName(query: Query, name: string): PlayerRef | null {
@@ -64,14 +53,11 @@ function resolveName(query: Query, name: string): PlayerRef | null {
 }
 
 function resolve(query: Query, request: FinishedGamesQuery): Resolved {
-    const { player: playerName, vs: vsName, cursor, ...filters } = request;
+    const { player: playerName, vs: vsName, page, ...filters } = request;
     const player = playerName === undefined ? null : resolveName(query, playerName);
     const vs = vsName === undefined ? null : resolveName(query, vsName);
     if ((playerName !== undefined && player === null) || (vsName !== undefined && vs === null)) return { kind: `unknown` };
-    if (cursor === undefined) return { kind: `page`, player, vs, filters, page: 1, below: null };
-    // The cursor schema admits only a page number, a dot, and a finish number.
-    const [page = 1, below = 0] = cursor.split(`.`).map(Number);
-    return { kind: `page`, player, vs, filters, page, below };
+    return { kind: `page`, player, vs, filters, page: page === undefined ? 1 : Number(page) };
 }
 
 const otherSide = sql`(case ${games.challengerSide} when 'x' then 'o' else 'x' end)`;
@@ -98,10 +84,9 @@ function seatsOf(player: PlayerRef): readonly Seat[] {
 
 // The conditions every arm shares; the clock and opening expressions are
 // written as their indexes are, or the planner would not match them.
-function shared(filters: Filters, cursor: Walk | null, before: Bound | null): (SQL | undefined)[] {
+function shared(filters: Filters, before: Bound | null): (SQL | undefined)[] {
     return [
         isNotNull(games.finishSeq),
-        cursor === null ? undefined : cursor.direction === `older` ? lt(games.finishSeq, cursor.seq) : gte(games.finishSeq, cursor.seq),
         before === null ? undefined : and(lte(games.finishSeq, before.seq), lt(games.finishedAt, before.at)),
         filters.kind === `human-bot` ? isNotNull(games.userId) : filters.kind === `bot-bot` ? isNotNull(games.challengerBotId) : undefined,
         filters.result === `none` ? isNull(games.winner) : undefined,
@@ -121,44 +106,45 @@ function seatConditions(seat: Seat, player: PlayerRef, vs: PlayerRef | null, fil
     ];
 }
 
+// The arms a named player's games read, one per seat the player can
+// hold, against an opponent's kind when one is named; none when the two
+// can never have met.
+function seatArms(resolved: Extract<Resolved, { kind: `page` }>, player: PlayerRef): Seat[] {
+    return seatsOf(player).filter((seat) => resolved.vs === null || seat.opponentKind === resolved.vs.kind);
+}
+
 /**
  * The page query: one arm per seat the player can hold, each walking its
- * own index and stopping one row past a page, merged in finish order.
- * Older walks newest first below the cursor's finish; newer walks oldest
- * first from it, which finds where the page before starts.
+ * own index newest first and stopping at the page's last row, merged in
+ * finish order and offset to the page.
+ * The cap keeps every arm's walk within its first pages.
  * Answers null when the filters can match nothing.
  */
-function pageQuery(query: Query, resolved: Extract<Resolved, { kind: `page` }>, before: Bound | null, walk: Walk | null): SQL | null {
-    const { player, vs, filters } = resolved;
-    const common = shared(filters, walk, before);
-    const newer = walk?.direction === `newer`;
-    const arm = (conditions: (SQL | undefined)[]) =>
+function pageQuery(query: Query, resolved: Extract<Resolved, { kind: `page` }>, before: Bound | null): SQL | null {
+    const { player, vs, filters, page } = resolved;
+    const common = shared(filters, before);
+    const skipped = (page - 1) * finishedGamesPageSize;
+    const arm = (conditions: (SQL | undefined)[], limit: number) =>
         query
             .select({ id: games.id, seq: sql<number>`${games.finishSeq}`.as(`seq`) })
             .from(games)
             .where(and(...common, ...conditions))
-            .orderBy(newer ? asc(games.finishSeq) : desc(games.finishSeq))
-            .limit(readAhead);
+            .orderBy(desc(games.finishSeq))
+            .limit(limit);
     // An embedded select renders in parentheses, which only a FROM takes.
-    if (player === null) return sql`select id, seq from ${arm([])}`;
-    const arms = seatsOf(player)
-        .filter((seat) => vs === null || seat.opponentKind === vs.kind)
-        .map((seat) => sql`select id, seq from ${arm(seatConditions(seat, player, vs, filters))}`);
+    if (player === null) return sql`select id, seq from ${arm([], finishedGamesPageSize).offset(skipped)}`;
+    const arms = seatArms(resolved, player).map((seat) => sql`select id, seq from ${arm(seatConditions(seat, player, vs, filters), skipped + finishedGamesPageSize)}`);
     if (arms.length === 0) return null;
-    return sql`${sql.join(arms, sql` union all `)} order by seq ${sql.raw(newer ? `asc` : `desc`)} limit ${readAhead}`;
+    return sql`${sql.join(arms, sql` union all `)} order by seq desc limit ${finishedGamesPageSize} offset ${skipped}`;
 }
 
 /**
- * The cursor of the page before a page past the second: the page before
- * ends on the game the cursor names, so it starts below the finish a page
- * further up; null when that page is the first.
+ * Every game the filters select when no player is named, counted through
+ * the same index the page walks.
+ * A named player's total is their record's games and voided ones.
  */
-function previousOf(query: Query, resolved: Extract<Resolved, { kind: `page` }>, before: Bound | null): string | null {
-    if (resolved.page <= 2 || resolved.below === null) return null;
-    const statement = pageQuery(query, resolved, before, { direction: `newer`, seq: resolved.below });
-    if (statement === null) return null;
-    const above = query.all<{ id: string; seq: number }>(statement).at(finishedGamesPageSize);
-    return above === undefined ? null : `${String(resolved.page - 1)}.${String(above.seq)}`;
+function totalQuery(query: Query, resolved: Extract<Resolved, { kind: `page` }>, before: Bound | null): SQL {
+    return sql`select count(*) as total from ${query.select({ id: games.id }).from(games).where(and(...shared(resolved.filters, before)))}`;
 }
 
 const noRecord: FinishedGamesRecord = {
@@ -166,6 +152,7 @@ const noRecord: FinishedGamesRecord = {
     won: 0,
     lost: 0,
     undecided: 0,
+    voided: 0,
     asX: { games: 0, won: 0, lost: 0 },
     asO: { games: 0, won: 0, lost: 0 },
 };
@@ -173,31 +160,30 @@ const noRecord: FinishedGamesRecord = {
 /**
  * The count behind a named player's record: the page's own arms without
  * their cursor or limit, summed by the side the player sat in one pass,
- * so nothing is sorted.
+ * so nothing is sorted; a voided game counts as voided alone.
  * Answers null when the filters can match nothing.
  */
 function recordQuery(query: Query, resolved: Extract<Resolved, { kind: `page` }>, player: PlayerRef, before: Bound | null): SQL | null {
     const { vs, filters } = resolved;
-    const common = shared(filters, null, before);
-    const arms = seatsOf(player)
-        .filter((seat) => vs === null || seat.opponentKind === vs.kind)
+    const common = shared(filters, before);
+    const arms = seatArms(resolved, player)
         .map((seat) => {
-            // A voided game stays on the page and out of the record.
             const arm = query
-                .select({ side: sql<Side>`${seat.side}`.as(`side`), winner: games.winner })
+                .select({ side: sql<Side>`${seat.side}`.as(`side`), winner: games.winner, voided: sql<number>`${games.voidedAt} is not null`.as(`voided`) })
                 .from(games)
-                .where(and(...common, isNull(games.voidedAt), ...seatConditions(seat, player, vs, filters)));
-            return sql`select side, winner from ${arm}`;
+                .where(and(...common, ...seatConditions(seat, player, vs, filters)));
+            return sql`select side, winner, voided from ${arm}`;
         });
     if (arms.length === 0) return null;
     const counts = ([`x`, `o`] as const).map(
         (side) =>
-            sql`coalesce(sum(side = ${side}), 0) as ${sql.raw(`${side}_games`)}, coalesce(sum(side = ${side} and winner = side), 0) as ${sql.raw(`${side}_won`)}, coalesce(sum(side = ${side} and winner <> side), 0) as ${sql.raw(`${side}_lost`)}`,
+            sql`coalesce(sum(not voided and side = ${side}), 0) as ${sql.raw(`${side}_games`)}, coalesce(sum(not voided and side = ${side} and winner = side), 0) as ${sql.raw(`${side}_won`)}, coalesce(sum(not voided and side = ${side} and winner <> side), 0) as ${sql.raw(`${side}_lost`)}`,
     );
-    return sql`select ${sql.join(counts, sql`, `)} from (${sql.join(arms, sql` union all `)})`;
+    return sql`select ${sql.join(counts, sql`, `)}, coalesce(sum(voided), 0) as voided from (${sql.join(arms, sql` union all `)})`;
 }
 
 interface RecordRow {
+    readonly voided: number;
     readonly x_games: number;
     readonly x_won: number;
     readonly x_lost: number;
@@ -217,7 +203,7 @@ function recordOf(query: Query, resolved: Extract<Resolved, { kind: `page` }>, p
     const total = asX.games + asO.games;
     const won = asX.won + asO.won;
     const lost = asX.lost + asO.lost;
-    return { games: total, won, lost, undecided: total - won - lost, asX, asO };
+    return { games: total, won, lost, undecided: total - won - lost, voided: row.voided, asX, asO };
 }
 
 // The latest finish before the date, so the page seeks below it at once
@@ -328,22 +314,19 @@ export function listFinishedGames(query: Query, request: FinishedGamesQuery): Fi
     if (resolved.kind === `unknown`) return `unknown`;
     const player = resolved.player;
     const before = beforeBound(query, resolved.filters.before);
-    const record = player === null ? {} : { record: before === `none` ? noRecord : recordOf(query, resolved, player, before) };
-    const empty: FinishedGamesPage = { games: [], next: null, previous: null, page: resolved.page, ...record };
+    const empty: FinishedGamesPage = { games: [], page: resolved.page, pages: 0, total: 0, ...(player === null ? {} : { record: noRecord }) };
     if (before === `none`) return empty;
-    const walk: Walk | null = resolved.below === null ? null : { direction: `older`, seq: resolved.below };
-    const statement = pageQuery(query, resolved, before, walk);
-    if (statement === null) return empty;
-    const rows = query.all<{ id: string; seq: number }>(statement);
-    const shown = rows.slice(0, finishedGamesPageSize);
-    const last = shown.at(-1);
-    const more = rows.length > finishedGamesPageSize && resolved.page < finishedGamesPageCap && last !== undefined;
+    const record = player === null ? null : recordOf(query, resolved, player, before);
+    // An aggregate with no grouping answers exactly one row.
+    const total = record === null ? query.get<{ total: number }>(totalQuery(query, resolved, before)).total : record.games + record.voided;
+    const statement = pageQuery(query, resolved, before);
+    const rows = statement === null ? [] : query.all<{ id: string; seq: number }>(statement);
     return {
-        games: entriesOf(query, shown.map((row) => row.id)),
-        next: more ? `${String(resolved.page + 1)}.${String(last.seq)}` : null,
-        previous: previousOf(query, resolved, before),
+        games: entriesOf(query, rows.map((row) => row.id)),
         page: resolved.page,
-        ...record,
+        pages: Math.min(finishedGamesPageCap, Math.ceil(total / finishedGamesPageSize)),
+        total,
+        ...(record === null ? {} : { record }),
     };
 }
 
@@ -363,13 +346,14 @@ export function explainFinishedGames(query: Query, request: FinishedGamesQuery):
         explain(sql`select seq from ${query.select({ seq: sql<number>`${games.finishSeq}`.as(`seq`) }).from(games).where(and(isNotNull(games.finishSeq), lt(games.finishedAt, at))).orderBy(desc(games.finishedAt)).limit(1)}`);
     }
     const before = resolved.filters.before === undefined ? null : { at: 0, seq: 0 };
-    const below = resolved.below;
-    for (const walk of below === null ? [null] : [{ direction: `older` as const, seq: below }, { direction: `newer` as const, seq: below }]) {
-        const statement = pageQuery(query, resolved, before, walk);
-        if (statement !== null) explain(statement);
+    const page = pageQuery(query, resolved, before);
+    if (page !== null) explain(page);
+    if (resolved.player === null) {
+        explain(totalQuery(query, resolved, before));
+    } else {
+        const record = recordQuery(query, resolved, resolved.player, before);
+        if (record !== null) explain(record);
     }
-    const record = resolved.player === null ? null : recordQuery(query, resolved, resolved.player, before);
-    if (record !== null) explain(record);
     return plans;
 }
 

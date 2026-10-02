@@ -1,7 +1,7 @@
 import { finishedGamesQuerySchema, nameKeyOf, type FinishedGamesQuery } from '@hexo-arena/contract';
 
 /** The filters a list of finished games can carry, as its address holds them. */
-export type GameFilters = Omit<FinishedGamesQuery, `cursor`>;
+export type GameFilters = Omit<FinishedGamesQuery, `page`>;
 
 /** One filter's name. */
 export type FilterKey = keyof GameFilters;
@@ -12,15 +12,15 @@ export const filterKeys = [`player`, `vs`, `result`, `side`, `reason`, `clock`, 
 /** The filters that mean nothing without a player. */
 const needPlayer = [`vs`, `side`] as const satisfies readonly FilterKey[];
 
-/** Where a list of finished games stands: its filters and the page its cursor names. */
+/** Where a list of finished games stands: its filters and its page, from 1. */
 export interface GamesView {
     readonly filters: GameFilters;
-    readonly cursor: string | null;
+    readonly page: number;
 }
 
 const fields = finishedGamesQuerySchema.shape;
 
-function field<K extends FilterKey | `cursor`>(key: K, raw: string | null): FinishedGamesQuery[K] | undefined {
+function field<K extends keyof FinishedGamesQuery>(key: K, raw: string | null): FinishedGamesQuery[K] | undefined {
     if (raw === null) return undefined;
     const parsed = fields[key].safeParse(raw);
     // Each field's schema parses exactly its own key's values.
@@ -39,7 +39,8 @@ export function viewOf(search: string): GamesView {
         const value = field(key, params.get(key));
         if (value !== undefined) Object.assign(filters, { [key]: value });
     }
-    return { filters: withoutOrphans(filters), cursor: field(`cursor`, params.get(`cursor`)) ?? null };
+    const page = field(`page`, params.get(`page`));
+    return { filters: withoutOrphans(filters), page: page === undefined ? 1 : Number(page) };
 }
 
 // The filters under the keys given, in their order.
@@ -61,22 +62,27 @@ export function withoutOrphans(filters: GameFilters): GameFilters {
     return pick(filters, filterKeys.filter((key) => !dropped.includes(key)));
 }
 
-/** The address of a list: its filters in a fixed order, then the cursor. */
+/** The address of a list: its filters in a fixed order, then the page past the first. */
 export function searchOf(view: GamesView): string {
     const params = new URLSearchParams();
     for (const key of filterKeys) {
         const value = view.filters[key];
         if (value !== undefined) params.set(key, value);
     }
-    if (view.cursor !== null) params.set(`cursor`, view.cursor);
+    if (view.page > 1) params.set(`page`, String(view.page));
     return params.size === 0 ? `` : `?${params.toString()}`;
+}
+
+/** The address of one page of a list. */
+export function pagePathOf(filters: GameFilters, page: number): string {
+    return `/games${searchOf({ filters, page })}`;
 }
 
 /** The list's address with one filter set or cleared, back on the first page. */
 export function withFilter<K extends FilterKey>(filters: GameFilters, key: K, value: GameFilters[K] | undefined): string {
     const next = pick(filters, filterKeys.filter((other) => other !== key));
     if (value !== undefined) Object.assign(next, { [key]: value });
-    return `/games${searchOf({ filters: withoutOrphans(next), cursor: null })}`;
+    return pagePathOf(withoutOrphans(next), 1);
 }
 
 /** The filters set, in their order. */
@@ -86,5 +92,5 @@ export function activeKeys(filters: GameFilters): FilterKey[] {
 
 /** The address of the games one player sat in, against another when named. */
 export function gamesPathOf(player: string, vs?: string): string {
-    return `/games${searchOf({ filters: vs === undefined ? { player } : { player, vs }, cursor: null })}`;
+    return pagePathOf(vs === undefined ? { player } : { player, vs }, 1);
 }

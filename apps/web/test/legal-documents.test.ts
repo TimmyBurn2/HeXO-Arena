@@ -1,9 +1,8 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { legalDetailsPath, legalDocumentPath, legalPages } from '@hexo-arena/contract';
+import { legalDetailsExampleFile, legalDetailsPath, legalDetailsSchema, legalDocumentPath, legalPages } from '@hexo-arena/contract';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { exampleDetailsFile, legalFileRoutes } from '../build/legal';
-import { legalDetailsSchema } from '../src/legal/details';
 import { legalStore, placeholderPattern, siteFacts, type LegalState } from '../src/legal/documents';
 import { deploy, details, template } from './legal-deploy';
 import { legalDetailNames } from '../src/legal/details';
@@ -125,6 +124,7 @@ describe('the repository legal folder', () => {
     it('is what the dev server serves, at the paths the site reads', () => {
         expect([...legalFileRoutes.keys()]).toEqual([...legalPages.map(legalDocumentPath), legalDetailsPath]);
         expect(legalFileRoutes.get(legalDetailsPath)?.file).toBe(exampleDetailsFile);
+        expect(exampleDetailsFile).toBe(legalDetailsExampleFile);
         for (const page of legalPages) expect(legalFileRoutes.get(legalDocumentPath(page))?.file).toBe(`${page}.md`);
     });
 });

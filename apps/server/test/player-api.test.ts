@@ -124,6 +124,16 @@ describe('the player reads', () => {
         expect((await history(placeholder)).status).toBe(404);
     });
 
+    it('carries the rating\'s deviation, as the last rated game left it, the seed\'s before any', async () => {
+        bots(`alpha`, `beta`, `x`, `x`);
+        const after = (await history(`alpha`, `all`)).body?.at(-1);
+        const { body } = await record(`alpha`);
+        expect(body?.rating).toBe(after?.rating);
+        expect(body?.deviation).toBe(after?.deviation);
+        expect(body?.deviation).toBeLessThan(500);
+        expect((await record(`gamma`)).body).toMatchObject({ rating: 1500, deviation: 500, provisional: true });
+    });
+
     it('charts the rating after each rated game, oldest first, within the range', async () => {
         const first = bots(`alpha`, `beta`, `x`, `x`);
         world.sqlite.prepare(`update games set finished_at = ? where id = ?`).run(clock / 1000 - 60 * 86_400, first);

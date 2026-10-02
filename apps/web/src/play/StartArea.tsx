@@ -170,6 +170,11 @@ export function StartArea({
                 wait(cause.retryAfter ?? humanGameCooldownSeconds, text.play.cooldown);
                 return;
             }
+            // The day's cap holds this pair alone, so the start stays free for another bot.
+            if (code === `daily_pair_cap`) {
+                setOutcome({ kind: `line`, text: text.play.errors.daily_pair_cap(bot.name), refused: null });
+                return;
+            }
             const limited = limitedFor(cause);
             if (limited !== null) {
                 wait(limited, text.states.tooMany);

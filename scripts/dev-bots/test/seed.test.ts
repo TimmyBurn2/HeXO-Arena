@@ -1,4 +1,4 @@
-import { botListingSchema, botsPath, tournamentListSchema, tournamentsPath } from '@hexo-arena/contract';
+import { botListingSchema, botsPath, parseClockArg, tournamentListSchema, tournamentsPath } from '@hexo-arena/contract';
 import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -10,7 +10,7 @@ import { createTestApp, type TestApp } from '../../../apps/server/test/helpers';
 import type { SeedPlan } from '../src/personas';
 import { NotADevServer } from '../src/runner';
 import { seedDevData, type SeedReport } from '../src/seed';
-import { devTournamentLeadMs, devTournamentName } from '../src/tournament';
+import { devTournamentLeadMs, devTournamentName, devWeeklyRule, type DevWeeklyRule } from '../src/tournament';
 
 // One game of each kind the full plan holds, so a run takes seconds.
 // Eve resigns at the first turn, before hextide can hold the six stones a win needs.
@@ -139,6 +139,32 @@ describe('the dev seed', () => {
         expect(Date.parse(list.scheduled[0]?.startsAt ?? ``) - now).toBeLessThanOrEqual(devTournamentLeadMs);
         const second = await seed(booted, extra);
         expect(second.tournament).toEqual(first.tournament);
+    }, 60_000);
+
+    it('adds the weekly rule once, and a rerun leaves the one rule standing', async () => {
+        const booted = await boot(true);
+        const addWeeklyRule = (rule: DevWeeklyRule) => {
+            const timeControl = parseClockArg(rule.clock);
+            if (timeControl === null) return Promise.reject(new Error(`no clock ${rule.clock}`));
+            const answer = booted.admin({
+                op: `tournament-schedule-add`,
+                weekday: rule.weekday,
+                time: rule.time,
+                namePattern: rule.namePattern,
+                timeControl,
+                openingPlies: rule.openingPlies,
+                maxEntrants: rule.maxEntrants,
+                daysAhead: rule.daysAhead,
+                reason: `dev seed weekly rule`,
+            });
+            return answer.kind === `error` && answer.code !== `unchanged` ? Promise.reject(new Error(answer.error)) : Promise.resolve();
+        };
+        await seed(booted, { addWeeklyRule });
+        await seed(booted, { addWeeklyRule });
+        const answer = booted.admin({ op: `tournament-schedule-list` });
+        expect(answer.kind === `tournament-rules` && answer.rules).toMatchObject([
+            { weekday: devWeeklyRule.weekday, time: devWeeklyRule.time, namePattern: devWeeklyRule.namePattern, maxEntrants: devWeeklyRule.maxEntrants },
+        ]);
     }, 60_000);
 
     it('refuses a target without the dev routes and creates nothing', async () => {
