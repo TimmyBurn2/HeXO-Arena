@@ -4,6 +4,9 @@
 # beside this file; the app's own settings and secrets live in
 # `hexo-arena.env`.
 
+# Fixed, so the volume and container names are the same in any folder.
+name: hexo-arena
+
 x-hardened: &hardened
     read_only: true
     cap_drop: [ALL]
@@ -125,6 +128,8 @@ networks:
     # No gateway: members reach each other and nothing else.
     # A fixed subnet gives Caddy a fixed address;
     # the others draw from the upper half, clear of it.
+    # Where it overlaps a network the host reaches, pick another private
+    # /24 and move Caddy's ipv4_address and the app's TRUSTED_PROXY with it.
     internal:
         internal: true
         ipam:

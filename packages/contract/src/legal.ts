@@ -74,10 +74,11 @@ const operatorSchema = z
         }
     });
 
+// No law asks where the server stands, so a deployment may leave it out.
 const hostSchema = z.strictObject({
     name: line,
     ...postalAddress,
-    serverLocation: line,
+    serverLocation: line.optional(),
 });
 
 const authoritySchema = z.strictObject({
@@ -96,14 +97,17 @@ export const legalDetailParties = { operator: operatorSchema, host: hostSchema, 
 
 /**
  * Who runs a deployment and who processes its data, as its legal documents
- * name them: the operator, the host and where the server stands, the
- * supervisory authority, and the mail provider if the contact address has
- * one. The deployment serves them as one file beside the documents.
+ * name them: the operator, the host and optionally where the server
+ * stands, optionally the supervisory authority, and the mail provider if
+ * the contact address has one.
+ * The deployment serves them as one file beside the documents.
  */
 export const legalDetailsSchema = z.strictObject({
     operator: operatorSchema,
     host: hostSchema,
-    supervisoryAuthority: authoritySchema,
+    // Art. 13(2)(d) GDPR asks for the right to complain, not a named
+    // authority.
+    supervisoryAuthority: authoritySchema.optional(),
     mailProvider: mailProviderSchema.optional(),
 });
 export type LegalDetails = z.infer<typeof legalDetailsSchema>;

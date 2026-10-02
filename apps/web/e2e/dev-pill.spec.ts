@@ -4,6 +4,8 @@ import { devPersonas, discordLoginPath, type DevAccount, type Me } from '@hexo-a
 import { looks, wear } from './matrix';
 import { serve, world, type World } from './mock-api';
 
+test.skip(process.env.E2E_BUILD === `1`, `the dev pill ships only in the dev server's bundle`);
+
 const standing: Record<string, Omit<DevAccount, `name` | `purpose`>> = {
     ana: { rating: 1220, provisional: true, banned: false, games: 4, bots: [`hextide`, `pebble`, `lantern`].map((name) => ({ name, rating: 1500, provisional: true, vsBots: 0 })) },
     bruno: { rating: 855, provisional: true, banned: false, games: 10, bots: [] },

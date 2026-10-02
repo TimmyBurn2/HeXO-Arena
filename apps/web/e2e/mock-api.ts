@@ -64,7 +64,8 @@ export interface World {
     stall: boolean;
     // Answer every data read with a 500, for error-state captures.
     broken: boolean;
-    // A module path whose download fails, as a missing page chunk does.
+    // A screen's module path whose download fails, as a missing page chunk
+    // does; in a production build, the chunk named after it.
     unloadable: string | null;
     // The deployment's legal details; null answers not found.
     legal: LegalDetails | null;
@@ -942,9 +943,14 @@ function historyOf(record: PlayerRecord, range: RatingRange): RatingPoint[] {
     });
 }
 
+function unloadable(path: string, screen: string | null): boolean {
+    const name = screen === null ? undefined : /([^/]+)\.tsx?$/u.exec(screen)?.[1];
+    return path === screen || (name !== undefined && new RegExp(`^/assets/${name}-[\\w-]+\\.js$`, `u`).test(path));
+}
+
 export async function serve(page: Page, state: World): Promise<void> {
     await page.addInitScript(installHeldEventSource);
-    await page.route((url) => url.pathname === state.unloadable, (route) => route.abort());
+    await page.route((url) => unloadable(url.pathname, state.unloadable), (route) => route.abort());
     await page.route((url) => url.pathname === `/healthz`, (route) =>
         route.fulfill({ status: state.paused ? 503 : 200, contentType: `application/json`, body: `{"ok":true}` }),
     );

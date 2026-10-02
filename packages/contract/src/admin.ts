@@ -33,9 +33,20 @@ export const adminReasonSchema = z.string().trim().min(1).max(500);
 
 const tournamentEntrantsSchema = z.number().int().min(tournamentMinPresent).max(tournamentMaxEntrants);
 
+/**
+ * What a backup taken on demand is for, such as `pre-update`: it names the
+ * file, so it stays short and safe in a file name.
+ */
+export const adminBackupLabelSchema = z
+    .string()
+    .max(32)
+    .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/);
+
 export const adminRequestSchema = z.discriminatedUnion(`op`, [
     z.strictObject({ op: z.literal(`status`) }),
-    z.strictObject({ op: z.literal(`backup`) }),
+    // A labelled backup is kept apart from the nightly ones, which never
+    // replace it.
+    z.strictObject({ op: z.literal(`backup`), label: adminBackupLabelSchema.optional() }),
     z.strictObject({ op: z.literal(`pause`), reason: adminReasonSchema }),
     z.strictObject({ op: z.literal(`resume`), reason: adminReasonSchema }),
     z.strictObject({ op: z.literal(`ban-user`), name: nameSyntaxSchema, reason: adminReasonSchema }),

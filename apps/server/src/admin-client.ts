@@ -14,7 +14,7 @@ import { parseArgs } from 'node:util';
 export const adminUsage = `usage: hexo-arena-admin <op> [target] [--reason <text>]
 
   status
-  backup
+  backup [label]
   pause --reason <text>
   resume --reason <text>
   ban-user <name> --reason <text>
@@ -63,7 +63,8 @@ function clockFlag(value: string | undefined): TimeControl | string | undefined 
 
 function requestBody(op: string, target: string | undefined, flags: Flags): Record<string, unknown> {
     const reason = flags.reason === undefined ? {} : { reason: flags.reason };
-    if (op === `status` || op === `backup`) return { op };
+    if (op === `status`) return { op };
+    if (op === `backup`) return { op, ...(target !== undefined && { label: target }) };
     if (namedOps.has(op)) return { op, name: target, ...reason };
     if (op === `abort-game`) {
         return { op, ...(target !== undefined && { gameId: target }), ...(flags.bot !== undefined && { bot: flags.bot }), ...reason };

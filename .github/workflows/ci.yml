@@ -2,6 +2,9 @@ name: ci
 on:
     push:
     pull_request:
+    # A fork receives no push until it makes one; a run started by hand on
+    # main publishes its first image.
+    workflow_dispatch:
 # Every job reads the repository and nothing more unless it says so.
 permissions:
     contents: read
@@ -24,7 +27,7 @@ jobs:
             - run: pnpm openapi
             - run: git diff --exit-code openapi.yaml
     # Every run builds the image, so a broken Dockerfile fails review; only
-    # main pushes it.
+    # main pushes it, on a push or a run started by hand.
     # The box never builds, it only pulls.
     image:
         needs: verify
@@ -46,7 +49,7 @@ jobs:
                       type=sha,format=long
                       type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
             - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
-              if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+              if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/main'
               with:
                   registry: ghcr.io
                   username: ${{ github.actor }}
@@ -55,7 +58,7 @@ jobs:
               with:
                   context: .
                   file: docker/prod/Dockerfile
-                  push: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+                  push: ${{ (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/main' }}
                   tags: ${{ steps.meta.outputs.tags }}
                   labels: ${{ steps.meta.outputs.labels }}
                   cache-from: type=gha

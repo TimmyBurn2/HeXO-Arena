@@ -107,6 +107,9 @@ describe('backup on demand', () => {
         expect(answer).toEqual({ kind: `done`, summary: `backup written to ${path}` });
         expect(existsSync(path)).toBe(true);
         expect(auditRows(world)).toEqual([]);
+        const labelled = world.admin({ op: `backup`, label: `pre-update` });
+        expect(labelled).toMatchObject({ kind: `done`, summary: expect.stringMatching(/^backup written to .*\/hexo-arena-pre-update-\d{8}T\d{6}\.sqlite$/u) as unknown });
+        expect(existsSync(path)).toBe(true);
         await world.app.close();
         rmSync(dir, { recursive: true, force: true });
         const bare = await createTestApp();

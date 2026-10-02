@@ -1,7 +1,11 @@
 # Legal documents
 
-Each deployment publishes its own legal documents.
-The files here are templates; one details file fills them in.
+Each deployment publishes its own legal documents: these templates, filled
+in from one details file.
+
+The texts are written for an operator in Germany under German and EU law.
+Check every document against your own law and adapt it before publishing;
+this folder is not legal advice.
 
 | file | what it is |
 |---|---|
@@ -10,86 +14,76 @@ The files here are templates; one details file fills them in.
 | `terms.md` | Terms of use: the rules for accounts, bots, names, and games |
 | `details.example.json` | the details the templates name, every value a placeholder |
 
-## What to copy where
+## What to copy
 
-1. Copy this folder to the box as `legal/`, beside `compose.yml`.
-2. In that copy, copy `details.example.json` to `details.json` and replace every `<...>` value.
-3. Delete the documents the deployment does not need; see below.
-   A sentence pointing at a deleted document keeps its words, unlinked, so reword it: the Terms name the Privacy policy under Guests and Ending, and the Impressum names the Terms under Reporting content.
-4. Open each remaining page, `https://<domain>/legal/imprint`, `/legal/privacy`, and `/legal/terms`, and read it through.
+1. Copy this folder into the deployment folder as `legal/`.
+2. In that copy, copy `details.example.json` to `details.json` and fill it
+   in.
+3. Delete the documents you do not need:
+   - the Impressum is required of an operator in Germany (sec. 18(1)
+     Medienstaatsvertrag, and sec. 5 DDG once the site is commercial) and
+     needs a postal address; elsewhere keep it only if your law asks for
+     something like it;
+   - keep the privacy policy: the GDPR covers an operator in the EU, and one
+     outside it who offers the site to people in the EU (Art. 3);
+   - no law requires the terms, which set the rules moderation acts on and
+     limit the operator's liability.
 
-Caddy serves `imprint.md`, `privacy.md`, `terms.md`, and `details.json` from the copy, mounted read-only, and nothing else in it.
-An edit shows on the next page load; nothing restarts.
-The site links only the documents the folder has: a deleted one leaves no link, and its page is not found.
-The app reads the folder too, read-only, and its boot log names the documents missing from it and a `details.json` that is missing or invalid.
-
-`pnpm dev` serves the repository's templates with `details.example.json`.
+   A sentence pointing at a deleted document keeps its words, unlinked, so
+   reword it: the Terms name the Privacy policy under Guests and Ending, and
+   the Impressum names the Terms under Reporting content.
+4. After the first deploy, open `https://<domain>/legal/imprint`,
+   `/legal/privacy`, and `/legal/terms` and read each through.
 
 ## What to fill in
 
-`details.json` holds every value the documents name; all of them are public.
+`details.json` holds every value the documents name, and all of it is
+public.
+Replace every `<...>` value: the example's placeholders pass the file's
+check, so one left in goes public as written.
 
-- `operator`: your `name`, an `email` a person reads, and optionally your postal address, `street` and number, `postcodeAndCity`, and `country`, all three or none, and a `discord` handle.
-- `host`: the hosting company's `name` and postal address, and `serverLocation`, the city and country of the server.
-- `supervisoryAuthority`: the data protection authority's `name`, postal address, and `url`, an `https://` address.
-- `mailProvider`, optional: the `name` and postal address of whoever hosts the contact mailbox.
+- `operator`: your `name`, an `email` a person reads, and optionally a
+  postal address and a `discord` handle.
+- `host`: the hosting company's `name` and postal address, and optionally
+  `serverLocation`, the city and country of the server.
+- `supervisoryAuthority`, optional: the data protection authority's `name`,
+  postal address, and `url`, an `https://` address; without it the privacy
+  policy states the right to complain and names no authority.
+- `mailProvider`, optional: the `name` and postal address of whoever hosts
+  the contact mailbox.
 
-Every postal address takes the same three keys: `street`, `postcodeAndCity`, and `country`.
-A key the file does not know, or a required one it lacks, makes the file invalid: every document that names a detail, all three as they come, is then left out, and the browser console names the key at fault.
-An optional value left out takes the paragraph or list item naming it with it; in a paragraph broken into lines, as an address is, only its line.
+A postal address is three keys: `street`, `postcodeAndCity`, and `country`.
+The operator gives all three or none; `host`, `supervisoryAuthority`, and
+`mailProvider` need all three.
+Without an operator address, delete `imprint.md`, which needs it, and
+`discord`, which only the Impressum names; whether a name and email without
+an address meet GDPR Art. 13(1)(a) is yours to judge.
 
-## Placeholders
+An optional value left out takes the paragraph or list item naming it with
+it; in a paragraph broken into lines, as an address is, only its line.
+A key the file does not know, or a required one it lacks, makes it invalid:
+every document naming a detail is then left out, and the browser console
+and the app's boot log name the key at fault.
 
-A placeholder is a dotted name in double braces.
-`{{operator.name}}`, `{{host.serverLocation}}`, and every other name of a party and its field come from `details.json`.
-`{{site.name}}` and the other `site.` names come from the site's code: the cookie names, how long a session lasts, the minimum age, and how long challenge records, moderation records, and closed reports are kept.
-Leave those as they are; they stay true when the code changes.
-A placeholder neither knows shows as written, so a misspelling is plain on the page.
-
-## Which documents are required where
-
-This is not legal advice.
-
-- **Impressum** (`imprint.md`): required of an operator in Germany, and it needs the postal address.
-  sec. 18(1) Medienstaatsvertrag asks it of any public site that is not purely personal or family, money or not; sec. 5 DDG adds to it once the site is commercial.
-  Elsewhere, keep it only if your law asks for something like it; otherwise delete it.
-- **Privacy policy** (`privacy.md`): keep it.
-  The GDPR covers an operator in the EU (Art. 3(1)), and one outside it who offers the site to people in the EU (Art. 3(2)).
-  Being reachable from the EU does not count on its own (Recital 23), but a site that welcomes accounts from anywhere, the EU included, offers itself there.
-- **Terms of use** (`terms.md`): no law requires them.
-  They set the rules moderation acts on and limit the operator's liability; they are written for German law.
-
-## Privacy and Terms only
-
-A deployment that publishes no Impressum and no postal address:
-
-1. Copy this folder to the box as `legal/` and delete `imprint.md`.
-2. Copy `details.example.json` to `details.json`, delete the `street`, `postcodeAndCity`, and `country` lines under `operator`, and replace every other `<...>` value.
-   Delete `discord` too: only the Impressum names it, and `details.json` is public as a whole.
-   Delete `mailProvider` if nobody else hosts the contact mailbox.
-3. Open `/legal/privacy` and `/legal/terms` and read them through: Who is responsible names you and your email, and the footer links Privacy and Terms only.
-
-The GDPR asks a privacy policy for the controller's identity and contact details (Art. 13(1)(a)); whether a name without an address meets that is yours to judge.
+`{{site.name}}` and the other `site.` placeholders come from the site's
+code, such as the cookie names and how long records are kept; leave them as
+they are.
+A placeholder nobody knows shows as written, so a misspelling is plain on
+the page.
 
 ## Keep the texts true
 
 The texts state what the code does and how the deployment runs it.
-Check every sentence about your deployment against it:
+Check every sentence about your deployment, in particular:
 
 - where the server stands, and "transfers no data outside the EU";
-- the backups, kept for 14 days, which `BACKUP_KEEP` sets, and the note of each deletion kept a day longer;
+- the processing agreement (Art. 28 GDPR) the privacy policy says you have
+  with your host: conclude one;
+- the backups, kept on the server for 14 days, which `BACKUP_KEEP` sets;
+- "a free, non-commercial hobby project", in the Terms;
 - the languages you answer in, in the Impressum;
 - the law that applies, and the liability clause, in the Terms.
 
 Change the "Last updated" line whenever a document changes.
-
-## Markdown
-
-Headings, paragraphs, lists, links, emphasis, quotes, code, and tables render.
-Raw HTML and images are dropped, never shown or run.
-
-- The first `#` heading is the page's title; the paragraph under it, such as the date, heads the page.
-- Each `##` heading starts a section; from five sections the page lists them first.
-- A section written as one quote (`>`) is set apart, as the right to object must be.
-- A link to a section names its heading lowercased, punctuation dropped, spaces as hyphens: `[Reporting](/legal/terms#reporting)`.
-- A line ending in a backslash breaks there, as the addresses do.
+Headings, paragraphs, lists, links, emphasis, quotes, and tables render;
+raw HTML, such as the note opening each template, and images never show.

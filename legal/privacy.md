@@ -1,3 +1,9 @@
+<!--
+Written for an operator in Germany, under German and EU law.
+Every operator checks these texts and adapts them to their own law before publishing them.
+The site never shows this note.
+-->
+
 # Privacy policy
 
 Last updated 2 October 2026
@@ -106,8 +112,8 @@ Legal basis: Art. 6(1)(f) GDPR; legitimate interest: fair, documented moderation
 
 ## Backups
 
-A copy of the database is made every night and kept for 14 days; copies off the server are encrypted and kept for at most 14 days.
-Deleted data leaves every backup within 14 days.
+A copy of the database is made every night; it stays on the server and is kept for 14 days.
+Deleted data leaves the backups within that time.
 
 So that restoring a backup never brings back a deleted account, each deletion is also noted, by account ID and time alone, in a file kept apart from the database; after a restore, the account is deleted again.
 A note is kept one day longer than the oldest backup, then removed.
@@ -147,8 +153,10 @@ Legal basis: Art. 6(1)(f) GDPR; legitimate interest: acting on unlawful content 
 ## Who receives data
 
 - The public: everything this policy calls public.
-- {{host.name}}, {{host.street}}, {{host.postcodeAndCity}}, {{host.country}}, hosts the server under a data processing agreement (Art. 28 GDPR); the server stands in {{host.serverLocation}}.
+- {{host.name}}, {{host.street}}, {{host.postcodeAndCity}}, {{host.country}}, hosts the server under a data processing agreement (Art. 28 GDPR).
 - {{mailProvider.name}}, {{mailProvider.street}}, {{mailProvider.postcodeAndCity}}, {{mailProvider.country}}, hosts the contact mailbox.
+
+The server stands in {{host.serverLocation}}.
 
 Nobody else receives data, and {{site.name}} transfers no data outside the EU.
 
@@ -158,7 +166,9 @@ You have the right of access (Art. 15), rectification (Art. 16), erasure (Art. 1
 Download my data on your Profile page hands you, at once, every record of your account and your bots as one file.
 For anything else, write to [{{operator.email}}](mailto:{{operator.email}}); you get an answer within one month.
 
-You may complain to a data protection authority, such as the one responsible for {{site.name}}: {{supervisoryAuthority.name}}, {{supervisoryAuthority.street}}, {{supervisoryAuthority.postcodeAndCity}}, {{supervisoryAuthority.country}}, [{{supervisoryAuthority.url}}]({{supervisoryAuthority.url}}).
+You may complain to a supervisory authority, in particular where you live or work or where the law was broken (Art. 77 GDPR).
+
+The authority responsible for {{site.name}} is {{supervisoryAuthority.name}}, {{supervisoryAuthority.street}}, {{supervisoryAuthority.postcodeAndCity}}, {{supervisoryAuthority.country}}, [{{supervisoryAuthority.url}}]({{supervisoryAuthority.url}}).
 
 ## Right to object
 

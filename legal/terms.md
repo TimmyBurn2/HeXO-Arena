@@ -1,3 +1,9 @@
+<!--
+Written for an operator in Germany, under German and EU law.
+Every operator checks these texts and adapts them to their own law before publishing them.
+The site never shows this note.
+-->
+
 # Terms of use
 
 Last updated 2 October 2026

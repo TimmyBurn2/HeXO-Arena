@@ -60,6 +60,14 @@ describe('adminRequestSchema', () => {
         expect(adminRequestSchema.safeParse({ op: `reset-rating` }).success).toBe(false);
     });
 
+    it('takes a backup with an optional short label of lowercase letters, digits, and inner hyphens', () => {
+        expect(adminRequestSchema.parse({ op: `backup` })).toEqual({ op: `backup` });
+        expect(adminRequestSchema.parse({ op: `backup`, label: `pre-update` })).toEqual({ op: `backup`, label: `pre-update` });
+        for (const label of [``, `Pre-update`, `pre_update`, `-pre`, `pre-`, `pre--update`, `pre update`, `x`.repeat(33)]) {
+            expect(adminRequestSchema.safeParse({ op: `backup`, label }).success, label).toBe(false);
+        }
+    });
+
     it('wants a reason on every mutation', () => {
         expect(adminRequestSchema.safeParse({ op: `pause`, reason: `incident` }).success).toBe(true);
         expect(adminRequestSchema.safeParse({ op: `pause` }).success).toBe(false);

@@ -44,8 +44,9 @@ export interface AdminDeps {
     limits: Pick<RequestLimits, `clientCount` | `keys`>;
     ladder: Pick<Ladder, `clear`>;
     actor: string;
-    // Writes the night's backup now and answers its path; null without a backup folder.
-    backup: (() => string) | null;
+    // Writes the night's backup now, or one under a label kept apart, and
+    // answers its path; null without a backup folder.
+    backup: ((label?: string) => string) | null;
     // Where a deletion is journaled once committed; null where nothing is restored, as in tests.
     erasures: Pick<ErasureJournal, `record`> | null;
     // How soon a tournament may start: an hour in production, a minute on a
@@ -270,7 +271,7 @@ export function createAdminHandler(deps: AdminDeps): AdminHandler {
             case `backup`:
                 return deps.backup === null
                     ? { kind: `error`, code: `bad_request`, error: `no backup folder is set` }
-                    : { kind: `done`, summary: `backup written to ${deps.backup()}` };
+                    : { kind: `done`, summary: `backup written to ${deps.backup(request.label)}` };
             case `pause`:
                 return audited(deps, request, null, (tx) => ({
                     response: setPaused(tx, true) ? done(`paused`) : unchanged(`already paused`),

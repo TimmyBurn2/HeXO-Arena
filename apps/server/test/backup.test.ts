@@ -54,6 +54,41 @@ describe('backups', () => {
         expect(readdirSync(backupDir)).toEqual([`hexo-arena-2026-09-25.sqlite`]);
     });
 
+    it('writes a labelled backup under its label and the second it was taken, which no later backup replaces', () => {
+        const backupDir = join(dir, `backup`);
+        const path = backupNow(sqlite, { dir: backupDir, keep: 7 }, new Date(`2026-09-25T14:05:09Z`), `pre-update`);
+        expect(path).toBe(join(backupDir, `hexo-arena-pre-update-20260925T140509.sqlite`));
+        backupNow(sqlite, { dir: backupDir, keep: 7 }, new Date(`2026-09-25T15:00:00Z`), `pre-update`);
+        backupNow(sqlite, { dir: backupDir, keep: 7 }, new Date(`2026-09-25T16:00:00Z`));
+        expect(readdirSync(backupDir).sort()).toEqual([
+            `hexo-arena-2026-09-25.sqlite`,
+            `hexo-arena-pre-update-20260925T140509.sqlite`,
+            `hexo-arena-pre-update-20260925T150000.sqlite`,
+        ]);
+        const restored = openDatabase(path);
+        expect(restored.prepare(`select paused_at as pausedAt from site_state`).get()).toEqual({ pausedAt: 42 });
+        restored.close();
+    });
+
+    it('drops a labelled backup within a day of keep days old, before the next nightly run could find it older, and counts none toward the nightly ones kept', () => {
+        const backupDir = join(dir, `backup`);
+        const policy = { dir: backupDir, keep: 3 };
+        backupNow(sqlite, policy, new Date(`2026-09-01T12:00:00Z`), `pre-update`);
+        backupNow(sqlite, policy, new Date(`2026-09-02T03:00:00Z`));
+        backupNow(sqlite, policy, new Date(`2026-09-03T03:00:00Z`));
+        backupNow(sqlite, policy, new Date(`2026-09-03T11:00:00Z`), `pre-update`);
+        expect(readdirSync(backupDir)).toContain(`hexo-arena-pre-update-20260901T120000.sqlite`);
+        backupNow(sqlite, policy, new Date(`2026-09-04T03:00:00Z`));
+        expect(readdirSync(backupDir).sort()).toEqual([
+            `hexo-arena-2026-09-02.sqlite`,
+            `hexo-arena-2026-09-03.sqlite`,
+            `hexo-arena-2026-09-04.sqlite`,
+            `hexo-arena-pre-update-20260903T110000.sqlite`,
+        ]);
+        backupNow(sqlite, policy, new Date(`2026-09-06T03:00:00Z`));
+        expect(readdirSync(backupDir).sort()).toEqual([`hexo-arena-2026-09-03.sqlite`, `hexo-arena-2026-09-04.sqlite`, `hexo-arena-2026-09-06.sqlite`]);
+    });
+
     it('waits until the next run at the configured utc hour', () => {
         expect(msUntilNextRun(new Date(`2026-09-25T02:30:00Z`), 3)).toBe(30 * 60 * 1000);
         expect(msUntilNextRun(new Date(`2026-09-25T03:00:00Z`), 3)).toBe(24 * 60 * 60 * 1000);
