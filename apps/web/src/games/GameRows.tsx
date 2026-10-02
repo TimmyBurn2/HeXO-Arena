@@ -9,7 +9,7 @@ import './GameRows.css';
  * rating they stood at before the result, the result in words, the clock,
  * the opening, the length, and when it ended; never a rating's move.
  * A game the operator voided stays listed, tagged, as it counts in no
- * record.
+ * record; one community analyzers have read whole says how many did.
  * A wide window lines them up under a head of columns; a narrow one makes
  * each a card with the time at its top right.
  */
@@ -41,6 +41,7 @@ export function GameRows({ games, now, label }: { games: readonly FinishedGameEn
                             {resultSentence(game, { x: seatName(game.players.x), o: seatName(game.players.o) })}
                             {game.voided ? <span className="tag muted">{text.games.voided}</span> : null}
                             {seatsRateNobody(game.players) ? <span className="tag muted">{text.games.unrated}</span> : null}
+                            {game.analyses > 0 ? <span className="tag">{text.games.analyses(game.analyses)}</span> : null}
                         </span>
                         <span className="game-row-facts">
                             <span>{clockText(game.timeControl)}</span>

@@ -13,6 +13,7 @@ const directory = [
         provisional: false,
         liveGames: 0,
         levels: null,
+        analyzer: null,
         about: undefined,
         version: `0.3.1`,
         repoUrl: undefined,
@@ -27,6 +28,7 @@ const directory = [
         provisional: true,
         liveGames: 0,
         levels: null,
+        analyzer: null,
         accepts: { turnMs: null, match: true, unlimited: true },
     },
 ];

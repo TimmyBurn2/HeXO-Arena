@@ -15,6 +15,7 @@ const sealbot = {
     provisional: false,
     liveGames: 0,
     levels: null,
+    analyzer: null,
     about: `A clean-room HeXO engine with a rotation opener.`,
     version: `0.3.1`,
     repoUrl: `https://github.com/quinn/sealbot`,
@@ -50,6 +51,7 @@ function history(player: string): unknown {
         finishedAt: new Date(Date.now() - (index + 1) * 3_600_000).toISOString(),
         rated: true,
         voided: false,
+        analyses: 0,
     }));
     return { games, page: 1, pages: 1, total: 12, record: { games: 12, won: 6, lost: 6, undecided: 0, voided: 0, asX: { games: 12, won: 6, lost: 6 }, asO: { games: 0, won: 0, lost: 0 } } };
 }
@@ -72,7 +74,7 @@ function serveAs(name: string, writes: { method: string; url: string }[], delete
                 }
                 return Promise.resolve(new Response(JSON.stringify({ name: `sealbot`, token: `hxo_${`c`.repeat(43)}` })));
             }
-            const body = url === `/api/me` ? { kind: `user`, name, rating: 1503, provisional: false, discord: null, liveGames: [] } : [sealbot];
+            const body = url === `/api/me` ? { kind: `user`, name, rating: 1503, provisional: false, discord: null, liveGames: [], analysisOptOut: false, analysisLeft: { positions: 300, games: 10 } } : [sealbot];
             return Promise.resolve(new Response(JSON.stringify(body)));
         }),
     );
@@ -133,6 +135,7 @@ describe('BotScreen', () => {
             finishedAt: new Date(Date.now() - 3_600_000).toISOString(),
             rated: false,
             voided: false,
+            analyses: 0,
         };
         vi.stubGlobal(
             `fetch`,
@@ -172,6 +175,7 @@ describe('BotScreen', () => {
             finishedAt: new Date(Date.now() - 3_600_000).toISOString(),
             rated: false,
             voided: false,
+            analyses: 0,
         };
         vi.stubGlobal(
             `fetch`,
@@ -316,7 +320,7 @@ describe('BotScreen', () => {
         vi.stubGlobal(
             `fetch`,
             vi.fn((url: string) =>
-                Promise.resolve(new Response(JSON.stringify(url === `/api/me` ? { kind: `user`, name: `quinn`, rating: 1503, provisional: false, discord: null, liveGames: [] } : [bare]))),
+                Promise.resolve(new Response(JSON.stringify(url === `/api/me` ? { kind: `user`, name: `quinn`, rating: 1503, provisional: false, discord: null, liveGames: [], analysisOptOut: false, analysisLeft: { positions: 300, games: 10 } } : [bare]))),
             ),
         );
         meStore.reset();
@@ -431,7 +435,7 @@ describe('BotScreen', () => {
                         new Response(JSON.stringify({ error: `slow down`, code: `rate_limited` }), { status: 429, headers: { 'retry-after': `42` } }),
                     );
                 }
-                const body = url === `/api/me` ? { kind: `user`, name: `quinn`, rating: 1503, provisional: false, discord: null, liveGames: [] } : [sealbot];
+                const body = url === `/api/me` ? { kind: `user`, name: `quinn`, rating: 1503, provisional: false, discord: null, liveGames: [], analysisOptOut: false, analysisLeft: { positions: 300, games: 10 } } : [sealbot];
                 return Promise.resolve(new Response(JSON.stringify(body)));
             }),
         );

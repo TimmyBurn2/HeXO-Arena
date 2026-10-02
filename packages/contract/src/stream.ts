@@ -203,6 +203,30 @@ export const gameFinishEventSchema = z
     .meta({ id: `GameFinishEvent` });
 export type GameFinishEvent = z.infer<typeof gameFinishEventSchema>;
 
+/** How long after a bot's analysis session closes, its stream still open, the stream offers a new one. */
+export const analysisSessionResendMs = 5_000;
+
+export const analysisSessionSchema = z
+    .object({
+        socketUrl: z.string().meta({ description: `The analysis session's path on the API's origin, dialed as a game's engine session is.` }),
+        token: z.string().meta({
+            description: `The analysis token (has_...): it opens the bot's analysis session until ${String(sessionTokenTtlMs / 1000)} s after the line that carried it; a later analysisSession line replaces it.`,
+        }),
+    })
+    .meta({ id: `AnalysisSession` });
+export type AnalysisSession = z.infer<typeof analysisSessionSchema>;
+
+export const analysisSessionEventSchema = z
+    .object({
+        type: z.literal(`analysisSession`),
+        engine: analysisSessionSchema,
+    })
+    .meta({
+        id: `AnalysisSessionEvent`,
+        description: `Sent only to a bot that declares an analyzer: as the stream opens, after a declaration turns it on, and ${String(analysisSessionResendMs / 1000)} s after its analysis session closes while the stream stays open.`,
+    });
+export type AnalysisSessionEvent = z.infer<typeof analysisSessionEventSchema>;
+
 export const challengeCreatedEventSchema = z
     .object({
         type: z.literal(`challenge`),
@@ -248,6 +272,7 @@ export const streamEventSchema = z
         challengeCreatedEventSchema,
         challengeCanceledEventSchema,
         challengeDeclinedEventSchema,
+        analysisSessionEventSchema,
     ])
     .meta({ id: `StreamEvent` });
 export type StreamEvent = z.infer<typeof streamEventSchema>;

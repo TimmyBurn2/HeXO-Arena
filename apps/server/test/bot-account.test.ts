@@ -46,7 +46,7 @@ async function patch(
 
 // An unrated bot sits at the bot seed, provisional until it has played,
 // and has declared no levels.
-const seed = { rating: 1500, provisional: true, levels: null };
+const seed = { rating: 1500, provisional: true, levels: null, analyzer: null };
 
 // The owner's alpha-beta engine, as the Bot API readme declares it.
 const levels = {
@@ -86,7 +86,7 @@ describe('GET /api/bot/account', () => {
             url: botAccountPath,
             headers: { authorization: `Bearer ${token}` },
         });
-        expect(response.json()).toEqual({ name: `Rated`, rating: 1623, provisional: false, levels: null });
+        expect(response.json()).toEqual({ name: `Rated`, rating: 1623, provisional: false, levels: null, analyzer: null });
         await app.close();
     });
 
@@ -260,6 +260,7 @@ describe('PATCH /api/bot/account', () => {
                 repoUrl: `https://example.com/visible`,
                 accepts: { turnMs: null, match: true, unlimited: true },
                 levels,
+                analyzer: null,
             },
         ]);
         await app.close();
@@ -271,7 +272,7 @@ describe('PATCH /api/bot/account', () => {
         await mintBotToken(app, owner, `Quiet`);
         const response = await app.inject({ method: 'GET', url: botsPath });
         expect(response.json()).toEqual([
-            { name: `Quiet`, ownerName: `owner`, online: false, openForChallenges: false, rating: 1500, provisional: true, liveGames: 0, levels: null },
+            { name: `Quiet`, ownerName: `owner`, online: false, openForChallenges: false, rating: 1500, provisional: true, liveGames: 0, levels: null, analyzer: null },
         ]);
         await app.close();
     });

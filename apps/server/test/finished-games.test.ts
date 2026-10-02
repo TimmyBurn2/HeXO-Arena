@@ -153,6 +153,7 @@ describe('GET /api/games/finished', () => {
             finishedAt: `2026-09-30T08:49:13Z`,
             rated: true,
             voided: false,
+            analyses: 0,
         });
         expect(later).toMatchObject({ gameId: second, openingPlies: 5, turns: 4, timeControl: turnClock });
         expect(later?.players.x.rating).toBeGreaterThan(1000);
@@ -274,7 +275,7 @@ describe('GET /api/games/finished', () => {
             [`?before=2026-02-30`],
             [`?page=11`],
             [`?cursor=2.40`],
-            [`?analysed=1`],
+            [`?analyzed=yes`],
             [`?player=ann&player=bob`],
         ])('refuses %s as a bad request', async (search) => {
             expect(await read(search)).toMatchObject({ status: 400, body: { code: `bad_request` } });

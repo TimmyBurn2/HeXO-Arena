@@ -141,6 +141,13 @@
       "when": 1790956517905,
       "tag": "0019_bot_levels",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "6",
+      "when": 1790966284409,
+      "tag": "0020_analyzers",
+      "breakpoints": true
     }
   ]
 }

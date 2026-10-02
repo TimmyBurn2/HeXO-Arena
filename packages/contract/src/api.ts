@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { analysisLeftSchema, analyzerDeclarationSchema, analyzerSchema } from './analysis';
 import { botConcurrentGameCap, humanConcurrentGameCap, liveGameEntrySchema } from './games';
 import { provisionalSchema, ratingSchema } from './leaderboard';
 import { levelsSchema } from './levels';
@@ -69,9 +70,23 @@ export const userMeSchema = z
         provisional: provisionalSchema,
         discord: discordNamesSchema.nullable(),
         liveGames: ownLiveGamesSchema,
+        analysisOptOut: z.boolean().meta({ description: `True when the user asked that their games stay out of public analysis.` }),
+        analysisLeft: analysisLeftSchema,
     })
     .meta({ id: `User`, description: `discord is null for a session made without Discord.` });
 export type UserMe = z.infer<typeof userMeSchema>;
+
+// The settings a user changes on their own account, each present field
+// replacing the stored one.
+export const meUpdateRequestSchema = z
+    .strictObject({
+        analysisOptOut: z
+            .boolean()
+            .optional()
+            .meta({ description: `True deletes the community readings of every game the user played and hides the bots' own views of them; false lets new requests in.` }),
+    })
+    .meta({ id: `MeUpdate` });
+export type MeUpdateRequest = z.infer<typeof meUpdateRequestSchema>;
 
 export const meSchema = z.discriminatedUnion(`kind`, [userMeSchema, guestMeSchema]).nullable();
 export type Me = z.infer<typeof meSchema>;
@@ -104,7 +119,7 @@ export type DevLoginRequest = z.infer<typeof devLoginRequestSchema>;
 
 // The literal `1` is the only legal value; absence means false.
 export const botStreamQuerySchema = z.object({ open: z.literal(`1`).optional() });
-export const botDirectoryQuerySchema = z.object({ online: z.literal(`1`).optional() });
+export const botDirectoryQuerySchema = z.object({ online: z.literal(`1`).optional(), analyzer: z.literal(`1`).optional() });
 
 // 32 random bytes in base64url behind the hxo_ prefix.
 export const botTokenPattern = /^hxo_[A-Za-z0-9_-]{43}$/;
@@ -168,8 +183,9 @@ export const botListingSchema = z
         repoUrl: botRepoUrlSchema.optional(),
         accepts: acceptsSchema.optional(),
         levels: levelsSchema.nullable(),
+        analyzer: analyzerSchema.nullable(),
     })
-    .meta({ id: `BotListing`, description: `The declaration fields are absent until the bot declares them, and levels is null.` });
+    .meta({ id: `BotListing`, description: `The declaration fields are absent until the bot declares them, and levels and analyzer are null.` });
 export type BotListing = z.infer<typeof botListingSchema>;
 
 // The Hexo-Bot-Api error shape: `error` is human-readable prose, `code` is
@@ -198,6 +214,7 @@ export const accountDeclarationSchema = z
         repoUrl: botRepoUrlSchema.optional(),
         accepts: acceptsSchema.optional(),
         levels: levelsSchema.nullable().optional(),
+        analyzer: analyzerDeclarationSchema.nullable().optional(),
     })
     .meta({
         id: `AccountDeclaration`,
@@ -220,8 +237,9 @@ export const botAccountSchema = z
         repoUrl: botRepoUrlSchema.optional(),
         accepts: acceptsSchema.optional(),
         levels: levelsSchema.nullable(),
+        analyzer: analyzerSchema.nullable(),
     })
-    .meta({ id: `Account`, description: `levels is null until the bot declares them.` });
+    .meta({ id: `Account`, description: `levels and analyzer are null until the bot declares them.` });
 export type BotAccount = z.infer<typeof botAccountSchema>;
 
 export const unauthorizedErrorCodes = [`unauthorized`] as const;

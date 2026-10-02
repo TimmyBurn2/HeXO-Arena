@@ -7,6 +7,7 @@ import {
     frontierCells,
     frontierOutline,
     hexCenter,
+    lineMarkPoints,
     markPoints,
     ringPoints,
     stonePoints,
@@ -21,6 +22,12 @@ export interface BoardStone extends AxialCoord {
     number: number | null;
 }
 
+/** Candidate turns for one side, best first, each with the letter it is named by. */
+export interface BoardLines {
+    readonly side: Side;
+    readonly lines: readonly { readonly letter: string; readonly cells: readonly AxialCoord[] }[];
+}
+
 export interface BoardOverlays {
     pending?: AxialCoord | undefined;
     // The side whose ghost stone previews the pending mark.
@@ -28,6 +35,9 @@ export interface BoardOverlays {
     focus?: AxialCoord | undefined;
     lastMove?: readonly AxialCoord[] | undefined;
     winLine?: readonly AxialCoord[] | undefined;
+    lines?: BoardLines | undefined;
+    // A candidate turn shown as the stones it would place, while its line is pointed at.
+    preview?: { readonly side: Side; readonly cells: readonly AxialCoord[] } | undefined;
 }
 
 export interface BoardProps {
@@ -57,6 +67,26 @@ const Cell = memo(function Cell({ cell }: { cell: AxialCoord }) {
         <polygon className="cell" data-x={cell.x} data-y={cell.y} points={cellPoints()} transform={translate(cx, cy)} />
     );
 });
+
+interface LineMark {
+    readonly cell: AxialCoord;
+    readonly letters: string;
+    readonly best: boolean;
+}
+
+// A cell several lines share is drawn once with every letter, and as solid as its best line.
+function lineMarks(lines: BoardLines): LineMark[] {
+    const marks = new Map<string, { cell: AxialCoord; letters: string; rank: number }>();
+    lines.lines.forEach((line, rank) => {
+        for (const cell of line.cells) {
+            const key = `${String(cell.x)},${String(cell.y)}`;
+            const mark = marks.get(key) ?? { cell, letters: ``, rank };
+            marks.set(key, { cell, letters: mark.letters + line.letter, rank: Math.min(mark.rank, rank) });
+        }
+    });
+    // The best line draws last, so it stays whole where marks meet.
+    return [...marks.values()].sort((a, b) => b.rank - a.rank).map((mark) => ({ cell: mark.cell, letters: mark.letters, best: mark.rank === 0 }));
+}
 
 const Ring = memo(function Ring({ className, coord }: { className: string; coord: AxialCoord }) {
     const { cx, cy } = hexCenter(coord);
@@ -160,6 +190,8 @@ export function Board({ stones, settings, label, overlays, scale, frame, edge = 
     }
 
     const pending = overlays?.pending;
+    const lines = overlays?.lines;
+    const preview = overlays?.preview;
     return (
         <div className="board-frame" {...(settings.numbers ? { 'data-numbers': `` } : {})}>
             <svg
@@ -210,6 +242,31 @@ export function Board({ stones, settings, label, overlays, scale, frame, edge = 
                         key={`last,${String(coord.x)},${String(coord.y)}`}
                         className={`last-ring${freshKeys.has(`${String(coord.x)},${String(coord.y)}`) ? ` fresh` : ``}`}
                         coord={coord}
+                    />
+                ))}
+                {lines === undefined
+                    ? null
+                    : lineMarks(lines).map((mark) => (
+                          <g
+                              key={`line,${String(mark.cell.x)},${String(mark.cell.y)}`}
+                              className={`line-mark line-${lines.side}${mark.best ? ` best` : ``}`}
+                              data-x={mark.cell.x}
+                              data-y={mark.cell.y}
+                              transform={translate(hexCenter(mark.cell).cx, hexCenter(mark.cell).cy)}
+                          >
+                              <polygon className="line-casing" points={lineMarkPoints()} />
+                              <polygon className="line-hex" points={lineMarkPoints()} />
+                              <text className={`line-letters letters-${String(mark.letters.length)}`} dy="0.35em">
+                                  {mark.letters}
+                              </text>
+                          </g>
+                      ))}
+                {preview?.cells.map((cell) => (
+                    <polygon
+                        key={`preview,${String(cell.x)},${String(cell.y)}`}
+                        className={`ghost preview b-${preview.side}`}
+                        points={stonePoints()}
+                        transform={translate(hexCenter(cell).cx, hexCenter(cell).cy)}
                     />
                 ))}
                 {winLine !== undefined && (

@@ -270,7 +270,7 @@ describe('openapi document', () => {
         const document = buildOpenApiDocument();
         expect(dig(document, `components`, `securitySchemes`, `bearerAuth`)).toBeDefined();
         const schema = dig(document, `paths`, botStreamPath, `get`, `responses`, `200`, `content`, `application/x-ndjson`, `schema`);
-        expect(oneOf(schema)).toHaveLength(6);
+        expect(oneOf(schema)).toHaveLength(7);
     });
 
     it('documents the human game actions behind the session cookie and the game read open to anyone', () => {

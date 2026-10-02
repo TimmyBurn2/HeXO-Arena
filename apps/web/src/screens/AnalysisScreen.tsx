@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import {
+    analysisCoordLimit,
     analysisMeta,
     analysisPagePath,
+    analysisStoneCap,
     resultSentence,
     sideOf,
     turnsOnBoard,
@@ -12,12 +14,18 @@ import {
 import type { Setup, TurnCells } from '@hexo-arena/rules';
 import { ApiError, fetchGameSnapshot, limitedFor } from '../api/client';
 import { AnalysisBoard } from '../analysis/AnalysisBoard';
+import { effectiveSeconds, useAnalysisSettings } from '../analysis/analysis-settings';
 import { ExportDialog, ImportDialog, type ExportView } from '../analysis/dialogs';
 import { draftOf, draftSetup, type SetupDraft, clickCell } from '../analysis/draft';
 import type { Imported } from '../analysis/import-text';
 import { gameLink, lineLink, readAddress, setupLink } from '../analysis/links';
 import { MoveTree, type RowActions } from '../analysis/MoveTree';
 import { writeGame } from '../analysis/notation';
+import { nextUtcDay, readings, useReadingsAt, type ReadingEntry, type ReadingTarget } from '../analysis/readings';
+import { AnalysisHead, AnalysisSettingsPanel, EvalBar, ReadingBlock, type AnalyzerShown, type ReadingPill, type Unreadable } from '../analysis/ReadingPanel';
+import { shownLines, type ShownLine } from '../analysis/reading-view';
+import { authorSourceId, botSource, botSourceId, type AnalysisPosition } from '../analysis/sources';
+import { useAnalyzers } from '../analysis/use-analyzers';
 import { SetupTools } from '../analysis/SetupTools';
 import { analysisStorageKey } from '../analysis/storage-key';
 import {
@@ -49,9 +57,9 @@ import {
 import { isMainLine, lineEnd, lineTo, mainLine, newTree, nodeAt, openingTurns, positionAt, rootId, type MoveTree as Tree, type NodeId } from '../analysis/tree';
 import { notationErrorText, positionWords, refusalText } from '../analysis/words';
 import type { BoardStone } from '../board/Board';
-import { BoardToggles } from '../board/BoardToggles';
 import { BotBadge, PlayerName, Swatch } from '../components/player';
 import { useWait, WaitText } from '../components/wait';
+import { meStore, useMe } from '../me';
 import { Link } from '../router/Link';
 import { navigate, useHash, useRoute, useSearch } from '../router/use-route';
 import { text } from '../text';
@@ -120,8 +128,28 @@ function numberedStones(tree: Tree, at: NodeId): BoardStone[] {
     }));
 }
 
+// Why an analyzer cannot read a position, if it cannot.
+function unreadableOf(position: Setup, won: boolean): Unreadable | null {
+    if (won) return { kind: `won` };
+    if (position.stones.length > analysisStoneCap) return { kind: `too-many`, stones: position.stones.length };
+    if (position.stones.some((stone) => Math.abs(stone.x) > analysisCoordLimit || Math.abs(stone.y) > analysisCoordLimit)) return { kind: `too-far` };
+    return null;
+}
+
+const noEntry: ReadingEntry = { read: null, state: { kind: `idle` } };
+
+// The wait a refusal names, or the rest of the UTC day for one that names none.
+function waitWords(seconds: number | null): string {
+    const now = Date.now();
+    return text.analysis.reading.wait(seconds ?? Math.ceil((nextUtcDay(now) - now) / 1000));
+}
+
+// A switch takes no arrows or letters, so the board's keys still work from
+// the Analyze switch a click has just turned on.
 function typingInto(target: EventTarget | null): boolean {
-    return target instanceof HTMLElement && (target.isContentEditable || [`INPUT`, `TEXTAREA`, `SELECT`].includes(target.tagName));
+    if (!(target instanceof HTMLElement)) return false;
+    if (target instanceof HTMLInputElement) return target.type !== `checkbox`;
+    return target.isContentEditable || [`TEXTAREA`, `SELECT`].includes(target.tagName);
 }
 
 /**
@@ -315,6 +343,9 @@ function Workspace({ board, game, notice, onBoard, onReplace, onNewBoard }: {
     const [refusal, setRefusal] = useState<string | null>(null);
     const [status, setStatus] = useState<string | null>(null);
     const [armed, setArmed] = useState(false);
+    // Off on every visit: positions are read on their own only once the person turns it on here.
+    const [analyzing, setAnalyzing] = useState(false);
+    const [preview, setPreview] = useState<ShownLine | null>(null);
     const setupButton = useRef<HTMLButtonElement>(null);
     const wasEditing = useRef(false);
     const gameTurns = game?.turns ?? noTurns;
@@ -338,6 +369,7 @@ function Workspace({ board, game, notice, onBoard, onReplace, onNewBoard }: {
             setRefusal(null);
             setStatus(null);
             setArmed(false);
+            setPreview(null);
             onBoard(move);
         },
         [onBoard],
@@ -352,6 +384,79 @@ function Workspace({ board, game, notice, onBoard, onReplace, onNewBoard }: {
     const won = node?.kind === `turn` && node.win !== null ? sideOf(node.win.player) : null;
     const floor = floorOf(tree);
     const mainLineEnd = nodeAt(tree, mainLine(tree).at(-1) ?? rootId)?.turn ?? 0;
+
+    const me = useMe();
+    const user = me.status === `ready` && me.me?.kind === `user` ? me.me : null;
+    const signedIn = user !== null;
+    const [settings, updateSettings] = useAnalysisSettings();
+    const { analyzers, reload: reloadAnalyzers } = useAnalyzers(signedIn);
+    const listing = settings.analyzer === null || analyzers.kind !== `ready` ? undefined : analyzers.bots.find((bot) => bot.name === settings.analyzer);
+    const cap = listing?.analyzer?.maxSeconds ?? null;
+    const ask = useMemo(() => ({ lines: settings.lines, seconds: effectiveSeconds(settings.seconds, cap) }), [settings.lines, settings.seconds, cap]);
+    const analyzerSource = useMemo(
+        () =>
+            botSource({
+                analyzer: settings.analyzer,
+                label: settings.analyzer ?? text.analysis.reading.any,
+                onLeft: (left) => {
+                    meStore.positionsLeft(left);
+                },
+            }),
+        [settings.analyzer],
+    );
+    const unreadable = useMemo(() => unreadableOf(position, won !== null), [position, won]);
+    const atKey = node?.key ?? ``;
+    const target: ReadingTarget | null = useMemo(() => {
+        if (!signedIn || unreadable !== null || editing !== null) return null;
+        const asked: AnalysisPosition = { cells: position.stones.map((stone) => ({ x: stone.x, y: stone.y, side: sideOf(stone.player) })), toMove };
+        return { source: analyzerSource, position: asked, key: atKey, ask };
+    }, [signedIn, unreadable, editing, position, toMove, analyzerSource, atKey, ask]);
+
+    useEffect(() => {
+        if (target === null) readings.leave();
+        else readings.visit([target], analyzing);
+    }, [target, analyzing]);
+    useEffect(
+        () => () => {
+            readings.leave();
+        },
+        [],
+    );
+    const positionsLeft = user?.analysisLeft.positions ?? null;
+    useEffect(() => {
+        if (positionsLeft !== null) readings.spend(positionsLeft === 0 ? nextUtcDay(Date.now()) : null);
+    }, [positionsLeft]);
+
+    const askNow = useCallback(() => {
+        if (target !== null) readings.ask(target);
+    }, [target]);
+
+    const entries = useReadingsAt(readings, atKey);
+    const entry = entries.get(analyzerSource.id) ?? noEntry;
+    const read = entry.read;
+    const lines = useMemo(() => (read === null ? [] : shownLines(read.reading, position, toMove, settings.lines)), [read, position, toMove, settings.lines]);
+    const shownPreview = preview !== null && lines.includes(preview) ? preview : null;
+    // A reading on its way, asked or about to be, keeps the lines' rows and the bar in place.
+    const waiting = read === null && (entry.state.kind === `thinking` || entry.state.kind === `queued` || (entry.state.kind === `idle` && analyzing));
+    const anyId = botSourceId(null);
+    const activePill = analyzerSource.id === anyId ? (read === null ? null : authorSourceId(read.reading)) : analyzerSource.id;
+    const pills: ReadingPill[] = [];
+    for (const [id, held] of entries) {
+        const by = held.read?.reading.by;
+        if (id !== anyId && by?.kind === `bot`) pills.push({ id, name: by.name });
+    }
+    if (activePill !== null && settings.analyzer !== null && !pills.some((pill) => pill.id === activePill)) pills.push({ id: activePill, name: settings.analyzer });
+    // By name, so a pill stays put as readings arrive.
+    pills.sort((a, b) => a.name.localeCompare(b.name));
+    const by = read?.reading.by;
+    const analyzerShown: AnalyzerShown =
+        by?.kind === `bot` && read !== null
+            ? { kind: `named`, name: by.name, version: by.version, ownerName: by.ownerName, seconds: read.reading.seconds }
+            : settings.analyzer === null
+              ? { kind: `any`, seconds: ask.seconds }
+              : analyzers.kind === `ready` && listing?.analyzer?.ready !== true
+                ? { kind: `offline`, name: settings.analyzer }
+                : { kind: `named`, name: settings.analyzer, version: listing?.version ?? null, ownerName: listing?.ownerName ?? null, seconds: ask.seconds };
 
     const openSetup = useCallback(() => {
         setRefusal(null);
@@ -405,12 +510,16 @@ function Workspace({ board, game, notice, onBoard, onReplace, onNewBoard }: {
                 event.preventDefault();
                 openSetup();
             }
+            if (event.key === `a`) {
+                event.preventDefault();
+                askNow();
+            }
         }
         window.addEventListener(`keydown`, onKey);
         return () => {
             window.removeEventListener(`keydown`, onKey);
         };
-    }, [editing, dialog, step, openSetup]);
+    }, [editing, dialog, step, openSetup, askNow]);
 
     const actions: RowActions = useMemo(
         () => ({
@@ -454,6 +563,15 @@ function Workspace({ board, game, notice, onBoard, onReplace, onNewBoard }: {
         const marked = markCell(board, cell);
         setRefusal(marked.refusal === null ? null : refusalText(marked.refusal));
         if (marked.state !== board) onBoard(() => marked.state);
+    }
+
+    function playLine(line: ShownLine) {
+        setArmed(false);
+        setStatus(null);
+        setPreview(null);
+        const played = playCells(board, line.cells);
+        setRefusal(played.refusal === null ? null : refusalText(played.refusal));
+        if (played.state !== board) onBoard(() => played.state);
     }
 
     function load(imported: Imported) {
@@ -556,11 +674,14 @@ function Workspace({ board, game, notice, onBoard, onReplace, onNewBoard }: {
                     lastMove={editing === null && node?.kind === `turn` && node.win === null ? node.cells : []}
                     winLine={editing === null && node?.kind === `turn` && node.win !== null ? node.win.cells : []}
                     label={text.analysis.board(stateWords)}
+                    lines={settings.boardLines && editing === null && lines.length > 0 ? { side: toMove, lines } : undefined}
+                    preview={shownPreview === null || editing !== null ? undefined : { side: toMove, cells: shownPreview.cells }}
                     onCell={onCell}
                     onPaste={(pasted) => {
                         if (editing === null) setDialog({ kind: `import`, text: pasted });
                     }}
                 />
+                {target === null ? null : <EvalBar line={lines[0] ?? null} mover={toMove} held={waiting} />}
                 <div className="hud-lift an-chip-source">
                     <div className="hud-chip">{source}</div>
                 </div>
@@ -597,8 +718,26 @@ function Workspace({ board, game, notice, onBoard, onReplace, onNewBoard }: {
                     </div>
                 ) : (
                     <>
+                        {fresh ? null : <div className="an-phone-source">{source}</div>}
+                        <AnalysisHead
+                            signedIn={signedIn}
+                            analyzing={analyzing}
+                            onAnalyzing={(on) => {
+                                setAnalyzing(on);
+                                if (on) askNow();
+                            }}
+                            settings={
+                                <AnalysisSettingsPanel
+                                    signedIn={signedIn}
+                                    settings={settings}
+                                    onSettings={updateSettings}
+                                    analyzers={analyzers}
+                                    onOpen={reloadAnalyzers}
+                                    left={positionsLeft}
+                                />
+                            }
+                        />
                         <div className="an-panel-scroll">
-                            {fresh ? null : <div className="an-phone-source">{source}</div>}
                             {notice === null ? null : (
                                 <div className="an-notice" role="alert">
                                     <p className="an-error">{text.analysis.linkFailed}</p>
@@ -611,9 +750,25 @@ function Workspace({ board, game, notice, onBoard, onReplace, onNewBoard }: {
                                     <p className="note">{text.analysis.intro.body((games) => <Link to="/games">{games}</Link>)}</p>
                                 </div>
                             ) : null}
-                            <div className="an-head">
-                                <BoardToggles />
-                            </div>
+                            <ReadingBlock
+                                signedIn={me.status === `loading` ? null : signedIn}
+                                unreadable={unreadable}
+                                analyzing={analyzing}
+                                pills={pills}
+                                activePill={activePill}
+                                onPill={(pill) => {
+                                    updateSettings({ analyzer: pill.name });
+                                }}
+                                analyzer={analyzerShown}
+                                entry={entry}
+                                lines={lines}
+                                held={waiting ? Math.min(settings.lines, listing?.analyzer?.lines ?? settings.lines) : 0}
+                                toMove={toMove}
+                                onPreview={setPreview}
+                                onPlay={playLine}
+                                onAsk={askNow}
+                                wait={waitWords}
+                            />
                             <div className="an-tree-host">
                                 <MoveTree tree={tree} gameTurns={gameTurns} at={at} onGo={goToNode} actions={actions} />
                             </div>

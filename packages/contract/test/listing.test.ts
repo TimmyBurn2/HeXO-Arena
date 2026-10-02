@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { botConcurrentGameCap, botListingSchema, humanSeedRating } from '../src/index';
 
-const listing = { name: `sealbot`, ownerName: `quinn`, online: true, openForChallenges: true, rating: 1712, provisional: false, levels: null };
+const listing = { name: `sealbot`, ownerName: `quinn`, online: true, openForChallenges: true, rating: 1712, provisional: false, levels: null, analyzer: null };
 
 describe('botListingSchema', () => {
     it(`carries the bot's live games, from none to its cap of ${String(botConcurrentGameCap)}`, () => {
@@ -20,6 +20,17 @@ describe('botListingSchema', () => {
         expect(botListingSchema.parse({ ...listing, liveGames: 0 }).levels).toBeNull();
         const { levels: _omitted, ...withoutLevels } = listing;
         expect(botListingSchema.safeParse({ ...withoutLevels, liveGames: 0 }).success).toBe(false);
+    });
+});
+
+describe('botListingSchema analyzer', () => {
+    it(`carries the bot's analyzer and whether it can read now, null until it declares one`, () => {
+        const analyzer = { maxSeconds: 5, lines: 3, whilePlaying: false, ready: true };
+        expect(botListingSchema.parse({ ...listing, liveGames: 0, analyzer }).analyzer).toEqual(analyzer);
+        expect(botListingSchema.parse({ ...listing, liveGames: 0 }).analyzer).toBeNull();
+        const { analyzer: _omitted, ...withoutAnalyzer } = listing;
+        expect(botListingSchema.safeParse({ ...withoutAnalyzer, liveGames: 0 }).success).toBe(false);
+        expect(botListingSchema.safeParse({ ...listing, liveGames: 0, analyzer: { ...analyzer, maxSeconds: 11 } }).success).toBe(false);
     });
 });
 

@@ -61,6 +61,7 @@ describe('bot api export', () => {
             `declineChallenge`,
             `getAccount`,
             `listBots`,
+            `openAnalysisSession`,
             `openEngineSession`,
             `openStream`,
             `resignBotGame`,

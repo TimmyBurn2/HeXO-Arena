@@ -23,6 +23,7 @@ const entry = {
     finishedAt: `2026-10-01T08:49:13Z`,
     rated: true,
     voided: false,
+    analyses: 0,
 };
 
 describe('finishedGamesQuerySchema', () => {
@@ -37,6 +38,7 @@ describe('finishedGamesQuerySchema', () => {
             clock: `turn`,
             opening: `5`,
             before: `2026-10-01`,
+            analyzed: `1`,
             page: `3`,
         });
         expect(parsed).toMatchObject({ player: `hextide`, opening: `5`, page: `3` });
@@ -57,7 +59,7 @@ describe('finishedGamesQuerySchema', () => {
     });
 
     it.each([
-        [{ analysed: `1` }],
+        [{ analyzed: `true` }],
         [{ opening: `2` }],
         [{ clock: `blitz` }],
         [{ before: `2026-13-01` }],
@@ -91,8 +93,11 @@ describe('finishedGamesPageSchema', () => {
         expect(finishedGamesPageSchema.safeParse({ ...page, record: { ...record, asO: { games: 20, won: 10 } } }).success).toBe(false);
     });
 
-    it('carries no analysis count yet', () => {
-        expect(finishedGameEntrySchema.parse({ ...entry, analyses: 1 })).not.toHaveProperty(`analyses`);
+    it('counts the finished community readings of a game, at most two', () => {
+        expect(finishedGameEntrySchema.parse({ ...entry, analyses: 2 }).analyses).toBe(2);
+        expect(finishedGameEntrySchema.safeParse({ ...entry, analyses: 3 }).success).toBe(false);
+        const { analyses: _omitted, ...uncounted } = entry;
+        expect(finishedGameEntrySchema.safeParse(uncounted).success).toBe(false);
     });
 });
 
@@ -103,7 +108,7 @@ describe('listFinishedGames in the document', () => {
         expect(operation?.operationId).toBe(`listFinishedGames`);
         expect(operation?.security).toEqual([]);
         const names = (operation?.parameters ?? []).map((parameter) => (`name` in parameter ? parameter.name : ``));
-        expect(names.sort()).toEqual([`before`, `clock`, `kind`, `opening`, `page`, `player`, `reason`, `result`, `side`, `vs`]);
+        expect(names.sort()).toEqual([`analyzed`, `before`, `clock`, `kind`, `opening`, `page`, `player`, `reason`, `result`, `side`, `vs`]);
         expect(Object.keys(operation?.responses ?? {}).sort()).toEqual([`200`, `400`, `404`, `429`]);
     });
 });

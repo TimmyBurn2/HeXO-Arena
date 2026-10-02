@@ -93,8 +93,17 @@ export const bwsMoveRequestPacketSchema = z.object({
 });
 export type BwsMoveRequestPacket = z.infer<typeof bwsMoveRequestPacketSchema>;
 
-// The only packet a bot may send on our engine sessions: evaluations are
-// never requested, so eval_response is not part of the accepted inbound set.
+// Cancels the outstanding request on an analysis session; the bot answers
+// nothing, and a late answer no longer matches.
+export const bwsInterruptPacketSchema = z.object({
+    type: z.literal(`interrupt`),
+    request_id: z.number().int().min(0).optional(),
+});
+export type BwsInterruptPacket = z.infer<typeof bwsInterruptPacketSchema>;
+
+// The only packet a bot may send on our engine and analysis sessions: a
+// position is read with move_request, never eval_request, so eval_response
+// is not part of the accepted inbound set.
 export const bwsMoveResponsePacketSchema = z.object({
     type: z.literal(`move_response`),
     move: htttxMoveOptionSchema,

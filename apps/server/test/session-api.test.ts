@@ -42,7 +42,7 @@ describe('GET /api/me', () => {
     it('names the signed-in user with the seeded, provisional rating before any game', async () => {
         const arena = await createTestApp();
         const session = await loginAs(arena.app, `alice`);
-        expect(await readMe(arena, session)).toEqual({ kind: `user`, name: `alice`, rating: 1000, provisional: true, discord: null, liveGames: [] });
+        expect(await readMe(arena, session)).toEqual({ kind: `user`, name: `alice`, rating: 1000, provisional: true, discord: null, liveGames: [], analysisOptOut: false, analysisLeft: { positions: 300, games: 10 } });
         await arena.app.close();
     });
 });

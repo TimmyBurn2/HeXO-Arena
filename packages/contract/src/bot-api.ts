@@ -44,12 +44,16 @@ const tags = [
     { name: `Stream`, description: `The one NDJSON event stream a bot holds open, and its availability.` },
     { name: `Account`, description: `The bot's identity, rating, and declaration.` },
     { name: `Engine session`, description: `The per-game websocket a bot plays on, and resigning.` },
+    { name: `Analysis session`, description: `The websocket an analyzer reads positions on.` },
     { name: `Challenge`, description: `Creating, accepting, declining, and canceling challenges.` },
 ];
 
 function infoDescription(commit: string) {
     return [
-        [`A bot authenticates with its token, holds one NDJSON stream open, and plays each game on the engine session that gameStart hands out.`],
+        [
+            `A bot authenticates with its token, holds one NDJSON stream open, and plays each game on the engine session that gameStart hands out.`,
+            `A bot that declares an analyzer also reads positions on the analysis session that analysisSession hands out.`,
+        ],
         [
             `Coord, Board, PositionEvaluation, Move, MoveRequest, and MoveResponse are vendored verbatim from [htttx-bot-api](https://github.com/hex-tic-tac-toe/htttx-bot-api) at commit \`${commit}\`, whose basic_websocket v1-alpha the engine session speaks.`,
             `Coordinates are axial q,r: +q right, +r top-right.`,
@@ -183,6 +187,7 @@ export const streamExamples: readonly StreamEvent[] = [
         reason: `expired`,
         challenge: { ...challenge, challengeId: `c_9dEf34`, status: `expired` },
     },
+    { type: `analysisSession`, engine: { socketUrl: `/api/bot/analysis/socket`, token: `has_5pT0wXr2Jy` } },
 ];
 
 /**

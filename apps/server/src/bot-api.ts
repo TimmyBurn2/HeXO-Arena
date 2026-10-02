@@ -13,7 +13,9 @@ import {
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import type { BotPrincipal } from './bot-auth';
 import { authenticateBot } from './bot-auth';
-import { listBots, readBotDeclaration, updateBotDeclaration, type BotDeclaration } from './bots';
+import type { AnalysisService } from './analysis-service';
+import type { AnalyzerSessions } from './analyzers';
+import { listBots, readBotDeclaration, updateBotDeclaration, type BotDeclaration, type StoredAnalyzer } from './bots';
 import { type Query } from './db';
 import type { GameRegistry } from './game-registry';
 import type { PresenceRegistry } from './presence';
@@ -31,6 +33,8 @@ export interface BotApiDeps {
     games: Pick<GameRegistry, `activeGameCount`>;
     limits: CredentialLimits;
     reservations: { isReserved: (botId: string) => boolean };
+    analyzers: Pick<AnalyzerSessions, `isReady` | `sendOffer`>;
+    analysis: Pick<AnalysisService, `withdraw` | `dispatch`>;
 }
 
 // Sends the failure itself and yields null, so handlers stay flat.
@@ -48,7 +52,8 @@ export function requireBot(query: Query, request: FastifyRequest, reply: Fastify
 }
 
 export function registerBotApi(app: FastifyInstance, deps: BotApiDeps): void {
-    const { query, presence, gate, games, limits, reservations } = deps;
+    const { query, presence, gate, games, limits, reservations, analyzers, analysis } = deps;
+    const withReadiness = (botId: string, analyzer: StoredAnalyzer | null) => (analyzer === null ? null : { ...analyzer, ready: analyzers.isReady(botId) });
 
     app.get(botStreamPath, { config: { limit: `stream` } }, async (request, reply) => {
         const bot = requireBot(query, request, reply);
@@ -81,6 +86,7 @@ export function registerBotApi(app: FastifyInstance, deps: BotApiDeps): void {
         const listed = rows
             .filter((row) => parsed.data.online !== `1` || presence.isOnline(row.id))
             .map((row): BotListing => ({
+                analyzer: withReadiness(row.id, row.analyzer),
                 name: row.name,
                 ownerName: row.ownerName,
                 online: presence.isOnline(row.id),
@@ -93,7 +99,8 @@ export function registerBotApi(app: FastifyInstance, deps: BotApiDeps): void {
                 ...(row.repoUrl !== undefined && { repoUrl: row.repoUrl }),
                 ...(row.accepts !== undefined && { accepts: row.accepts }),
                 levels: row.levels,
-            }));
+            }))
+            .filter((listing) => parsed.data.analyzer !== `1` || listing.analyzer !== null);
         return reply.code(200).send(botListingSchema.array().parse(listed));
     });
 
@@ -101,6 +108,7 @@ export function registerBotApi(app: FastifyInstance, deps: BotApiDeps): void {
         botAccountSchema.parse({
             ...streamPlayerOf(query, { kind: `bot`, id: botId }, declaration.name),
             ...declaration,
+            analyzer: withReadiness(botId, declaration.analyzer),
         });
 
     app.get(botAccountPath, { config: { limit: `principal` } }, async (request, reply) => {
@@ -121,6 +129,13 @@ export function registerBotApi(app: FastifyInstance, deps: BotApiDeps): void {
         if (!parsed.success) {
             return reply.code(400).send({ error: `the declaration fails validation`, code: `bad_request` });
         }
-        return reply.code(200).send(accountOf(bot.id, updateBotDeclaration(query, bot.id, parsed.data)));
+        const before = parsed.data.analyzer === undefined ? null : readBotDeclaration(query, bot.id)?.analyzer ?? null;
+        const declared = updateBotDeclaration(query, bot.id, parsed.data);
+        // Turning the analyzer on offers its session at once; withdrawing it
+        // closes the session; a change to it may free requests for it.
+        if (parsed.data.analyzer === null) analysis.withdraw(bot.id);
+        else if (parsed.data.analyzer !== undefined && before === null) analyzers.sendOffer(bot.id);
+        else if (parsed.data.analyzer !== undefined) analysis.dispatch();
+        return reply.code(200).send(accountOf(bot.id, declared));
     });
 }

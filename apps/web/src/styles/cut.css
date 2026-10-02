@@ -54,7 +54,9 @@
     .pip,
     .steps .step-n,
     .build-step-n,
-    .podium-rank {
+    .podium-rank,
+    .an-letter,
+    .an-pip {
         clip-path: var(--hex-path);
     }
 
@@ -90,6 +92,7 @@
     .hud-chip,
     .an-intro,
     .an-check,
+    .an-trouble,
     .an-dialog-body {
         clip-path: var(--cut-md-path);
     }
@@ -105,7 +108,11 @@
     .stepper button,
     .opening-preview,
     .an-mini,
-    .an-row-more {
+    .an-row-more,
+    .an-gear,
+    .an-line,
+    .an-analyzer,
+    .an-evalbar-chip {
         clip-path: var(--cut-sm-path);
     }
 
@@ -113,7 +120,8 @@
        focus inside its edge. */
     .clock-tile:has(input:focus-visible),
     .strength-chip:has(input:focus-visible),
-    .roster-row:has(input:focus-visible) {
+    .roster-row:has(input:focus-visible),
+    .an-analyzer:has(input:focus-visible) {
         outline: var(--focus-w) solid var(--c-focus);
         outline-offset: calc(-3 * var(--focus-w));
     }
@@ -170,6 +178,8 @@
     .hud-toggle:focus-visible,
     .scrub-step:focus-visible,
     .an-row-more:focus-visible,
+    .an-gear:focus-visible,
+    .an-line:focus-visible,
     .scrub-count:focus-visible,
     .drawer-close:focus-visible,
     .drawer-tab:focus-visible,

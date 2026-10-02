@@ -1,3 +1,4 @@
+import { analyzedGame, doneCounts } from './analysis-store';
 import {
     boardCellSchema,
     finishedGamesMemoMs,
@@ -111,6 +112,7 @@ function shared(filters: Filters, before: Bound | null): (SQL | undefined)[] {
         filters.reason === undefined ? undefined : eq(games.finishReason, filters.reason),
         filters.clock === undefined ? undefined : sql`${games.timeControl} ->> '$.mode' = ${filters.clock}`,
         filters.opening === undefined ? undefined : sql`json_array_length(${games.openingCells}) = ${Number(filters.opening)}`,
+        filters.analyzed === undefined ? undefined : analyzedGame,
     ];
 }
 
@@ -296,6 +298,7 @@ function entriesOf(query: Query, ids: readonly string[]): FinishedGameEntry[] {
         .where(inArray(games.id, [...ids]))
         .orderBy(desc(games.finishSeq))
         .all();
+    const analyzed = doneCounts(query, ids);
     return rows.map((row): FinishedGameEntry => {
         // The seats, side, winner, and reason checks admit only these values,
         // and a page lists finished games alone.
@@ -338,6 +341,7 @@ function entriesOf(query: Query, ids: readonly string[]): FinishedGameEntry[] {
             finishedAt: new Date(row.finishedAt * 1000).toISOString().replace(/\.\d{3}Z$/u, `Z`),
             rated: winner !== null && row.voidedAt === null && ratesSomebody(row),
             voided: row.voidedAt !== null,
+            analyses: analyzed.get(row.id) ?? 0,
         };
     });
 }

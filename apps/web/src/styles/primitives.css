@@ -260,6 +260,14 @@
         color: var(--c-text);
     }
 
+    /* A choice that cannot be taken here, such as a time over an
+       analyzer's most, reads as unavailable and stays so under the pointer. */
+    .pill[aria-disabled='true'],
+    .pill[aria-disabled='true']:hover {
+        color: var(--c-offline);
+        cursor: not-allowed;
+    }
+
     /* A table wider than the window scrolls inside its frame, which also
        holds its hidden header text, so neither pushes the page sideways. */
     .table-wrap {

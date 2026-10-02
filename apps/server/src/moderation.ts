@@ -1,7 +1,7 @@
 import { adminGameIdSchema, nameKeyOf } from '@hexo-arena/contract';
 import { and, count, eq, inArray, isNotNull, isNull, like, or, type SQL } from 'drizzle-orm';
 import { nowSeconds, type Query } from './db';
-import { adminActions, bots, games, nameReservations, sessions, tournamentEntries, users } from './db/schema';
+import { adminActions, analyses, bots, games, nameReservations, sessions, tournamentEntries, users } from './db/schema';
 import { randomToken, sha256Hex } from './tokens';
 
 export type ModerationChange = { kind: `changed`; id: string } | { kind: `unchanged` } | { kind: `not_found` };
@@ -256,6 +256,8 @@ export function deleteUser(query: Query, userId: string): UserDeletion {
         placeholders.set(nameKey, outcome.kind === `anonymized` ? outcome.placeholder : placeholder);
     }
     query.delete(sessions).where(eq(sessions.userId, userId)).run();
+    // A reading the user asked for stays with its game; who asked goes.
+    query.update(analyses).set({ requestedBy: null }).where(eq(analyses.requestedBy, userId)).run();
     pseudonymizeAudit(query, placeholders);
     const kept =
         query.select({ id: games.id }).from(games).where(eq(games.userId, userId)).limit(1).get() !== undefined ||

@@ -300,6 +300,15 @@ function FilterFields({ filters, set }: FieldsProps) {
                     set(`kind`, value);
                 }}
             />
+            <Choice
+                id="games-analyzed"
+                label={text.games.analysis}
+                value={filters.analyzed}
+                options={[[`1`, text.games.analyzed] as const]}
+                onChange={(value) => {
+                    set(`analyzed`, value);
+                }}
+            />
             <div className="games-field">
                 <label htmlFor="games-before">{text.games.before}</label>
                 <input
@@ -412,6 +421,8 @@ function chipOf(key: FilterKey, filters: GameFilters): string {
             return filters.kind === undefined ? `` : chips.kinds[filters.kind];
         case `opening`:
             return chips.opening(Number(filters.opening));
+        case `analyzed`:
+            return chips.analyzed;
         case `before`:
             return chips.before(filters.before ?? ``);
     }

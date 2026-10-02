@@ -6,9 +6,9 @@ import { ProfileScreen } from '../src/screens/ProfileScreen';
 import { meStore } from '../src/me';
 
 const roster = [
-    { name: `sealbot`, ownerName: `quinn`, online: true, openForChallenges: true, rating: 1712, provisional: false, liveGames: 0, levels: null },
-    { name: `quietlake`, ownerName: `quinn`, online: false, openForChallenges: false, rating: 1461, provisional: true, liveGames: 0, levels: null },
-    { name: `hextide`, ownerName: `ana`, online: true, openForChallenges: false, rating: 1690, provisional: false, liveGames: 0, levels: null },
+    { name: `sealbot`, ownerName: `quinn`, online: true, openForChallenges: true, rating: 1712, provisional: false, liveGames: 0, levels: null, analyzer: null },
+    { name: `quietlake`, ownerName: `quinn`, online: false, openForChallenges: false, rating: 1461, provisional: true, liveGames: 0, levels: null, analyzer: null },
+    { name: `hextide`, ownerName: `ana`, online: true, openForChallenges: false, rating: 1690, provisional: false, liveGames: 0, levels: null, analyzer: null },
 ];
 
 function serve(me: Me, posts: string[] = []): void {
@@ -52,13 +52,14 @@ function history(player: string): unknown {
         finishedAt: new Date(Date.now() - (index + 1) * 3_600_000).toISOString(),
         rated: true,
         voided: false,
+        analyses: 0,
     }));
     return { games, page: 1, pages: 1, total: 12, record: { games: 12, won: 6, lost: 6, undecided: 0, voided: 0, asX: { games: 12, won: 6, lost: 6 }, asO: { games: 0, won: 0, lost: 0 } } };
 }
 
 describe('ProfileScreen', () => {
     it('list the latest games of a signed-in player, then lead to all of them', async () => {
-        serve({ kind: `user`, name: `quinn`, rating: 1503, provisional: false, discord: null, liveGames: [] });
+        serve({ kind: `user`, name: `quinn`, rating: 1503, provisional: false, discord: null, liveGames: [], analysisOptOut: false, analysisLeft: { positions: 300, games: 10 } });
         render(<ProfileScreen />);
         const section = (await screen.findByRole(`heading`, { name: `Your games` })).closest(`section`) as HTMLElement;
         expect(within(section).getAllByRole(`listitem`)).toHaveLength(5);
@@ -95,7 +96,7 @@ describe('ProfileScreen', () => {
     });
 
     it('show a user their name, rating, and only their own bots with room for another', async () => {
-        serve({ kind: `user`, name: `quinn`, rating: 1503, provisional: false, discord: null, liveGames: [] });
+        serve({ kind: `user`, name: `quinn`, rating: 1503, provisional: false, discord: null, liveGames: [], analysisOptOut: false, analysisLeft: { positions: 300, games: 10 } });
         render(<ProfileScreen />);
         expect(await screen.findByText(`quinn`, { selector: `.identity-name` })).toBeTruthy();
         expect(document.querySelector(`.identity-number`)?.textContent).toBe(`1503`);
@@ -114,7 +115,7 @@ describe('ProfileScreen', () => {
             vi.fn((url: string) =>
                 Promise.resolve(
                     url === `/api/me`
-                        ? new Response(JSON.stringify({ kind: `user`, name: `quinn`, rating: 1503, provisional: false, discord: null, liveGames: [] }))
+                        ? new Response(JSON.stringify({ kind: `user`, name: `quinn`, rating: 1503, provisional: false, discord: null, liveGames: [], analysisOptOut: false, analysisLeft: { positions: 300, games: 10 } }))
                         : new Response(JSON.stringify({ error: `slow down`, code: `rate_limited` }), { status: 429, headers: { 'retry-after': `8` } }),
                 ),
             ),
@@ -129,16 +130,16 @@ describe('ProfileScreen', () => {
     });
 
     it('show the person their pattern and the Discord account they signed in with', async () => {
-        serve({ kind: `user`, name: `mira-hex`, rating: 1000, provisional: true, discord: { username: `mira.hex`, displayName: `Mira` }, liveGames: [] });
+        serve({ kind: `user`, name: `mira-hex`, rating: 1000, provisional: true, discord: { username: `mira.hex`, displayName: `Mira` }, liveGames: [], analysisOptOut: false, analysisLeft: { positions: 300, games: 10 } });
         render(<ProfileScreen />);
         expect(await screen.findByText(`Signed in with Discord as Mira (@mira.hex)`)).toBeTruthy();
         expect(document.querySelector(`.identity-plate .sigil-plate svg.sigil`)).toBeTruthy();
         cleanup();
-        serve({ kind: `user`, name: `mira-hex`, rating: 1000, provisional: true, discord: { username: `mira.hex`, displayName: null }, liveGames: [] });
+        serve({ kind: `user`, name: `mira-hex`, rating: 1000, provisional: true, discord: { username: `mira.hex`, displayName: null }, liveGames: [], analysisOptOut: false, analysisLeft: { positions: 300, games: 10 } });
         render(<ProfileScreen />);
         expect(await screen.findByText(`Signed in with Discord as @mira.hex`)).toBeTruthy();
         cleanup();
-        serve({ kind: `user`, name: `quinn`, rating: 1503, provisional: false, discord: null, liveGames: [] });
+        serve({ kind: `user`, name: `quinn`, rating: 1503, provisional: false, discord: null, liveGames: [], analysisOptOut: false, analysisLeft: { positions: 300, games: 10 } });
         render(<ProfileScreen />);
         await screen.findByText(`quinn`, { selector: `.identity-name` });
         expect(screen.queryByText(/^Signed in with Discord/u)).toBe(null);
@@ -146,7 +147,7 @@ describe('ProfileScreen', () => {
 
     it('sign a user out and forget them', async () => {
         const posts: string[] = [];
-        serve({ kind: `user`, name: `quinn`, rating: 1503, provisional: false, discord: null, liveGames: [] }, posts);
+        serve({ kind: `user`, name: `quinn`, rating: 1503, provisional: false, discord: null, liveGames: [], analysisOptOut: false, analysisLeft: { positions: 300, games: 10 } }, posts);
         render(<ProfileScreen />);
         fireEvent.click(await screen.findByRole(`button`, { name: `Sign out` }));
         await waitFor(() => {
@@ -185,7 +186,7 @@ describe('ProfileScreen', () => {
 });
 
 describe('the account panel', () => {
-    const quinn: Me = { kind: `user`, name: `quinn`, rating: 1503, provisional: false, discord: null, liveGames: [] };
+    const quinn: Me = { kind: `user`, name: `quinn`, rating: 1503, provisional: false, discord: null, liveGames: [], analysisOptOut: false, analysisLeft: { positions: 300, games: 10 } };
 
     // Me, the bot list, and the history read as signed in until the account is deleted;
     // the delete answers as the server would, and the export with its file.
@@ -217,7 +218,7 @@ describe('the account panel', () => {
         serveAccount({ status: 204 }, calls);
         render(<ProfileScreen />);
         const panel = (await screen.findByRole(`heading`, { name: `Your account` })).closest(`section`) as HTMLElement;
-        expect(within(panel).getAllByRole(`heading`, { level: 3 }).map((heading) => heading.textContent)).toEqual([`Your data`, `Delete account`]);
+        expect(within(panel).getAllByRole(`heading`, { level: 3 }).map((heading) => heading.textContent)).toEqual([`Your data`, `Public analysis`, `Delete account`]);
         expect(panel.textContent).toContain(
             `Each bot of yours that won or lost a game against an account or a bot, or played in a tournament, stays there too under "deleted bot", with all its games, guest games included; your other bots are deleted with their games.`,
         );

@@ -82,7 +82,15 @@ describe('the sign-up', () => {
 
 describe('who the session names', () => {
     it('carries the Discord account a user signed in with, or null', () => {
-        const user = { kind: `user`, name: `mira-hex`, rating: 1000, provisional: true, liveGames: [] } as const;
+        const user = {
+            kind: `user`,
+            name: `mira-hex`,
+            rating: 1000,
+            provisional: true,
+            liveGames: [],
+            analysisOptOut: false,
+            analysisLeft: { positions: 300, games: 10 },
+        } as const;
         expect(userMeSchema.parse({ ...user, discord: { username: `mira.hex`, displayName: null } }).discord).toEqual({ username: `mira.hex`, displayName: null });
         expect(userMeSchema.parse({ ...user, discord: null }).discord).toBeNull();
         expect(userMeSchema.safeParse(user).success).toBe(false);

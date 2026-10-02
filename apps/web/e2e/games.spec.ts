@@ -1,6 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 import { looks, wear } from './matrix';
-import { rivalry, serve, world } from './mock-api';
+import { recentGames, rivalry, serve, world } from './mock-api';
 
 async function open(page: Page, path: string, width: number): Promise<void> {
     await page.setViewportSize({ width, height: 900 });
@@ -121,3 +121,24 @@ test('a page number answers the pointer as the other page links do', async ({ pa
     await expect.poll(() => number.evaluate((element) => getComputedStyle(element).backgroundColor)).not.toBe(resting);
 });
 
+
+test('the list narrows to games analyzers have read, and each row counts its analyses', async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 900 });
+    const look = looks[0];
+    if (look === undefined) throw new Error(`no look registered`);
+    await wear(page, look);
+    const finished = recentGames.map((entry, index) => ({ ...entry, analyses: index === 1 ? 2 : index === 3 ? 1 : 0 }));
+    await serve(page, world({ finished }));
+    await page.goto(`/games`);
+    await page.locator(`.game-row`).first().waitFor();
+    await expect(page.locator(`.game-row-result .tag`, { hasText: /analys/u })).toHaveText([`2 analyses`, `1 analysis`]);
+    await page.getByRole(`button`, { name: `Filters`, exact: true }).click();
+    const panel = page.locator(`dialog.games-panel[open]`);
+    await panel.getByLabel(`Analysis`).selectOption(`Analyzed`);
+    await expect.poll(() => search(page)).toBe(`?analyzed=1`);
+    await expect(page.locator(`.game-row`)).toHaveCount(2);
+    await page.keyboard.press(`Escape`);
+    await page.getByRole(`button`, { name: `Remove analyzed` }).click();
+    await expect.poll(() => search(page)).toBe(``);
+    await expect(page.locator(`.game-row`)).toHaveCount(finished.length);
+});

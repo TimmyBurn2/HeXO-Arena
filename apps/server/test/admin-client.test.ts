@@ -107,6 +107,10 @@ describe('parseAdminArgs', () => {
         [[`tournament-schedule`, `list`], { op: `tournament-schedule-list` }],
         [[`tournament-schedule`, `remove`, `3`, `--reason`, `done`], { op: `tournament-schedule-remove`, id: 3, reason: `done` }],
         [[`report-close`, `12`, `--reason`, `name changed`], { op: `report-close`, id: 12, reason: `name changed` }],
+        [
+            [`delete-analysis`, `a_0f8d2c4e-1b3a-4c5d-8e9f-0a1b2c3d4e5f`, `--reason`, `lied about wins`],
+            { op: `delete-analysis`, id: `a_0f8d2c4e-1b3a-4c5d-8e9f-0a1b2c3d4e5f`, reason: `lied about wins` },
+        ],
     ])('turns %j into the socket request', (argv, request) => {
         expect(parseAdminArgs(argv)).toEqual({ kind: `request`, request });
     });
@@ -135,6 +139,7 @@ describe('parseAdminArgs', () => {
         [`a backup label with a capital`, [`backup`, `Pre-update`]],
         [`a report closed without a note`, [`report-close`, `12`]],
         [`a report closed by an id that is no number`, [`report-close`, `first`, `--reason`, `r`]],
+        [`an analysis deleted by a game's id`, [`delete-analysis`, `g_0f8d2c4e-1b3a-4c5d-8e9f-0a1b2c3d4e5f`, `--reason`, `r`]],
     ])('refuses %s with usage', (_label, argv) => {
         expect(parseAdminArgs(argv).kind).toBe(`usage`);
     });

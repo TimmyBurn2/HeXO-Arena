@@ -161,7 +161,7 @@ for (const [width, names] of [
 }
 
 test('a seated player gets no scrubber', async ({ page }) => {
-    await open(page, `/game/running`, { kind: `user`, name: `quinn`, rating: 1503, provisional: false, discord: null, liveGames: [] });
+    await open(page, `/game/running`, { kind: `user`, name: `quinn`, rating: 1503, provisional: false, discord: null, liveGames: [], analysisOptOut: false, analysisLeft: { positions: 300, games: 10 } });
     await expect(page.locator(`.hud-bottom-center`)).toBeVisible();
     await expect(page.getByRole(`slider`)).toHaveCount(0);
 });

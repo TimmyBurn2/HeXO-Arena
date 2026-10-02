@@ -17,7 +17,12 @@ import { createAdminHandler } from './admin-ops';
 import { backupNow, type BackupPolicy } from './backup';
 import type { AdminHandler } from './admin-socket';
 import { createBot, rotateBotToken } from './bots';
+import { analysisSocketRoute, registerAnalysisApi } from './analysis-api';
+import { AnalysisService } from './analysis-service';
+import { analyzersAmong } from './analysis-store';
+import { AnalyzerSessions } from './analyzers';
 import { registerBotApi } from './bot-api';
+import { LiveGuard } from './live-guard';
 import { registerChallengeApi } from './challenge-api';
 import { ChallengeRegistry, challengeTtlSeconds } from './challenge-registry';
 import { expireStaleChallenges } from './challenge-store';
@@ -177,7 +182,7 @@ export async function buildApp(deps: AppDeps): Promise<BuiltApp> {
     // closes one no socket handler serves; refused here, the upgrade never
     // reaches that line.
     app.addHook(`onRequest`, (request, reply, done) => {
-        if (request.ws && request.routeOptions.url !== engineSocketRoute) {
+        if (request.ws && request.routeOptions.url !== engineSocketRoute && request.routeOptions.url !== analysisSocketRoute) {
             void reply.code(404).send({ error: `no websocket on this route`, code: `not_found` });
             return;
         }
@@ -191,11 +196,20 @@ export async function buildApp(deps: AppDeps): Promise<BuiltApp> {
     });
     const { presence, watchers } = deps;
     const gate = new StartGate(query);
+    const guard = new LiveGuard();
     const games = new GameRegistry(
         deps.random === undefined
-            ? { query, presence, watchers, generation }
-            : { query, presence, watchers, generation, random: deps.random },
+            ? { query, presence, watchers, generation, live: guard }
+            : { query, presence, watchers, generation, live: guard, random: deps.random },
     );
+    const analyzers = new AnalyzerSessions({
+        online: (botId) => presence.isOnline(botId),
+        mayAnalyze: (botId) => analyzersAmong(query, [botId]).length > 0,
+        send: (botId, event) => {
+            presence.send(botId, event);
+        },
+        now: deps.now ?? Date.now,
+    });
     const challenges = new ChallengeRegistry({ query, presence, games });
     wirePresence(presence, games);
     const leadMs = deps.devLogin ? tournamentDevLeadMs : tournamentLeadMs;
@@ -221,7 +235,7 @@ export async function buildApp(deps: AppDeps): Promise<BuiltApp> {
         deps.erasures === undefined ? null : new ErasureJournal({ ...deps.erasures, log: app.log, ...(deps.now === undefined ? {} : { now: deps.now }) });
     if (erasures !== null) {
         erasures.prune();
-        const applied = reapplyErasures({ games, presence, challenges, tournaments }, query, erasures);
+        const applied = reapplyErasures({ games, presence, challenges, tournaments, analysis: { withdraw: (botId) => { analyzers.close(botId); } } }, query, erasures);
         if (applied > 0) app.log.warn({ applied }, `deletions applied again after a restore`);
     }
     const purges = deps.purgeHourUtc === undefined ? null : schedulePurges({ query, journal: erasures, hourUtc: deps.purgeHourUtc, log: app.log });
@@ -234,8 +248,19 @@ export async function buildApp(deps: AppDeps): Promise<BuiltApp> {
     });
     // Challenge lines lead the replay: they wait on a TTL that the games,
     // with their own clocks and sessions, do not.
+    // A bot that declares an analyzer hears last how to dial its session.
+    const analysis = new AnalysisService({ query, analyzers, games, now: deps.now ?? Date.now });
+    games.onStart((botIds) => {
+        analysis.gameStarted(botIds);
+    });
+    games.onFinish(() => {
+        analysis.dispatch();
+    });
     const gameReplay = presence.replay;
-    presence.replay = (botId) => [...challenges.replayForBot(botId), ...gameReplay(botId)];
+    presence.replay = (botId) => {
+        const offer = analyzers.offer(botId);
+        return [...challenges.replayForBot(botId), ...gameReplay(botId), ...(offer === null ? [] : [offer])];
+    };
     // Open streams would hold the server's close, so they end before it.
     app.addHook(`preClose`, (done) => {
         presence.closeAll();
@@ -248,8 +273,11 @@ export async function buildApp(deps: AppDeps): Promise<BuiltApp> {
         tournaments.stop();
         challenges.stop();
         games.stop();
+        analysis.stop();
+        analyzers.stop();
     });
-    registerBotApi(app, { query, presence, gate, games, limits, reservations: tournaments });
+    registerBotApi(app, { query, presence, gate, games, limits, reservations: tournaments, analyzers, analysis });
+    registerAnalysisApi(app, { query, analysis, analyzers, guard, games, gate, limits });
     registerChallengeApi(app, { query, presence, games, challenges, gate, limits, reservations: tournaments });
     registerGameApi(app, { query, presence, games, watchers, gate, guests, limits, reservations: tournaments });
     registerFinishedGamesApi(app, { query, now: deps.now ?? Date.now });
@@ -263,9 +291,10 @@ export async function buildApp(deps: AppDeps): Promise<BuiltApp> {
         games,
         secureCookies: deps.secureCookies,
         limits,
-        erasure: { presence, challenges, tournaments },
+        erasure: { presence, challenges, tournaments, analysis },
         erasures,
         ladder,
+        analysis,
         now: deps.now ?? Date.now,
     });
     if (deps.reportForm === true) registerReportApi(app, { query, limits });
@@ -288,6 +317,7 @@ export async function buildApp(deps: AppDeps): Promise<BuiltApp> {
     const admin = createAdminHandler({
         query,
         presence,
+        analysis,
         games,
         challenges,
         tournaments,
@@ -354,6 +384,7 @@ export async function buildApp(deps: AppDeps): Promise<BuiltApp> {
             return reply.code(409).send({ error: `the bot is in a live game`, code: `in_game` });
         }
         presence.close(botId);
+        analysis.withdraw(botId);
         challenges.withdrawFor(botId);
         tournaments.withdraw(botId, `deleted`);
         query.transaction((tx) => deleteBotByPolicy(tx, botId));

@@ -298,7 +298,7 @@ describe('WelcomeScreen', () => {
         });
         expect(screen.queryByRole(`button`, { name: `Create account` })).toBe(null);
         expect(document.querySelector(`.skeleton`)).toBeTruthy();
-        held.answer?.({ kind: `user`, name: `quinn`, rating: 1503, provisional: false, discord: null, liveGames: [] });
+        held.answer?.({ kind: `user`, name: `quinn`, rating: 1503, provisional: false, discord: null, liveGames: [], analysisOptOut: false, analysisLeft: { positions: 300, games: 10 } });
         expect(await screen.findByText(`Creating this account signs quinn out.`)).toBeTruthy();
         expect(screen.getByRole(`button`, { name: `Create account` })).toBeTruthy();
     });
@@ -346,7 +346,7 @@ describe('WelcomeScreen', () => {
     });
 
     it('give way to the profile of someone already signed in with no sign-up waiting, never saying expired', async () => {
-        serve(refused(410, `signup_expired`), undefined, { kind: `user`, name: `mira-hex`, rating: 1000, provisional: true, discord: null, liveGames: [] });
+        serve(refused(410, `signup_expired`), undefined, { kind: `user`, name: `mira-hex`, rating: 1000, provisional: true, discord: null, liveGames: [], analysisOptOut: false, analysisLeft: { positions: 300, games: 10 } });
         render(<WelcomeScreen />);
         await waitFor(() => {
             expect(document.querySelector(`.skeleton`)).toBeTruthy();
@@ -361,7 +361,7 @@ describe('WelcomeScreen', () => {
     });
 
     it('tell someone signed in that creating another account signs them out', async () => {
-        serve(ok, undefined, { kind: `user`, name: `quinn`, rating: 1503, provisional: false, discord: null, liveGames: [] });
+        serve(ok, undefined, { kind: `user`, name: `quinn`, rating: 1503, provisional: false, discord: null, liveGames: [], analysisOptOut: false, analysisLeft: { positions: 300, games: 10 } });
         meStore.start();
         render(<WelcomeScreen />);
         expect(await screen.findByText(`Creating this account signs quinn out.`)).toBeTruthy();
@@ -374,7 +374,7 @@ describe('WelcomeScreen', () => {
             vi.fn((url: string, init?: RequestInit) => {
                 if (url === `/api/me`) return Promise.resolve(new Response(JSON.stringify(me)));
                 if (init?.method === `POST`) {
-                    me = { kind: `user`, name: `mira-hex`, rating: 1000, provisional: true, discord: null, liveGames: [] };
+                    me = { kind: `user`, name: `mira-hex`, rating: 1000, provisional: true, discord: null, liveGames: [], analysisOptOut: false, analysisLeft: { positions: 300, games: 10 } };
                     return Promise.resolve(refused(410, `signup_expired`)());
                 }
                 return Promise.resolve(ok());
@@ -392,7 +392,7 @@ describe('WelcomeScreen', () => {
     });
 
     it('end the sign-up of someone signed in whose own sign-up expired, pressing once while it checks', async () => {
-        const quinn: Me = { kind: `user`, name: `quinn`, rating: 1503, provisional: false, discord: null, liveGames: [] };
+        const quinn: Me = { kind: `user`, name: `quinn`, rating: 1503, provisional: false, discord: null, liveGames: [], analysisOptOut: false, analysisLeft: { positions: 300, games: 10 } };
         const posts: string[] = [];
         const pending: { answer: (() => void) | null } = { answer: null };
         let meReads = 0;

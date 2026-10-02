@@ -1,10 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import {
     canonicalKey,
+    containmentProbe,
+    containmentTarget,
     containsPosition,
     originSetup,
     otherPlayer,
     playTurn,
+    targetContains,
     type Setup,
     type Stone,
 } from '../src';
@@ -104,5 +107,54 @@ describe('containsPosition', () => {
 
     it('refuses an inner board larger than the outer one', () => {
         expect(containsPosition(stones(0, [0, 0]), stones(0, [0, 0], [1, 0]))).toBe(false);
+    });
+});
+
+describe('targetContains', () => {
+    const contains = (outer: readonly Stone[], inner: readonly Stone[]) => targetContains(containmentTarget(outer), containmentProbe(inner));
+
+    it('finds an earlier position of a game, or one turned, mirrored, swapped, or shifted, inside a later one', () => {
+        const rng = createRng(0xc0de);
+        for (let sample = 0; sample < 80; sample += 1) {
+            const later = randomGame(rng, 4 + rng.int(30));
+            const earlier = later.stones.slice(0, 1 + rng.int(later.stones.length));
+            const { map } = randomMap(rng);
+            expect(contains(later.stones, earlier.map(map))).toBe(true);
+            expect(contains(later.stones.map(map), earlier)).toBe(true);
+        }
+    });
+
+    it('answers as containsPosition does on boards that share stones but not shapes', () => {
+        const rng = createRng(0xbeef);
+        let refused = 0;
+        for (let sample = 0; sample < 200; sample += 1) {
+            const outer = randomGame(rng, 3 + rng.int(25)).stones;
+            const other = randomGame(rng, 1 + rng.int(6)).stones;
+            const inner = rng.int(2) === 0 ? other : [...outer.slice(0, rng.int(outer.length)), ...other.slice(1)];
+            const expected = containsPosition(outer, inner);
+            if (!expected) refused += 1;
+            expect(contains(outer, inner), JSON.stringify({ outer, inner })).toBe(expected);
+        }
+        expect(refused).toBeGreaterThan(50);
+    });
+
+    it('holds for a position inside itself and an empty one, and refuses a larger one or one whose owners no swap repairs', () => {
+        const board = [...stones(0, [0, 0], [1, 1]), ...stones(1, [2, -1])];
+        expect(contains(board, board)).toBe(true);
+        expect(contains(board, [])).toBe(true);
+        expect(contains(stones(0, [0, 0]), stones(0, [0, 0], [1, 0]))).toBe(false);
+        const outer = stones(0, [0, 0], [1, 0], [5, 5]);
+        expect(contains(outer, [...stones(0, [0, 0]), ...stones(1, [1, 0])])).toBe(false);
+        expect(contains(outer, stones(1, [0, 0], [1, 0]))).toBe(true);
+    });
+
+    it('finds a probe whose anchor sits in a crowd, a ring, or alone', () => {
+        const ring = stones(0, [1, 0], [1, -1], [0, -1], [-1, 0], [-1, 1], [0, 1]);
+        const crowded = [...stones(1, [0, 0]), ...ring, ...stones(1, [5, 0], [6, 0])];
+        expect(contains(crowded, [...stones(1, [0, 0]), ...ring])).toBe(true);
+        expect(contains(crowded.map(swap), [...stones(1, [0, 0]), ...ring])).toBe(true);
+        expect(contains(crowded, [...stones(0, [0, 0]), ...ring])).toBe(false);
+        expect(contains(crowded, stones(1, [10, 10], [11, 10]))).toBe(true);
+        expect(contains(crowded, stones(1, [10, 10], [13, 10]))).toBe(false);
     });
 });

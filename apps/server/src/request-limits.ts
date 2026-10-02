@@ -3,6 +3,7 @@ import {
     archiveReadLimit,
     accountExportLimit,
     botManagementLimit,
+    positionRequestLimit,
     clientRequestLimit,
     discordExchangeLimit,
     engineDialLimit,
@@ -62,6 +63,7 @@ export interface LimitTable {
     reportPrefix: RateLimit;
     reportGlobal: RateLimit;
     accountExport: RateLimit;
+    positionRequest: RateLimit;
 }
 
 export const defaultLimits: LimitTable = {
@@ -82,13 +84,14 @@ export const defaultLimits: LimitTable = {
     reportPrefix: reportPrefixLimit,
     reportGlobal: reportGlobalLimit,
     accountExport: accountExportLimit,
+    positionRequest: positionRequestLimit,
 };
 
 /** The limits a client is held to for one kind of anonymous act. */
 export type ClientLimit = `guestMint` | `signInStart` | `report`;
 
 /** The limits a credential is held to, each spent once the credential is known. */
-export type CredentialLimit = `principal` | `botManagement` | `streamOpen` | `engineDial` | `accountExport`;
+export type CredentialLimit = `principal` | `botManagement` | `streamOpen` | `engineDial` | `accountExport` | `positionRequest`;
 
 /** The part of the limits a route handler spends after authentication. */
 export interface CredentialLimits {
@@ -139,6 +142,7 @@ export class RequestLimits {
             streamOpen: new RateBuckets(deps.table.streamOpen, deps.now),
             engineDial: new RateBuckets(deps.table.engineDial, deps.now),
             accountExport: new RateBuckets(deps.table.accountExport, deps.now),
+            positionRequest: new RateBuckets(deps.table.positionRequest, deps.now),
         };
         this.#perClient = {
             guestMint: new RateBuckets(deps.table.guestMint, deps.now, clientKeyCap),

@@ -72,6 +72,7 @@ describe('fetchBots', () => {
                 provisional: false,
                 liveGames: 0,
                 levels: null,
+                analyzer: null,
                 about: `clean-room engine`,
                 version: `0.3.1`,
                 repoUrl: `https://github.com/quinn/sealbot`,

@@ -103,7 +103,7 @@ describe(`POST ${signupPath}`, () => {
         const cleared = response.cookies.find((entry) => entry.name === `hexo_arena_signup`);
         expect(cleared?.value).toBe(``);
         const me = meSchema.parse((await world.app.inject({ method: `GET`, url: mePath, cookies: { hexo_arena_session: session?.value ?? `` } })).json());
-        expect(me).toEqual({ kind: `user`, name: `Mira`, rating: 1000, provisional: true, discord: { username: `mira.hex`, displayName: `Mira` }, liveGames: [] });
+        expect(me).toEqual({ kind: `user`, name: `Mira`, rating: 1000, provisional: true, discord: { username: `mira.hex`, displayName: `Mira` }, liveGames: [], analysisOptOut: false, analysisLeft: { positions: 300, games: 10 } });
         const query = createQuery(world.sqlite);
         expect(query.select({ discordId: users.discordId, name: users.name }).from(users).all()).toEqual([{ discordId: `9`, name: `Mira` }]);
         expect(query.select().from(pendingSignups).all()).toHaveLength(0);

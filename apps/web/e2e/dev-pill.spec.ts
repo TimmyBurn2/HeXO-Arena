@@ -182,7 +182,7 @@ test('on a phone, the Discord button in a guest\'s sheet hands over to the panel
 });
 
 test('the panel leaves with the frame when the game takes the screen', async ({ page }) => {
-    await visit(page, `/bots`, { me: { kind: `user`, name: `quinn`, rating: 1503, provisional: false, discord: null, liveGames: [] } });
+    await visit(page, `/bots`, { me: { kind: `user`, name: `quinn`, rating: 1503, provisional: false, discord: null, liveGames: [], analysisOptOut: false, analysisLeft: { positions: 300, games: 10 } } });
     await pill(page).click();
     await expect(panel(page)).toBeVisible();
     await page.evaluate(() => {
@@ -202,7 +202,7 @@ test('the first sign-in goes on to the name page', async ({ page }) => {
 });
 
 test('a guest session replaces the account, and sign out ends it', async ({ page }) => {
-    const me: Me = { kind: `user`, name: `ana`, rating: 1220, provisional: true, discord: null, liveGames: [] };
+    const me: Me = { kind: `user`, name: `ana`, rating: 1220, provisional: true, discord: null, liveGames: [], analysisOptOut: false, analysisLeft: { positions: 300, games: 10 } };
     await visit(page, `/bots`, { me });
     await expect(pill(page)).toHaveText(`dev: ana`);
     await pill(page).click();
@@ -220,7 +220,7 @@ test('an empty list says to run the seed', async ({ page }) => {
 });
 
 test('the game keeps its board to itself', async ({ page }) => {
-    const me: Me = { kind: `user`, name: `quinn`, rating: 1503, provisional: false, discord: null, liveGames: [] };
+    const me: Me = { kind: `user`, name: `quinn`, rating: 1503, provisional: false, discord: null, liveGames: [], analysisOptOut: false, analysisLeft: { positions: 300, games: 10 } };
     const answered = page.waitForResponse((response) => response.url().endsWith(`/api/dev/accounts`));
     await visit(page, `/game/running`, { me });
     await answered;

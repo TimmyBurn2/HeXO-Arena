@@ -9,7 +9,7 @@ const sheetQuery = `(max-width: 30rem)`;
 // not one.
 const controls = `a[href], button, input, select, textarea, summary, label, [tabindex]:not([tabindex="-1"])`;
 
-type PanelId = `settings` | `identity` | `games-filters`;
+type PanelId = `settings` | `identity` | `games-filters` | `analysis-settings`;
 type OpenMode = `popover` | `sheet`;
 
 /** Whether a top-bar panel is shut, or open and in which form. */

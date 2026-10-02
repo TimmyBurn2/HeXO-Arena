@@ -9,6 +9,7 @@ import {
 } from '@hexo-arena/contract';
 import type { AdminHandler } from './admin-socket';
 import { recentAdminActions, recordAdminAction } from './admin-store';
+import type { AnalysisService } from './analysis-service';
 import { eraseUser, type ErasureJournal } from './erasure';
 import {
     banUser,
@@ -38,6 +39,7 @@ import { createTournament, openTournaments } from './tournament-store';
 export interface AdminDeps {
     query: Query;
     presence: PresenceRegistry;
+    analysis: Pick<AnalysisService, `withdraw` | `delete`>;
     games: GameRegistry;
     challenges: ChallengeRegistry;
     tournaments: Pick<TournamentScheduler, `cancel` | `withdraw`>;
@@ -289,6 +291,7 @@ export function createAdminHandler(deps: AdminDeps): AdminHandler {
                         // Its stream and live games run on; only what is
                         // still pending leaves with it.
                         live: (botId) => {
+                            deps.analysis.withdraw(botId);
                             deps.challenges.withdrawFor(botId);
                             deps.tournaments.withdraw(botId, `delisted`);
                         },
@@ -306,6 +309,7 @@ export function createAdminHandler(deps: AdminDeps): AdminHandler {
                         live: (userId) => {
                             for (const botId of botIdsOf(deps.query, userId)) {
                                 deps.presence.close(botId);
+                                deps.analysis.withdraw(botId);
                                 deps.challenges.withdrawFor(botId);
                                 deps.tournaments.withdraw(botId, `banned`);
                             }
@@ -335,6 +339,7 @@ export function createAdminHandler(deps: AdminDeps): AdminHandler {
                         notFound: `no such bot`,
                         live: (botId) => {
                             deps.presence.close(botId);
+                            deps.analysis.withdraw(botId);
                         },
                     }),
                 );
@@ -370,6 +375,10 @@ export function createAdminHandler(deps: AdminDeps): AdminHandler {
                             return { response: notFound(`no such report`) };
                     }
                 });
+            case `delete-analysis`:
+                return audited(deps, request, request.id, () => ({
+                    response: deps.analysis.delete(request.id) ? done(`deleted analysis ${request.id}`) : notFound(`no such analysis`),
+                }));
         }
     };
 }

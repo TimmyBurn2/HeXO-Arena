@@ -1,6 +1,7 @@
 import {
     analysisStoneCap,
     analysisTreeNodeCap,
+    positionReadingsPerUserDay,
     botCapPerUser,
     closedReportMonths,
     botConcurrentGameCap,
@@ -41,6 +42,18 @@ const countFormat = new Intl.NumberFormat(`en-US`);
 const counted = (count: number) => countFormat.format(count);
 // A wait the server named, in seconds under a minute and whole minutes, rounded up, past it.
 const inWait = (seconds: number) => (seconds < 60 ? `${String(seconds)} s` : inMinutes(Math.ceil(seconds / 60)));
+// A wait in running text, every unit spelled out: "2 hours 59 minutes", "1 day 23 hours".
+function spelledWait(seconds: number): string {
+    if (seconds < 60) return `under a minute`;
+    const minutes = Math.floor((seconds % 3_600) / 60);
+    const spelled = `${String(minutes)} ${plural(minutes, `minute`, `minutes`)}`;
+    if (seconds < 3_600) return spelled;
+    const hours = Math.floor((seconds % 86_400) / 3_600);
+    const spelledHours = `${String(hours)} ${plural(hours, `hour`, `hours`)}`;
+    if (seconds < 86_400) return `${spelledHours}${minutes === 0 ? `` : ` ${spelled}`}`;
+    const days = Math.floor(seconds / 86_400);
+    return `${String(days)} ${plural(days, `day`, `days`)}${hours === 0 ? `` : ` ${spelledHours}`}`;
+}
 
 /** A link to each legal page the deployment has; a page it lacks is null, and its words go with it. */
 export type LegalSlots = Readonly<Record<LegalPage, Slot | null>>;
@@ -302,6 +315,8 @@ export const en = {
         clock: `Clock`,
         kind: `Who played`,
         opening: `Opening`,
+        analysis: `Analysis`,
+        analyzed: `Analyzed`,
         before: `Before`,
         any: `Any`,
         results: { won: `Won`, lost: `Lost`, none: `No winner` },
@@ -315,6 +330,7 @@ export const en = {
             clocks: { turn: `turn clock`, match: `match clock`, unlimited: `unlimited` },
             kinds: { 'bot-bot': `bot vs bot`, 'human-bot': `human vs bot`, 'guest-bot': `guest vs bot` },
             opening: (stones: number) => (stones === 1 ? `origin only` : `${String(stones)}-stone opening`),
+            analyzed: `analyzed`,
             before: (date: string) => `before ${date}`,
         },
         chipsLabel: `Active filters`,
@@ -327,6 +343,7 @@ export const en = {
         versus: `vs`,
         voided: `voided`,
         unrated: `unrated`,
+        analyses: (count: number) => `${String(count)} ${plural(count, `analysis`, `analyses`)}`,
         turns: (count: number) => `${String(count)} ${plural(count, `turn`, `turns`)}`,
         count: (count: number) => `${counted(count)} ${plural(count, `game`, `games`)}`,
         pageOf: (page: number, pages: number, count: number) => `Page ${String(page)} of ${String(pages)}; ${counted(count)} ${plural(count, `game`, `games`)}`,
@@ -466,6 +483,10 @@ export const en = {
             dataNote: `Everything stored about your account and your bots, their games included, as one file.`,
             download: `Download my data`,
             downloadFailed: `The download did not start; try again`,
+            analysis: `Public analysis`,
+            optOut: `Leave my games out of public analysis`,
+            optOutNote: `Anyone signed in can have your finished games read by an analyzer, and the readings are public. With this on, no one can; readings already made are deleted and the bots' own views of your games are hidden. The analysis board still reads positions for you.`,
+            optOutFailed: `The setting did not change; try again`,
             delete: `Delete account`,
             deleteNote: (name: string) =>
                 `Your sessions end and ${name} becomes free for anyone. Your games stay in the public record under "deleted player", linked to nothing. Each bot of yours that won or lost a game against an account or a bot, or played in a tournament, stays there too under "deleted bot", with all its games, guest games included; your other bots are deleted with their games. This cannot be undone; download your data first to keep a copy.`,
@@ -766,7 +787,82 @@ export const en = {
                 rich`Play turns for both sides from the origin, set up any position, paste HTTTX notation, or open a finished game from ${games(`Games`)}.`,
         },
         keys: (key: Slot): ReactNode =>
-            rich`${key(`Left`)} ${key(`Right`)} step through the turns, ${key(`Up`)} ${key(`Down`)} switch variations, ${key(`Home`)} ${key(`End`)} go to the ends, and ${key(`s`)} sets up a position. On the board, reached with ${key(`Tab`)}, ${key(`arrows`)}, ${key(`q`)} and ${key(`e`)} move between cells and ${key(`Enter`)} marks a stone; a paste there opens Import.`,
+            rich`${key(`Left`)} ${key(`Right`)} step through the turns, ${key(`Up`)} ${key(`Down`)} switch variations, ${key(`Home`)} ${key(`End`)} go to the ends, ${key(`a`)} asks the analyzer for this position, and ${key(`s`)} sets up a position. On the board, reached with ${key(`Tab`)}, ${key(`arrows`)}, ${key(`q`)} and ${key(`e`)} move between cells and ${key(`Enter`)} marks a stone; a paste there opens Import.`,
+        reading: {
+            analyze: `Analyze`,
+            readings: `Readings`,
+            settings: `Analysis settings`,
+            signedOut: `Sign in to ask analyzers; the board works without it.`,
+            off: `Turn on Analyze to have each position you visit read.`,
+            won: `This line is won; there is nothing left to read.`,
+            tooMany: (count: number) => `This position holds ${String(count)} stones; an analyzer reads at most ${String(analysisStoneCap)}.`,
+            tooFar: `A stone lies too far from the origin for an analyzer to read.`,
+            any: `Any online analyzer`,
+            anyOne: `an analyzer`,
+            // "0.9, by tom; 2 s a position", leaving out what the bot does not say.
+            by: (version: string | null, owner: string | null, seconds: number) => {
+                const who = [version, owner === null ? null : `by ${owner}`].filter((part) => part !== null);
+                return [...(who.length === 0 ? [] : [who.join(`, `)]), `${String(seconds)} s a position`].join(`; `);
+            },
+            notReading: `not reading now`,
+            toMove: (state: string, side: string) => `${state}; ${side} to move`,
+            readIn: (ms: number) => `Read in ${(ms / 1000).toFixed(1)} s`,
+            readBefore: `Read before`,
+            reading: (name: string) => `${name} is reading`,
+            anyReading: `An analyzer is reading`,
+            waiting: (name: string, ahead: number) =>
+                ahead === 0 ? `Waiting for ${name}; yours is next` : `Waiting for ${name}; ${String(ahead)} ${plural(ahead, `position`, `positions`)} ahead of yours`,
+            waitingNote: (name: string, seconds: number) => `It goes to ${name} when it is free, in about ${String(seconds)} s.`,
+            cells: (side: string, cells: readonly string[]) => `${side}: ${cells.join(` `)}`,
+            play: (letter: string, value: string, cells: string) => `Play line ${letter}: ${value}, ${cells}`,
+            askAgain: `Ask again`,
+            // A wait a refusal names: seconds under a minute, every unit spelled out past it.
+            wait: (seconds: number) => (seconds < 60 ? `${String(seconds)} s` : spelledWait(seconds)),
+            refusals: {
+                live_position: { title: `This position is in a live game`, note: `Analysis opens once that game ends; the board still works.` },
+                seated: { title: `You are playing a live game`, note: `Analyzers read for you again once your game ends; the board still works.` },
+                analysis_busy: { title: `The analyzers are busy`, note: (wait: string) => `Every queue is full; ask again in ${wait}.` },
+                rate_limited: { title: `Too many readings asked for at once`, note: (wait: string) => `Ask again in ${wait}.` },
+                unavailable: { title: `The reading did not go through`, note: `Ask again; the board still works.` },
+            },
+            limit: `Today's readings are spent`,
+            limitNote: (wait: string) =>
+                `You may have ${String(positionReadingsPerUserDay)} positions read a day; more in ${wait}. Positions read before still show.`,
+            noneOnline: `No analyzer is online`,
+            noneOnlineNote: `Bots that read positions show up in Analysis settings once one connects.`,
+            offline: (name: string) => `${name} is not reading now`,
+            offlineNote: `Pick another analyzer in Analysis settings, or ask again later.`,
+            failed: (name: string) => `${name} did not finish this position`,
+            failedAny: `The analyzer did not finish this position`,
+            failures: {
+                timeout: `It ran out of time.`,
+                illegal: `It named a turn the rules do not allow.`,
+                no_evaluation: `It sent no evaluation.`,
+                inconsistent: `Its evaluation contradicted the board.`,
+                disconnect: `It disconnected.`,
+                protocol: `It answered in a way the site cannot read.`,
+                expired: `No analyzer took it in time.`,
+            },
+        },
+        settings: {
+            title: `Analysis settings`,
+            close: `Close analysis settings`,
+            analyzer: `Analyzer`,
+            anyNote: `the first one free`,
+            analyzerNote: (owner: string | null, maxSeconds: number, lines: number) =>
+                `${owner === null ? `` : `by ${owner}; `}up to ${String(maxSeconds)} s a position; ${String(lines)} ${plural(lines, `line`, `lines`)}`,
+            noneOnline: `No analyzer is online right now.`,
+            failed: `The analyzers did not load`,
+            lines: `Lines`,
+            time: `Time`,
+            seconds: (seconds: number) => `${String(seconds)} s`,
+            capped: (name: string, seconds: number) => `${name} reads up to ${String(seconds)} s a position.`,
+            boardLines: `Lines on the board`,
+            left: (left: number) =>
+                left === 0
+                    ? `No positions left today; the count starts again at 00:00 UTC. Stored readings and positions read before cost nothing.`
+                    : `${String(left)} of ${String(positionReadingsPerUserDay)} positions left today. Stored readings and positions read before cost nothing.`,
+        },
         tree: {
             label: `Moves`,
             opening: (last: number) => (last === 0 ? `op 0` : `op 0-${String(last)}`),
@@ -977,18 +1073,7 @@ export const en = {
             const days = Math.floor(seconds / 86_400);
             return `${String(days)} ${plural(days, `day`, `days`)}${hours === 0 ? `` : ` ${String(hours)} h`}`;
         },
-        // The same wait in running text, every unit spelled out: "2 hours 59 minutes", "1 day 23 hours".
-        untilInProse: (seconds: number) => {
-            if (seconds < 60) return `under a minute`;
-            const minutes = Math.floor((seconds % 3_600) / 60);
-            const spelled = `${String(minutes)} ${plural(minutes, `minute`, `minutes`)}`;
-            if (seconds < 3_600) return spelled;
-            const hours = Math.floor((seconds % 86_400) / 3_600);
-            const spelledHours = `${String(hours)} ${plural(hours, `hour`, `hours`)}`;
-            if (seconds < 86_400) return `${spelledHours}${minutes === 0 ? `` : ` ${spelled}`}`;
-            const days = Math.floor(seconds / 86_400);
-            return `${String(days)} ${plural(days, `day`, `days`)}${hours === 0 ? `` : ` ${spelledHours}`}`;
-        },
+        untilInProse: spelledWait,
         ago: (seconds: number) => {
             if (seconds < 60) return `just now`;
             if (seconds < 3_600) return `${String(Math.floor(seconds / 60))} min ago`;

@@ -19,6 +19,7 @@ import {
     signInStartLimit,
     signInStartPrefixLimit,
     streamOpenLimit,
+    positionRequestLimit,
 } from '@hexo-arena/contract';
 import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -179,6 +180,7 @@ describe('request limits', () => {
             reportPrefix: reportPrefixLimit,
             reportGlobal: reportGlobalLimit,
             accountExport: accountExportLimit,
+            positionRequest: positionRequestLimit,
         });
     });
 
@@ -230,6 +232,7 @@ describe('request limits', () => {
             'GET /api/leaderboard': `public`,
             'GET /api/me': `public`,
             'DELETE /api/me': `principal`,
+            'PATCH /api/me': `principal`,
             'GET /api/me/export': `principal`,
             'POST /api/auth/logout': `public`,
             'POST /api/auth/guest': `public`,
@@ -261,6 +264,10 @@ describe('request limits', () => {
             'POST /api/games/:gameId/resign': `principal`,
             'GET /api/bot/game/:gameId/socket': `engine`,
             'POST /api/bot/game/:gameId/resign': `principal`,
+            'POST /api/analysis/positions': `principal`,
+            'POST /api/games/:gameId/analyses': `principal`,
+            'GET /api/games/:gameId/analyses': `public`,
+            'GET /api/bot/analysis/socket': `engine`,
             'GET /': `shell`,
             'GET /ladder': `shell`,
             'GET /play': `shell`,

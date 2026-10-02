@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { z } from 'zod';
+import { devAnalyzer } from './analyzer';
 import { ApiError, ArenaClient } from './client';
 import { hostBots, message, type HostedBot } from './host';
 import { devLevels } from './levels';
@@ -15,6 +16,9 @@ const devAccepts: Accepts = { turnMs: [5_000, 300_000], match: true, unlimited: 
 const about = `Plays random turns next to the stones; a local development opponent.`;
 
 const challengeClock: TimeControl = { mode: `turn`, turnTimeMs: 20_000 };
+
+// The one dev bot that also reads positions, so the analysis board has a reader.
+const analyzerBot = `devbot-a`;
 
 // An owner's bots may not challenge each other, so every bot gets an owner
 // of its own.
@@ -91,7 +95,7 @@ export async function startDevBots(options: DevBotsOptions): Promise<DevBots> {
             throw error;
         }
         const token = await client.claimBot(cookie, name);
-        await client.declare(token, { accepts: devAccepts, about, levels: devLevels });
+        await client.declare(token, { accepts: devAccepts, about, levels: devLevels, analyzer: name === analyzerBot ? devAnalyzer : null });
         return token;
     }
 
@@ -101,7 +105,7 @@ export async function startDevBots(options: DevBotsOptions): Promise<DevBots> {
         owners.set(name, `devowner-${seat}`);
         const token = await claim(`devowner-${seat}`, name);
         tokens.set(name, token);
-        devBots.push({ name, strategy: `random`, levels: devLevels, token });
+        devBots.push({ name, strategy: `random`, levels: devLevels, ...(name === analyzerBot ? { analyzer: devAnalyzer } : {}), token });
     }
     saveTokens(options.tokenFile, tokens);
 
