@@ -7,7 +7,9 @@ import {
     valueWords,
     type AnalysisList,
     type AnalysisTurn,
+    type AnalyzerValues,
     type AxialCoord,
+    type BoardFacts,
     type GameCell,
     type HtttxPositionEvaluation,
     type Judgment,
@@ -15,7 +17,8 @@ import {
     type OwnAnalysis,
     type Side,
 } from '@hexo-arena/contract';
-import { positionKey, winner, type Setup } from '@hexo-arena/rules';
+import { otherPlayer, positionKey, sixesBlockable, winner, winsThisTurn, type Setup } from '@hexo-arena/rules';
+import { afterWords, type AfterReading } from './reading-view';
 import { botAuthor, botSourceId, readingLineOf, type Reading, type ReadingAsk, type ReadingLine } from './sources';
 
 /** A finished game's main line, as its readings are laid against it. */
@@ -52,6 +55,14 @@ export function setupBefore(line: GameLine, turn: number): Setup {
         stones: line.cells.slice(0, Math.max(1, 2 * turn - 1)).map((cell) => ({ x: cell.x, y: cell.y, player: playerOf(cell.side) })),
         toMove: playerOf(moverOf(turn)),
     };
+}
+
+/** What the board says around a played turn, as judging reads it under every analyzer. */
+export function boardFactsOf(line: GameLine, turn: number): BoardFacts {
+    const { stones, toMove } = setupBefore(line, turn);
+    const opponent = otherPlayer(toMove);
+    const after = [...stones, ...turnCells(line, turn).map((cell) => ({ ...cell, player: toMove }))];
+    return { sixOnBoard: winsThisTurn(stones, toMove), sixLeft: winsThisTurn(after, opponent), sixesUnblockable: !sixesBlockable(stones, opponent) };
 }
 
 /** What one reading says of one played turn. */
@@ -112,11 +123,13 @@ export function plotValue(evaluation: HtttxPositionEvaluation): number {
 /**
  * A community analyzer's reading of a game, from the positions it has read so far.
  * Each turn's value after it is the played turn's own evaluation where the reading lists it,
- * else the best line's at the next position; a turn that completed six is its mover's win.
+ * else the best line's at the next position, a forced win there counting that line's own turn;
+ * a turn that completed six is its mover's win.
  * The board after the opening is the first point, so the graph starts where play does.
- * Turns are judged only when `judged`, as a reading still running may yet change its mind.
+ * Turns are judged only when `judged`, as a reading still running may yet change its mind,
+ * by the board's facts and the reading's forced wins, and by its value drops on the `values` its analyzer declared.
  */
-export function communityReading(line: GameLine, turns: readonly AnalysisTurn[], judged: boolean): GameReading {
+export function communityReading(line: GameLine, turns: readonly AnalysisTurn[], judged: boolean, values: AnalyzerValues): GameReading {
     const byTurn = linesByTurn(turns);
     const reads = new Map<number, TurnRead>();
     const points: GraphPoint[] = [];
@@ -128,11 +141,16 @@ export function communityReading(line: GameLine, turns: readonly AnalysisTurn[],
         const played = turnCells(line, turn);
         const completesSix = line.sixAtEnd && turn === line.lastTurn;
         const nextBest = byTurn.get(turn + 1)?.[0]?.evaluation ?? null;
-        const after = completesSix ? null : (options.find((option) => sameCells(option.cells, played))?.evaluation ?? nextBest);
+        const listed = options.find((option) => sameCells(option.cells, played))?.evaluation;
+        const source: AfterReading | null = completesSix ? null : listed !== undefined ? { kind: `played`, evaluation: listed } : nextBest === null ? null : { kind: `next`, evaluation: nextBest, mover: moverOf(turn + 1) };
+        const after = source?.evaluation ?? null;
         // A six is known from the board, but it joins the graph only once the reading reaches it.
         const read = completesSix ? options.length > 0 : after !== null;
-        const judgment = judged ? judgeTurn({ turn, side, cells: played, opening: false, completesSix }, { before: options, nextBest }) : null;
-        reads.set(turn, { turn, side, options, after, completesSix, value: read ? afterWords(after, side, completesSix) : null, judgment });
+        // The board is read only for a turn the reading can judge, as long games make it the costliest part.
+        const judgeable = judged && !completesSix && options.length > 0 && after !== null;
+        const judgment = judgeable ? judgeTurn({ turn, side, cells: played, opening: false, completesSix }, { before: options, nextBest, board: boardFactsOf(line, turn), values }) : null;
+        const value = !read ? null : completesSix ? sixWords(side) : source === null ? null : afterWords(source);
+        reads.set(turn, { turn, side, options, after, completesSix, value, judgment });
         if (completesSix && read) points.push({ turn, value: side === `x` ? 1 : -1, forced: side, series: null });
         else if (after !== null) points.push(pointOf(turn, after, null));
     }
@@ -153,7 +171,8 @@ export function ownReading(line: GameLine, views: readonly OwnAnalysis[]): GameR
             const options = turn.lines.map(readingLineOf);
             const after = options[0]?.evaluation ?? null;
             const completesSix = line.sixAtEnd && turn.turn === line.lastTurn;
-            reads.set(turn.turn, { turn: turn.turn, side: view.side, options, after, completesSix, value: afterWords(after, view.side, completesSix), judgment: null });
+            const value = completesSix ? sixWords(view.side) : after === null ? null : afterWords({ kind: `played`, evaluation: after });
+            reads.set(turn.turn, { turn: turn.turn, side: view.side, options, after, completesSix, value, judgment: null });
             if (after !== null) points.push(pointOf(turn.turn, after, view.side));
         }
     }
@@ -227,9 +246,8 @@ function pointOf(turn: number, evaluation: HtttxPositionEvaluation, series: Side
     return { turn, value: plotValue(evaluation), forced: forcedWinner(evaluation), series };
 }
 
-function afterWords(after: HtttxPositionEvaluation | null, side: Side, completesSix: boolean): string | null {
-    if (completesSix) return valueWords({}, { kind: `line`, mover: side, completesSix: true });
-    return after === null ? null : valueWords(after, { kind: `board` });
+function sixWords(side: Side): string | null {
+    return valueWords({}, { kind: `line`, mover: side, completesSix: true });
 }
 
 function marksOf(reads: ReadonlyMap<number, TurnRead>, points: readonly GraphPoint[]): { marks: GraphMark[]; counts: MarkCounts } {

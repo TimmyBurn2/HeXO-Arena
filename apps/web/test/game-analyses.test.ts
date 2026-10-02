@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { analysisTurnCap, type AnalysisList, type GameCell } from '@hexo-arena/contract';
+import { analysisTurnCap, undeclaredValues, type AnalysisList, type GameCell } from '@hexo-arena/contract';
 import { gameLineOf } from '../src/analysis/game-readings';
 import { analysesStep, headOf, initialAnalyses, ownChoiceId, refusalOf, underWay, type AnalysesState } from '../src/game/game-analyses';
 import { community, judgedCells, ownViews } from './judged-game';
@@ -44,14 +44,14 @@ describe('the head a game\'s readings make', () => {
     });
 
     it('once one is done, offer the done ones in order and say nothing more, a failure included', () => {
-        const second = community({ analysisId: `a_4`, analyzer: { name: `driftwood`, version: null, ownerName: `mika` } });
+        const second = community({ analysisId: `a_4`, analyzer: { name: `driftwood`, version: null, ownerName: `mika`, values: undeclaredValues } });
         const head = headOf(list([community(), second, failed, ...ownViews]), line);
         expect(head.choices.map((choice) => (choice.kind === `community` ? choice.name : choice.id))).toEqual([`kestrel`, `driftwood`, ownChoiceId]);
         expect(head.card).toBe(null);
     });
 
     it('keep a reading under way beside the done ones', () => {
-        expect(headOf(list([community(), { ...running, analyzer: { name: `driftwood`, version: null, ownerName: null } }]), line).card).toMatchObject({ kind: `running` });
+        expect(headOf(list([community(), { ...running, analyzer: { name: `driftwood`, version: null, ownerName: null, values: undeclaredValues } }]), line).card).toMatchObject({ kind: `running` });
     });
 
     it('with an opt-out, offer nothing and say so', () => {

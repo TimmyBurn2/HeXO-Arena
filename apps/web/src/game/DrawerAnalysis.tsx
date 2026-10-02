@@ -1,6 +1,7 @@
 import { useEffect, useId, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import type { GamePlayers, JudgmentSeverity, Side } from '@hexo-arena/contract';
 import { GameGraph } from '../analysis/GameGraph';
+import { verdictInLine } from '../analysis/explain';
 import { JudgmentChip } from '../analysis/Judgment';
 import { useAnalysisSettings } from '../analysis/analysis-settings';
 import type { GameLine, GameReading } from '../analysis/game-readings';
@@ -212,13 +213,16 @@ function graphLabel(choice: ReadingChoice, last: number): string {
     return choice.kind === `own` ? words.ownGraph(last) : words.graph(choice.name, last);
 }
 
-/** Per side, its marks by severity: per game only, never a share or a rate. */
-export function Marks({ view, players }: { view: GameReading; players: GamePlayers }) {
+/**
+ * Per side, its marks by severity: per game only, never a share or a rate.
+ * As a `grid`, every severity keeps its column, each count a number beside its mark and a zero dimmed.
+ */
+export function Marks({ view, players, grid = false }: { view: GameReading; players: GamePlayers; grid?: boolean }) {
     return (
-        <dl className="dr-marks">
+        <dl className={grid ? `dr-marks dr-marks-grid` : `dr-marks`}>
             {sides.map((side) => {
                 const counts = view.counts[side];
-                const shown = severities.filter((severity) => counts[severity] > 0);
+                const shown = grid ? severities : severities.filter((severity) => counts[severity] > 0);
                 return (
                     <div key={side} className="dr-marks-row">
                         <dt>
@@ -228,9 +232,16 @@ export function Marks({ view, players }: { view: GameReading; players: GamePlaye
                         <dd>
                             {shown.length === 0 ? <span>{judged.noMarks}</span> : null}
                             {shown.map((severity) => (
-                                <span key={severity} className="dr-mark-count">
+                                <span key={severity} className={counts[severity] === 0 ? `dr-mark-count dr-mark-none` : `dr-mark-count`}>
                                     <JudgmentChip severity={severity} spoken={false} />
-                                    <span>{judged.count(counts[severity], severity)}</span>
+                                    {grid ? (
+                                        <>
+                                            <span aria-hidden="true">{String(counts[severity])}</span>
+                                            <span className="sr-only">{judged.count(counts[severity], severity)}</span>
+                                        </>
+                                    ) : (
+                                        <span>{judged.count(counts[severity], severity)}</span>
+                                    )}
                                 </span>
                             ))}
                         </dd>
@@ -246,7 +257,8 @@ function waitWords(seconds: number | null): string {
     return text.analysis.reading.wait(seconds ?? Math.ceil((nextUtcDay(now) - now) / 1000));
 }
 
-function refusalWords(code: RequestRefusal, retryAfter: number | null, analyzer: string | null): string {
+/** A refused request for a reading in the words the head has for it. */
+export function refusalWords(code: RequestRefusal, retryAfter: number | null, analyzer: string | null): string {
     const refusals = words.refusals;
     switch (code) {
         case `analysis_limit`:
@@ -261,8 +273,8 @@ function refusalWords(code: RequestRefusal, retryAfter: number | null, analyzer:
     }
 }
 
-// The status of a community reading: waiting, under way, failed, refused by an opt-out, or out of reach.
-function StatusCard({ card, state, asker, onRequest }: {
+/** The status of a community reading: waiting, under way, failed, refused by an opt-out, or out of reach. */
+export function StatusCard({ card, state, asker, onRequest }: {
     card: Exclude<RequestCard, { kind: `none` }>;
     state: AnalysesState;
     asker: Asker;
@@ -421,7 +433,7 @@ export function PeekReadout({ card, view, choice, turn, players }: {
     const read = view?.turns.get(turn);
     if (read === undefined || choice === null) return null;
     const judgment = read.judgment;
-    const what = judgment === null ? read.value : judgment.reason === `value-drop` ? judged.severities[judgment.severity] : judged.reasonInLine(judgment.reason);
+    const what = judgment === null ? read.value : verdictInLine(judgment);
     if (what === null) return null;
     return (
         <span className="peek-readout">

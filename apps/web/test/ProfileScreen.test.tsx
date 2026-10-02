@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { BotListing, Levels, Me } from '@hexo-arena/contract';
+import { undeclaredValues, type BotListing, type Levels, type Me } from '@hexo-arena/contract';
 import { ProfileScreen } from '../src/screens/ProfileScreen';
 import { meStore } from '../src/me';
 
@@ -23,7 +23,7 @@ const threeStrengths: Levels = {
 // Quinn's two, then three more: one reading positions at three strengths, one closed, one never connected.
 const fullRoster: BotListing[] = [
     ...roster,
-    { name: `tidewater`, ownerName: `quinn`, online: true, openForChallenges: true, rating: 1634, provisional: false, liveGames: 0, levels: threeStrengths, analyzer: { maxSeconds: 5, lines: 3, whilePlaying: false, ready: true } },
+    { name: `tidewater`, ownerName: `quinn`, online: true, openForChallenges: true, rating: 1634, provisional: false, liveGames: 0, levels: threeStrengths, analyzer: { maxSeconds: 5, lines: 3, whilePlaying: false, values: undeclaredValues, ready: true } },
     { name: `marsh`, ownerName: `quinn`, online: true, openForChallenges: false, rating: 1588, provisional: false, liveGames: 0, levels: null, analyzer: null },
     { name: `alder`, ownerName: `quinn`, online: false, openForChallenges: false, rating: 1500, provisional: true, liveGames: 0, levels: null, analyzer: null },
 ];

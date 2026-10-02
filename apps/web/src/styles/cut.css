@@ -92,6 +92,7 @@
     .roster,
     .play-setup,
     .hud-chip,
+    .an-window::before,
     .an-intro,
     .an-check,
     .an-trouble,
@@ -115,6 +116,8 @@
     .an-row-more,
     .an-gear,
     .an-line,
+    .an-fold,
+    .an-request,
     .an-analyzer,
     .an-evalbar-chip {
         clip-path: var(--cut-sm-path);
@@ -184,6 +187,7 @@
     .an-row-more:focus-visible,
     .an-gear:focus-visible,
     .an-line:focus-visible,
+    .an-fold:focus-visible,
     .scrub-count:focus-visible,
     .drawer-close:focus-visible,
     .drawer-tab:focus-visible,

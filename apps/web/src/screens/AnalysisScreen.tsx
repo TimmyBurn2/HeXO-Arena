@@ -7,6 +7,7 @@ import {
     resultSentence,
     sideOf,
     turnsOnBoard,
+    undeclaredValues,
     type AxialCoord,
     type GameSnapshot,
     type Side,
@@ -14,17 +15,19 @@ import {
 import type { Setup, TurnCells } from '@hexo-arena/rules';
 import { ApiError, fetchGameSnapshot, limitedFor } from '../api/client';
 import { AnalysisBoard } from '../analysis/AnalysisBoard';
+import { AnalyzerWindow, CourseGraph, GameRequest } from '../analysis/AnalyzerWindow';
 import { effectiveSeconds, useAnalysisSettings } from '../analysis/analysis-settings';
 import { ExportDialog, ImportDialog, type ExportView } from '../analysis/dialogs';
 import { draftOf, draftSetup, type SetupDraft, clickCell } from '../analysis/draft';
+import { explain, type ExplainedTurn, type Explanation, type PreferredLine } from '../analysis/explain';
 import type { Imported } from '../analysis/import-text';
 import { gameLink, lineLink, readAddress, setupLink } from '../analysis/links';
-import { MoveTree, type RowActions } from '../analysis/MoveTree';
+import { MoveList, type RowActions } from '../analysis/MoveList';
 import { writeGame } from '../analysis/notation';
 import { communityReading, gameLineOf, ownReading, ownSourceId, storedReadings, turnCells } from '../analysis/game-readings';
 import { rowFacts } from '../analysis/row-facts';
 import { nextUtcDay, readings, useReadingsAt, useReadingsSnapshot, type ReadingEntry, type ReadingTarget } from '../analysis/readings';
-import { AnalysisHead, AnalysisSettingsPanel, EvalBar, ReadingBlock, type AnalyzerShown, type ReadingPill, type Unreadable } from '../analysis/ReadingPanel';
+import { AnalysisSettingsPanel, EvalBar, type AnalyzerShown, type ReadingPill, type Unreadable } from '../analysis/ReadingPanel';
 import { shownLines, type ShownLine } from '../analysis/reading-view';
 import { authorSourceId, botSource, botSourceId, type AnalysisPosition, type ReadingAuthor } from '../analysis/sources';
 import { useAnalyzers } from '../analysis/use-analyzers';
@@ -60,8 +63,9 @@ import {
 import { isMainLine, lineEnd, lineTo, mainLine, newTree, nodeAt, openingTurns, pathTo, positionAt, rootId, type MoveTree as Tree, type NodeId } from '../analysis/tree';
 import { notationErrorText, positionWords, refusalText } from '../analysis/words';
 import type { BoardStone } from '../board/Board';
-import { BotBadge, PlayerName, Swatch } from '../components/player';
-import { Marks, ReadingGraph } from '../game/DrawerAnalysis';
+import { BotBadge, PlayerName, seatName, Swatch } from '../components/player';
+import { Marks, type Asker } from '../game/DrawerAnalysis';
+import { turnLines } from '../game/drawer-reading';
 import { headOf, useGameAnalyses, type ReadingChoice } from '../game/game-analyses';
 import { useWait, WaitText } from '../components/wait';
 import { meStore, useMe } from '../me';
@@ -155,6 +159,17 @@ function authorShown(by: ReadingAuthor, seconds: number): AnalyzerShown {
             return { kind: `own`, name: by.name, side: by.side };
         case `worker`:
             return { kind: `engine`, name: by.engine, version: by.version, seconds };
+    }
+}
+
+// The name a reading goes by in an explanation: the analyzer's, the bot's for its own view, the engine's.
+function authorName(by: ReadingAuthor): string {
+    switch (by.kind) {
+        case `bot`:
+        case `own`:
+            return by.name;
+        case `worker`:
+            return by.engine;
     }
 }
 
@@ -366,6 +381,8 @@ function Workspace({ board, game, notice, onBoard, onReplace, onNewBoard }: {
     // Off on every visit: positions are read on their own only once the person turns it on here.
     const [analyzing, setAnalyzing] = useState(false);
     const [preview, setPreview] = useState<ShownLine | null>(null);
+    // The line an explanation names, previewed on the board the turn was played from.
+    const [preferred, setPreferred] = useState<PreferredLine | null>(null);
     const setupButton = useRef<HTMLButtonElement>(null);
     const wasEditing = useRef(false);
     const gameTurns = game?.turns ?? noTurns;
@@ -390,6 +407,7 @@ function Workspace({ board, game, notice, onBoard, onReplace, onNewBoard }: {
             setStatus(null);
             setArmed(false);
             setPreview(null);
+            setPreferred(null);
             onBoard(move);
         },
         [onBoard],
@@ -443,6 +461,7 @@ function Workspace({ board, game, notice, onBoard, onReplace, onNewBoard }: {
         [],
     );
     const positionsLeft = user?.analysisLeft.positions ?? null;
+    const asker: Asker = me.status === `loading` ? { kind: `unknown` } : user === null ? { kind: `signed-out` } : { kind: `user`, left: user.analysisLeft.games };
     useEffect(() => {
         if (positionsLeft !== null) readings.spend(positionsLeft === 0 ? nextUtcDay(Date.now()) : null);
     }, [positionsLeft]);
@@ -468,6 +487,7 @@ function Workspace({ board, game, notice, onBoard, onReplace, onNewBoard }: {
     const ownChoice = head?.choices.find((choice) => choice.kind === `own`) ?? null;
     const storedNames = head?.choices.flatMap((choice) => (choice.kind === `community` ? [choice.name] : [])) ?? [];
     const gameNodes = useMemo(() => gameLine(tree, gameTurns), [tree, gameTurns]);
+    const lineDepth = useMemo(() => new Map(gameNodes.map((node) => [node.id, node.turn])), [gameNodes]);
 
     const entries = useReadingsAt(readings, atKey);
     const entry = entries.get(analyzerSource.id) ?? noEntry;
@@ -518,14 +538,16 @@ function Workspace({ board, game, notice, onBoard, onReplace, onNewBoard }: {
               : (head.choices.find((choice) => choice.kind === `community` && choice.name === shownAnalyzer) ?? head.choices[0] ?? null);
     const view = useMemo(() => {
         if (active === null || record === null) return null;
-        return active.kind === `community` ? communityReading(record, active.analysis.turns, active.analysis.status === `done`) : ownReading(record, active.views);
+        return active.kind === `community` ? communityReading(record, active.analysis.turns, active.analysis.status === `done`, active.analysis.analyzer?.values ?? undeclaredValues) : ownReading(record, active.views);
     }, [active, record]);
     const snapshot = useReadingsSnapshot(readings);
     // Rows away from the game's own turns read what the source of the game's reading holds, or the analyzer the panel asks.
     const analyzerId = analyzerSource.id;
+    const sourceFor = useCallback(
+        (side: Side) => (active === null || gameId === null ? analyzerId : active.kind === `community` ? botSourceId(active.name) : ownSourceId(gameId, side)),
+        [active, gameId, analyzerId],
+    );
     const facts = useMemo(() => {
-        const sourceFor = (side: Side) =>
-            active === null || gameId === null ? analyzerId : active.kind === `community` ? botSourceId(active.name) : ownSourceId(gameId, side);
         const all = rowFacts(tree, (key, id) => snapshot.get(key)?.get(id)?.read?.reading ?? null, sourceFor);
         if (view === null) return all;
         for (const node of gameNodes) {
@@ -534,7 +556,35 @@ function Workspace({ board, game, notice, onBoard, onReplace, onNewBoard }: {
             else all.set(node.id, { judgment: turn.judgment, value: turn.value });
         }
         return all;
-    }, [tree, snapshot, active, gameId, analyzerId, view, gameNodes]);
+    }, [tree, snapshot, sourceFor, view, gameNodes]);
+
+    // The turn shown explained from the reading its row's value comes from:
+    // a game's own turn from the game's reading picked, any other from what the same source read around it.
+    const explanation = useMemo((): Explanation | null => {
+        if (game !== null && at === floor && openingTurns(tree.root) > 0) return explain({ kind: `opening` }, { kind: `none` });
+        if (node?.kind !== `turn`) return null;
+        const onGame = lineDepth.has(node.id);
+        // A game no reading may judge whole, opted out or out of an analyzer's reach, waits for none.
+        const judgeable = head?.card?.kind !== `opted-out` && head?.card?.kind !== `unreadable`;
+        const place = gameId === null ? `board` : !onGame ? `variation` : judgeable ? `game` : `board`;
+        const player = onGame && game !== null ? seatName(game.snapshot.players[node.side]) : null;
+        const turn: ExplainedTurn = { kind: `turn`, turn: node.turn, side: node.side, cells: node.cells, completesSix: node.win !== null, place, player };
+        if (onGame && view !== null && active !== null && record !== null) {
+            const read = view.turns.get(node.turn);
+            if (active.kind === `own`) return explain(turn, { kind: `own`, name: player ?? ``, after: read?.value ?? null });
+            if (read === undefined) return explain(turn, { kind: `none` });
+            return explain(turn, { kind: `analyzer`, name: active.name, best: turnLines(record, read)[0] ?? null, after: read.value, judgment: read.judgment, whole: active.analysis.status === `done` });
+        }
+        const parent = nodeAt(tree, node.parent);
+        const readAt = (key: string, side: Side) => snapshot.get(key)?.get(sourceFor(side))?.read?.reading ?? null;
+        const before = parent === undefined ? null : readAt(parent.key, node.side);
+        const after = facts.get(node.id)?.value ?? null;
+        const by = before?.by ?? readAt(node.key, node.side === `x` ? `o` : `x`)?.by ?? null;
+        if (by === null || (before === null && after === null)) return explain(turn, { kind: `none` });
+        if (by.kind === `own`) return explain(turn, { kind: `own`, name: by.name, after });
+        const best = before === null ? null : (shownLines(before, positionAt(tree, node.parent), node.side, 1)[0] ?? null);
+        return explain(turn, { kind: `analyzer`, name: authorName(by), best, after, judgment: null, whole: false });
+    }, [game, at, floor, tree, node, lineDepth, gameId, head, view, active, record, snapshot, sourceFor, facts]);
 
     const openSetup = useCallback(() => {
         setRefusal(null);
@@ -632,7 +682,6 @@ function Workspace({ board, game, notice, onBoard, onReplace, onNewBoard }: {
     );
 
     // The graph's cursor stands at the game's turn on the board, or for a variation at the turn it leaves from.
-    const lineDepth = useMemo(() => new Map(gameNodes.map((node) => [node.id, node.turn])), [gameNodes]);
     const graphCursor = useMemo(() => {
         for (const id of pathTo(tree, at).reverse()) {
             const turn = lineDepth.get(id);
@@ -670,6 +719,17 @@ function Workspace({ board, game, notice, onBoard, onReplace, onNewBoard }: {
         const played = playCells(board, line.cells);
         setRefusal(played.refusal === null ? null : refusalText(played.refusal));
         if (played.state !== board) onBoard(() => played.state);
+    }
+
+    // A line an explanation names plays as a variation from the position its turn was played from.
+    function playPreferred(line: PreferredLine) {
+        if (node?.kind !== `turn`) return;
+        setArmed(false);
+        setStatus(null);
+        setPreferred(null);
+        const played = playCells({ tree, at: node.parent, mark: null }, line.cells);
+        setRefusal(played.refusal === null ? null : refusalText(played.refusal));
+        if (played.refusal === null) onBoard(() => played.state);
     }
 
     function load(imported: Imported) {
@@ -757,6 +817,9 @@ function Workspace({ board, game, notice, onBoard, onReplace, onNewBoard }: {
 
     const replaces = gameId !== null && game !== null ? text.analysis.setup.gameTree(game.snapshot.players.x.name, game.snapshot.players.o.name) : text.analysis.setup.thisTree;
     const draftStones = editing === null ? null : editing.stones.map((stone) => ({ x: stone.x, y: stone.y, side: sideOf(stone.player), number: null }));
+    // A preferred line shows on the board its turn was played from, in that turn's place.
+    const preferredFrom = preferred !== null && explanation?.line === preferred && node?.kind === `turn` ? node.parent : null;
+    const preferredStones = useMemo(() => (preferredFrom === null ? null : numberedStones(tree, preferredFrom)), [tree, preferredFrom]);
     const draftField = editing === null ? undefined : [{ x: 0, y: 0 }, ...editing.stones];
 
     return (
@@ -764,17 +827,27 @@ function Workspace({ board, game, notice, onBoard, onReplace, onNewBoard }: {
             <h1 className="sr-only">{text.analysis.title}</h1>
             <section className="an-stage" aria-label={text.analysis.workspace}>
                 <AnalysisBoard
-                    stones={draftStones ?? stones}
+                    stones={draftStones ?? preferredStones ?? stones}
                     frame={draftField ?? frame}
                     field={draftField}
-                    mark={editing === null ? mark : null}
+                    mark={editing === null && preferredStones === null ? mark : null}
                     toMove={toMove}
-                    lastMove={editing === null && node?.kind === `turn` && node.win === null ? node.cells : []}
-                    winLine={editing === null && node?.kind === `turn` && node.win !== null ? node.win.cells : []}
+                    lastMove={editing === null && preferredStones === null && node?.kind === `turn` && node.win === null ? node.cells : []}
+                    winLine={editing === null && preferredStones === null && node?.kind === `turn` && node.win !== null ? node.win.cells : []}
                     label={text.analysis.board(stateWords)}
-                    lines={settings.boardLines && editing === null && lines.length > 0 ? { side: toMove, lines } : undefined}
-                    preview={shownPreview === null || editing !== null ? undefined : { side: toMove, cells: shownPreview.cells }}
-                    judgment={editing !== null || judgedCell === undefined || judged === undefined || judged === null ? undefined : { cell: judgedCell, severity: judged.severity }}
+                    lines={settings.boardLines && editing === null && preferredStones === null && lines.length > 0 ? { side: toMove, lines } : undefined}
+                    preview={
+                        editing !== null
+                            ? undefined
+                            : preferredStones !== null && preferred !== null
+                              ? { side: preferred.side, cells: preferred.cells }
+                              : shownPreview === null
+                                ? undefined
+                                : { side: toMove, cells: shownPreview.cells }
+                    }
+                    judgment={
+                        editing !== null || preferredStones !== null || judgedCell === undefined || judged === undefined || judged === null ? undefined : { cell: judgedCell, severity: judged.severity }
+                    }
                     onCell={onCell}
                     onPaste={(pasted) => {
                         if (editing === null) setDialog({ kind: `import`, text: pasted });
@@ -818,8 +891,8 @@ function Workspace({ board, game, notice, onBoard, onReplace, onNewBoard }: {
                 ) : (
                     <>
                         {fresh ? null : <div className="an-phone-source">{source}</div>}
-                        <AnalysisHead
-                            signedIn={signedIn}
+                        <AnalyzerWindow
+                            signedIn={me.status === `loading` ? null : signedIn}
                             analyzing={analyzing}
                             onAnalyzing={(on) => {
                                 setAnalyzing(on);
@@ -835,6 +908,38 @@ function Workspace({ board, game, notice, onBoard, onReplace, onNewBoard }: {
                                     left={positionsLeft}
                                 />
                             }
+                            shown={{ analyzer: analyzerShown, entry: shown, lines, held: waiting, toMove, unreadable }}
+                            pills={pills}
+                            activePill={activePill}
+                            onPill={(pill) => {
+                                if (pill.id === ownPill) {
+                                    setOwnFor(gameId);
+                                    return;
+                                }
+                                setOwnFor(null);
+                                updateSettings({ analyzer: pill.name });
+                            }}
+                            graph={game !== null && record !== null && view !== null && active !== null ? <CourseGraph view={view} choice={active} line={record} cursor={graphCursor} onTurn={goToTurn} /> : null}
+                            card={
+                                analyses.state.load.kind === `failed` ? (
+                                    <p className="dr-failed">
+                                        <span className="field-error">{text.drawer.reading.loadFailed}</span>
+                                        <button type="button" className="btn btn-ghost btn-sm" onClick={analyses.retry}>
+                                            {text.states.tryAgain}
+                                        </button>
+                                    </p>
+                                ) : head?.card === undefined || head.card === null ? null : (
+                                    <GameRequest card={head.card} state={analyses.state} asker={asker} analyzer={settings.analyzer} onRequest={analyses.request} />
+                                )
+                            }
+                            counts={game !== null && view !== null && active?.kind === `community` && active.analysis.status === `done` ? <Marks view={view} players={game.snapshot.players} grid /> : null}
+                            explanation={explanation}
+                            onPreview={setPreview}
+                            onPlay={playLine}
+                            onPreferred={setPreferred}
+                            onPlayPreferred={playPreferred}
+                            onAsk={askNow}
+                            wait={waitWords}
                         />
                         <div className="an-panel-scroll">
                             {notice === null ? null : (
@@ -849,40 +954,9 @@ function Workspace({ board, game, notice, onBoard, onReplace, onNewBoard }: {
                                     <p className="note">{text.analysis.intro.body((games) => <Link to="/games">{games}</Link>)}</p>
                                 </div>
                             ) : null}
-                            <ReadingBlock
-                                signedIn={me.status === `loading` ? null : signedIn}
-                                unreadable={unreadable}
-                                analyzing={analyzing}
-                                pills={pills}
-                                activePill={activePill}
-                                onPill={(pill) => {
-                                    if (pill.id === ownPill) {
-                                        setOwnFor(gameId);
-                                        return;
-                                    }
-                                    setOwnFor(null);
-                                    updateSettings({ analyzer: pill.name });
-                                }}
-                                analyzer={analyzerShown}
-                                entry={shown}
-                                lines={lines}
-                                held={waiting ? Math.min(settings.lines, listing?.analyzer?.lines ?? settings.lines) : 0}
-                                toMove={toMove}
-                                onPreview={setPreview}
-                                onPlay={playLine}
-                                onAsk={askNow}
-                                wait={waitWords}
-                            />
-                            {game !== null && record !== null && view !== null && active !== null ? (
-                                <div className="an-game-reading">
-                                    <ReadingGraph view={view} choice={active} line={record} cursor={graphCursor} onTurn={goToTurn} />
-                                    {active.kind === `community` && active.analysis.status === `done` ? <Marks view={view} players={game.snapshot.players} /> : null}
-                                </div>
-                            ) : null}
-                            {list?.optedOut === true ? <p className="note an-quiet">{text.drawer.reading.optedOut}</p> : null}
                             {/* The keys scroll with the tree, which keeps the panel's room for its rows. */}
                             <div className="an-tree-host">
-                                <MoveTree tree={tree} gameTurns={gameTurns} at={at} onGo={goToNode} actions={actions} facts={facts} />
+                                <MoveList tree={tree} gameTurns={gameTurns} at={at} onGo={goToNode} actions={actions} facts={facts} />
                                 <p className="note an-keys">{text.analysis.keys(key)}</p>
                             </div>
                             <p className="note an-status" role="status">

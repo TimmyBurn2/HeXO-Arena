@@ -72,13 +72,13 @@ for (const width of [laptop, phone]) {
         await expect(page.locator(`.dr-by`)).toHaveText(`kestrelBOT0.9, by tom; 2 s a position`);
         await expect(page.getByRole(`switch`, { name: `Lines on the board` })).toBeChecked();
         await expect(page.getByRole(`switch`, { name: `Stone numbers` })).toBeVisible();
-        await expect(page.locator(`.dr-marks-row`)).toHaveText([`hextide?!1 inaccuracy?1 mistake??1 blunder`, `quietlake??1 blunder`]);
+        await expect(page.locator(`.dr-marks-row`)).toHaveText([`hextide?!1 inaccuracy??3 blunders`, `quietlake??7 blunders`]);
         await expect(row(page, 22).locator(`.feed-mark`)).toHaveText(`??blunder`);
         await expect(row(page, 22).locator(`.feed-value`)).toHaveText(`o wins in 2`);
         await expect(row(page, 25).locator(`.feed-value`)).toHaveText(`o wins`);
         // A value's side and number never break apart.
         expect(await row(page, 21).locator(`.feed-value`).textContent()).toBe(`o\u00a00.12`);
-        await expect(page.locator(`.feed-note`)).toHaveText(/^Allowed a forced win; kestrel preferred x: \[-?\d+,-?\d+\] \[-?\d+,-?\d+\], o 0\.12$/u);
+        await expect(page.locator(`.feed-note`)).toHaveText(/^Blunder: allowed a forced win; o\u00a00\.12 before, o wins in 2 after; kestrel preferred x: \[-?\d+,-?\d+\] \[-?\d+,-?\d+\]$/u);
         await expect(page.locator(`.feed-note`)).toBeInViewport();
         // The board: line A on its empty cells in x's color, the mark beside the played stones.
         await expect(page.locator(`.board-tag.jd-blunder`)).toHaveText(`??`);
@@ -93,8 +93,8 @@ test(`the graph and the marks follow the reading picked, and the own view judges
     await openPanel(page, laptop);
     // The drawer's graph; the phone peek's mini graph stays hidden at this width.
     const graph = page.locator(`.dr-graph`);
-    await expect(graph.locator(`.graph-mark`)).toHaveCount(4);
-    await expect(graph.locator(`.graph-mark.jd-blunder`)).toHaveCount(2);
+    await expect(graph.locator(`.graph-mark`)).toHaveCount(11);
+    await expect(graph.locator(`.graph-mark.jd-blunder`)).toHaveCount(10);
     await expect(graph.locator(`.graph-trace`)).toHaveCount(1);
     await expect(graph.locator(`.graph-wash`)).toHaveCount(2);
     await expect(graph.locator(`.graph-cursor`)).toHaveCount(1);
@@ -133,17 +133,56 @@ test(`lines B and C show while the line shown is pointed at or focused, and the 
 test(`a press on a line of the feed or on the graph shows that turn`, async ({ page }) => {
     await open(page, laptop, lists.review);
     await openPanel(page, laptop);
-    await row(page, 14).click();
-    await expect(scrubWords(page)).toHaveText(`Turn 14 of 25`);
-    await expect(row(page, 14).locator(`.feed-mark`)).toHaveText(`?mistake`);
-    await expect(page.locator(`.feed-note`)).toHaveText(/^Mistake; kestrel preferred x: /u);
-    await expect(page.locator(`.board-tag.jd-mistake`)).toHaveCount(1);
+    await row(page, 6).click();
+    await expect(scrubWords(page)).toHaveText(`Turn 6 of 25`);
+    await expect(row(page, 6).locator(`.feed-mark`)).toHaveText(`?!inaccuracy`);
+    await expect(page.locator(`.feed-note`)).toHaveText(/^Inaccuracy: [xo]\u00a00\.\d\d before, [xo]\u00a00\.\d\d after; kestrel preferred x: /u);
+    await expect(page.locator(`.board-tag.jd-inaccuracy`)).toHaveCount(1);
     const graph = await page.locator(`.dr-graph .graph-svg`).boundingBox();
     if (graph === null) throw new Error(`no graph`);
     await page.mouse.click(graph.x + 6, graph.y + graph.height / 2);
     await expect(scrubWords(page)).toHaveText(`Opening, 5 stones`);
     await expect(page.locator(`.feed-line.latest .feed-n`)).toContainText(`op 0-2`);
 });
+
+// Each part of a feed line that leaves its line's box or overlaps the next line, and each opening group broken over lines.
+async function openingFaults(page: Page): Promise<string[]> {
+    return page.locator(`.feed`).evaluate((feed) => {
+        const found: string[] = [];
+        const lines = (element: Element) => {
+            const range = document.createRange();
+            range.selectNodeContents(element);
+            return new Set([...range.getClientRects()].map((rect) => Math.round(rect.top))).size;
+        };
+        const opening = feed.querySelector(`.feed-opening`);
+        const next = opening?.nextElementSibling ?? null;
+        if (opening === null || next === null) return [`no opening line`];
+        const box = opening.getBoundingClientRect();
+        for (const part of opening.querySelectorAll(`.feed-n, .feed-group`)) {
+            const rect = part.getBoundingClientRect();
+            if (rect.top < box.top - 0.5 || rect.bottom > box.bottom + 0.5) found.push(`${part.textContent} runs out of its line`);
+            if (part.classList.contains(`feed-group`) && lines(part) !== 1) found.push(`${part.textContent} breaks`);
+        }
+        if (next.getBoundingClientRect().top < box.bottom - 0.5) found.push(`the next line overlaps the opening`);
+        return found;
+    });
+}
+
+for (const width of [laptop, phone]) {
+    test(`the feed's opening line keeps its label and each side's stones whole and clear of the next line at ${width.name}`, async ({ page }) => {
+        await open(page, width, lists.review);
+        await openPanel(page, width);
+        await page.locator(`.feed-opening`).click();
+        await expect(scrubWords(page)).toHaveText(`Opening, 5 stones`);
+        await expect(page.locator(`.feed-opening .feed-group`)).toHaveText([`x: [0,0]`, /^o: /u, /^x: /u]);
+        expect(await openingFaults(page)).toEqual([]);
+        // Large text takes the room from the stones, never the line's height from them.
+        const devtools = await page.context().newCDPSession(page);
+        await devtools.send(`Page.setFontSizes`, { fontSizes: { standard: 24 } });
+        await page.waitForTimeout(250);
+        expect(await openingFaults(page)).toEqual([]);
+    });
+}
 
 for (const width of [laptop, phone]) {
     test(`with no community reading yet the own view stands, and a request names its analyzer and waits for one at ${width.name}`, async ({ page }) => {

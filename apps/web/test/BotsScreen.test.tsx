@@ -110,7 +110,7 @@ describe('BotsScreen', () => {
     });
 
     it('narrow to analyzers, alone or online, tagging each and saying so when none is left', async () => {
-        const kestrel = { ...directory[0], name: `kestrel`, analyzer: { maxSeconds: 5, lines: 3, whilePlaying: false, ready: true } };
+        const kestrel = { ...directory[0], name: `kestrel`, analyzer: { maxSeconds: 5, lines: 3, whilePlaying: false, values: { scale: 1, cuts: null, meaning: `raw` }, ready: true } };
         stubDirectory([kestrel, ...directory], 200, []);
         render(<BotsScreen />);
         const row = (await screen.findByText(`kestrel`)).closest(`tr`);

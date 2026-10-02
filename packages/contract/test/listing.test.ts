@@ -25,7 +25,7 @@ describe('botListingSchema', () => {
 
 describe('botListingSchema analyzer', () => {
     it(`carries the bot's analyzer and whether it can read now, null until it declares one`, () => {
-        const analyzer = { maxSeconds: 5, lines: 3, whilePlaying: false, ready: true };
+        const analyzer = { maxSeconds: 5, lines: 3, whilePlaying: false, values: { scale: 1, cuts: null, meaning: `raw` }, ready: true };
         expect(botListingSchema.parse({ ...listing, liveGames: 0, analyzer }).analyzer).toEqual(analyzer);
         expect(botListingSchema.parse({ ...listing, liveGames: 0 }).analyzer).toBeNull();
         const { analyzer: _omitted, ...withoutAnalyzer } = listing;

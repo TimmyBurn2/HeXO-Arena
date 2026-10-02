@@ -249,7 +249,7 @@ function MoveFeed({ feed, current, visible, notes, onLine, onPoint }: {
                 return (
                     <Fragment key={`${line.label}-${line.groups.join(` `)}`}>
                         <li
-                            className={`feed-line${shown ? ` latest` : ``}${index > current ? ` ahead` : ``}${index >= settled.current ? ` fresh` : ``}`}
+                            className={`feed-line${index === 0 ? ` feed-opening` : ``}${shown ? ` latest` : ``}${index > current ? ` ahead` : ``}${index >= settled.current ? ` fresh` : ``}`}
                             aria-current={shown ? `step` : undefined}
                             tabIndex={focusable ? 0 : undefined}
                             onClick={
@@ -291,7 +291,7 @@ function MoveFeed({ feed, current, visible, notes, onLine, onPoint }: {
                             <span className="feed-n">
                                 <FeedLabel line={line} />
                             </span>
-                            <span>
+                            <span className="feed-groups">
                                 {line.groups.map((group, index) => (
                                     <Fragment key={group}>
                                         {index > 0 ? ` ` : null}
@@ -299,7 +299,8 @@ function MoveFeed({ feed, current, visible, notes, onLine, onPoint }: {
                                     </Fragment>
                                 ))}
                             </span>
-                            {notes === null ? null : (
+                            {/* The opening is never read or judged, so its stones take the mark's and the value's room. */}
+                            {notes === null || index === 0 ? null : (
                                 <>
                                     <span className="feed-mark">{note === null || note.severity === null ? null : <JudgmentChip severity={note.severity} />}</span>
                                     <span className="feed-value">{note === null || note.value === null ? null : text.drawer.reading.value(note.value)}</span>

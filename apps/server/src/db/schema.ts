@@ -15,6 +15,7 @@ import {
     reportReasons,
     reportSubjectMaxLength,
     signupAttemptCap,
+    valueCutMax,
 } from '@hexo-arena/contract';
 // One global namespace shared by users and bots: a SQLite unique index
 // cannot span two tables, so the fold key is reserved here first and both
@@ -122,6 +123,29 @@ const linesMax = sql.raw(String(analysisLinesMax));
 const winInMax = sql.raw(String(analysisWinInLimit));
 const heuristicMax = sql.raw(String(analysisHeuristicLimit));
 
+const cutMax = sql.raw(String(valueCutMax));
+
+// How an analyzer declared its heuristic reads: a scale and a meaning, set
+// together and null where it declared none, and three cuts set together,
+// rising, only beside a scale; a row with a `holder` sets a scale only beside it.
+const valuesChecks = (
+    name: string,
+    table: { scale: AnySQLiteColumn; inaccuracy: AnySQLiteColumn; mistake: AnySQLiteColumn; blunder: AnySQLiteColumn; meaning: AnySQLiteColumn },
+    holder?: AnySQLiteColumn,
+) => [
+    check(`${name}_meaning_check`, sql`(${table.meaning} is null) = (${table.scale} is null) and coalesce(${table.meaning}, 'raw') in ('expected', 'raw')`),
+    check(
+        `${name}_scale_check`,
+        holder === undefined
+            ? sql`${table.scale} is null or (${table.scale} > 0 and ${table.scale} <= ${heuristicMax})`
+            : sql`${table.scale} is null or (${holder} is not null and ${table.scale} > 0 and ${table.scale} <= ${heuristicMax})`,
+    ),
+    check(
+        `${name}_cuts_check`,
+        sql`(${table.inaccuracy} is null) = (${table.mistake} is null) and (${table.mistake} is null) = (${table.blunder} is null) and (${table.blunder} is null or (${table.scale} is not null and ${table.inaccuracy} > 0 and ${table.inaccuracy} < ${table.mistake} and ${table.mistake} < ${table.blunder} and ${table.blunder} <= ${cutMax}))`,
+    ),
+];
+
 // A line read at a position: two cells and the evaluation of the board after them, one value at least.
 const lineChecks = (name: string, table: { heuristic: AnySQLiteColumn; winIn: AnySQLiteColumn; rank: AnySQLiteColumn }) => [
     check(`${name}_rank_check`, sql`${table.rank} between 0 and ${sql.raw(String(analysisLinesMax - 1))}`),
@@ -162,10 +186,16 @@ export const bots = sqliteTable(
         repoUrl: text(`repo_url`),
         accepts: text(`accepts`),
         levels: text(`levels`),
-        // The analyzer the bot declared, all three set or all three null.
+        // The analyzer the bot declared, all three set or all three null,
+        // and how its heuristic reads, set only beside them.
         analyzerMaxSeconds: integer(`analyzer_max_seconds`),
         analyzerLines: integer(`analyzer_lines`),
         analyzerWhilePlaying: integer(`analyzer_while_playing`),
+        analyzerScale: real(`analyzer_scale`),
+        analyzerCutInaccuracy: real(`analyzer_cut_inaccuracy`),
+        analyzerCutMistake: real(`analyzer_cut_mistake`),
+        analyzerCutBlunder: real(`analyzer_cut_blunder`),
+        analyzerMeaning: text(`analyzer_meaning`),
         delistedAt: integer(`delisted_at`),
         // Set when a bot with rated games is deleted: the row stays so the
         // game log stays whole, under a deleted-<n> placeholder name.
@@ -182,6 +212,11 @@ export const bots = sqliteTable(
         check(
             `bots_analyzer_check`,
             sql`(${table.analyzerWhilePlaying} is null or ${table.analyzerWhilePlaying} in (0, 1)) and (${table.analyzerMaxSeconds} is null) = (${table.analyzerLines} is null) and (${table.analyzerLines} is null) = (${table.analyzerWhilePlaying} is null)`,
+        ),
+        ...valuesChecks(
+            `bots_analyzer`,
+            { scale: table.analyzerScale, inaccuracy: table.analyzerCutInaccuracy, mistake: table.analyzerCutMistake, blunder: table.analyzerCutBlunder, meaning: table.analyzerMeaning },
+            table.analyzerLines,
         ),
     ],
 );
@@ -355,9 +390,32 @@ export const ownLines = sqliteTable(
     ],
 );
 
+// How a bot seat's heuristic read in a game, as its analyzer declaration
+// stood when the seat first published an evaluation, so a later declaration
+// never rereads the game; null values mean it declared none.
+export const ownValues = sqliteTable(
+    `own_values`,
+    {
+        gameId: text(`game_id`)
+            .notNull()
+            .references(() => games.id, { onDelete: `cascade` }),
+        side: text(`side`).notNull(),
+        scale: real(`scale`),
+        cutInaccuracy: real(`cut_inaccuracy`),
+        cutMistake: real(`cut_mistake`),
+        cutBlunder: real(`cut_blunder`),
+        meaning: text(`meaning`),
+    },
+    (table) => [
+        primaryKey({ columns: [table.gameId, table.side] }),
+        check(`own_values_side_check`, sql`${table.side} in ('x', 'o')`),
+        ...valuesChecks(`own_values`, { scale: table.scale, inaccuracy: table.cutInaccuracy, mistake: table.cutMistake, blunder: table.cutBlunder, meaning: table.meaning }),
+    ],
+);
+
 // A whole finished game read by a community analyzer on request. The
-// analyzer is set once one takes the request, and its version is the one it
-// declared then; lines are written only when the reading is done.
+// analyzer is set once one takes the request, and its version and values are
+// the ones it declared then; lines are written only when the reading is done.
 // A requester's account may go while the reading stays.
 // A reading goes with its game, and with the analyzer that read or was named for it.
 export const analyses = sqliteTable(
@@ -369,6 +427,11 @@ export const analyses = sqliteTable(
             .references(() => games.id, { onDelete: `cascade` }),
         analyzerBotId: text(`analyzer_bot_id`).references(() => bots.id, { onDelete: `cascade` }),
         analyzerVersion: text(`analyzer_version`),
+        analyzerScale: real(`analyzer_scale`),
+        analyzerCutInaccuracy: real(`analyzer_cut_inaccuracy`),
+        analyzerCutMistake: real(`analyzer_cut_mistake`),
+        analyzerCutBlunder: real(`analyzer_cut_blunder`),
+        analyzerMeaning: text(`analyzer_meaning`),
         // The analyzer the requester named, if any; only it may take the request.
         namedBotId: text(`named_bot_id`).references(() => bots.id, { onDelete: `cascade` }),
         requestedBy: text(`requested_by`).references(() => users.id, { onDelete: `set null` }),
@@ -399,6 +462,11 @@ export const analyses = sqliteTable(
         check(`analyses_version_check`, sql`${table.analyzerVersion} is null or length(${table.analyzerVersion}) <= 64`),
         check(`analyses_seconds_check`, sql`${table.seconds} between 1 and ${analyzerSecondsMax}`),
         check(`analyses_finished_check`, sql`(${table.status} in ('done', 'failed')) = (${table.finishedAt} is not null)`),
+        ...valuesChecks(
+            `analyses_analyzer`,
+            { scale: table.analyzerScale, inaccuracy: table.analyzerCutInaccuracy, mistake: table.analyzerCutMistake, blunder: table.analyzerCutBlunder, meaning: table.analyzerMeaning },
+            table.analyzerBotId,
+        ),
     ],
 );
 

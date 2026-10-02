@@ -17,8 +17,9 @@ const cell = (page: Page, x: number, y: number) => page.locator(`.board-camera p
 const stones = (page: Page) => page.locator(`.board-camera .board-svg g.stone`);
 const navWords = (page: Page) => page.locator(`.an-chip-nav .scrub-words`);
 const navLine = (page: Page) => page.locator(`.an-chip-nav .an-nav-line`);
-const rows = (page: Page) => page.locator(`.an-tree .an-row:not(.an-opening) .an-move`);
-const currentRow = (page: Page) => page.locator(`.an-tree .an-row[aria-current="step"] .an-move`);
+const rows = (page: Page) => page.locator(`.an-tree .an-row:not(.an-opening) .an-move .sr-only`);
+const currentRow = (page: Page) => page.locator(`.an-tree [aria-current="step"] .an-move .sr-only`);
+const tokens = (page: Page) => page.locator(`.an-band .an-tok`);
 
 async function playTurn(page: Page, first: readonly [number, number], second: readonly [number, number]): Promise<void> {
     await cell(page, ...first).click();
@@ -71,7 +72,7 @@ test('the tree keeps variations, steps with the keys, and promotes, deletes, and
     await expect(navWords(page)).toHaveText(`Turn 1`);
     await playTurn(page, [2, 0], [3, 0]);
     await expect(navWords(page)).toHaveText(`Turn 2, a variation`);
-    await expect(page.locator(`.an-var .an-move`)).toHaveText([`x: [2,0] [3,0]`]);
+    await expect(tokens(page).locator(`.an-move .sr-only`)).toHaveText([`x: [2,0] [3,0]`]);
     await page.keyboard.press(`ArrowUp`);
     await expect(currentRow(page)).toHaveText(`x: [-1,0] [-1,1]`);
     await page.keyboard.press(`ArrowDown`);
@@ -82,18 +83,19 @@ test('the tree keeps variations, steps with the keys, and promotes, deletes, and
     await page.keyboard.press(`End`);
     await expect(currentRow(page)).toHaveText(`x: [2,0] [3,0]`);
 
-    await page.locator(`.an-var .an-row`).click({ button: `right` });
+    await tokens(page).click({ button: `right` });
     await page.getByRole(`button`, { name: `Copy line` }).click();
     await expect(page.locator(`.an-status`)).toHaveText(`Line copied as HTTTX notation`);
     expect(await page.evaluate(async () => navigator.clipboard.readText())).toBe(`version[1];\n1. [1,0][1,-1];\n2. [2,0][3,0];\n`);
 
     await page.getByRole(`button`, { name: `More for turn 2` }).click();
     await page.getByRole(`button`, { name: `Promote to main line` }).click();
-    await expect(rows(page)).toHaveText([`o: [1,0] [1,-1]`, `x: [2,0] [3,0]`, `x: [-1,0] [-1,1]`]);
+    await expect(rows(page)).toHaveText([`o: [1,0] [1,-1]`, `x: [2,0] [3,0]`]);
+    await expect(tokens(page).locator(`.an-move .sr-only`)).toHaveText([`x: [-1,0] [-1,1]`]);
     await expect(navWords(page)).toHaveText(`Turn 2`);
-    await page.locator(`.an-var .an-row`).click({ button: `right` });
+    await tokens(page).click({ button: `right` });
     await page.getByRole(`button`, { name: `Delete from here` }).click();
-    await expect(page.locator(`.an-var`)).toHaveCount(0);
+    await expect(page.locator(`.an-band`)).toHaveCount(0);
     await expect(rows(page)).toHaveText([`o: [1,0] [1,-1]`, `x: [2,0] [3,0]`]);
 });
 
@@ -140,7 +142,7 @@ test('a finished game opens at the linked turn, its opening one row, its game on
     await expect(page).toHaveTitle(`Analysis: hextide vs quietlake - HeXO Arena`);
     await expect(page.locator(`.an-chip-source`)).toContainText(`quietlake won with six in a row`);
     await expect(page.locator(`.an-chip-source`).getByRole(`link`, { name: `Open the game` })).toHaveAttribute(`href`, `/game/long-finished?turn=12`);
-    await expect(page.locator(`.an-opening .feed-n`)).toContainText(`op 0-2`);
+    await expect(page.locator(`.an-opening .an-row-go`)).toHaveAccessibleName(/^opening, turns 0 to 2, x: \[0,0\] o: /u);
     await expect(page).toHaveURL(/\/analysis\?game=long-finished$/u);
     await page.keyboard.press(`Home`);
     await expect(navWords(page)).toHaveText(`Opening, 5 stones`);
@@ -154,18 +156,18 @@ test('a finished game opens at the linked turn, its opening one row, its game on
 
 test('a game\'s own turns stay in the tree while its variations can go', async ({ page }) => {
     await open(page, `/analysis?game=long-finished&turn=3`);
-    await page.locator(`.an-tree .an-row[aria-current="step"]`).click({ button: `right` });
+    await page.locator(`.an-tree [aria-current="step"]`).click({ button: `right` });
     const menu = page.getByRole(`group`, { name: `Turn 3` });
     await expect(menu.getByRole(`button`)).toHaveText([`Copy line`]);
     await page.keyboard.press(`Escape`);
     await expect(menu).toHaveCount(0);
     await playTurn(page, [3, 3], [3, 4]);
-    await page.locator(`.an-var .an-row`).click({ button: `right` });
+    await tokens(page).click({ button: `right` });
     await expect(page.getByRole(`group`, { name: `Turn 4` }).getByRole(`button`)).toHaveText([`Promote to main line`, `Delete from here`, `Copy line`]);
     const axe = await new AxeBuilder({ page }).withRules([`list`, `listitem`, `aria-allowed-role`, `target-size`]).analyze();
     expect(axe.violations.flatMap((violation) => violation.nodes.map((node) => node.target))).toEqual([]);
     await page.getByRole(`button`, { name: `Delete from here` }).click();
-    await expect(page.locator(`.an-var`)).toHaveCount(0);
+    await expect(page.locator(`.an-band`)).toHaveCount(0);
     await expect(navWords(page)).toHaveText(`Turn 3 of 25`);
 });
 

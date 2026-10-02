@@ -30,6 +30,7 @@ const screens: readonly { name: string; path: string; world?: Partial<World>; th
         path: `/analysis?game=long-finished&turn=12`,
         then: async (page) => {
             await page.getByRole(`switch`, { name: `Analyze` }).check();
+            await page.getByRole(`button`, { name: `Lines B, C` }).click();
             await page.locator(`button.an-line`).nth(2).waitFor();
         },
     },

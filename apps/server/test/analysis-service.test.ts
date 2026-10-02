@@ -13,6 +13,7 @@ import { AnalysisService } from '../src/analysis-service';
 import { AnalyzerSessions } from '../src/analyzers';
 import { createQuery, openDatabase, runMigrations, type Query, type Sqlite } from '../src/db';
 import type { EngineSocket } from '../src/game-registry';
+import { insertOwnLines } from '../src/analysis-store';
 import { insertBotGame, insertGame, insertMove, recordFinish } from '../src/game-store';
 
 class FakeSocket implements EngineSocket {
@@ -204,7 +205,8 @@ describe('position readings', () => {
         await busy;
         await settled();
         vi.advanceTimersByTime(positionHoldMs - 7_000);
-        expect(await asked).toEqual({ kind: `reading`, reading: { status: `queued`, ahead: 0, analyzer: { name: `kestrel`, version: `0.9`, ownerName: `owner-c` }, left: positionReadingsPerUserDay - 1 } });
+        const analyzer = { name: `kestrel`, version: `0.9`, ownerName: `owner-c`, values: { scale: 1, cuts: null, meaning: `raw` } };
+        expect(await asked).toEqual({ kind: `reading`, reading: { status: `queued`, ahead: 0, analyzer, left: positionReadingsPerUserDay - 1 } });
         answer(`kestrel`);
         await settled();
         const again = await world.service.requestPosition(`asker`, { setup: other, analyzer: null, lines: 1, seconds: 5 }, never);
@@ -301,6 +303,40 @@ describe('whole-game readings', () => {
             [5, `o`],
         ]);
         expect(world.service.requestGame(`asker`, gameId, `kestrel`)).toMatchObject({ kind: `refused`, code: `no_analyzer` });
+    });
+
+    it('lists a reading and its analyzer with the values the analyzer declared when it took the game, whatever it declares after', async () => {
+        const declare = world.sqlite.prepare(`update bots set analyzer_scale = ?, analyzer_cut_inaccuracy = ?, analyzer_cut_mistake = ?, analyzer_cut_blunder = ?, analyzer_meaning = ? where id = 'kestrel'`);
+        declare.run(1000, 0.1, 0.2, 0.3, `expected`);
+        dial(`kestrel`);
+        const gameId = playedGame(world.query, { challenger: `alpha`, dest: `beta` });
+        world.service.requestGame(`asker`, gameId, null);
+        await settled();
+        declare.run(null, null, null, null, null);
+        const declared = { scale: 1000, cuts: { inaccuracy: 0.1, mistake: 0.2, blunder: 0.3 }, meaning: `expected` };
+        expect(world.service.list(gameId)).toMatchObject({ kind: `list`, list: { analyses: [{ status: `running`, analyzer: { name: `kestrel`, values: declared } }] } });
+        await readAll(`kestrel`);
+        now += 1_000;
+        expect(world.service.list(gameId)).toMatchObject({ kind: `list`, list: { analyses: [{ status: `done`, analyzer: { name: `kestrel`, values: declared } }] } });
+        world.sqlite.exec(`update analyses set analyzer_scale = null, analyzer_cut_inaccuracy = null, analyzer_cut_mistake = null, analyzer_cut_blunder = null, analyzer_meaning = null`);
+        now += 1_000;
+        expect(world.service.list(gameId)).toMatchObject({ kind: `list`, list: { analyses: [{ analyzer: { values: { scale: 1, cuts: null, meaning: `raw` } } }] } });
+    });
+
+    it('lists each bot seat\'s own view with the values its declaration held at the seat\'s first evaluation', () => {
+        world.sqlite.exec(`update bots set analyzer_max_seconds = 2, analyzer_lines = 1, analyzer_while_playing = 0, analyzer_scale = 1000, analyzer_meaning = 'expected' where id = 'alpha'`);
+        const gameId = playedGame(world.query, { challenger: `alpha`, dest: `beta` });
+        const line = { cells: [{ x: 9, y: 9 }, { x: 9, y: 10 }], heuristic: 120 };
+        insertOwnLines(world.query, { gameId, seq: 2, side: `x`, botId: `alpha` }, [line]);
+        world.sqlite.exec(`update bots set analyzer_scale = 50, analyzer_meaning = 'raw' where id = 'alpha'`);
+        insertOwnLines(world.query, { gameId, seq: 4, side: `x`, botId: `alpha` }, [line]);
+        insertOwnLines(world.query, { gameId, seq: 1, side: `o`, botId: `beta` }, [{ ...line, heuristic: -0.2 }]);
+        const listed = world.service.list(gameId);
+        if (listed.kind !== `list`) throw new Error(`no list`);
+        expect(listed.list.analyses.map((view) => (view.kind === `own` ? [view.side, view.values, view.turns.length] : null))).toEqual([
+            [`x`, { scale: 1000, cuts: null, meaning: `expected` }, 2],
+            [`o`, { scale: 1, cuts: null, meaning: `raw` }, 1],
+        ]);
     });
 
     it('retries a timed-out position once, then moves to another analyzer, and fails when both did', async () => {

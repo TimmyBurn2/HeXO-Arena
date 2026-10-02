@@ -8,6 +8,7 @@ import {
     analysisPositionsPath,
     analysisRequestSchema,
     analysisStoneCap,
+    analysisHeuristicLimit,
     analyzerMaxSecondsCap,
     botAccountSchema,
     botAnalysisSocketPath,
@@ -23,7 +24,7 @@ import { buildOpenApiDocument } from '../src/openapi';
 
 const position = { cells: [{ x: 0, y: 0, side: `x` }], toMove: `o` } as const;
 const ask = { ...position, analyzer: null, lines: 3, seconds: 2 } as const;
-const kestrel = { name: `kestrel`, version: `0.9`, ownerName: `tom` };
+const kestrel = { name: `kestrel`, version: `0.9`, ownerName: `tom`, values: { scale: 1, cuts: null, meaning: `raw` } };
 const line = { cells: [{ x: 1, y: 0 }, { x: 0, y: 1 }], heuristic: 0.12 };
 
 const document = buildOpenApiDocument();
@@ -73,12 +74,46 @@ describe('the analyzer declaration', () => {
         }
     });
 
+    it('declares how its heuristic reads: scale 1 and raw when absent, and cuts that judge drops of value only when given', () => {
+        const values = (declared: unknown) => accountDeclarationSchema.parse({ analyzer: { lines: 1, values: declared } }).analyzer?.values;
+        expect(accountDeclarationSchema.parse({ analyzer: { lines: 1 } }).analyzer).not.toHaveProperty(`values`);
+        expect(values({})).toEqual({ scale: 1, meaning: `raw` });
+        expect(values({ scale: 1000 })).toEqual({ scale: 1000, meaning: `raw` });
+        const cuts = { inaccuracy: 0.1, mistake: 0.2, blunder: 0.3 };
+        expect(values({ cuts, meaning: `expected` })).toEqual({ scale: 1, cuts, meaning: `expected` });
+        expect(values({ scale: 0.5, cuts: { inaccuracy: 0.05, mistake: 1, blunder: 2 } })).toEqual({ scale: 0.5, cuts: { inaccuracy: 0.05, mistake: 1, blunder: 2 }, meaning: `raw` });
+    });
+
+    it(`refuses a scale outside above 0 to ${String(analysisHeuristicLimit)}, cuts outside above 0 to 2 or not rising, another meaning, and unknown keys`, () => {
+        for (const declared of [
+            { scale: 0 },
+            { scale: -1 },
+            { scale: analysisHeuristicLimit * 2 },
+            { cuts: { inaccuracy: 0, mistake: 0.2, blunder: 0.3 } },
+            { cuts: { inaccuracy: 0.1, mistake: 0.2, blunder: 2.5 } },
+            { cuts: { inaccuracy: 0.2, mistake: 0.2, blunder: 0.3 } },
+            { cuts: { inaccuracy: 0.3, mistake: 0.2, blunder: 0.1 } },
+            { cuts: { inaccuracy: 0.1, mistake: 0.2 } },
+            { cuts: { inaccuracy: 0.1, mistake: 0.2, blunder: 0.3, great: 0.5 } },
+            { scale: 1, shape: `tanh` },
+            { meaning: `winning chances` },
+            { meaning: null },
+            null,
+        ]) {
+            expect(accountDeclarationSchema.safeParse({ analyzer: { lines: 1, values: declared } }).success, JSON.stringify(declared)).toBe(false);
+        }
+    });
+
     it('reads back on the account as stored, with whether the session is open, or null', () => {
         const account = { name: `kestrel`, rating: 1500, provisional: true, levels: null };
-        const analyzer = { maxSeconds: 2, lines: 3, whilePlaying: false, ready: false };
+        const analyzer = { maxSeconds: 2, lines: 3, whilePlaying: false, values: { scale: 1, cuts: { inaccuracy: 0.1, mistake: 0.2, blunder: 0.3 }, meaning: `expected` }, ready: false };
         expect(botAccountSchema.parse({ ...account, analyzer }).analyzer).toEqual(analyzer);
         expect(botAccountSchema.parse({ ...account, analyzer: null }).analyzer).toBeNull();
         expect(botAccountSchema.safeParse(account).success).toBe(false);
+        const { values: _omitted, ...withoutValues } = analyzer;
+        expect(botAccountSchema.safeParse({ ...account, analyzer: withoutValues }).success).toBe(false);
+        const { meaning: _unsaid, ...withoutMeaning } = analyzer.values;
+        expect(botAccountSchema.safeParse({ ...account, analyzer: { ...analyzer, values: withoutMeaning } }).success).toBe(false);
     });
 
     it('narrows the directory to analyzers with analyzer=1 and nothing else', () => {
@@ -167,7 +202,7 @@ describe('a game reading', () => {
     };
 
     it('lists community readings and each bot seat\'s own view, and whether a player opted out', () => {
-        const own = { kind: `own`, side: `x`, player: `hextide`, turns: [{ turn: 4, toMove: `x`, lines: [line] }] };
+        const own = { kind: `own`, side: `x`, player: `hextide`, values: { scale: 1, cuts: null, meaning: `raw` }, turns: [{ turn: 4, toMove: `x`, lines: [line] }] };
         const list = { analyses: [community, own], optedOut: false };
         expect(analysisListSchema.parse(list)).toEqual(list);
         expect(analysisListSchema.safeParse({ analyses: [] }).success).toBe(false);

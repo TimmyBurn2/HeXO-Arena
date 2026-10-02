@@ -6,7 +6,7 @@ import { rowFacts } from '../src/analysis/row-facts';
 import { botSourceId, type Reading } from '../src/analysis/sources';
 import { gameLine, gameTree, turnsOfGame } from '../src/analysis/state';
 import { nodeAt, playLineFrom } from '../src/analysis/tree';
-import { community, judgedCells, ownViews } from './judged-game';
+import { community, judgedCells, nextWinTurns, ownViews } from './judged-game';
 
 const line = gameLineOf(judgedCells, 1);
 const list = (analyses: AnalysisList[`analyses`]): AnalysisList => ({ analyses, optedOut: false });
@@ -47,6 +47,11 @@ describe('rowFacts', () => {
     it('reads a turn\'s value from its own line where the reading before it lists it, else from the best line after it', () => {
         expect(of(2)).toEqual({ judgment: null, value: `x 0.05` });
         expect(of(3)).toEqual({ judgment: null, value: `x 0.45` });
+    });
+
+    it('counts a win the next mover\'s best line finds from the board after a turn, that line\'s own turn included', () => {
+        const next = rowFacts(tree, reader(list([community({ turns: nextWinTurns })])), () => botSourceId(`kestrel`));
+        expect(next.get(played[2]?.id ?? -1)?.value).toBe(`x wins in 2`);
     });
 
     it('reads a six as won only where the source read the position it was played from', () => {

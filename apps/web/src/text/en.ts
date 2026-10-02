@@ -23,6 +23,7 @@ import {
     unlimitedWallCapMs,
     type AnalysisFailure,
     type DiscordNames,
+    type JudgmentReason,
     type JudgmentSeverity,
     type LegalPage,
     type ReportReason,
@@ -43,6 +44,10 @@ function ordinal(place: number): string {
     const suffix = tens >= 11 && tens <= 13 ? `th` : ones === 1 ? `st` : ones === 2 ? `nd` : ones === 3 ? `rd` : `th`;
     return `${String(place)}${suffix}`;
 }
+// A forced win given up or handed over, as a verdict names it after its severity, which heads it.
+const reasons = { 'gave-away-win': `gave away the win`, 'missed-win': `missed a forced win`, 'allowed-win': `allowed a forced win` } as const satisfies Record<Exclude<JudgmentReason, `value-drop`>, string>;
+const severityWord = (severity: JudgmentSeverity) => `${severity.charAt(0).toUpperCase()}${severity.slice(1)}`;
+const reasonWords = (reason: JudgmentReason) => (reason === `value-drop` ? `` : `: ${reasons[reason]}`);
 // A count in the catalog's language, its thousands grouped: 1,234.
 const countFormat = new Intl.NumberFormat(`en-US`);
 const counted = (count: number) => countFormat.format(count);
@@ -855,7 +860,6 @@ export const en = {
             },
             notReading: `not reading now`,
             ownView: `Own view`,
-            ownBy: `its own view, published with the game`,
             ownSeat: (side: string) => `${side}'s own view`,
             ownRead: `Said while it played`,
             ownNone: `No own view of this position; a bot's own view shows at the turns it played.`,
@@ -871,6 +875,9 @@ export const en = {
             waitingNote: (name: string, seconds: number) => `It goes to ${name} when it is free, in about ${String(seconds)} s.`,
             cells: (side: string, cells: readonly string[]) => `${side}: ${cells.join(` `)}`,
             play: (letter: string, value: string, cells: string) => `Play line ${letter}: ${value}, ${cells}`,
+            // The lines past A, folded behind a toggle that names them: "B, C".
+            foldLetters: (letters: readonly string[]) => letters.join(`, `),
+            fold: (letters: readonly string[]) => `${letters.length === 1 ? `Line` : `Lines`} ${letters.join(`, `)}`,
             askAgain: `Ask again`,
             // A wait a refusal names: seconds under a minute, every unit spelled out past it.
             wait: (seconds: number) => (seconds < 60 ? `${String(seconds)} s` : spelledWait(seconds)),
@@ -921,7 +928,7 @@ export const en = {
         },
         tree: {
             label: `Moves`,
-            opening: (last: number) => (last === 0 ? `op 0` : `op 0-${String(last)}`),
+            openingMark: `op`,
             openingSpoken: (last: number) => (last === 0 ? `opening, turn 0` : `opening, turns 0 to ${String(last)}`),
             variations: `Variations`,
             more: (turn: number) => `More for turn ${String(turn)}`,
@@ -1042,16 +1049,41 @@ export const en = {
             severities: { inaccuracy: `inaccuracy`, mistake: `mistake`, blunder: `blunder` } satisfies Record<JudgmentSeverity, string>,
             count: (count: number, severity: JudgmentSeverity) =>
                 `${String(count)} ${count === 1 ? severity : ({ inaccuracy: `inaccuracies`, mistake: `mistakes`, blunder: `blunders` } satisfies Record<JudgmentSeverity, string>)[severity]}`,
-            // A judged turn's reason, as a note's sentence opens and as a line runs on.
-            reason: (reason: `missed-win` | `allowed-win`) => (reason === `missed-win` ? `Missed a forced win` : `Allowed a forced win`),
-            reasonInLine: (reason: `missed-win` | `allowed-win`) => (reason === `missed-win` ? `missed a forced win` : `allowed a forced win`),
-            // "Blunder: allowed a forced win", or the severity alone for a turn that only lost value.
-            verdict: (severity: JudgmentSeverity, reason: `missed-win` | `allowed-win` | `value-drop`) =>
-                `${severity.charAt(0).toUpperCase()}${severity.slice(1)}${reason === `value-drop` ? `` : `: ${reason === `missed-win` ? `missed a forced win` : `allowed a forced win`}`}`,
-            severity: (severity: JudgmentSeverity) => `${severity.charAt(0).toUpperCase()}${severity.slice(1)}`,
             above: `x ahead above the line`,
             below: `o ahead below`,
             noMarks: `No marks`,
+        },
+        window: {
+            label: `Analyzer`,
+            noReading: `No reading of this game yet`,
+            requestsLeft: (left: number) =>
+                left === 0 ? `No requests left today` : `${String(left)} of ${String(analysisRequestsPerUserDay)} requests left today`,
+            playPreferred: (line: string) => `Play ${line} as a variation`,
+        },
+        // A turn explained as a named analyzer's opinion; values keep their side and number together.
+        explain: {
+            // "Mistake", or "Blunder: allowed a forced win" for a forced win given up or handed over.
+            title: (severity: JudgmentSeverity, reason: JudgmentReason) => `${severityWord(severity)}${reasonWords(reason)}`,
+            severity: severityWord,
+            reason: reasonWords,
+            // The verdict as a line runs on: "mistake", "allowed a forced win".
+            inLine: (severity: JudgmentSeverity, reason: JudgmentReason) => (reason === `value-drop` ? severity : reasons[reason]),
+            // A title that names its reason takes a semicolon before the text, a bare severity a colon.
+            joiner: (namesReason: boolean) => (namesReason ? `; ` : `: `),
+            preferred: (before: string, after: string, analyzer: string) => `${before} before, ${after} after; ${analyzer} preferred`,
+            firstChoice: (after: string, analyzer: string) => `${after} after; ${analyzer}'s first choice`,
+            afterOnly: (after: string) => `${after} after`,
+            six: (side: string) => `${side} wins with six in a row`,
+            opening: `Placed by the opening; not judged`,
+            variation: (after: string) => `${after} after; variations are not judged`,
+            variationUnread: `Variations are not judged`,
+            unjudged: `; not judged until the game is read whole`,
+            unread: `Not read yet; not judged until the game is read whole`,
+            own: (name: string, after: string) => `${name}'s own view: ${after} after this turn`,
+            openingHead: `The opening`,
+            gameHead: (turn: number, player: string) => `Turn ${String(turn)}, ${player}`,
+            variationHead: (turn: number) => `Turn ${String(turn)}, a variation`,
+            boardHead: (turn: number) => `Turn ${String(turn)}`,
         },
     },
     rundown: {
@@ -1140,8 +1172,6 @@ export const en = {
             own: `Own view`,
             ownBy: `own view`,
             ownNote: `Each bot's view of its own turns, published once the game ended`,
-            // "Allowed a forced win; kestrel preferred x: [-7,6] [-8,6], o 0.12"
-            note: (reason: string, analyzer: string, line: string, value: string) => `${reason}; ${analyzer} preferred ${line}, ${value}`,
             // "hextide: allowed a forced win; kestrel"
             readout: (who: string, what: string, by: string) => `${who}: ${what}; ${by}`,
             // A value's side stays with its number, so "x 0.12" never breaks between them.

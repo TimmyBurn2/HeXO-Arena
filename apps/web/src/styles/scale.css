@@ -30,6 +30,8 @@
 
         --leading-tight: 1.25;
         --leading-normal: 1.5;
+        /* a paragraph of buttons, whose lines keep their targets apart */
+        --leading-loose: 1.9;
 
         --measure: 40rem;
 
@@ -135,7 +137,13 @@
         --analysis-value-w: 6.5rem;
         --analysis-letter-w: 1.5rem;
         --analysis-letter-h: 1.7rem;
-        --analysis-row-value-w: 5.5rem;
+        /* two lines of a turn's explanation, so the window above the move
+           list holds still as most turns are explained */
+        --analysis-bubble-text-h: 3em;
+        /* a mark and its count in the analysis window's grid of them */
+        --analysis-count-w: 3.25rem;
+        /* a variation's turn, a whole target in a line of them */
+        --analysis-token-h: 1.5rem;
         /* a line or the eval bar waiting for its reading */
         --analysis-held-opacity: 0.4;
         --sheet-peek-h: 4.5rem;
@@ -148,6 +156,9 @@
         /* a game's graph in the drawer, and the mini one in a phone's peek */
         --graph-h: 4.5rem;
         --graph-mini-h: 2.25rem;
+        /* the analysis window's graph folded into a phone's strip */
+        --graph-strip-h: 2.5rem;
+        --graph-key-size: 0.625rem;
         --graph-trace-w: 2px;
         --graph-line-w: 1px;
         --graph-mark-edge-w: 1.5px;

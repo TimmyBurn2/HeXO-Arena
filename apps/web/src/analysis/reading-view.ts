@@ -25,21 +25,49 @@ export function shownLines(reading: Reading, position: Setup, mover: Side, count
     return shownLinesOf(reading.lines, position, mover, count);
 }
 
-/** Lines as they show at a position, at most `count` of them, best first, whoever read them. */
+/**
+ * Lines as they show at a position, at most `count` of them, best first, whoever read them.
+ * A line completes six with its first stone, which ends the turn, or with both.
+ */
 export function shownLinesOf(lines: readonly ReadingLine[], position: Setup, mover: Side, count: number): ShownLine[] {
     return lines.slice(0, Math.min(count, lineLetters.length)).map((line, index) => {
         const [first, second] = line.cells;
-        const completesSix = playTurn(position, [first]).ok;
-        const cells: ShownLine[`cells`] = completesSix ? [first] : [first, second];
+        const firstWins = playTurn(position, [first]).ok;
+        const both = firstWins ? null : playTurn(position, [first, second]);
+        const completesSix = firstWins || (both?.ok === true && both.win !== null);
+        const cells: ShownLine[`cells`] = firstWins ? [first] : [first, second];
         return {
             letter: lineLetters[index] ?? ``,
             cells,
             evaluation: line.evaluation,
             completesSix,
-            value: valueWords(line.evaluation, { kind: `line`, mover, completesSix }) ?? ``,
+            value: lineWords(line.evaluation, mover, completesSix) ?? ``,
             cellsText: cells.map(cellText).join(` `),
         };
     });
+}
+
+/**
+ * Where the value of the board after a turn comes from: the played turn's own line, whose evaluation describes that board,
+ * or the next mover's best line from it, whose evaluation describes the board a turn later.
+ */
+export type AfterReading =
+    | { readonly kind: `played`; readonly evaluation: HtttxPositionEvaluation }
+    | { readonly kind: `next`; readonly evaluation: HtttxPositionEvaluation; readonly mover: Side };
+
+/**
+ * The value of the board after a turn in words, a forced win counting its winner's own turns from that board:
+ * a win the next mover's best line finds for that mover counts the line's own turn too.
+ */
+export function afterWords(after: AfterReading): string | null {
+    return after.kind === `played` ? valueWords(after.evaluation, { kind: `board` }) : lineWords(after.evaluation, after.mover, false);
+}
+
+// A line's value for its mover, from the position it is played from;
+// a win in 1 for its own mover is a six it completes this very turn, whatever the board check found.
+function lineWords(evaluation: HtttxPositionEvaluation, mover: Side, completesSix: boolean): string | null {
+    if (!completesSix && forcedWinner(evaluation) === mover && Math.abs(evaluation.win_in ?? 0) === 1) return valueWords(evaluation, { kind: `board` });
+    return valueWords(evaluation, { kind: `line`, mover, completesSix });
 }
 
 /**

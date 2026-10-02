@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useState } from 'react';
-import type { GameSnapshot } from '@hexo-arena/contract';
+import { undeclaredValues, type GameSnapshot } from '@hexo-arena/contract';
 import { useAnalysisSettings } from '../analysis/analysis-settings';
 import { communityReading, gameLineOf, ownReading, type GameLine, type GameReading } from '../analysis/game-readings';
 import type { BoardStone } from '../board/Board';
@@ -50,7 +50,7 @@ export function useGameReading({ snapshot, replay, shownStones, feedLines, curre
     const active = head === null ? null : (head.choices.find((choice) => choice.id === chosen) ?? head.choices[0] ?? null);
     const view = useMemo(() => {
         if (active === null || line === null) return null;
-        return active.kind === `community` ? communityReading(line, active.analysis.turns, active.analysis.status === `done`) : ownReading(line, active.views);
+        return active.kind === `community` ? communityReading(line, active.analysis.turns, active.analysis.status === `done`, active.analysis.analyzer?.values ?? undeclaredValues) : ownReading(line, active.views);
     }, [active, line]);
     const [pointed, setPointed] = useState<number | null>(null);
     const [settings] = useAnalysisSettings();

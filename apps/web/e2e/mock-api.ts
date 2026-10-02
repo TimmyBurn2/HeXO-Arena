@@ -15,9 +15,12 @@ import {
     type AnalysisList,
     type AnalysisRequest,
     type AnalysisTurn,
+    type AnalyzerValues,
     type CommunityAnalysis,
     type OwnAnalysis,
     type PositionReadingRequest,
+    undeclaredValues,
+    winChanceCuts,
     accountExportSchema,
     deleteAccountRequestSchema,
     reportFormMetaName,
@@ -131,11 +134,14 @@ export type PositionAnswer =
     | { kind: `failed`; failure: AnalysisFailure }
     | { kind: `refused`; status: number; code: string; retryAfter?: number };
 
+// kestrel declares its values expected, x's expected result, so its readings mark drops of value by lichess's cuts.
+const winChanceValues: AnalyzerValues = { scale: 1, cuts: winChanceCuts, meaning: `expected` };
+
 /** Two analyzers online, one reading up to 5 s and three lines, one up to 2 s and two, and one offline. */
 export const analyzerBots: BotListing[] = [
-    { name: `kestrel`, ownerName: `tom`, online: true, openForChallenges: false, rating: 1500, provisional: true, liveGames: 0, levels: null, version: `0.9`, analyzer: { maxSeconds: 5, lines: 3, whilePlaying: false, ready: true } },
-    { name: `driftwood`, ownerName: `mika`, online: true, openForChallenges: false, rating: 1500, provisional: true, liveGames: 0, levels: null, analyzer: { maxSeconds: 2, lines: 2, whilePlaying: false, ready: true } },
-    { name: `slowpoke`, ownerName: `ana`, online: false, openForChallenges: false, rating: 1500, provisional: true, liveGames: 0, levels: null, analyzer: { maxSeconds: 10, lines: 1, whilePlaying: false, ready: false } },
+    { name: `kestrel`, ownerName: `tom`, online: true, openForChallenges: false, rating: 1500, provisional: true, liveGames: 0, levels: null, version: `0.9`, analyzer: { maxSeconds: 5, lines: 3, whilePlaying: false, values: winChanceValues, ready: true } },
+    { name: `driftwood`, ownerName: `mika`, online: true, openForChallenges: false, rating: 1500, provisional: true, liveGames: 0, levels: null, analyzer: { maxSeconds: 2, lines: 2, whilePlaying: false, values: undeclaredValues, ready: true } },
+    { name: `slowpoke`, ownerName: `ana`, online: false, openForChallenges: false, rating: 1500, provisional: true, liveGames: 0, levels: null, analyzer: { maxSeconds: 10, lines: 1, whilePlaying: false, values: undeclaredValues, ready: false } },
 ];
 
 // Each line's heuristic for the side to move, x-positive as the wire has it.
@@ -237,7 +243,7 @@ export const bots: BotListing[] = [
         provisional: false,
         liveGames: 0,
         levels: strengths,
-        analyzer: { maxSeconds: 10, lines: 1, whilePlaying: true, ready: true },
+        analyzer: { maxSeconds: 10, lines: 1, whilePlaying: true, values: undeclaredValues, ready: true },
         about: `A clean-room HeXO engine with a rotation opener.`,
         version: `0.3.1`,
         repoUrl: `https://github.com/quinn/sealbot`,
@@ -278,7 +284,7 @@ export const bots: BotListing[] = [
  */
 export const heldBots: BotListing[] = [
     { name: `alder`, ownerName: `quinn`, online: false, openForChallenges: false, rating: 1500, provisional: true, liveGames: 0, levels: null, analyzer: null },
-    { name: `marsh`, ownerName: `quinn`, online: true, openForChallenges: false, rating: 1588, provisional: false, liveGames: 0, levels: null, version: `0.4.0`, analyzer: { maxSeconds: 5, lines: 3, whilePlaying: false, ready: true } },
+    { name: `marsh`, ownerName: `quinn`, online: true, openForChallenges: false, rating: 1588, provisional: false, liveGames: 0, levels: null, version: `0.4.0`, analyzer: { maxSeconds: 5, lines: 3, whilePlaying: false, values: undeclaredValues, ready: true } },
     ...bots.filter((bot) => bot.ownerName === `quinn`),
     {
         name: `tidewater-alphabeta-v2`,
@@ -289,7 +295,7 @@ export const heldBots: BotListing[] = [
         provisional: false,
         liveGames: 1,
         levels: strengths,
-        analyzer: { maxSeconds: 2, lines: 2, whilePlaying: true, ready: true },
+        analyzer: { maxSeconds: 2, lines: 2, whilePlaying: true, values: undeclaredValues, ready: true },
         accepts: { turnMs: [5000, 120000], match: true, unlimited: false },
     },
 ];
@@ -852,13 +858,16 @@ export const games: Record<string, GameSnapshot> = {
 };
 
 // long-finished read whole: the best line's value at the position before
-// each turn, x-positive, a forced win as winIn. x slips on turns 6 and 14,
-// o blunders on 17, and x hands o a forced win on 22, which o plays out to
-// its six on 25.
+// each turn, x-positive, a forced win as winIn, counted in turns from the
+// board after the line, its side to move first; a line completing six
+// carries 1 for its mover. x slips on turn 6; from turn 10 the board holds
+// o sixes that o leaves untaken, a blunder on each of its turns, and x, lost
+// until it could block again, leaves o a six on 20 and 22 and gives away its
+// own on 24; o completes six on 25.
 const longStones = longCells.slice(0, 51);
 const longBest: Readonly<Record<number, number | { winIn: number }>> = {
     3: 0.02, 4: 0.05, 5: 0.08, 6: 0.17, 7: 0.05, 8: 0.1, 9: 0.12, 10: 0.15, 11: 0.2, 12: 0.24, 13: 0.28, 14: 0.33,
-    15: 0.12, 16: 0.1, 17: 0.08, 18: 0.45, 19: 0.4, 20: 0.22, 21: 0.15, 22: -0.12, 23: { winIn: -3 }, 24: { winIn: -2 }, 25: { winIn: -1 },
+    15: 0.12, 16: 0.1, 17: 0.08, 18: 0.45, 19: 0.4, 20: 0.22, 21: 0.15, 22: -0.12, 23: { winIn: -2 }, 24: { winIn: -1 }, 25: { winIn: -1 },
 };
 const longFirstTurn = 3;
 const longLastTurn = 25;
@@ -869,7 +878,8 @@ function longPlayed(turn: number): { x: number; y: number }[] {
 }
 
 // Lines best first, each worse for the mover by a step: on turn 22 the
-// third is the turn x played, which hands o the win.
+// third is the turn x played, which hands o the win, and on turn 25 the
+// first is o's six.
 function longTurn(turn: number, count: number, scale: number): AnalysisTurn {
     const toMove: Side = turn % 2 === 1 ? `o` : `x`;
     const sign = toMove === `x` ? 1 : -1;
@@ -878,6 +888,7 @@ function longTurn(turn: number, count: number, scale: number): AnalysisTurn {
     const lines = Array.from({ length: count }, (_, rank): AnalysisLine => {
         const cells = [free[rank * 2] ?? { x: 0, y: 0 }, free[rank * 2 + 1] ?? { x: 0, y: 0 }];
         if (turn === 22 && rank === 2) return { cells: longPlayed(22), winIn: -3 };
+        if (turn === longLastTurn && rank === 0) return { cells: longPlayed(turn), winIn: -1 };
         if (typeof best !== `number`) return rank === 0 ? { cells, winIn: best.winIn } : { cells, heuristic: -0.4 - 0.1 * rank };
         return { cells, heuristic: Math.round((best * scale - sign * 0.07 * rank) * 100) / 100 };
     });
@@ -895,17 +906,27 @@ function longOwn(side: Side, player: string): OwnAnalysis {
     for (let turn = side === `o` ? 3 : 4; turn <= longLastTurn; turn += 2) {
         const next = longBest[turn + 1] ?? { winIn: side === `o` ? -1 : 1 };
         const free = freeCells(longStones.slice(0, 2 * turn - 1));
-        const own: AnalysisLine = typeof next === `number` ? { cells: longPlayed(turn), heuristic: Math.round((next + (side === `x` ? 0.1 : -0.05)) * 100) / 100 } : { cells: longPlayed(turn), winIn: next.winIn };
+        const own: AnalysisLine =
+            typeof next === `number`
+                ? { cells: longPlayed(turn), heuristic: Math.round((next + (side === `x` ? 0.1 : -0.05)) * 100) / 100 }
+                : { cells: longPlayed(turn), winIn: turn === longLastTurn ? next.winIn : ownWinIn(next.winIn, side === `x` ? `o` : `x`) };
         turns.push({
             turn,
             toMove: side,
             lines: [own, { cells: [free[0] ?? { x: 0, y: 0 }, free[1] ?? { x: 0, y: 0 }], heuristic: 0.05 }, { cells: [free[2] ?? { x: 0, y: 0 }, free[3] ?? { x: 0, y: 0 }], heuristic: -0.05 }],
         });
     }
-    return { kind: `own`, side, player, turns };
+    return { kind: `own`, side, player, values: undeclaredValues, turns };
 }
 
-const kestrelRef = { name: `kestrel`, version: `0.9`, ownerName: `tom` };
+// A forced win the next mover's best line finds counts from the board after that line,
+// a turn after the one a played turn describes: one turn more, unless the line is that mover's six.
+function ownWinIn(next: number, nextMover: Side): number {
+    const nextWins = next > 0 === (nextMover === `x`);
+    return nextWins && Math.abs(next) === 1 ? next : next + Math.sign(next);
+}
+
+const kestrelRef = { name: `kestrel`, version: `0.9`, ownerName: `tom`, values: winChanceValues };
 const readAt = new Date(Date.UTC(2026, 9, 1, 12)).toISOString();
 
 /** long-finished's readings in each state a community reading passes through, and both bots' own views. */
@@ -921,7 +942,7 @@ export const longReadings: {
     driftwood: {
         kind: `community`,
         analysisId: `a_7c2a1d4f-3e5b-4f6c-9d7e-8f9a0b1c2d3e`,
-        analyzer: { name: `driftwood`, version: null, ownerName: `mika` },
+        analyzer: { name: `driftwood`, version: null, ownerName: `mika`, values: undeclaredValues },
         status: `done`,
         requestedAt: readAt,
         finishedAt: readAt,
@@ -1248,7 +1269,7 @@ async function answerPosition(route: Route, state: World, request: PositionReadi
     const answer = state.positions;
     const left = me.analysisLeft.positions;
     const analyzer = analyzerBots.find((bot) => bot.name === request.analyzer) ?? analyzerBots[0];
-    const ref = { name: analyzer?.name ?? `kestrel`, version: analyzer?.version ?? null, ownerName: analyzer?.ownerName ?? null };
+    const ref = { name: analyzer?.name ?? `kestrel`, version: analyzer?.version ?? null, ownerName: analyzer?.ownerName ?? null, values: analyzer?.analyzer?.values ?? undeclaredValues };
     switch (answer.kind) {
         case `held`:
             return;

@@ -21,17 +21,20 @@ async function open(page: Page, path: string, overrides: Partial<World> = {}, wi
 
 const game = `/analysis?game=long-finished&turn=12`;
 const lines = (page: Page) => page.locator(`.an-line:not(.an-line-held)`);
-const row = (page: Page, turn: number) => page.locator(`.an-tree > .an-row`).filter({ has: page.locator(`.feed-n`, { hasText: new RegExp(`^${String(turn)}$`, `u`) }) });
+const row = (page: Page, turn: number) => page.locator(`.an-tree > .an-row`).filter({ has: page.locator(`.an-row-n`, { hasText: new RegExp(`^${String(turn)}$`, `u`) }) });
 const pills = (page: Page) => page.getByRole(`group`, { name: `Readings` });
-const graph = (page: Page) => page.locator(`.an-game-reading`);
+const graph = (page: Page) => page.locator(`.an-win-graph`);
+const counts = (page: Page) => page.locator(`.an-win-counts`);
 
 test('a game read whole shows its graph, each side\'s marks, and every turn\'s verdict and value as the drawer does, without asking', async ({ page }) => {
     const state = await open(page, game);
     await expect(pills(page).getByRole(`button`)).toHaveText([`driftwood`, `kestrel`, `Own view`]);
     await expect(pills(page).getByRole(`button`, { name: `kestrel` })).toHaveAttribute(`aria-pressed`, `true`);
     await expect(graph(page).getByRole(`img`)).toHaveAccessibleName(`Graph of kestrel's reading, from the opening to turn 25`);
-    await expect(graph(page).locator(`.graph-mark`)).toHaveCount(4);
-    await expect(page.locator(`.dr-marks-row`)).toHaveText([`hextide?!1 inaccuracy?1 mistake??1 blunder`, `quietlake??1 blunder`]);
+    await expect(graph(page).locator(`.graph-mark`)).toHaveCount(11);
+    await expect(counts(page).locator(`dt`)).toHaveText([`hextide`, `quietlake`]);
+    await expect(counts(page).locator(`.dr-mark-count .sr-only`)).toHaveText([`1 inaccuracy`, `0 mistakes`, `3 blunders`, `0 inaccuracies`, `0 mistakes`, `7 blunders`]);
+    await expect(counts(page).locator(`.dr-mark-none`)).toHaveCount(3);
 
     await expect(row(page, 17).locator(`.jd-blunder`)).toHaveText(`??`);
     await expect(row(page, 22).getByRole(`button`).first()).toHaveAccessibleName(/^22 x: \[-?\d+,-?\d+\] \[-?\d+,-?\d+\] Blunder: allowed a forced win; o wins in 2$/u);
@@ -41,9 +44,10 @@ test('a game read whole shows its graph, each side\'s marks, and every turn\'s v
     await expect(row(page, 12).locator(`.jd`)).toHaveCount(0);
 
     // The position after turn 12 holds kestrel's reading before turn 13, with o to move.
-    await expect(lines(page)).toHaveCount(3);
+    await expect(lines(page)).toHaveCount(1);
+    await page.getByRole(`button`, { name: `Lines B, C` }).click();
     await expect(page.locator(`.an-line .an-value`)).toHaveText([`x 0.28`, `x 0.35`, `x 0.42`]);
-    await expect(page.locator(`.an-by`)).toHaveText(`kestrelBOT0.9, by tom; 2 s a position`);
+    await expect(page.locator(`.an-by`)).toHaveText(`kestrelBOT`);
     await expect(page.locator(`.an-state`)).toHaveText(`Read before; o to move`);
     await expect(page.locator(`.an-evalbar-chip`)).toHaveText(`x 0.28`);
 
@@ -86,21 +90,19 @@ test('a position a stored game passes through shows its reading on any line that
     await expect(page.locator(`.an-chip-nav .scrub-words`)).toHaveText(`Turn 13, a variation`);
     await expect(page.locator(`.an-state`)).toHaveText(`Read before; x to move`);
     await expect(page.locator(`.an-line .an-value`).first()).toHaveText(`x 0.33`);
-    await expect(page.locator(`.an-var .an-row`).last().locator(`.an-row-value`)).toHaveText(`x 0.33`);
-    await expect(page.locator(`.an-var .an-row`).first().locator(`.an-row-value`)).toHaveCount(0);
 });
 
 test('the bots\' own views sit under their own pill, each seat\'s trace in its color and no marks', async ({ page }) => {
     await open(page, game);
     await pills(page).getByRole(`button`, { name: `Own view` }).click();
     await expect(pills(page).getByRole(`button`, { name: `Own view` })).toHaveAttribute(`aria-pressed`, `true`);
-    await expect(page.locator(`.an-by`)).toHaveText(`quietlakeBOTits own view, published with the game`);
+    await expect(page.locator(`.an-by`)).toHaveText(`quietlakeBOT`);
     await expect(page.locator(`.an-state`)).toHaveText(`Said while it played; o to move`);
-    await expect(lines(page)).toHaveCount(3);
+    await expect(lines(page)).toHaveCount(1);
     await expect(graph(page).getByRole(`img`)).toHaveAccessibleName(`Graph of each bot's own view, from the opening to turn 25`);
     await expect(graph(page).locator(`.graph-trace-x`)).toHaveCount(1);
     await expect(graph(page).locator(`.graph-trace-o`)).toHaveCount(1);
-    await expect(page.locator(`.dr-own-key`)).toHaveText(`hextidequietlake`);
+    await expect(page.locator(`.an-bubble-full`)).toHaveText(/^Turn 12hextide's own view: x\u00a00\.\d\d after this turn$/u);
     await expect(page.locator(`.dr-marks`)).toHaveCount(0);
     await expect(page.locator(`.an-tree .jd`)).toHaveCount(0);
 
@@ -111,38 +113,59 @@ test('the bots\' own views sit under their own pill, each seat\'s trace in its c
 
 test('signed out, a stored game\'s readings and own views show, and only asking needs a sign-in', async ({ page }) => {
     const state = await open(page, game, { me: null });
-    await expect(lines(page)).toHaveCount(3);
-    await expect(page.locator(`.an-reading`)).toContainText(`Sign in to ask analyzers; the board works without it.`);
+    await expect(page.getByRole(`switch`, { name: `Analyze` })).toHaveCount(0);
+    await expect(lines(page)).toHaveCount(1);
     await expect(page.locator(`.dr-marks`)).toHaveCount(1);
     await pills(page).getByRole(`button`, { name: `Own view` }).click();
     await expect(page.locator(`.an-by`)).toContainText(`quietlake`);
     await page.keyboard.press(`ArrowLeft`);
-    await expect(page.locator(`.an-reading`)).toContainText(`hextide`);
+    await expect(page.locator(`.an-by`)).toContainText(`hextide`);
+    // Off the game's line nothing is stored, and asking needs a sign-in.
+    await pills(page).getByRole(`button`, { name: `kestrel` }).click();
+    for (const [x, y] of [[3, 3], [3, 4]] as const) await page.locator(`.board-camera polygon.cell[data-x="${String(x)}"][data-y="${String(y)}"]`).click({ force: true });
+    await expect(page.locator(`.an-win-who`)).toHaveText(`Sign in to ask analyzers; the board works without it.`);
+    await expect(page.locator(`.an-window .discord-button`)).toBeVisible();
+    await page.keyboard.press(`a`);
+    await page.waitForTimeout(800);
     expect(state.asked).toHaveLength(0);
 });
 
 test('a reading still running draws its graph so far and keeps its marks for its end', async ({ page }) => {
     await open(page, game, { analyses: { 'long-finished': { analyses: [longReadings.running, ...longReadings.own], optedOut: false } } });
     await expect(graph(page).getByRole(`img`)).toHaveAccessibleName(`Graph of kestrel's reading, from the opening to turn 25`);
+    await expect(page.locator(`.an-win-card`)).toContainText(`kestrel is reading turn 13 of 25`);
     await expect(page.locator(`.dr-marks`)).toHaveCount(0);
     await expect(page.locator(`.an-tree .jd`)).toHaveCount(0);
+    await expect(page.locator(`.an-bubble-full`)).toContainText(`not judged until the game is read whole`);
     await expect(row(page, 6).locator(`.an-row-value`)).not.toHaveText(``);
     await expect(row(page, 20).locator(`.an-row-value`)).toHaveCount(0);
 });
 
 test('a game whose player opted out says so, and its positions are still read on request', async ({ page }) => {
     const state = await open(page, game, { analyses: { 'long-finished': { analyses: [], optedOut: true } } });
-    await expect(page.locator(`.an-panel`)).toContainText(`A player in this game asked that their games not be analyzed`);
+    await expect(page.locator(`.an-win-card`)).toHaveText(`A player in this game asked that their games not be analyzed`);
     await expect(graph(page)).toHaveCount(0);
+    await expect(page.locator(`.an-bubble`)).toHaveCount(0);
     await page.keyboard.press(`a`);
-    await expect(lines(page)).toHaveCount(3);
+    await expect(lines(page)).toHaveCount(1);
+    // Read live, a turn of a game no reading may judge whole waits for no such reading.
+    await expect(page.locator(`.an-bubble-full`)).toHaveText(/^Turn 12, hextide[xo]\u00a00\.\d\d after$/u);
     expect(state.asked).toHaveLength(1);
 });
 
-test('on a phone the graph and the marks flow under the lines without pushing the page sideways', async ({ page }) => {
+test('on a phone the window folds into a strip of the graph, Analyze, and the gear, the marks left to the graph, without pushing the page sideways', async ({ page }) => {
     await open(page, game, {}, 390, 844);
     await expect(graph(page).getByRole(`img`)).toBeVisible();
-    await expect(page.locator(`.dr-marks`)).toBeVisible();
+    await expect(graph(page).locator(`.graph-mark`)).toHaveCount(11);
+    const [plot, gear] = await Promise.all([graph(page).boundingBox(), page.getByRole(`button`, { name: `Analysis settings` }).boundingBox()]);
+    if (plot === null || gear === null) throw new Error(`no strip`);
+    expect(gear.y + gear.height / 2).toBeGreaterThan(plot.y);
+    expect(gear.y + gear.height / 2).toBeLessThan(plot.y + plot.height);
+    await expect(page.getByRole(`switch`, { name: `Analyze` })).toBeVisible();
+    await expect(page.locator(`.an-win-who`)).toBeHidden();
+    await expect(counts(page)).toBeHidden();
+    await expect(page.locator(`.an-bubble-full`)).toBeHidden();
+    await expect(page.locator(`.an-bubble-flat`)).toHaveText(/^Turn 12, hextide: x\u00a00\.24 before, x\u00a00\.28 after; kestrel preferred x: \[-?\d+,-?\d+\] \[-?\d+,-?\d+\]$/u);
     const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
     expect(overflow).toBeLessThanOrEqual(0);
 });

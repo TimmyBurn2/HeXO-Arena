@@ -1,4 +1,4 @@
-import type { AnalysisTurn, CommunityAnalysis, GameCell, OwnAnalysis } from '@hexo-arena/contract';
+import { undeclaredValues, winChanceCuts, type AnalysisTurn, type AnalyzerValues, type CommunityAnalysis, type GameCell, type OwnAnalysis } from '@hexo-arena/contract';
 
 // A five-turn game from the origin alone: o's stones run along y = 1 and
 // its second stone of turn 5 completes six; x plays turns 2 and 4.
@@ -45,7 +45,13 @@ export const judgedTurns: AnalysisTurn[] = [
     { turn: 5, toMove: `o`, lines: [{ cells: [{ x: 4, y: 1 }, { x: 5, y: 1 }], winIn: -1 }] },
 ];
 
-export const kestrel = { name: `kestrel`, version: `0.9`, ownerName: `tom` };
+// The same reading, but x's best line before turn 4 finds x a win in 2 counted from the board after that line:
+// the board after o's turn 3, which kestrel did not list, is x's win in 2, its turn 4 and then its turn 6.
+export const nextWinTurns: AnalysisTurn[] = judgedTurns.map((turn) => (turn.turn === 4 ? { ...turn, lines: [{ cells: [{ x: -1, y: 1 }, { x: -1, y: 2 }], winIn: 2 }] } : turn));
+
+// kestrel declares its values expected, x's expected result, so its readings mark drops of value by lichess's cuts.
+const expectedValues: AnalyzerValues = { scale: 1, cuts: winChanceCuts, meaning: `expected` };
+export const kestrel = { name: `kestrel`, version: `0.9`, ownerName: `tom`, values: expectedValues };
 
 export function community(overrides: Partial<CommunityAnalysis> = {}): CommunityAnalysis {
     return {
@@ -67,6 +73,7 @@ export const ownViews: OwnAnalysis[] = [
         kind: `own`,
         side: `x`,
         player: `hextide`,
+        values: undeclaredValues,
         turns: [
             { turn: 2, toMove: `x`, lines: [{ cells: [{ x: 1, y: 0 }, { x: 2, y: 0 }], heuristic: 0.3 }, { cells: [{ x: 0, y: -1 }, { x: 1, y: -1 }], heuristic: 0.2 }] },
             { turn: 4, toMove: `x`, lines: [{ cells: [{ x: 3, y: -1 }, { x: 4, y: -1 }], heuristic: 0.1 }] },
@@ -76,6 +83,7 @@ export const ownViews: OwnAnalysis[] = [
         kind: `own`,
         side: `o`,
         player: `quietlake`,
+        values: undeclaredValues,
         turns: [
             { turn: 1, toMove: `o`, lines: [{ cells: [{ x: 0, y: 1 }, { x: 1, y: 1 }], heuristic: -0.05 }] },
             { turn: 3, toMove: `o`, lines: [{ cells: [{ x: 2, y: 1 }, { x: 3, y: 1 }], heuristic: -0.2 }] },

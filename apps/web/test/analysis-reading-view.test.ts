@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { originSetup, type Setup } from '@hexo-arena/rules';
-import { shownLines, xShare } from '../src/analysis/reading-view';
+import { afterWords, shownLines, xShare } from '../src/analysis/reading-view';
 import type { Reading } from '../src/analysis/sources';
 
 function reading(lines: Reading[`lines`]): Reading {
@@ -51,6 +51,48 @@ describe('the lines a reading shows', () => {
         const [line] = shownLines(reading([{ cells: [{ x: 5, y: 0 }, { x: 6, y: 0 }], evaluation: { win_in: 1 } }]), fiveInARow, `x`, 3);
         expect(line).toMatchObject({ completesSix: true, cells: [{ x: 5, y: 0 }], value: `x wins` });
         expect(line === undefined ? null : xShare(line, `x`)).toBe(1);
+    });
+});
+
+// x has four in a row from the origin: x to move completes six only with both stones.
+const fourInARow: Setup = {
+    stones: [
+        { x: 0, y: 0, player: 0 },
+        { x: 0, y: 3, player: 1 },
+        { x: 1, y: 3, player: 1 },
+        { x: 1, y: 0, player: 0 },
+        { x: 2, y: 0, player: 0 },
+        { x: -2, y: 3, player: 1 },
+        { x: -1, y: 3, player: 1 },
+        { x: 3, y: 0, player: 0 },
+    ],
+    toMove: 0,
+};
+
+describe('a forced win in words', () => {
+    it('call a line whose two stones complete six a win, as one whose first stone does', () => {
+        const [line] = shownLines(reading([{ cells: [{ x: 4, y: 0 }, { x: 5, y: 0 }], evaluation: { win_in: 1 } }]), fourInARow, `x`, 1);
+        expect(line).toMatchObject({ completesSix: true, cells: [{ x: 4, y: 0 }, { x: 5, y: 0 }], value: `x wins` });
+        expect(line === undefined ? null : xShare(line, `x`)).toBe(1);
+    });
+
+    it('read a line\'s win in 1 for its own mover as a win this turn, not the next', () => {
+        const [line] = shownLines(reading([{ cells: [{ x: 1, y: -1 }, { x: 0, y: -1 }], evaluation: { win_in: -1 } }]), originSetup, `o`, 1);
+        expect(line?.value).toBe(`o wins in 1`);
+        const [slower] = shownLines(reading([{ cells: [{ x: 1, y: -1 }, { x: 0, y: -1 }], evaluation: { win_in: -2 } }]), originSetup, `o`, 1);
+        expect(slower?.value).toBe(`o wins in 2`);
+    });
+
+    it('count the winner\'s own turns from the board after a turn, whichever line the value comes from', () => {
+        // The played turn's own line describes the board after it, the next mover to move.
+        expect(afterWords({ kind: `played`, evaluation: { win_in: 2 } })).toBe(`x wins in 1`);
+        expect(afterWords({ kind: `played`, evaluation: { win_in: -3 } })).toBe(`o wins in 2`);
+        // The next mover's best line describes the board a turn later, so its own win counts that turn.
+        expect(afterWords({ kind: `next`, evaluation: { win_in: 2 }, mover: `x` })).toBe(`x wins in 2`);
+        expect(afterWords({ kind: `next`, evaluation: { win_in: 4 }, mover: `x` })).toBe(`x wins in 3`);
+        expect(afterWords({ kind: `next`, evaluation: { win_in: 1 }, mover: `x` })).toBe(`x wins in 1`);
+        expect(afterWords({ kind: `next`, evaluation: { win_in: 3 }, mover: `o` })).toBe(`x wins in 2`);
+        expect(afterWords({ kind: `next`, evaluation: { heuristic: -0.3 }, mover: `x` })).toBe(`o 0.30`);
     });
 });
 

@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { analysisStatusSchema } from './analysis';
+import { analysisStatusSchema, analyzerValuesSchema } from './analysis';
 import { acceptsSchema } from './api';
 import { axialCoordSchema } from './board';
 import { gameCellSchema, unratedByChoiceSchema } from './games';
@@ -78,7 +78,7 @@ export const accountExportSchema = z
                 repoUrl: z.string().nullable(),
                 accepts: acceptsSchema.nullable(),
                 levels: levelsSchema.nullable(),
-                analyzer: z.object({ maxSeconds: z.number().int(), lines: z.number().int(), whilePlaying: z.boolean() }).nullable(),
+                analyzer: z.object({ maxSeconds: z.number().int(), lines: z.number().int(), whilePlaying: z.boolean(), values: analyzerValuesSchema }).nullable(),
                 delistedAt: time.nullable(),
                 deletedAt: time.nullable(),
                 rating: exportedRatingSchema.nullable(),

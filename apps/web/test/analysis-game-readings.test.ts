@@ -1,7 +1,9 @@
+import { undeclaredValues, winChanceCuts } from '@hexo-arena/contract';
 import { describe, expect, it } from 'vitest';
 import { communityReading, gameLineOf, moverOf, ownReading, plotValue, setupBefore, turnCells } from '../src/analysis/game-readings';
 import { graphX, graphY, seriesOf, tracePoints, turnAt, washPoints, type GraphFrame } from '../src/analysis/graph';
-import { judgedCells, judgedTurns, ownViews } from './judged-game';
+import { feedNotes } from '../src/game/drawer-reading';
+import { judgedCells, judgedTurns, nextWinTurns, ownViews } from './judged-game';
 
 const line = gameLineOf(judgedCells, 1);
 
@@ -30,21 +32,32 @@ describe('a finished game as its readings lay against it', () => {
 });
 
 describe('a community reading of a whole game', () => {
-    const reading = communityReading(line, judgedTurns, true);
+    const reading = communityReading(line, judgedTurns, true, { scale: 1, cuts: winChanceCuts, meaning: `expected` });
 
     it('value each turn by its own line where the reading lists it, else by the best line after it, and a six as its winner', () => {
         expect([1, 2, 3, 4, 5].map((turn) => reading.turns.get(turn)?.value)).toEqual([`x 0.17`, `x 0.05`, `x 0.45`, `o wins in 2`, `o wins`]);
     });
 
-    it('judge each turn lichess\'s way, never the six, and count the marks per side', () => {
+    it('count a win the next mover\'s best line finds from the board after a turn, that line\'s own turn included, in the rows and the feed', () => {
+        const next = communityReading(line, nextWinTurns, true, undeclaredValues);
+        expect(next.turns.get(3)?.value).toBe(`x wins in 2`);
+        expect(feedNotes(line, next, 6, `kestrel`)[3]?.value).toBe(`x wins in 2`);
+    });
+
+    it('judge each turn by the board, its forced wins, and its analyzer\'s declared cuts, never the six, and count the marks per side', () => {
         expect([1, 2, 3, 4, 5].map((turn) => reading.turns.get(turn)?.judgment ?? null)).toEqual([
             null,
-            { severity: `inaccuracy`, reason: `value-drop` },
-            { severity: `blunder`, reason: `value-drop` },
-            { severity: `blunder`, reason: `allowed-win` },
+            { severity: `inaccuracy`, reason: `value-drop`, turns: null },
+            { severity: `blunder`, reason: `value-drop`, turns: null },
+            { severity: `blunder`, reason: `allowed-win`, turns: 1 },
             null,
         ]);
         expect(reading.counts).toEqual({ x: { inaccuracy: 1, mistake: 0, blunder: 1 }, o: { inaccuracy: 0, mistake: 0, blunder: 1 } });
+    });
+
+    it('judge no value drop for an analyzer that declared no cuts, and still the six x left o', () => {
+        const forcedOnly = communityReading(line, judgedTurns, true, undeclaredValues);
+        expect([1, 2, 3, 4, 5].map((turn) => forcedOnly.turns.get(turn)?.judgment ?? null)).toEqual([null, null, null, { severity: `blunder`, reason: `allowed-win`, turns: 1 }, null]);
     });
 
     it('plot the board after the opening first, then each turn, forced wins pinned to the winner\'s edge', () => {
@@ -67,7 +80,7 @@ describe('a community reading of a whole game', () => {
     });
 
     it('while under way, fill only the turns read so far and judge none', () => {
-        const partial = communityReading(line, judgedTurns.slice(0, 3), false);
+        const partial = communityReading(line, judgedTurns.slice(0, 3), false, undeclaredValues);
         expect(partial.points.map((point) => point.turn)).toEqual([0, 1, 2]);
         expect(partial.turns.get(3)?.value).toBe(null);
         expect(partial.turns.get(5)?.value).toBe(null);

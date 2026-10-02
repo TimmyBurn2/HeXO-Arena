@@ -1,7 +1,6 @@
-import type { CSSProperties, ReactNode } from 'react';
+import { useState, type CSSProperties } from 'react';
 import { analysisSecondsChoices, type BotListing, type Side } from '@hexo-arena/contract';
 import { BoardToggles } from '../board/BoardToggles';
-import { DiscordButton } from '../components/DiscordButton';
 import { BotBadge } from '../components/player';
 import { TopbarPanel, usePanel } from '../components/TopbarPanel';
 import { text } from '../text';
@@ -10,9 +9,10 @@ import type { HeldReading, ReadingState } from './readings';
 import { lineLetters, xShare, type ShownLine } from './reading-view';
 
 const words = text.analysis.reading;
+const [lineLetterA] = lineLetters;
 
 /**
- * Who reads the position shown, as the panel's line says it: the analyzer that did, or the one the settings name;
+ * Who reads the position shown, as the analyzer window names it: the analyzer that did, or the one the settings name;
  * a bot's own view of its turn, by the seat to move; or an engine in this browser.
  */
 export type AnalyzerShown =
@@ -37,130 +37,71 @@ export interface ReadingPill {
     readonly name: string;
 }
 
-/**
- * The top of the analysis panel: the Analyze switch, off on every visit,
- * and the settings gear, whose panel hangs under it.
- */
-export function AnalysisHead({ signedIn, analyzing, onAnalyzing, settings }: {
-    signedIn: boolean;
-    analyzing: boolean;
-    onAnalyzing: (on: boolean) => void;
-    settings: ReactNode;
-}) {
-    return (
-        <div className="an-head">
-            {signedIn ? (
-                <label className="checkline an-switch">
-                    <input
-                        type="checkbox"
-                        role="switch"
-                        checked={analyzing}
-                        onChange={(event) => {
-                            onAnalyzing(event.target.checked);
-                        }}
-                    />
-                    {words.analyze}
-                </label>
-            ) : null}
-            {settings}
-        </div>
-    );
+/** Where a source's reading of the position shown stands: the reading in hand, if any, and its latest ask. */
+export interface ShownEntry {
+    readonly read: HeldReading | null;
+    readonly state: ReadingState;
 }
 
 /**
- * What the panel says of the position shown: the readings to pick from, who reads it,
- * where the ask stands, and the analyzer's lines, or why there are none.
- * Signed out, a reading kept with a game and a bot's own view still show; only asking needs a sign-in.
- * Each line previews on the board while pointed at or focused, and plays when pressed.
+ * Who reads the position shown and where the reading stands: the analyzer's name,
+ * then its state, a pip lit while the reading is on its way;
+ * with no state to tell, what the analyzer is.
  */
-export function ReadingBlock({ signedIn, unreadable, analyzing, pills, activePill, onPill, analyzer, entry, lines, held, toMove, onPreview, onPlay, onAsk, wait }: {
-    // Null until the page knows who the person is.
-    signedIn: boolean | null;
-    unreadable: Unreadable | null;
-    analyzing: boolean;
-    pills: readonly ReadingPill[];
-    activePill: string | null;
-    onPill: (pill: ReadingPill) => void;
-    analyzer: AnalyzerShown;
-    entry: { readonly read: HeldReading | null; readonly state: ReadingState };
-    lines: readonly ShownLine[];
-    // Rows kept for lines on their way, so the panel holds still while the position is read.
-    held: number;
-    toMove: Side;
-    onPreview: (line: ShownLine | null) => void;
-    onPlay: (line: ShownLine) => void;
-    onAsk: () => void;
-    // Seconds until the day's readings come back, for a refusal that names none.
-    wait: (seconds: number | null) => string;
-}) {
-    if (signedIn === null) return null;
+export function AnalyzerHead({ analyzer, entry, analyzing, toMove }: { analyzer: AnalyzerShown; entry: ShownEntry; analyzing: boolean; toMove: Side }) {
     const { read, state } = entry;
-    const own = analyzer.kind === `own`;
-    const pillGroup =
-        pills.length > 1 ? (
-            <div className="pills an-pills" role="group" aria-label={words.readings}>
-                {pills.map((pill) => (
-                    <button
-                        key={pill.id}
-                        type="button"
-                        className={`pill${pill.id === activePill ? ` active` : ``}`}
-                        aria-pressed={pill.id === activePill}
-                        onClick={() => {
-                            onPill(pill);
-                        }}
-                    >
-                        {pill.name}
-                    </button>
-                ))}
-            </div>
-        ) : null;
-    const signIn = (
+    const name = analyzerName(analyzer);
+    const said = analyzer.kind === `own` ? (read === null ? null : words.toMove(words.ownRead, toMove)) : stateWords(state, read, analyzing, name, analyzer.kind === `any`, toMove);
+    const live = analyzer.kind !== `own` && (state.kind === `thinking` || state.kind === `queued` || (read === null && analyzing && state.kind === `idle`));
+    return (
         <>
-            <p className="note">{words.signedOut}</p>
-            <DiscordButton />
+            <p className="an-by">
+                <svg className="an-lens" viewBox="0 0 24 24" aria-hidden="true">
+                    <circle cx="10.5" cy="10.5" r="6" />
+                    <path d="M15 15l5 5" />
+                </svg>
+                <span className="an-by-name">
+                    {analyzer.kind === `any` ? words.any : analyzer.kind === `own` ? (analyzer.name ?? words.ownSeat(analyzer.side)) : analyzer.name}
+                    {analyzer.kind === `named` || analyzer.kind === `offline` || (analyzer.kind === `own` && analyzer.name !== null) ? <BotBadge /> : null}
+                </span>
+                {analyzer.kind === `engine` ? <span className="an-by-meta">{words.engineBy(analyzer.version, analyzer.seconds)}</span> : null}
+            </p>
+            <p className="an-state" role="status">
+                {said === null ? null : <span className={live ? `an-pip an-pip-live` : `an-pip`} aria-hidden="true" />}
+                {/* A refusal or a failure says its own words under the head. */}
+                {said ?? (state.kind === `refused` || state.kind === `failed` ? null : analyzerMeta(analyzer))}
+            </p>
         </>
     );
-    if (!signedIn && read === null && !own) {
-        return (
-            <div className="an-reading an-signed-out">
-                {pillGroup}
-                {signIn}
-            </div>
-        );
+}
+
+// What the analyzer is, said where no reading or ask tells more.
+function analyzerMeta(analyzer: AnalyzerShown): string {
+    switch (analyzer.kind) {
+        case `any`:
+            return words.by(null, null, analyzer.seconds);
+        case `named`:
+            return words.by(analyzer.version, analyzer.ownerName, analyzer.seconds);
+        case `offline`:
+            return words.notReading;
+        case `own`:
+            return words.ownNone;
+        case `engine`:
+            return ``;
     }
-    if (unreadable !== null) {
-        return (
-            <div className="an-reading">
-                {pillGroup}
-                <p className="note an-quiet">{unreadableText(unreadable)}</p>
-            </div>
-        );
+}
+
+function analyzerName(analyzer: AnalyzerShown): string {
+    switch (analyzer.kind) {
+        case `any`:
+            return words.anyOne;
+        case `own`:
+            return analyzer.name ?? words.ownSeat(analyzer.side);
+        case `named`:
+        case `offline`:
+        case `engine`:
+            return analyzer.name;
     }
-    const name = analyzer.kind === `any` ? words.anyOne : analyzer.kind === `own` ? (analyzer.name ?? words.ownSeat(analyzer.side)) : analyzer.name;
-    return (
-        <div className={signedIn ? `an-reading` : `an-reading an-signed-out`}>
-            {pillGroup}
-            <AnalyzerLine analyzer={analyzer} />
-            {state.kind === `refused` || state.kind === `failed` ? (
-                <Trouble state={state} analyzer={analyzer} onAsk={onAsk} wait={wait} />
-            ) : own ? (
-                <p className={read === null ? `note an-quiet` : `an-state`} role="status">
-                    {read === null ? words.ownNone : words.toMove(words.ownRead, toMove)}
-                </p>
-            ) : (
-                <>
-                    <p className="an-state" role="status">
-                        {stateWords(state, read, analyzing, name, analyzer.kind === `any`, toMove)}
-                    </p>
-                    {state.kind === `queued` ? <p className="note an-quiet">{words.waitingNote(waitedFor(state, name), (state.ahead + 1) * (read?.ask.seconds ?? seconds(analyzer)))}</p> : null}
-                    {signedIn && read === null && state.kind === `idle` && !analyzing ? <p className="note an-quiet">{words.off}</p> : null}
-                </>
-            )}
-            {/* A reading in hand stays, whatever became of a later ask. */}
-            {lines.length > 0 ? <Lines lines={lines} toMove={toMove} onPreview={onPreview} onPlay={onPlay} /> : held > 0 ? <HeldLines count={held} toMove={toMove} /> : null}
-            {signedIn || own ? null : signIn}
-        </div>
-    );
 }
 
 // The analyzer a waiting position is queued for, once the site has chosen one.
@@ -168,11 +109,27 @@ function waitedFor(state: Extract<ReadingState, { kind: `queued` }>, name: strin
     return state.by?.kind === `bot` ? state.by.name : name;
 }
 
-function seconds(analyzer: AnalyzerShown): number {
-    return analyzer.kind === `offline` || analyzer.kind === `own` ? 0 : analyzer.seconds;
+/**
+ * What line A's held place says: for a position waiting in a queue, when it goes to its analyzer;
+ * for one being read, who reads it, which the head says too, so only a phone's strip, holding the graph in the head's place, shows it.
+ */
+export type HeldNote = { readonly kind: `queued`; readonly words: string } | { readonly kind: `reading`; readonly words: string };
+
+/** The held line A's note for the position shown, if it has one. */
+export function heldNote(analyzer: AnalyzerShown, entry: ShownEntry, analyzing: boolean): HeldNote | null {
+    const { state, read } = entry;
+    if (state.kind === `queued`) {
+        const seconds = analyzer.kind === `offline` || analyzer.kind === `own` ? 0 : analyzer.seconds;
+        return { kind: `queued`, words: words.waitingNote(waitedFor(state, analyzerName(analyzer)), (state.ahead + 1) * (read?.ask.seconds ?? seconds)) };
+    }
+    if (state.kind === `thinking` || (state.kind === `idle` && analyzing && read === null)) {
+        return { kind: `reading`, words: analyzer.kind === `any` ? words.anyReading : words.reading(analyzerName(analyzer)) };
+    }
+    return null;
 }
 
-function unreadableText(unreadable: Unreadable): string {
+/** Why a position cannot be read, in a sentence. */
+export function unreadableText(unreadable: Unreadable): string {
     switch (unreadable.kind) {
         case `won`:
             return words.won;
@@ -183,7 +140,7 @@ function unreadableText(unreadable: Unreadable): string {
     }
 }
 
-function stateWords(state: ReadingState, read: HeldReading | null, analyzing: boolean, name: string, any: boolean, toMove: Side): ReactNode {
+function stateWords(state: ReadingState, read: HeldReading | null, analyzing: boolean, name: string, any: boolean, toMove: Side): string | null {
     const reading = any ? words.anyReading : words.reading(name);
     let said: string;
     switch (state.kind) {
@@ -195,84 +152,48 @@ function stateWords(state: ReadingState, read: HeldReading | null, analyzing: bo
             break;
         default:
             // A position Analyze will ask for reads as being read through the dwell before the ask.
-            said = read === null ? (analyzing ? reading : ``) : read.reading.elapsedMs === null ? words.readBefore : words.readIn(read.reading.elapsedMs);
+            said = read === null ? (analyzing && state.kind === `idle` ? reading : ``) : read.reading.elapsedMs === null ? words.readBefore : words.readIn(read.reading.elapsedMs);
     }
-    if (said === ``) return null;
-    const live = state.kind === `thinking` || state.kind === `queued` || (read === null && analyzing);
-    return (
-        <>
-            <span className={live ? `an-pip an-pip-live` : `an-pip`} aria-hidden="true" />
-            {words.toMove(said, toMove)}
-        </>
-    );
+    return said === `` ? null : words.toMove(said, toMove);
 }
 
-function AnalyzerLine({ analyzer }: { analyzer: AnalyzerShown }) {
-    return (
-        <p className="an-by">
-            <svg className="an-lens" viewBox="0 0 24 24" aria-hidden="true">
-                <circle cx="10.5" cy="10.5" r="6" />
-                <path d="M15 15l5 5" />
-            </svg>
-            <AnalyzerWords analyzer={analyzer} />
-        </p>
-    );
-}
-
-function AnalyzerWords({ analyzer }: { analyzer: AnalyzerShown }) {
-    switch (analyzer.kind) {
-        case `any`:
-            return (
-                <>
-                    <span className="an-by-name">{words.any}</span>
-                    <span className="an-by-meta">{words.by(null, null, analyzer.seconds)}</span>
-                </>
-            );
-        case `named`:
-        case `offline`:
-            return (
-                <>
-                    <span className="an-by-name">
-                        {analyzer.name}
-                        <BotBadge />
-                    </span>
-                    <span className="an-by-meta">
-                        {analyzer.kind === `named` ? words.by(analyzer.version, analyzer.ownerName, analyzer.seconds) : words.notReading}
-                    </span>
-                </>
-            );
-        case `own`:
-            return (
-                <>
-                    <span className="an-by-name">
-                        {analyzer.name ?? words.ownSeat(analyzer.side)}
-                        {analyzer.name === null ? null : <BotBadge />}
-                    </span>
-                    <span className="an-by-meta">{words.ownBy}</span>
-                </>
-            );
-        case `engine`:
-            return (
-                <>
-                    <span className="an-by-name">{analyzer.name}</span>
-                    <span className="an-by-meta">{words.engineBy(analyzer.version, analyzer.seconds)}</span>
-                </>
-            );
-    }
-}
-
-function Lines({ lines, toMove, onPreview, onPlay }: {
+/**
+ * The analyzer's lines at the position shown: line A, and the rest folded behind a toggle.
+ * Each line previews on the board while pointed at or focused, and plays when pressed.
+ */
+export function Lines({ lines, toMove, onPreview, onPlay }: {
     lines: readonly ShownLine[];
     toMove: Side;
     onPreview: (line: ShownLine | null) => void;
     onPlay: (line: ShownLine) => void;
 }) {
+    const [unfolded, setUnfolded] = useState(false);
+    const [first, ...rest] = lines;
+    if (first === undefined) return null;
+    const letters = rest.map((line) => line.letter);
+    const fold =
+        rest.length === 0 ? null : (
+            <button
+                type="button"
+                className="an-fold"
+                aria-expanded={unfolded}
+                aria-label={words.fold(letters)}
+                onClick={() => {
+                    setUnfolded(!unfolded);
+                }}
+            >
+                {words.foldLetters(letters)}
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="M6 9l6 6 6-6" />
+                </svg>
+            </button>
+        );
     return (
         <ol className="an-lines">
-            {lines.map((line) => {
+            {(unfolded ? lines : [first]).map((line, index) => {
                 const cells = words.cells(toMove, [line.cellsText]);
                 return (
-                    <li key={line.letter}>
+                    <li key={line.letter} className="an-line-row">
                         <button
                             type="button"
                             className="an-line"
@@ -303,6 +224,7 @@ function Lines({ lines, toMove, onPreview, onPlay }: {
                                 <path d="M9 5l7 7-7 7" />
                             </svg>
                         </button>
+                        {index === 0 ? fold : null}
                     </li>
                 );
             })}
@@ -310,21 +232,22 @@ function Lines({ lines, toMove, onPreview, onPlay }: {
     );
 }
 
-function HeldLines({ count, toMove }: { count: number; toMove: Side }) {
+/** Line A's place kept while the position is read, so the window holds still as the board steps; its letter dimmed, and its note. */
+export function HeldLine({ toMove, note }: { toMove: Side; note: HeldNote | null }) {
     return (
-        <ol className="an-lines" aria-hidden="true">
-            {lineLetters.slice(0, count).map((letter) => (
-                <li key={letter}>
-                    <span className="an-line an-line-held">
-                        <span className={`an-letter an-letter-${toMove}`}>{letter}</span>
-                    </span>
-                </li>
-            ))}
-        </ol>
+        <div className="an-lines">
+            <div className="an-line an-line-held">
+                <span className={`an-letter an-letter-${toMove}`} aria-hidden="true">
+                    {lineLetterA}
+                </span>
+                {note === null ? null : <span className={note.kind === `queued` ? `an-held-note` : `an-held-note an-held-reading`}>{note.words}</span>}
+            </div>
+        </div>
     );
 }
 
-function Trouble({ state, analyzer, onAsk, wait }: {
+/** Why a reading did not come, and asking again where that can help. */
+export function Trouble({ state, analyzer, onAsk, wait }: {
     state: Extract<ReadingState, { kind: `refused` | `failed` }>;
     analyzer: AnalyzerShown;
     onAsk: () => void;

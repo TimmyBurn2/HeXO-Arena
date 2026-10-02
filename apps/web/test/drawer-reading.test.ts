@@ -1,15 +1,16 @@
+import { undeclaredValues, winChanceCuts } from '@hexo-arena/contract';
 import { describe, expect, it } from 'vitest';
 import { communityReading, gameLineOf, ownReading } from '../src/analysis/game-readings';
 import { boardReading, feedNotes } from '../src/game/drawer-reading';
 import { judgedCells, judgedTurns, ownViews } from './judged-game';
 
 const line = gameLineOf(judgedCells, 1);
-const reading = communityReading(line, judgedTurns, true);
+const reading = communityReading(line, judgedTurns, true, { scale: 1, cuts: winChanceCuts, meaning: `expected` });
 // The cells the board holds after a turn.
 const after = (turn: number) => new Set(judgedCells.slice(0, 2 * turn + 1).map((cell) => `${String(cell.x)},${String(cell.y)}`));
 
 describe('what a reading adds to the feed', () => {
-    it('give each turn its mark and value, none the opening, and a judged turn what the analyzer preferred', () => {
+    it('give each turn its mark and value, none the opening, and a judged turn its explanation on one line', () => {
         const notes = feedNotes(line, reading, 6, `kestrel`);
         expect(notes[0]).toBe(null);
         expect(notes.slice(1).map((note) => [note?.severity, note?.value])).toEqual([
@@ -19,8 +20,8 @@ describe('what a reading adds to the feed', () => {
             [`blunder`, `o wins in 2`],
             [null, `o wins`],
         ]);
-        expect(notes[2]?.note).toBe(`Inaccuracy; kestrel preferred x: [-1,1] [0,1], x 0.17`);
-        expect(notes[4]?.note).toBe(`Allowed a forced win; kestrel preferred x: [0,-1] [1,-2], x 0.45`);
+        expect(notes[2]?.note).toBe(`Inaccuracy: x\u00a00.17 before, x\u00a00.05 after; kestrel preferred x: [-1,1] [0,1]`);
+        expect(notes[4]?.note).toBe(`Blunder: allowed a forced win; x\u00a00.45 before, o wins in 2 after; kestrel preferred x: [0,-1] [1,-2]`);
         expect(notes[1]?.note).toBe(null);
     });
 
@@ -49,6 +50,6 @@ describe('what the board shows of a reading at a turn', () => {
 
     it('keep the mark and drop the lines with the switch off, and show nothing at a turn not read', () => {
         expect(boardReading(line, reading, 2, after(2), true, false)).toEqual({ lines: undefined, judgment: { cell: { x: 2, y: 0 }, severity: `inaccuracy` } });
-        expect(boardReading(line, communityReading(line, judgedTurns.slice(0, 1), false), 3, after(3), true, true)).toEqual({ lines: undefined, judgment: undefined });
+        expect(boardReading(line, communityReading(line, judgedTurns.slice(0, 1), false, undeclaredValues), 3, after(3), true, true)).toEqual({ lines: undefined, judgment: undefined });
     });
 });

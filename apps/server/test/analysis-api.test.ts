@@ -123,9 +123,9 @@ const quiet: GameCell[] = [
     { x: 0, y: 3, side: `o` },
 ];
 
-async function analyzerOnline(): Promise<{ token: string; requests: unknown[] }> {
+async function analyzerOnline(values?: object): Promise<{ token: string; requests: unknown[] }> {
     const token = await mintBot(world.app, await loginAs(world.app, `kestrelowner`), `kestrel`);
-    await declare(token, { analyzer: { lines: 2, maxSeconds: 5 } });
+    await declare(token, { analyzer: { lines: 2, maxSeconds: 5, ...(values === undefined ? {} : { values }) } });
     const offer = offerIn(stream(`kestrel`));
     if (offer === undefined) throw new Error(`no offer`);
     const { requests } = await reader(offer);
@@ -144,7 +144,7 @@ function finishedGame(): string {
 describe('the analyzer declaration', () => {
     it('stores maxSeconds and whilePlaying at their defaults, shows it in the directory, and withdraws with null', async () => {
         const token = await mintBot(world.app, await loginAs(world.app, `owner`), `kestrel`);
-        expect((await declare(token, { analyzer: { lines: 3 } })).analyzer).toEqual({ maxSeconds: 2, lines: 3, whilePlaying: false, ready: false });
+        expect((await declare(token, { analyzer: { lines: 3 } })).analyzer).toEqual({ maxSeconds: 2, lines: 3, whilePlaying: false, values: { scale: 1, cuts: null, meaning: `raw` }, ready: false });
         const listed = async (query = ``) => botListingSchema.array().parse((await world.app.inject({ method: `GET`, url: `/api/bots${query}` })).json());
         expect((await listed(`?analyzer=1`)).map((bot) => bot.name)).toEqual([`kestrel`]);
         await mintBot(world.app, await loginAs(world.app, `other`), `plain`);
@@ -153,6 +153,24 @@ describe('the analyzer declaration', () => {
         expect(await listed(`?analyzer=1`)).toEqual([]);
         const refused = await world.app.inject({ method: `PATCH`, url: botAccountPath, headers: { authorization: `Bearer ${token}` }, payload: { analyzer: { lines: 4 } } });
         expect(refused.statusCode).toBe(400);
+    });
+
+    it('stores how the heuristic reads, shows it on the account and in the directory, refuses it out of bounds, and replaces it with each declaration', async () => {
+        const token = await mintBot(world.app, await loginAs(world.app, `owner`), `kestrel`);
+        const values = { scale: 1000, cuts: { inaccuracy: 0.1, mistake: 0.2, blunder: 0.3 }, meaning: `expected` };
+        expect((await declare(token, { analyzer: { lines: 1, values } })).analyzer?.values).toEqual(values);
+        const listed = botListingSchema.array().parse((await world.app.inject({ method: `GET`, url: `/api/bots` })).json());
+        expect(listed.find((bot) => bot.name === `kestrel`)?.analyzer?.values).toEqual(values);
+        expect((await declare(token, { about: `reads fast` })).analyzer?.values).toEqual(values);
+        expect((await declare(token, { analyzer: { lines: 1, values: {} } })).analyzer?.values).toEqual({ scale: 1, cuts: null, meaning: `raw` });
+        expect((await declare(token, { analyzer: { lines: 1, values } })).analyzer?.values).toEqual(values);
+        expect((await declare(token, { analyzer: { lines: 2 } })).analyzer?.values).toEqual({ scale: 1, cuts: null, meaning: `raw` });
+        for (const refused of [{ scale: 0 }, { cuts: { inaccuracy: 0.3, mistake: 0.2, blunder: 0.1 } }, { cuts: { inaccuracy: 0.1, mistake: 0.2, blunder: 3 } }, { meaning: `win chance` }, { shape: `tanh` }]) {
+            const response = await world.app.inject({ method: `PATCH`, url: botAccountPath, headers: { authorization: `Bearer ${token}` }, payload: { analyzer: { lines: 1, values: refused } } });
+            expect(response.statusCode, JSON.stringify(refused)).toBe(400);
+        }
+        expect((await declare(token, { analyzer: null })).analyzer).toBeNull();
+        expect(world.sqlite.prepare(`select analyzer_scale as scale, analyzer_cut_blunder as blunder, analyzer_meaning as meaning from bots where name = 'kestrel'`).get()).toEqual({ scale: null, blunder: null, meaning: null });
     });
 
     it('offers a session down the stream of a bot that declared, and nothing new to one that never did', async () => {
@@ -307,6 +325,21 @@ describe('whole-game readings', () => {
         const exported = accountExportSchema.parse((await world.app.inject({ method: `GET`, url: `/api/me/export`, cookies: { hexo_arena_session: asker } })).json());
         expect(exported.analyses).toMatchObject([{ gameId, status: `done` }]);
         expect(exported.account.analysisOptOut).toBe(false);
+    });
+
+    it('keeps with a reading how its analyzer\'s heuristic read when it read, whatever the analyzer declares after', async () => {
+        await mintBot(world.app, await loginAs(world.app, `alphaowner`), `alpha`);
+        await mintBot(world.app, await loginAs(world.app, `betaowner`), `beta`);
+        const values = { scale: 1000, cuts: { inaccuracy: 0.1, mistake: 0.2, blunder: 0.3 }, meaning: `expected` };
+        const { token, requests } = await analyzerOnline(values);
+        const gameId = finishedGame();
+        const asker = await loginAs(world.app, `asker`);
+        expect((await world.app.inject({ method: `POST`, url: `/api/games/${gameId}/analyses`, cookies: { hexo_arena_session: asker } })).statusCode).toBe(202);
+        await until(() => requests.length === 3);
+        await declare(token, { analyzer: { lines: 2, maxSeconds: 5 } });
+        await new Promise((resolve) => setTimeout(resolve, 1_100));
+        const listed = analysisListSchema.parse((await world.app.inject({ method: `GET`, url: `/api/games/${gameId}/analyses` })).json());
+        expect(listed.analyses).toMatchObject([{ kind: `community`, status: `done`, analyzer: { name: `kestrel`, values } }]);
     });
 
     it('keeps a reading when the account that asked for it goes, and forgets who asked', async () => {

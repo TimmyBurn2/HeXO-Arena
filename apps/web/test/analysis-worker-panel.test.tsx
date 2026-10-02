@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { meStore } from '../src/me';
 import { AnalysisScreen } from '../src/screens/AnalysisScreen';
@@ -74,6 +74,8 @@ describe('the analysis panel with an engine in the browser', () => {
             { timeout: 4_000 },
         );
         expect(container.querySelector(`.an-by .badge-bot`)).toBeNull();
+        expect([...container.querySelectorAll(`.an-line .an-value`)].map((value) => value.textContent)).toEqual([`o 0.20`]);
+        fireEvent.click(screen.getByRole(`button`, { name: `Lines B, C` }));
         expect([...container.querySelectorAll(`.an-line .an-value`)].map((value) => value.textContent)).toEqual([`o 0.20`, `x 0.05`, `x 0.10`]);
         expect(screen.getByRole(`button`, { name: /^Play line A: o 0\.20, o: \[1,0\] \[1,-1\]$/u })).toBeTruthy();
         expect(container.querySelector(`.an-state`)?.textContent).toMatch(/^Read in \d+\.\d s; o to move$/u);

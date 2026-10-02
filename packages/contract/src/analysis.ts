@@ -142,6 +142,62 @@ export const analysisIdSchema = z.string().regex(/^a_[0-9a-f]{8}-[0-9a-f]{4}-[0-
 const secondsSchema = z.number().int().min(1).max(analyzerMaxSecondsCap);
 const linesSchema = z.number().int().min(1).max(analysisLinesMax);
 
+/** The largest drop of a scaled value a cut may name: the scaled range runs from -1 to 1. */
+export const valueCutMax = 2;
+
+const scaleSchema = z.number().positive().max(analysisHeuristicLimit);
+const cutSchema = z.number().positive().max(valueCutMax);
+
+/**
+ * What an analyzer's heuristic, divided by its scale, means:
+ * `expected` is its estimate of x's expected result, 2 P(x wins) - 1;
+ * `raw` is only ordered, higher better for x, and calibrated to nothing.
+ */
+export const valueMeaningSchema = z.enum([`expected`, `raw`]).meta({
+    id: `ValueMeaning`,
+    description: `What the heuristic, divided by scale, means: expected is the analyzer's estimate of x's expected result, 2 P(x wins) - 1; raw is only ordered, higher being better for x, and not calibrated.`,
+});
+export type ValueMeaning = z.infer<typeof valueMeaningSchema>;
+
+/** The drops of the scaled value an analyzer calls an inaccuracy, a mistake, and a blunder. */
+export const valueCutsSchema = z
+    .strictObject({ inaccuracy: cutSchema, mistake: cutSchema, blunder: cutSchema })
+    .refine((cuts) => cuts.inaccuracy < cuts.mistake && cuts.mistake < cuts.blunder, { message: `cuts rise from inaccuracy to blunder` })
+    .meta({
+        id: `ValueCuts`,
+        description: `Drops of the mover's value, on the scaled range, each above 0 and at most ${String(valueCutMax)}, rising from inaccuracy to blunder; 0.1, 0.2, and 0.3 suit expected values.`,
+    });
+
+/** How a bot's heuristic reads, as it declares it. */
+export const analyzerValuesDeclarationSchema = z
+    .strictObject({
+        scale: scaleSchema
+            .default(1)
+            .meta({ description: `The heuristic size the bot means as decided; the site divides heuristics by it before drawing or judging them. 1 when absent.` }),
+        cuts: valueCutsSchema
+            .optional()
+            .meta({
+                description: `The drops of the mover's value, on the scaled range, the site judges a turn by: each above 0 and at most ${String(valueCutMax)}, rising from inaccuracy to blunder; 0.1, 0.2, and 0.3 suit expected values. Absent, it judges no drop of value.`,
+            }),
+        meaning: valueMeaningSchema.default(`raw`).meta({
+            description: `expected: the heuristic, divided by scale, is the bot's estimate of x's expected result, 2 P(x wins) - 1. raw, the default: it is only ordered, higher being better for x, and not calibrated.`,
+        }),
+    })
+    .meta({
+        id: `AnalyzerValuesDeclaration`,
+        description: `How the bot's heuristic reads. Absent, the heuristic reads as raw at scale 1 and no drop of value is judged; forced wins are judged either way.`,
+    });
+
+/** How an analyzer's heuristic reads, as it declared it: scale 1, no cuts, and raw when it declared none. */
+export const analyzerValuesSchema = z
+    .object({
+        scale: scaleSchema,
+        cuts: valueCutsSchema.nullable(),
+        meaning: valueMeaningSchema,
+    })
+    .meta({ id: `AnalyzerValues`, description: `How the analyzer's heuristic reads: scale 1, null cuts, which judge no drop of value, and raw, unless it declared otherwise.` });
+export type AnalyzerValues = z.infer<typeof analyzerValuesSchema>;
+
 /** What a bot declares to read positions for the site; null withdraws it. */
 export const analyzerDeclarationSchema = z
     .strictObject({
@@ -153,6 +209,7 @@ export const analyzerDeclarationSchema = z
             .boolean()
             .default(false)
             .meta({ description: `True to take positions while the bot plays a game; false, the default, takes them only between games.` }),
+        values: analyzerValuesDeclarationSchema.optional(),
     })
     .meta({
         id: `AnalyzerDeclaration`,
@@ -169,6 +226,7 @@ export const analyzerSchema = z
         maxSeconds: secondsSchema,
         lines: linesSchema,
         whilePlaying: z.boolean(),
+        values: analyzerValuesSchema,
         ready: z.boolean().meta({ description: `True while the bot holds its analysis session open.` }),
     })
     .meta({ id: `Analyzer`, description: `The analyzer the bot declared; null until it declares one, and once it withdraws.` });
@@ -225,8 +283,9 @@ export const analyzerRefSchema = z
         name: z.string(),
         version: z.string().nullable().meta({ description: `The version the bot declared when it read; null if none.` }),
         ownerName: z.string().nullable().meta({ description: `Null once the owner's account is deleted.` }),
+        values: analyzerValuesSchema,
     })
-    .meta({ id: `AnalyzerRef`, description: `A community bot whose reading this is; no analyzer is official.` });
+    .meta({ id: `AnalyzerRef`, description: `A community bot whose reading this is, with the values it declared when it read; no analyzer is official.` });
 export type AnalyzerRef = z.infer<typeof analyzerRefSchema>;
 
 const positionCellsSchema = z
@@ -335,9 +394,13 @@ export const ownAnalysisSchema = z
         kind: z.literal(`own`),
         side: htttxSideSchema,
         player: z.string().meta({ description: `The bot's name as the game shows it.` }),
+        values: analyzerValuesSchema,
         turns: z.array(analysisTurnSchema).meta({ description: `Each turn the bot evaluated: its move first, then up to ${String(ownConsiderationsMax)} considerations.` }),
     })
-    .meta({ id: `OwnAnalysis`, description: `What a bot said of its own moves while it played; a bot judging itself is no judgment.` });
+    .meta({
+        id: `OwnAnalysis`,
+        description: `What a bot said of its own moves while it played, with the values its analyzer declaration held at its first evaluation of the game; a bot judging itself is no judgment.`,
+    });
 export type OwnAnalysis = z.infer<typeof ownAnalysisSchema>;
 
 export const analysisSchema = z.discriminatedUnion(`kind`, [communityAnalysisSchema, ownAnalysisSchema]).meta({ id: `Analysis` });

@@ -1,9 +1,9 @@
 import { describe, expect, it, vi } from 'vitest';
-import { analysisPositionsPath } from '@hexo-arena/contract';
+import { analysisPositionsPath, undeclaredValues } from '@hexo-arena/contract';
 import { authorSourceId, botSource, botSourceId, readingLineOf, type AnalysisPosition, type SourceEvent } from '../src/analysis/sources';
 
 const position: AnalysisPosition = { cells: [{ x: 0, y: 0, side: `x` }], toMove: `o` };
-const kestrel = { name: `kestrel`, version: `0.9`, ownerName: `tom` };
+const kestrel = { name: `kestrel`, version: `0.9`, ownerName: `tom`, values: undeclaredValues };
 const done = {
     status: `done`,
     analyzer: kestrel,

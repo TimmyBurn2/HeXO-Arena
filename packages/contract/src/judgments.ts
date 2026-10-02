@@ -1,4 +1,4 @@
-import { analysisTurnCap } from './analysis';
+import { analysisTurnCap, type AnalyzerValues } from './analysis';
 import type { AxialCoord } from './board';
 import type { HtttxPositionEvaluation } from './htttx';
 import type { Side } from './stream';
@@ -7,16 +7,22 @@ import type { Side } from './stream';
 export type JudgmentSeverity = `inaccuracy` | `mistake` | `blunder`;
 
 /**
- * Why a turn was judged: it let the mover's forced win go,
- * it handed the opponent one, or it gave up value.
+ * Why a turn was judged by a forced win: it let the mover's own go and handed the opponent one,
+ * it let the mover's own go, or it handed the opponent one from a board where neither held one.
  */
-export type JudgmentReason = `missed-win` | `allowed-win` | `value-drop`;
+export type ForcedJudgmentReason = `gave-away-win` | `missed-win` | `allowed-win`;
 
-/** One analyzer's verdict on one played turn. */
-export interface Judgment {
-    readonly severity: JudgmentSeverity;
-    readonly reason: JudgmentReason;
-}
+/** Why a turn was judged: a forced win, or a drop of value by the analyzer's own cuts. */
+export type JudgmentReason = ForcedJudgmentReason | `value-drop`;
+
+/**
+ * One analyzer's verdict on one played turn.
+ * `turns` is the length, in its winner's own turns, of the forced win that grades the turn:
+ * the mover's, let go, on a missed win; the opponent's, after the turn, otherwise.
+ */
+export type Judgment =
+    | { readonly severity: JudgmentSeverity; readonly reason: ForcedJudgmentReason; readonly turns: number }
+    | { readonly severity: JudgmentSeverity; readonly reason: `value-drop`; readonly turns: null };
 
 /** The mark printed beside a judged turn. */
 export const judgmentGlyphs: Readonly<Record<JudgmentSeverity, string>> = {
@@ -26,25 +32,27 @@ export const judgmentGlyphs: Readonly<Record<JudgmentSeverity, string>> = {
 };
 
 /**
- * The least loss of the mover's value, on the -1 to 1 scale, that earns each severity:
- * lichess's cuts on its winning-chance scale, which htttx's default heuristic shares.
+ * The longest forced win, in the mover's own turns, whose loss is still a blunder, and still a mistake;
+ * a longer one lost is an inaccuracy.
+ * A short win is plain to see, and a long one may be the analyzer's assumption.
  */
-export const judgmentDrops: Readonly<Record<JudgmentSeverity, number>> = {
-    inaccuracy: 0.1,
-    mistake: 0.2,
-    blunder: 0.3,
-};
+export const missedWinTurns = { blunder: 1, mistake: 2 } as const;
+
+/** The longest forced win, in the opponent's own turns, whose allowing is still a blunder; a longer one allowed is a mistake. */
+export const allowedWinBlunderTurns = 2;
+
+/** The least drop of the mover's scaled value, on the -1 to 1 range, that earns each severity. */
+export type JudgmentCuts = Readonly<Record<JudgmentSeverity, number>>;
 
 /**
- * Where a forced win given up or handed over stops being a blunder:
- * a missed win is an inaccuracy if the mover's value after it is still at least the first cut,
- * a mistake if at least the second; an allowed win is judged the same way on the value before it, negated.
- * They are lichess's 999 and 700 centipawns on its winning-chance curve.
+ * lichess's cuts, on its winning-chance scale:
+ * they suit an analyzer whose values are `expected`, its estimate of x's expected result.
+ * htttx promises its heuristic's sign and drawing range, not that scale.
  */
-export const forcedWinCuts: Readonly<Record<Exclude<JudgmentSeverity, `blunder`>, number>> = {
-    inaccuracy: 0.95,
-    mistake: 0.86,
-};
+export const winChanceCuts: JudgmentCuts = { inaccuracy: 0.1, mistake: 0.2, blunder: 0.3 };
+
+/** What an analyzer that declared nothing gets: scale 1, no value drop judged, and raw values. */
+export const undeclaredValues: Readonly<AnalyzerValues> = { scale: 1, cuts: null, meaning: `raw` };
 
 /** A candidate turn and the evaluation of the board after it, x-positive, as htttx defines it. */
 export interface EvaluatedLine {
@@ -62,12 +70,40 @@ export interface PlayedTurn {
     readonly completesSix: boolean;
 }
 
-/** One analyzer's readings around a played turn. */
+/**
+ * What the board itself says around a played turn, alike under every analyzer.
+ * The caller reads it with the rules engine, which the contract does not depend on.
+ */
+export interface BoardFacts {
+    /** The mover could complete six with this turn. */
+    readonly sixOnBoard: boolean;
+    /** The turn left the opponent a six to complete. */
+    readonly sixLeft: boolean;
+    /** Before the turn, the opponent held sixes that no two stones could all block. */
+    readonly sixesUnblockable: boolean;
+}
+
+/** One analyzer's readings around a played turn, the board's facts, and how the analyzer's values read. */
 export interface TurnReadings {
     /** Its lines at the position the turn was played from, best first; empty when it read none. */
     readonly before: readonly EvaluatedLine[];
     /** The evaluation of its best line at the position after the turn, if it read one. */
     readonly nextBest: HtttxPositionEvaluation | null;
+    readonly board: BoardFacts;
+    /** How the analyzer declared its heuristic reads: `scale` is divided out before a value is judged, and null `cuts` judge no drop. */
+    readonly values: AnalyzerValues;
+}
+
+/** A forced win, and its length in the winner's own turns. */
+export interface ForcedWin {
+    readonly winner: Side;
+    readonly turns: number;
+}
+
+/** The forced wins around a played turn: the one held at the position it was played from, and the one at the position after. */
+export interface ForcedWinsAround {
+    readonly before: ForcedWin | null;
+    readonly after: ForcedWin | null;
 }
 
 /** The side a forced win in an evaluation belongs to, if it names one. */
@@ -78,52 +114,107 @@ export function forcedWinner(evaluation: HtttxPositionEvaluation): Side | null {
 }
 
 /**
- * An evaluation from `side`'s view, rounded to hundredths as it is shown:
- * 1 or -1 for a forced win or loss, else the heuristic clamped to -1 to 1;
- * null when the evaluation holds neither.
- */
-export function sideValue(evaluation: HtttxPositionEvaluation, side: Side): number | null {
-    const hundredths = sideHundredths(evaluation, side);
-    return hundredths === null ? null : hundredths / 100;
-}
-
-/**
- * Judge one played turn against one analyzer's readings, lichess's way.
- * The value before is the best line's at the position played from;
- * the value after is the played turn's own when the analyzer listed it, in either stone order,
- * else that of the best line at the position after.
- * Never judged, so null: opening turns, a turn that completes six,
- * turns past the analysis cap, and turns missing either reading.
- * The caller keeps variations and a bot's view of its own turns away, since neither is a judgment.
- */
-export function judgeTurn(played: PlayedTurn, readings: TurnReadings): Judgment | null {
-    if (played.opening || played.completesSix || played.turn > analysisTurnCap) return null;
-    const best = readings.before[0];
-    const listed = readings.before.find((line) => sameCells(line.cells, played.cells));
-    const afterEvaluation = listed?.evaluation ?? readings.nextBest;
-    if (best === undefined || afterEvaluation === null) return null;
-    const before = sideHundredths(best.evaluation, played.side);
-    const after = sideHundredths(afterEvaluation, played.side);
-    if (before === null || after === null) return null;
-    const mover = played.side;
-    const opponent: Side = mover === `x` ? `o` : `x`;
-    const forcedBefore = forcedWinner(best.evaluation);
-    const forcedAfter = forcedWinner(afterEvaluation);
-    if (forcedBefore === forcedAfter && forcedBefore !== null) return null;
-    if (forcedBefore === mover) return { severity: forcedSeverity(after), reason: `missed-win` };
-    if (forcedAfter === opponent) return { severity: forcedSeverity(-before), reason: `allowed-win` };
-    const drop = before - after;
-    const severity = severestFirst.find((each) => drop >= hundredthsOf(judgmentDrops[each]));
-    return severity === undefined ? null : { severity, reason: `value-drop` };
-}
-
-/**
  * How a view of the board reads: `board` for an evaluation of the position shown,
  * `line` for one of a turn `mover` would play from it.
  */
 export type ValueView =
     | { readonly kind: `board` }
     | { readonly kind: `line`; readonly mover: Side; readonly completesSix: boolean };
+
+/**
+ * The forced win an evaluation names, in its winner's own turns from the position shown.
+ * htttx counts win_in from the board the evaluation describes, its side to move first:
+ * from a board the winner moves on alternate turns, so half the count, rounded up, is its own;
+ * a line's evaluation describes the board after it, so the winner's own line adds that line,
+ * and a line that completes six, or carries win_in 1 for its own mover, is a win in 1.
+ */
+export function forcedWin(evaluation: HtttxPositionEvaluation, view: ValueView): ForcedWin | null {
+    if (view.kind === `line` && view.completesSix) return { winner: view.mover, turns: 1 };
+    const winner = forcedWinner(evaluation);
+    if (winner === null) return null;
+    const count = Math.abs(evaluation.win_in ?? 0);
+    if (view.kind === `line` && view.mover === winner) return { winner, turns: count === 1 ? 1 : 1 + Math.ceil(count / 2) };
+    return { winner, turns: Math.ceil(count / 2) };
+}
+
+/**
+ * An evaluation from `side`'s view, rounded to hundredths as it is shown:
+ * 1 or -1 for a forced win or loss, else the heuristic divided by `scale` and held to -1 to 1;
+ * null when the evaluation holds neither.
+ */
+export function sideValue(evaluation: HtttxPositionEvaluation, side: Side, scale = 1): number | null {
+    const hundredths = sideHundredths(evaluation, side, scale);
+    return hundredths === null ? null : hundredths / 100;
+}
+
+/**
+ * The forced wins around a played turn, from the board's facts first and the analyzer's win_in after them.
+ * Before: a six the mover can complete is its win in 1; else sixes the opponent holds that no two stones block are the opponent's;
+ * else the best line's win_in.
+ * After: a six left to the opponent is its win in 1; else the win_in of the played turn's own evaluation
+ * when the analyzer listed the turn, in either stone order, or of the best line at the position after.
+ * Null while either reading is missing.
+ */
+export function forcedWinsAround(played: Pick<PlayedTurn, `side` | `cells`>, readings: TurnReadings): ForcedWinsAround | null {
+    const read = readAround(played, readings);
+    return read === null ? null : forcedOf(read, played.side, readings.board);
+}
+
+/**
+ * Judge one played turn against one analyzer's readings.
+ * Forced wins judge every analyzer alike, graded by their length:
+ * a side already lost is never blamed, and a turn that keeps a forced win, however slow, gets no mark;
+ * letting a win go while handing the opponent one is a blunder;
+ * letting one go is graded by `missedWinTurns`, handing one over by `allowedWinBlunderTurns`.
+ * Otherwise a drop of value is judged only by the cuts the analyzer declared, on its declared scale.
+ * Never judged, so null: opening turns, a turn that completes six,
+ * turns past the analysis cap, and turns missing either reading.
+ * The caller keeps variations and a bot's view of its own turns away, since neither is a judgment.
+ */
+export function judgeTurn(played: PlayedTurn, readings: TurnReadings): Judgment | null {
+    if (played.opening || played.completesSix || played.turn > analysisTurnCap) return null;
+    const read = readAround(played, readings);
+    if (read === null) return null;
+    const mover = played.side;
+    const { before, after } = forcedOf(read, mover, readings.board);
+    if (before !== null) {
+        if (before.winner !== mover || after?.winner === mover) return null;
+        if (after !== null) return { severity: `blunder`, reason: `gave-away-win`, turns: after.turns };
+        return { severity: missedWinSeverity(before.turns), reason: `missed-win`, turns: before.turns };
+    }
+    if (after !== null) {
+        if (after.winner === mover) return null;
+        return { severity: after.turns <= allowedWinBlunderTurns ? `blunder` : `mistake`, reason: `allowed-win`, turns: after.turns };
+    }
+    return valueDrop(read.best.evaluation, read.after.evaluation, mover, readings.values);
+}
+
+/** A run of consecutive judged turns, both sides', each marked for a forced win: its first and last turn. */
+export interface JudgmentRun {
+    readonly from: number;
+    readonly to: number;
+}
+
+/** The fewest consecutive turns that make a run. */
+export const judgmentRunMin = 3;
+
+/**
+ * The runs among a game's judged turns: `judgmentRunMin` or more consecutive turns, both sides', each with a forced mark,
+ * as when each side in turn lets a win go or hands one over.
+ * Every turn keeps its own mark and counts; a run only lets a list fold them under one note.
+ */
+export function judgmentRuns(turns: Iterable<{ readonly turn: number; readonly judgment: Judgment | null }>): JudgmentRun[] {
+    const forced = [...turns].flatMap((each) => (each.judgment === null || each.judgment.reason === `value-drop` ? [] : [each.turn])).sort((a, b) => a - b);
+    const runs: JudgmentRun[] = [];
+    let from: number | null = null;
+    for (const [index, turn] of forced.entries()) {
+        from ??= turn;
+        if (forced[index + 1] === turn + 1) continue;
+        if (turn - from + 1 >= judgmentRunMin) runs.push({ from, to: turn });
+        from = null;
+    }
+    return runs;
+}
 
 /**
  * An evaluation in words: `x 0.52`, `even` when it rounds to zero, `o wins in 3`,
@@ -152,21 +243,60 @@ export function valueWords(evaluation: HtttxPositionEvaluation, view: ValueView)
 
 const severestFirst: readonly JudgmentSeverity[] = [`blunder`, `mistake`, `inaccuracy`];
 
+// The best line at the position played from, and the evaluation after the
+// turn with the view it reads from: the played turn's own, of the board
+// after it, or the next mover's best line.
+interface Read {
+    readonly best: EvaluatedLine;
+    readonly after: { readonly evaluation: HtttxPositionEvaluation; readonly view: ValueView };
+}
+
+function readAround(played: Pick<PlayedTurn, `side` | `cells`>, readings: TurnReadings): Read | null {
+    const best = readings.before[0];
+    if (best === undefined) return null;
+    const listed = readings.before.find((line) => sameCells(line.cells, played.cells));
+    if (listed !== undefined) return { best, after: { evaluation: listed.evaluation, view: { kind: `board` } } };
+    if (readings.nextBest === null) return null;
+    return { best, after: { evaluation: readings.nextBest, view: { kind: `line`, mover: otherSide(played.side), completesSix: false } } };
+}
+
+// Board facts first, alike for every analyzer; the analyzer's win_in after them.
+function forcedOf(read: Read, mover: Side, board: BoardFacts): ForcedWinsAround {
+    const opponent = otherSide(mover);
+    const before = board.sixOnBoard
+        ? { winner: mover, turns: 1 }
+        : board.sixesUnblockable
+          ? { winner: opponent, turns: 1 }
+          : forcedWin(read.best.evaluation, { kind: `line`, mover, completesSix: false });
+    const after = board.sixLeft ? { winner: opponent, turns: 1 } : forcedWin(read.after.evaluation, read.after.view);
+    return { before, after };
+}
+
+function missedWinSeverity(turns: number): JudgmentSeverity {
+    if (turns <= missedWinTurns.blunder) return `blunder`;
+    return turns <= missedWinTurns.mistake ? `mistake` : `inaccuracy`;
+}
+
+function valueDrop(best: HtttxPositionEvaluation, after: HtttxPositionEvaluation, side: Side, values: AnalyzerValues): Judgment | null {
+    const cuts = values.cuts;
+    if (cuts === null) return null;
+    const before = sideHundredths(best, side, values.scale);
+    const now = sideHundredths(after, side, values.scale);
+    if (before === null || now === null) return null;
+    const drop = before - now;
+    const severity = severestFirst.find((each) => drop >= hundredthsOf(cuts[each]));
+    return severity === undefined ? null : { severity, reason: `value-drop`, turns: null };
+}
+
 // Values compare in whole hundredths, the precision they are shown at, so a
 // cut never falls between what a reader sees and what was judged.
-function sideHundredths(evaluation: HtttxPositionEvaluation, side: Side): number | null {
+function sideHundredths(evaluation: HtttxPositionEvaluation, side: Side, scale: number): number | null {
     const sign = side === `x` ? 1 : -1;
     const winner = forcedWinner(evaluation);
     if (winner !== null) return (winner === `x` ? 100 : -100) * sign;
     const heuristic = evaluation.heuristic;
     if (heuristic === undefined || !Number.isFinite(heuristic)) return null;
-    return rounded(Math.max(-1, Math.min(1, heuristic))) * sign;
-}
-
-function forcedSeverity(value: number): JudgmentSeverity {
-    if (value >= hundredthsOf(forcedWinCuts.inaccuracy)) return `inaccuracy`;
-    if (value >= hundredthsOf(forcedWinCuts.mistake)) return `mistake`;
-    return `blunder`;
+    return rounded(Math.max(-1, Math.min(1, heuristic / scale))) * sign;
 }
 
 // Half a hundredth rounds away from zero, so x and o values mirror exactly.
@@ -176,6 +306,10 @@ function rounded(value: number): number {
 
 function hundredthsOf(cut: number): number {
     return Math.round(cut * 100);
+}
+
+function otherSide(side: Side): Side {
+    return side === `x` ? `o` : `x`;
 }
 
 function sameCells(a: readonly AxialCoord[], b: readonly AxialCoord[]): boolean {

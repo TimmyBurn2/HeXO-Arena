@@ -45,6 +45,25 @@ export function winsThisTurn(stones: readonly Stone[], player: Player): boolean 
     return openWindows(stones, player).length > 0;
 }
 
+/**
+ * Whether one turn of the other player, two stones, can block every open window of `player`:
+ * true when it has none, false when it will complete six next turn whatever the other player does,
+ * unless the other player completes six first.
+ */
+export function sixesBlockable(stones: readonly Stone[], player: Player): boolean {
+    const windows = openWindows(stones, player).map((window) => new Set(window.empty.map(cellKey)));
+    const cells = [...new Set(windows.flatMap((empty) => [...empty]))];
+    // A window is blocked by a stone on any one of its empty cells, so a first
+    // stone on a window cell leaves the windows it misses for the second.
+    return (
+        windows.length === 0 ||
+        cells.some((first) => {
+            const missed = windows.filter((empty) => !empty.has(first));
+            return missed.length === 0 || cells.some((second) => missed.every((empty) => empty.has(second)));
+        })
+    );
+}
+
 function openWindowAt(owners: ReadonlyMap<string, Player>, player: Player, start: Coord, axis: Coord): OpenWindow | null {
     const cells: Coord[] = [];
     const empty: Coord[] = [];

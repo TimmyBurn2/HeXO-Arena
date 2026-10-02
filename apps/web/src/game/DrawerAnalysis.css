@@ -149,6 +149,31 @@
         gap: var(--space-1);
     }
 
+    /* Each side's marks: a column per severity, a zero dimmed. */
+    .dr-marks-grid {
+        grid-template-columns: minmax(0, 1fr) repeat(3, var(--analysis-count-w));
+        column-gap: var(--space-2);
+    }
+
+    .dr-marks-grid dd {
+        display: contents;
+    }
+
+    .dr-marks-grid .dr-mark-count {
+        color: var(--c-text);
+        font-weight: var(--weight-strong);
+    }
+
+    .dr-marks-grid .dr-mark-none {
+        color: var(--c-text-dim);
+        font-weight: var(--weight-regular);
+    }
+
+    .dr-marks-grid .dr-mark-none .jd {
+        background: var(--c-bg-overlay);
+        color: var(--c-text-dim);
+    }
+
     .dr-card {
         display: flex;
         flex-direction: column;
@@ -219,6 +244,23 @@
         align-items: center;
         min-height: calc(var(--judgment-h) + 2 * var(--space-1));
         cursor: pointer;
+    }
+
+    /* The opening's stones take every column after its label, each side's
+       group whole, so the line breaks between groups and grows with them;
+       only a group wider than the line breaks between its cells.
+       Its label stands by the first of its lines. */
+    .feed[data-notes] .feed-opening {
+        align-items: start;
+    }
+
+    .feed[data-notes] .feed-opening .feed-groups {
+        grid-column: 2 / -1;
+    }
+
+    .feed[data-notes] .feed-opening .feed-group {
+        display: inline-block;
+        max-width: 100%;
     }
 
     .feed[data-notes] .feed-line:hover {

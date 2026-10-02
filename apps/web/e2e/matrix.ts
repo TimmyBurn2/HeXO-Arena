@@ -408,7 +408,7 @@ export const shots: readonly Shot[] = [
         board: true,
         after: async (page) => {
             for (const [x, y] of [[-3, 0], [-2, -1]] as const) await page.locator(`.board-camera polygon.cell[data-x="${String(x)}"][data-y="${String(y)}"]`).click();
-            await page.locator(`.an-var`).waitFor();
+            await page.locator(`.an-band`).waitFor();
         },
     },
     {
@@ -464,19 +464,41 @@ export const shots: readonly Shot[] = [
         name: `analysis-game-reading`,
         path: `/analysis?game=long-finished&turn=17`,
         world: analysedLong,
-        ready: `.an-game-reading .graph`,
+        ready: `.an-win-graph .graph`,
         framed: true,
         board: true,
+    },
+    // A game read whole at quietlake's blunder on turn 13, a six left untaken, with a three-turn variation from turn 6 that holds a one-turn alternative at turn 7.
+    {
+        name: `analysis-review`,
+        path: `/analysis?game=long-finished&turn=5`,
+        world: analysedLong,
+        ready: `.an-win-graph .graph`,
+        framed: true,
+        board: true,
+        viewports: panelViewports,
+        after: async (page) => {
+            const cell = (x: number, y: number) => page.locator(`.board-camera polygon.cell[data-x="${String(x)}"][data-y="${String(y)}"]`);
+            for (const [x, y] of [[3, 3], [3, 4], [4, 3], [4, 4], [5, 3], [5, 4]] as const) await cell(x, y).click({ force: true });
+            await page.keyboard.press(`ArrowLeft`);
+            await page.keyboard.press(`ArrowLeft`);
+            for (const [x, y] of [[-3, 5], [-3, 6]] as const) await cell(x, y).click({ force: true });
+            await page.keyboard.press(`ArrowUp`);
+            await page.keyboard.press(`ArrowLeft`);
+            await page.keyboard.press(`ArrowUp`);
+            for (let turn = 6; turn < 13; turn += 1) await page.keyboard.press(`ArrowRight`);
+            await page.locator(`.an-bubble-blunder`).waitFor();
+        },
     },
     {
         name: `analysis-own-view`,
         path: `/analysis?game=long-finished&turn=17`,
         world: analysedLong,
-        ready: `.an-game-reading .graph`,
+        ready: `.an-win-graph .graph`,
         framed: true,
         after: async (page) => {
             await page.getByRole(`group`, { name: `Readings` }).getByRole(`button`, { name: `Own view` }).click();
-            await page.locator(`.dr-own-key`).waitFor();
+            await page.locator(`.an-win-graph .graph-trace-x`).waitFor();
         },
     },
     {
@@ -505,6 +527,7 @@ export const shots: readonly Shot[] = [
         board: true,
         after: async (page) => {
             await page.getByRole(`switch`, { name: `Analyze` }).check();
+            await page.getByRole(`button`, { name: `Lines B, C` }).click();
             await page.locator(`button.an-line`).nth(2).waitFor();
             await page.locator(`button.an-line`).nth(1).hover();
         },

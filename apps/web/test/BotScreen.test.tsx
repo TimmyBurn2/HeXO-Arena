@@ -304,7 +304,7 @@ describe('BotScreen', () => {
     });
 
     it('show Strength, Analyzer, and Source in that order for a bot declaring all three, and only the groups each other bot declares', async () => {
-        const analyzer = { maxSeconds: 10, lines: 1, whilePlaying: true, ready: true };
+        const analyzer = { maxSeconds: 10, lines: 1, whilePlaying: true, values: { scale: 1, cuts: null, meaning: `raw` }, ready: true };
         const kinds = [
             { bot: { ...sealbot, levels, analyzer }, groups: [`Strength`, `Analyzer`, `Source`] },
             { bot: sealbot, groups: [`Source`] },
@@ -326,7 +326,7 @@ describe('BotScreen', () => {
     });
 
     it('say what an analyzer reads for, whether during its games and now, and lead to the analysis board', async () => {
-        stubDirectory([{ ...sealbot, analyzer: { maxSeconds: 5, lines: 3, whilePlaying: true, ready: false } }]);
+        stubDirectory([{ ...sealbot, analyzer: { maxSeconds: 5, lines: 3, whilePlaying: true, values: { scale: 1, cuts: null, meaning: `raw` }, ready: false } }]);
         render(<BotScreen name="sealbot" />);
         const card = await screen.findByRole(`region`, { name: `Analyzer` });
         expect(pairs(card)).toEqual([

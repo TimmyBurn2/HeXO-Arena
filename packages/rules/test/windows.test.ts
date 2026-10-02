@@ -9,6 +9,7 @@ import {
     place,
     type Player,
     setupProblem,
+    sixesBlockable,
     type Stone,
     winner,
     winsThisTurn,
@@ -93,6 +94,54 @@ describe('winsThisTurn', () => {
         expect(unbalanced).toBeGreaterThan(0);
     });
 });
+
+describe('sixesBlockable', () => {
+    it('holds for no window, and for four in a row open at both ends, which two stones close', () => {
+        expect(sixesBlockable([], 0)).toBe(true);
+        expect(sixesBlockable(four, 1)).toBe(true);
+        expect(sixesBlockable(four, 0)).toBe(true);
+    });
+
+    it('fails for two rows of four on different lines, each open at both ends', () => {
+        const two = [...four, ...stones(0, [0, 3], [1, 3], [2, 3], [3, 3])];
+        expect(sixesBlockable(two, 0)).toBe(false);
+        expect(sixesBlockable([...two, ...stones(1, [-1, 3])], 0)).toBe(false);
+        expect(sixesBlockable([...two, ...stones(1, [-1, 3], [4, 3])], 0)).toBe(true);
+    });
+
+    it('holds exactly when two stones of the other player leave no open window', () => {
+        const rng = createRng(0xb10c);
+        const seen = { blockable: 0, not: 0 };
+        for (let board = 0; board < 40; board += 1) {
+            const sample = randomBoard(rng);
+            const expected = blockableByTwo(sample, 0);
+            expect(sixesBlockable(sample, 0)).toBe(expected);
+            if (expected) seen.blockable += 1;
+            else seen.not += 1;
+        }
+        expect(seen.blockable).toBeGreaterThan(3);
+        expect(seen.not).toBeGreaterThan(3);
+    });
+});
+
+// Scans every six-cell line of the area for four or more of the player's stones and none of the other's,
+// then tries every pair of the empty cells such lines hold, the only cells that block one.
+function blockableByTwo(board: readonly Stone[], player: Player): boolean {
+    const owners = new Map(board.map((stone) => [`${String(stone.x)},${String(stone.y)}`, stone.player]));
+    const lines: string[][] = [];
+    for (let x = -12; x <= 12; x += 1) {
+        for (let y = -12; y <= 12; y += 1) {
+            for (const [dx, dy] of [[1, 0], [0, 1], [1, -1]] as const) {
+                const keys = [0, 1, 2, 3, 4, 5].map((step) => `${String(x + step * dx)},${String(y + step * dy)}`);
+                const held = keys.map((key) => owners.get(key));
+                if (held.some((owner) => owner !== undefined && owner !== player)) continue;
+                if (held.filter((owner) => owner === player).length >= 4) lines.push(keys.filter((key) => !owners.has(key)));
+            }
+        }
+    }
+    const cells = [...new Set(lines.flat())];
+    return lines.length === 0 || cells.some((first, index) => cells.slice(index).some((second) => lines.every((line) => line.includes(first) || line.includes(second))));
+}
 
 // A dense board in a small area, mostly of one player, so open windows are common for it and rare for the other.
 function randomBoard(rng: ReturnType<typeof createRng>): Stone[] {

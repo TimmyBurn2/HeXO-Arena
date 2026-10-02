@@ -1349,6 +1349,7 @@ function registerBotSurface(registry: OpenAPIRegistry, shared: SharedComponents)
                 description: [
                     `Switching protocols; the analysis session is open, and a new connection replaces the previous one.`,
                     `A bot with a live game is sent nothing unless it declared whilePlaying, and a game's move request never waits on a reading.`,
+                    `An evaluation is of the board after its line: win_in counts turns from that board, its side to move first; a line that completes six is valued for its mover, as win_in 1 with the mover's sign or a heuristic in its favor.`,
                     `A reading fails when the answer comes more than ${seconds(analysisGraceMs)} s past move_time_limit, a line is no legal turn from the position or repeats one, the move carries no evaluation, or an evaluation contradicts the board or passes a win_in of ${String(analysisWinInLimit)} or a heuristic of ${String(analysisHeuristicLimit)} either way.`,
                     `${String(analyzerStrikeLimit)} failures within ${String(analyzerStrikeWindowMs / 60_000)} minutes bench the analyzer for ${String(analyzerBenchMs / 60_000)} minutes.`,
                     `heartbeat, frame sizes, stray frames, and closes are as on the engine session; withdrawing the declaration closes the session.`,

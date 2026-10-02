@@ -907,7 +907,8 @@ export class GameRegistry {
         game.position = applied.position;
         game.turnLog = [...game.turnLog, { side, cells }];
         insertMove(this.#query, { gameId: game.id, seq: game.nextSeq, side, cells });
-        insertOwnLines(this.#query, game.id, game.nextSeq, own);
+        const seat = game.seats[side];
+        if (seat.kind === `bot`) insertOwnLines(this.#query, { gameId: game.id, seq: game.nextSeq, side, botId: seat.botId }, own);
         game.nextSeq += 1;
         if (applied.win === null) this.#advanceClock(game, side);
         this.#watchers.publish(game.id, {
