@@ -80,11 +80,12 @@ export interface LoggedGame extends FinishedGame {
     readonly id: string;
 }
 
+// A guest's games rate nobody, so the log the fold reads leaves them out.
 export function finishedGameLog(query: Query): LoggedGame[] {
     return query
         .select({ id: games.id, voidedAt: games.voidedAt, ...seatColumns })
         .from(games)
-        .where(isNotNull(games.finishSeq))
+        .where(and(isNotNull(games.finishSeq), isNull(games.guestName)))
         .orderBy(asc(games.finishSeq))
         .all()
         .map((row) => ({ id: row.id, ...countedGameOf(row) }));
@@ -260,7 +261,7 @@ export function recomputeRatings(query: Query): number {
 export function fillGameRatings(query: Query): number {
     return query.transaction((tx) => {
         const cached = tx.select({ gameId: gameRatings.gameId }).from(gameRatings).where(eq(gameRatings.gameId, games.id));
-        const missing = tx.select({ n: count() }).from(games).where(and(isNotNull(games.finishSeq), notExists(cached))).get()?.n ?? 0;
+        const missing = tx.select({ n: count() }).from(games).where(and(isNotNull(games.finishSeq), isNull(games.guestName), notExists(cached))).get()?.n ?? 0;
         if (missing === 0) return 0;
         tx.delete(gameRatings).run();
         foldRatings(finishedGameLog(tx), (game, step) => {
@@ -285,8 +286,8 @@ export interface RankedPlayer {
 
 const botOwners = alias(users, `bot_owner`);
 
-// A rated game is one with a winner that no moderation voided.
-const ratedFinish = sql`${games.winner} is not null and ${games.voidedAt} is null`;
+// A rated game is one with a winner that no moderation voided and no guest played.
+const ratedFinish = sql`${games.winner} is not null and ${games.voidedAt} is null and ${games.guestName} is null`;
 
 // The rated games in one seat column, by count and latest finish, read
 // through that seat's index; a column the player cannot sit in counts none.

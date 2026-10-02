@@ -66,7 +66,7 @@ for (const place of places) {
                 const note = pair.locator(`.note`);
                 await expect(note).toHaveText(
                     place.me?.kind === `guest`
-                        ? `Signing in ends this guest session and its games. Your email stays with Discord; see\u00a0Privacy.`
+                        ? `Signing in ends this guest session and its live games. Your email stays with Discord; see\u00a0Privacy.`
                         : `Your email stays with Discord, and a first sign-in asks for your public name; see\u00a0Privacy.`,
                 );
                 await expect(note.getByRole(`link`, { name: `Privacy` })).toHaveAttribute(`href`, `/legal/privacy`);

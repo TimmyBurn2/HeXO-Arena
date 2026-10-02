@@ -15,6 +15,7 @@ import { nowSeconds, type Query } from './db';
 import { alias } from 'drizzle-orm/sqlite-core';
 import { bots, games, moves, tournamentPairings, tournaments, users } from './db/schema';
 import { applyFinishedGame, countedGameOf, seatColumns } from './rating-store';
+import { shownBot, shownUser, type ShownName } from './shown-names';
 
 // The position a game starts from: the origin stone plus the server-placed
 // opening stones, in placement order.
@@ -32,10 +33,26 @@ export interface HumanGameRecord {
     readonly kind: `human`;
     readonly id: string;
     readonly userId: string;
-    readonly userName: string;
+    readonly user: ShownName;
     readonly botId: string;
-    readonly botName: string;
+    readonly bot: ShownName;
     readonly userSide: Side;
+    readonly timeControl: TimeControl;
+    readonly opening: readonly OpeningCell[];
+    readonly winner: Side | null;
+    readonly finishReason: FinishReason | null;
+    readonly voided: boolean;
+}
+
+/** A game a guest played: the guest is its label alone, and the game rates nobody. */
+export interface GuestGameRecord {
+    readonly kind: `guest`;
+    readonly id: string;
+    readonly guestName: string;
+    readonly botId: string;
+    readonly bot: ShownName;
+    readonly guestSide: Side;
+    readonly createdAt: number;
     readonly timeControl: TimeControl;
     readonly opening: readonly OpeningCell[];
     readonly winner: Side | null;
@@ -47,9 +64,9 @@ export interface BotGameRecord {
     readonly kind: `bots`;
     readonly id: string;
     readonly challengerBotId: string;
-    readonly challengerName: string;
+    readonly challenger: ShownName;
     readonly destBotId: string;
-    readonly destName: string;
+    readonly dest: ShownName;
     readonly challengerSide: Side;
     readonly timeControl: TimeControl;
     readonly opening: readonly OpeningCell[];
@@ -58,12 +75,12 @@ export interface BotGameRecord {
     readonly voided: boolean;
 }
 
-export type GameRecord = HumanGameRecord | BotGameRecord;
+export type GameRecord = HumanGameRecord | GuestGameRecord | BotGameRecord;
 
+/** A game a person plays against a bot: a user by id, a guest by its label alone. */
 export function insertGame(
     query: Query,
-    game: {
-        userId: string;
+    game: ({ userId: string } | { guestName: string }) & {
         botId: string;
         userSide: Side;
         timeControl: TimeControl;
@@ -74,7 +91,7 @@ export function insertGame(
     query.insert(games)
         .values({
             id,
-            userId: game.userId,
+            ...(`userId` in game ? { userId: game.userId } : { guestName: game.guestName }),
             botId: game.botId,
             userSide: game.userSide,
             timeControl: JSON.stringify(game.timeControl),
@@ -145,10 +162,11 @@ export function recordFinish(
             .update(games)
             .set({ winner: finish.winner, finishReason: finish.reason, finishedAt: nowSeconds(), finishSeq: nextFinishSeq })
             .where(and(eq(games.id, gameId), isNull(games.finishedAt)))
-            .returning({ ...seatColumns, voidedAt: games.voidedAt })
+            .returning({ ...seatColumns, voidedAt: games.voidedAt, guestName: games.guestName })
             .all();
-        // A game voided while live finishes on the record but never rates.
-        if (finished?.finishSeq != null) applyFinishedGame(tx, gameId, finished.finishSeq, countedGameOf(finished));
+        // A game voided while live finishes on the record but never rates,
+        // and a guest's game rates nobody, the bot included.
+        if (finished?.finishSeq != null && finished.guestName === null) applyFinishedGame(tx, gameId, finished.finishSeq, countedGameOf(finished));
         return { voided: finished?.voidedAt != null };
     });
 }
@@ -171,13 +189,19 @@ export function findGame(query: Query, gameId: string): GameRecord | undefined {
             id: games.id,
             userId: games.userId,
             userName: users.name,
+            userDeletedAt: users.deletedAt,
+            guestName: games.guestName,
             botId: games.botId,
             botName: bots.name,
+            botDeletedAt: bots.deletedAt,
             userSide: games.userSide,
+            createdAt: games.createdAt,
             challengerBotId: games.challengerBotId,
             challengerName: challengerBots.name,
+            challengerDeletedAt: challengerBots.deletedAt,
             destBotId: games.destBotId,
             destName: destBots.name,
+            destDeletedAt: destBots.deletedAt,
             challengerSide: games.challengerSide,
             timeControl: games.timeControl,
             openingCells: games.openingCells,
@@ -211,11 +235,28 @@ export function findGame(query: Query, gameId: string): GameRecord | undefined {
             kind: `human`,
             id: row.id,
             userId: row.userId,
-            userName: row.userName,
+            user: shownUser(row.userName, row.userDeletedAt),
             botId: row.botId,
-            botName: row.botName,
+            bot: shownBot(row.botName, row.botDeletedAt),
             // The seats constraint admits only x and o here.
             userSide: row.userSide as Side,
+            timeControl,
+            opening,
+            winner,
+            finishReason,
+            voided,
+        };
+    }
+    if (row.guestName !== null && row.botId !== null && row.botName !== null && row.userSide !== null) {
+        return {
+            kind: `guest`,
+            id: row.id,
+            guestName: row.guestName,
+            botId: row.botId,
+            bot: shownBot(row.botName, row.botDeletedAt),
+            // The seats constraint admits only x and o here.
+            guestSide: row.userSide as Side,
+            createdAt: row.createdAt,
             timeControl,
             opening,
             winner,
@@ -234,9 +275,9 @@ export function findGame(query: Query, gameId: string): GameRecord | undefined {
             kind: `bots`,
             id: row.id,
             challengerBotId: row.challengerBotId,
-            challengerName: row.challengerName,
+            challenger: shownBot(row.challengerName, row.challengerDeletedAt),
             destBotId: row.destBotId,
-            destName: row.destName,
+            dest: shownBot(row.destName, row.destDeletedAt),
             // The seats constraint admits only x and o here.
             challengerSide: row.challengerSide as Side,
             timeControl,
@@ -255,10 +296,15 @@ export function findFinishedHeadline(query: Query, gameId: string): GameHeadline
     const row = query
         .select({
             userName: users.name,
+            userDeletedAt: users.deletedAt,
+            guestName: games.guestName,
             botName: bots.name,
+            botDeletedAt: bots.deletedAt,
             userSide: games.userSide,
             challengerName: challengerBots.name,
+            challengerDeletedAt: challengerBots.deletedAt,
             destName: destBots.name,
+            destDeletedAt: destBots.deletedAt,
             challengerSide: games.challengerSide,
             winner: games.winner,
             finishReason: games.finishReason,
@@ -276,11 +322,16 @@ export function findFinishedHeadline(query: Query, gameId: string): GameHeadline
     // The seats, side, winner, and reason checks admit only these values.
     const seated = (firstSide: Side, first: string, second: string): Record<Side, string> =>
         firstSide === `x` ? { x: first, o: second } : { x: second, o: first };
+    const human = row.userName === null ? row.guestName : shownUser(row.userName, row.userDeletedAt).name;
     const names =
-        row.userName !== null && row.botName !== null && row.userSide !== null
-            ? seated(row.userSide as Side, row.userName, row.botName)
+        human !== null && row.botName !== null && row.userSide !== null
+            ? seated(row.userSide as Side, human, shownBot(row.botName, row.botDeletedAt).name)
             : row.challengerName !== null && row.destName !== null && row.challengerSide !== null
-              ? seated(row.challengerSide as Side, row.challengerName, row.destName)
+              ? seated(
+                    row.challengerSide as Side,
+                    shownBot(row.challengerName, row.challengerDeletedAt).name,
+                    shownBot(row.destName, row.destDeletedAt).name,
+                )
               : undefined;
     if (names === undefined) throw new Error(`stored game row seats nobody: ${gameId}`);
     return {

@@ -191,7 +191,7 @@ describe('ConnectScreen', () => {
         render(<ConnectScreen />);
         expect(await screen.findByText(`You are playing as Guest k3f9; owning a bot needs a Discord sign-in.`)).toBeTruthy();
         expect(document.querySelector(`.discord-sign-in .note`)?.textContent).toBe(
-            `Signing in ends this guest session and its games. Your email stays with Discord; see\u00a0Privacy.`,
+            `Signing in ends this guest session and its live games. Your email stays with Discord; see\u00a0Privacy.`,
         );
         meStore.reset();
     });

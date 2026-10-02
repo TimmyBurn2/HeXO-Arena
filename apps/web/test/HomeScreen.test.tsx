@@ -170,6 +170,19 @@ describe('HomeScreen', () => {
         expect(document.querySelectorAll(`.rung`)).toHaveLength(3);
     });
 
+    it('names a deleted seat in a recent result by its label, set apart from the names', async () => {
+        const gone: GamePlayer = { name: `deleted bot`, rating: 1500, provisional: false, kind: `bot`, deleted: true };
+        serve({ finished: [{ ...result(0), players: { x: bot(`hextide`, 1700), o: gone } }] });
+        render(<HomeScreen />);
+        const recent = (await screen.findByRole(`heading`, { name: `Recent results` })).closest(`section`);
+        if (recent === null) throw new Error(`no results block`);
+        const names = [...recent.querySelectorAll(`.live-name`)];
+        expect(names.map((name) => [name.textContent, name.classList.contains(`deleted-name`)])).toEqual([
+            [`hextide`, false],
+            [`deleted bot`, true],
+        ]);
+    });
+
     it('shows the tournament running now, or one starting within a day, and none further off', async () => {
         const summary = { id: `t_autumnrobin1`, name: `Autumn round robin`, status: `scheduled` as const, startsAt: new Date(Date.now() + 3 * 3_600_000 + 30_000).toISOString(), timeControl: { mode: `turn` as const, turnTimeMs: 10_000 }, openingPlies: 5 as const, entrants: 4, maxEntrants: 12, winner: null, round: null };
         serve({ tournaments: { running: null, scheduled: [summary], past: [] } });

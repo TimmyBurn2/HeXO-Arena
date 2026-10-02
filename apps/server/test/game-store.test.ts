@@ -6,6 +6,7 @@ import { createBot, findBot } from '../src/bots';
 import { createQuery, openDatabase, runMigrations, type Query, type Sqlite } from '../src/db';
 import { games } from '../src/db/schema';
 import { abortUnfinishedGames, findFinishedHeadline, findGame, insertGame, insertMove, recordFinish, replayPosition } from '../src/game-store';
+import { deleteBotByPolicy } from '../src/moderation';
 import { createUserWithExactName } from '../src/users';
 
 const unlimited = { mode: `unlimited` as const };
@@ -63,6 +64,31 @@ describe('finish order', () => {
         create();
         abortUnfinishedGames(query);
         expect(sequence().map((row) => row.finishSeq)).toEqual([1, 2]);
+    });
+
+    it('sweeps a guest\'s unfinished game at boot like any other, rating nobody', () => {
+        const guestGame = insertGame(query, { guestName: `Guest k3f9`, botId: seat.botId, userSide: `o`, timeControl: unlimited, opening: origin });
+        abortUnfinishedGames(query);
+        expect(findGame(query, guestGame)).toMatchObject({ kind: `guest`, guestName: `Guest k3f9`, guestSide: `o`, winner: null, finishReason: `aborted` });
+        expect(findFinishedHeadline(query, guestGame)).toMatchObject({ status: `finished`, names: { x: `alpha`, o: `Guest k3f9` }, reason: `aborted` });
+        expect(sqlite.prepare(`select count(*) as n from game_ratings`).get()).toEqual({ n: 0 });
+    });
+});
+
+describe('a bot\'s guest games', () => {
+    it('keep no bot on the record: a bot with only guest games is deleted outright, its games with it', () => {
+        const sqlite = openDatabase(`:memory:`);
+        runMigrations(sqlite);
+        const query = createQuery(sqlite);
+        const owner = createUserWithExactName(query, `dev:owner`, `owner`);
+        if (owner === `name_taken`) throw new Error(`seed name taken`);
+        createBot(query, owner.id, `alpha`);
+        const botId = findBot(query, `alpha`)?.id ?? ``;
+        const gameId = insertGame(query, { guestName: `Guest k3f9`, botId, userSide: `o`, timeControl: unlimited, opening: origin });
+        recordFinish(query, gameId, { winner: `o`, reason: `six-in-a-row` });
+        expect(deleteBotByPolicy(query, botId)).toEqual({ kind: `deleted` });
+        expect(sqlite.prepare(`select count(*) as n from games`).get()).toEqual({ n: 0 });
+        sqlite.close();
     });
 });
 

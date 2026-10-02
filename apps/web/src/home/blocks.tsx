@@ -182,7 +182,7 @@ function RecentSeat({ side, player }: { side: Side; player: GamePlayer }) {
         <span className="live-seat">
             <span className="live-seat-who">
                 <Swatch side={side} />
-                <span className="live-name">{player.name}</span>
+                <span className={player.deleted === true ? `live-name deleted-name` : `live-name`}>{player.name}</span>
             </span>
             {player.kind === `bot` ? <BotBadge /> : null}
         </span>

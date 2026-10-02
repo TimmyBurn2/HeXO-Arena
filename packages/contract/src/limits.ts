@@ -52,6 +52,18 @@ export const guestMintPrefixLimit: RateLimit = { burst: 4 * guestMintLimit.burst
 /** Discord sign-ins one IPv6 /48 may start. */
 export const signInStartPrefixLimit: RateLimit = { burst: 4 * signInStartLimit.burst, refillMs: signInStartLimit.refillMs / 4 };
 
+/** Data exports one account may download: each reads every row the account has. */
+export const accountExportLimit: RateLimit = { burst: 2, refillMs: 10 * 60_000 };
+
+/** Reports one client may send. */
+export const reportLimit: RateLimit = { burst: 5, refillMs: 10 * 60_000 };
+
+/** Reports one IPv6 /48 may send. */
+export const reportPrefixLimit: RateLimit = { burst: 4 * reportLimit.burst, refillMs: reportLimit.refillMs / 4 };
+
+/** Reports received across every caller, so no crowd of addresses fills the database. */
+export const reportGlobalLimit: RateLimit = { burst: 30, refillMs: 60_000 };
+
 /** Sign-ins handed to Discord to confirm, across every caller: Discord limits the server's one address. */
 export const discordExchangeLimit: RateLimit = { burst: 30, refillMs: 1_000 };
 

@@ -42,7 +42,7 @@ describe('LegalScreen', () => {
         render(<LegalScreen page="imprint" />);
         expect(screen.getByRole(`heading`, { level: 1, name: `Impressum / Legal notice` })).toBeTruthy();
         await screen.findByRole(`heading`, { level: 2, name: `Provider` });
-        expect(screen.getByText(`Last updated 1 October 2026`).closest(`header`)).toBeTruthy();
+        expect(screen.getByText(`Last updated 2 October 2026`).closest(`header`)).toBeTruthy();
         const provider = section(`Provider`);
         expect(provider.querySelector(`p`)?.textContent).toBe(`Under sec. 18(1) Medienstaatsvertrag and sec. 5 DDG:`);
         expect(lines(provider.querySelectorAll(`p`)[1])).toEqual([`Ada Beispiel`, `Musterweg 7`, `12345 Beispielstadt`, `Germany`]);
@@ -50,6 +50,7 @@ describe('LegalScreen', () => {
         expect(mail?.getAttribute(`href`)).toBe(`mailto:contact@arena.example`);
         expect(screen.getByText(`Discord: ada_b`)).toBeTruthy();
         expect(screen.getByRole(`link`, { name: `Reporting` }).getAttribute(`href`)).toBe(`/legal/terms#reporting`);
+        expect(screen.getByRole(`link`, { name: `report form` }).getAttribute(`href`)).toBe(`/report`);
         // A short page needs no list of its sections.
         expect(screen.queryByRole(`navigation`)).toBe(null);
     });
@@ -62,11 +63,12 @@ describe('LegalScreen', () => {
             `anyone can search the games by it, which shows your results and your record against each opponent.`,
         );
         const games = section(`Games and ratings`).textContent;
-        expect(games).toContain(`each player's rating before and after. Games, ratings, and the rating history are public`);
+        expect(games).toContain(`stores every game, guest games included:`);
+        expect(games).toContain(`each rated player's rating before and after. Games, ratings, and the rating history are public`);
         expect(games).toContain(`each player's rating, rated games played, and when the last one finished`);
         const bots = section(`Bots`);
         expect(bots.textContent).toContain(`whether the bot is connected, whether it is open to challenges, and how many games it is playing`);
-        expect(bots.textContent).toContain(`These records are not public, count toward the daily challenge limits, and have no set end yet.`);
+        expect(bots.textContent).toContain(`These records are not public, count toward the daily challenge limits, and are deleted 90 days after the challenge was sent.`);
         expect(bots.textContent).toContain(`for the challenge records, Art. 6(1)(f) GDPR, legitimate interest: enforcing fair challenge limits.`);
         expect(within(bots).getByRole(`link`, { name: `Deleting your account` }).getAttribute(`href`)).toBe(`#deleting-your-account`);
         expect(document.getElementById(`deleting-your-account`)?.querySelector(`h2`)?.textContent).toBe(`Deleting your account`);
@@ -173,19 +175,38 @@ describe('LegalScreen', () => {
         );
     });
 
-    it('state deletion by email and the moderation records as they are today', async () => {
+    it('state deletion from the profile and by email, the export, the moderation records, and the note a restore reads', async () => {
         deploy(details);
         render(<LegalScreen page="privacy" />);
         await screen.findByRole(`heading`, { name: `Deleting your account` });
         const deletion = section(`Deleting your account`);
-        expect(deletion.textContent).toContain(`Write to contact@arena.example and name your account; the operator deletes it within one month.`);
+        expect(deletion.textContent).toContain(`Use Delete account on your Profile page and type your public name to confirm; the deletion takes effect at once.`);
+        expect(deletion.textContent).toContain(`You can also write to contact@arena.example and name your account; the operator deletes it within one month.`);
         expect(deletion.textContent).toContain(
-            `Your account, sessions, and bots are deleted, and your name becomes free. Your games, and the games of each bot of yours with a game that has a winner, stay in the public record, your name and those bots' names replaced by placeholders such as deleted-12. A bot without a game that has a winner is deleted with its games, yours against it included.`,
+            `Your games, and those of each bot of yours that won or lost a game against an account or a bot, or played in a tournament, stay in the public record, where you read as "deleted player" and those bots as "deleted bot".`,
         );
         expect(deletion.textContent).toContain(`legitimate interest: keeping your opponents' histories and ratings whole.`);
-        expect(deletion.textContent).toContain(`Nothing the site shows links a placeholder to you; the operator's record of the deletion keeps your name.`);
+        expect(deletion.textContent).toContain(`Nothing the site shows links "deleted player" or "deleted bot" to you, and the operator's moderation records name a placeholder instead of your name.`);
         expect(within(deletion).getByRole(`link`, { name: `Right to object` }).getAttribute(`href`)).toBe(`#right-to-object`);
-        expect(section(`Moderation records`).textContent).toContain(`The records have no set end yet and keep the name after the account is deleted.`);
+        const moderation = section(`Moderation records`).textContent;
+        expect(moderation).toContain(`The records are kept for the rest of the year of the action and the 3 calendar years after it, then deleted.`);
+        expect(moderation).toContain(`every record naming it or one of its bots names a placeholder instead, such as deleted-12, which only the operator sees.`);
+        expect(section(`Backups`).textContent).toContain(`each deletion is also noted, by account ID and time alone, in a file kept apart from the database; after a restore, the account is deleted again.`);
+        expect(section(`Your rights`).textContent).toContain(`Download my data on your Profile page hands you, at once, every record of your account and your bots as one file.`);
+    });
+
+    it('say what a report stores, who reads it, and when it goes', async () => {
+        deploy(details);
+        render(<LegalScreen page="privacy" />);
+        await screen.findByRole(`heading`, { name: `Reports` });
+        const reports = section(`Reports`).textContent;
+        expect(reports).toContain(`A report stores the page address, the reason and description you give, your name and email address if you give them, your statement that the report is accurate and in good faith, and the time.`);
+        expect(reports).toContain(`It is not linked to your account, even when you are signed in.`);
+        expect(reports).toContain(`a report is deleted 12 months after the operator closes it.`);
+        expect(within(section(`Reports`)).getByRole(`link`, { name: `report form` }).getAttribute(`href`)).toBe(`/report`);
+        expect(section(`Playing as a guest`).textContent).toContain(
+            `Guest games are unrated and join the public record like every other game, shown and kept under the random label, which is all a game keeps of a guest`,
+        );
     });
 
     it('run the terms under the operator name and email, needing no Impressum, and link the privacy policy section on deletion', async () => {
@@ -209,11 +230,12 @@ describe('LegalScreen', () => {
         expect(headings.indexOf(`Guests`)).toBe(headings.indexOf(`Accounts`) + 1);
         const guests = section(`Guests`);
         expect(guests.textContent).toBe(
-            `GuestsYou can play as a guest, without an account. These terms, the age rule included, apply to guests too. Guest games are unrated and end with the guest session; see Playing as a guest in the Privacy policy. The operator may end a guest session and its games at any time.`,
+            `GuestsYou can play as a guest, without an account. These terms, the age rule included, apply to guests too. Guest games are unrated and stay in the public record under the guest's label; see Playing as a guest in the Privacy policy. The operator may end a guest session and its live games at any time.`,
         );
         expect(within(guests).getByRole(`link`, { name: `Playing as a guest` }).getAttribute(`href`)).toBe(`/legal/privacy#playing-as-a-guest`);
         expect(section(`Moderation`).textContent).toContain(`and ban or delete accounts or end guest sessions when these terms or the law are broken`);
-        expect(section(`Changes`).textContent).toContain(`If you disagree, you can have your account deleted, or stop playing as a guest, before then.`);
+        expect(section(`Changes`).textContent).toContain(`If you disagree, you can delete your account, or stop playing as a guest, before then.`);
+        expect(within(section(`Reporting`)).getByRole(`link`, { name: `report form` }).getAttribute(`href`)).toBe(`/report`);
     });
 
     it('hold the title and a placeholder frame until the documents are read, never text with gaps', () => {

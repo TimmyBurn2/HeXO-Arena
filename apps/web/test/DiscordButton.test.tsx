@@ -104,7 +104,7 @@ describe('DiscordSignIn', () => {
         expect(line?.querySelector(`a`)).toBe(null);
         unmount();
         render(<DiscordSignIn guest />);
-        expect(document.querySelector(`.discord-sign-in .note`)?.textContent).toBe(`Signing in ends this guest session and its games. Your email stays with Discord.`);
+        expect(document.querySelector(`.discord-sign-in .note`)?.textContent).toBe(`Signing in ends this guest session and its live games. Your email stays with Discord.`);
     });
 
     it('let the place that holds it close before the privacy link navigates', () => {

@@ -330,11 +330,11 @@ describe('WelcomeScreen', () => {
         serve(ok, refused(410, `signup_limit`), { kind: `guest`, name: `Guest k3f9`, liveGames: [] });
         meStore.start();
         render(<WelcomeScreen />);
-        await screen.findByText(`Creating your account ends this guest session and its games.`);
+        await screen.findByText(`Creating your account ends this guest session and its live games.`);
         fireEvent.click(screen.getByRole(`button`, { name: `Create account` }));
         await screen.findByRole(`heading`, { name: `That sign-in tried too many names; sign in again` });
         expect(document.querySelector(`.welcome-ended .discord-sign-in .note`)?.textContent).toBe(
-            `Signing in ends this guest session and its games. Your email stays with Discord; see\u00a0Privacy.`,
+            `Signing in ends this guest session and its live games. Your email stays with Discord; see\u00a0Privacy.`,
         );
     });
 
@@ -342,7 +342,7 @@ describe('WelcomeScreen', () => {
         serve(ok, undefined, { kind: `guest`, name: `Guest k3f9`, liveGames: [] });
         meStore.start();
         render(<WelcomeScreen />);
-        expect(await screen.findByText(`Creating your account ends this guest session and its games.`)).toBeTruthy();
+        expect(await screen.findByText(`Creating your account ends this guest session and its live games.`)).toBeTruthy();
     });
 
     it('give way to the profile of someone already signed in with no sign-up waiting, never saying expired', async () => {

@@ -120,6 +120,20 @@
       "when": 1790919532152,
       "tag": "0016_tournament_rules",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "6",
+      "when": 1790946811638,
+      "tag": "0017_reports",
+      "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "6",
+      "when": 1790947596061,
+      "tag": "0018_guest_games",
+      "breakpoints": true
     }
   ]
 }

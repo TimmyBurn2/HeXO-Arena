@@ -1,4 +1,4 @@
-import { clockText, type TournamentSummary } from '@hexo-arena/contract';
+import { clockText, deletedPlayerName, type TournamentSummary } from '@hexo-arena/contract';
 import { fetchTournaments } from '../api/client';
 import { useAsync } from '../api/use-async';
 import { BotBadge, PlayerName } from '../components/player';
@@ -88,9 +88,9 @@ function Facts({ tournament }: { tournament: TournamentSummary }) {
                         text.tournaments.played(tournament.entrants)
                     ) : (
                         <>
-                            {text.tournaments.winner(<PlayerName name={tournament.winner.name} kind="bot" />)}
+                            {text.tournaments.winner(<PlayerName name={tournament.winner.name} kind="bot" deleted={tournament.winner.deleted} />)}
                             <BotBadge />{` `}
-                            <span className="tournament-owner">{text.ladder.byOwner(<PlayerName name={tournament.winner.ownerName} kind="human" />)}</span>
+                            <span className="tournament-owner">{text.ladder.byOwner(<PlayerName name={tournament.winner.ownerName} kind="human" deleted={tournament.winner.ownerName === deletedPlayerName} />)}</span>
                         </>
                     )}
                 </>

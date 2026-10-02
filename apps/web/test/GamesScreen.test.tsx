@@ -72,7 +72,7 @@ describe('GamesScreen', () => {
         expect(won.textContent).toBe(`hextideBOT1712vsquietlakeBOT1690?hextide won with six in a rowturn clock 10 s5 stones38 turns3 h ago`);
         expect(aborted.textContent).toContain(`No winner; the game was aborted`);
         expect(aborted.textContent).toContain(`unlimitedOrigin only1 turn`);
-        expect(screen.getByText(`Newest first; guest games are not kept, so they never show here.`)).toBeTruthy();
+        expect(screen.getByText(`Newest first; a guest's games show under the guest's label, unrated.`)).toBeTruthy();
         expect(screen.getByText(`2 games`)).toBeTruthy();
     });
 
@@ -84,6 +84,31 @@ describe('GamesScreen', () => {
         expect(voided.querySelector(`.game-row-result`)?.textContent).toBe(`hextide won with six in a rowvoided`);
         expect(voided.querySelector(`.game-row-result .tag`)?.textContent).toBe(`voided`);
         expect(kept.querySelector(`.tag`)).toBe(null);
+    });
+
+    it('name a deleted seat by its label, set apart, the row still leading to the game', async () => {
+        const gone: GamePlayer = { name: `deleted player`, rating: 1400, provisional: false, kind: `user`, deleted: true };
+        serve(() => ({ games: [game(0, { players: { x: hextide, o: gone } })], page: 1, pages: 1, total: 1 }));
+        open(`/games`);
+        const [row] = await screen.findAllByRole(`link`, { name: /deleted player/u });
+        expect(row?.getAttribute(`href`)).toBe(`/game/g-0`);
+        expect(row?.querySelector(`.deleted-name`)?.textContent).toBe(`deleted player`);
+    });
+
+    it('list a guest\'s game under its label, tagged unrated, and offer Guest vs bot under Who played', async () => {
+        const guest: GamePlayer = { name: `Guest k3f9`, rating: null, provisional: false, kind: `guest` };
+        const fetch = serve(() => ({ games: [game(0, { players: { x: hextide, o: guest }, rated: false })], page: 1, pages: 1, total: 1 }));
+        open(`/games`);
+        const [row] = await screen.findAllByRole(`link`, { name: /Guest k3f9/u });
+        expect(row?.querySelector(`.tag`)?.textContent).toBe(`unrated`);
+        const panel = openFilters();
+        const kind = within(panel).getByLabelText<HTMLSelectElement>(`Who played`);
+        expect([...kind.options].map((option) => option.textContent)).toEqual([`Any`, `Bot vs bot`, `Human vs bot`, `Guest vs bot`]);
+        fireEvent.change(kind, { target: { value: `guest-bot` } });
+        await waitFor(() => {
+            expect(reads(fetch).at(-1)).toBe(`/api/games/finished?kind=guest-bot`);
+        });
+        expect(within(screen.getByRole(`group`, { name: `Active filters` })).getAllByRole(`button`)[0]?.getAttribute(`aria-label`)).toBe(`Remove guest vs bot`);
     });
 
     it('hold Player beside one Filters button, Against and Side waiting in its panel for a player and Result offering No winner alone', async () => {

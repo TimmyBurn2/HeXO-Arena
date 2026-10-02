@@ -3,6 +3,7 @@ import { botMeta, nameKeyOf, notFoundMeta, type BotListing, type LiveGameEntry }
 import { fetchBots } from '../api/client';
 import { useAsync } from '../api/use-async';
 import { OwnerPanel } from '../components/OwnerPanel';
+import { ReportLine } from '../components/ReportLine';
 import { PlayerHistory } from '../games/PlayerHistory';
 import { PendingPlate } from '../players/PendingPlate';
 import { PlayerBlocks } from '../players/PlayerBlocks';
@@ -182,6 +183,7 @@ function BotProfile({ bot }: { bot: BotListing }) {
             <PlayerBlocks name={bot.name} />
             <PlayerHistory player={bot.name} title={text.games.recent} />
             {owned ? <OwnerPanel bot={bot.name} /> : null}
+            <ReportLine subject={`/bots/${encodeURIComponent(bot.name)}`} name={bot.name} />
         </>
     );
 }

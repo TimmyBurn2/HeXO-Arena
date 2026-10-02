@@ -170,6 +170,18 @@ describe('the game ratings cache', () => {
         expect(rowsOf(second).find((row) => row.side === `x`)?.before).toBe(seedRating(`human`).rating);
     });
 
+    it('keeps no rows for a guest\'s game, which the fold, a recompute, and the boot fill all pass over', () => {
+        const [botId = ``] = bots;
+        const standing = readRating(query, { kind: `bot`, id: botId });
+        const guestGame = insertGame(query, { guestName: `Guest k3f9`, botId, userSide: `o`, timeControl: unlimited, opening: origin });
+        recordFinish(query, guestGame, { winner: `o`, reason: `six-in-a-row` });
+        expect(rowsOf(guestGame)).toEqual([]);
+        expect(readRating(query, { kind: `bot`, id: botId })).toEqual(standing);
+        expect(fillGameRatings(query)).toBe(0);
+        expect(recomputeRatings(query)).toBe(0);
+        expect(rowsOf(guestGame)).toEqual([]);
+    });
+
     it('fills the rows a database from before the cache lacks, as a recompute would', async () => {
         playLog(7, 60);
         const live = allRows();

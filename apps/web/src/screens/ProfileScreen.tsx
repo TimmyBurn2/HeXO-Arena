@@ -2,6 +2,7 @@ import { useCallback, useState } from 'react';
 import { botCapPerUser, nameKeyOf, type GuestMe, type UserMe } from '@hexo-arena/contract';
 import { fetchBots } from '../api/client';
 import { useAsync } from '../api/use-async';
+import { AccountPanel } from '../components/AccountPanel';
 import { DiscordSignIn } from '../components/DiscordButton';
 import { PlayerHistory } from '../games/PlayerHistory';
 import { PlayerBlocks } from '../players/PlayerBlocks';
@@ -18,8 +19,17 @@ import './ProfileScreen.css';
 export function ProfileScreen() {
     const route = useRoute();
     const state = useMe();
+    const [deleted, setDeleted] = useState(false);
     useDocumentMeta(route);
 
+    if (deleted) {
+        return (
+            <>
+                <h1 className="screen-title">{text.profile.title}</h1>
+                <Deleted />
+            </>
+        );
+    }
     return (
         <>
             <h1 className="screen-title">{text.profile.title}</h1>
@@ -38,9 +48,31 @@ export function ProfileScreen() {
                     <YourBots owner={state.me.name} />
                     <PlayerBlocks name={state.me.name} />
                     <PlayerHistory player={state.me.name} title={text.games.yours} />
+                    <AccountPanel
+                        name={state.me.name}
+                        onDeleted={() => {
+                            setDeleted(true);
+                        }}
+                    />
                 </>
             ) : null}
         </>
+    );
+}
+
+// Said once, on the page the deletion happened on; the next visit reads signed out.
+function Deleted() {
+    const words = text.profile.account;
+    return (
+        <div className="card" role="status">
+            <h2 className="card-title">{words.deleted}</h2>
+            <p className="note">{words.deletedNote}</p>
+            <p className="card-actions">
+                <Link to="/" className="btn btn-ghost">
+                    {words.home}
+                </Link>
+            </p>
+        </div>
     );
 }
 

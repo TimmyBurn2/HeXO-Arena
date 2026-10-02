@@ -328,7 +328,7 @@ function GameView({ snapshot, send, link }: { snapshot: GameSnapshot; send: Game
                 <Swatch side={bottom} />
                 {you === null ? (
                     <span className="hud-name">
-                        {snapshot.players[bottom].name}
+                        <span className={snapshot.players[bottom].deleted === true ? `deleted-name` : undefined}>{snapshot.players[bottom].name}</span>
                         {snapshot.players[bottom].kind === `bot` ? <BotBadge /> : null}
                     </span>
                 ) : (
@@ -442,12 +442,13 @@ interface Meetings {
     readonly record: FinishedGamesRecord;
 }
 
-// Guest games are never kept, so a guest's seat has no record to read; the
-// record is read again at the finish, which adds this game to it.
+// A guest or a deleted player is no name the history takes, so neither
+// seat has a record to read; the record is read again at the finish,
+// which adds this game to it.
 function useMeetings(snapshot: GameSnapshot): Meetings | null {
     const { x, o } = snapshot.players;
     const seated = (player: typeof x) => ({ name: player.name, kind: player.kind === `bot` ? (`bot` as const) : (`human` as const) });
-    const kept = x.kind !== `guest` && o.kind !== `guest`;
+    const kept = [x, o].every((player) => player.kind !== `guest` && player.deleted !== true);
     const finished = snapshot.status === `finished`;
     const [meetings, setMeetings] = useState<Meetings | null>(null);
     useEffect(() => {
@@ -475,7 +476,8 @@ function factsOf(snapshot: GameSnapshot): (readonly [string, string])[] {
     const voided = snapshot.status === `finished` && snapshot.voided;
     if (snapshot.you === undefined) {
         const guest = snapshot.players.x.kind === `guest` || snapshot.players.o.kind === `guest`;
-        facts.push([text.drawer.rated, guest ? text.drawer.ratedNoGuest : voided ? text.drawer.ratedNoVoided : text.drawer.ratedYes]);
+        const unratedGuest = snapshot.status === `finished` ? text.drawer.ratedNoGuestPlayed : text.drawer.ratedNoGuest;
+        facts.push([text.drawer.rated, guest ? unratedGuest : voided ? text.drawer.ratedNoVoided : text.drawer.ratedYes]);
     } else {
         facts.push([text.drawer.yourSide, snapshot.you]);
         // A seated player's own game needs no Rated row until the operator voids it.

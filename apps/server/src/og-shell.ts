@@ -18,6 +18,8 @@ import {
     playMeta,
     profileMeta,
     playerMeta,
+    reportMeta,
+    reportPagePath,
     siteMeta,
     tournamentIdSchema,
     tournamentMeta,
@@ -96,6 +98,7 @@ const fixedPages: readonly (readonly [string, PageMeta])[] = [
     [`/connect`, connectMeta],
     [`/profile`, profileMeta],
     [`/credits`, creditsMeta],
+    [reportPagePath, reportMeta],
     [welcomePath, welcomeMeta],
     ...legalPages.map((page) => [legalPagePath(page), legalPageMeta[page]] as const),
 ];

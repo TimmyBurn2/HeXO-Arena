@@ -40,6 +40,7 @@ export function GameRows({ games, now, label }: { games: readonly FinishedGameEn
                         <span className="game-row-result">
                             {resultSentence(game, { x: game.players.x.name, o: game.players.o.name })}
                             {game.voided ? <span className="tag muted">{text.games.voided}</span> : null}
+                            {isGuestGame(game) ? <span className="tag muted">{text.games.unrated}</span> : null}
                         </span>
                         <span className="game-row-facts">
                             <span>{clockText(game.timeControl)}</span>
@@ -56,12 +57,17 @@ export function GameRows({ games, now, label }: { games: readonly FinishedGameEn
     );
 }
 
+// A guest's game rates nobody, a winner or not, so its row says so.
+function isGuestGame(game: FinishedGameEntry): boolean {
+    return game.players.x.kind === `guest` || game.players.o.kind === `guest`;
+}
+
 function Seat({ side, player }: { side: Side; player: GamePlayer }) {
     return (
         <span className="game-row-seat">
             <span className="game-row-who">
                 <Swatch side={side} />
-                <span className="game-row-name">{player.name}</span>
+                <span className={player.deleted === true ? `game-row-name deleted-name` : `game-row-name`}>{player.name}</span>
             </span>
             {player.kind === `bot` ? <BotBadge /> : null}
             {player.rating === null ? null : (

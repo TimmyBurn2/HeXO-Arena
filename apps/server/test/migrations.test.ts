@@ -242,3 +242,82 @@ describe('the weekly rules migration', () => {
         expect(() => audit.run(`tournament-schedule-list`)).toThrow(/CHECK/);
     });
 });
+
+describe('the reports migration', () => {
+    let sqlite: Sqlite;
+    let folder: string;
+
+    afterEach(() => {
+        sqlite.close();
+        rmSync(folder, { recursive: true, force: true });
+    });
+
+    it('keeps every audit row and its numbering, audits closing a report, and holds reports to their checks', () => {
+        sqlite = openDatabase(`:memory:`);
+        folder = migrationsUpTo(17);
+        migrate(drizzle(sqlite), { migrationsFolder: folder });
+        sqlite.exec(`insert into admin_actions (actor, action, target, reason, at) values ('operator', 'ban-user', 'ann', 'spam', 1);`);
+        runMigrations(sqlite);
+        const audit = sqlite.prepare(`insert into admin_actions (actor, action, target, reason, at) values ('operator', ?, '1', 'done', 2)`);
+        expect(audit.run(`report-close`).lastInsertRowid).toBe(2);
+        expect(sqlite.prepare(`select id, action, target from admin_actions order by id`).all()).toEqual([
+            { id: 1, action: `ban-user`, target: `ann` },
+            { id: 2, action: `report-close`, target: `1` },
+        ]);
+        const report = sqlite.prepare(`insert into reports (subject, reason, details, good_faith, created_at) values (?, ?, ?, ?, 1)`);
+        expect(() => report.run(`/bots/x`, `name`, `rude`, 1)).not.toThrow();
+        expect(() => report.run(`https://elsewhere.example`, `name`, `rude`, 1)).toThrow(/CHECK/);
+        expect(() => report.run(`/bots/x`, `spam`, `rude`, 1)).toThrow(/CHECK/);
+        expect(() => report.run(`/bots/x`, `name`, ``, 1)).toThrow(/CHECK/);
+        expect(() => report.run(`/bots/x`, `name`, `rude`, 0)).toThrow(/CHECK/);
+        expect(() => sqlite.prepare(`update reports set status = 'closed'`).run()).toThrow(/CHECK/);
+        expect(() => sqlite.prepare(`update reports set status = 'closed', closed_at = 2, note = 'cleared'`).run()).not.toThrow();
+    });
+});
+
+describe('the guest games migration', () => {
+    let sqlite: Sqlite;
+    let folder: string;
+
+    afterEach(() => {
+        sqlite.close();
+        rmSync(folder, { recursive: true, force: true });
+    });
+
+    it('keeps every game with its moves, ratings, and challenges, and holds a guest seat to its label alone', () => {
+        sqlite = openDatabase(`:memory:`);
+        folder = migrationsUpTo(18);
+        migrate(drizzle(sqlite), { migrationsFolder: folder });
+        sqlite.exec(`
+            insert into name_reservations (name_key) values ('owner'), ('alpha'), ('beta');
+            insert into users (id, discord_id, name, name_key, created_at) values ('u1', 'd1', 'owner', 'owner', 1);
+            insert into bots (id, owner_id, name, name_key, token_hash, scope, created_at)
+                values ('b1', 'u1', 'alpha', 'alpha', 'h1', 'bot:play', 1), ('b2', 'u1', 'beta', 'beta', 'h2', 'bot:play', 1);
+            insert into games (id, user_id, bot_id, user_side, time_control, opening_cells, winner, finish_reason, created_at, finished_at, finish_seq)
+                values ('human', 'u1', 'b1', 'x', '{"mode":"unlimited"}', '[]', 'x', 'surrender', 1, 2, 1);
+            insert into games (id, challenger_bot_id, dest_bot_id, challenger_side, time_control, opening_cells, winner, finish_reason, created_at, finished_at, finish_seq)
+                values ('bots', 'b1', 'b2', 'o', '{"mode":"unlimited"}', '[]', 'o', 'surrender', 3, 4, 2);
+            insert into moves (game_id, seq, side, first_x, first_y, second_x, second_y, created_at) values ('bots', 1, 'o', 1, 0, 2, 0, 3);
+            insert into game_ratings (game_id, side, rating_before, rating_after, deviation_after) values ('bots', 'x', 1500, 1480, 300), ('bots', 'o', 1500, 1520, 300);
+            insert into challenges (id, challenger_bot_id, dest_bot_id, request_key, time_control, opening_plies, first_player, status, game_id, created_at, decided_at)
+                values ('c1', 'b1', 'b2', 'r1', '{}', 5, 'random', 'accepted', 'bots', 3, 3);
+        `);
+        runMigrations(sqlite);
+        expect(sqlite.prepare(`select id, guest_name as guest from games order by id`).all()).toEqual([
+            { id: `bots`, guest: null },
+            { id: `human`, guest: null },
+        ]);
+        expect(sqlite.prepare(`select count(*) as n from moves`).get()).toEqual({ n: 1 });
+        expect(sqlite.prepare(`select count(*) as n from game_ratings`).get()).toEqual({ n: 2 });
+        expect(sqlite.prepare(`select id, game_id as gameId from challenges`).all()).toEqual([{ id: `c1`, gameId: `bots` }]);
+        expect(sqlite.pragma(`foreign_key_check`)).toEqual([]);
+        const guest = sqlite.prepare(`insert into games (id, user_id, guest_name, bot_id, user_side, time_control, opening_cells, created_at) values (?, ?, ?, 'b1', 'o', '{}', '[]', 5)`);
+        expect(() => guest.run(`g1`, null, `Guest k3f9`)).not.toThrow();
+        expect(() => guest.run(`g2`, `u1`, `Guest k3f9`)).toThrow(/CHECK/);
+        expect(() => guest.run(`g3`, null, `Guest K3F9`)).toThrow(/CHECK/);
+        expect(() => guest.run(`g4`, null, `Guest k3f9 and more`)).toThrow(/CHECK/);
+        expect(() => guest.run(`g5`, null, null)).toThrow(/CHECK/);
+        const indexes = sqlite.prepare(`select name from sqlite_master where type = 'index' and tbl_name = 'games' and name like 'games_%' order by name`).all();
+        expect(indexes).toHaveLength(14);
+    });
+});

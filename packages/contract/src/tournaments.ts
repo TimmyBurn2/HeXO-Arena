@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { liveGameEntrySchema } from './games';
 import { clockText, pageTitle, plural, siteName, type PageMeta } from './meta';
-import { nameSyntaxSchema } from './names';
+import { deletedBotName, deletedMarkSchema, deletedPlayerName, nameSyntaxSchema } from './names';
 import { openingPliesSchema, timeControlSchema, type TimeControl } from './stream';
 
 /** Bots that must be connected at the start, or the tournament is called off. */
@@ -148,7 +148,7 @@ export const tournamentWaitingPollMs = 60_000;
 
 const tournamentTime = z.iso.datetime();
 
-export const tournamentWinnerSchema = z.object({ name: z.string(), ownerName: z.string() }).meta({ id: `TournamentWinner` });
+export const tournamentWinnerSchema = z.object({ name: z.string(), ownerName: z.string(), deleted: deletedMarkSchema.optional() }).meta({ id: `TournamentWinner` });
 
 export const tournamentSummarySchema = z
     .object({
@@ -184,10 +184,27 @@ export type TournamentEntryState = z.infer<typeof tournamentEntryStateSchema>;
 export const tournamentEntryReasonSchema = z.enum([`daily_cap`, `clock`, `missed`, `banned`, `delisted`, `deleted`]);
 export type TournamentEntryReason = z.infer<typeof tournamentEntryReasonSchema>;
 
+// A bot's number within one tournament, by which its pages name it; a
+// deleted bot reads as its label alone, so two deleted bots stay apart only
+// by this, and it means nothing outside the tournament.
+const tournamentKeySchema = z
+    .number()
+    .int()
+    .min(1)
+    .meta({ id: `TournamentKey`, description: `A bot's number within this tournament, its entries counted in the order they came; it means nothing outside the tournament.` });
+
+/** A bot as a tournament's round lines name it: its number in the tournament, its name, and the mark if it was deleted. */
+export const tournamentBotSchema = z
+    .object({ key: tournamentKeySchema, name: z.string(), deleted: deletedMarkSchema.optional() })
+    .meta({ id: `TournamentBot` });
+export type TournamentBot = z.infer<typeof tournamentBotSchema>;
+
 export const tournamentEntrySchema = z
     .object({
+        key: tournamentKeySchema,
         bot: z.string(),
         ownerName: z.string(),
+        deleted: deletedMarkSchema.optional(),
         online: z.boolean(),
         ratingAtStart: z.number().int().nullable(),
         state: tournamentEntryStateSchema,
@@ -203,19 +220,19 @@ export type TournamentGameOutcome = z.infer<typeof tournamentGameOutcomeSchema>;
 
 export const tournamentGameSchema = z
     .object({
-        x: z.string().meta({ description: `The bot playing x: the pairing's first in game 1, its second in game 2.` }),
+        x: tournamentKeySchema.meta({ description: `The bot playing x: the pairing's first in game 1, its second in game 2.` }),
         gameId: z.string().nullable(),
         outcome: tournamentGameOutcomeSchema,
-        point: z.string().nullable().meta({ description: `The bot the game scored for: the winner, or the bot that came or stayed when the other did not.` }),
-        missing: z.array(z.string()).meta({ description: `The bots that did not show for a no-show, or were withdrawn for a forfeit.` }),
+        point: tournamentKeySchema.nullable().meta({ description: `The bot the game scored for: the winner, or the bot that came or stayed when the other did not.` }),
+        missing: z.array(tournamentKeySchema).meta({ description: `The bots that did not show for a no-show, or were withdrawn for a forfeit.` }),
     })
     .meta({ id: `TournamentGame` });
 export type TournamentGame = z.infer<typeof tournamentGameSchema>;
 
 export const tournamentPairingSchema = z
     .object({
-        first: z.string(),
-        second: z.string(),
+        first: tournamentBotSchema,
+        second: tournamentBotSchema,
         games: z.array(tournamentGameSchema).length(2),
     })
     .meta({ id: `TournamentPairing` });
@@ -225,7 +242,7 @@ export const tournamentRoundSchema = z
     .object({
         round: z.number().int().min(1),
         pairings: z.array(tournamentPairingSchema),
-        rest: z.string().nullable().meta({ description: `The bot sitting the round out, in an odd field.` }),
+        rest: tournamentBotSchema.nullable().meta({ description: `The bot sitting the round out, in an odd field.` }),
     })
     .meta({ id: `TournamentRound` });
 export type TournamentRound = z.infer<typeof tournamentRoundSchema>;
@@ -233,8 +250,10 @@ export type TournamentRound = z.infer<typeof tournamentRoundSchema>;
 export const tournamentStandingSchema = z
     .object({
         rank: z.number().int().min(1),
+        key: tournamentKeySchema,
         bot: z.string(),
         ownerName: z.string(),
+        deleted: deletedMarkSchema.optional(),
         points: z.number().int().min(0),
         asX: z.number().int().min(0),
         asO: z.number().int().min(0),
@@ -264,7 +283,10 @@ export const tournamentDetailSchema = z
         }),
         live: z.array(liveGameEntrySchema),
     })
-    .meta({ id: `TournamentDetail` });
+    .meta({
+        id: `TournamentDetail`,
+        description: `A deleted bot reads as ${deletedBotName}, and a deleted owner as ${deletedPlayerName}; each bot's key tells two deleted bots apart.`,
+    });
 export type TournamentDetail = z.infer<typeof tournamentDetailSchema>;
 
 /** The tournament list's meta. */

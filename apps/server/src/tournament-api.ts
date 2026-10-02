@@ -14,6 +14,7 @@ import {
     tournamentListPastCap,
     tournamentListSchema,
     tournamentStatusSchema,
+    type TournamentBot,
     type TournamentDetail,
     type TournamentEntry,
     type TournamentGame,
@@ -29,6 +30,7 @@ import type { PresenceRegistry } from './presence';
 import type { CredentialLimits } from './request-limits';
 import { pointOf, standingsOf, storedSlot, xSeatOf, type PairingSeat, type ScoredPairing } from './round-robin';
 import { sessionUser } from './sessions';
+import { shownBot, shownUser } from './shown-names';
 
 const isoOf = (seconds: number) => new Date(seconds * 1000).toISOString().replace(/\.\d{3}Z$/u, `Z`);
 
@@ -58,19 +60,27 @@ const tournamentColumns = {
 
 interface EntryRow {
     readonly botId: string;
+    /** The bot's number in this tournament, which its pages name it by. */
+    readonly key: number;
+    /** The bot as the tournament's pages name it. */
     readonly bot: string;
     readonly ownerName: string;
+    readonly deleted: boolean;
     readonly state: string;
     readonly reason: string | null;
     readonly ratingAtStart: number | null;
 }
 
+// A deleted bot reads by its label alone; its number in the entry order
+// keeps it apart from another deleted bot without either one's placeholder.
 function entryRows(query: Query, tournamentId: string): EntryRow[] {
-    return query
+    const rows = query
         .select({
             botId: tournamentEntries.botId,
             bot: bots.name,
+            botDeletedAt: bots.deletedAt,
             ownerName: users.name,
+            ownerDeletedAt: users.deletedAt,
             state: tournamentEntries.state,
             reason: tournamentEntries.reason,
             ratingAtStart: tournamentEntries.ratingAtStart,
@@ -81,13 +91,28 @@ function entryRows(query: Query, tournamentId: string): EntryRow[] {
         .where(eq(tournamentEntries.tournamentId, tournamentId))
         .orderBy(asc(tournamentEntries.enteredAt), asc(bots.nameKey))
         .all();
+    return rows.map(({ botDeletedAt, ownerDeletedAt, ...row }, index) => ({
+        ...row,
+        key: index + 1,
+        bot: shownBot(row.bot, botDeletedAt).name,
+        ownerName: shownUser(row.ownerName, ownerDeletedAt).name,
+        deleted: botDeletedAt !== null,
+    }));
+}
+
+// A bot as the round lines name it; every pairing seats two of the entries.
+function botOf(entry: EntryRow | undefined, botId: string): TournamentBot {
+    if (entry === undefined) throw new Error(`a pairing seats a bot with no entry: ${botId}`);
+    return { key: entry.key, name: entry.bot, ...(entry.deleted ? { deleted: true as const } : {}) };
 }
 
 // The checks admit only the contract's states and reasons.
 function entryView(row: EntryRow, online: boolean): TournamentEntry {
     return {
+        key: row.key,
         bot: row.bot,
         ownerName: row.ownerName,
+        ...(row.deleted ? { deleted: true } : {}),
         online,
         ratingAtStart: row.ratingAtStart === null ? null : Math.round(row.ratingAtStart),
         state: tournamentEntryStateSchema.parse(row.state),
@@ -97,13 +122,14 @@ function entryView(row: EntryRow, online: boolean): TournamentEntry {
 
 interface PairingView {
     readonly round: number;
-    readonly first: string;
-    readonly second: string;
+    readonly first: TournamentBot;
+    readonly second: TournamentBot;
     readonly scored: ScoredPairing;
     readonly gameIds: readonly [string | null, string | null];
 }
 
-function pairingViews(query: Query, tournamentId: string): PairingView[] {
+// Every pairing seats two of the tournament's entries, which name its bots.
+function pairingViews(query: Query, tournamentId: string, entries: readonly EntryRow[]): PairingView[] {
     const rows = query
         .select({
             id: tournamentPairings.id,
@@ -120,14 +146,7 @@ function pairingViews(query: Query, tournamentId: string): PairingView[] {
         .orderBy(asc(tournamentPairings.round), asc(tournamentPairings.id))
         .all();
     if (rows.length === 0) return [];
-    const names = new Map(
-        query
-            .select({ id: bots.id, name: bots.name })
-            .from(bots)
-            .where(inArray(bots.id, [...new Set(rows.flatMap((row) => [row.firstBotId, row.secondBotId]))]))
-            .all()
-            .map((row) => [row.id, row.name]),
-    );
+    const byBot = new Map(entries.map((entry) => [entry.botId, entry]));
     // The latest game of each slot, a replay over the game it replaced.
     const slotGames = new Map<string, string>();
     {
@@ -142,8 +161,8 @@ function pairingViews(query: Query, tournamentId: string): PairingView[] {
     }
     return rows.map((row) => ({
         round: row.round,
-        first: names.get(row.firstBotId) ?? row.firstBotId,
-        second: names.get(row.secondBotId) ?? row.secondBotId,
+        first: botOf(byBot.get(row.firstBotId), row.firstBotId),
+        second: botOf(byBot.get(row.secondBotId), row.secondBotId),
         scored: {
             round: row.round,
             first: row.firstBotId,
@@ -156,15 +175,15 @@ function pairingViews(query: Query, tournamentId: string): PairingView[] {
 
 function gameView(pairing: PairingView, index: 0 | 1): TournamentGame {
     const result = pairing.scored.games[index];
-    const seatName = (seat: PairingSeat) => (seat === `first` ? pairing.first : pairing.second);
+    const keyOf = (seat: PairingSeat) => (seat === `first` ? pairing.first.key : pairing.second.key);
     const point = pointOf(result);
     const absent = result.kind === `no_show` ? result.missing : result.kind === `forfeit` ? result.withdrawn : null;
     return {
-        x: seatName(xSeatOf(index === 0 ? 1 : 2)),
+        x: keyOf(xSeatOf(index === 0 ? 1 : 2)),
         gameId: pairing.gameIds[index],
         outcome: result.kind,
-        point: point === null ? null : seatName(point),
-        missing: absent === null ? [] : absent === `both` ? [pairing.first, pairing.second] : [seatName(absent)],
+        point: point === null ? null : keyOf(point),
+        missing: absent === null ? [] : absent === `both` ? [pairing.first.key, pairing.second.key] : [keyOf(absent)],
     };
 }
 
@@ -173,33 +192,36 @@ export function tournamentDetail(query: Query, deps: { presence: PresenceRegistr
     const row = query.select(tournamentColumns).from(tournaments).where(eq(tournaments.id, id)).get();
     if (row === undefined) return null;
     const entries = entryRows(query, id);
-    const pairings = pairingViews(query, id);
-    const nameOf = new Map(entries.map((entry) => [entry.botId, entry]));
+    const pairings = pairingViews(query, id, entries);
+    const byBot = new Map(entries.map((entry) => [entry.botId, entry]));
     const field = entries.filter((entry) => entry.state === `playing` || entry.state === `withdrawn`).map((entry) => entry.botId);
     const standings = standingsOf(
         field,
         pairings.map((pairing) => pairing.scored),
     ).map((line) => {
-        const entry = nameOf.get(line.bot);
+        const entry = byBot.get(line.bot);
+        if (entry === undefined) throw new Error(`a standing names a bot with no entry: ${line.bot}`);
         return {
             rank: line.rank,
-            bot: entry?.bot ?? line.bot,
-            ownerName: entry?.ownerName ?? ``,
+            key: entry.key,
+            bot: entry.bot,
+            ownerName: entry.ownerName,
+            ...(entry.deleted ? { deleted: true as const } : {}),
             points: line.points,
             asX: line.asX,
             asO: line.asO,
-            withdrawn: entry?.state === `withdrawn`,
+            withdrawn: entry.state === `withdrawn`,
         };
     });
     const roundNumbers = [...new Set(pairings.map((pairing) => pairing.round))];
-    const fieldNames = field.map((botId) => nameOf.get(botId)?.bot ?? botId);
     const rounds = roundNumbers.map((round) => {
         const inRound = pairings.filter((pairing) => pairing.round === round);
-        const seated = new Set(inRound.flatMap((pairing) => [pairing.first, pairing.second]));
+        const seated = new Set(inRound.flatMap((pairing) => [pairing.first.key, pairing.second.key]));
+        const resting = field.map((botId) => byBot.get(botId)).find((entry) => entry !== undefined && !seated.has(entry.key));
         return {
             round,
             pairings: inRound.map((pairing) => ({ first: pairing.first, second: pairing.second, games: [gameView(pairing, 0), gameView(pairing, 1)] })),
-            rest: fieldNames.find((name) => !seated.has(name)) ?? null,
+            rest: resting === undefined ? null : botOf(resting, resting.botId),
         };
     });
     const liveIds = pairings.flatMap((pairing) => pairing.gameIds.filter((gameId, index) => gameId !== null && pairing.scored.games[index]?.kind === `live`));
@@ -239,11 +261,11 @@ function summaryOf(query: Query, row: TournamentRow): TournamentSummary {
     if (row.status === `finished`) {
         const entries = entryRows(query, row.id);
         const field = entries.filter((entry) => entry.state === `playing` || entry.state === `withdrawn`).map((entry) => entry.botId);
-        const top = standingsOf(field, pairingViews(query, row.id).map((pairing) => pairing.scored))[0];
+        const top = standingsOf(field, pairingViews(query, row.id, entries).map((pairing) => pairing.scored))[0];
         const entry = entries.find((candidate) => candidate.botId === top?.bot);
-        winner = entry === undefined ? null : { name: entry.bot, ownerName: entry.ownerName };
+        winner = entry === undefined ? null : { name: entry.bot, ownerName: entry.ownerName, ...(entry.deleted ? { deleted: true as const } : {}) };
     }
-    return { ...summaryBase(row), entrants, winner, round: row.status === `running` ? roundOf(pairingViews(query, row.id)) : null };
+    return { ...summaryBase(row), entrants, winner, round: row.status === `running` ? roundOf(pairingViews(query, row.id, entryRows(query, row.id))) : null };
 }
 
 // The first round with a game still to finish, or the last once none has.

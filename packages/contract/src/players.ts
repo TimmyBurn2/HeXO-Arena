@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { provisionalSchema, ratingSchema } from './leaderboard';
 import { pageTitle, siteName, type PageMeta } from './meta';
+import { deletedMarkSchema } from './names';
 
 export const playerPath = `/api/players/{name}`;
 export const ratingHistoryPath = `/api/players/{name}/rating`;
@@ -46,7 +47,7 @@ export const playerRecordSchema = z
             .object({ disconnect: count, terminated: count })
             .meta({ description: `Games lost by a stream that stayed closed, and by an illegal move.` }),
         opponents: z
-            .array(z.object({ name: z.string(), kind: z.enum([`bot`, `human`]), games: count, won: count, lost: count }))
+            .array(z.object({ name: z.string(), kind: z.enum([`bot`, `human`]), deleted: deletedMarkSchema.optional(), games: count, won: count, lost: count }))
             .max(playerOpponentsCap)
             .meta({ description: `The opponents met most, with the player's wins and losses against each.` }),
         firstGameAt: time.nullable(),
@@ -56,8 +57,12 @@ export const playerRecordSchema = z
             .max(playerPlacingsCap)
             .optional()
             .meta({ description: `A bot's finished tournaments, newest first, with its place in each.` }),
+        guests: z
+            .object({ games: count, won: count, lost: count })
+            .optional()
+            .meta({ description: `A bot's games against guests, unrated and counted in no other figure here.` }),
     })
-    .meta({ id: `PlayerRecord`, description: `Every finished game the player sat in counts, aborted and voided games aside.` });
+    .meta({ id: `PlayerRecord`, description: `Every finished game the player sat in counts, aborted and voided games aside, and a bot's games against guests apart.` });
 export type PlayerRecord = z.infer<typeof playerRecordSchema>;
 
 export const ratingPointSchema = z

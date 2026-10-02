@@ -4,7 +4,21 @@ import type { ZodType } from 'zod';
 import { errorBodySchema } from './api';
 import {
     accountDeclarationSchema,
+    accountExportLimit,
+    accountExportSchema,
+    accountInGameErrorCodes,
+    accountNameMismatchErrorCodes,
     apiVersion,
+    deleteAccountRequestSchema,
+    deletedBotName,
+    deletedPlayerName,
+    meExportPath,
+    reportGlobalLimit,
+    reportLimit,
+    reportPrefixLimit,
+    reportReceiptSchema,
+    reportRequestSchema,
+    reportsPath,
     badRequestErrorCodes,
     botAccountPath,
     botAccountSchema,
@@ -179,6 +193,8 @@ const signupExpiredError = errorBodySchema(signupExpiredErrorCodes).meta({ id: `
 const botLimitError = errorBodySchema([`bot_limit`]).meta({ id: `BotLimitError` });
 const nameTakenError = errorBodySchema([`name_taken`]).meta({ id: `NameTakenError` });
 const inGameError = errorBodySchema(botDeleteConflictErrorCodes).meta({ id: `InGameError` });
+const nameMismatchError = errorBodySchema([...badRequestErrorCodes, ...accountNameMismatchErrorCodes]).meta({ id: `NameMismatchError` });
+const inLiveGameError = errorBodySchema(accountInGameErrorCodes).meta({ id: `InLiveGameError` });
 const gameLimitError = errorBodySchema([...gameLimitErrorCodes, ...rateLimitedErrorCodes]).meta({ id: `GameLimitError` });
 const challengeQuotaError = errorBodySchema([...challengeQuotaErrorCodes, ...rateLimitedErrorCodes]).meta({ id: `ChallengeQuotaError` });
 const signupEndedError = errorBodySchema([...signupExpiredErrorCodes, ...signupLimitErrorCodes]).meta({ id: `SignupEndedError` });
@@ -454,13 +470,56 @@ function registerSiteSurface(registry: OpenAPIRegistry, shared: SharedComponents
     });
 
     registry.registerPath({
+        method: 'delete',
+        path: mePath,
+        summary: 'Delete the signed-in account.',
+        operationId: 'deleteAccount',
+        tags: ['Auth'],
+        security: [{ sessionCookie: [] }],
+        description: `The body names the account's public name. The account, its sessions, and its bots are deleted, and its name is freed; its games stay, the account reading as ${deletedPlayerName} and each kept bot as ${deletedBotName}. Its bots' live games are aborted and their tournament entries withdrawn. Every session ends and the cookie clears.`,
+        request: {
+            body: { required: true, content: { 'application/json': { schema: deleteAccountRequestSchema } } },
+        },
+        responses: {
+            204: { description: `The account is gone and the cookie cleared.` },
+            400: {
+                description: `Validation failed (bad_request), or the name is not the account's (name_mismatch).`,
+                content: { 'application/json': { schema: nameMismatchError } },
+            },
+            401: shared.unauthorized,
+            409: {
+                description: `The account is seated in a live game (in_live_game); it finishes or resigns first.`,
+                content: { 'application/json': { schema: inLiveGameError } },
+            },
+        },
+    });
+
+    registry.registerPath({
+        method: 'get',
+        path: meExportPath,
+        summary: `Download the signed-in account's data.`,
+        operationId: 'exportAccount',
+        tags: ['Auth'],
+        security: [{ sessionCookie: [] }],
+        description: `Every row tied to the account as one JSON attachment. An account downloads ${rateText(accountExportLimit)}.`,
+        responses: {
+            200: {
+                description: `The account's data.`,
+                headers: { 'Content-Disposition': { description: `An attachment named for the account and the day.`, schema: { type: 'string' } } },
+                content: { 'application/json': { schema: accountExportSchema } },
+            },
+            401: shared.unauthorized,
+        },
+    });
+
+    registry.registerPath({
         method: 'post',
         path: guestPath,
         summary: 'Start an anonymous guest session.',
         operationId: 'startGuest',
         tags: ['Auth'],
         security: [{ sessionCookie: [] }, {}],
-        description: `The session lives in server memory only and ends at sign-out, a Discord sign-in, or a restart. It also ends after ${String(guestIdleSeconds / 3600)} h without a request, unless it sits in a live game. Every guest game is unrated.`,
+        description: `The session lives in server memory only and ends at sign-out, a Discord sign-in, or a restart. It also ends after ${String(guestIdleSeconds / 3600)} h without a request, unless it sits in a live game. Every guest game is unrated, and stays in the public record under the guest's label.`,
         responses: {
             200: {
                 description: 'The caller already holds this guest session.',
@@ -558,7 +617,7 @@ function registerSiteSurface(registry: OpenAPIRegistry, shared: SharedComponents
         operationId: 'deleteBot',
         tags: ['Bots'],
         security: [{ sessionCookie: [] }],
-        description: `A bot with rated games is anonymized: it becomes a deleted-<n> placeholder, its games and ratings stay, and its name stays reserved. A bot without rated games is deleted and its name freed.`,
+        description: `A bot with rated games or a tournament is kept: its games and ratings stay, it reads as ${deletedBotName}, and its name stays reserved. Any other bot is deleted with its games and its name freed.`,
         parameters: [shared.botName],
         responses: {
             204: { description: 'The bot and its token are gone.' },
@@ -650,9 +709,9 @@ function registerSiteSurface(registry: OpenAPIRegistry, shared: SharedComponents
         security: [],
         description: [
             `Finished games, newest first, ${String(finishedGamesPageSize)} a page, at most ${String(finishedGamesPageCap)} pages per set of filters; before reaches older games.`,
-            `Guest games are never stored.`,
-            `A name no player holds, a deleted player's placeholder included, answers not_found.`,
-            `An identical query is read at most once every ${seconds(finishedGamesMemoMs)} s, every caller in that time getting the same body.`,
+            `Guest games are listed, unrated, under the guest's label.`,
+            `An unknown name answers not_found; a deleted player is never a filter.`,
+            `An identical query is read at most once every ${seconds(finishedGamesMemoMs)} s, every caller then getting one body.`,
         ].join(` `),
         request: { query: finishedGamesQuerySchema },
         responses: {
@@ -672,7 +731,7 @@ function registerSiteSurface(registry: OpenAPIRegistry, shared: SharedComponents
         operationId: 'getGameSnapshot',
         tags: ['Games'],
         security: [{ sessionCookie: [] }, {}],
-        description: `Board, turn, and clock in one read; a finished game carries its result. Anyone may read a game, a guest's while the guest's session lives.`,
+        description: `Board, turn, and clock in one read; a finished game carries its result. Anyone may read any game.`,
         parameters: [shared.gameId],
         responses: {
             200: {
@@ -759,6 +818,23 @@ function registerSiteSurface(registry: OpenAPIRegistry, shared: SharedComponents
 
     registerTournamentPaths(registry, shared);
     registerPlayerPaths(registry, shared);
+
+    registry.registerPath({
+        method: 'post',
+        path: reportsPath,
+        summary: 'Report something on the site to the operator.',
+        operationId: 'createReport',
+        tags: ['Reports'],
+        security: [{ sessionCookie: [] }, {}],
+        description: `Anyone may report, signed in or not; the report is stored for the operator, who closes it with a note. One client sends ${rateText(reportLimit)}, one IPv6 /48 ${rateText(reportPrefixLimit)}, and every caller together ${rateText(reportGlobalLimit)}.`,
+        request: {
+            body: { required: true, content: { 'application/json': { schema: reportRequestSchema } } },
+        },
+        responses: {
+            201: { description: `The report is stored.`, content: { 'application/json': { schema: reportReceiptSchema } } },
+            400: shared.badRequest,
+        },
+    });
 }
 
 const tournamentEntryError = errorBodySchema([...badRequestErrorCodes, `clock_not_accepted`]).meta({ id: `TournamentEntryError` });
@@ -781,7 +857,7 @@ function registerPlayerPaths(registry: OpenAPIRegistry, shared: SharedComponents
         operationId: 'getPlayerRecord',
         tags: ['Players'],
         security: [],
-        description: `Games won, lost, and without a winner, by side, forfeits, the most played opponents, and a bot's tournament places. A deleted player's placeholder answers not_found. A record is read at most once every ${String(playerRecordMemoMs / 1000)} s, every caller in that time getting the same body.`,
+        description: `Games won, lost, and without a winner, by side, forfeits, the most played opponents, and a bot's tournament places. A name no player holds answers not_found. A record is read at most once every ${String(playerRecordMemoMs / 1000)} s, every caller in that time getting the same body.`,
         parameters: [name],
         responses: {
             200: { description: `The record.`, content: { 'application/json': { schema: playerRecordSchema } } },
@@ -796,7 +872,7 @@ function registerPlayerPaths(registry: OpenAPIRegistry, shared: SharedComponents
         operationId: 'getRatingHistory',
         tags: ['Players'],
         security: [],
-        description: `The rating after each rated game in the range, the newest ${String(ratingHistoryCap)} at most. A deleted player's placeholder answers not_found.`,
+        description: `The rating after each rated game in the range, the newest ${String(ratingHistoryCap)} at most. A name no player holds answers not_found.`,
         parameters: [name],
         request: { query: ratingHistoryQuerySchema },
         responses: {

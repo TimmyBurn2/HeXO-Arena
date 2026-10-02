@@ -184,6 +184,24 @@ describe('GET /api/games/finished', () => {
         expect((await page(`?player=alpha&vs=beta`)).record).toEqual(record);
     });
 
+    it('lists a guest\'s game under its label, unrated, by its kind and under the bot, and takes no guest for a name', async () => {
+        const guestGame = finish(insertGame(query, { guestName: `Guest k3f9`, botId: id(`alpha`), userSide: `o`, timeControl: turnClock, opening: opening(1) }), `o`);
+        finish(human(`ann`, `alpha`, `x`), `x`);
+        finish(bots(`alpha`, `beta`, `x`), `x`);
+        const [listed] = (await page(`?kind=guest-bot`)).games;
+        expect(listed).toMatchObject({
+            gameId: guestGame,
+            players: { x: { name: `alpha`, kind: `bot`, rating: null }, o: { name: `Guest k3f9`, kind: `guest`, rating: null, provisional: false } },
+            winner: `o`,
+            rated: false,
+            voided: false,
+        });
+        expect(await gameIds(`?kind=human-bot`)).not.toContain(guestGame);
+        expect(await gameIds(`?player=alpha`)).toContain(guestGame);
+        expect((await page(`?player=alpha&kind=guest-bot`)).record).toMatchObject({ games: 1, won: 0, lost: 1 });
+        expect(await read(`?player=${encodeURIComponent(`Guest k3f9`)}`)).toMatchObject({ status: 404, body: { code: `not_found` } });
+    });
+
     describe('filters', () => {
         let games: Record<string, string>;
 
@@ -265,11 +283,14 @@ describe('GET /api/games/finished', () => {
             expect(await read(search)).toMatchObject({ status: 404, body: { code: `not_found` } });
         });
 
-        it('takes a deleted player\'s placeholder for an unknown name, and lists the games under it', async () => {
-            deleteUser(query, id(`ann`));
+        it('lists a deleted player\'s games under the label, marked, and takes neither the label nor the placeholder for a name', async () => {
+            const { placeholder } = deleteUser(query, id(`ann`));
+            const body = await read(``);
             const listed = (await page()).games.find((game) => game.gameId === games.annWinsX);
-            expect(listed?.players.x.name).toMatch(/^deleted-[0-9]+$/);
-            expect(await read(`?player=${listed?.players.x.name ?? ``}`)).toMatchObject({ status: 404, body: { code: `not_found` } });
+            expect(listed?.players.x).toMatchObject({ name: `deleted player`, deleted: true, kind: `user` });
+            expect(JSON.stringify(body.body)).not.toMatch(/deleted-[0-9]/);
+            expect(await read(`?player=${placeholder}`)).toMatchObject({ status: 404, body: { code: `not_found` } });
+            expect(await read(`?player=${encodeURIComponent(`deleted player`)}`)).toMatchObject({ status: 404, body: { code: `not_found` } });
         });
     });
 
@@ -294,6 +315,7 @@ describe('GET /api/games/finished', () => {
         [{ player: `alpha`, vs: `beta` }, [`games_dest_finish_idx`]],
         [{ kind: `bot-bot` }, [`games_bots_finish_idx`]],
         [{ kind: `human-bot` }, [`games_human_finish_idx`]],
+        [{ kind: `guest-bot` }, [`games_guests_finish_idx`]],
         [{ result: `none` }, [`games_undecided_finish_idx`]],
         [{ reason: `timeout` }, [`games_reason_finish_idx`]],
         [{ clock: `match` }, [`games_clock_finish_idx`]],

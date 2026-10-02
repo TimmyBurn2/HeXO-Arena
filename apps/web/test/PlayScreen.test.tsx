@@ -92,7 +92,7 @@ function serve(options: { me?: Me; bots?: BotListing[] | (() => BotListing[]); s
                 return Promise.resolve(new Response(JSON.stringify({ running, scheduled: [], past: [] })));
             }
             if (url === `/api/tournaments/t_autumnrobin1` && options.tournament !== undefined) {
-                const entries = options.tournament.map((name) => ({ bot: name, ownerName: `owner`, online: true, ratingAtStart: 1500, state: `playing` }));
+                const entries = options.tournament.map((name, index) => ({ key: index + 1, bot: name, ownerName: `owner`, online: true, ratingAtStart: 1500, state: `playing` }));
                 const detail = { id: `t_autumnrobin1`, name: `Autumn round robin`, status: `running`, startsAt: `2026-10-01T18:00:00Z`, startedAt: `2026-10-01T18:00:00Z`, endedAt: null, timeControl: { mode: `turn`, turnTimeMs: 10_000 }, openingPlies: 5, maxEntrants: 12, entries, rounds: [], standings: [], live: [] };
                 return Promise.resolve(new Response(JSON.stringify(detail)));
             }
@@ -261,18 +261,19 @@ describe('PlayScreen', () => {
         await ready();
         const row = document.querySelector(`details.opening`);
         expect(row?.hasAttribute(`open`)).toBe(false);
-        expect(row?.querySelector(`summary`)?.textContent).toBe(`Opening5 stones`);
+        expect(row?.querySelector(`summary`)?.textContent).toBe(`OpeningOrigin only`);
         expect(screen.queryByRole(`img`)).toBe(null);
         act(() => {
             row?.setAttribute(`open`, ``);
             row?.dispatchEvent(new Event(`toggle`));
         });
-        expect(screen.getByRole(`img`, { name: `An example opening of 5 stones` }).querySelectorAll(`.stone-art`)).toHaveLength(5);
-        expect(screen.getByText(`Before the first turn the server places the origin stone and a few random stones near it, so games start differently; 5 means the origin and 4 more.`)).toBeTruthy();
-        fireEvent.click(screen.getByRole(`radio`, { name: `1` }));
         expect(screen.getByRole(`img`, { name: `An example opening of 1 stone` }).querySelectorAll(`.stone-art`)).toHaveLength(1);
         expect(screen.getByText(`Before the first turn the server places the origin stone and a few random stones near it, so games start differently; 1 means the origin alone.`)).toBeTruthy();
-        expect(window.location.search).toBe(`?bot=devbot-c&clock=t10&opening=1`);
+        fireEvent.click(screen.getByRole(`radio`, { name: `5` }));
+        expect(screen.getByRole(`img`, { name: `An example opening of 5 stones` }).querySelectorAll(`.stone-art`)).toHaveLength(5);
+        expect(screen.getByText(`Before the first turn the server places the origin stone and a few random stones near it, so games start differently; 5 means the origin and 4 more.`)).toBeTruthy();
+        expect(row?.querySelector(`summary`)?.textContent).toBe(`Opening5 stones`);
+        expect(window.location.search).toBe(`?bot=devbot-c&clock=t10&opening=5`);
     });
 
     it('give a signed-in player their expected score against the bot on the card', async () => {
@@ -301,7 +302,7 @@ describe('PlayScreen', () => {
         await waitFor(() => {
             expect(window.location.pathname).toBe(`/game/g1`);
         });
-        expect(served.posts).toEqual([{ url: `/api/games`, body: { bot: `devbot-c`, timeControl: { mode: `turn`, turnTimeMs: 10_000 }, openingPlies: 5 } }]);
+        expect(served.posts).toEqual([{ url: `/api/games`, body: { bot: `devbot-c`, timeControl: { mode: `turn`, turnTimeMs: 10_000 }, openingPlies: 1 } }]);
         expect(JSON.parse(window.localStorage.getItem(playStorageKey) ?? ``)).toEqual({ opponent: `devbot-c`, clock: `t10` });
     });
 

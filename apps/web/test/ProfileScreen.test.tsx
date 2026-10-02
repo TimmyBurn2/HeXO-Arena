@@ -65,10 +65,10 @@ describe('ProfileScreen', () => {
         expect(within(section).getByRole(`link`, { name: `All 12 games` }).getAttribute(`href`)).toBe(`/games?player=quinn`);
     });
 
-    it('keep no games for a guest, whose games are never kept', async () => {
+    it('list no games on a guest\'s card, which has no player page', async () => {
         serve({ kind: `guest`, name: `Guest k3f9`, liveGames: [] });
         render(<ProfileScreen />);
-        await screen.findByText(`Guest games are unrated and end with the session.`);
+        await screen.findByText(`Guest games are unrated and public under your guest label; live ones end with the session.`);
         expect(screen.queryByRole(`heading`, { name: `Your games` })).toBe(null);
     });
 
@@ -157,12 +157,12 @@ describe('ProfileScreen', () => {
         });
     });
 
-    it('tell a guest their games are unrated and end the session as the menu does', async () => {
+    it('tell a guest their games are unrated and public, and end the session as the menu does', async () => {
         const posts: string[] = [];
         serve({ kind: `guest`, name: `Guest k3f9`, liveGames: [] }, posts);
         render(<ProfileScreen />);
         expect(await screen.findByText(`Guest k3f9`)).toBeTruthy();
-        expect(screen.getByText(`Guest games are unrated and end with the session.`)).toBeTruthy();
+        expect(screen.getByText(`Guest games are unrated and public under your guest label; live ones end with the session.`)).toBeTruthy();
         expect(screen.queryByRole(`button`, { name: `Sign out` })).toBe(null);
         fireEvent.click(screen.getByRole(`button`, { name: `End guest session` }));
         await waitFor(() => {
@@ -179,7 +179,90 @@ describe('ProfileScreen', () => {
         expect(signIn.closest(`.identity-plate`)).not.toBe(null);
         // The guest's line sits with the sign-in, as in the guest menu.
         expect(signIn.closest(`.discord-sign-in`)?.textContent).toContain(
-            `Signing in ends this guest session and its games. Your email stays with Discord; see\u00a0Privacy.`,
+            `Signing in ends this guest session and its live games. Your email stays with Discord; see\u00a0Privacy.`,
         );
+    });
+});
+
+describe('the account panel', () => {
+    const quinn: Me = { kind: `user`, name: `quinn`, rating: 1503, provisional: false, discord: null, liveGames: [] };
+
+    // Me, the bot list, and the history read as signed in until the account is deleted;
+    // the delete answers as the server would, and the export with its file.
+    function serveAccount(deleteAnswer: { status: number; code?: string }, calls: { method: string; url: string; body?: string }[] = []): void {
+        let session: Me = quinn;
+        vi.stubGlobal(
+            `fetch`,
+            vi.fn((url: string, init?: RequestInit) => {
+                const method = init?.method ?? `GET`;
+                calls.push({ method, url, ...(typeof init?.body === `string` ? { body: init.body } : {}) });
+                if (method === `DELETE` && url === `/api/me`) {
+                    if (deleteAnswer.status === 204) session = null;
+                    const body = deleteAnswer.code === undefined ? null : JSON.stringify({ error: `no`, code: deleteAnswer.code });
+                    return Promise.resolve(new Response(body, { status: deleteAnswer.status }));
+                }
+                if (url === `/api/me/export`) {
+                    return Promise.resolve(new Response(`{"account":{}}`, { headers: { 'content-disposition': `attachment; filename="hexo-arena-quinn-2026-10-02.json"` } }));
+                }
+                const body = url === `/api/me` ? session : url.startsWith(`/api/games/finished`) ? history(`quinn`) : roster;
+                return Promise.resolve(new Response(JSON.stringify(body), { status: 200 }));
+            }),
+        );
+        meStore.reset();
+        meStore.start();
+    }
+
+    it('offer the download first, then deleting the account behind its typed name, and say the deletion once done', async () => {
+        const calls: { method: string; url: string; body?: string }[] = [];
+        serveAccount({ status: 204 }, calls);
+        render(<ProfileScreen />);
+        const panel = (await screen.findByRole(`heading`, { name: `Your account` })).closest(`section`) as HTMLElement;
+        expect(within(panel).getAllByRole(`heading`, { level: 3 }).map((heading) => heading.textContent)).toEqual([`Your data`, `Delete account`]);
+        expect(panel.textContent).toContain(
+            `Each bot of yours that won or lost a game against an account or a bot, or played in a tournament, stays there too under "deleted bot", with all its games, guest games included; your other bots are deleted with their games.`,
+        );
+        const remove = within(panel).getByRole<HTMLButtonElement>(`button`, { name: `Delete account` });
+        expect(remove.disabled).toBe(true);
+        const field = within(panel).getByLabelText(`Type quinn to confirm`);
+        fireEvent.change(field, { target: { value: `Quinn` } });
+        expect(remove.disabled).toBe(true);
+        fireEvent.change(field, { target: { value: `quinn` } });
+        expect(remove.disabled).toBe(false);
+        fireEvent.click(remove);
+        expect(await screen.findByRole(`heading`, { name: `Your account is deleted` })).toBeTruthy();
+        expect(screen.getByText(/^Your name is free/u).textContent).toBe(`Your name is free; your games stay in the public record under "deleted player", and the bots of yours kept there read "deleted bot".`);
+        expect(calls.find((call) => call.method === `DELETE`)).toEqual({ method: `DELETE`, url: `/api/me`, body: `{"name":"quinn"}` });
+        await waitFor(() => {
+            expect(meStore.read()).toEqual({ status: `ready`, me: null });
+        });
+        expect(screen.getByRole(`link`, { name: `Home` }).getAttribute(`href`)).toBe(`/`);
+    });
+
+    it('say in plain words that a live game holds the deletion back', async () => {
+        serveAccount({ status: 409, code: `in_live_game` });
+        render(<ProfileScreen />);
+        fireEvent.change(await screen.findByLabelText(`Type quinn to confirm`), { target: { value: `quinn` } });
+        fireEvent.click(screen.getByRole(`button`, { name: `Delete account` }));
+        expect((await screen.findByRole(`alert`)).textContent).toBe(`You are in a live game; finish or resign it, then delete the account`);
+        expect(meStore.read()).toMatchObject({ me: { name: `quinn` } });
+    });
+
+    it('save the data under the name the server gives the file', async () => {
+        const calls: { method: string; url: string }[] = [];
+        serveAccount({ status: 204 }, calls);
+        const created = vi.fn(() => `blob:data`);
+        const revoked = vi.fn();
+        vi.stubGlobal(`URL`, Object.assign(URL, { createObjectURL: created, revokeObjectURL: revoked }));
+        const clicked: string[] = [];
+        const click = vi.spyOn(HTMLAnchorElement.prototype, `click`).mockImplementation(function (this: HTMLAnchorElement) {
+            clicked.push(`${this.download} ${this.href}`);
+        });
+        render(<ProfileScreen />);
+        fireEvent.click(await screen.findByRole(`button`, { name: `Download my data` }));
+        await waitFor(() => {
+            expect(clicked).toEqual([`hexo-arena-quinn-2026-10-02.json blob:data`]);
+        });
+        expect(calls.some((call) => call.url === `/api/me/export`)).toBe(true);
+        click.mockRestore();
     });
 });

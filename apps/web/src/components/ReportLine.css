@@ -1,0 +1,6 @@
+@layer components {
+    .report-line {
+        margin: var(--space-7) 0 0;
+        font-size: var(--text-sm);
+    }
+}

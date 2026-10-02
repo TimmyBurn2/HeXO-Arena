@@ -1,6 +1,6 @@
 import type { Page } from '@playwright/test';
 import { themes } from '../src/theme/themes';
-import { leaderboard, liveGames, playBots, rivalry, signup, tournaments, world, type World } from './mock-api';
+import { keptNames, leaderboard, liveGames, playBots, rivalry, signup, tournaments, world, type World } from './mock-api';
 
 /** A named look the whole site can wear. */
 export interface Look {
@@ -110,7 +110,7 @@ async function openIdentity(page: Page): Promise<void> {
 }
 
 export const shots: readonly Shot[] = [
-    { name: `home`, path: `/`, world: world({ live: liveGames }), ready: `.featured`, framed: true, board: true },
+    { name: `home`, path: `/`, world: world({ live: liveGames, finished: keptNames }), ready: `.featured`, framed: true, board: true },
     { name: `home-few`, path: `/`, world: world({ live: liveGames.slice(1, 2), leaderboard: [] }), ready: `.featured`, framed: true, board: true },
     { name: `home-quiet`, path: `/`, world: world({ live: [] }), ready: `.featured`, framed: true, board: true },
     { name: `home-day-one`, path: `/`, world: world({ live: [], leaderboard: [], bots: [], finished: [] }), ready: `.build-band.wide`, framed: true },
@@ -311,6 +311,42 @@ export const shots: readonly Shot[] = [
     },
     { name: `menu-identity-long-names`, path: `/bots`, world: world({ me: longNamed }), ready: `table`, framed: true, after: openIdentity, viewports: panelViewports },
     { name: `profile-signed-out`, path: `/profile`, world: signedOut, ready: `h1`, framed: true },
+    {
+        name: `profile-delete-typed`,
+        path: `/profile`,
+        world: world(),
+        ready: `.rating-chart-plot`,
+        framed: true,
+        after: async (page) => {
+            await page.getByLabel(`Type quinn to confirm`).fill(`quinn`);
+            await page.locator(`.owner-panel`).scrollIntoViewIfNeeded();
+        },
+    },
+    {
+        name: `profile-delete-refused`,
+        path: `/profile`,
+        world: world({ live: liveGames, me: { kind: `user`, name: `quinn`, rating: 1503, provisional: false, discord: null, liveGames: liveGames.filter((game) => game.players.x.name === `quinn`) } }),
+        ready: `.rating-chart-plot`,
+        framed: true,
+        after: async (page) => {
+            await page.getByLabel(`Type quinn to confirm`).fill(`quinn`);
+            await page.getByRole(`button`, { name: `Delete account` }).click();
+            await page.locator(`.owner-panel .field-error`).waitFor();
+            await page.locator(`.owner-panel`).scrollIntoViewIfNeeded();
+        },
+    },
+    {
+        name: `profile-deleted`,
+        path: `/profile`,
+        world: world(),
+        ready: `.rating-chart-plot`,
+        framed: true,
+        after: async (page) => {
+            await page.getByLabel(`Type quinn to confirm`).fill(`quinn`);
+            await page.getByRole(`button`, { name: `Delete account` }).click();
+            await page.getByRole(`heading`, { name: `Your account is deleted` }).waitFor();
+        },
+    },
     { name: `game-your-move`, path: `/game/running`, world: world(), ready: `svg polygon.cell`, framed: false, board: true },
     { name: `game-waiting`, path: `/game/waiting`, world: world(), ready: `svg polygon.cell`, framed: false, board: true },
     { name: `game-rundown`, path: `/game/fresh`, world: world(), ready: `.hud-rundown .rundown-expected`, framed: false, board: true },
@@ -463,6 +499,34 @@ export const shots: readonly Shot[] = [
         },
     },
     { name: `watch-guest`, path: `/game/guest`, world: signedOut, ready: `svg polygon.cell`, framed: false, board: true },
+    { name: `games-kept-names`, path: `/games`, world: world({ finished: keptNames }), ready: `.game-row`, framed: true },
+    { name: `report`, path: `/report?subject=%2Fbots%2Fsealbot`, world: signedOut, ready: `.report-form`, framed: true },
+    {
+        name: `report-missing`,
+        path: `/report`,
+        world: signedOut,
+        ready: `.report-form`,
+        framed: true,
+        after: async (page) => {
+            await page.getByRole(`button`, { name: `Send report` }).click();
+            await page.locator(`.report-form .field-error`).first().waitFor();
+        },
+    },
+    {
+        name: `report-sent`,
+        path: `/report?subject=%2Fbots%2Fsealbot`,
+        world: world(),
+        ready: `.report-form`,
+        framed: true,
+        after: async (page) => {
+            await page.getByLabel(`Reason`).selectOption(`name`);
+            await page.getByLabel(`What is wrong`).fill(`The about text insults another player.`);
+            await page.getByLabel(`This report is accurate, and I send it in good faith`).check();
+            await page.getByRole(`button`, { name: `Send report` }).click();
+            await page.getByRole(`heading`, { name: `Report 12 received` }).waitFor();
+        },
+    },
+    { name: `watch-deleted`, path: `/game/gone`, world: signedOut, ready: `.hud-result`, framed: false, board: true },
     { name: `watch-finished`, path: `/game/finished`, world: signedOut, ready: `svg polygon.cell`, framed: false, board: true },
     ...(
         [

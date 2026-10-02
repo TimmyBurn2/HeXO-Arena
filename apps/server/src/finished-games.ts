@@ -27,6 +27,7 @@ import type { FastifyInstance } from 'fastify';
 import type { Query } from './db';
 import { bots, gameRatings, games, moves, users } from './db/schema';
 import type { PlayerRef } from './rating';
+import { shownBot, shownUser, type ShownName } from './shown-names';
 
 // Distinct queries remembered at once; past it the oldest leaves first.
 const memoCap = 500;
@@ -82,13 +83,27 @@ function seatsOf(player: PlayerRef): readonly Seat[] {
     ];
 }
 
+// Each kind reads through its own partial index.
+function kindFilter(kind: Filters[`kind`]): SQL | undefined {
+    switch (kind) {
+        case `human-bot`:
+            return isNotNull(games.userId);
+        case `guest-bot`:
+            return isNotNull(games.guestName);
+        case `bot-bot`:
+            return isNotNull(games.challengerBotId);
+        case undefined:
+            return undefined;
+    }
+}
+
 // The conditions every arm shares; the clock and opening expressions are
 // written as their indexes are, or the planner would not match them.
 function shared(filters: Filters, before: Bound | null): (SQL | undefined)[] {
     return [
         isNotNull(games.finishSeq),
         before === null ? undefined : and(lte(games.finishSeq, before.seq), lt(games.finishedAt, before.at)),
-        filters.kind === `human-bot` ? isNotNull(games.userId) : filters.kind === `bot-bot` ? isNotNull(games.challengerBotId) : undefined,
+        kindFilter(filters.kind),
         filters.result === `none` ? isNull(games.winner) : undefined,
         filters.reason === undefined ? undefined : eq(games.finishReason, filters.reason),
         filters.clock === undefined ? undefined : sql`${games.timeControl} ->> '$.mode' = ${filters.clock}`,
@@ -226,9 +241,9 @@ const destBots = alias(bots, `dest_bot`);
 const xRatings = alias(gameRatings, `x_rating`);
 const oRatings = alias(gameRatings, `o_rating`);
 
-function seatOf(name: string, kind: GamePlayer[`kind`], before: number | null, deviation: number | null): GamePlayer {
+function seatOf(shown: ShownName, kind: GamePlayer[`kind`], before: number | null, deviation: number | null): GamePlayer {
     return {
-        name,
+        ...shown,
         kind,
         rating: before === null ? null : Math.round(before),
         provisional: deviation !== null && deviation > rankableDeviation,
@@ -241,10 +256,15 @@ function entriesOf(query: Query, ids: readonly string[]): FinishedGameEntry[] {
         .select({
             id: games.id,
             userName: users.name,
+            userDeletedAt: users.deletedAt,
+            guestName: games.guestName,
             botName: bots.name,
+            botDeletedAt: bots.deletedAt,
             userSide: games.userSide,
             challengerName: challengerBots.name,
+            challengerDeletedAt: challengerBots.deletedAt,
             destName: destBots.name,
+            destDeletedAt: destBots.deletedAt,
             challengerSide: games.challengerSide,
             timeControl: games.timeControl,
             openingCells: games.openingCells,
@@ -274,23 +294,32 @@ function entriesOf(query: Query, ids: readonly string[]): FinishedGameEntry[] {
         // and a page lists finished games alone.
         const winner = row.winner as Side | null;
         const reason = row.finishReason as FinishReason;
-        const seats: Record<Side, { name: string; kind: GamePlayer[`kind`] }> | null =
-            row.userName !== null && row.botName !== null && row.userSide !== null
-                ? row.userSide === `x`
-                    ? { x: { name: row.userName, kind: `user` }, o: { name: row.botName, kind: `bot` } }
-                    : { x: { name: row.botName, kind: `bot` }, o: { name: row.userName, kind: `user` } }
+        type Seat = { shown: ShownName; kind: GamePlayer[`kind`] };
+        const seated = (firstSide: string, first: Seat, second: Seat): Record<Side, Seat> =>
+            firstSide === `x` ? { x: first, o: second } : { x: second, o: first };
+        const human: Seat | null =
+            row.userName !== null
+                ? { shown: shownUser(row.userName, row.userDeletedAt), kind: `user` }
+                : row.guestName !== null
+                  ? { shown: { name: row.guestName }, kind: `guest` }
+                  : null;
+        const seats: Record<Side, Seat> | null =
+            human !== null && row.botName !== null && row.userSide !== null
+                ? seated(row.userSide, human, { shown: shownBot(row.botName, row.botDeletedAt), kind: `bot` })
                 : row.challengerName !== null && row.destName !== null && row.challengerSide !== null
-                  ? row.challengerSide === `x`
-                      ? { x: { name: row.challengerName, kind: `bot` }, o: { name: row.destName, kind: `bot` } }
-                      : { x: { name: row.destName, kind: `bot` }, o: { name: row.challengerName, kind: `bot` } }
+                  ? seated(
+                        row.challengerSide,
+                        { shown: shownBot(row.challengerName, row.challengerDeletedAt), kind: `bot` },
+                        { shown: shownBot(row.destName, row.destDeletedAt), kind: `bot` },
+                    )
                   : null;
         if (seats === null || row.finishedAt === null) throw new Error(`stored game row seats nobody or never finished: ${row.id}`);
         const openingPlies = boardCellSchema.array().parse(JSON.parse(row.openingCells)).length;
         return {
             gameId: row.id,
             players: {
-                x: seatOf(seats.x.name, seats.x.kind, row.xBefore, row.xDeviation),
-                o: seatOf(seats.o.name, seats.o.kind, row.oBefore, row.oDeviation),
+                x: seatOf(seats.x.shown, seats.x.kind, row.xBefore, row.xDeviation),
+                o: seatOf(seats.o.shown, seats.o.kind, row.oBefore, row.oDeviation),
             },
             winner,
             reason,
@@ -299,7 +328,7 @@ function entriesOf(query: Query, ids: readonly string[]): FinishedGameEntry[] {
             openingPlies: openingPlies as OpeningPlies,
             turns: turnsOnBoard(openingPlies) + row.moves,
             finishedAt: new Date(row.finishedAt * 1000).toISOString().replace(/\.\d{3}Z$/u, `Z`),
-            rated: winner !== null && row.voidedAt === null,
+            rated: winner !== null && row.voidedAt === null && row.guestName === null,
             voided: row.voidedAt !== null,
         };
     });

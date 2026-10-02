@@ -55,7 +55,7 @@ export function SeatChip({ snapshot, side, corner }: { snapshot: GameSnapshot; s
             <Swatch side={side} />
             <span className="hud-who">
                 <span className="hud-name">
-                    {player.name}
+                    <span className={player.deleted === true ? `deleted-name` : undefined}>{player.name}</span>
                     {player.kind === `bot` ? <BotBadge /> : null}
                 </span>
                 <span className="hud-meta">

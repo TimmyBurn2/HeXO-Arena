@@ -141,13 +141,14 @@ describe('the clock', () => {
 });
 
 describe('the address', () => {
-    it('carries the bot, the clock, and an opening other than the default', () => {
-        expect(playPath(`devbot-c`, { mode: `turn`, turnTimeMs: 20_000 }, 5)).toBe(`/play?bot=devbot-c&clock=t20`);
+    it('carries the bot, the clock, and an opening other than the origin alone, the default', () => {
+        expect(playPath(`devbot-c`, { mode: `turn`, turnTimeMs: 20_000 }, 1)).toBe(`/play?bot=devbot-c&clock=t20`);
         expect(playPath(`devbot-c`, { mode: `unlimited` }, 9)).toBe(`/play?bot=devbot-c&clock=u&opening=9`);
-        expect(playPath(null, null, 5)).toBe(`/play`);
+        expect(playPath(`devbot-c`, null, 5)).toBe(`/play?bot=devbot-c&opening=5`);
+        expect(playPath(null, null, 1)).toBe(`/play`);
         expect(openingFromParam(`7`)).toBe(7);
-        expect(openingFromParam(`4`)).toBe(5);
-        expect(openingFromParam(null)).toBe(5);
+        expect(openingFromParam(`4`)).toBe(1);
+        expect(openingFromParam(null)).toBe(1);
     });
 });
 

@@ -154,7 +154,7 @@ const legalLinks = [
     [`Licenses`, `/third-party-licenses.txt`],
 ];
 
-const framedScreens = [`/`, `/games`, `/ladder`, `/bots`, `/bots/sealbot`, `/connect`, `/profile`, `/credits`, `/legal/imprint`, `/legal/privacy`, `/legal/terms`, `/nowhere`, `/game/nope`];
+const framedScreens = [`/`, `/games`, `/ladder`, `/bots`, `/bots/sealbot`, `/connect`, `/profile`, `/credits`, `/report`, `/legal/imprint`, `/legal/privacy`, `/legal/terms`, `/nowhere`, `/game/nope`];
 
 // The legal links are the footer's last group: at the bottom right where
 // the footer is a row, at its end where it stacks, signed in or out.
@@ -177,7 +177,9 @@ for (const [visitor, me] of visitors) {
                 await page.setViewportSize({ width, height: 900 });
                 const footer = await footerLayout(page);
                 const legal = footer.groups.at(-1);
-                expect(legal?.links.map((link) => [link.label, link.href])).toEqual(legalLinks);
+                // The report form's own link names no page; every other names the page it stands on.
+                const report = path === `/report` ? `/report` : `/report?subject=${encodeURIComponent(path)}`;
+                expect(legal?.links.map((link) => [link.label, link.href])).toEqual([...legalLinks, [`Report`, report]]);
                 for (const group of footer.groups.slice(0, -1)) expect(legal?.box.top ?? 0).toBeGreaterThanOrEqual(group.box.bottom - 0.5);
                 expect(legal?.box.bottom ?? 0).toBeGreaterThanOrEqual(footer.tagline.bottom - 0.5);
                 if (width >= 640) expect(Math.abs((legal?.box.right ?? 0) - footer.content.right)).toBeLessThanOrEqual(0.5);

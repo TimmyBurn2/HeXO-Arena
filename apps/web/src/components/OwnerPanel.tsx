@@ -3,7 +3,7 @@ import { ApiError, deleteBot, limitedFor, rotateBotToken } from '../api/client';
 import { navigate } from '../router/use-route';
 import { text } from '../text';
 import { TokenBox } from './TokenBox';
-import { useWait, WaitText, type Wait } from './wait';
+import { ActionFailure, useWait } from './wait';
 import './OwnerPanel.css';
 
 /**
@@ -63,7 +63,7 @@ function RotateToken({ bot }: { bot: string }) {
                     <TokenBox token={token} />
                 </div>
             )}
-            <Failure failure={failure} wait={limited.wait} />
+            <ActionFailure failure={failure} wait={limited.wait} />
         </div>
     );
 }
@@ -125,22 +125,7 @@ function DeleteBot({ bot }: { bot: string }) {
                     {text.bot.owner.deleteBot(bot)}
                 </button>
             </form>
-            <Failure failure={failure} wait={limited.wait} />
+            <ActionFailure failure={failure} wait={limited.wait} />
         </div>
-    );
-}
-
-function Failure({ failure, wait }: { failure: string | null; wait: Wait | null }) {
-    if (wait !== null) {
-        return (
-            <p className="field-error" role="alert">
-                <WaitText wait={wait} line={text.states.tooMany} />
-            </p>
-        );
-    }
-    return failure === null ? null : (
-        <p className="field-error" role="alert">
-            {failure}
-        </p>
     );
 }

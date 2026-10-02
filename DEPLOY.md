@@ -211,6 +211,11 @@ find <off-box directory> -name 'hexo-arena-*.sqlite.age' -mtime +13 -delete
 Host backup tools and the provider's server snapshots are copies too: exclude
 the Docker volumes from them, or keep what holds the volumes 14 days at most.
 
+At the same hour, backups or not, the app purges what has outlived its stated
+time: moderation records after the end of the third calendar year after
+theirs, challenge records after 90 days, and reports a year after they were
+closed.
+
 ### Restore
 
 Direct database access is allowed only while the app is stopped.
@@ -231,6 +236,12 @@ then place the snapshot with
 `docker compose cp ./hexo-arena-YYYY-MM-DD.sqlite app:/backup/`.
 The boot aborts, unrated, any game the snapshot caught live.
 The pause flag is part of the snapshot, so check `status`.
+
+Every account deletion is also written to `/data/erasures.jsonl`, beside the
+database and outside the snapshot, and kept `BACKUP_KEEP` + 1 days.
+The boot deletes again any account in it that the snapshot brought back,
+with an audit row by `restore`, and its log names how many.
+Keep the file through a restore: the steps above leave it in place.
 
 ### Restore test
 
@@ -286,11 +297,11 @@ local `pnpm dev`.
 
 | op | effect |
 |---|---|
-| `status` | uptime, paused flag, live streams, active games, client keys, requests without a public address, the last 10 admin actions |
+| `status` | uptime, paused flag, live streams, active games, client keys, requests without a public address, the open reports, oldest first, the last 10 admin actions |
 | `backup` | write the day's backup now; no audit row, as it changes no data |
 | `pause` / `resume` | new streams, games, and challenges answer `503` with `Retry-After`; open streams and live games run on; the flag survives restarts |
 | `ban-user <name>` / `unban-user <name>` | sessions end, bots are closed and hidden, their tokens answer `403`; unban relists the bots and kills their old tokens |
-| `delete-user <name>` | live games aborted, bots deleted as below, the user forgotten; rated history stays under a `deleted-<n>` placeholder |
+| `delete-user <name>` | live games aborted, bots deleted as below, the user forgotten; rated history stays under a `deleted-<n>` placeholder, which earlier audit rows naming the user or their bots now name instead; the deletion goes to the erasure journal |
 | `delist-bot <name>` / `relist-bot <name>` | hidden from the directory and the ladder, refused from challenges and games both ways; live play continues |
 | `revoke-bot <name>` | token dead, stream closed; the owner mints a fresh one |
 | `abort-game <gameId>` / `abort-game --bot <name>` | unrated abort of one game, or of every live game of a bot |
@@ -300,6 +311,7 @@ local `pnpm dev`.
 | `tournament-schedule add --weekday <mon..sun> --time <HH:MM> --name <text> --clock turn:<s>\|match:<min>+<s> [--opening <plies>] [--max <bots>] [--ahead <days>]` | a weekly rule: each week's tournament starts on that weekday at that UTC time and is created `--ahead` days before, 1 to 14, default 7, opening it for entries; `{date}` in the name becomes the start's date, YYYY-MM-DD; clock, opening, and entries as for `tournament-create`; one rule per weekday and time |
 | `tournament-schedule list` | the weekly rules with their ids and next starts |
 | `tournament-schedule remove <ruleId>` | delete a weekly rule; the tournaments it created stay, and `tournament-cancel` ends a waiting one |
+| `report-close <reportId>` | close a report from the site's report form; the reason is the note the report keeps |
 
 Every mutation takes `--reason` and writes an audit row.
 `status` lists the running and waiting tournaments with their ids, and the
@@ -310,8 +322,11 @@ creation waits for a free slot.
 A week whose tournament does not exist an hour before its start, from a full
 waiting cap, downtime, or a clock step, is skipped, never created late.
 Deleting a bot, by its owner or through `delete-user`, keeps a bot that has a
-game with a winner under a placeholder, its name still reserved, and deletes
-any other bot outright, freeing the name.
+game with a winner against an account or a bot, or a tournament, under a
+placeholder, its name still reserved, and deletes any other bot outright, its
+guest games with it, freeing the name.
+A person deleting their own account from the profile takes the `delete-user`
+path, audited by `self`.
 
 ## Break-glass
 

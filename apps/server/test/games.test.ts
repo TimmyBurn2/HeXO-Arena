@@ -19,7 +19,8 @@ import http from 'node:http';
 import WebSocket, { type RawData } from 'ws';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createQuery, type Query } from '../src/db';
-import { insertGame, recordFinish } from '../src/game-store';
+import { findBot } from '../src/bots';
+import { countBotBotGamesSince, insertGame, recordFinish } from '../src/game-store';
 import { recomputeRatings } from '../src/rating-store';
 import { createTestApp, type TestApp } from './helpers';
 
@@ -671,11 +672,11 @@ describe('a human plays a connected bot end to end', () => {
         expect((await arena.snapshot(bot.cookie, gameId)).timeControl).toEqual(match);
     });
 
-    it('defaults a game without an opening length to five plies', async () => {
+    it('opens a game without an opening length on the origin alone', async () => {
         const response = await arena.createGame(bot.cookie, { bot: `opponentbot`, timeControl: turnControl });
         expect(response.status).toBe(201);
-        expect(snapshotOf(response).openingPlies).toBe(5);
-        expect(snapshotOf(response).board.cells).toHaveLength(5);
+        expect(snapshotOf(response).openingPlies).toBe(1);
+        expect(snapshotOf(response).board.cells).toEqual([{ x: 0, y: 0, side: `x` }]);
     });
 
     it('refuses an even opening length', async () => {
@@ -876,7 +877,7 @@ describe('a guest plays a connected bot', () => {
         vi.useRealTimers();
     });
 
-    it('wins a decided game that leaves no row, no move, and no rating delta behind', async () => {
+    it('wins a decided game that is stored under the label, moves and all, and rates nobody', async () => {
         const guest = await arena.guest();
         const before = await arena.directoryEntry(`opponentbot`);
         expect(before?.liveGames).toBe(0);
@@ -912,8 +913,8 @@ describe('a guest plays a connected bot', () => {
         expect(winning).toMatchObject({ winner: `o`, reason: `six-in-a-row`, openingPlies: 1 });
         expect(await finishOn(bot.stream)).toMatchObject({ winner: `o`, reason: `six-in-a-row` });
 
-        expect(arena.count(`games`)).toBe(0);
-        expect(arena.count(`moves`)).toBe(0);
+        expect(arena.count(`games`)).toBe(1);
+        expect(arena.count(`moves`)).toBe(5);
         expect(arena.count(`ratings`)).toBe(0);
         expect(arena.count(`game_ratings`)).toBe(0);
         expect(recomputeRatings(arena.query)).toBe(0);
@@ -952,14 +953,24 @@ describe('a guest plays a connected bot', () => {
         expect((await arena.snapshot(guest, gameId)).timeControl).toEqual(turnControl);
     });
 
-    it('aborts the live game when the guest signs out and forgets it after', async () => {
+    it('aborts the live game when the guest signs out, and keeps it on the record', async () => {
         const guest = await arena.guest();
         const { gameId } = await startGame(arena, guest);
         expect((await arena.logout(guest)).status).toBe(204);
         expect(await finishOn(bot.stream)).toMatchObject({ gameId, winner: null, reason: `aborted` });
-        expect((await arena.getGame(guest, gameId)).status).toBe(404);
-        expect((await arena.getGame(``, gameId)).status).toBe(404);
-        expect(arena.count(`games`)).toBe(0);
+        expect(finished(await arena.snapshot(``, gameId))).toMatchObject({ winner: null, reason: `aborted` });
+        expect(arena.count(`games`)).toBe(1);
+    });
+
+    it('counts a guest\'s games toward no daily cap, the bot\'s or a pair\'s', async () => {
+        for (let game = 0; game < pairDailyCap; game += 1) {
+            const guest = await arena.guest();
+            const { gameId } = await startGame(arena, guest);
+            await arena.humanResign(guest, gameId);
+        }
+        expect(arena.count(`games`)).toBe(pairDailyCap);
+        expect(countBotBotGamesSince(arena.query, findBot(arena.query, `opponentbot`)?.id ?? ``, 0)).toBe(0);
+        await startGame(arena, bot.cookie);
     });
 });
 

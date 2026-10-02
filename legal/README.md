@@ -42,7 +42,7 @@ An optional value left out takes the paragraph or list item naming it with it; i
 
 A placeholder is a dotted name in double braces.
 `{{operator.name}}`, `{{host.serverLocation}}`, and every other name of a party and its field come from `details.json`.
-`{{site.name}}` and the other `site.` names come from the site's code: the cookie names, how long a session lasts, the minimum age.
+`{{site.name}}` and the other `site.` names come from the site's code: the cookie names, how long a session lasts, the minimum age, and how long challenge records, moderation records, and closed reports are kept.
 Leave those as they are; they stay true when the code changes.
 A placeholder neither knows shows as written, so a misspelling is plain on the page.
 
@@ -77,7 +77,7 @@ The texts state what the code does and how the deployment runs it.
 Check every sentence about your deployment against it:
 
 - where the server stands, and "transfers no data outside the EU";
-- the backups, kept for 14 days, which `BACKUP_KEEP` sets;
+- the backups, kept for 14 days, which `BACKUP_KEEP` sets, and the note of each deletion kept a day longer;
 - the languages you answer in, in the Impressum;
 - the law that applies, and the liability clause, in the Terms.
 

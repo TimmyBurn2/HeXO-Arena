@@ -1,4 +1,5 @@
 import {
+    accountExportLimit,
     archiveReadGlobalLimit,
     archiveReadLimit,
     botManagementLimit,
@@ -10,6 +11,9 @@ import {
     guestPath,
     principalRequestLimit,
     publicRequestLimit,
+    reportGlobalLimit,
+    reportLimit,
+    reportPrefixLimit,
     requestBodyLimitBytes,
     sessionCookieName,
     signInStartLimit,
@@ -171,6 +175,10 @@ describe('request limits', () => {
             discordExchange: discordExchangeLimit,
             archiveRead: archiveReadLimit,
             archiveReadGlobal: archiveReadGlobalLimit,
+            report: reportLimit,
+            reportPrefix: reportPrefixLimit,
+            reportGlobal: reportGlobalLimit,
+            accountExport: accountExportLimit,
         });
     });
 
@@ -221,8 +229,11 @@ describe('request limits', () => {
             'DELETE /api/tournaments/:id/entry': `principal`,
             'GET /api/leaderboard': `public`,
             'GET /api/me': `public`,
+            'DELETE /api/me': `principal`,
+            'GET /api/me/export': `principal`,
             'POST /api/auth/logout': `public`,
             'POST /api/auth/guest': `public`,
+            'POST /api/reports': `public`,
             'GET /api/auth/discord/login': `public`,
             'GET /api/auth/discord/callback': `public`,
             'GET /api/signup': `public`,
@@ -260,6 +271,7 @@ describe('request limits', () => {
             'GET /connect': `shell`,
             'GET /profile': `shell`,
             'GET /credits': `shell`,
+            'GET /report': `shell`,
             'GET /welcome': `shell`,
             'GET /legal/imprint': `shell`,
             'GET /legal/privacy': `shell`,

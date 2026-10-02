@@ -9,13 +9,12 @@ import {
 } from '@hexo-arena/contract';
 import type { AdminHandler } from './admin-socket';
 import { recentAdminActions, recordAdminAction } from './admin-store';
+import { eraseUser, type ErasureJournal } from './erasure';
 import {
     banUser,
     botIdsOf,
-    deleteUser,
     findBotId,
     findUserId,
-    liveBotIdsOf,
     revokeBot,
     setBotDelisted,
     unbanUser,
@@ -23,6 +22,7 @@ import {
     type ModerationChange,
 } from './moderation';
 import { recomputeRatings } from './rating-store';
+import { closeReport, openReports } from './reports';
 import type { ChallengeRegistry } from './challenge-registry';
 import type { Query } from './db';
 import type { GameRegistry } from './game-registry';
@@ -46,6 +46,8 @@ export interface AdminDeps {
     actor: string;
     // Writes the night's backup now and answers its path; null without a backup folder.
     backup: (() => string) | null;
+    // Where a deletion is journaled once committed; null where nothing is restored, as in tests.
+    erasures: Pick<ErasureJournal, `record`> | null;
     // How soon a tournament may start: an hour in production, a minute on a
     // development server.
     tournamentLeadMs: number;
@@ -55,6 +57,7 @@ export interface AdminDeps {
 const recentActionCount = 10;
 
 function statusOf(deps: AdminDeps): AdminStatus {
+    const reports = openReports(deps.query);
     return {
         uptimeSeconds: Math.floor(process.uptime()),
         paused: isPaused(deps.query),
@@ -65,6 +68,8 @@ function statusOf(deps: AdminDeps): AdminStatus {
         tournaments: openTournaments(deps.query),
         tournamentRules: adminTournamentRules(deps.query, nowOf(deps), deps.tournamentLeadMs),
         recentActions: recentAdminActions(deps.query, recentActionCount),
+        openReportCount: reports.count,
+        openReports: reports.oldest,
     };
 }
 
@@ -152,24 +157,20 @@ function abortGame(deps: AdminDeps, tx: Query, target: { gameId?: string | undef
     };
 }
 
-// A forgotten user's live games end unrated before their rows change: an
-// operator's deletion is no one's fault at the board, and a clean delete
-// would take the game rows away from under the registry.
+// The audit row names the placeholder, as every earlier row naming the user now does.
 function forgetUser(deps: AdminDeps, tx: Query, name: string): Outcome {
     const userId = findUserId(tx, nameKeyOf(name));
     if (userId === undefined) return { response: notFound(`no such user`) };
-    const botIds = liveBotIdsOf(tx, userId);
-    let aborted = deps.games.abortForPerson({ kind: `user`, id: userId });
-    for (const botId of botIds) {
-        aborted += deps.games.abortForBot(botId);
-        deps.presence.close(botId);
-        deps.challenges.withdrawFor(botId);
-        deps.tournaments.withdraw(botId, `deleted`);
-    }
-    const deletion = deleteUser(tx, userId);
-    const user = deletion.placeholder === null ? `user deleted` : `user kept as ${deletion.placeholder}`;
+    const deletion = eraseUser(deps, tx, userId);
+    const user = deletion.user === `deleted` ? `user deleted` : `user kept`;
     const bots = `${String(deletion.bots.anonymized)} bots kept anonymized, ${String(deletion.bots.deleted)} deleted`;
-    return { response: done(`forgot ${name}: ${user}; ${bots}; ${String(aborted)} live games aborted`) };
+    return {
+        response: done(`forgot ${name} as ${deletion.placeholder}: ${user}; ${bots}; ${String(deletion.aborted)} live games aborted`),
+        target: deletion.placeholder,
+        live: () => {
+            deps.erasures?.record(userId);
+        },
+    };
 }
 
 function recompute(tx: Query, exclude: readonly string[]): Outcome {
@@ -356,6 +357,18 @@ export function createAdminHandler(deps: AdminDeps): AdminHandler {
                 return { kind: `tournament-rules`, rules: adminTournamentRules(deps.query, nowOf(deps), deps.tournamentLeadMs) };
             case `tournament-schedule-remove`:
                 return audited(deps, request, String(request.id), (tx) => removeRule(tx, request.id));
+            case `report-close`:
+                return audited(deps, request, String(request.id), (tx) => {
+                    const closed = closeReport(tx, request.id, request.reason);
+                    switch (closed.kind) {
+                        case `closed`:
+                            return { response: done(`closed report ${String(request.id)}`) };
+                        case `already_closed`:
+                            return { response: unchanged(`the report is already closed`) };
+                        case `not_found`:
+                            return { response: notFound(`no such report`) };
+                    }
+                });
         }
     };
 }

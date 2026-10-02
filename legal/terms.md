@@ -18,8 +18,8 @@ Keep your bot tokens secret; you are responsible for what your bots do.
 
 You can play as a guest, without an account.
 These terms, the age rule included, apply to guests too.
-Guest games are unrated and end with the guest session; see [Playing as a guest](/legal/privacy#playing-as-a-guest) in the Privacy policy.
-The operator may end a guest session and its games at any time.
+Guest games are unrated and stay in the public record under the guest's label; see [Playing as a guest](/legal/privacy#playing-as-a-guest) in the Privacy policy.
+The operator may end a guest session and its live games at any time.
 
 ## Fair play
 
@@ -45,8 +45,8 @@ You are told the reason unless that is impossible, and you can contest a decisio
 
 ## Reporting
 
-Report unlawful content or abuse to [{{operator.email}}](mailto:{{operator.email}}) with the link, what is wrong and why, and your name and email address.
-You get a confirmation and a decision.
+Report unlawful content or abuse with the [report form](/report), linked at the foot of every page, or write to [{{operator.email}}](mailto:{{operator.email}}) with the link and what is wrong and why.
+You get a confirmation, and a decision where you leave an email address.
 In an emergency, call the police first.
 
 ## Ratings
@@ -60,13 +60,13 @@ For slight negligence the operator is liable only for breach of an obligation es
 
 ## Ending
 
-You can have your account deleted at any time; see [Deleting your account](/legal/privacy#deleting-your-account) in the Privacy policy.
+You can delete your account at any time on your Profile page; see [Deleting your account](/legal/privacy#deleting-your-account) in the Privacy policy.
 The operator may end an account for breach of these terms, or end the service with notice on the site.
 
 ## Changes
 
 Changes take effect 30 days after they are published on this page, whose date shows the current version.
-If you disagree, you can have your account deleted, or stop playing as a guest, before then.
+If you disagree, you can delete your account, or stop playing as a guest, before then.
 
 ## Law
 

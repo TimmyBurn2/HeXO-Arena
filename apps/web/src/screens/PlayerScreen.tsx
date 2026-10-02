@@ -7,6 +7,7 @@ import { ErrorFrame, SkeletonRows } from '../components/states';
 import { PlayerHistory } from '../games/PlayerHistory';
 import { PendingPlate } from '../players/PendingPlate';
 import { PlayerBlocks } from '../players/PlayerBlocks';
+import { ReportLine } from '../components/ReportLine';
 import { Link } from '../router/Link';
 import { navigate, useRoute } from '../router/use-route';
 import { text } from '../text';
@@ -75,6 +76,7 @@ export function PlayerScreen({ name }: { name: string }) {
             </div>
             <PlayerBlocks name={data.name} />
             <PlayerHistory player={data.name} title={text.games.recent} />
+            <ReportLine subject={`/players/${encodeURIComponent(data.name)}`} name={data.name} />
         </>
     );
 }

@@ -267,8 +267,9 @@ describe('AppShell', () => {
                 [`Privacy`, `/legal/privacy`, null],
                 [`Terms`, `/legal/terms`, null],
                 [`Licenses`, `/third-party-licenses.txt`, null],
+                [`Report`, `/report?subject=${encodeURIComponent(path)}`, null],
             ]);
-            expect([...footer.querySelectorAll(`ul`)].at(-1)?.textContent).toBe(`Impressum / Legal noticePrivacyTermsLicenses`);
+            expect([...footer.querySelectorAll(`ul`)].at(-1)?.textContent).toBe(`Impressum / Legal noticePrivacyTermsLicensesReport`);
         }
         navigate(`/credits`);
         await waitFor(() => {
@@ -411,10 +412,10 @@ describe('AppShell', () => {
             if (!(found instanceof HTMLElement)) throw new Error(`no footer yet`);
             return found;
         });
-        expect([...footer.querySelectorAll(`ul`)].at(-1)?.textContent).toBe(`Licenses`);
+        expect([...footer.querySelectorAll(`ul`)].at(-1)?.textContent).toBe(`LicensesReport`);
         deploy(details, { imprint: null });
         await waitFor(() => {
-            expect([...footer.querySelectorAll(`ul`)].at(-1)?.textContent).toBe(`PrivacyTermsLicenses`);
+            expect([...footer.querySelectorAll(`ul`)].at(-1)?.textContent).toBe(`PrivacyTermsLicensesReport`);
         });
         expect(footer.querySelector(`a[href="/legal/imprint"]`)).toBe(null);
     });
@@ -428,7 +429,7 @@ describe('AppShell', () => {
         render(<AppShell />);
         navigate(`/credits`);
         await waitFor(() => {
-            expect([...(document.querySelector(`footer.site-footer`)?.querySelectorAll(`ul`) ?? [])].at(-1)?.textContent).toBe(`Impressum / Legal noticePrivacyTermsLicenses`);
+            expect([...(document.querySelector(`footer.site-footer`)?.querySelectorAll(`ul`) ?? [])].at(-1)?.textContent).toBe(`Impressum / Legal noticePrivacyTermsLicensesReport`);
         });
     });
 

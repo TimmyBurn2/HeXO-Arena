@@ -8,6 +8,8 @@ const labelAlphabet = `abcdefghijklmnopqrstuvwxyz0123456789`;
 export interface GuestSession {
     readonly id: string;
     readonly name: string;
+    /** When the session was minted, which tells its stored games from those of an earlier holder of its label. */
+    readonly since: number;
     lastSeenAt: number;
     lastGameCreatedAt: number | null;
 }
@@ -21,8 +23,8 @@ export interface GuestSessionsDeps {
 
 /**
  * Anonymous sessions held in memory alone: no users row, no sessions row,
- * nothing that outlives the process. Tokens are kept as their sha256, the
- * same as every stored credential.
+ * nothing that outlives the process; a guest's games keep only its label.
+ * Tokens are kept as their sha256, the same as every stored credential.
  */
 export class GuestSessions {
     readonly #byTokenHash = new Map<string, GuestSession>();
@@ -44,6 +46,7 @@ export class GuestSessions {
         const guest: GuestSession = {
             id: `guest_${randomToken(16)}`,
             name: this.#freshLabel(),
+            since: nowSeconds(),
             lastSeenAt: nowSeconds(),
             lastGameCreatedAt: null,
         };

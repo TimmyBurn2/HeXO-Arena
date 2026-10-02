@@ -1,13 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import {
     createGameRequestSchema,
+    defaultHumanOpeningPlies,
     gameClockSchema,
     gameSnapshotSchema,
     humanMoveRequestSchema,
     liveGameEntrySchema,
     liveGameListCap,
 } from '../src/games';
-import { defaultOpeningPlies, openingPliesSchema } from '../src/stream';
+import { openingPliesSchema } from '../src/stream';
 
 const turnControl = { mode: `turn`, turnTimeMs: 30_000 };
 const players = {
@@ -30,13 +31,13 @@ describe('openingPliesSchema', () => {
 });
 
 describe('createGameRequestSchema', () => {
-    it('fills in the default opening when none is asked for', () => {
+    it('opens on the origin alone when no opening is asked for', () => {
         const parsed = createGameRequestSchema.parse({
             bot: `opponentbot`,
             timeControl: turnControl,
         });
-        expect(parsed.openingPlies).toBe(defaultOpeningPlies);
-        expect(defaultOpeningPlies).toBe(5);
+        expect(parsed.openingPlies).toBe(defaultHumanOpeningPlies);
+        expect(defaultHumanOpeningPlies).toBe(1);
     });
 
     it('keeps the time-control floors from the stream contract', () => {

@@ -30,7 +30,8 @@ export const adminUsage = `usage: hexo-arena-admin <op> [target] [--reason <text
   tournament-cancel <tournamentId> --reason <text>
   tournament-schedule add --weekday mon|tue|wed|thu|fri|sat|sun --time <HH:MM UTC> --name <text; {date} becomes the start's date> --clock turn:<s>|match:<min>+<s> [--opening <plies>] [--max <bots>] [--ahead <days>] --reason <text>
   tournament-schedule list
-  tournament-schedule remove <ruleId> --reason <text>`;
+  tournament-schedule remove <ruleId> --reason <text>
+  report-close <reportId> --reason <note>`;
 
 export type ParsedArgs = { kind: `request`; request: AdminRequest } | { kind: `usage`; error: string };
 
@@ -98,7 +99,7 @@ function requestBody(op: string, target: string | undefined, flags: Flags): Reco
             ...reason,
         };
     }
-    if (op === `tournament-schedule-remove`) return { op, id: numberFlag(target), ...reason };
+    if (op === `tournament-schedule-remove` || op === `report-close`) return { op, id: numberFlag(target), ...reason };
     return { op, ...reason };
 }
 
@@ -172,6 +173,20 @@ function ruleLines(rules: readonly AdminTournamentRule[]): string[] {
     return lines;
 }
 
+// A report's own words come from the public form: printed as JSON strings,
+// they cannot move the cursor or recolor the operator's terminal.
+function reportLines(status: AdminStatus): string[] {
+    const lines = [`open reports: ${String(status.openReportCount)}`];
+    for (const report of status.openReports) {
+        const at = new Date(report.at * 1000).toISOString();
+        const from = [report.name, report.email].filter((part) => part !== null).map((part) => JSON.stringify(part)).join(` `);
+        lines.push(`  ${String(report.id)}  ${at}  ${report.reason}  ${JSON.stringify(report.subject)}${from === `` ? `` : `  from ${from}`}`);
+        lines.push(`    ${JSON.stringify(report.details)}`);
+    }
+    if (status.openReportCount > status.openReports.length) lines.push(`  and ${String(status.openReportCount - status.openReports.length)} more; close the oldest first`);
+    return lines;
+}
+
 function formatStatus(status: AdminStatus): string {
     const lines = [
         `uptime        ${String(status.uptimeSeconds)} s`,
@@ -188,6 +203,7 @@ function formatStatus(status: AdminStatus): string {
         lines.push(`  ${tournament.id}  ${tournament.status}  ${at}  ${String(tournament.entrants)} entered  ${tournament.name}`);
     }
     lines.push(...ruleLines(status.tournamentRules));
+    lines.push(...reportLines(status));
     lines.push(`recent admin actions:`);
     if (status.recentActions.length === 0) lines.push(`  none`);
     for (const action of status.recentActions) {

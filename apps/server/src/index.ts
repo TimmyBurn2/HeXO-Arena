@@ -6,6 +6,7 @@ import { openDatabase, runMigrations } from './db';
 import { parseEnv } from './env';
 import { createDiscordOAuth } from './discord';
 import { drainGraceMs } from './drain';
+import { erasureJournalPath } from './erasure';
 import { reportLegalDocuments } from './legal';
 import { PresenceRegistry } from './presence';
 import { handleStopSignals } from './signals';
@@ -36,6 +37,9 @@ const { app, admin, drain: drainApp } = await buildApp({
     trustedProxy: env.TRUSTED_PROXY,
     ...(env.WEB_INDEX_PATH !== `` && { webIndexPath: env.WEB_INDEX_PATH }),
     ...(env.BACKUP_DIR !== `` && { backup: { dir: env.BACKUP_DIR, keep: env.BACKUP_KEEP } }),
+    // Kept a day past the oldest backup, which a restore may bring back.
+    erasures: { path: erasureJournalPath(env.DATABASE_PATH), keepDays: env.BACKUP_KEEP + 1 },
+    purgeHourUtc: env.BACKUP_HOUR_UTC,
 });
 
 reportLegalDocuments(env.LEGAL_DIR, app.log, env.DEV_LOGIN ? legalDetailsExampleFile : legalDetailsFile);

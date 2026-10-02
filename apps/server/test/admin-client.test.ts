@@ -105,6 +105,7 @@ describe('parseAdminArgs', () => {
         ],
         [[`tournament-schedule`, `list`], { op: `tournament-schedule-list` }],
         [[`tournament-schedule`, `remove`, `3`, `--reason`, `done`], { op: `tournament-schedule-remove`, id: 3, reason: `done` }],
+        [[`report-close`, `12`, `--reason`, `name changed`], { op: `report-close`, id: 12, reason: `name changed` }],
     ])('turns %j into the socket request', (argv, request) => {
         expect(parseAdminArgs(argv)).toEqual({ kind: `request`, request });
     });
@@ -130,6 +131,8 @@ describe('parseAdminArgs', () => {
         [`a removal without an id`, [`tournament-schedule`, `remove`, `--reason`, `r`]],
         [`a removal by an id that is no number`, [`tournament-schedule`, `remove`, `third`, `--reason`, `r`]],
         [`a stray argument after the rule id`, [`tournament-schedule`, `remove`, `3`, `4`, `--reason`, `r`]],
+        [`a report closed without a note`, [`report-close`, `12`]],
+        [`a report closed by an id that is no number`, [`report-close`, `first`, `--reason`, `r`]],
     ])('refuses %s with usage', (_label, argv) => {
         expect(parseAdminArgs(argv).kind).toBe(`usage`);
     });
@@ -149,6 +152,11 @@ describe('formatAdminResponse', () => {
                 tournaments: [{ id: `t_abcdefghijk2`, name: `Autumn round robin`, status: `scheduled`, startsAt: 0, entrants: 4 }],
                 tournamentRules: [sundayRule],
                 recentActions: [{ actor: `operator`, action: `pause`, target: null, reason: `incident`, at: 0 }],
+                openReportCount: 22,
+                openReports: [
+                    { id: 4, subject: `/bots/sealbot`, reason: `name`, details: `Rude name\n\u001b[2Jcleared`, name: `Quinn`, email: `q@example.org`, at: 60 },
+                    { id: 5, subject: `/game/g_1?turn=3`, reason: `cheating`, details: `Two accounts`, name: null, email: null, at: 120 },
+                ],
             },
         });
         expect(screen).toBe(
@@ -163,6 +171,12 @@ describe('formatAdminResponse', () => {
                 `  t_abcdefghijk2  scheduled  1970-01-01T00:00:00.000Z  4 entered  Autumn round robin`,
                 `weekly rules:`,
                 `  2  sun 18:00  next 2026-10-04T18:00:00.000Z  match:3+2  opening 5  max 12  ahead 7  Sunday cup {date}`,
+                `open reports: 22`,
+                `  4  1970-01-01T00:01:00.000Z  name  "/bots/sealbot"  from "Quinn" "q@example.org"`,
+                `    "Rude name\\n\\u001b[2Jcleared"`,
+                `  5  1970-01-01T00:02:00.000Z  cheating  "/game/g_1?turn=3"`,
+                `    "Two accounts"`,
+                `  and 20 more; close the oldest first`,
                 `recent admin actions:`,
                 `  1970-01-01T00:00:00.000Z  operator  pause  -  incident`,
             ].join(`\n`),

@@ -133,7 +133,7 @@ export function registerGameApi(app: FastifyInstance, deps: GameApiDeps): void {
             });
         }
         // A signed-in human and a bot share the pair cap two bots have, counted
-        // from the log like theirs; a guest's games are unrated and kept in no log.
+        // from the log like theirs; a guest's games are unrated and count toward no cap.
         if (person.kind === `user`) {
             const now = nowSeconds();
             const dayStart = now - (now % 86_400);
