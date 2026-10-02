@@ -1,0 +1,61 @@
+@layer components {
+    .site-links {
+        display: flex;
+        flex-wrap: wrap;
+        column-gap: var(--space-4);
+        margin: 0;
+        padding: 0;
+        list-style: none;
+    }
+
+    /* A label that wraps, as the legal notice's can at large text, does
+       so in even lines, never leaving one word alone. */
+    .site-links a {
+        display: inline-flex;
+        align-items: center;
+        gap: var(--space-half);
+        min-height: var(--control-sm);
+        font-weight: var(--weight-strong);
+        text-wrap: balance;
+    }
+
+    .site-links a[aria-current='page'] {
+        color: var(--c-text);
+    }
+
+    /* The legal links read as small print wherever they stand. */
+    .site-links.legal-links a {
+        color: var(--c-text-dim);
+        font-weight: var(--weight-regular);
+    }
+
+    .site-links.legal-links a:hover,
+    .site-links.legal-links a[aria-current='page'] {
+        color: var(--c-text);
+    }
+
+    /* GitHub's mark beside the link to the place it names, in the one
+       color the brand sheet gives it, never the link's hue. */
+    .github-mark {
+        flex: none;
+        width: var(--github-mark-h);
+        height: var(--github-mark-h);
+        fill: var(--c-github);
+    }
+
+    @media (forced-colors: active) {
+        .github-mark {
+            fill: CanvasText;
+        }
+    }
+
+    .new-tab-mark {
+        width: var(--text-sm);
+        height: var(--text-sm);
+        fill: none;
+        stroke: currentColor;
+        stroke-width: 2.5;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+    }
+}

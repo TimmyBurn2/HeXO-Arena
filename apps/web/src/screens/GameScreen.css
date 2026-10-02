@@ -1,0 +1,855 @@
+@layer screens {
+    /* The board is the screen: the stage owns the viewport, the camera
+       fills it, and everything else floats above or slides in. */
+    .stage {
+        position: fixed;
+        inset: 0;
+        display: grid;
+        grid-template-columns: minmax(0, 1fr);
+        /* One viewport-high row: an auto row would grow to a long feed,
+           and a drawer in its own column would push the chips off screen
+           instead of scrolling its panel. */
+        grid-template-rows: minmax(0, 1fr);
+        background: var(--board-bg);
+        --camera-floor: var(--hud-clear);
+    }
+
+    /* The camera keeps a fixed allowance under the board for the chips,
+       or the result chip's measured reach when that is more. */
+    .board-camera {
+        padding-bottom: max(var(--camera-floor), calc(var(--hud-reach) + var(--space-2)));
+    }
+
+    .stage[data-pinned] {
+        grid-template-columns: minmax(0, 1fr) var(--drawer-w);
+    }
+
+    .hud-skeleton {
+        width: var(--card-min);
+        height: var(--control-lg);
+        background: var(--c-bg-active);
+    }
+
+    .board-host {
+        position: relative;
+        min-width: 0;
+        min-height: 0;
+        overflow: hidden;
+    }
+
+    .hud-lift {
+        position: absolute;
+        z-index: var(--z-hud);
+        filter: var(--lift);
+    }
+
+    .hud-top-left {
+        top: var(--space-4);
+        left: var(--space-4);
+    }
+
+    .hud-top-right {
+        top: var(--space-4);
+        right: var(--space-4);
+    }
+
+    .hud-bottom-left {
+        bottom: var(--space-4);
+        left: var(--space-4);
+    }
+
+    /* The chip under the board may hold a result with two long names, so it
+       takes its own width but never more than the stage, and its words wrap. */
+    .hud-bottom-center {
+        bottom: var(--space-4);
+        left: 50%;
+        transform: translateX(-50%);
+        width: max-content;
+        max-width: calc(100% - 2 * var(--space-4));
+    }
+
+    .hud-bottom-center .hud-chip {
+        flex-wrap: wrap;
+        justify-content: center;
+    }
+
+    .hud-bottom-center .hud-result,
+    .hud-bottom-center .hud-turn,
+    .hud-bottom-center .hud-hint {
+        white-space: normal;
+        text-wrap: balance;
+        text-align: center;
+        overflow-wrap: anywhere;
+    }
+
+    /* The rundown hangs under the top chips before the first turn, and
+       the camera keeps the position below its measured reach. */
+    .hud-rundown {
+        top: var(--hud-clear);
+        left: 50%;
+        transform: translateX(-50%);
+        width: min(var(--rundown-w), calc(100% - 2 * var(--space-4)));
+    }
+
+    .hud-rundown .hud-chip {
+        display: block;
+        padding: var(--space-3) var(--space-4);
+        white-space: normal;
+    }
+
+    /* A cell the keyboard walks to scrolls into view below the card, never under it. */
+    .board-host[data-rundown] .board-camera {
+        padding-top: calc(var(--rundown-reach, var(--hud-clear)) + var(--space-2));
+        scroll-padding-top: calc(var(--rundown-reach, var(--hud-clear)) + var(--space-2));
+    }
+
+    /* The game screen stacks a result that would meet the seat chip. */
+    .board-host[data-stacked] .hud-bottom-center {
+        bottom: var(--hud-clear);
+    }
+
+    /* A replay's chip: its controls on the first line, the result or the
+       live state on the second. */
+    /* A column that wraps sizes itself poorly, so the two lines never do. */
+    .hud-replay .hud-chip {
+        flex-direction: column;
+        flex-wrap: nowrap;
+        gap: var(--space-1);
+    }
+
+    .hud-replay-line {
+        display: inline-flex;
+        align-items: center;
+        flex-wrap: wrap;
+        justify-content: center;
+        gap: var(--space-2) var(--space-3);
+        max-width: 100%;
+    }
+
+    .scrubber {
+        display: inline-flex;
+        align-items: center;
+        gap: var(--space-1);
+    }
+
+    .scrub-step {
+        display: grid;
+        place-items: center;
+        flex: none;
+        width: var(--control-md);
+        height: var(--control-md);
+        padding: 0;
+        border: none;
+        background: transparent;
+        color: var(--c-text-dim);
+        cursor: pointer;
+        transition: color var(--dur-fast) var(--ease), background var(--dur-fast) var(--ease);
+    }
+
+    .scrub-step:hover {
+        background: var(--c-bg-hover);
+        color: var(--c-text);
+    }
+
+    .scrub-step[aria-disabled='true'],
+    .scrub-step[aria-disabled='true']:hover {
+        background: transparent;
+        color: var(--c-border-strong);
+        cursor: not-allowed;
+    }
+
+    @media (forced-colors: active) {
+        .scrub-step[aria-disabled='true'],
+        .scrub-step[aria-disabled='true']:hover {
+            color: GrayText;
+        }
+    }
+
+    .scrub-step svg {
+        width: var(--text-xl);
+        height: var(--text-xl);
+        fill: none;
+        stroke: currentColor;
+        stroke-width: 2;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+    }
+
+    /* The count is the slider: its words, and under them the share of the
+       game on the board, in brass as every control's state is. */
+    .scrub-count {
+        display: inline-flex;
+        flex-direction: column;
+        align-items: stretch;
+        gap: var(--space-1);
+        min-width: var(--scrub-count-min);
+        padding: var(--space-1) var(--space-2);
+        cursor: default;
+    }
+
+    .scrub-words {
+        text-align: center;
+        font-variant-numeric: tabular-nums;
+        white-space: nowrap;
+    }
+
+    /* A drag along the track seeks rather than scrolls the page. */
+    .scrub-track {
+        display: block;
+        height: var(--space-1);
+        background: var(--c-border-strong);
+        cursor: pointer;
+        touch-action: none;
+    }
+
+    .scrub-fill {
+        display: block;
+        height: 100%;
+        background: var(--c-accent-solid);
+    }
+
+    /* Off, the switch reads as a control, in brass words, apart from the
+       quiet watching tag beside it; on, it takes the accent tint. */
+    .scrub-live {
+        background: var(--c-bg-hover);
+        color: var(--c-accent);
+    }
+
+    .scrub-live[aria-pressed='true'] {
+        background: var(--c-accent-bg);
+        color: var(--c-accent);
+    }
+
+    .stage[data-pinned] .hud-top-right {
+        display: none;
+    }
+
+    .hud-chip {
+        display: flex;
+        align-items: center;
+        gap: var(--space-3);
+        padding: var(--space-2) var(--space-3);
+        background: var(--c-bg-overlay);
+        box-shadow: inset 0 var(--border-w) 0 var(--surface-edge-hi);
+        color: var(--c-text);
+        white-space: nowrap;
+    }
+
+    .hud-exit,
+    .hud-toggle,
+    .drawer-close {
+        display: grid;
+        place-items: center;
+        width: var(--control-md);
+        height: var(--control-md);
+        color: var(--c-text-dim);
+        border: none;
+        cursor: pointer;
+        transition: color var(--dur-fast) var(--ease), background var(--dur-fast) var(--ease);
+    }
+
+    .hud-exit:hover,
+    .hud-toggle:hover,
+    .drawer-close:hover {
+        color: var(--c-text);
+    }
+
+    .hud-toggle,
+    .drawer-close {
+        padding: 0;
+    }
+
+    .drawer-close {
+        background: transparent;
+        margin-left: auto;
+    }
+
+    .hud-exit svg,
+    .hud-toggle svg,
+    .drawer-close svg {
+        width: var(--text-xl);
+        height: var(--text-xl);
+        fill: none;
+        stroke: currentColor;
+        stroke-width: 2;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+    }
+
+    .hud-who {
+        display: flex;
+        flex-direction: column;
+        line-height: var(--leading-tight);
+    }
+
+    .hud-name {
+        display: inline-flex;
+        align-items: center;
+        gap: var(--space-2);
+        font-weight: var(--weight-display);
+    }
+
+    .hud-name .badge-bot {
+        margin-left: 0;
+    }
+
+    .hud-meta {
+        display: inline-flex;
+        gap: var(--space-2);
+        color: var(--c-text-dim);
+        font-size: var(--text-sm);
+    }
+
+    .hud-rating {
+        color: var(--c-text);
+        font-weight: var(--weight-display);
+        font-variant-numeric: tabular-nums;
+    }
+
+    .hud-turn,
+    .hud-result {
+        font-weight: var(--weight-display);
+    }
+
+    .hud-hint {
+        color: var(--c-text-dim);
+    }
+
+    .hud-note {
+        color: var(--c-bad);
+        white-space: normal;
+    }
+
+    .pips {
+        display: inline-flex;
+        gap: var(--space-1);
+    }
+
+    .pip {
+        width: var(--pip-size);
+        height: var(--pip-size);
+        background: var(--c-bg-active);
+        transition: background var(--dur-fast) var(--ease);
+    }
+
+    .pip.on {
+        background: var(--c-accent-solid);
+    }
+
+    .hot-edge {
+        position: absolute;
+        top: 0;
+        right: 0;
+        bottom: 0;
+        width: var(--hot-edge-w);
+        z-index: var(--z-hud);
+    }
+
+    .stage[data-pinned] .hot-edge {
+        display: none;
+    }
+
+    /* Unpinned, the drawer floats over the board; the slot passes pointer
+       events through wherever the drawer is not. */
+    .drawer-slot {
+        position: absolute;
+        top: 0;
+        right: 0;
+        bottom: 0;
+        width: var(--drawer-w);
+        z-index: var(--z-drawer);
+        pointer-events: none;
+        filter: var(--lift);
+    }
+
+    .stage[data-pinned] .drawer-slot {
+        position: relative;
+        width: auto;
+        filter: none;
+    }
+
+    .drawer {
+        height: 100%;
+    }
+
+    .drawer-body {
+        display: flex;
+        flex-direction: column;
+        height: 100%;
+        background: var(--c-bg-raised);
+        box-shadow: inset var(--border-w) 0 0 var(--c-border);
+        pointer-events: auto;
+    }
+
+    .drawer-body[hidden] {
+        display: none;
+    }
+
+    .drawer[data-visible] .drawer-body {
+        animation: drawer-in var(--dur-slow) var(--ease) both;
+    }
+
+    .stage[data-pinned] .drawer-body {
+        animation: none;
+    }
+
+    .sheet-peek {
+        display: none;
+    }
+
+    .drawer-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: var(--space-2);
+        padding: var(--space-3) var(--space-3) 0;
+    }
+
+    .drawer-tabs {
+        display: flex;
+        gap: var(--space-1);
+    }
+
+    .drawer-tab {
+        height: var(--control-sm);
+        padding: 0 var(--space-3);
+        border: none;
+        background: transparent;
+        color: var(--c-text-dim);
+        font-size: var(--text-sm);
+        font-weight: var(--weight-strong);
+        cursor: pointer;
+        transition: color var(--dur-fast) var(--ease);
+    }
+
+    .drawer-tab:hover {
+        color: var(--c-text);
+    }
+
+    .drawer-tab[aria-selected='true'] {
+        color: var(--c-text);
+        box-shadow: inset 0 calc(-1 * var(--focus-w)) 0 var(--c-accent);
+    }
+
+    .drawer-panel {
+        flex: 1;
+        min-height: 0;
+        overflow-y: auto;
+        padding: var(--space-4);
+    }
+
+    /* The standing links, then the legal ones, each group its own row. */
+    .drawer-foot {
+        flex: none;
+        display: grid;
+        padding: var(--space-1) var(--space-4);
+        box-shadow: inset var(--border-w) 0 0 var(--c-border), inset 0 var(--border-w) 0 var(--c-border);
+        font-size: var(--text-sm);
+    }
+
+    /* Four legal links stand two to a row, so none is left on a line of
+       its own at any drawer width. */
+    .drawer-foot .legal-links {
+        display: grid;
+        grid-template-columns: repeat(2, auto);
+        justify-content: start;
+    }
+
+    /* Where two labels no longer fit side by side, as with large text on
+       a phone, they stand one to a row. */
+    @media (width < 12rem) {
+        .drawer-foot .legal-links {
+            grid-template-columns: auto;
+        }
+    }
+
+    /* The feed scrolls under its header, so the panel's top padding
+       moves into the header, which stays pinned. */
+    .drawer-panel[data-tab='moves'] {
+        padding-top: 0;
+    }
+
+    /* The header spans the panel over its padding, so it repeats the
+       drawer's left hairline. */
+    .moves-head {
+        position: sticky;
+        top: 0;
+        z-index: var(--z-sticky);
+        margin: 0 calc(-1 * var(--space-4)) var(--space-2);
+        padding: var(--space-2) var(--space-4);
+        background: var(--c-bg-raised);
+        box-shadow: inset var(--border-w) 0 0 var(--c-border), inset 0 calc(-1 * var(--border-w)) 0 var(--c-border);
+    }
+
+    .moves-head .board-toggles {
+        display: flex;
+        flex-wrap: wrap;
+        column-gap: var(--space-4);
+    }
+
+    .moves-head .checkline {
+        min-height: var(--control-sm);
+    }
+
+    /* the opening span is wider than any turn number, and every line
+       shares its column so the numbers stay aligned under it */
+    .feed {
+        display: grid;
+        grid-template-columns: max-content minmax(0, 1fr);
+        column-gap: var(--space-3);
+        list-style: none;
+        margin: 0;
+        padding: 0;
+        font-family: var(--font-mono);
+        font-variant-numeric: tabular-nums;
+        font-size: var(--text-sm);
+    }
+
+    .feed-line {
+        display: grid;
+        grid-column: 1 / -1;
+        grid-template-columns: subgrid;
+        padding: var(--space-1) var(--space-2);
+    }
+
+    .feed-n {
+        color: var(--c-text-dim);
+        text-align: right;
+    }
+
+    .feed-group {
+        white-space: nowrap;
+    }
+
+    .feed-line.latest {
+        background: var(--c-accent-bg);
+    }
+
+    /* Dim text on the accent tint falls under AA in some themes, so the newest
+       line's label takes the full text color. */
+    .feed-line.latest .feed-n {
+        color: var(--c-text);
+    }
+
+    /* Turns the board has not reached yet read in the dim color, still held to AA. */
+    .feed-line.ahead {
+        color: var(--c-text-dim);
+    }
+
+    .feed-line.fresh {
+        animation: line-in var(--dur-base) var(--ease) both;
+    }
+
+    .facts {
+        margin: 0 0 var(--space-4);
+    }
+
+    .drawer-panel > .rundown {
+        margin-bottom: var(--space-4);
+        padding-bottom: var(--space-4);
+        box-shadow: inset 0 calc(-1 * var(--border-w)) 0 var(--c-border);
+    }
+
+    .facts-row {
+        display: grid;
+        grid-template-columns: var(--facts-term-w) minmax(0, 1fr);
+        gap: var(--space-3);
+        padding: var(--space-1) 0;
+        font-size: var(--text-sm);
+    }
+
+    .facts-row dt {
+        color: var(--c-text-dim);
+    }
+
+    .facts-row dd {
+        margin: 0;
+    }
+
+    /* The head to head line runs as a sentence, so its links need more than their hue. */
+    .facts-row dd a:not([class]) {
+        text-decoration: underline;
+        text-underline-offset: var(--underline-offset);
+    }
+
+    @keyframes drawer-in {
+        from {
+            opacity: 0;
+            transform: translateX(var(--space-5));
+        }
+    }
+
+    @keyframes sheet-in {
+        from {
+            opacity: 0;
+            transform: translateY(var(--space-5));
+        }
+    }
+
+    @keyframes line-in {
+        from {
+            opacity: 0;
+            transform: translateY(var(--space-2));
+        }
+    }
+
+    @media (hover: none) {
+        .hot-edge {
+            display: none;
+        }
+    }
+
+    /* Between phones and the pinnable width a floating drawer would cover
+       much of the board, so an open one takes its own column and the
+       camera refits to what is left. */
+    @media (40rem < width < 80rem) {
+        .stage[data-open] {
+            grid-template-columns: minmax(0, 1fr) var(--drawer-w);
+        }
+
+        .stage[data-open] .drawer-slot {
+            position: relative;
+            width: auto;
+            filter: none;
+        }
+
+        .stage[data-open] .hot-edge {
+            display: none;
+        }
+
+        /* The turn chip meets the seat chip on one row at the narrow end
+           of this range, and a result beside the open drawer meets it
+           throughout, so here the chip always stacks above the seat chip
+           and the camera clears both rows; beside an open drawer it also
+           moves to the left edge. */
+        .stage {
+            --camera-floor: calc(2 * var(--hud-clear));
+        }
+
+        .hud-bottom-center {
+            bottom: var(--hud-clear);
+        }
+
+        .stage[data-open] .hud-bottom-center {
+            left: var(--space-4);
+            transform: none;
+        }
+    }
+
+    /* The drawer floats over the board's right edge here, so the chip
+       under the board keeps as clear of it on both sides. */
+    @media (80rem <= width) {
+        .stage[data-open] .hud-bottom-center {
+            max-width: calc(100% - 2 * (var(--drawer-w) + var(--space-4)));
+        }
+    }
+
+    /* Phones: full-bleed board, one chip across the top, and a bottom
+       sheet whose peek keeps the player's own clock in reach. */
+    @media (max-width: 40rem) {
+        .hud-top-left {
+            top: var(--space-2);
+            left: var(--space-2);
+            right: var(--space-2);
+        }
+
+        .hud-top-left .hud-who {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .hud-top-right,
+        .hud-bottom-left,
+        .hot-edge {
+            display: none;
+        }
+
+        .hud-bottom-center {
+            bottom: calc(var(--sheet-peek-h) + var(--space-2));
+            max-width: calc(100% - 2 * var(--space-2));
+        }
+
+        .hud-rundown {
+            top: calc(var(--hud-clear) - var(--space-2));
+            width: calc(100% - 2 * var(--space-2));
+        }
+
+        .stage {
+            --camera-floor: calc(var(--sheet-peek-h) + var(--hud-clear));
+        }
+
+        .drawer-slot {
+            top: auto;
+            left: 0;
+            width: auto;
+            pointer-events: auto;
+        }
+
+        .drawer {
+            background: var(--c-bg-overlay);
+            box-shadow: inset 0 var(--border-w) 0 var(--surface-edge-hi);
+            padding-bottom: env(safe-area-inset-bottom);
+        }
+
+        .sheet-peek {
+            display: block;
+            padding: var(--space-2) var(--space-4) var(--space-3);
+        }
+
+        .sheet-handle {
+            display: block;
+            width: var(--space-8);
+            height: var(--space-4);
+            margin: 0 auto var(--space-2);
+            border: none;
+            background: transparent;
+            cursor: pointer;
+            position: relative;
+        }
+
+        .sheet-handle::after {
+            content: '';
+            position: absolute;
+            left: 0;
+            right: 0;
+            top: calc(50% - var(--space-half));
+            height: var(--space-1);
+            background: var(--c-border-strong);
+        }
+
+        .peek-row {
+            display: flex;
+            align-items: center;
+            gap: var(--space-3);
+            min-height: var(--control-md);
+        }
+
+        .peek-who {
+            display: inline-flex;
+            align-items: center;
+            gap: var(--space-3);
+        }
+
+        .peek-line {
+            margin-left: auto;
+            color: var(--c-text-dim);
+            font-family: var(--font-mono);
+            font-size: var(--text-sm);
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        /* A result that does not fit beside the name takes its own line
+           under it and wraps there, never cut short. */
+        .peek-row:has(.peek-result) {
+            flex-wrap: wrap;
+        }
+
+        .peek-row:has(.peek-result) .hud-name {
+            overflow-wrap: anywhere;
+        }
+
+        .peek-row:has(.peek-result) .badge-bot {
+            flex: none;
+            overflow-wrap: normal;
+        }
+
+        .peek-result {
+            color: var(--c-text);
+            font-family: inherit;
+            font-weight: var(--weight-display);
+            white-space: normal;
+            text-wrap: balance;
+            text-align: right;
+            overflow-wrap: anywhere;
+        }
+
+        /* Large text on a short phone can fill the sheet with its head and
+           foot alone; the sheet's body then scrolls, so every foot link stays
+           reachable, while the panel keeps its own scroll. */
+        .drawer-body {
+            height: auto;
+            max-height: 55dvh;
+            overflow-y: auto;
+            box-shadow: none;
+            background: transparent;
+        }
+
+        /* The panel keeps the moves head and a few lines in view however
+           many links the foot holds; where the sheet is too short for both,
+           the body's scroll carries the foot. */
+        .drawer-panel {
+            min-height: var(--sheet-panel-min-h);
+        }
+
+        .moves-head {
+            background: var(--c-bg-overlay);
+            box-shadow: inset 0 calc(-1 * var(--border-w)) 0 var(--c-border);
+        }
+
+        .drawer-foot {
+            box-shadow: inset 0 var(--border-w) 0 var(--c-border);
+        }
+
+        /* A finger needs the full target on the sheet, and a link that
+           focus scrolls into view keeps its whole focus ring in the window. */
+        .drawer-foot .site-links a {
+            min-height: var(--control-lg);
+            scroll-margin-block: var(--space-2);
+        }
+
+        /* A finger needs the full target on the sheet. */
+        .moves-head .checkline {
+            min-height: var(--control-lg);
+        }
+
+        .drawer[data-visible] .drawer-body {
+            animation: sheet-in var(--dur-slow) var(--ease) both;
+        }
+
+        .sheet-peek {
+            cursor: pointer;
+        }
+
+        .hud-bottom-center .pips {
+            display: none;
+        }
+
+        /* The sheet's peek holds a replay's steps, so the chip above it
+           keeps the result or the live state alone. */
+        .hud-replay .scrubber {
+            display: none;
+        }
+
+        /* A replay's peek gives its steps and count a row of their own
+           under the name and clock, so a long name never pushes them out;
+           the stage reserves the taller peek for the chip and the camera. */
+        .stage[data-replay] {
+            --sheet-peek-h: var(--sheet-peek-replay-h);
+        }
+
+        .peek-row:has(.peek-scrub) {
+            flex-wrap: wrap;
+            row-gap: var(--space-1);
+        }
+
+        .peek-scrub {
+            display: flex;
+            flex-basis: 100%;
+            justify-content: center;
+            cursor: default;
+        }
+
+        .scrubber.compact .scrub-step {
+            width: var(--control-lg);
+            height: var(--control-lg);
+        }
+
+        .scrubber.compact .scrub-count {
+            min-width: var(--scrub-count-min);
+            color: var(--c-text-dim);
+            font-size: var(--text-sm);
+        }
+    }
+}

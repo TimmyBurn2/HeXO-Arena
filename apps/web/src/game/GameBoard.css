@@ -1,0 +1,33 @@
+@layer components {
+    /* The camera: centers a board smaller than the view, scrolls one
+       larger than it, and keeps its padding clear of the overlays. */
+    .board-camera {
+        position: absolute;
+        inset: 0;
+        display: flex;
+        overflow: auto;
+        padding: var(--hud-clear) var(--space-4);
+        overscroll-behavior: contain;
+    }
+
+    .board-control {
+        margin: auto;
+    }
+
+    /* The focus ring on the cell is the board's focus indicator; an
+       outline around the whole board would frame the screen. */
+    .board-control:focus-visible {
+        outline: none;
+    }
+
+    /* Off your move no cell carries focus, so the board itself shows it. */
+    .board-control[role='group']:focus-visible {
+        outline: var(--focus-w) solid var(--c-focus);
+        outline-offset: var(--focus-w);
+    }
+
+    .board-camera .board-frame {
+        padding: 0;
+        background: none;
+    }
+}

@@ -1,0 +1,52 @@
+/* HTTTX board from HeXO Renderer by MineKing, MIT. */
+/*
+ * Ember and cobalt stones on a plum board, after the HTTTX look.
+ * The source's decoration colors fill the stones, since its dark fills
+ * vanish on the cell; x carries an inset mark where the fills meet in
+ * lightness, and the page ramp is derived from the board's plum.
+ */
+
+@layer theme {
+    :root[data-theme='htttx'],
+    [data-theme-preview='htttx'] {
+        --c-bg: #191221;
+        --c-bg-raised: #22192b;
+        --c-bg-overlay: #2b2136;
+        --c-bg-input: #30263b;
+        --c-bg-hover: #32273f;
+        --c-bg-active: #3c304b;
+        --c-border: #30273f;
+        --c-border-strong: #574b6c;
+        --c-text: #e5e0eb;
+        --c-text-dim: #aca4b7;
+        --c-good: #66cc8b;
+        --c-good-solid: #38945a;
+        --c-bad: #f28896;
+        --c-bad-solid: #e25a6c;
+        --c-warn: #f8924f;
+        --c-online: #38945a;
+        --c-offline: #867c98;
+        --c-backdrop: #0a060eb8;
+
+        --board-bg: #1f1729;
+        --board-cell: #231b30;
+        --board-line: #2e2a47;
+        --board-frontier: #847cab;
+        --board-stone-x: #d25a06;
+        --board-stone-o: #0383e1;
+        --board-focus: #ffffff;
+        --board-number-x: #1f1729;
+        --board-number-o: #1f1729;
+        --board-pending: #f7c23b;
+        --board-last: #f7c23b;
+        --board-win: #e0485c;
+        --board-win-casing: #1f1729;
+
+        --stone-mark-x: #1f1729;
+        --stone-shine-x: #ffffff;
+        --stone-shine-o: #ffffff;
+        --stone-shine-opacity: 0.4;
+        --surface-edge-hi: #e5e0eb14;
+        --lift: drop-shadow(0 10px 14px #0a060e8c) drop-shadow(0 1px 2px #0a060e73);
+    }
+}

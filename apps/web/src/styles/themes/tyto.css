@@ -1,0 +1,52 @@
+/* Tyto board from HeXO Renderer by MineKing, MIT; page from Strix by Tyto (SootyOwl), MIT. */
+/*
+ * Ember and teal stones on near-black, with phosphor marks and a gold
+ * win line, after the Strix observatory.
+ * The two stones differ in hue more than in lightness, so x carries an
+ * inset mark; derived steps fill the ramp between the source colors.
+ */
+
+@layer theme {
+    :root[data-theme='tyto'],
+    [data-theme-preview='tyto'] {
+        --c-bg: #0d0f0e;
+        --c-bg-raised: #15191a;
+        --c-bg-overlay: #1b201f;
+        --c-bg-input: #1f2523;
+        --c-bg-hover: #202624;
+        --c-bg-active: #272d2b;
+        --c-border: #2a302e;
+        --c-border-strong: #3a423f;
+        --c-text: #ece6da;
+        --c-text-dim: #8b8f88;
+        --c-good: #79cf9a;
+        --c-good-solid: #3f9f66;
+        --c-bad: #ef8585;
+        --c-bad-solid: #e25c5c;
+        --c-warn: #e0a23a;
+        --c-online: #3f9f66;
+        --c-offline: #6e726b;
+        --c-backdrop: #0d0f0eb8;
+
+        --board-bg: #0d0f0e;
+        --board-cell: #101211;
+        --board-line: #2e2a1d;
+        --board-frontier: #6e726b;
+        --board-stone-x: #f08a3c;
+        --board-stone-o: #3fb6d9;
+        --board-focus: #ece6da;
+        --board-number-x: #0d0f0e;
+        --board-number-o: #0d0f0e;
+        --board-pending: #f2b65a;
+        --board-last: #f2b65a;
+        --board-win: #f2c14e;
+        --board-win-casing: #0d0f0e;
+
+        --stone-mark-x: #0d0f0e;
+        --stone-shine-x: #ffe0bf;
+        --stone-shine-o: #d8f4ff;
+        --stone-shine-opacity: 0.35;
+        --surface-edge-hi: #ece6da12;
+        --lift: drop-shadow(0 10px 14px #0000008c) drop-shadow(0 1px 2px #00000073);
+    }
+}

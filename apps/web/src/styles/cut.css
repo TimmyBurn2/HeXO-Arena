@@ -1,0 +1,203 @@
+/*
+ * The hex cut: controls and surfaces lose their corners along the slope
+ * of a cell's shoulder, so the board's geometry runs through the whole
+ * interface.
+ * Which element takes which cut is decided here once, and components
+ * never set a clip path.
+ * A clip path clips outlines too, so focus on a cut element draws inside
+ * its edge.
+ */
+
+@layer components {
+    .btn,
+    .pill,
+    .seg-btn,
+    .opt label,
+    .badge-bot,
+    .tag,
+    .skeleton,
+    .nav-link,
+    .identity,
+    .identity-row,
+    .discord-face,
+    .discord-button::before,
+    kbd,
+    .clock,
+    .theme-tile,
+    .chip,
+    input[type='text'],
+    input[type='date'],
+    select {
+        clip-path: var(--cut-sm-path);
+    }
+
+    .card,
+    .raised,
+    .pills,
+    .seg,
+    .table-wrap,
+    .empty,
+    .token-box,
+    .credit-rows,
+    .skip {
+        clip-path: var(--cut-md-path);
+    }
+
+    /* Small marks are whole cells: a checkbox, gray when off and the
+       accent when on, and the step numbers. */
+    input[type='checkbox'],
+    .monogram,
+    .identity-monogram,
+    .sigil-plate,
+    .pip,
+    .steps .step-n,
+    .build-step-n,
+    .podium-rank {
+        clip-path: var(--hex-path);
+    }
+
+    /* Discord's brand kit shows its symbol only in rectangular or circular
+       containers, so the plate around it takes a control's cut, not a cell. */
+    .from-discord-plate {
+        clip-path: var(--cut-sm-path);
+    }
+
+    /* The hexagon clips the checkbox's own ring, so its label shows focus. */
+    .checkline:has(input:focus-visible) {
+        outline: var(--focus-w) solid var(--c-focus);
+        outline-offset: var(--focus-w);
+    }
+
+    .rung,
+    .rung-skeleton,
+    .games-h2h,
+    .podium,
+    .podium-plate,
+    .live-game,
+    .live-card,
+    .play-card,
+    .featured,
+    .featured-skeleton,
+    .build-band,
+    .bot-plate,
+    .bot-card,
+    .identity-plate,
+    .welcome-card,
+    .roster,
+    .play-setup,
+    .hud-chip {
+        clip-path: var(--cut-md-path);
+    }
+
+    .clock-tile,
+    .roster-row,
+    .play-ready-bot,
+    .your-game,
+    .recent-game,
+    .game-row,
+    .featured-chip,
+    .stepper button,
+    .opening-preview {
+        clip-path: var(--cut-sm-path);
+    }
+
+    /* The cut clips a ring drawn outside, so a picked tile or row shows
+       focus inside its edge. */
+    .clock-tile:has(input:focus-visible),
+    .roster-row:has(input:focus-visible) {
+        outline: var(--focus-w) solid var(--c-focus);
+        outline-offset: calc(-3 * var(--focus-w));
+    }
+
+    .play-sheet[data-mode='sheet'] .topbar-panel-body {
+        clip-path: none;
+    }
+
+    .hud-exit,
+    .hud-toggle,
+    .scrub-step,
+    .drawer-close,
+    .drawer-tab,
+    .settings-gear,
+    .topbar-panel-close,
+    .theme-card,
+    .theme-swatch {
+        clip-path: var(--cut-sm-path);
+    }
+
+    .topbar-panel-body {
+        clip-path: var(--cut-md-path);
+    }
+
+    /* The sheet meets the screen's own edges, which leave nothing to cut. */
+    .topbar-panel[data-mode='sheet'] .topbar-panel-body {
+        clip-path: none;
+    }
+
+    .rung.r1 {
+        clip-path: var(--cut-lg-path);
+    }
+
+    .board-frame {
+        clip-path: var(--cut-md-path);
+    }
+
+    /* On the game stage the board is the screen, not a surface on it,
+       and a mini is the top of the card that cuts it. */
+    .board-camera .board-frame,
+    .mini-board .board-frame {
+        clip-path: none;
+    }
+
+    /* The card is the link's target, so the card shows its focus. */
+    .live-card:has(.live-card-link:focus-visible) {
+        outline: var(--focus-w) solid var(--c-focus);
+        outline-offset: calc(-1 * var(--focus-w));
+    }
+
+    .btn:focus-visible,
+    .hud-exit:focus-visible,
+    .hud-toggle:focus-visible,
+    .scrub-step:focus-visible,
+    .scrub-count:focus-visible,
+    .drawer-close:focus-visible,
+    .drawer-tab:focus-visible,
+    .settings-gear:focus-visible,
+    .topbar-panel-close:focus-visible,
+    .pill:focus-visible,
+    .seg-btn:focus-visible,
+    .stepper button:focus-visible,
+    .nav-link:focus-visible,
+    .identity:focus-visible,
+    .identity-row:focus-visible,
+    .live-game:focus-visible,
+    .play-card:focus-visible,
+    .play-ready-bot:focus-visible,
+    .your-game:focus-visible,
+    .recent-game:focus-visible,
+    .game-row:focus-visible,
+    .chip:focus-visible,
+    .featured-link:focus-visible,
+    .skip:focus-visible,
+    input[type='text']:focus-visible,
+    input[type='date']:focus-visible,
+    select:focus-visible,
+    .opt input:focus-visible + label {
+        outline: var(--focus-w) solid var(--c-focus);
+        outline-offset: calc(-1 * var(--focus-w));
+    }
+
+    /* A checked card already wears an accent frame, so its focus ring
+       sits a gap further in. */
+    .theme-card:has(input:focus-visible) {
+        outline: var(--focus-w) solid var(--c-focus);
+        outline-offset: calc(-3 * var(--focus-w));
+    }
+
+    /* The focus color is the accent, so on an accent fill the ring
+       switches to the text on it. */
+    .btn-primary:focus-visible,
+    .play-card:focus-visible {
+        outline-color: var(--c-text-on-accent);
+    }
+}

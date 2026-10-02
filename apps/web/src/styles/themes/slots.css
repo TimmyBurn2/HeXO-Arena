@@ -1,0 +1,28 @@
+/*
+ * Every effect a component shows goes through one of these slots, and
+ * the literal gate keeps effects out of component sheets.
+ * A theme that sets no slot is flat; it opts into an effect by setting
+ * the slot.
+ * A preview starts from the same neutral values, so the look it shows
+ * never inherits an effect from the look the page wears.
+ */
+
+@layer brand {
+    :root,
+    [data-theme-preview] {
+        /* a filter, not a box shadow, since the cut clips box shadows */
+        --lift: none;
+        --surface-edge-hi: transparent;
+        /* stone outline, for themes whose two stone colors sit close */
+        --stone-rim: transparent;
+        --stone-rim-w: 0;
+        /* stone glare: gradient center colors and the layer's strength */
+        --stone-shine-x: transparent;
+        --stone-shine-o: transparent;
+        --stone-shine-opacity: 0;
+        /* an inset hexagon edge per side, for themes whose two stones
+           differ in hue more than in lightness */
+        --stone-mark-x: transparent;
+        --stone-mark-o: transparent;
+    }
+}

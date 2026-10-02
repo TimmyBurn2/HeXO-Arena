@@ -1,0 +1,161 @@
+@layer components {
+    .rundown {
+        display: grid;
+        gap: var(--space-2);
+        font-size: var(--text-sm);
+    }
+
+    .rundown-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: var(--space-3);
+    }
+
+    .rundown-title {
+        margin: 0;
+        color: var(--c-text-dim);
+        font-size: var(--text-sm);
+        font-weight: var(--weight-strong);
+    }
+
+    .rundown-hide {
+        display: grid;
+        flex: none;
+        place-items: center;
+        width: var(--control-sm);
+        height: var(--control-sm);
+        padding: 0;
+        border: none;
+        background: transparent;
+        color: var(--c-text-dim);
+        cursor: pointer;
+    }
+
+    .rundown-hide:hover {
+        background: var(--c-bg-hover);
+        color: var(--c-text);
+    }
+
+    .rundown-hide svg {
+        width: var(--text-base);
+        height: var(--text-base);
+        fill: none;
+        stroke: currentColor;
+        stroke-width: 2;
+        stroke-linecap: round;
+    }
+
+    /* x on the left and o on the right, as the seats read across the board. */
+    .rundown-sides {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: var(--space-2) var(--space-5);
+    }
+
+    .rundown-side {
+        display: grid;
+        align-content: start;
+        gap: var(--space-1);
+        min-width: 0;
+    }
+
+    .rundown-side p {
+        margin: 0;
+    }
+
+    .rundown-name {
+        display: flex;
+        align-items: center;
+        gap: var(--space-2);
+        min-width: 0;
+        font-size: var(--text-base);
+        font-weight: var(--weight-strong);
+        overflow-wrap: anywhere;
+    }
+
+    .rundown-name .badge-bot {
+        margin-left: 0;
+    }
+
+    .rundown-side > .tag {
+        justify-self: start;
+    }
+
+    .rundown-figures,
+    .rundown-expected,
+    .rundown-form {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: baseline;
+        gap: 0 var(--space-2);
+    }
+
+    .rundown-rating {
+        font-size: var(--text-lg);
+        font-weight: var(--weight-display);
+        font-variant-numeric: tabular-nums;
+    }
+
+    .rundown-deviation,
+    .rundown-label,
+    .rundown-form-none {
+        color: var(--c-text-dim);
+    }
+
+    .rundown-value {
+        font-weight: var(--weight-strong);
+        font-variant-numeric: tabular-nums;
+    }
+
+    .rundown-form {
+        align-items: center;
+    }
+
+    .rundown-glyphs {
+        display: inline-flex;
+        gap: var(--space-half);
+    }
+
+    .rundown-glyph {
+        width: var(--rundown-glyph-w);
+        height: auto;
+        fill: none;
+        stroke: var(--c-text-dim);
+        stroke-width: 4;
+    }
+
+    .rundown-won {
+        fill: var(--c-good);
+        stroke: var(--c-good);
+    }
+
+    .rundown-lost {
+        stroke: var(--c-bad);
+    }
+
+    .rundown-dot {
+        fill: var(--c-text-dim);
+        stroke: none;
+    }
+
+    .rundown-meetings {
+        margin: 0;
+        padding-top: var(--space-2);
+        box-shadow: inset 0 var(--border-w) 0 var(--c-border);
+        color: var(--c-text-dim);
+    }
+
+    .rundown-meetings .player-name {
+        color: var(--c-text);
+    }
+
+    /* A phone's target reaches past the head row without making it taller. */
+    @media (max-width: 40rem) {
+        .rundown-hide {
+            width: var(--control-lg);
+            height: var(--control-lg);
+            margin: calc((var(--control-sm) - var(--control-lg)) / 2);
+        }
+    }
+}

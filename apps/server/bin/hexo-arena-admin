@@ -1,0 +1,4 @@
+#!/bin/sh
+# Talks to the admin socket of the server running in this container.
+here=$(dirname "$(readlink -f "$0")")
+exec "$here/../node_modules/.bin/tsx" "$here/../src/admin-cli.ts" "$@"

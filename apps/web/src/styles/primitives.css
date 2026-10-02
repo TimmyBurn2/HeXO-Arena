@@ -1,0 +1,447 @@
+/*
+ * Surfaces separate by lightness and a top hairline, never by a border,
+ * because the hex cut would clip a border at every corner.
+ */
+
+@layer components {
+    .screen-title {
+        font-size: var(--text-2xl);
+        font-weight: var(--weight-display);
+        line-height: var(--leading-tight);
+        letter-spacing: var(--tracking-display);
+        overflow-wrap: break-word;
+        margin: 0 0 var(--space-5);
+    }
+
+    /* Large text on a narrow window leaves a long word no room at the
+       full title size. */
+    @media (max-width: 19.5rem) {
+        .screen-title {
+            font-size: var(--text-xl);
+        }
+    }
+
+    .section-title {
+        font-size: var(--text-lg);
+        font-weight: var(--weight-display);
+        margin: var(--space-7) 0 var(--space-3);
+    }
+
+    .raised,
+    .card {
+        background: var(--c-bg-raised);
+        box-shadow: inset 0 var(--border-w) 0 var(--surface-edge-hi);
+    }
+
+    .card {
+        padding: var(--space-5);
+    }
+
+    .note {
+        color: var(--c-text-dim);
+        font-size: var(--text-sm);
+    }
+
+    .card-title {
+        margin: 0 0 var(--space-3);
+        font-size: var(--text-base);
+        font-weight: var(--weight-display);
+    }
+
+    /* A value such as a repository link is one long word, so the value
+       column may shrink and the word wrap rather than push the card wide. */
+    .kv {
+        display: grid;
+        grid-template-columns: max-content minmax(0, 1fr);
+        gap: var(--space-2) var(--space-5);
+        margin: 0;
+        font-size: var(--text-sm);
+    }
+
+    .kv dt {
+        color: var(--c-text-dim);
+    }
+
+    .kv dd {
+        margin: 0;
+        font-weight: var(--weight-strong);
+        overflow-wrap: anywhere;
+    }
+
+    .controls {
+        display: flex;
+        flex-wrap: wrap;
+        gap: var(--space-4);
+        align-items: center;
+    }
+
+    .controls fieldset {
+        border: none;
+        margin: 0;
+        padding: 0;
+        display: inline-flex;
+        align-items: center;
+        gap: var(--space-2);
+    }
+
+    .controls legend {
+        color: var(--c-text-dim);
+        font-size: var(--text-sm);
+        padding: 0;
+        margin-bottom: var(--space-2);
+    }
+
+    .checkline {
+        display: inline-flex;
+        align-items: center;
+        gap: var(--space-2);
+        font-size: var(--text-sm);
+        color: var(--c-text-dim);
+        min-height: var(--control-md);
+        cursor: pointer;
+    }
+
+    input[type='checkbox'] {
+        appearance: none;
+        flex: none;
+        width: var(--check-size);
+        height: var(--check-size);
+        margin: 0;
+        background: var(--c-offline);
+        cursor: pointer;
+        transition: background var(--dur-fast) var(--ease);
+    }
+
+    input[type='checkbox']:checked {
+        background: var(--c-accent-solid);
+    }
+
+    .opt {
+        display: inline-flex;
+        align-items: center;
+    }
+
+    .opt input {
+        position: absolute;
+        opacity: 0;
+    }
+
+    .opt label {
+        display: inline-flex;
+        align-items: center;
+        height: var(--control-sm);
+        padding: 0 var(--space-3);
+        background: var(--c-bg-input);
+        color: var(--c-text-dim);
+        font-size: var(--text-sm);
+        font-weight: var(--weight-strong);
+        font-variant-numeric: tabular-nums;
+        cursor: pointer;
+        transition: background var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease);
+    }
+
+    .opt label:hover {
+        color: var(--c-text);
+    }
+
+    .opt input:checked + label {
+        background: var(--c-bg-active);
+        color: var(--c-text);
+    }
+
+    .btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        height: var(--control-md);
+        padding: 0 var(--space-4);
+        font-size: var(--text-sm);
+        font-weight: var(--weight-strong);
+        border: none;
+        cursor: pointer;
+        text-decoration: none;
+        transition: background var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease);
+    }
+
+    .btn-primary {
+        background: var(--c-accent-solid);
+        color: var(--c-text-on-accent);
+    }
+
+    .btn-primary:hover {
+        background: var(--c-accent-solid-hover);
+        color: var(--c-text-on-accent);
+    }
+
+    .btn-ghost {
+        background: var(--c-bg-hover);
+        color: var(--c-text);
+    }
+
+    .btn-ghost:hover {
+        background: var(--c-bg-active);
+        color: var(--c-text);
+    }
+
+    .btn-danger {
+        background: var(--c-bg-hover);
+        color: var(--c-bad);
+    }
+
+    .btn-danger:hover {
+        background: var(--c-bg-active);
+        color: var(--c-bad);
+    }
+
+    .btn-sm {
+        height: var(--control-sm);
+        padding: 0 var(--space-3);
+    }
+
+    .btn[disabled],
+    .btn[disabled]:hover,
+    .btn[aria-disabled='true'],
+    .btn[aria-disabled='true']:hover {
+        background: var(--c-bg-hover);
+        color: var(--c-text-dim);
+        cursor: not-allowed;
+    }
+
+    /* Forced colors gray a disabled button on their own;
+       one that stays focusable while it cannot act is grayed the same way. */
+    @media (forced-colors: active) {
+        .btn[aria-disabled='true'],
+        .btn[aria-disabled='true']:hover {
+            color: GrayText;
+        }
+    }
+
+    .toolbar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: var(--space-3);
+        margin-bottom: var(--space-3);
+        flex-wrap: wrap;
+    }
+
+    /* Large text on a narrow window breaks the group between pills rather
+       than push the page sideways. */
+    .pills {
+        display: inline-flex;
+        flex-wrap: wrap;
+        max-width: 100%;
+        gap: var(--space-1);
+        background: var(--c-bg-raised);
+        box-shadow: inset 0 var(--border-w) 0 var(--surface-edge-hi);
+        padding: var(--space-1);
+    }
+
+    .pill {
+        display: inline-flex;
+        align-items: center;
+        height: var(--control-sm);
+        padding: 0 var(--space-3);
+        color: var(--c-text-dim);
+        font-size: var(--text-sm);
+        font-weight: var(--weight-strong);
+        border: none;
+        background: transparent;
+        cursor: pointer;
+        transition: background var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease);
+    }
+
+    .pill:hover {
+        color: var(--c-text);
+    }
+
+    .pill.active {
+        background: var(--c-bg-active);
+        color: var(--c-text);
+    }
+
+    /* A table wider than the window scrolls inside its frame, which also
+       holds its hidden header text, so neither pushes the page sideways. */
+    .table-wrap {
+        position: relative;
+        background: var(--c-bg-raised);
+        box-shadow: inset 0 var(--border-w) 0 var(--surface-edge-hi);
+        overflow-x: auto;
+    }
+
+    table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: var(--text-sm);
+    }
+
+    th {
+        text-align: left;
+        font-size: var(--text-sm);
+        font-weight: var(--weight-strong);
+        color: var(--c-text-dim);
+        padding: var(--space-3) var(--space-4) var(--space-2);
+    }
+
+    td {
+        padding: var(--space-2) var(--space-4);
+        box-shadow: inset 0 var(--border-w) 0 var(--c-border);
+    }
+
+    tbody tr {
+        transition: background var(--dur-fast) var(--ease);
+    }
+
+    tbody tr:hover {
+        background: var(--c-bg-hover);
+    }
+
+    .num {
+        font-variant-numeric: tabular-nums;
+        text-align: right;
+    }
+
+    th.num {
+        text-align: right;
+    }
+
+    /* A rating reads the same on every screen: heavy, tabular. */
+    .rating-cell {
+        font-weight: var(--weight-display);
+    }
+
+    .table-note {
+        color: var(--c-text-dim);
+        text-align: center;
+    }
+
+    .legend {
+        display: flex;
+        gap: var(--space-4);
+        align-items: center;
+        color: var(--c-text-dim);
+        font-size: var(--text-xs);
+        margin-top: var(--space-3);
+        flex-wrap: wrap;
+    }
+
+    .empty {
+        background: var(--c-bg-raised);
+        box-shadow: inset 0 var(--border-w) 0 var(--surface-edge-hi);
+        padding: var(--space-8) var(--space-4);
+        text-align: center;
+        color: var(--c-text-dim);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: var(--space-3);
+    }
+
+    /* A heading that wraps does so in even lines, never leaving one word alone. */
+    .empty h2,
+    .empty h1 {
+        color: var(--c-text);
+        font-size: var(--text-xl);
+        font-weight: var(--weight-display);
+        margin: 0;
+        text-wrap: balance;
+    }
+
+    .empty p {
+        margin: 0;
+        max-width: var(--measure);
+    }
+
+    .empty .actions {
+        display: flex;
+        gap: var(--space-3);
+        margin-top: var(--space-2);
+        flex-wrap: wrap;
+        justify-content: center;
+    }
+
+    .skeleton-stack {
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-2);
+        padding: var(--space-3);
+    }
+
+    .skeleton {
+        height: var(--control-md);
+        background: var(--c-bg-active);
+    }
+
+    .field-error {
+        color: var(--c-bad);
+        font-size: var(--text-sm);
+        margin: var(--space-1) 0 0;
+    }
+
+    .field-ok {
+        color: var(--c-good);
+        font-size: var(--text-sm);
+        margin: var(--space-1) 0 0;
+    }
+
+    .warn {
+        color: var(--c-warn);
+        font-size: var(--text-sm);
+    }
+
+    /* A field keeps its default width while it fits and narrows to its
+       column when large text leaves less. */
+    input[type='text'],
+    input[type='date'],
+    select {
+        max-width: 100%;
+        min-width: 0;
+        font-family: var(--font-sans);
+        font-size: var(--text-base);
+        color: var(--c-text);
+        background: var(--c-bg-input);
+        border: none;
+        height: var(--control-md);
+        padding: 0 var(--space-3);
+    }
+
+    select {
+        padding-right: var(--space-2);
+        cursor: pointer;
+    }
+
+    /* Every theme's page is dark, so the browser draws a field's own
+       parts, the date's calendar and the menu's list, dark as well. */
+    input[type='date'],
+    select {
+        color-scheme: dark;
+    }
+
+    input:disabled,
+    select:disabled {
+        color: var(--c-text-dim);
+        cursor: not-allowed;
+    }
+
+    .name-field {
+        display: flex;
+        max-width: 100%;
+        gap: var(--space-2);
+        align-items: center;
+        flex-wrap: wrap;
+    }
+
+    /* A field's visible name takes its own line above the field. */
+    .field-label {
+        flex-basis: 100%;
+        color: var(--c-text-dim);
+        font-size: var(--text-sm);
+    }
+
+    .card-actions {
+        display: flex;
+        gap: var(--space-3);
+        margin: var(--space-4) 0 0;
+        flex-wrap: wrap;
+    }
+}

@@ -1,0 +1,45 @@
+services:
+    server:
+        build:
+            context: .
+            dockerfile: docker/dev/Dockerfile
+        command: ['pnpm', '--filter', '@hexo-arena/server', 'dev']
+        environment:
+            HOST: '0.0.0.0'
+            PORT: '3000'
+            DATABASE_PATH: /data/hexo-arena.sqlite
+            DEV_LOGIN: '1'
+            ADMIN_SOCKET_PATH: /run/hexo-arena/admin.sock
+        # The admin socket lives on a private tmpfs owned by the app uid
+        # (node, 1000); it dies with the container, so no stale socket
+        # survives a restart.
+        tmpfs:
+            - /run/hexo-arena:mode=0700,uid=1000,gid=1000
+        ports:
+            - '127.0.0.1:3000:3000'
+        volumes:
+            - ./apps/server/src:/app/apps/server/src
+            - ./apps/server/test:/app/apps/server/test
+            - ./packages/contract/src:/app/packages/contract/src
+            - ./packages/contract/test:/app/packages/contract/test
+            - ./packages/contract/scripts:/app/packages/contract/scripts
+            - ./legal:/app/legal
+            - hexo-arena-data:/data
+    web:
+        build:
+            context: .
+            dockerfile: docker/dev/Dockerfile
+        command: ['pnpm', '--filter', '@hexo-arena/web', 'dev']
+        ports:
+            - '127.0.0.1:5173:5173'
+        volumes:
+            - ./apps/web/src:/app/apps/web/src
+            - ./apps/web/test:/app/apps/web/test
+            - ./apps/web/index.html:/app/apps/web/index.html
+            - ./legal:/app/legal
+            - ./packages/contract/src:/app/packages/contract/src
+            - ./packages/contract/test:/app/packages/contract/test
+            - ./packages/contract/scripts:/app/packages/contract/scripts
+
+volumes:
+    hexo-arena-data:

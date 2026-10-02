@@ -1,0 +1,8 @@
+/*
+ * Declared before any sheet loads, so lazy route sheets land in their
+ * layer whatever their load order.
+ * A later layer wins without specificity games.
+ * Themes only set custom properties, so they sit below every rule that
+ * consumes them.
+ */
+@layer scale, brand, theme, base, components, screens, preferences;

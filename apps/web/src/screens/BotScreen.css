@@ -1,0 +1,113 @@
+@layer screens {
+    .bot-lift {
+        filter: var(--lift);
+        margin-bottom: var(--space-5);
+    }
+
+    /* The bot's headline fact is its rating, so the plate gives it the
+       display weight the ladder gives it. */
+    .bot-plate {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        align-items: center;
+        gap: var(--space-2) var(--space-5);
+        padding: var(--space-5) var(--space-6);
+        background: var(--c-bg-overlay);
+        box-shadow: inset 0 var(--border-w) 0 var(--surface-edge-hi);
+    }
+
+    .bot-title {
+        display: flex;
+        align-items: center;
+        gap: var(--space-3);
+        min-width: 0;
+    }
+
+    .bot-title h1 {
+        margin: 0;
+        font-size: var(--text-rung-1);
+        font-weight: var(--weight-display);
+        letter-spacing: var(--tracking-display);
+        line-height: var(--leading-tight);
+        overflow-wrap: anywhere;
+    }
+
+    .bot-title .badge-bot {
+        margin-left: 0;
+    }
+
+    .bot-rating {
+        grid-row: span 2;
+        display: flex;
+        flex-direction: column;
+        align-items: flex-end;
+    }
+
+    /* The rating's own height, held while it loads. */
+    .bot-rating-pending {
+        width: 4ch;
+        height: calc(var(--text-rung-1) * var(--leading-tight));
+        background: var(--c-bg-active);
+    }
+
+    .bot-rating-number {
+        font-size: var(--text-rung-1);
+        font-weight: var(--weight-display);
+        font-variant-numeric: tabular-nums;
+        line-height: var(--leading-tight);
+    }
+
+    .bot-facts {
+        display: flex;
+        align-items: center;
+        gap: var(--space-4);
+        flex-wrap: wrap;
+        color: var(--c-text-dim);
+        font-size: var(--text-sm);
+    }
+
+    .about {
+        max-width: var(--measure);
+        font-size: var(--text-lg);
+        margin: 0 0 var(--space-5);
+    }
+
+    .bot-columns {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(min(100%, var(--card-min)), 1fr));
+        gap: var(--space-3);
+    }
+
+    .play-row {
+        margin-top: var(--space-5);
+    }
+
+    .play-row .play-reason {
+        margin-left: var(--space-3);
+    }
+
+    @media (max-width: 40rem) {
+        .bot-plate {
+            padding: var(--space-4);
+        }
+
+        .bot-title h1,
+        .bot-rating-number {
+            font-size: var(--text-xl);
+        }
+
+        .bot-rating-pending {
+            height: calc(var(--text-xl) * var(--leading-tight));
+        }
+    }
+
+    .bot-live {
+        margin: var(--space-6) 0 0;
+    }
+
+    /* Above the first row's edge cells, which reach a cell past each board. */
+    .bot-live > h2 {
+        position: relative;
+        z-index: 1;
+    }
+}

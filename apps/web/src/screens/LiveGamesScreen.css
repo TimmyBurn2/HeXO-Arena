@@ -1,0 +1,26 @@
+@layer screens {
+    /* Above the first row's edge cells, which reach a cell past each board. */
+    .live-head,
+    .live-stale {
+        position: relative;
+        z-index: 1;
+    }
+
+    .live-head {
+        margin-bottom: var(--space-5);
+    }
+
+    .live-head .note {
+        margin: 0;
+    }
+
+    .live-stale {
+        margin: 0 0 var(--space-4);
+    }
+
+    /* A card's shape before its board arrives: a 4:3 board over its lines. */
+    .live-skeletons .skeleton {
+        height: auto;
+        aspect-ratio: 12 / 13;
+    }
+}

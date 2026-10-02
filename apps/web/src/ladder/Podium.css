@@ -1,0 +1,161 @@
+@layer components {
+    /* The podium is a strip of board: its plates and towers stand on the
+       board's own ground, the page around it. */
+    .podium {
+        display: flex;
+        flex-direction: column;
+        margin-bottom: var(--space-5);
+        background: var(--board-bg);
+    }
+
+    /* Each plate takes a third of the strip, over its tower in the middle
+       of that third, and drops past the strip's top edge onto the tower;
+       a plate taller than the room above its tower grows the row, so no
+       text size makes it cover anything above. */
+    .podium-plates {
+        display: flex;
+        align-items: flex-end;
+        margin: 0;
+        padding: var(--space-4) 0 0;
+        list-style: none;
+    }
+
+    .podium-slot {
+        position: relative;
+        z-index: 1;
+        display: flex;
+        justify-content: center;
+        flex: 0 0 calc(100% / 3);
+        min-width: 0;
+        padding: 0 var(--space-2);
+        margin-bottom: var(--drop-wide);
+        filter: var(--lift);
+    }
+
+    .podium-slot.p2 {
+        order: 1;
+    }
+
+    .podium-slot.p1 {
+        order: 2;
+    }
+
+    .podium-slot.p3 {
+        order: 3;
+    }
+
+    .podium-plates[data-places='1'] .p1 {
+        margin-left: calc(100% / 3);
+    }
+
+    .podium-plate {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: var(--space-1);
+        max-width: 100%;
+        min-width: 0;
+        padding: var(--space-3) var(--space-4);
+        background: var(--c-bg-overlay);
+        box-shadow: inset 0 var(--border-w) 0 var(--surface-edge-hi);
+        color: var(--c-text);
+        text-align: center;
+    }
+
+    .podium-who {
+        display: flex;
+        align-items: center;
+        gap: var(--space-2);
+        max-width: 100%;
+        min-width: 0;
+    }
+
+    .podium-rank {
+        display: inline-grid;
+        place-items: center;
+        flex: none;
+        width: var(--control-sm);
+        height: var(--control-sm);
+        background: var(--c-bg-active);
+        color: var(--c-text);
+        font-size: var(--text-sm);
+        font-weight: var(--weight-display);
+    }
+
+    .podium-rank.first {
+        background: var(--c-accent-solid);
+        color: var(--c-text-on-accent);
+    }
+
+    .podium-name {
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        font-weight: var(--weight-display);
+    }
+
+    .podium-who .badge-bot {
+        flex: none;
+        margin-left: 0;
+    }
+
+    .podium-rating {
+        font-size: var(--text-2xl);
+        font-weight: var(--weight-display);
+        line-height: var(--leading-tight);
+        font-variant-numeric: proportional-nums;
+    }
+
+    .podium-meta {
+        color: var(--c-text-dim);
+        font-size: var(--text-sm);
+    }
+
+    .podium-play {
+        margin-top: var(--space-1);
+    }
+
+    .podium-board {
+        display: block;
+        width: 100%;
+        height: auto;
+    }
+
+    .podium-board.narrow {
+        display: none;
+    }
+
+    /* A phone stands the towers closer, at a larger cell, and its plates
+       name the player and the rating alone. */
+    @media (max-width: 40rem) {
+        .podium-board.wide {
+            display: none;
+        }
+
+        .podium-board.narrow {
+            display: block;
+        }
+
+        .podium-slot {
+            margin-bottom: var(--drop-narrow);
+            padding: 0 var(--space-1);
+        }
+
+        .podium-plate {
+            gap: 0;
+            padding: var(--space-2);
+        }
+
+        .podium-meta,
+        .podium-play,
+        .podium-rank,
+        .podium-who .badge-bot {
+            display: none;
+        }
+
+        .podium-rating {
+            font-size: var(--text-lg);
+        }
+    }
+}

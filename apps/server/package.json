@@ -1,0 +1,35 @@
+{
+    "name": "@hexo-arena/server",
+    "version": "0.0.0",
+    "private": true,
+    "type": "module",
+    "scripts": {
+        "dev": "tsx watch --env-file-if-exists=../../.env src/index.ts",
+        "build": "vite build --config build.config.ts && cp -r src/db/migrations dist/migrations",
+        "test": "vitest run",
+        "typecheck": "tsc --noEmit -p .",
+        "db:generate": "drizzle-kit generate",
+        "admin": "tsx --env-file-if-exists=../../.env src/admin-cli.ts"
+    },
+    "dependencies": {
+        "@fastify/cookie": "^11.1.2",
+        "@fastify/websocket": "^11.3.1",
+        "@hexo-arena/contract": "workspace:*",
+        "@hexo-arena/rules": "workspace:*",
+        "better-sqlite3": "^13.0.3",
+        "drizzle-orm": "^0.45.3",
+        "fastify": "^5.12.5",
+        "zod": "^4.6.5"
+    },
+    "devDependencies": {
+        "@types/better-sqlite3": "^9.6.0",
+        "@types/node": "^24.0.0",
+        "@types/ws": "^8.18.1",
+        "drizzle-kit": "0.31.11",
+        "tsx": "^4.23.15",
+        "typescript": "~5.9.3",
+        "vite": "^8.3.1",
+        "vitest": "^5.0.1",
+        "ws": "^8.21.3"
+    }
+}

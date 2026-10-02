@@ -1,0 +1,203 @@
+@layer screens {
+    .credits-section {
+        margin-top: var(--space-7);
+    }
+
+    .credits-section:first-of-type {
+        margin-top: 0;
+    }
+
+    .credits-section > .section-title {
+        margin-top: 0;
+    }
+
+    .credits-prose {
+        max-width: var(--measure);
+        margin: 0 0 var(--space-3);
+        color: var(--c-text-dim);
+    }
+
+    .credits-prose strong {
+        color: var(--c-text);
+        font-weight: var(--weight-strong);
+    }
+
+    .credits-small {
+        max-width: var(--measure);
+        margin: var(--space-3) 0 0;
+        color: var(--c-text-dim);
+        font-size: var(--text-sm);
+    }
+
+    /* Six themes in one row; at phone width three and three, never a row
+       of five with one left over. */
+    .theme-row {
+        list-style: none;
+        margin: 0 0 var(--space-4);
+        padding: 0;
+        display: grid;
+        grid-template-columns: repeat(6, minmax(0, 1fr));
+        gap: var(--space-3);
+    }
+
+    .theme-tile {
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-2);
+        padding: var(--space-2);
+        background: var(--c-bg-raised);
+        box-shadow: inset 0 var(--border-w) 0 var(--surface-edge-hi);
+    }
+
+    /* The swatch sits on the raised tile, so a theme whose board ground
+       matches its own page still shows its edge. */
+    .theme-tile .theme-swatch {
+        height: auto;
+        aspect-ratio: 29 / 10;
+    }
+
+    .theme-tile-name {
+        padding: 0 var(--space-1) var(--space-half);
+        font-weight: var(--weight-strong);
+        color: var(--c-text);
+        line-height: var(--leading-tight);
+    }
+
+    /* One credit per row: what, who, what it gives here, and the terms. */
+    .credit-rows {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+        background: var(--c-bg-raised);
+        box-shadow: inset 0 var(--border-w) 0 var(--surface-edge-hi);
+    }
+
+    .credit-row {
+        display: grid;
+        grid-template-columns: minmax(0, var(--credit-who-w)) minmax(0, 1fr) minmax(0, var(--credit-terms-w));
+        gap: var(--space-1) var(--space-5);
+        align-items: baseline;
+        padding: var(--space-3) var(--space-4);
+        font-size: var(--text-sm);
+    }
+
+    .credit-row + .credit-row {
+        box-shadow: inset 0 var(--border-w) 0 var(--c-border);
+    }
+
+    .credit-who,
+    .credit-terms {
+        display: flex;
+        flex-direction: column;
+    }
+
+    /* A name can be a web address, one word with no space to wrap at,
+       which at large text on a phone is wider than the row. */
+    .credit-who a {
+        font-size: var(--text-base);
+        font-weight: var(--weight-strong);
+        overflow-wrap: anywhere;
+    }
+
+    /* A paragraph, so a link inside it is underlined as in any running text. */
+    .credit-for {
+        margin: 0;
+        color: var(--c-text);
+    }
+
+    .credit-by,
+    .credit-copy {
+        color: var(--c-text-dim);
+    }
+
+    .credit-copy {
+        font-size: var(--text-xs);
+    }
+
+    .credit-terms a,
+    .credit-plain {
+        font-weight: var(--weight-strong);
+    }
+
+    .credit-plain {
+        color: var(--c-text);
+    }
+
+    /* The platform a link opens: its mark at the smallest size Discord
+       allows its symbol, which YouTube's icon matches, and inline, so the
+       label keeps the row's baseline. */
+    .credit-platform {
+        color: var(--c-text);
+        font-weight: var(--weight-strong);
+    }
+
+    .credit-platform svg {
+        height: var(--discord-symbol-h);
+        width: auto;
+        margin-right: var(--discord-symbol-space);
+        vertical-align: middle;
+    }
+
+    .youtube-icon-frame {
+        fill: var(--c-youtube);
+    }
+
+    .youtube-icon-play {
+        fill: var(--c-on-youtube);
+    }
+
+    /* Blurple is one of the three colors Discord allows its symbol, and the
+       one that reads on every theme's ground. */
+    .credit-platform .discord-symbol {
+        fill: var(--c-discord);
+    }
+
+    @media (forced-colors: active) {
+        .credit-platform .discord-symbol,
+        .credit-platform .youtube-icon-frame {
+            fill: CanvasText;
+        }
+
+        .credit-platform .youtube-icon-play {
+            fill: Canvas;
+        }
+    }
+
+    .credits-license {
+        max-width: var(--measure);
+        margin-top: var(--space-3);
+        color: var(--c-text-dim);
+        font-size: var(--text-sm);
+    }
+
+    .credits-license summary {
+        color: var(--c-accent);
+        font-weight: var(--weight-strong);
+        cursor: pointer;
+    }
+
+    /* Three and three while the names fit, then two and one a row as
+       large text leaves each tile less room than its longest name. */
+    @media (max-width: 40rem) {
+        .theme-row {
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: var(--space-2);
+        }
+
+        .credit-row {
+            grid-template-columns: minmax(0, 1fr);
+        }
+    }
+
+    @media (max-width: 17.5rem) {
+        .theme-row {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+    }
+
+    @media (max-width: 13rem) {
+        .theme-row {
+            grid-template-columns: minmax(0, 1fr);
+        }
+    }
+}

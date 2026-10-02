@@ -1,0 +1,26 @@
+@layer screens {
+    .bots-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: var(--space-4);
+        flex-wrap: wrap;
+        margin-bottom: var(--space-4);
+    }
+
+    .bots-head .screen-title {
+        margin: 0;
+    }
+
+    @media (max-width: 48rem) {
+        .col-optional {
+            display: none;
+        }
+    }
+
+    @media (max-width: 30rem) {
+        .col-narrow-optional {
+            display: none;
+        }
+    }
+}

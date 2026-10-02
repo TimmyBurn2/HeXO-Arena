@@ -1,0 +1,51 @@
+/* Six palette from playsix by CixMango, MIT. */
+/*
+ * Gold and sky stones on a blue-black field, after playsix's default look.
+ * The two stones differ in hue more than in lightness, so x carries an
+ * inset mark; derived steps fill the ramp between the source colors.
+ */
+
+@layer theme {
+    :root[data-theme='six'],
+    [data-theme-preview='six'] {
+        --c-bg: #080b12;
+        --c-bg-raised: #0f141c;
+        --c-bg-overlay: #191e28;
+        --c-bg-input: #1d232e;
+        --c-bg-hover: #1e2430;
+        --c-bg-active: #252c37;
+        --c-border: #22272f;
+        --c-border-strong: #373d48;
+        --c-text: #f4f5f8;
+        --c-text-dim: #9fa5af;
+        --c-good: #6ecf91;
+        --c-good-solid: #38945a;
+        --c-bad: #ff9f94;
+        --c-bad-solid: #f1453f;
+        --c-warn: #f8a34f;
+        --c-online: #38945a;
+        --c-offline: #737b8c;
+        --c-backdrop: #03050ab8;
+
+        --board-bg: #07090e;
+        --board-cell: #141924;
+        --board-line: #07090e;
+        --board-frontier: #5d6f93;
+        --board-stone-x: #f6d04a;
+        --board-stone-o: #87d1f7;
+        --board-focus: #f4f5f8;
+        --board-number-x: #07090e;
+        --board-number-o: #07090e;
+        --board-pending: #f4f5f8;
+        --board-last: #f4f5f8;
+        --board-win: #f1453f;
+        --board-win-casing: #07090e;
+
+        --stone-mark-x: #07090e;
+        --stone-shine-x: #ffffff;
+        --stone-shine-o: #ffffff;
+        --stone-shine-opacity: 0.5;
+        --surface-edge-hi: #f4f5f812;
+        --lift: drop-shadow(0 10px 14px #03050a8c) drop-shadow(0 1px 2px #03050a73);
+    }
+}

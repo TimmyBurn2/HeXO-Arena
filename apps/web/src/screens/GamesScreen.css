@@ -1,0 +1,295 @@
+@layer screens {
+    /* The filters' popover hangs under the search row. */
+    .games-search {
+        position: relative;
+    }
+
+    /* Large text puts the Filters button on a line of its own under Player. */
+    .games-filters {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: flex-end;
+        gap: var(--space-3);
+    }
+
+    .games-field {
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-1);
+        min-width: 0;
+        max-width: 100%;
+    }
+
+    .games-field label {
+        color: var(--c-text-dim);
+        font-size: var(--text-sm);
+    }
+
+    .games-field input[type='text'] {
+        width: var(--games-name-w);
+    }
+
+    .games-field:has(:disabled) label {
+        color: var(--c-border-strong);
+    }
+
+    .games-panel[data-mode='popover'] {
+        top: calc(100% + var(--space-2));
+        right: auto;
+        left: 0;
+        width: var(--games-panel-w);
+    }
+
+    .games-panel-title {
+        margin: 0;
+        font-size: var(--text-lg);
+        font-weight: var(--weight-display);
+    }
+
+    .games-panel-note {
+        margin: var(--space-2) 0 0;
+    }
+
+    .games-panel-fields {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(min(100%, var(--games-field-min)), 1fr));
+        align-items: end;
+        gap: var(--space-3);
+        margin-top: var(--space-3);
+    }
+
+    .games-panel-fields .games-field,
+    .games-panel-fields .games-field input,
+    .games-panel-fields .games-field select {
+        width: 100%;
+    }
+
+    .games-panel-foot {
+        display: flex;
+        justify-content: flex-end;
+        margin-top: var(--space-5);
+    }
+
+    .games-panel[data-mode='sheet'] .games-panel-foot .btn {
+        flex: 1;
+        height: var(--control-lg);
+    }
+
+    .games-chips {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: var(--space-2);
+        margin-top: var(--space-4);
+    }
+
+    .chip {
+        display: inline-flex;
+        align-items: center;
+        gap: var(--space-1);
+        min-height: var(--control-sm);
+        max-width: 100%;
+        padding: 0 var(--space-2) 0 var(--space-3);
+        border: none;
+        background: var(--c-bg-active);
+        color: var(--c-text);
+        font-size: var(--text-sm);
+        font-weight: var(--weight-strong);
+        overflow-wrap: anywhere;
+        text-align: left;
+        cursor: pointer;
+        transition: background var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease);
+    }
+
+    .chip:hover {
+        background: var(--c-bg-hover);
+    }
+
+    .chip svg {
+        flex: none;
+        width: var(--text-base);
+        height: var(--text-base);
+        fill: none;
+        stroke: currentColor;
+        stroke-width: 2;
+        stroke-linecap: round;
+        color: var(--c-text-dim);
+    }
+
+    .games-note {
+        margin: var(--space-3) 0 var(--space-4);
+    }
+
+    .games-h2h {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        align-items: center;
+        gap: var(--space-2) var(--space-5);
+        margin-bottom: var(--space-4);
+        padding: var(--space-4) var(--space-5);
+        background: var(--c-bg-raised);
+        box-shadow: inset 0 var(--border-w) 0 var(--surface-edge-hi);
+    }
+
+    .games-h2h-title {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: var(--space-1) var(--space-2);
+        margin: 0;
+        font-size: var(--text-lg);
+        font-weight: var(--weight-regular);
+        color: var(--c-text-dim);
+    }
+
+    /* A narrow window drops the badge under the name rather than break a short name mid-word. */
+    .games-h2h-name {
+        display: inline-flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: var(--space-2);
+        color: var(--c-text);
+        font-weight: var(--weight-display);
+        overflow-wrap: break-word;
+    }
+
+    .games-h2h-name .player-name {
+        font-weight: inherit;
+    }
+
+    .games-h2h-name .badge-bot {
+        margin-left: 0;
+    }
+
+    .games-h2h-figures {
+        grid-row: span 2;
+        display: flex;
+        gap: var(--space-5);
+        margin: 0;
+        padding: 0;
+        list-style: none;
+    }
+
+    .games-h2h-figures li {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        min-width: 0;
+    }
+
+    .games-h2h-n {
+        font-size: var(--text-2xl);
+        font-weight: var(--weight-display);
+        line-height: var(--leading-tight);
+        font-variant-numeric: tabular-nums;
+    }
+
+    .games-h2h-label {
+        color: var(--c-text-dim);
+        font-size: var(--text-sm);
+        overflow-wrap: anywhere;
+        text-align: center;
+    }
+
+    .games-h2h-split {
+        margin: 0;
+        color: var(--c-text-dim);
+        font-size: var(--text-sm);
+    }
+
+    .games-paging {
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-2);
+        margin-top: var(--space-4);
+    }
+
+    .games-paging-line {
+        margin: var(--space-4) 0 0;
+    }
+
+    .games-paging .games-paging-line {
+        margin: 0;
+    }
+
+    /* Large text on a narrow window wraps the page links rather than push the page sideways. */
+    .games-pages,
+    .games-page-numbers {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: var(--space-1);
+    }
+
+    .games-pages {
+        gap: var(--space-2);
+    }
+
+    .games-page-numbers {
+        margin: 0;
+        padding: 0;
+        list-style: none;
+    }
+
+    .games-page-number {
+        min-width: var(--control-md);
+        padding: 0 var(--space-2);
+        background: transparent;
+        font-variant-numeric: tabular-nums;
+    }
+
+    .games-page-number:hover {
+        background: var(--c-bg-hover);
+    }
+
+    .games-page-number[aria-current='page'] {
+        background: var(--c-bg-active);
+        box-shadow: inset 0 calc(-1 * var(--focus-w)) 0 var(--c-accent);
+    }
+
+    .games-cap {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: var(--space-2) var(--space-3);
+        margin: var(--space-3) 0 0;
+    }
+
+    /* The figures take their own row under the names on a narrow window. */
+    @media (max-width: 40rem) {
+        .games-h2h {
+            grid-template-columns: minmax(0, 1fr);
+            padding: var(--space-4);
+        }
+
+        .games-h2h-figures {
+            grid-row: auto;
+            justify-content: space-between;
+        }
+
+        .games-pages .btn {
+            min-width: var(--control-lg);
+            height: var(--control-lg);
+        }
+
+        /* Previous and Next share the first row, the page numbers wrap under them. */
+        .games-pages {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+        }
+
+        .games-pages > :first-child {
+            justify-self: start;
+        }
+
+        .games-pages > :last-child {
+            grid-row: 1;
+            grid-column: 2;
+            justify-self: end;
+        }
+
+        .games-page-numbers {
+            grid-column: 1 / -1;
+        }
+    }
+}

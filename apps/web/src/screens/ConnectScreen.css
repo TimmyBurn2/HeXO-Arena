@@ -1,0 +1,74 @@
+@layer screens {
+    .steps {
+        list-style: none;
+        margin: var(--space-4) 0 0;
+        padding: 0;
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-5);
+    }
+
+    .steps li {
+        display: flex;
+        gap: var(--space-3);
+        align-items: flex-start;
+    }
+
+    /* An upcoming step sits on the raised surface, the quietest one dim
+       text is held to AA on; done steps lift to hover, the current one
+       takes the accent. */
+    .steps .step-n {
+        flex: none;
+        width: var(--control-md);
+        height: var(--control-md);
+        background: var(--c-bg-raised);
+        color: var(--c-text-dim);
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        font-size: var(--text-sm);
+        font-weight: var(--weight-display);
+    }
+
+    .steps li.active .step-n {
+        background: var(--c-accent-bg);
+        color: var(--c-accent);
+    }
+
+    .steps li.done .step-n {
+        background: var(--c-bg-hover);
+        color: var(--c-good);
+    }
+
+    .steps .step-body {
+        display: flex;
+        min-width: 0;
+        flex-direction: column;
+        gap: var(--space-2);
+        align-items: flex-start;
+    }
+
+    .steps .step-body h2 {
+        margin: 0;
+        font-size: var(--text-base);
+    }
+
+    .steps .step-body p {
+        margin: 0;
+        color: var(--c-text-dim);
+        font-size: var(--text-sm);
+    }
+
+    .steps .step-body .discord-sign-in {
+        margin: 0;
+    }
+
+    /* Large text on a narrow window leaves the body too little room beside
+       its number, so the number stands above it. */
+    @media (max-width: 19.5rem) {
+        .steps li {
+            flex-direction: column;
+            align-items: stretch;
+        }
+    }
+}

@@ -1,0 +1,195 @@
+/*
+ * The only place an absolute size may appear, so no theme can change
+ * proportion.
+ */
+
+@layer scale {
+    :root {
+        --font-sans: system-ui, -apple-system, 'Segoe UI', Roboto,
+            'Helvetica Neue', Arial, sans-serif;
+        --font-mono: ui-monospace, 'SF Mono', 'Cascadia Mono', Menlo, Consolas,
+            'Liberation Mono', monospace;
+        /* the subset holds only the wordmark's letters, so this face
+           suits no other text */
+        --font-display: 'Chakra Petch', var(--font-sans);
+
+        --text-xs: 0.75rem;
+        --text-sm: 0.875rem;
+        --text-base: 1rem;
+        --text-lg: 1.125rem;
+        --text-xl: 1.5rem;
+        --text-2xl: 2rem;
+        --text-wordmark: 1.375rem;
+        --text-rung-1: 2.5rem;
+
+        --weight-regular: 400;
+        --weight-strong: 600;
+        --weight-display: 800;
+        --tracking-display: -0.015em;
+        --tracking-badge: 0.04em;
+
+        --leading-tight: 1.25;
+        --leading-normal: 1.5;
+
+        --measure: 40rem;
+
+        --space-half: 0.125rem;
+        --space-1: 0.25rem;
+        --space-2: 0.5rem;
+        --space-3: 0.75rem;
+        --space-4: 1rem;
+        --space-5: 1.5rem;
+        --space-6: 2rem;
+        --space-7: 3rem;
+        --space-8: 4rem;
+
+        --control-sm: 1.75rem;
+        --control-md: 2.25rem;
+        --control-lg: 2.75rem;
+        --check-size: 1.125rem;
+
+        --radius-full: 999px;
+
+        /* The cut runs along a pointy-top cell's shoulder: across by the
+           cut, down by the cut times tan 30 degrees. */
+        --cut-sm: 0.5rem;
+        --cut-md: 0.8rem;
+        --cut-lg: 1.2rem;
+        --cut-sm-rise: calc(var(--cut-sm) * 0.577);
+        --cut-md-rise: calc(var(--cut-md) * 0.577);
+        --cut-lg-rise: calc(var(--cut-lg) * 0.577);
+        --cut-sm-path: polygon(
+            var(--cut-sm) 0, calc(100% - var(--cut-sm)) 0, 100% var(--cut-sm-rise),
+            100% calc(100% - var(--cut-sm-rise)), calc(100% - var(--cut-sm)) 100%,
+            var(--cut-sm) 100%, 0 calc(100% - var(--cut-sm-rise)), 0 var(--cut-sm-rise)
+        );
+        --cut-md-path: polygon(
+            var(--cut-md) 0, calc(100% - var(--cut-md)) 0, 100% var(--cut-md-rise),
+            100% calc(100% - var(--cut-md-rise)), calc(100% - var(--cut-md)) 100%,
+            var(--cut-md) 100%, 0 calc(100% - var(--cut-md-rise)), 0 var(--cut-md-rise)
+        );
+        --cut-lg-path: polygon(
+            var(--cut-lg) 0, calc(100% - var(--cut-lg)) 0, 100% var(--cut-lg-rise),
+            100% calc(100% - var(--cut-lg-rise)), calc(100% - var(--cut-lg)) 100%,
+            var(--cut-lg) 100%, 0 calc(100% - var(--cut-lg-rise)), 0 var(--cut-lg-rise)
+        );
+        --hex-path: polygon(50% 0, 100% 25%, 100% 75%, 50% 100%, 0 75%, 0 25%);
+
+        --border-w: 1px;
+        --underline-offset: 0.25em;
+        --focus-w: 2px;
+
+        --shell-max: 72rem;
+        --shell-pad: var(--space-4);
+        --panel-w: 20rem;
+        --settings-w: 24rem;
+        --identity-menu-w: 16rem;
+        --theme-swatch-h: 2.75rem;
+        --credit-who-w: 15rem;
+        --credit-terms-w: 17rem;
+        --legal-contents-w: 15rem;
+        --sheet-panel-min-h: 10rem;
+        --identity-size: 4rem;
+        --mark-size: 2.5rem;
+        --mark-size-sm: 2rem;
+        --plate-name-w: 12rem;
+        --card-min: 14rem;
+        --mini-card-min: 20rem;
+        --home-panel-max: 36rem;
+        --scrub-count-min: 9rem;
+        --games-name-w: 11rem;
+        --games-panel-w: 34rem;
+        --rundown-w: 30rem;
+        --rundown-glyph-w: 0.875rem;
+        --games-field-min: 9.5rem;
+        --facts-term-w: 6.5rem;
+        --skeleton-line-w: 24rem;
+        --skeleton-short-w: 16rem;
+        --round-step-w: 1.75rem;
+        --xt-hex-w: 1.25rem;
+        --xt-name-w: 11rem;
+        --tournament-side-w: 26rem;
+        --rating-chart-h: 16rem;
+        --rating-chart-gutter: 3.5rem;
+        --chart-line-w: 2px;
+        --chart-dot: 0.875rem;
+        --chart-band-opacity: 0.08;
+        --rung-rank-w: 3.5rem;
+        --game-max: 90rem;
+        --topbar-h: 4rem;
+        --topbar-h-sm: 3.75rem;
+        --tabbar-h: 3.5rem;
+        --drawer-w: 21rem;
+        --sheet-peek-h: 4.5rem;
+        --sheet-peek-replay-h: 8.25rem;
+        --swatch-size: 0.875rem;
+        --pip-size: 0.75rem;
+        /* Discord's smallest symbol on screen is 20 px tall, with a third
+           of its width clear around it. */
+        --discord-symbol-h: 1.25rem;
+        --github-mark-h: 1rem;
+        --discord-symbol-space: 0.625rem;
+        --discord-plate-size: 3rem;
+        --play-card-w: 27rem;
+        --play-card-min: 22rem;
+        --play-column-w: 40rem;
+        --clock-tile-h: 3.5rem;
+        --opening-preview-w: 7.5rem;
+        --stepper-value-w: 5.5rem;
+        --chevron-size: 0.75rem;
+        --welcome-w: 34rem;
+        --z-sticky: 1;
+        --z-hud: 2;
+        --z-drawer: 3;
+        --z-popover: 4;
+        --hot-edge-w: 0.75rem;
+        /* the board's camera keeps this clear above and below for the
+           overlays */
+        --hud-clear: 4.75rem;
+        /* how far the result chip reaches up the stage, which the game
+           screen measures; nothing until it does */
+        --hud-reach: 0rem;
+
+        /* every motion sits in one band, short enough to never delay play */
+        --dur-fast: 120ms;
+        --dur-base: 160ms;
+        --dur-slow: 180ms;
+        --ease: cubic-bezier(0.2, 0, 0, 1);
+
+        --board-stone-scale: 0.82;
+        --board-line-w: 1px;
+        --board-number-size: 1.25rem;
+        --board-ring-w: 2px;
+        --board-pending-dash: 6 4;
+        /* screen pixels at any board scale: each casing edge beside the
+           line stays two whole pixels, never a sub-pixel fringe */
+        --board-win-w: 4px;
+        --board-win-casing-w: 8px;
+        --board-stone-mark-w: 1.5px;
+        /* a cell never renders smaller than this; a finger needs more,
+           but a finished board takes no taps and keeps the reading one */
+        --board-cell-read: 1.75rem;
+        --board-cell-min: var(--board-cell-read);
+        --board-frontier-w: 1.5px;
+        --board-frontier-dash: 5 4;
+        /* the pending mark previews its stone at this strength */
+        --board-ghost-opacity: 0.35;
+        /* a pattern's unlit cells, and a guest's empty rosette */
+        --sigil-trace-opacity: 0.2;
+        --sigil-guest-opacity: 0.35;
+    }
+
+    @media (pointer: coarse) {
+        :root {
+            --board-cell-min: 2.75rem;
+        }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+        :root {
+            --dur-fast: 0s;
+            --dur-base: 0s;
+            --dur-slow: 0s;
+        }
+    }
+}

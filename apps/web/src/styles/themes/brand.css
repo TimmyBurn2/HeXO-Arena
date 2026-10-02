@@ -1,0 +1,39 @@
+/*
+ * One accent, one bot hue, and Discord's and YouTube's colors, identical
+ * in every theme.
+ * Themes never set these; the contrast check holds them against each
+ * theme's surfaces.
+ */
+
+@layer brand {
+    :root {
+        --c-accent: hsl(43 92% 60%);
+        --c-accent-hover: hsl(43 95% 76%);
+        --c-accent-solid: hsl(43 92% 60%);
+        --c-accent-solid-hover: hsl(43 95% 68%);
+        --c-accent-bg: hsl(43 45% 17%);
+        --c-text-on-accent: hsl(222 32% 8%);
+        --c-focus: hsl(43 92% 60%);
+
+        --c-bot: hsl(188 70% 62%);
+        --c-bot-bg: hsl(188 45% 16%);
+
+        /* Discord's brand blurple and the white its symbol takes on it;
+           the hover darkens so the white label gains contrast. */
+        --c-discord: #5865f2;
+        --c-discord-hover: #4954d6;
+        --c-on-discord: #ffffff;
+
+        /* YouTube's icon red and the white of its play triangle. */
+        --c-youtube: #ff0000;
+        --c-on-youtube: #ffffff;
+
+        /* GitHub's mark in white, one of the two colors GitHub allows it,
+           and the one that reads on every theme's dark ground. */
+        --c-github: #ffffff;
+
+        /* a luminance mask's two ends: what it keeps and what it cuts */
+        --mask-keep: #ffffff;
+        --mask-cut: #000000;
+    }
+}

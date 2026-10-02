@@ -1,0 +1,30 @@
+{
+    "operator": {
+        "name": "<operator name>",
+        "street": "<street and number>",
+        "postcodeAndCity": "<postcode and city>",
+        "country": "<country>",
+        "email": "<contact>@<domain>",
+        "discord": "<discord handle>"
+    },
+    "host": {
+        "name": "<hosting company>",
+        "street": "<street and number>",
+        "postcodeAndCity": "<postcode and city>",
+        "country": "<country>",
+        "serverLocation": "<city and country of the server>"
+    },
+    "supervisoryAuthority": {
+        "name": "<data protection authority>",
+        "street": "<street and number>",
+        "postcodeAndCity": "<postcode and city>",
+        "country": "<country>",
+        "url": "https://<authority-domain>/"
+    },
+    "mailProvider": {
+        "name": "<mail provider>",
+        "street": "<street and number>",
+        "postcodeAndCity": "<postcode and city>",
+        "country": "<country>"
+    }
+}

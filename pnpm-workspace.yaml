@@ -1,0 +1,11 @@
+packages:
+    - apps/*
+    - packages/*
+    - scripts/*
+
+allowBuilds:
+  better-sqlite3: false
+  esbuild: true
+
+minimumReleaseAgeExclude:
+  - vite@8.3.1

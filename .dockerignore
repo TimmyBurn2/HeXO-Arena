@@ -1,0 +1,11 @@
+.git
+node_modules
+dist
+coverage
+data
+*.sqlite
+*.sqlite-wal
+*.sqlite-shm
+.env
+# A deployment's legal details hold the operator's real name and address.
+legal/details.json

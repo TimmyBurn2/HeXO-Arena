@@ -1,0 +1,143 @@
+# Production stack.
+# The box never builds: every image is pulled.
+# Interpolation reads HEXO_ARENA_IMAGE and HEXO_ARENA_DOMAIN from `.env`
+# beside this file; the app's own settings and secrets live in
+# `hexo-arena.env`.
+
+x-hardened: &hardened
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    restart: unless-stopped
+    logging:
+        driver: json-file
+        options:
+            max-size: 10m
+            max-file: '5'
+
+services:
+    app:
+        <<: *hardened
+        image: ${HEXO_ARENA_IMAGE:?set HEXO_ARENA_IMAGE in .env}
+        env_file: hexo-arena.env
+        environment:
+            # The internal network has no route out; Discord is reached
+            # through the egress proxy or not at all.
+            NODE_USE_ENV_PROXY: '1'
+            HTTPS_PROXY: http://egress:3128
+            # Read per request, so a front-end redeploy reaches the og
+            # shell without restarting the app.
+            WEB_INDEX_PATH: /srv/web/index.html
+            # Caddy's fixed address below,
+            # the one peer whose forwarded client address the rate limits read.
+            TRUSTED_PROXY: 172.29.64.10
+        mem_limit: 512m
+        cpus: 1.0
+        pids_limit: 256
+        tmpfs:
+            - /run/hexo-arena:mode=0700,uid=10001,gid=10001
+            - /tmp:mode=1777,size=16m
+        volumes:
+            - data:/data
+            - backup:/backup
+            - web:/srv/web:ro
+            # Read only to name the legal documents it lacks; Caddy serves it.
+            - ./legal:/srv/legal:ro
+        networks: [internal]
+        # Covers the 120 s drain plus the close; docker's default of 10 s
+        # would cut every live game short.
+        stop_grace_period: 150s
+        depends_on: [egress]
+
+    egress:
+        <<: *hardened
+        image: ${HEXO_ARENA_IMAGE:?set HEXO_ARENA_IMAGE in .env}
+        command: [node, --max-old-space-size=32, dist/egress.js]
+        mem_limit: 64m
+        cpus: 0.25
+        pids_limit: 32
+        tmpfs:
+            - /tmp:mode=1777,size=1m
+        networks: [internal, edge]
+        healthcheck:
+            disable: true
+
+    # Copies the static site of the pulled image into the volume the proxy
+    # serves, then exits; rerunning it alone redeploys the front end without
+    # touching the app.
+    web:
+        <<: *hardened
+        restart: 'no'
+        image: ${HEXO_ARENA_IMAGE:?set HEXO_ARENA_IMAGE in .env}
+        command: [sh, -c, 'find /srv/web -mindepth 1 -delete && cp -R /app/web/. /srv/web/']
+        network_mode: none
+        mem_limit: 64m
+        cpus: 0.25
+        pids_limit: 16
+        volumes:
+            - web:/srv/web
+        healthcheck:
+            disable: true
+
+    caddy:
+        <<: *hardened
+        # Pinned by digest: a moved tag never changes what the box runs.
+        image: caddy:2.11.4@sha256:0c994536bddb66445885237f1a5dcc1916bccea922661c76b4e9fc24061f9b52
+        environment:
+            HEXO_ARENA_DOMAIN: ${HEXO_ARENA_DOMAIN:?set HEXO_ARENA_DOMAIN in .env}
+            # Go collects harder near the cap instead of crossing it under
+            # many open connections.
+            GOMEMLIMIT: 200MiB
+        cap_add: [NET_BIND_SERVICE]
+        mem_limit: 256m
+        cpus: 0.25
+        pids_limit: 64
+        ports:
+            - 80:80
+            - 443:443
+            - 443:443/udp
+        tmpfs:
+            - /tmp:size=16m
+        volumes:
+            - ./Caddyfile:/etc/caddy/Caddyfile:ro
+            - web:/srv/web:ro
+            - caddy-data:/data
+            - caddy-config:/config
+            # The deployment's legal documents and their details, served
+            # as files.
+            - ./legal:/srv/legal:ro
+        networks:
+            internal:
+                ipv4_address: 172.29.64.10
+            edge: {}
+        healthcheck:
+            test: [CMD, nc, -z, 127.0.0.1, '443']
+            interval: 30s
+            timeout: 5s
+            retries: 3
+        depends_on:
+            app:
+                condition: service_started
+            web:
+                condition: service_completed_successfully
+
+networks:
+    # No gateway: members reach each other and nothing else.
+    # A fixed subnet gives Caddy a fixed address;
+    # the others draw from the upper half, clear of it.
+    internal:
+        internal: true
+        ipam:
+            config:
+                - subnet: 172.29.64.0/24
+                  ip_range: 172.29.64.128/25
+    # Without IPv6 here, Docker publishes the ports on IPv4 alone.
+    edge:
+        enable_ipv6: true
+
+volumes:
+    data:
+    backup:
+    web:
+    caddy-data:
+    caddy-config:

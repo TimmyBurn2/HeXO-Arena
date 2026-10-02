@@ -1,0 +1,137 @@
+@layer components {
+    .live-grid {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(min(100%, var(--mini-card-min)), 1fr));
+        gap: var(--space-4);
+    }
+
+    .live-card {
+        position: relative;
+        display: flex;
+        flex-direction: column;
+        height: 100%;
+        background: var(--c-bg-raised);
+        box-shadow: inset 0 var(--border-w) 0 var(--surface-edge-hi);
+        transition: background var(--dur-fast) var(--ease);
+    }
+
+    .live-card .mini-board {
+        order: -1;
+    }
+
+    .live-card:hover {
+        background: var(--c-bg-hover);
+    }
+
+    /* A board's edge cells reach a cell past it, under what stands around it;
+       the text stacks above them,
+       so it reads, and is measured, clear. */
+    .live-card-body {
+        z-index: 1;
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-2);
+        padding: var(--space-3) var(--space-4) var(--space-4);
+    }
+
+    .live-card-title {
+        margin: 0;
+        font-size: var(--text-base);
+        line-height: var(--leading-tight);
+    }
+
+    .live-card-link {
+        display: inline-flex;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: var(--space-2) var(--space-3);
+        color: var(--c-text);
+        text-decoration: none;
+    }
+
+    /* A seat keeps its name whole, taking the next line when the title is full,
+       and breaks a name only wider than the card. */
+    .live-card .live-seat {
+        display: inline-flex;
+        flex: none;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: var(--space-2);
+        max-width: 100%;
+        min-width: 0;
+    }
+
+    /* The swatch holds to the first line of its name, however the name wraps. */
+    .live-card .live-seat-who {
+        display: inline-flex;
+        align-items: flex-start;
+        gap: var(--space-2);
+        min-width: 0;
+    }
+
+    .live-card .live-seat-who .swatch {
+        margin-block-start: calc((1lh - var(--swatch-size)) / 2);
+    }
+
+    .live-card .live-name {
+        min-width: 0;
+        font-weight: var(--weight-display);
+        overflow-wrap: break-word;
+    }
+
+    .live-card .badge-bot {
+        margin-left: 0;
+    }
+
+    .live-card .live-vs {
+        color: var(--c-text-dim);
+        font-size: var(--text-sm);
+        font-weight: var(--weight-regular);
+    }
+
+    .live-card-link:hover {
+        color: var(--c-text);
+    }
+
+    /* The link covers the card, board included, as its one target. */
+    .live-card-link::after {
+        content: '';
+        position: absolute;
+        inset: 0;
+    }
+
+    .live-card-link:focus-visible {
+        outline: none;
+    }
+
+    .live-card-meta {
+        display: flex;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: var(--space-2) var(--space-3);
+        margin: 0;
+        color: var(--c-text-dim);
+        font-size: var(--text-sm);
+    }
+
+    /* Whose turn, with the clock when there is one, holds its height either way,
+       so cards in a row line up. */
+    .live-card-turn {
+        display: flex;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: var(--space-2);
+        min-height: var(--control-sm);
+        margin: 0;
+        color: var(--c-text);
+        font-size: var(--text-sm);
+    }
+
+    .live-card .clock {
+        font-size: var(--text-sm);
+        padding: var(--space-half) var(--space-2);
+    }
+}

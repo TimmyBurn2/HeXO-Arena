@@ -1,0 +1,159 @@
+@layer screens {
+    .legal-head {
+        margin-bottom: var(--space-6);
+    }
+
+    /* The notice's name wraps as "Impressum /" over "Legal notice". */
+    .legal-head .screen-title {
+        margin-bottom: var(--space-1);
+        text-wrap: balance;
+    }
+
+    .legal-head .note {
+        margin: 0;
+    }
+
+    .legal {
+        display: grid;
+        gap: var(--space-6) var(--space-7);
+        align-items: start;
+    }
+
+    /* A long page lists its sections beside the text where the window has
+       room for both, and above the text where it has not; beside, the list
+       stays in view as the text scrolls. */
+    @media (min-width: 60rem) {
+        .legal-with-contents {
+            grid-template-columns: minmax(0, var(--measure)) minmax(0, var(--legal-contents-w));
+        }
+
+        .legal-contents {
+            position: sticky;
+            top: var(--space-5);
+            grid-column: 2;
+            grid-row: 1;
+        }
+    }
+
+    .legal-contents-title {
+        margin: 0 0 var(--space-2);
+        color: var(--c-text-dim);
+        font-size: var(--text-sm);
+        font-weight: var(--weight-strong);
+    }
+
+    .legal-contents ol {
+        margin: 0;
+        padding: 0;
+        list-style: none;
+        font-size: var(--text-sm);
+    }
+
+    .legal-contents li {
+        break-inside: avoid;
+    }
+
+    /* An entry that wraps, as in two columns on a phone, does so in even
+       lines, never leaving one word alone. */
+    .legal-contents a {
+        display: block;
+        padding: var(--space-1) 0;
+        line-height: var(--leading-tight);
+        text-wrap: balance;
+    }
+
+    /* Above the text, the list takes two columns where they have room,
+       so the text starts within the first screen; the switch is in rem,
+       so larger text keeps one column. */
+    @media (20rem <= width < 60rem) {
+        .legal-contents ol {
+            columns: 2;
+            column-gap: var(--space-5);
+        }
+    }
+
+    .legal-text {
+        max-width: var(--measure);
+    }
+
+    .legal-section + .legal-section {
+        margin-top: var(--space-6);
+    }
+
+    .legal-section > .section-title {
+        margin: 0 0 var(--space-2);
+    }
+
+    /* A fragment lands the heading a little below the window's edge. */
+    .legal-section {
+        scroll-margin-top: var(--space-5);
+    }
+
+    .legal-section p,
+    .legal-section ul,
+    .legal-section ol,
+    .legal-section blockquote,
+    .legal-section pre,
+    .legal-section .legal-table {
+        margin: 0 0 var(--space-3);
+        line-height: var(--leading-normal);
+    }
+
+    .legal-section h3,
+    .legal-section h4,
+    .legal-section h5,
+    .legal-section h6 {
+        margin: var(--space-4) 0 var(--space-2);
+        font-size: var(--text-base);
+    }
+
+    .legal-section blockquote > :last-child {
+        margin-bottom: 0;
+    }
+
+    .legal-section > :last-child {
+        margin-bottom: 0;
+    }
+
+    .legal-section ul,
+    .legal-section ol {
+        padding-left: var(--space-5);
+    }
+
+    .legal-section li + li {
+        margin-top: var(--space-2);
+    }
+
+    /* A link inside running text needs more than its hue, as in any paragraph. */
+    .legal-section li a:not([class]),
+    .legal-section td a:not([class]) {
+        text-decoration: underline;
+        text-underline-offset: var(--underline-offset);
+    }
+
+    /* A wide table scrolls inside its own frame, never the page. */
+    .legal-table {
+        overflow-x: auto;
+    }
+
+    .legal-table table {
+        border-collapse: collapse;
+    }
+
+    .legal-table th,
+    .legal-table td {
+        padding: var(--space-1) var(--space-3) var(--space-1) 0;
+        text-align: left;
+        vertical-align: top;
+    }
+
+    .legal-section pre {
+        overflow-x: auto;
+        white-space: pre-wrap;
+    }
+
+    /* A long address or link breaks rather than widening the page. */
+    .legal-section {
+        overflow-wrap: anywhere;
+    }
+}

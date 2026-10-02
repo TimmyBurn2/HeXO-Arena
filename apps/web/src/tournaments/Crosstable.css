@@ -1,0 +1,117 @@
+@layer components {
+    /* The table scrolls inside its frame on a narrow window, its name
+       column held in place; the frame holds the column heads' hidden
+       names too, which would otherwise widen the page. */
+    .xt-frame {
+        position: relative;
+        width: fit-content;
+        max-width: 100%;
+        overflow-x: auto;
+        background: var(--c-bg-raised);
+        box-shadow: inset 0 var(--border-w) 0 var(--surface-edge-hi);
+    }
+
+    .xt {
+        width: auto;
+    }
+
+    .xt th,
+    .xt td {
+        padding: var(--space-2);
+        text-align: center;
+    }
+
+    .xt .xt-name {
+        position: sticky;
+        left: 0;
+        z-index: 1;
+        max-width: var(--xt-name-w);
+        background: var(--c-bg-raised);
+        text-align: left;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .xt tbody .xt-name {
+        color: var(--c-text);
+        font-weight: var(--weight-strong);
+    }
+
+    .xt-rank {
+        display: inline-block;
+        min-width: var(--space-5);
+        color: var(--c-text-dim);
+    }
+
+    .xt-self {
+        background: var(--c-bg-active);
+    }
+
+    .xt-pair {
+        display: inline-flex;
+        gap: var(--space-1);
+    }
+
+    .xt-game {
+        display: inline-flex;
+        text-decoration: none;
+    }
+
+    .xt-hex {
+        display: block;
+        width: var(--xt-hex-w);
+        height: auto;
+    }
+
+    .xt-cell {
+        background: var(--board-bg);
+    }
+
+    .xt-ground {
+        fill: var(--board-cell);
+    }
+
+    .xt-x {
+        --xt-ink: var(--board-stone-x);
+    }
+
+    .xt-o {
+        --xt-ink: var(--board-stone-o);
+    }
+
+    .xt-stone {
+        stroke-width: var(--board-ring-w);
+        vector-effect: non-scaling-stroke;
+    }
+
+    .xt-won .xt-stone {
+        fill: var(--xt-ink);
+        stroke: var(--stone-rim);
+    }
+
+    .xt-lost .xt-stone,
+    .xt-none .xt-stone {
+        fill: none;
+        stroke: var(--xt-ink);
+    }
+
+    .xt-live .xt-stone {
+        fill: none;
+        stroke: var(--board-last);
+    }
+
+    .xt-dot {
+        fill: var(--board-frontier);
+    }
+
+    .xt-dash {
+        stroke: var(--board-frontier);
+        stroke-width: var(--board-ring-w);
+        vector-effect: non-scaling-stroke;
+    }
+
+    .xt-total {
+        font-weight: var(--weight-display);
+    }
+}

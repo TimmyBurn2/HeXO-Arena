@@ -1,0 +1,86 @@
+@layer components {
+    .live-list {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-2);
+    }
+
+    /* A whole row is the link, so the target spans the entry. */
+    .live-game {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        flex-wrap: wrap;
+        gap: var(--space-2) var(--space-4);
+        padding: var(--space-3) var(--space-4);
+        background: var(--c-bg-raised);
+        box-shadow: inset 0 var(--border-w) 0 var(--surface-edge-hi);
+        color: var(--c-text);
+        text-decoration: none;
+        transition: background var(--dur-fast) var(--ease);
+    }
+
+    .live-game:hover {
+        background: var(--c-bg-hover);
+        color: var(--c-text);
+    }
+
+    .live-seats {
+        display: flex;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: var(--space-2) var(--space-3);
+        min-width: 0;
+    }
+
+    /* A seat keeps its name whole, taking the next line when the row is full,
+       and breaks a name only wider than the row. */
+    .live-seat {
+        display: inline-flex;
+        align-items: center;
+        gap: var(--space-2);
+        flex: none;
+        flex-wrap: wrap;
+        max-width: 100%;
+        min-width: 0;
+    }
+
+    /* The swatch holds to the first line of its name, however the name wraps. */
+    .live-seat-who {
+        display: inline-flex;
+        align-items: flex-start;
+        gap: var(--space-2);
+        min-width: 0;
+    }
+
+    .live-seat-who .swatch {
+        margin-block-start: calc((1lh - var(--swatch-size)) / 2);
+    }
+
+    .live-name {
+        min-width: 0;
+        font-weight: var(--weight-display);
+        overflow-wrap: break-word;
+    }
+
+    .live-seat .badge-bot {
+        margin-left: 0;
+    }
+
+    .live-vs {
+        color: var(--c-text-dim);
+        font-size: var(--text-sm);
+    }
+
+    .live-meta {
+        display: inline-flex;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: var(--space-2) var(--space-3);
+        color: var(--c-text-dim);
+        font-size: var(--text-sm);
+    }
+}

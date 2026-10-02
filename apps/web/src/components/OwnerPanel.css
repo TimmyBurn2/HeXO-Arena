@@ -1,0 +1,35 @@
+@layer components {
+    .owner-panel {
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-5);
+        margin-top: var(--space-7);
+    }
+
+    .owner-title {
+        margin: 0;
+        font-size: var(--text-lg);
+        font-weight: var(--weight-display);
+    }
+
+    .owner-row {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+        gap: var(--space-3);
+    }
+
+    .owner-text h3 {
+        margin: 0 0 var(--space-1);
+        font-size: var(--text-base);
+    }
+
+    .owner-text p {
+        margin: 0;
+        max-width: var(--measure);
+    }
+
+    .owner-token {
+        align-self: stretch;
+    }
+}

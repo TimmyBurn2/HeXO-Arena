@@ -1,0 +1,651 @@
+@layer screens {
+    /* The roster beside a card that holds the setup; on phones the card
+       alone, its head choosing the bot through a sheet. */
+    .play-layout {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) clamp(var(--play-card-min), 40%, var(--play-card-w));
+        gap: var(--space-6);
+        align-items: start;
+    }
+
+    .block-head {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: var(--space-3);
+        margin: 0 0 var(--space-2);
+    }
+
+    .play-label {
+        margin: 0;
+        color: var(--c-text-dim);
+        font-size: var(--text-sm);
+        font-weight: var(--weight-strong);
+    }
+
+    .roster {
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-half);
+        padding: var(--space-1);
+        background: var(--c-bg-raised);
+        box-shadow: inset 0 var(--border-w) 0 var(--surface-edge-hi);
+    }
+
+    .roster-row {
+        position: relative;
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        align-items: center;
+        gap: var(--space-1) var(--space-4);
+        padding: var(--space-3) var(--space-4);
+        cursor: pointer;
+        transition: background var(--dur-fast) var(--ease);
+    }
+
+    .roster-row:hover {
+        background: var(--c-bg-hover);
+    }
+
+    /* The picked row keeps a surface its dim line reads on and takes the
+       accent ring, as a picked theme does. */
+    .roster-row:has(input:checked) {
+        background: var(--c-bg-hover);
+        box-shadow: inset 0 0 0 var(--focus-w) var(--c-accent);
+    }
+
+    .roster-row input {
+        position: absolute;
+        opacity: 0;
+        pointer-events: none;
+    }
+
+    .roster-row[aria-disabled='true'] {
+        cursor: default;
+    }
+
+    .roster-row[aria-disabled='true']:hover {
+        background: transparent;
+    }
+
+    .roster-row[aria-disabled='true'] .player-name,
+    .roster-row[aria-disabled='true'] .roster-rating {
+        color: var(--c-text-dim);
+    }
+
+    .roster-name {
+        display: flex;
+        align-items: center;
+        gap: var(--space-2);
+        min-width: 0;
+        font-weight: var(--weight-strong);
+    }
+
+    .roster-name .player-name {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .roster-meta {
+        grid-column: 1;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0 var(--space-3);
+        color: var(--c-text-dim);
+        font-size: var(--text-xs);
+    }
+
+    .roster-rating {
+        grid-column: 2;
+        grid-row: 1 / span 2;
+        font-weight: var(--weight-display);
+        font-variant-numeric: tabular-nums;
+        text-align: right;
+    }
+
+    .roster-reason {
+        color: var(--c-warn);
+    }
+
+    .roster-foot {
+        margin: var(--space-3) 0 0;
+    }
+
+    .play-setup-lift {
+        position: sticky;
+        top: var(--space-5);
+        filter: var(--lift);
+    }
+
+    .play-setup {
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-5);
+        padding: var(--space-5);
+        background: var(--c-bg-overlay);
+        box-shadow: inset 0 var(--border-w) 0 var(--surface-edge-hi);
+    }
+
+    .setup-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: var(--space-3);
+        min-width: 0;
+    }
+
+    .setup-head h2 {
+        margin: 0;
+        font-size: var(--text-xl);
+        font-weight: var(--weight-display);
+        letter-spacing: var(--tracking-display);
+        line-height: var(--leading-tight);
+        overflow-wrap: anywhere;
+    }
+
+    .setup-rating {
+        font-size: var(--text-xl);
+        font-weight: var(--weight-display);
+        font-variant-numeric: tabular-nums;
+    }
+
+    /* The chooser that stands in for the roster on phones. */
+    .bot-choice-row {
+        display: none;
+    }
+
+    .setup-block {
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-2);
+    }
+
+    .clock-grid {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: var(--space-2);
+    }
+
+    /* Hover, not input: the gate holds hover a step above the overlay the
+       card is. */
+    .clock-tile {
+        position: relative;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: var(--space-half);
+        min-height: var(--clock-tile-h);
+        padding: var(--space-2) var(--space-1);
+        background: var(--c-bg-hover);
+        color: var(--c-text);
+        text-align: center;
+        cursor: pointer;
+        transition: background var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease);
+    }
+
+    /* The active surface holds full text only, so the tile's line brightens with it. */
+    .clock-tile:hover {
+        background: var(--c-bg-active);
+    }
+
+    .clock-tile:hover .clock-kind {
+        color: var(--c-text);
+    }
+
+    .clock-tile input {
+        position: absolute;
+        opacity: 0;
+        pointer-events: none;
+    }
+
+    .clock-tile:has(input:checked) {
+        box-shadow: inset 0 0 0 var(--focus-w) var(--c-accent);
+    }
+
+    .clock-value {
+        font-size: var(--text-sm);
+        font-weight: var(--weight-strong);
+        font-variant-numeric: tabular-nums;
+        line-height: var(--leading-tight);
+    }
+
+    .clock-kind {
+        color: var(--c-text-dim);
+        font-size: var(--text-xs);
+    }
+
+    /* A clock the bot refuses is an outline, not a fill. */
+    .clock-tile:has(input:disabled),
+    .clock-tile:has(input:disabled) .clock-kind {
+        background: transparent;
+        color: var(--c-text-dim);
+    }
+
+    .clock-tile:has(input:disabled) {
+        box-shadow: inset 0 0 0 var(--border-w) var(--c-border-strong);
+        cursor: not-allowed;
+    }
+
+    .clock-foot {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: var(--space-2) var(--space-3);
+    }
+
+    .clock-foot .note {
+        margin: 0;
+    }
+
+    .text-button {
+        flex: none;
+        margin-left: auto;
+        padding: 0;
+        border: none;
+        background: none;
+        color: var(--c-accent);
+        font: inherit;
+        font-size: var(--text-sm);
+        text-decoration: underline;
+        text-underline-offset: var(--underline-offset);
+        cursor: pointer;
+    }
+
+    .text-button:hover {
+        color: var(--c-accent-hover);
+    }
+
+    .custom {
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-3);
+    }
+
+    .seg {
+        display: flex;
+        gap: var(--space-1);
+        background: var(--c-bg-raised);
+        box-shadow: inset 0 var(--border-w) 0 var(--surface-edge-hi);
+        padding: var(--space-1);
+    }
+
+    .seg-btn {
+        flex: 1;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        height: var(--control-sm);
+        border: none;
+        background: transparent;
+        color: var(--c-text-dim);
+        font-size: var(--text-sm);
+        cursor: pointer;
+    }
+
+    .seg-btn.active {
+        background: var(--c-bg-active);
+        color: var(--c-text);
+    }
+
+    .seg-btn[aria-disabled='true'] {
+        color: var(--c-offline);
+        cursor: not-allowed;
+    }
+
+    .stepper-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: var(--space-3);
+    }
+
+    .stepper-row .play-label {
+        font-weight: var(--weight-regular);
+    }
+
+    .stepper {
+        display: inline-flex;
+        align-items: center;
+        gap: var(--space-1);
+    }
+
+    .stepper button {
+        width: var(--control-md);
+        height: var(--control-md);
+        border: none;
+        background: var(--c-bg-hover);
+        color: var(--c-text);
+        font-size: var(--text-lg);
+        font-weight: var(--weight-strong);
+        cursor: pointer;
+    }
+
+    .stepper button:hover {
+        background: var(--c-bg-active);
+    }
+
+    .stepper button[aria-disabled='true'],
+    .stepper button[aria-disabled='true']:hover {
+        background: transparent;
+        color: var(--c-text-dim);
+        cursor: not-allowed;
+    }
+
+    .stepper-value {
+        min-width: var(--stepper-value-w);
+        font-family: var(--font-mono);
+        font-size: var(--text-sm);
+        font-variant-numeric: tabular-nums;
+        text-align: center;
+    }
+
+    /* The opening: one quiet row, shut until asked. */
+    .opening {
+        padding-top: var(--space-3);
+        box-shadow: inset 0 var(--border-w) 0 var(--c-border);
+    }
+
+    .opening summary {
+        display: flex;
+        align-items: center;
+        gap: var(--space-2);
+        min-height: var(--control-sm);
+        color: var(--c-text-dim);
+        font-size: var(--text-sm);
+        list-style: none;
+        cursor: pointer;
+    }
+
+    .opening summary::-webkit-details-marker {
+        display: none;
+    }
+
+    .opening summary:hover {
+        color: var(--c-text);
+    }
+
+    .opening-value {
+        margin-left: auto;
+    }
+
+    .chevron {
+        flex: none;
+        width: var(--chevron-size);
+        height: var(--chevron-size);
+        fill: none;
+        stroke: currentColor;
+        stroke-width: 2;
+        transition: transform var(--dur-fast) var(--ease);
+    }
+
+    .opening[open] .chevron {
+        transform: rotate(180deg);
+    }
+
+    .opening-body {
+        display: grid;
+        grid-template-columns: var(--opening-preview-w) minmax(0, 1fr);
+        gap: var(--space-4);
+        align-items: start;
+        margin-top: var(--space-3);
+    }
+
+    .opening-preview {
+        background: var(--board-bg);
+    }
+
+    .opening-controls {
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-2);
+    }
+
+    .opening-controls fieldset {
+        margin: 0;
+        padding: 0;
+        border: none;
+    }
+
+    .opening-controls legend {
+        margin-bottom: var(--space-2);
+        padding: 0;
+        color: var(--c-text-dim);
+        font-size: var(--text-xs);
+    }
+
+    .opening-counts {
+        display: flex;
+        flex-wrap: wrap;
+        gap: var(--space-1);
+    }
+
+    .opening-counts .opt label {
+        padding: 0 var(--space-2);
+        background: var(--c-bg-hover);
+    }
+
+    .opening-counts .opt input:checked + label {
+        background: var(--c-bg-active);
+        color: var(--c-text);
+        box-shadow: inset 0 calc(-1 * var(--focus-w)) 0 var(--c-accent);
+    }
+
+    .opening-caption {
+        margin: 0;
+        color: var(--c-text-dim);
+        font-size: var(--text-xs);
+    }
+
+    /* The start: the one primary action, and what it waits on. */
+    .start-area {
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-3);
+        padding-top: var(--space-4);
+        box-shadow: inset 0 var(--border-w) 0 var(--c-border);
+    }
+
+    .start-area p {
+        margin: 0;
+    }
+
+    .start-lines:empty {
+        display: none;
+    }
+
+    /* A status said to screen readers alone takes no room, so the start never moves while it is sent. */
+    .start-lines:has(> .sr-only:only-child) {
+        position: absolute;
+    }
+
+    .start-yours {
+        list-style: none;
+        margin: var(--space-1) 0 0;
+        padding: 0;
+        display: flex;
+        flex-wrap: wrap;
+        gap: var(--space-1) var(--space-4);
+    }
+
+    .start-lines {
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-1);
+    }
+
+    .start-actions {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: var(--space-3);
+    }
+
+    .start-actions .btn {
+        height: var(--control-lg);
+        padding: 0 var(--space-5);
+    }
+
+    .start-actions .discord-face {
+        height: var(--control-lg);
+    }
+
+    .start-area .start-notice {
+        font-size: var(--text-xs);
+    }
+
+    .play-sheet-title {
+        margin: 0;
+        font-size: var(--text-lg);
+        font-weight: var(--weight-display);
+    }
+
+    .play-sheet .roster {
+        margin-top: var(--space-3);
+    }
+
+    @media (max-width: 44rem) {
+        .play-layout {
+            grid-template-columns: minmax(0, 1fr);
+        }
+
+        .play-roster {
+            display: none;
+        }
+
+        .play-setup-lift {
+            position: static;
+            max-width: var(--play-column-w);
+        }
+
+        /* The chooser shows the bot in the head's place,
+           and the head stays for screen readers, so the outline keeps its h2;
+           the chooser says the rating, so the head's goes. */
+        .setup-head {
+            position: absolute;
+            width: var(--border-w);
+            height: var(--border-w);
+            overflow: hidden;
+            clip-path: inset(50%);
+            white-space: nowrap;
+        }
+
+        .setup-head .setup-rating {
+            display: none;
+        }
+
+        /* A name keeps its whole word:
+           where it and the rating do not fit on one line, the rating and Change take the next. */
+        .bot-choice-row {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            justify-content: space-between;
+            gap: var(--space-2) var(--space-3);
+        }
+
+        .bot-choice {
+            flex: 1 1 auto;
+            max-width: 100%;
+        }
+
+        .bot-choice p {
+            margin: 0;
+        }
+
+        .bot-choice-name {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: var(--space-1) var(--space-2);
+        }
+
+        .bot-choice-name strong {
+            max-width: 100%;
+            font-size: var(--text-xl);
+            font-weight: var(--weight-display);
+            letter-spacing: var(--tracking-display);
+            overflow-wrap: break-word;
+        }
+
+        .bot-choice-side {
+            display: flex;
+            flex: none;
+            flex-wrap: wrap;
+            align-items: center;
+            max-width: 100%;
+            gap: var(--space-2) var(--space-3);
+        }
+    }
+
+    /* Forced colors drop the surfaces and rings that mark a pick,
+       so a picked row, tile or count takes a system outline, thicker while it holds focus,
+       and what cannot be picked is grayed. */
+    @media (forced-colors: active) {
+        .roster-row:has(input:checked),
+        .clock-tile:has(input:checked),
+        .opening-counts .opt input:checked + label {
+            outline: var(--focus-w) solid Highlight;
+            outline-offset: calc(-1 * var(--focus-w));
+        }
+
+        .roster-row:has(input:checked:focus-visible),
+        .clock-tile:has(input:checked:focus-visible),
+        .opening-counts .opt input:checked:focus-visible + label {
+            outline-width: calc(2 * var(--focus-w));
+            outline-offset: calc(-2 * var(--focus-w));
+        }
+
+        /* The pressed mode is filled, so the focus ring stays free to show focus on either mode;
+           the fill needs its own colors kept, and the ring on it takes the fill's text color. */
+        .seg-btn[aria-pressed='true'] {
+            forced-color-adjust: none;
+            background: Highlight;
+            color: HighlightText;
+        }
+
+        .seg-btn[aria-pressed='true']:focus-visible {
+            outline-color: HighlightText;
+            outline-offset: calc(-2 * var(--focus-w));
+        }
+
+        .stepper button[aria-disabled='true'],
+        .seg-btn[aria-disabled='true'],
+        .roster-row[aria-disabled='true'],
+        .roster-row[aria-disabled='true'] *,
+        .roster-row[aria-disabled='true'] .player-name,
+        .roster-row[aria-disabled='true'] .roster-rating,
+        .clock-tile:has(input:disabled),
+        .clock-tile:has(input:disabled) *,
+        .clock-tile:has(input:disabled) .clock-kind {
+            color: GrayText;
+        }
+    }
+
+    @media (max-width: 30rem) {
+        .play-setup {
+            gap: var(--space-4);
+            padding: var(--space-4);
+        }
+    }
+
+    /* Large text on a narrow window leaves three presets a row too little room for their labels,
+       and, at its narrowest, two. */
+    @media (max-width: 19.5rem) {
+        .clock-grid {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+    }
+
+    @media (max-width: 13rem) {
+        .clock-grid {
+            grid-template-columns: minmax(0, 1fr);
+        }
+    }
+
+    .setup-expected-pending {
+        visibility: hidden;
+    }
+}
