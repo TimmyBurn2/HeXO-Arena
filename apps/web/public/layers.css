@@ -1,6 +1,7 @@
 /*
- * Declared before any sheet loads, so lazy route sheets land in their
- * layer whatever their load order.
+ * The cascade layer order, linked first from index.html so it precedes
+ * every bundled sheet: the build splits and reorders those, and a layer
+ * first named elsewhere would rank below the ones named after it.
  * A later layer wins without specificity games.
  * Themes only set custom properties, so they sit below every rule that
  * consumes them.

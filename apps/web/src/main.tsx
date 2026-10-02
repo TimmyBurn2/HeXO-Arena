@@ -1,6 +1,3 @@
-// The layer order must be declared before any component sheet loads, so
-// the style imports lead.
-import './styles/layers.css';
 import './styles/scale.css';
 import './styles/base.css';
 import './styles/primitives.css';
