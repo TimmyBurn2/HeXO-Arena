@@ -1,0 +1,49 @@
+@layer components {
+    .code-block {
+        margin: 0;
+        min-width: 0;
+        max-width: 100%;
+        background: var(--c-bg-raised);
+        box-shadow: inset 0 var(--border-w) 0 var(--surface-edge-hi);
+    }
+
+    .code-head {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: var(--space-1) var(--space-3);
+        padding: var(--space-1) var(--space-1) 0 var(--space-3);
+    }
+
+    /* The title holds the left edge, and the status and button the right,
+       even when large text wraps the status under the title. */
+    .code-title {
+        margin-right: auto;
+        font-family: var(--font-mono);
+        font-size: var(--text-xs);
+        color: var(--c-text-dim);
+    }
+
+    .code-status {
+        font-size: var(--text-xs);
+        color: var(--c-text-dim);
+    }
+
+    /* A line keeps its indentation and never wraps, since wrapped code
+       reads as another line; a long one scrolls inside the block. */
+    .code-block pre {
+        margin: 0;
+        padding: var(--space-2) var(--space-3) var(--space-3);
+        overflow-x: auto;
+        font-family: var(--font-mono);
+        font-size: var(--text-sm);
+        line-height: var(--leading-normal);
+        color: var(--c-text);
+        white-space: pre;
+    }
+
+    /* The block's cut would clip a ring drawn outside the sample. */
+    .code-block pre:focus-visible {
+        outline-offset: calc(-1 * var(--focus-w));
+    }
+}

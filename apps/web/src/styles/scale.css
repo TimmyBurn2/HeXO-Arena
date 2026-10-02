@@ -82,6 +82,8 @@
         --focus-w: 2px;
 
         --shell-max: 72rem;
+        /* The guide's column: a sample's longest line fits without scrolling. */
+        --guide-w: 48rem;
         --shell-pad: var(--space-4);
         --panel-w: 20rem;
         --settings-w: 24rem;

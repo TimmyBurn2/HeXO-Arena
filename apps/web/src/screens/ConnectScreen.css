@@ -1,7 +1,85 @@
 @layer screens {
+    /* A guide reads down one column held to a measure, code included,
+       rather than across the shell's full width. */
+    .build-guide {
+        max-width: var(--guide-w);
+    }
+
+    .build-guide > .note {
+        margin: 0;
+    }
+
+    .build-part {
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-3);
+    }
+
+    .build-part > .section-title {
+        margin-bottom: 0;
+    }
+
+    .build-part > h3 {
+        margin: var(--space-3) 0 0;
+        font-size: var(--text-base);
+    }
+
+    .build-part > p {
+        margin: 0;
+    }
+
+    /* A note introduces the block under it, so it sits closer to it than
+       to the block above. */
+    .build-part > p.note + .code-block {
+        margin-top: calc(-1 * var(--space-1));
+    }
+
+    /* An identifier in running text takes the full text color, as a key
+       hint does, so it stands apart from the dim words around it. */
+    .build-guide :not(pre) > code {
+        font-family: var(--font-mono);
+        color: var(--c-text);
+    }
+
+    .declaration-fields {
+        display: grid;
+        grid-template-columns: max-content minmax(0, 1fr);
+        gap: var(--space-2) var(--space-4);
+        margin: 0;
+    }
+
+    /* Each field and its words are one group on the field's own row,
+       their columns shared with every other row. */
+    .declaration-fields > div {
+        display: grid;
+        grid-column: 1 / -1;
+        grid-template-columns: subgrid;
+        row-gap: var(--space-1);
+        align-items: baseline;
+    }
+
+    .declaration-fields dd {
+        margin: 0;
+        color: var(--c-text-dim);
+        font-size: var(--text-sm);
+    }
+
+    .declaration-fields dt code {
+        font-size: var(--text-sm);
+    }
+
+    /* Large text on a narrow window leaves the description too little
+       room beside its field, so the field stands above it. */
+    @media (max-width: 30rem) {
+        .declaration-fields {
+            grid-template-columns: minmax(0, 1fr);
+            row-gap: var(--space-3);
+        }
+    }
+
     .steps {
         list-style: none;
-        margin: var(--space-4) 0 0;
+        margin: 0;
         padding: 0;
         display: flex;
         flex-direction: column;
@@ -48,7 +126,7 @@
         align-items: flex-start;
     }
 
-    .steps .step-body h2 {
+    .steps .step-body h3 {
         margin: 0;
         font-size: var(--text-base);
     }

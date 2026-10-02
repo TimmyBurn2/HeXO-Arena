@@ -55,6 +55,8 @@ export interface Shot {
     board?: true;
     // Widths other than the matrix's own.
     viewports?: readonly Viewport[];
+    // A page read top to bottom is captured whole, so one shot shows every part.
+    fullPage?: true;
 }
 
 const signedOut = world({ me: null });
@@ -112,6 +114,12 @@ const guest = world({ me: { kind: `guest`, name: `Guest k3f9`, liveGames: [] } }
 const visitingAna: World[`me`] = { kind: `user`, name: `ana`, rating: 1402, provisional: false, discord: null, liveGames: [], analysisOptOut: false, analysisLeft: { positions: 300, games: 10 } };
 // The bot page's head for each kind of bot, as a laptop and a phone show it.
 const botPageViewports: readonly Viewport[] = [
+    { name: `laptop`, width: 1280, height: 900 },
+    { name: `phone`, width: 390, height: 844 },
+];
+
+// The guide reads down one column, so a laptop and a phone show it.
+const guideViewports: readonly Viewport[] = [
     { name: `laptop`, width: 1280, height: 900 },
     { name: `phone`, width: 390, height: 844 },
 ];
@@ -307,8 +315,22 @@ export const shots: readonly Shot[] = [
         framed: true,
     },
     { name: `bots-play`, path: `/bots`, world: playing(), ready: `tbody tr`, framed: true },
-    { name: `build`, path: `/connect`, world: world(), ready: `h1`, framed: true },
-    { name: `build-signed-out`, path: `/connect`, world: signedOut, ready: `h1`, framed: true },
+    { name: `build`, path: `/connect`, world: world(), ready: `h1`, framed: true, viewports: guideViewports, fullPage: true },
+    { name: `build-signed-out`, path: `/connect`, world: signedOut, ready: `h1`, framed: true, viewports: guideViewports, fullPage: true },
+    {
+        name: `build-created`,
+        path: `/connect`,
+        world: world(),
+        ready: `h1`,
+        framed: true,
+        viewports: guideViewports,
+        after: async (page) => {
+            await page.getByRole(`textbox`, { name: `Bot name` }).fill(`sealbot-two`);
+            await page.getByRole(`button`, { name: `Create bot` }).click();
+            await page.locator(`.token-box`).waitFor();
+            await page.locator(`.steps`).scrollIntoViewIfNeeded();
+        },
+    },
     {
         name: `build-rate-limited`,
         path: `/connect`,
