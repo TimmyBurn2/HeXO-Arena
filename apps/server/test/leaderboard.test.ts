@@ -1,10 +1,11 @@
-import { botsPath, devLoginPath, leaderboardCap, leaderboardPath, leaderboardSchema, type Side } from '@hexo-arena/contract';
+import { botsPath, devLoginPath, leaderboardCap, leaderboardPath, leaderboardSchema, sessionCookieName, type Side } from '@hexo-arena/contract';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { findBot } from '../src/bots';
 import { createQuery, type Query } from '../src/db';
 import { insertBotGame, insertGame, recordFinish } from '../src/game-store';
 import { voidGames } from '../src/moderation';
 import { createUserWithExactName } from '../src/users';
-import { createTestApp, FakeStreamSocket, type TestApp } from './helpers';
+import { createTestApp, FakeStreamSocket, loginAs, mintBot, type TestApp } from './helpers';
 
 const day = 86_400;
 const now = Date.UTC(2026, 9, 1, 12);
@@ -156,5 +157,63 @@ describe('GET /api/leaderboard', () => {
             expect(response.statusCode).toBe(400);
             expect(response.json()).toMatchObject({ code: `bad_request` });
         }
+    });
+});
+
+describe('the leaderboard after a finish', () => {
+    let world: TestApp;
+
+    beforeEach(async () => {
+        world = await createTestApp({ logger: false });
+    });
+
+    afterEach(async () => {
+        await world.app.close();
+    });
+
+    it('shows a game that finished inside the memo window at once', async () => {
+        const token = await mintBot(world.app, await loginAs(world.app, `owner`), `boardbot`);
+        await world.app.inject({
+            method: `PATCH`,
+            url: `/api/bot/account`,
+            headers: { authorization: `Bearer ${token}` },
+            payload: { accepts: { turnMs: null, match: false, unlimited: true } },
+        });
+        const bot = findBot(createQuery(world.sqlite), `boardbot`);
+        if (bot === undefined) throw new Error(`no bot`);
+        world.presence.attach(bot.id, new FakeStreamSocket(), true);
+        const player = await loginAs(world.app, `player`);
+        // Settled already, so one rated game puts the player on the board.
+        world.sqlite.prepare(`insert into ratings (user_id, rating, deviation, volatility) select id, 1500, 60, 0.06 from users where name = ?`).run(`player`);
+        const humans = async () =>
+            leaderboardSchema.parse((await world.app.inject({ method: `GET`, url: `${leaderboardPath}?kind=humans&active=all` })).json()).map((entry) => [entry.name, entry.games]);
+        expect(await humans()).toEqual([]);
+        const created = await world.app.inject({
+            method: `POST`,
+            url: `/api/games`,
+            cookies: { [sessionCookieName]: player },
+            payload: { bot: `boardbot`, timeControl: { mode: `unlimited` }, openingPlies: 1 },
+        });
+        const { gameId } = created.json<{ gameId: string }>();
+        const resigned = await world.app.inject({ method: `POST`, url: `/api/games/${gameId}/resign`, cookies: { [sessionCookieName]: player } });
+        expect(resigned.statusCode).toBe(200);
+        expect(await humans()).toEqual([[`player`, 1]]);
+    });
+
+    it('shows a recompute at once', async () => {
+        const read = async () => (await world.app.inject({ method: `GET`, url: `${leaderboardPath}?active=all` })).json<unknown[]>();
+        const query = createQuery(world.sqlite);
+        const owner = await loginAs(world.app, `owner`);
+        await mintBot(world.app, owner, `one`);
+        await mintBot(world.app, owner, `two`);
+        const one = findBot(query, `one`);
+        const two = findBot(query, `two`);
+        if (one === undefined || two === undefined) throw new Error(`no bots`);
+        const game = insertBotGame(query, { challengerBotId: one.id, destBotId: two.id, challengerSide: `x`, timeControl: { mode: `unlimited` }, opening: [{ x: 0, y: 0, player: 0 }] });
+        recordFinish(query, game, { winner: `x`, reason: `six-in-a-row` });
+        world.sqlite.prepare(`update ratings set deviation = 60`).run();
+        expect(await read()).toHaveLength(2);
+        expect(world.admin({ op: `recompute-ratings`, exclude: [game], reason: `test` })).toMatchObject({ kind: `done` });
+        expect(await read()).toEqual([]);
     });
 });

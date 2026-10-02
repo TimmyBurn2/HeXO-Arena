@@ -117,7 +117,7 @@ export const shots: readonly Shot[] = [
     {
         name: `home-your-games`,
         path: `/`,
-        world: world({ live: liveGames, me: { kind: `user`, name: `tom`, rating: 1503, provisional: false, discord: null, liveGames: liveGames.filter((game) => game.players.x.name === `tom`) } }),
+        world: world({ live: liveGames, me: { kind: `user`, name: `quinn`, rating: 1503, provisional: false, discord: null, liveGames: liveGames.filter((game) => game.players.x.name === `quinn`) } }),
         ready: `.your-game`,
         framed: true,
     },

@@ -1,4 +1,4 @@
-import { discordNameMaxLength, type DiscordNames } from '@hexo-arena/contract';
+import { controlOrBidiPattern, discordNameMaxLength, type DiscordNames } from '@hexo-arena/contract';
 import { z } from 'zod';
 
 /** A Discord account as the site keeps it: the id, and its names made safe to show. */
@@ -32,8 +32,7 @@ const identityResponseSchema = z.object({
     global_name: z.string().nullish(),
 });
 
-// Control characters, and the marks that reorder text around a name.
-const unsafe = /[\p{Cc}\u061c\u200e\u200f\u202a-\u202e\u2066-\u2069]/gu;
+const unsafe = new RegExp(controlOrBidiPattern.source, `gu`);
 
 /**
  * A Discord name as the site shows it back: NFC, without control or

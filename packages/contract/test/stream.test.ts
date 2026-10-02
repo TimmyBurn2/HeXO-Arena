@@ -173,6 +173,14 @@ describe('accountDeclarationSchema', () => {
         expect(accountDeclarationSchema.safeParse({}).success).toBe(true);
     });
 
+    it('refuses control and bidirectional characters in about and version, and takes other text as written', () => {
+        for (const text of [`a\nb`, `tab\there`, `nul\u0000`, `\u202eabc`, `x\u2067y`, `mark\u200f`, `arabic\u061c`]) {
+            expect(accountDeclarationSchema.safeParse({ about: text }).success, JSON.stringify(text)).toBe(false);
+            expect(accountDeclarationSchema.safeParse({ version: text }).success, JSON.stringify(text)).toBe(false);
+        }
+        expect(accountDeclarationSchema.safeParse({ about: `Spielt vorsichtig, \u00e9l\u00e8ve de HeXO, \u{1f40d}`, version: `v2.1.0-rc.1` }).success).toBe(true);
+    });
+
     it('caps about at 280 chars and version at 64', () => {
         expect(accountDeclarationSchema.safeParse({ about: `a`.repeat(281) }).success).toBe(false);
         expect(accountDeclarationSchema.safeParse({ version: `v`.repeat(65) }).success).toBe(false);

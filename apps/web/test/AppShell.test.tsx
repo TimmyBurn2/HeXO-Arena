@@ -47,7 +47,7 @@ describe('AppShell', () => {
             `fetch`,
             vi.fn((url: string) =>
                 Promise.resolve(
-                    new Response(url === `/api/me` ? JSON.stringify({ kind: `user`, name: `tom`, rating: 1503, provisional: false, discord: null, liveGames: [] }) : null, {
+                    new Response(url === `/api/me` ? JSON.stringify({ kind: `user`, name: `quinn`, rating: 1503, provisional: false, discord: null, liveGames: [] }) : null, {
                         status: 200,
                     }),
                 ),
@@ -61,7 +61,7 @@ describe('AppShell', () => {
             if (!(button instanceof HTMLElement)) throw new Error(`no identity button yet`);
             return button;
         });
-        expect(who.textContent).toBe(`tom`);
+        expect(who.textContent).toBe(`quinn`);
         expect(who.querySelector(`.monogram svg.sigil`)).toBeTruthy();
         fireEvent.click(who);
         expect(document.querySelector(`#identity-panel .identity-row`)?.getAttribute(`href`)).toBe(`/profile`);

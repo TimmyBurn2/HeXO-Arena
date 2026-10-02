@@ -170,6 +170,9 @@ describe('PATCH /api/bot/account', () => {
         [`accepts with an inverted window`, { accepts: { turnMs: [30_000, 5_000], match: true, unlimited: true } }],
         [`accepts with a three-number window`, { accepts: { turnMs: [1, 2, 3], match: true, unlimited: true } }],
         [`an unknown field`, { nope: true }],
+        [`about with a right-to-left override`, { about: `evil\u202egnp.exe` }],
+        [`about with a control character`, { about: `bell\u0007` }],
+        [`version with an isolate`, { version: `1.0\u2066` }],
     ])('rejects %j with bad_request', async (_name, payload) => {
         const { app } = await createTestApp();
         const owner = await devLogin(app, `owner`);

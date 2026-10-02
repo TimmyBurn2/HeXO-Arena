@@ -77,9 +77,9 @@ test('the play card shows its keyboard focus against its brass', async ({ page }
 
 test('with nothing live the slot freezes the latest result, its board one link into the game', async ({ page }) => {
     await visit(page, world({ me: null, live: [] }));
-    const link = featured(page).getByRole(`link`, { name: `Replay tom vs hextide` });
+    const link = featured(page).getByRole(`link`, { name: `Replay quinn vs hextide` });
     await expect(link).toHaveAttribute(`href`, `/game/won`);
-    await expect(featured(page).locator(`.featured-result`)).toHaveText(`Last gametom won with six in a row`);
+    await expect(featured(page).locator(`.featured-result`)).toHaveText(`Last gamequinn won with six in a row`);
     await expect(featured(page).locator(`polyline.win-line`)).toHaveCount(1);
 });
 

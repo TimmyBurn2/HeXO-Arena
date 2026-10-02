@@ -3,11 +3,14 @@ import {
     archiveReadLimit,
     botManagementLimit,
     clientRequestLimit,
+    discordExchangeLimit,
     engineDialLimit,
     guestMintLimit,
+    guestMintPrefixLimit,
     principalRequestLimit,
     publicRequestLimit,
     signInStartLimit,
+    signInStartPrefixLimit,
     streamOpenLimit,
     type RateLimit,
 } from '@hexo-arena/contract';
@@ -31,6 +34,8 @@ declare module 'fastify' {
     interface FastifyRequest {
         // The keyed hash the request's limits count under, null without a public address.
         clientKey: string | null;
+        // The keyed hash of its IPv6 /48, null for IPv4 and without a public address.
+        prefixKey: string | null;
     }
 }
 
@@ -44,6 +49,9 @@ export interface LimitTable {
     engineDial: RateLimit;
     guestMint: RateLimit;
     signInStart: RateLimit;
+    guestMintPrefix: RateLimit;
+    signInStartPrefix: RateLimit;
+    discordExchange: RateLimit;
     archiveRead: RateLimit;
     archiveReadGlobal: RateLimit;
 }
@@ -57,6 +65,9 @@ export const defaultLimits: LimitTable = {
     engineDial: engineDialLimit,
     guestMint: guestMintLimit,
     signInStart: signInStartLimit,
+    guestMintPrefix: guestMintPrefixLimit,
+    signInStartPrefix: signInStartPrefixLimit,
+    discordExchange: discordExchangeLimit,
     archiveRead: archiveReadLimit,
     archiveReadGlobal: archiveReadGlobalLimit,
 };
@@ -76,6 +87,7 @@ export interface CredentialLimits {
 export interface ClientLimits {
     wait(limit: ClientLimit, request: FastifyRequest): number | null;
     refuseArchive(reply: FastifyReply, request: FastifyRequest): boolean;
+    takeDiscordExchange(): boolean;
 }
 
 // One client map holds at most this many keys, about a megabyte and a half.
@@ -99,7 +111,9 @@ export class RequestLimits {
     readonly #public: RateBuckets;
     readonly #credential: Record<CredentialLimit, RateBuckets>;
     readonly #perClient: Record<ClientLimit | `archiveRead`, RateBuckets>;
+    readonly #perPrefix: Record<ClientLimit, RateBuckets>;
     readonly #archive: RateBuckets;
+    readonly #discordExchange: RateBuckets;
 
     constructor(deps: { table: LimitTable; now: () => number; trustedProxy: string | null }) {
         this.keys = new ClientKeys({ trustedProxy: deps.trustedProxy, now: deps.now });
@@ -116,10 +130,15 @@ export class RequestLimits {
             signInStart: new RateBuckets(deps.table.signInStart, deps.now, clientKeyCap),
             archiveRead: new RateBuckets(deps.table.archiveRead, deps.now, clientKeyCap),
         };
+        this.#perPrefix = {
+            guestMint: new RateBuckets(deps.table.guestMintPrefix, deps.now, clientKeyCap),
+            signInStart: new RateBuckets(deps.table.signInStartPrefix, deps.now, clientKeyCap),
+        };
         this.#archive = new RateBuckets(deps.table.archiveReadGlobal, deps.now);
+        this.#discordExchange = new RateBuckets(deps.table.discordExchange, deps.now);
         this.keys.onRekey(() => {
             this.#client.clear();
-            for (const buckets of Object.values(this.#perClient)) buckets.clear();
+            for (const buckets of [...Object.values(this.#perClient), ...Object.values(this.#perPrefix)]) buckets.clear();
         });
     }
 
@@ -132,17 +151,24 @@ export class RequestLimits {
         this.#client.sweep();
         this.#public.sweep();
         for (const buckets of Object.values(this.#credential)) buckets.sweep();
-        for (const buckets of Object.values(this.#perClient)) buckets.sweep();
+        for (const buckets of [...Object.values(this.#perClient), ...Object.values(this.#perPrefix)]) buckets.sweep();
         this.#archive.sweep();
+        this.#discordExchange.sweep();
     }
 
     /**
-     * Spends a token of the client's bucket for an anonymous act:
+     * Spends a token of the client's bucket for an anonymous act, then of its IPv6 /48's:
      * null when admitted, else whole seconds until one returns.
      * A request without a public address meets only the act's global cap.
      */
     wait(limit: ClientLimit, request: FastifyRequest): number | null {
-        return request.clientKey === null ? null : this.#perClient[limit].take(request.clientKey);
+        if (request.clientKey === null) return null;
+        return this.#perClient[limit].take(request.clientKey) ?? (request.prefixKey === null ? null : this.#perPrefix[limit].take(request.prefixKey));
+    }
+
+    /** Spends one of the Discord exchanges every caller shares; false once they are spent. */
+    takeDiscordExchange(): boolean {
+        return this.#discordExchange.take(`all`) === null;
     }
 
     /**
@@ -174,6 +200,7 @@ export class RequestLimits {
      */
     register(app: FastifyInstance): void {
         app.decorateRequest(`clientKey`, null);
+        app.decorateRequest(`prefixKey`, null);
         app.addHook(`onRoute`, (route) => {
             const limit = route.config?.limit;
             if (limit === undefined) throw new Error(`route ${String(route.method)} ${route.url} names no limit class`);
@@ -182,8 +209,9 @@ export class RequestLimits {
         app.addHook(`onRequest`, (request, reply, done) => {
             // A path no route serves reads as a public page.
             const limit = request.routeOptions.config.limit ?? `public`;
-            const key = this.keys.keyOf(request.socket.remoteAddress, request.headers[`x-forwarded-for`]);
+            const { client: key, prefix } = this.keys.keysOf(request.socket.remoteAddress, request.headers[`x-forwarded-for`]);
             request.clientKey = key;
+            request.prefixKey = prefix;
             const wait = (key === null ? null : this.#client.take(key)) ?? (limit === `public` || limit === `shell` ? this.#public.take(`all`) : null);
             if (wait === null) {
                 done();

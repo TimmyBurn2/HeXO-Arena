@@ -3,7 +3,7 @@ import {
     guestRetryAfterSeconds,
     logoutPath,
     mePath,
-    sessionCookieName,
+    sessionCookieNameFor,
     sessionMaxAgeSeconds,
     type GuestMe,
     type Me,
@@ -28,8 +28,15 @@ export interface SessionApiDeps {
 // since nothing of a guest survives anyway.
 export type CookieLife = `account` | `guest`;
 
+declare module 'fastify' {
+    interface FastifyRequest {
+        // The session cookie's value under the one name this deployment sets.
+        sessionToken: string | undefined;
+    }
+}
+
 export function setSessionCookie(reply: FastifyReply, token: string, secure: boolean, life: CookieLife): void {
-    reply.setCookie(sessionCookieName, token, {
+    reply.setCookie(sessionCookieNameFor(secure), token, {
         path: `/`,
         httpOnly: true,
         sameSite: `lax`,
@@ -39,11 +46,33 @@ export function setSessionCookie(reply: FastifyReply, token: string, secure: boo
 }
 
 /**
+ * Reads the session cookie under the name this deployment sets, and refuses
+ * a write that carries it from another origin.
+ * SameSite=Lax keeps the cookie off a cross-site write, but a sibling
+ * subdomain is the same site; the browser's own Sec-Fetch-Site tells it apart.
+ * A client that sends none, a bot or curl, is never refused.
+ */
+export function registerSessionCookie(app: FastifyInstance, secure: boolean): void {
+    const name = sessionCookieNameFor(secure);
+    app.decorateRequest(`sessionToken`, undefined);
+    app.addHook(`onRequest`, (request, reply, done) => {
+        const token = request.cookies[name];
+        request.sessionToken = token;
+        const site = request.headers[`sec-fetch-site`];
+        if (token !== undefined && request.method !== `GET` && request.method !== `HEAD` && site !== undefined && site !== `same-origin`) {
+            void reply.code(403).send({ error: `a write from another origin carries no session`, code: `cross_origin` });
+            return;
+        }
+        done();
+    });
+}
+
+/**
  * The person behind a request's session cookie: a user, a guest, or null.
  * Guests are checked first, as a map lookup costs less than a query.
  */
 export function sessionPerson(query: Query, guests: GuestSessions, request: FastifyRequest): Person | null {
-    const token = request.cookies[sessionCookieName];
+    const token = request.sessionToken;
     if (token === undefined) return null;
     const guest = guests.find(token);
     if (guest !== null) return { kind: `guest`, id: guest.id, name: guest.name };
@@ -68,16 +97,16 @@ export function registerSessionApi(app: FastifyInstance, deps: SessionApiDeps): 
     const { query, guests, games, secureCookies, limits } = deps;
 
     app.get(mePath, { config: { limit: `public` } }, async (request, reply) => {
-        return reply.code(200).send(meOf(deps, request.cookies[sessionCookieName]));
+        return reply.code(200).send(meOf(deps, request.sessionToken));
     });
 
     app.post(logoutPath, { config: { limit: `public` } }, async (request, reply) => {
-        const token = request.cookies[sessionCookieName];
+        const token = request.sessionToken;
         if (token !== undefined) {
             guests.end(token);
             deleteSession(query, token);
         }
-        reply.clearCookie(sessionCookieName, { path: `/`, httpOnly: true, sameSite: `lax`, secure: secureCookies });
+        reply.clearCookie(sessionCookieNameFor(secureCookies), { path: `/`, httpOnly: true, sameSite: `lax`, secure: secureCookies });
         return reply.code(204).send();
     });
 

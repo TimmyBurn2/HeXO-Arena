@@ -40,9 +40,11 @@ import {
     archiveReadLimit,
     clientWatcherCap,
     guestMintLimit,
+    guestMintPrefixLimit,
     guestSessionCap,
     seatWatcherCap,
     signInStartLimit,
+    signInStartPrefixLimit,
     signInStateCap,
     botManagementLimit,
     engineDialLimit,
@@ -55,6 +57,7 @@ import {
     createChallengeRequestSchema,
     createGameRequestSchema,
     discordCallbackPath,
+    discordExchangeLimit,
     discordLoginPath,
     discordNameMaxLength,
     gameCreateErrorCodes,
@@ -127,6 +130,7 @@ import {
     rankableDeviation,
     requestBodyLimitBytes,
     serverLineLimitBytes,
+    secureSessionCookieName,
     sessionCookieName,
     sessionHeartbeatMs,
     signInFailureParam,
@@ -286,8 +290,8 @@ function registerSiteSurface(registry: OpenAPIRegistry, shared: SharedComponents
     registry.registerComponent('securitySchemes', 'sessionCookie', {
         type: 'apiKey',
         in: 'cookie',
-        name: sessionCookieName,
-        description: `An HttpOnly session cookie, set by a Discord sign-in, a created account, or the guest route.`,
+        name: secureSessionCookieName,
+        description: `An HttpOnly session cookie, set by a Discord sign-in, a created account, or the guest route; named ${sessionCookieName} where the site runs without TLS. A write carrying it from another origin, by the browser's Sec-Fetch-Site, answers 403 cross_origin.`,
     });
     registry.registerComponent('securitySchemes', 'signupCookie', {
         type: 'apiKey',
@@ -328,7 +332,7 @@ function registerSiteSurface(registry: OpenAPIRegistry, shared: SharedComponents
         ],
         responses: {
             302: {
-                description: `Redirect to Discord's authorize endpoint; or to the return path with ${signInFailureParam}=unconfigured when Discord OAuth is not set up, or with ${signInFailureParam}=busy past ${rateText(signInStartLimit)} per client or with ${String(signInStateCap)} sign-ins waiting on Discord.`,
+                description: `Redirect to Discord's authorize endpoint; or to the return path with ${signInFailureParam}=unconfigured when Discord OAuth is not set up, or with ${signInFailureParam}=busy past ${rateText(signInStartLimit)} per client or ${rateText(signInStartPrefixLimit)} per IPv6 /48, or with ${String(signInStateCap)} sign-ins waiting on Discord.`,
             },
         },
     });
@@ -342,7 +346,7 @@ function registerSiteSurface(registry: OpenAPIRegistry, shared: SharedComponents
         description: `Requests the identify scope only and keeps the Discord id, username, and display name. A known account is signed in unless it is banned. An unknown account creates nothing: the callback holds a sign-up for ${String(signupMaxAgeSeconds / 60)} minutes behind the signup cookie and sends the visitor to ${welcomePath} to choose a public name. A failed sign-in creates no session.`,
         responses: {
             302: {
-                description: `A redirect to the return path with the session cookie set, to ${welcomePath} with the signup cookie set, or on failure to the return path with ${signInFailureParam} naming a SignInFailure; error=access_denied from Discord reads as cancelled.`,
+                description: `A redirect to the return path with the session cookie set, to ${welcomePath} with the signup cookie set, or on failure to the return path with ${signInFailureParam} naming a SignInFailure; error=access_denied from Discord reads as cancelled. Codes confirmed with Discord are held to ${rateText(discordExchangeLimit)} across every caller; past that the callback answers busy without asking Discord.`,
                 headers: {
                     Location: {
                         description: `The return path, ${welcomePath}, or the return path with ${signInFailureParam}= and the reason.`,
@@ -471,7 +475,7 @@ function registerSiteSurface(registry: OpenAPIRegistry, shared: SharedComponents
                 content: { 'application/json': { schema: signedInError } },
             },
             429: {
-                description: `The global cap of ${String(guestSessionCap)} guest sessions is full (guest_limit), retry after ${String(guestRetryAfterSeconds)} s; or one client started ${rateText(guestMintLimit)} (rate_limited), or too many requests.`,
+                description: `The global cap of ${String(guestSessionCap)} guest sessions is full (guest_limit), retry after ${String(guestRetryAfterSeconds)} s; or one client started ${rateText(guestMintLimit)}, or one IPv6 /48 ${rateText(guestMintPrefixLimit)} (rate_limited), or too many requests.`,
                 headers: { 'Retry-After': shared.retryAfter },
                 content: { 'application/json': { schema: guestLimitError } },
             },

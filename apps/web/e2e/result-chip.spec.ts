@@ -13,7 +13,7 @@ const long: GameSnapshot[`players`] = {
 };
 const ordinary: GameSnapshot[`players`] = {
     x: { name: `driftwood`, rating: 1388, provisional: false, kind: `bot` },
-    o: { name: `tom`, rating: 1503, provisional: false, kind: `user` },
+    o: { name: `quinn`, rating: 1503, provisional: false, kind: `user` },
 };
 const results = [
     [`x`, `terminated`],
@@ -22,10 +22,10 @@ const results = [
     [`x`, `six-in-a-row`],
     [`o`, `timeout`],
 ] as const;
-const tom: Me = { kind: `user`, name: `tom`, rating: 1503, provisional: false, discord: null, liveGames: [] };
+const quinn: Me = { kind: `user`, name: `quinn`, rating: 1503, provisional: false, discord: null, liveGames: [] };
 const seats = [
     [`watching`, null],
-    [`seated`, tom],
+    [`seated`, quinn],
 ] as const;
 
 async function showResults(page: Page, players: GameSnapshot[`players`], me: Me, fixture = `finished`): Promise<number> {

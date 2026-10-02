@@ -203,14 +203,23 @@ describe('request logging', () => {
     it('logs an unmatched path as a 404 with no route, no path, and no query', async () => {
         const missing = await request(port, `GET`, `/nowhere/pathmarker?q=querymarker`, {});
 
-        // The client still gets Fastify's own body, its own url included.
         expect(missing.status).toBe(404);
-        expect(missing.text).toBe(`{"message":"Route GET:/nowhere/pathmarker?q=querymarker not found","error":"Not Found","statusCode":404}`);
+        expect(missing.text).toBe(`{"error":"not found","code":"not_found"}`);
         const records = sink.records();
         expect(records).toContainEqual(expect.objectContaining({ req: { method: `GET`, route: null } }));
         expect(records).toContainEqual(expect.objectContaining({ res: { statusCode: 404 } }));
         expect(sink.text()).not.toContain(`pathmarker`);
         expect(sink.text()).not.toContain(`querymarker`);
+    });
+
+    it('logs a path the router cannot decode, or one past the parameter cap, without the path', async () => {
+        const undecodable = await request(port, `GET`, `/api/players/pathmarker%c0`, {});
+        const long = await request(port, `GET`, `/api/players/${`pathmarker`.repeat(12)}`, {});
+
+        expect([undecodable.status, long.status]).toEqual([400, 414]);
+        expect(sink.records()).toContainEqual(expect.objectContaining({ res: { statusCode: 400 }, err: { code: `FST_ERR_BAD_URL`, statusCode: 400 } }));
+        expect(sink.records()).toContainEqual(expect.objectContaining({ res: { statusCode: 414 }, err: { code: `FST_ERR_MAX_PARAM_LENGTH`, statusCode: 414 } }));
+        expect(sink.text()).not.toContain(`pathmarker`);
     });
 
     it('logs a malformed json body as a 400 with its error code, never its message or the body', async () => {
@@ -291,5 +300,42 @@ describe('request logging', () => {
         expect(sink.text()).not.toContain(`upgrademarker`);
         expect(sink.text()).not.toContain(`upgradequerymarker`);
         expect([shell, api, engine]).toEqual([404, 404, 101]);
+    });
+});
+
+describe('a server error', () => {
+    let world: TestApp;
+    let sink: LogSink;
+
+    beforeEach(async () => {
+        sink = new LogSink();
+        world = await createTestApp({ logger: { level: `info`, stream: sink } });
+        world.app.get(`/api/fails`, { config: { limit: `public` } }, () => {
+            throw new Error(`secretmarker`);
+        });
+        world.app.get(`/api/unavailable`, { config: { limit: `public` } }, () => {
+            throw Object.assign(new Error(`secretmarker`), { statusCode: 503 });
+        });
+    });
+
+    afterEach(async () => {
+        await world.app.close();
+        world.sqlite.close();
+    });
+
+    it('answers internal error without its message, and logs the message and stack', async () => {
+        const failed = await world.app.inject({ method: `GET`, url: `/api/fails` });
+        expect(failed.statusCode).toBe(500);
+        expect(failed.json()).toEqual({ error: `internal error`, code: `internal` });
+        expect(failed.body).not.toContain(`secretmarker`);
+        const logged = sink.records().find((record) => record.msg === `request failed`);
+        expect(logged).toMatchObject({ level: 50, req: { method: `GET`, route: `/api/fails` }, res: { statusCode: 500 }, err: { message: `secretmarker` } });
+        expect(JSON.stringify(logged)).toContain(`request-logging.test.ts`);
+    });
+
+    it('answers an error carrying a server status the same way', async () => {
+        const failed = await world.app.inject({ method: `GET`, url: `/api/unavailable` });
+        expect(failed.statusCode).toBe(500);
+        expect(failed.json()).toEqual({ error: `internal error`, code: `internal` });
     });
 });

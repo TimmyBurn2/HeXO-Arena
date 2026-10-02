@@ -19,7 +19,7 @@ describe('DEV_LOGIN env flag', () => {
     });
 
     it('unset in production parses with the route off', () => {
-        expect(parseEnv({ NODE_ENV: `production`, TRUSTED_PROXY: `172.29.64.10` }).DEV_LOGIN).toBe(false);
+        expect(parseEnv({ NODE_ENV: `production`, TRUSTED_PROXY: `172.29.64.10`, PUBLIC_ORIGIN: `https://arena.example` }).DEV_LOGIN).toBe(false);
     });
 });
 

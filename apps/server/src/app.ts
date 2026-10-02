@@ -12,7 +12,7 @@ import {
 } from '@hexo-arena/contract';
 import websocketPlugin from '@fastify/websocket';
 import cookiePlugin from '@fastify/cookie';
-import Fastify, { errorCodes, type FastifyInstance, type FastifyRequest } from 'fastify';
+import Fastify, { errorCodes, type FastifyError, type FastifyInstance, type FastifyReply, type FastifyRequest } from 'fastify';
 import { createAdminHandler } from './admin-ops';
 import { backupNow, type BackupPolicy } from './backup';
 import type { AdminHandler } from './admin-socket';
@@ -25,9 +25,10 @@ import { createQuery, type Query, type Sqlite } from './db';
 import { registerDevAccountsApi } from './dev-accounts';
 import { registerFinishedGamesApi } from './finished-games';
 import { abortUnfinishedGames } from './game-store';
-import { fillGameRatings } from './rating-store';
+import { fillGameRatings, rankablePlayers } from './rating-store';
 import { engineSocketRoute, registerGameApi } from './game-api';
 import { GameRegistry, wirePresence } from './game-registry';
+import { Ladder } from './ladder';
 import { registerLeaderboardApi } from './leaderboard-api';
 import type { DiscordOAuth } from './discord';
 import { drain } from './drain';
@@ -36,8 +37,8 @@ import type { PresenceRegistry } from './presence';
 import { GuestSessions } from './guests';
 import { registerOgShell } from './og-shell';
 import { defaultLimits, RequestLimits, type LimitTable } from './request-limits';
-import { loggingOptions, type LogTarget } from './request-log';
-import { registerSessionApi } from './session-api';
+import { logClientError, loggingOptions, type LogTarget } from './request-log';
+import { registerSessionApi, registerSessionCookie } from './session-api';
 import { sessionUser, sweepSessions } from './sessions';
 import { registerSignInApi } from './sign-in-api';
 import { sweepSignups } from './signups';
@@ -94,17 +95,52 @@ const tournamentTickMs = 1_000;
 // so none outlives its stated time by more than a minute.
 const sweepMs = 60_000;
 
+// An error's own status when it names a failure, else 500.
+function errorStatusOf(error: unknown): number {
+    const status = typeof error === `object` && error !== null && `statusCode` in error ? error.statusCode : undefined;
+    return typeof status === `number` && status >= 400 ? status : 500;
+}
+
+const malformed = { error: `the request is malformed`, code: `bad_request` };
+
+// The router refuses a path it cannot decode, or one past its parameter
+// cap, before any route or hook runs; Fastify's own body would quote the path.
+// No route sets an async constraint, the one other error that lands here.
+function answerFrameworkError(error: FastifyError, _request: FastifyRequest, reply: FastifyReply): void {
+    const tooLong = errorStatusOf(error) === 414;
+    logClientError(error, reply.code(tooLong ? 414 : 400));
+    void reply.send(tooLong ? { error: `the path is too long`, code: `bad_request` } : malformed);
+}
+
 function sweepExpired(query: Query): void {
     sweepSignups(query);
     sweepSessions(query);
 }
 
 export async function buildApp(deps: AppDeps): Promise<BuiltApp> {
-    const app = Fastify({ ...loggingOptions(deps.logger), bodyLimit: requestBodyLimitBytes });
-    // Every other error keeps the default answer.
-    app.setErrorHandler((error, _request, reply) => {
-        if (!(error instanceof errorCodes.FST_ERR_CTP_BODY_TOO_LARGE)) throw error;
-        return reply.code(413).send({ error: `request body too large`, code: `payload_too_large` });
+    const app = Fastify({ ...loggingOptions(deps.logger), bodyLimit: requestBodyLimitBytes, frameworkErrors: answerFrameworkError });
+    // Fastify's own refusals answer in the contract's shape; any other
+    // client error keeps the default answer.
+    app.setErrorHandler((error, request, reply) => {
+        if (error instanceof errorCodes.FST_ERR_CTP_BODY_TOO_LARGE) {
+            return reply.code(413).send({ error: `request body too large`, code: `payload_too_large` });
+        }
+        const status = errorStatusOf(error);
+        if (status === 400 || status === 415) {
+            logClientError(error, reply.code(status));
+            return reply.send(status === 400 ? malformed : { error: `the body's content type is not supported`, code: `unsupported_media_type` });
+        }
+        if (status < 500) throw error;
+        // A server error's message may quote SQL, a template, or a name;
+        // the log keeps it with the stack, and the answer says nothing.
+        reply.code(500);
+        reply.log.error({ req: request, res: reply, err: error }, `request failed`);
+        return reply.send({ error: `internal error`, code: `internal` });
+    });
+    // The answer names no path: a path carries player and bot names and a query.
+    app.setNotFoundHandler((request, reply) => {
+        request.log.info(`route not found`);
+        return reply.code(404).send({ error: `not found`, code: `not_found` });
     });
     // Registered first, so every route after it must name its limit,
     // and every request spends its tokens before any other hook runs.
@@ -124,6 +160,7 @@ export async function buildApp(deps: AppDeps): Promise<BuiltApp> {
     }, sweepMs);
     sweep.unref();
     await app.register(cookiePlugin);
+    registerSessionCookie(app, deps.secureCookies);
     // One move_response is a few hundred bytes; anything bigger is a broken or hostile client.
     await app.register(websocketPlugin, { options: { maxPayload: engineFrameLimitBytes } });
     // The plugin accepts an upgrade on any route, then logs the raw url as it
@@ -135,6 +172,12 @@ export async function buildApp(deps: AppDeps): Promise<BuiltApp> {
             return;
         }
         done();
+    });
+    // Tokens and account data ride API answers, so none may be cached,
+    // whatever proxy stands in front of the app.
+    app.addHook(`onSend`, (request, reply, payload, done) => {
+        if (request.url.startsWith(`/api/`) && !reply.hasHeader(`cache-control`)) void reply.header(`cache-control`, `no-store`);
+        done(null, payload);
     });
     const { presence, watchers } = deps;
     const gate = new StartGate(query);
@@ -156,8 +199,11 @@ export async function buildApp(deps: AppDeps): Promise<BuiltApp> {
         actor: deps.adminActor,
         ...(deps.now === undefined ? {} : { now: deps.now }),
     });
+    const ladder = new Ladder({ rank: (filter) => rankablePlayers(query, filter), now: deps.now ?? Date.now });
     games.onFinish((finished) => {
         tournaments.gameFinished(finished);
+        // A finish moves ratings, which the ladder shows at once rather than in ten seconds.
+        ladder.clear();
     });
     if ((deps.tournamentTickMs ?? tournamentTickMs) > 0) tournaments.start(deps.tournamentTickMs ?? tournamentTickMs);
     const guests = new GuestSessions({
@@ -182,19 +228,19 @@ export async function buildApp(deps: AppDeps): Promise<BuiltApp> {
         challenges.stop();
         games.stop();
     });
-    registerBotApi(app, { query, presence, gate, games, limits });
+    registerBotApi(app, { query, presence, gate, games, limits, reservations: tournaments });
     registerChallengeApi(app, { query, presence, games, challenges, gate, limits, reservations: tournaments });
     registerGameApi(app, { query, presence, games, watchers, gate, guests, limits, reservations: tournaments });
     registerFinishedGamesApi(app, { query, now: deps.now ?? Date.now });
-    registerLeaderboardApi(app, { query, presence, now: deps.now ?? Date.now });
+    registerLeaderboardApi(app, { ladder, presence, now: deps.now ?? Date.now });
     registerTournamentApi(app, { query, presence, games, limits, now: deps.now ?? Date.now });
-    const playerReads = createPlayerReads({ query, now: deps.now ?? Date.now });
+    const playerReads = createPlayerReads({ query, ladder, now: deps.now ?? Date.now });
     registerPlayerApi(app, { reads: playerReads });
     registerSessionApi(app, { query, guests, games, secureCookies: deps.secureCookies, limits });
     registerSignInApi(app, { query, guests, discord: deps.discord, secureCookies: deps.secureCookies, devLogin: deps.devLogin, limits });
     if (deps.devLogin) registerDevAccountsApi(app, { query });
     if (deps.webIndexPath !== undefined) {
-        registerOgShell(app, { query, presence, games, players: playerReads, indexPath: deps.webIndexPath, publicOrigin: deps.publicOrigin, now: deps.now ?? Date.now });
+        registerOgShell(app, { query, presence, games, ladder, players: playerReads, indexPath: deps.webIndexPath, publicOrigin: deps.publicOrigin, now: deps.now ?? Date.now });
     }
     const backupPolicy = deps.backup;
     const admin = createAdminHandler({
@@ -204,6 +250,7 @@ export async function buildApp(deps: AppDeps): Promise<BuiltApp> {
         challenges,
         tournaments,
         limits,
+        ladder,
         actor: deps.adminActor,
         backup: backupPolicy === undefined ? null : () => backupNow(deps.sqlite, backupPolicy, new Date()),
         tournamentLeadMs: leadMs,

@@ -24,13 +24,13 @@ describe('Sigil', () => {
     });
 
     it('light the center first, then the ring from the right', () => {
-        const { container } = render(<Sigil nameKey="tom" />);
-        // tom lights the center and the upper left cell alone.
+        const { container } = render(<Sigil nameKey="quinn" />);
+        // quinn lights the center and the right and left cells alone.
         const centers = (container.querySelector(`.sigil-on`)?.getAttribute(`d`) ?? ``)
             .split(`M`)
             .slice(1)
             .map((cell) => cell.split(`L`)[0]);
-        expect(centers).toEqual([`50.00,37.40`, `37.44,15.65`]);
+        expect(centers).toEqual([`50.00,37.40`, `75.11,37.40`, `24.89,37.40`]);
     });
 
     it('tell three owners of one stem apart', () => {

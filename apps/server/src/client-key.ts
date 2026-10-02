@@ -37,16 +37,24 @@ function ipv6Groups(address: string): string[] {
 }
 
 // One client as the limits count it:
-// an IPv4 address whole, an IPv6 address by the /64 one subscriber holds;
+// an IPv4 address whole, an IPv6 address by the /64 one subscriber holds,
+// with the /48 a subscriber may hold as well;
 // null where no public address is known.
-function clientOf(address: string | undefined): string | null {
+function clientOf(address: string | undefined): { client: string; prefix: string | null } | null {
     if (address === undefined) return null;
     const mapped = /^::ffff:(\d+\.\d+\.\d+\.\d+)$/iu.exec(address)?.[1];
     const plain = mapped ?? address;
-    if (isIPv4(plain)) return notPublic.check(plain, `ipv4`) ? null : plain;
+    if (isIPv4(plain)) return notPublic.check(plain, `ipv4`) ? null : { client: plain, prefix: null };
     if (!isIPv6(plain)) return null;
     if (notPublic.check(plain, `ipv6`)) return null;
-    return `${ipv6Groups(plain).slice(0, 4).join(`:`)}::/64`;
+    const groups = ipv6Groups(plain);
+    return { client: `${groups.slice(0, 4).join(`:`)}::/64`, prefix: `${groups.slice(0, 3).join(`:`)}::/48` };
+}
+
+/** The keys one request is limited under: its client's, and its IPv6 /48's, null for IPv4. */
+export interface RequestKeys {
+    readonly client: string | null;
+    readonly prefix: string | null;
 }
 
 /**
@@ -80,7 +88,7 @@ export class ClientKeys {
         this.#rekeyed.add(listener);
     }
 
-    keyOf(peer: string | undefined, forwardedFor: string | string[] | undefined): string | null {
+    keysOf(peer: string | undefined, forwardedFor: string | string[] | undefined): RequestKeys {
         const day = Math.floor(this.#now() / dayMs);
         if (day !== this.#day) {
             this.#day = day;
@@ -94,8 +102,12 @@ export class ClientKeys {
         const client = clientOf(address);
         if (client === null) {
             this.#keyless += 1;
-            return null;
+            return { client: null, prefix: null };
         }
-        return createHmac(`sha256`, this.#secret).update(client).digest(`base64url`).slice(0, 22);
+        return { client: this.#hash(client.client), prefix: client.prefix === null ? null : this.#hash(client.prefix) };
+    }
+
+    #hash(network: string): string {
+        return createHmac(`sha256`, this.#secret).update(network).digest(`base64url`).slice(0, 22);
     }
 }

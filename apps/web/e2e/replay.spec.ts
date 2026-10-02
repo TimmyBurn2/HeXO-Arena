@@ -26,7 +26,7 @@ test('a finished game replays from its scrubber, a turn or a stone at a time, ho
     await open(page, `/game/finished`);
     await expect(slider(page)).toBeFocused();
     await expect(slider(page)).toHaveAttribute(`aria-valuetext`, `Turn 6 of 6`);
-    await expect(page.locator(`.hud-bottom-center .hud-result`)).toHaveText(`tom won with six in a row`);
+    await expect(page.locator(`.hud-bottom-center .hud-result`)).toHaveText(`quinn won with six in a row`);
     await expect(page.locator(`polyline.win-line`)).toHaveCount(1);
     const frame = await page.locator(`.board-camera .board-svg`).getAttribute(`viewBox`);
 
@@ -161,7 +161,7 @@ for (const [width, names] of [
 }
 
 test('a seated player gets no scrubber', async ({ page }) => {
-    await open(page, `/game/running`, { kind: `user`, name: `tom`, rating: 1503, provisional: false, discord: null, liveGames: [] });
+    await open(page, `/game/running`, { kind: `user`, name: `quinn`, rating: 1503, provisional: false, discord: null, liveGames: [] });
     await expect(page.locator(`.hud-bottom-center`)).toBeVisible();
     await expect(page.getByRole(`slider`)).toHaveCount(0);
 });

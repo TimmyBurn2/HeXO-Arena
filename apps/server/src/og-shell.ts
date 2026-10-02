@@ -30,18 +30,19 @@ import { readFile } from 'node:fs/promises';
 import { listBots } from './bots';
 import type { Query } from './db';
 import type { GameRegistry } from './game-registry';
+import type { Ladder } from './ladder';
 import type { PresenceRegistry } from './presence';
 import { isProvisional } from './rating';
 import { activeSince } from './leaderboard-api';
 import type { PlayerReads } from './player-api';
-import { rankablePlayers } from './rating-store';
 import { tournamentSummary } from './tournament-api';
 
 export interface OgShellDeps {
     query: Query;
     presence: PresenceRegistry;
     games: GameRegistry;
-    // The player API's own reads, so a preview never reads past its memo.
+    // The API's own reads, so a preview never reads past their memos.
+    ladder: Pick<Ladder, `read`>;
     players: PlayerReads;
     indexPath: string;
     publicOrigin: string;
@@ -113,7 +114,7 @@ export const shellRoutes: readonly string[] = [`/`, `/play`, `/ladder`, `/bots/:
  * it removed.
  */
 export function registerOgShell(app: FastifyInstance, deps: OgShellDeps): void {
-    const { query, presence, games, indexPath, publicOrigin, now } = deps;
+    const { query, presence, games, ladder, indexPath, publicOrigin, now } = deps;
 
     async function sendShell(reply: FastifyReply, status: 200 | 404, meta: PageMeta): Promise<FastifyReply> {
         const template = await readFile(indexPath, `utf8`);
@@ -129,7 +130,7 @@ export function registerOgShell(app: FastifyInstance, deps: OgShellDeps): void {
         return {
             listed: listed.length,
             online: listed.filter((bot) => presence.isOnline(bot.id)).length,
-            leader: rankablePlayers(query, { kind: `all`, activeSince: activeSince(now()) })[0],
+            leader: ladder.read(`all`, activeSince(now()))[0],
         };
     }
 

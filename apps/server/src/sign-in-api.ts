@@ -9,7 +9,6 @@ import {
     nextPathOf,
     oauthCookieName,
     oauthMaxAgeSeconds,
-    sessionCookieName,
     signInFailurePath,
     signInStateCap,
     signupCookieName,
@@ -68,7 +67,7 @@ function clearOAuthCookie(reply: FastifyReply, secure: boolean): void {
 // A sign-in replaces whatever session the browser held: a guest ends with
 // its games, and an account's old session is deleted.
 function endHeldSession(deps: SignInApiDeps, request: FastifyRequest): void {
-    const token = request.cookies[sessionCookieName];
+    const token = request.sessionToken;
     if (token === undefined) return;
     deps.guests.end(token);
     deleteSession(deps.query, token);
@@ -120,6 +119,8 @@ export function registerSignInApi(app: FastifyInstance, deps: SignInApiDeps): vo
         if (error !== undefined) return reply.redirect(signInFailurePath(error === `access_denied` ? `cancelled` : `rejected`, next));
         if (issued === null) return reply.redirect(signInFailurePath(`expired`));
         if (code === undefined) return reply.redirect(signInFailurePath(`rejected`, next));
+        // Discord restricts an address that floods it, and every sign-in leaves from the one address.
+        if (!deps.limits.takeDiscordExchange()) return reply.redirect(signInFailurePath(`busy`, next));
         const identity = await deps.discord.exchange(code).catch(() => null);
         if (!identity) return reply.redirect(signInFailurePath(`rejected`, next));
         return finishSignIn(deps, identity, next, request, reply);

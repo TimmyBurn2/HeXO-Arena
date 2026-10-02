@@ -46,6 +46,12 @@ const envShape = z.object({
         .refine((value) => value === `` || isIP(value) !== 0, { message: `TRUSTED_PROXY must be an IP address` }),
 });
 
+function isHttpsOrigin(origin: string): boolean {
+    if (!URL.canParse(origin)) return false;
+    const url = new URL(origin);
+    return url.protocol === `https:` && url.pathname === `/` && url.search === `` && url.hash === `` && url.username === `` && url.password === ``;
+}
+
 /** Every variable the server reads; `.env.example` lists exactly these. */
 export const envKeys = envShape.keyof().options;
 
@@ -67,6 +73,12 @@ const envSchema = envShape
     .refine((env) => env.NODE_ENV !== `production` || env.TRUSTED_PROXY !== ``, {
         message: `TRUSTED_PROXY must name the proxy's address when NODE_ENV is production`,
         path: [`TRUSTED_PROXY`],
+    })
+    // TLS ends at the proxy, so an http origin would drop the cookie's
+    // Secure flag without a word, and a path would send Discord's redirect elsewhere.
+    .refine((env) => env.NODE_ENV !== `production` || isHttpsOrigin(env.PUBLIC_ORIGIN), {
+        message: `PUBLIC_ORIGIN must be an https origin with no path when NODE_ENV is production`,
+        path: [`PUBLIC_ORIGIN`],
     })
     .transform(({ DEV_LOGIN, DEV_FAST_STOP, TRUSTED_PROXY, ...env }) => ({
         ...env,

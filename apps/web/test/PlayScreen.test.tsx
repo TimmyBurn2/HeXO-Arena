@@ -31,11 +31,11 @@ const roster: BotListing[] = [
     bot(`lantern`, 1500, { online: false, openForChallenges: false }),
 ];
 
-const tom: Me = { kind: `user`, name: `tom`, rating: 1503, provisional: false, discord: null, liveGames: [] };
+const quinn: Me = { kind: `user`, name: `quinn`, rating: 1503, provisional: false, discord: null, liveGames: [] };
 const snapshot = {
     gameId: `g1`,
     players: {
-        x: { name: `tom`, rating: 1503, provisional: false, kind: `user` },
+        x: { name: `quinn`, rating: 1503, provisional: false, kind: `user` },
         o: { name: `devbot-c`, rating: 1514, provisional: false, kind: `bot` },
     },
     you: `x`,
@@ -57,7 +57,7 @@ type Answer = (body: unknown) => Response;
 // The API as one test sees it: who is here, the bot list, and how a start answers.
 function serve(options: { me?: Me; bots?: BotListing[] | (() => BotListing[]); start?: Answer; guest?: Answer; tournament?: string[]; records?: Record<string, { rating: number; deviation: number }> } = {}): Served {
     const served: Served = { posts: [], listReads: 0 };
-    let me = options.me === undefined ? tom : options.me;
+    let me = options.me === undefined ? quinn : options.me;
     vi.stubGlobal(
         `fetch`,
         vi.fn((url: string, init?: RequestInit) => {
@@ -67,7 +67,7 @@ function serve(options: { me?: Me; bots?: BotListing[] | (() => BotListing[]); s
             const record = player === undefined ? undefined : options.records?.[decodeURIComponent(player)];
             if (player !== undefined && record !== undefined) {
                 const name = decodeURIComponent(player);
-                const body = { name, kind: name === `tom` ? `human` : `bot`, ...record, provisional: record.deviation > 75, rank: null, games: 10, won: 5, lost: 5, undecided: 0, asX: { games: 5, won: 3 }, asO: { games: 5, won: 2 }, forfeits: { disconnect: 0, terminated: 0 }, opponents: [], firstGameAt: null, lastGameAt: null };
+                const body = { name, kind: name === `quinn` ? `human` : `bot`, ...record, provisional: record.deviation > 75, rank: null, games: 10, won: 5, lost: 5, undecided: 0, asX: { games: 5, won: 3 }, asO: { games: 5, won: 2 }, forfeits: { disconnect: 0, terminated: 0 }, opponents: [], firstGameAt: null, lastGameAt: null };
                 return Promise.resolve(new Response(JSON.stringify(body)));
             }
             if (url.startsWith(`/api/bots`)) {
@@ -181,7 +181,7 @@ describe('PlayScreen', () => {
 
     it('hold Start on a bot of the person\'s own, saying so, and say it when the server refuses one', async () => {
         window.history.replaceState(null, ``, `/play?bot=devbot-c`);
-        serve({ bots: roster.map((listed) => (listed.name === `devbot-c` ? { ...listed, ownerName: `tom` } : listed)) });
+        serve({ bots: roster.map((listed) => (listed.name === `devbot-c` ? { ...listed, ownerName: `quinn` } : listed)) });
         render(<PlayScreen />);
         await ready();
         expect(title()).toBe(`Play devbot-c`);
@@ -276,7 +276,7 @@ describe('PlayScreen', () => {
     });
 
     it('give a signed-in player their expected score against the bot on the card', async () => {
-        serve({ records: { tom: { rating: 1503, deviation: 60 }, 'devbot-c': { rating: 1514, deviation: 52 }, 'devbot-a': { rating: 1310, deviation: 200 } } });
+        serve({ records: { quinn: { rating: 1503, deviation: 60 }, 'devbot-c': { rating: 1514, deviation: 52 }, 'devbot-a': { rating: 1310, deviation: 200 } } });
         render(<PlayScreen />);
         const card = await ready();
         expect(await within(card).findByText(`Your expected score against devbot-c: 0.48`)).toBeTruthy();
@@ -469,7 +469,7 @@ describe('PlayScreen', () => {
         vi.stubGlobal(
             `fetch`,
             vi.fn((url: string) => {
-                if (url === `/api/me`) return Promise.resolve(new Response(JSON.stringify(tom)));
+                if (url === `/api/me`) return Promise.resolve(new Response(JSON.stringify(quinn)));
                 if (url.startsWith(`/api/bots`)) return Promise.resolve(new Response(JSON.stringify(roster)));
                 return new Promise<Response>((resolve) => {
                     held.answer = () => {
@@ -542,12 +542,12 @@ describe('PlayScreen', () => {
     });
 
     it('lead to the games that fill the cap when a start is refused for it, reading the session again for them', async () => {
-        const game = (gameId: string, opponent: string, tomSide: `x` | `o`): LiveGameEntry => {
-            const tomSeat = { name: `tom`, rating: 1503, provisional: false, kind: `user` as const };
+        const game = (gameId: string, opponent: string, quinnSide: `x` | `o`): LiveGameEntry => {
+            const quinnSeat = { name: `quinn`, rating: 1503, provisional: false, kind: `user` as const };
             const bot = { name: opponent, rating: 1600, provisional: false, kind: `bot` as const };
             return {
                 gameId,
-                players: tomSide === `x` ? { x: tomSeat, o: bot } : { x: bot, o: tomSeat },
+                players: quinnSide === `x` ? { x: quinnSeat, o: bot } : { x: bot, o: quinnSeat },
                 timeControl: { mode: `unlimited` },
                 toMove: `x`,
                 rated: true,
@@ -556,7 +556,7 @@ describe('PlayScreen', () => {
             };
         };
         const liveGames = [game(`g1`, `hextide`, `x`), game(`g2`, `pebble`, `o`), game(`g3`, `lantern`, `x`)];
-        serve({ me: { kind: `user`, name: `tom`, rating: 1503, provisional: false, discord: null, liveGames }, start: refused(400, `human_busy`) });
+        serve({ me: { kind: `user`, name: `quinn`, rating: 1503, provisional: false, discord: null, liveGames }, start: refused(400, `human_busy`) });
         render(<PlayScreen />);
         await ready();
         const sessionReads = () => vi.mocked(fetch).mock.calls.filter(([url]) => url === `/api/me`).length;
@@ -693,7 +693,7 @@ describe('PlayScreen', () => {
         vi.stubGlobal(
             `fetch`,
             vi.fn((url: string) => {
-                if (url === `/api/me`) return Promise.resolve(new Response(JSON.stringify(tom)));
+                if (url === `/api/me`) return Promise.resolve(new Response(JSON.stringify(quinn)));
                 if (url.startsWith(`/api/bots`)) return Promise.resolve(new Response(JSON.stringify(roster)));
                 if (url === `/api/games`) return Promise.resolve(refused(401, `unauthorized`)(undefined));
                 return Promise.resolve(new Response(null, { status: 404 }));
@@ -918,7 +918,7 @@ describe('PlayScreen', () => {
         vi.stubGlobal(
             `fetch`,
             vi.fn((url: string) => {
-                if (url === `/api/me`) return Promise.resolve(new Response(JSON.stringify(tom)));
+                if (url === `/api/me`) return Promise.resolve(new Response(JSON.stringify(quinn)));
                 if (url.startsWith(`/api/bots`)) return Promise.resolve(new Response(JSON.stringify(roster)));
                 if (url === `/healthz`) return Promise.resolve(new Response(`{}`, { status: 503 }));
                 return Promise.resolve(refused(503, `paused`)(undefined));
@@ -1161,7 +1161,7 @@ describe('PlayScreen', () => {
     it('offer a retry when the bot list does not load', async () => {
         vi.stubGlobal(
             `fetch`,
-            vi.fn((url: string) => Promise.resolve(url === `/api/me` ? new Response(JSON.stringify(tom)) : new Response(`{}`, { status: 500 }))),
+            vi.fn((url: string) => Promise.resolve(url === `/api/me` ? new Response(JSON.stringify(quinn)) : new Response(`{}`, { status: 500 }))),
         );
         meStore.reset();
         meStore.start();
@@ -1175,7 +1175,7 @@ describe('PlayScreen', () => {
             vi.fn((url: string) =>
                 Promise.resolve(
                     url === `/api/me`
-                        ? new Response(JSON.stringify(tom))
+                        ? new Response(JSON.stringify(quinn))
                         : new Response(JSON.stringify({ error: `slow down`, code: `rate_limited` }), { status: 429, headers: { 'retry-after': `7` } }),
                 ),
             ),

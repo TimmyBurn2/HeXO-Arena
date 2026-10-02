@@ -19,7 +19,7 @@ const record = {
     forfeits: { disconnect: 1, terminated: 0 },
     opponents: [
         { name: `sealbot`, kind: `bot`, games: 12, won: 4, lost: 8 },
-        { name: `tom`, kind: `human`, games: 6, won: 3, lost: 3 },
+        { name: `quinn`, kind: `human`, games: 6, won: 3, lost: 3 },
     ],
     firstGameAt: `2026-03-01T10:00:00Z`,
     lastGameAt: `2026-09-30T18:00:00Z`,
@@ -66,7 +66,7 @@ describe('PlayerScreen', () => {
         expect(within(card).getByRole(`link`, { name: `5th` }).getAttribute(`href`)).toBe(`/ladder`);
         const opponents = screen.getByRole(`region`, { name: `Most played` });
         expect(within(opponents).getByRole(`link`, { name: `sealbot` }).getAttribute(`href`)).toBe(`/bots/sealbot`);
-        expect(within(opponents).getByRole(`link`, { name: `tom` }).getAttribute(`href`)).toBe(`/players/tom`);
+        expect(within(opponents).getByRole(`link`, { name: `quinn` }).getAttribute(`href`)).toBe(`/players/quinn`);
         expect(within(opponents).getByRole(`link`, { name: `12 games: 4 won, 8 lost` }).getAttribute(`href`)).toBe(`/games?player=ana&vs=sealbot`);
         expect(screen.queryByRole(`region`, { name: `Tournaments` })).toBeNull();
     });

@@ -12,7 +12,7 @@ describe('sigilCells', () => {
         [`devowner-b`, `1101000`],
         [`devowner-c`, `1010101`],
         [`mira-hex`, `1011000`],
-        [`tom`, `1000010`],
+        [`quinn`, `1100100`],
         [`ana`, `1111000`],
         [`quietowner`, `1011101`],
         [`sealbot-owner-with-a-long-name`, `1100010`],

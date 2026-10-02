@@ -109,11 +109,11 @@ describe('WelcomeScreen', () => {
         const drawn = () => document.querySelector(`.public-name-mark .sigil-on`)?.getAttribute(`d`) ?? null;
         const suggested = drawn();
         expect(suggested).not.toBe(null);
-        type(`tom`);
+        type(`quinn`);
         expect(drawn()).not.toBe(suggested);
-        type(`TOM`);
+        type(`QUINN`);
         const folded = drawn();
-        type(`tom`);
+        type(`quinn`);
         expect(drawn()).toBe(folded);
         type(``);
         expect(document.querySelector(`.public-name-mark svg.sigil-guest`)).toBeTruthy();
@@ -298,8 +298,8 @@ describe('WelcomeScreen', () => {
         });
         expect(screen.queryByRole(`button`, { name: `Create account` })).toBe(null);
         expect(document.querySelector(`.skeleton`)).toBeTruthy();
-        held.answer?.({ kind: `user`, name: `tom`, rating: 1503, provisional: false, discord: null, liveGames: [] });
-        expect(await screen.findByText(`Creating this account signs tom out.`)).toBeTruthy();
+        held.answer?.({ kind: `user`, name: `quinn`, rating: 1503, provisional: false, discord: null, liveGames: [] });
+        expect(await screen.findByText(`Creating this account signs quinn out.`)).toBeTruthy();
         expect(screen.getByRole(`button`, { name: `Create account` })).toBeTruthy();
     });
 
@@ -361,10 +361,10 @@ describe('WelcomeScreen', () => {
     });
 
     it('tell someone signed in that creating another account signs them out', async () => {
-        serve(ok, undefined, { kind: `user`, name: `tom`, rating: 1503, provisional: false, discord: null, liveGames: [] });
+        serve(ok, undefined, { kind: `user`, name: `quinn`, rating: 1503, provisional: false, discord: null, liveGames: [] });
         meStore.start();
         render(<WelcomeScreen />);
-        expect(await screen.findByText(`Creating this account signs tom out.`)).toBeTruthy();
+        expect(await screen.findByText(`Creating this account signs quinn out.`)).toBeTruthy();
     });
 
     it('go on where the sign-in was headed when another tab created the account first', async () => {
@@ -392,7 +392,7 @@ describe('WelcomeScreen', () => {
     });
 
     it('end the sign-up of someone signed in whose own sign-up expired, pressing once while it checks', async () => {
-        const tom: Me = { kind: `user`, name: `tom`, rating: 1503, provisional: false, discord: null, liveGames: [] };
+        const quinn: Me = { kind: `user`, name: `quinn`, rating: 1503, provisional: false, discord: null, liveGames: [] };
         const posts: string[] = [];
         const pending: { answer: (() => void) | null } = { answer: null };
         let meReads = 0;
@@ -401,11 +401,11 @@ describe('WelcomeScreen', () => {
             vi.fn((url: string, init?: RequestInit) => {
                 if (url === `/api/me`) {
                     meReads += 1;
-                    // The first read signs tom in; the check after the 410 waits.
-                    if (meReads === 1) return Promise.resolve(new Response(JSON.stringify(tom)));
+                    // The first read signs quinn in; the check after the 410 waits.
+                    if (meReads === 1) return Promise.resolve(new Response(JSON.stringify(quinn)));
                     return new Promise<Response>((resolve) => {
                         pending.answer = () => {
-                            resolve(new Response(JSON.stringify(tom)));
+                            resolve(new Response(JSON.stringify(quinn)));
                         };
                     });
                 }
@@ -418,7 +418,7 @@ describe('WelcomeScreen', () => {
         );
         meStore.start();
         render(<WelcomeScreen />);
-        await screen.findByText(`Creating this account signs tom out.`);
+        await screen.findByText(`Creating this account signs quinn out.`);
         const create = screen.getByRole(`button`, { name: `Create account` });
         fireEvent.click(create);
         await waitFor(() => {

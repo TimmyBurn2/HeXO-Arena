@@ -160,7 +160,7 @@ const framedScreens = [`/`, `/games`, `/ladder`, `/bots`, `/bots/sealbot`, `/con
 // the footer is a row, at its end where it stacks, signed in or out.
 const visitors: readonly (readonly [string, Me])[] = [
     [`signed out`, null],
-    [`signed in`, { kind: `user`, name: `tom`, rating: 1503, provisional: false, discord: null, liveGames: [] }],
+    [`signed in`, { kind: `user`, name: `quinn`, rating: 1503, provisional: false, discord: null, liveGames: [] }],
     [`a guest`, { kind: `guest`, name: `Guest k3f9`, liveGames: [] }],
 ];
 for (const [visitor, me] of visitors) {

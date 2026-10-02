@@ -1,4 +1,6 @@
-FROM node:24-slim AS build
+# Both stages pin the multi-arch index by digest: a moved tag never changes
+# what a build starts from.
+FROM node:24-slim@sha256:0e0ff40c39bc087845bfb27465a0df4ea419520094bc35842ff83dd8cbe6f9b6 AS build
 
 RUN npm install --global pnpm@12.6.0
 
@@ -19,12 +21,16 @@ COPY . .
 RUN pnpm build \
     && pnpm --filter @hexo-arena/server deploy --prod /out
 
-FROM node:24-slim
+FROM node:24-slim@sha256:0e0ff40c39bc087845bfb27465a0df4ea419520094bc35842ff83dd8cbe6f9b6
 
+# The app needs node alone; a package manager left in would only serve
+# whoever got a shell.
 # A dedicated uid that matches nothing on the host.
 # A fresh named volume takes the owner of its mount point, so every
 # directory a volume or tmpfs lands on exists here, owned by that uid.
-RUN groupadd --gid 10001 hexo-arena \
+RUN rm -rf /usr/local/lib/node_modules/npm /usr/local/lib/node_modules/corepack \
+        /usr/local/bin/npm /usr/local/bin/npx /usr/local/bin/corepack /usr/local/bin/yarn /usr/local/bin/yarnpkg /opt/yarn-v* \
+    && groupadd --gid 10001 hexo-arena \
     && useradd --uid 10001 --gid hexo-arena --no-create-home --shell /usr/sbin/nologin hexo-arena \
     && mkdir -p /data /backup /run/hexo-arena /srv/web \
     && chown hexo-arena:hexo-arena /data /backup /run/hexo-arena /srv/web \

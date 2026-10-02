@@ -26,7 +26,7 @@ const botGame: LiveGameEntry = {
     gameId: `g-bots`,
     players: {
         x: { name: `hextide`, rating: 1690, provisional: false, kind: `bot` },
-        o: { name: `tom`, rating: 1503, provisional: false, kind: `user` },
+        o: { name: `quinn`, rating: 1503, provisional: false, kind: `user` },
     },
     timeControl: { mode: `match`, mainTimeMs: 300_000, incrementMs: 2_000 },
     toMove: `x`,

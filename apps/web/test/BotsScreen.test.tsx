@@ -6,7 +6,7 @@ import { BotsScreen } from '../src/screens/BotsScreen';
 const directory = [
     {
         name: `sealbot`,
-        ownerName: `tom`,
+        ownerName: `quinn`,
         online: true,
         openForChallenges: true,
         rating: 1712,
@@ -61,9 +61,9 @@ describe('BotsScreen', () => {
         stubDirectory(directory);
         render(<BotsScreen />);
         expect(await screen.findByRole(`table`)).toBeTruthy();
-        const owner = screen.getByRole(`link`, { name: `tom` });
-        expect(owner.closest(`td`)?.textContent).toBe(`tom`);
-        expect(owner.getAttribute(`href`)).toBe(`/players/tom`);
+        const owner = screen.getByRole(`link`, { name: `quinn` });
+        expect(owner.closest(`td`)?.textContent).toBe(`quinn`);
+        expect(owner.getAttribute(`href`)).toBe(`/players/quinn`);
         expect(screen.getByText(`turn 5 to 60 s, match, unlimited`)).toBeTruthy();
         expect(screen.getByText(`match, unlimited`)).toBeTruthy();
         expect(document.querySelectorAll(`tbody tr`).length).toBe(2);

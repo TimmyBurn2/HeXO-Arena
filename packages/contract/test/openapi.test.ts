@@ -174,10 +174,10 @@ describe('openapi document', () => {
         }
     });
 
-    it('carries the site name as its title and on the session cookie', () => {
+    it('carries the site name as its title and on the session cookie as TLS names it', () => {
         const document = buildOpenApiDocument();
         expect(document.info.title).toBe(`HeXO Arena`);
-        expect(dig(document, `components`, `securitySchemes`, `sessionCookie`, `name`)).toBe(`hexo_arena_session`);
+        expect(dig(document, `components`, `securitySchemes`, `sessionCookie`, `name`)).toBe(`__Host-hexo_arena_session`);
     });
 
     it('documents the healthz route', () => {

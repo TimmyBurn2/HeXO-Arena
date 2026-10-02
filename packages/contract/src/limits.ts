@@ -43,6 +43,18 @@ export const guestSessionCap = 500;
 /** Discord sign-ins one client may start. */
 export const signInStartLimit: RateLimit = { burst: 10, refillMs: 30_000 };
 
+// One subscriber may hold a whole IPv6 /48, 65,536 networks of a /64 each,
+// so a /48 meets a second bucket of four clients' worth.
+
+/** Guest sessions one IPv6 /48 may start. */
+export const guestMintPrefixLimit: RateLimit = { burst: 4 * guestMintLimit.burst, refillMs: guestMintLimit.refillMs / 4 };
+
+/** Discord sign-ins one IPv6 /48 may start. */
+export const signInStartPrefixLimit: RateLimit = { burst: 4 * signInStartLimit.burst, refillMs: signInStartLimit.refillMs / 4 };
+
+/** Sign-ins handed to Discord to confirm, across every caller: Discord limits the server's one address. */
+export const discordExchangeLimit: RateLimit = { burst: 30, refillMs: 1_000 };
+
 /** Sign-ins started and not yet back from Discord, across every caller. */
 export const signInStateCap = 500;
 

@@ -96,9 +96,9 @@ describe('Identity', () => {
     });
 
     it('open a popover from the signed-in name with the rating, where to go, and sign-out', async () => {
-        serve({ kind: `user`, name: `tom`, rating: 1503, provisional: false, discord: null, liveGames: [] });
+        serve({ kind: `user`, name: `quinn`, rating: 1503, provisional: false, discord: null, liveGames: [] });
         render(<Identity route={bots} />);
-        const button = await screen.findByRole(`button`, { name: `tom` });
+        const button = await screen.findByRole(`button`, { name: `quinn` });
         expect(button.getAttribute(`aria-expanded`)).toBe(`false`);
         expect(button.getAttribute(`aria-haspopup`)).toBe(`dialog`);
         fireEvent.click(button);
@@ -107,8 +107,8 @@ describe('Identity', () => {
         expect(dialog?.dataset.mode).toBe(`popover`);
         expect(button.getAttribute(`aria-expanded`)).toBe(`true`);
         expect(button.getAttribute(`aria-controls`)).toBe(`identity-panel`);
-        expect(screen.getByRole(`dialog`, { name: `tom` })).toBe(dialog);
-        expect(document.querySelector(`.identity-head`)?.textContent).toBe(`tom, rating 1503`);
+        expect(screen.getByRole(`dialog`, { name: `quinn` })).toBe(dialog);
+        expect(document.querySelector(`.identity-head`)?.textContent).toBe(`quinn, rating 1503`);
         expect(document.querySelector(`[role="menu"], [role="menuitem"]`)).toBe(null);
         const rows = [...(dialog?.querySelectorAll(`.identity-row`) ?? [])];
         expect(rows.map((row) => [row.tagName, row.textContent, row.getAttribute(`href`)])).toEqual([
@@ -136,9 +136,9 @@ describe('Identity', () => {
         fireEvent.click(await screen.findByRole(`button`, { name: `mira-hex` }));
         expect(document.querySelector(`#identity-panel .discord-line`)?.textContent).toBe(`Discord: @mira.hex`);
         cleanup();
-        serve({ kind: `user`, name: `tom`, rating: 1503, provisional: false, discord: null, liveGames: [] });
+        serve({ kind: `user`, name: `quinn`, rating: 1503, provisional: false, discord: null, liveGames: [] });
         render(<Identity route={bots} />);
-        fireEvent.click(await screen.findByRole(`button`, { name: `tom` }));
+        fireEvent.click(await screen.findByRole(`button`, { name: `quinn` }));
         expect(document.querySelector(`.discord-line`)).toBe(null);
     });
 
@@ -162,9 +162,9 @@ describe('Identity', () => {
     });
 
     it('mark the page the panel links to as current', async () => {
-        serve({ kind: `user`, name: `tom`, rating: 1503, provisional: false, discord: null, liveGames: [] });
+        serve({ kind: `user`, name: `quinn`, rating: 1503, provisional: false, discord: null, liveGames: [] });
         render(<Identity route={{ name: `profile` }} />);
-        const button = await screen.findByRole(`button`, { name: `tom` });
+        const button = await screen.findByRole(`button`, { name: `quinn` });
         expect(button.classList.contains(`active`)).toBe(true);
         fireEvent.click(button);
         expect(screen.getByRole(`link`, { name: `Profile` }).getAttribute(`aria-current`)).toBe(`page`);
@@ -198,9 +198,9 @@ describe('Identity', () => {
     });
 
     it('close on Esc and the close button, handing focus back to the button', async () => {
-        serve({ kind: `user`, name: `tom`, rating: 1503, provisional: false, discord: null, liveGames: [] });
+        serve({ kind: `user`, name: `quinn`, rating: 1503, provisional: false, discord: null, liveGames: [] });
         render(<Identity route={bots} />);
-        const button = await screen.findByRole(`button`, { name: `tom` });
+        const button = await screen.findByRole(`button`, { name: `quinn` });
         fireEvent.click(button);
         fireEvent.keyDown(screen.getByRole(`link`, { name: `Profile` }), { key: `Escape` });
         expect(panel()).toBe(null);
@@ -215,14 +215,14 @@ describe('Identity', () => {
     });
 
     it('close when focus moves back past its button, leaving focus where it went', async () => {
-        serve({ kind: `user`, name: `tom`, rating: 1503, provisional: false, discord: null, liveGames: [] });
+        serve({ kind: `user`, name: `quinn`, rating: 1503, provisional: false, discord: null, liveGames: [] });
         render(
             <>
                 <a href="/bots">before</a>
                 <Identity route={bots} />
             </>,
         );
-        const button = await screen.findByRole(`button`, { name: `tom` });
+        const button = await screen.findByRole(`button`, { name: `quinn` });
         fireEvent.click(button);
         act(() => {
             button.focus();
@@ -237,9 +237,9 @@ describe('Identity', () => {
     });
 
     it('close on a link, leaving focus to the next screen', async () => {
-        serve({ kind: `user`, name: `tom`, rating: 1503, provisional: false, discord: null, liveGames: [] });
+        serve({ kind: `user`, name: `quinn`, rating: 1503, provisional: false, discord: null, liveGames: [] });
         render(<Identity route={bots} />);
-        const button = await screen.findByRole(`button`, { name: `tom` });
+        const button = await screen.findByRole(`button`, { name: `quinn` });
         fireEvent.click(button);
         fireEvent.click(screen.getByRole(`link`, { name: `Build a bot` }));
         expect(window.location.pathname).toBe(`/connect`);
@@ -249,21 +249,21 @@ describe('Identity', () => {
 
     it('open as a modal sheet below the phone breakpoint', async () => {
         stubPhone();
-        serve({ kind: `user`, name: `tom`, rating: 1503, provisional: false, discord: null, liveGames: [] });
+        serve({ kind: `user`, name: `quinn`, rating: 1503, provisional: false, discord: null, liveGames: [] });
         render(<Identity route={bots} />);
-        fireEvent.click(await screen.findByRole(`button`, { name: `tom` }));
+        fireEvent.click(await screen.findByRole(`button`, { name: `quinn` }));
         expect(panel()?.dataset.mode).toBe(`sheet`);
     });
 
     it('keep at most one of settings and who is here open', async () => {
-        serve({ kind: `user`, name: `tom`, rating: 1503, provisional: false, discord: null, liveGames: [] });
+        serve({ kind: `user`, name: `quinn`, rating: 1503, provisional: false, discord: null, liveGames: [] });
         render(
             <>
                 <Settings />
                 <Identity route={bots} />
             </>,
         );
-        const who = await screen.findByRole(`button`, { name: `tom` });
+        const who = await screen.findByRole(`button`, { name: `quinn` });
         const gear = screen.getByRole(`button`, { name: `Settings` });
         fireEvent.click(gear);
         expect(document.querySelector(`dialog.settings`)).not.toBe(null);
@@ -279,9 +279,9 @@ describe('Identity', () => {
 
     it('sign out from the panel and put focus on the sign-in that takes its place', async () => {
         const posts: string[] = [];
-        serve({ kind: `user`, name: `tom`, rating: 1503, provisional: false, discord: null, liveGames: [] }, posts);
+        serve({ kind: `user`, name: `quinn`, rating: 1503, provisional: false, discord: null, liveGames: [] }, posts);
         render(<Identity route={bots} />);
-        fireEvent.click(await screen.findByRole(`button`, { name: `tom` }));
+        fireEvent.click(await screen.findByRole(`button`, { name: `quinn` }));
         fireEvent.click(screen.getByRole(`button`, { name: `Sign out` }));
         const signIn = await screen.findByRole(`link`, { name: `Sign in with Discord` });
         expect(posts).toEqual([`/api/auth/logout`]);
@@ -309,9 +309,9 @@ describe('Identity', () => {
     });
 
     it('say so and keep the panel when sign-out does not land', async () => {
-        serve({ kind: `user`, name: `tom`, rating: 1503, provisional: false, discord: null, liveGames: [] }, [], 500);
+        serve({ kind: `user`, name: `quinn`, rating: 1503, provisional: false, discord: null, liveGames: [] }, [], 500);
         render(<Identity route={bots} />);
-        fireEvent.click(await screen.findByRole(`button`, { name: `tom` }));
+        fireEvent.click(await screen.findByRole(`button`, { name: `quinn` }));
         fireEvent.click(screen.getByRole(`button`, { name: `Sign out` }));
         expect((await screen.findByRole(`alert`)).textContent).toBe(`Sign-out did not go through; you are still signed in`);
         expect(panel()).not.toBe(null);

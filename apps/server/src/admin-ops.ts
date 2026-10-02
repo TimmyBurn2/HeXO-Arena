@@ -27,6 +27,7 @@ import type { ChallengeRegistry } from './challenge-registry';
 import type { Query } from './db';
 import type { GameRegistry } from './game-registry';
 import { findGame } from './game-store';
+import type { Ladder } from './ladder';
 import type { PresenceRegistry } from './presence';
 import type { RequestLimits } from './request-limits';
 import { isPaused, setPaused } from './site-state';
@@ -41,6 +42,7 @@ export interface AdminDeps {
     challenges: ChallengeRegistry;
     tournaments: Pick<TournamentScheduler, `cancel` | `withdraw`>;
     limits: Pick<RequestLimits, `clientCount` | `keys`>;
+    ladder: Pick<Ladder, `clear`>;
     actor: string;
     // Writes the night's backup now and answers its path; null without a backup folder.
     backup: (() => string) | null;
@@ -107,6 +109,9 @@ function audited(
         return result;
     });
     outcome.live?.();
+    // A recompute moves ratings and a ban or delist moves who is listed;
+    // the ladder shows either at once.
+    if (outcome.response.kind === `done`) deps.ladder.clear();
     return outcome.response;
 }
 
