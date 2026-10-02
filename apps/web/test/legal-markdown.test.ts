@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import { describe, expect, it } from 'vitest';
 import type { Filling } from '../src/legal/documents';
 import { layoutLegal, plainText, type Block } from '../src/legal/markdown';
@@ -108,6 +109,14 @@ describe('a legal document laid out for its page', () => {
         const children = paragraph?.[0]?.kind === `paragraph` ? paragraph[0].children : [];
         expect(children.flatMap((child) => (child.kind === `link` ? [child.href] : []))).toEqual([`/credits`, `#law`, `https://example.com/`, `mailto:a@b.example`]);
         expect(plainText(children)).toBe(`A b  site part web mail run data far near.`);
+    });
+
+    it('reads a path as the browser does against the page origin, and links none that leaves it', () => {
+        const layout = layoutLegal(`## Links\n\n[back](/\\evil.example) [both](/\\/evil.example) [encoded](/%5Cpage) [deep](/legal/terms#law)`, fill);
+        const blocks = layout.sections[0]?.blocks ?? [];
+        const children = blocks[0]?.kind === `paragraph` ? blocks[0].children : [];
+        expect(children.flatMap((child) => (child.kind === `link` ? [child.href] : []))).toEqual([`/%5Cpage`, `/legal/terms#law`]);
+        expect(plainText(children)).toBe(`back both encoded deep`);
     });
 
     it('reads character references and escapes as the characters they stand for', () => {

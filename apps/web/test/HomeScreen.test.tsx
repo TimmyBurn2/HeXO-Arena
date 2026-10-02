@@ -190,9 +190,9 @@ describe('HomeScreen', () => {
     });
 
     it('leads back to the reader\'s own live games, and drops one that ended', async () => {
-        const mine = live(`mine`, { name: `tom`, rating: 1500, provisional: false, kind: `user` }, bot(`hextide`, 1600));
-        const gone = live(`gone`, bot(`pebble`, 1400), { name: `tom`, rating: 1500, provisional: false, kind: `user` });
-        serve({ me: { kind: `user`, name: `tom`, rating: 1500, provisional: false, discord: null, liveGames: [mine, gone] }, live: [mine] });
+        const mine = live(`mine`, { name: `quinn`, rating: 1500, provisional: false, kind: `user` }, bot(`hextide`, 1600));
+        const gone = live(`gone`, bot(`pebble`, 1400), { name: `quinn`, rating: 1500, provisional: false, kind: `user` });
+        serve({ me: { kind: `user`, name: `quinn`, rating: 1500, provisional: false, discord: null, liveGames: [mine, gone] }, live: [mine] });
         meStore.start();
         render(<HomeScreen />);
         const yours = (await screen.findByRole(`heading`, { name: `Your games` })).closest(`section`);

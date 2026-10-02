@@ -2173,9 +2173,11 @@ components:
       scheme: bearer
       type: http
     sessionCookie:
-      description: An HttpOnly session cookie, set by a Discord sign-in, a created account, or the guest route.
+      description: An HttpOnly session cookie, set by a Discord sign-in, a created account, or the guest
+        route; named hexo_arena_session where the site runs without TLS. A write carrying it from
+        another origin, by the browser's Sec-Fetch-Site, answers 403 cross_origin.
       in: cookie
-      name: hexo_arena_session
+      name: __Host-hexo_arena_session
       type: apiKey
     signupCookie:
       description: An HttpOnly cookie for a first sign-in waiting for its public name, set by the Discord
@@ -2199,7 +2201,9 @@ paths:
         "302":
           description: A redirect to the return path with the session cookie set, to /welcome with the signup
             cookie set, or on failure to the return path with signin naming a SignInFailure;
-            error=access_denied from Discord reads as cancelled.
+            error=access_denied from Discord reads as cancelled. Codes confirmed with Discord are
+            held to 30 at once, then 1 a second across every caller; past that the callback answers
+            busy without asking Discord.
           headers:
             Location:
               description: The return path, /welcome, or the return path with signin= and the reason.
@@ -2229,7 +2233,8 @@ paths:
         "302":
           description: Redirect to Discord's authorize endpoint; or to the return path with
             signin=unconfigured when Discord OAuth is not set up, or with signin=busy past 10 at
-            once, then 1 every 30 s per client or with 500 sign-ins waiting on Discord.
+            once, then 1 every 30 s per client or 40 at once, then 1 every 7.5 s per IPv6 /48, or
+            with 500 sign-ins waiting on Discord.
         "429":
           $ref: "#/components/responses/RateLimited"
       summary: "Start Discord OAuth: redirect to the authorize endpoint."
@@ -2266,7 +2271,8 @@ paths:
               schema:
                 $ref: "#/components/schemas/GuestLimitError"
           description: The global cap of 500 guest sessions is full (guest_limit), retry after 60 s; or one
-            client started 3 at once, then 1 every 20 min (rate_limited), or too many requests.
+            client started 3 at once, then 1 every 20 min, or one IPv6 /48 12 at once, then 1 every
+            5 min (rate_limited), or too many requests.
           headers:
             Retry-After:
               $ref: "#/components/headers/RetryAfter"

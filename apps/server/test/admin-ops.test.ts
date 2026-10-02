@@ -1,4 +1,5 @@
 import { existsSync, mkdtempSync, rmSync } from 'node:fs';
+import http from 'node:http';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { orphanForfeitMs } from '@hexo-arena/contract';
@@ -26,6 +27,17 @@ async function goOnline(world: TestApp, token: string, name: string): Promise<Fa
     const stream = new FakeStreamSocket();
     world.presence.attach(botId(world, name), stream, true);
     return stream;
+}
+
+// Opens a bot's stream over the network, answering its status once the headers arrive.
+async function openStream(world: TestApp, token: string): Promise<{ status: number; close: () => void }> {
+    const address = await world.app.listen({ host: `127.0.0.1`, port: 0 });
+    return new Promise((resolve, reject) => {
+        const request = http.get(`${address}/api/bot/stream?open=1`, { headers: { authorization: `Bearer ${token}` } }, (response) => {
+            resolve({ status: response.statusCode ?? 0, close: () => request.destroy() });
+        });
+        request.on(`error`, reject);
+    });
 }
 
 function lines(stream: FakeStreamSocket): { type: string }[] {
@@ -196,6 +208,27 @@ describe('pause and resume', () => {
         expect(resigned.statusCode).toBe(200);
         expect(resigned.json()).toMatchObject({ status: `finished`, reason: `surrender` });
         world.presence.close(botId(world, `livebot`));
+    });
+
+    it('admits the stream of a bot holding a live game, so a cut stream comes back to its game', async () => {
+        const token = await mintBot(world.app, await loginAs(world.app, `owner`), `livebot`);
+        const stream = await goOnline(world, token, `livebot`);
+        const player = await loginAs(world.app, `player`);
+        const created = await world.app.inject({
+            method: `POST`,
+            url: `/api/games`,
+            cookies: { hexo_arena_session: player },
+            payload: { bot: `livebot`, timeControl: { mode: `unlimited` } },
+        });
+        const { gameId } = created.json<{ gameId: string }>();
+        world.admin({ op: `pause`, reason: `incident` });
+        stream.emitClose();
+        expect(world.presence.isOnline(botId(world, `livebot`))).toBe(false);
+        const reopened = await openStream(world, token);
+        expect(reopened.status).toBe(200);
+        expect(world.presence.isOnline(botId(world, `livebot`))).toBe(true);
+        expect((await world.app.inject({ method: `GET`, url: `/api/games/${gameId}` })).json()).toMatchObject({ status: `in-progress` });
+        reopened.close();
     });
 
     it('opens the doors again on resume', async () => {

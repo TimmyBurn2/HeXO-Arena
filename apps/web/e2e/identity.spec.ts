@@ -4,7 +4,7 @@ import type { Me } from '@hexo-arena/contract';
 import { looks, wear } from './matrix';
 import { serve, world } from './mock-api';
 
-const tom: Me = { kind: `user`, name: `tom`, rating: 1503, provisional: false, discord: null, liveGames: [] };
+const quinn: Me = { kind: `user`, name: `quinn`, rating: 1503, provisional: false, discord: null, liveGames: [] };
 const guest: Me = { kind: `guest`, name: `Guest k3f9`, liveGames: [] };
 
 async function visit(page: Page, width: number, me: Me, height = 900): Promise<void> {
@@ -30,7 +30,7 @@ function gear(page: Page) {
 }
 
 test('who is here opens a popover by click that Esc closes, focus going in and back', async ({ page }) => {
-    await visit(page, 1280, tom);
+    await visit(page, 1280, quinn);
     await who(page).click();
     await expect(menu(page)).toBeVisible();
     expect(await menu(page).evaluate((dialog) => dialog.matches(`:modal`))).toBe(false);
@@ -41,7 +41,7 @@ test('who is here opens a popover by click that Esc closes, focus going in and b
 });
 
 test('a click outside the identity popover closes it and a click inside does not', async ({ page }) => {
-    await visit(page, 1280, tom);
+    await visit(page, 1280, quinn);
     await who(page).click();
     await menu(page).locator(`.identity-head`).click();
     await expect(menu(page)).toBeVisible();
@@ -51,7 +51,7 @@ test('a click outside the identity popover closes it and a click inside does not
 });
 
 test('tabbing past the identity popover closes it and leaves focus where it went', async ({ page }) => {
-    await visit(page, 1280, tom);
+    await visit(page, 1280, quinn);
     await who(page).click();
     await menu(page).getByRole(`button`, { name: `Sign out` }).focus();
     await page.keyboard.press(`Tab`);
@@ -66,7 +66,7 @@ for (const [name, opener] of [
     [`settings`, `header button.settings-gear`],
 ] as const) {
     test(`shift-tabbing out of the ${name} popover closes it`, async ({ page }) => {
-        await visit(page, 1280, tom);
+        await visit(page, 1280, quinn);
         await page.locator(opener).click();
         const open = page.locator(`dialog[open]`);
         await expect(open).toHaveCount(1);
@@ -82,7 +82,7 @@ for (const [name, opener] of [
 
 for (const width of [481, 768, 1280]) {
     test(`the identity popover hangs under the bar inside the window at ${String(width)} px`, async ({ page }) => {
-        await visit(page, width, tom);
+        await visit(page, width, quinn);
         await who(page).click();
         const box = await menu(page).boundingBox();
         const button = await who(page).boundingBox();
@@ -95,7 +95,7 @@ for (const width of [481, 768, 1280]) {
 }
 
 test('on a phone the identity menu is a modal bottom sheet with full finger targets', async ({ page }) => {
-    await visit(page, 390, tom, 844);
+    await visit(page, 390, quinn, 844);
     await who(page).click();
     expect(await menu(page).evaluate((dialog) => dialog.matches(`:modal`))).toBe(true);
     await expect.poll(async () => {
@@ -112,7 +112,7 @@ test('on a phone the identity menu is a modal bottom sheet with full finger targ
 });
 
 test('opening settings shuts the identity menu, and the other way round', async ({ page }) => {
-    await visit(page, 1280, tom);
+    await visit(page, 1280, quinn);
     await who(page).click();
     await gear(page).click();
     await expect(page.locator(`dialog.settings`)).toBeVisible();
@@ -124,7 +124,7 @@ test('opening settings shuts the identity menu, and the other way round', async 
 });
 
 test('signing out from the menu leaves the sign-in in its place with focus', async ({ page }) => {
-    await visit(page, 1280, tom);
+    await visit(page, 1280, quinn);
     await who(page).click();
     await menu(page).getByRole(`button`, { name: `Sign out` }).click();
     const signIn = page.locator(`header`).getByRole(`link`, { name: `Sign in with Discord` });
@@ -152,9 +152,9 @@ test('signed out, the top bar links straight to Discord, returning to the page i
 
 // Every open panel, in both forms, holds to every axe rule.
 for (const [name, me, open] of [
-    [`identity`, tom, `identity`],
+    [`identity`, quinn, `identity`],
     [`guest`, guest, `identity`],
-    [`settings`, tom, `settings`],
+    [`settings`, quinn, `settings`],
 ] as const) {
     for (const width of [390, 1280]) {
         test(`the open ${name} panel passes axe at ${String(width)} px`, async ({ page }) => {

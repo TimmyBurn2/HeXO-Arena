@@ -14,7 +14,7 @@ function stubJson(body: unknown, status = 200): void {
     );
 }
 
-const board = [{ rank: 1, name: `sealbot`, kind: `bot`, rating: 1712, games: 214, lastPlayedAt: `2026-10-01T08:00:00Z`, ownerName: `tom`, online: true }];
+const board = [{ rank: 1, name: `sealbot`, kind: `bot`, rating: 1712, games: 214, lastPlayedAt: `2026-10-01T08:00:00Z`, ownerName: `quinn`, online: true }];
 
 afterEach(() => {
     vi.unstubAllGlobals();
@@ -65,7 +65,7 @@ describe('fetchBots', () => {
         const listing = [
             {
                 name: `sealbot`,
-                ownerName: `tom`,
+                ownerName: `quinn`,
                 online: true,
                 openForChallenges: true,
                 rating: 1712,
@@ -73,7 +73,7 @@ describe('fetchBots', () => {
                 liveGames: 0,
                 about: `clean-room engine`,
                 version: `0.3.1`,
-                repoUrl: `https://github.com/tom/sealbot`,
+                repoUrl: `https://github.com/quinn/sealbot`,
                 accepts: { turnMs: [5000, 60000], match: true, unlimited: true },
             },
         ];

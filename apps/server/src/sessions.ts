@@ -1,6 +1,6 @@
 import { and, eq, gt, isNull, lte } from 'drizzle-orm';
 import { randomUUID } from 'node:crypto';
-import { sessionCookieName, sessionMaxAgeSeconds, type DiscordNames } from '@hexo-arena/contract';
+import { sessionMaxAgeSeconds, type DiscordNames } from '@hexo-arena/contract';
 import type { FastifyRequest } from 'fastify';
 import { nowSeconds, type Query } from './db';
 import { sessions, users } from './db/schema';
@@ -58,7 +58,7 @@ export function findSessionUser(query: Query, token: string): SessionUser | null
 
 /** The user behind a request's session cookie, or null without one. */
 export function sessionUser(query: Query, request: FastifyRequest): SessionUser | null {
-    const token = request.cookies[sessionCookieName];
+    const token = request.sessionToken;
     return token ? findSessionUser(query, token) : null;
 }
 

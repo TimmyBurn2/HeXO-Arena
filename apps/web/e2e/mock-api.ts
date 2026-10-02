@@ -116,10 +116,10 @@ const playedAgo = (hours: number) => new Date(Date.now() - hours * 3_600_000).to
 
 // The ranked players, the last of them idle past the default 30 days.
 export const leaderboard: LeaderboardEntry[] = [
-    { rank: 1, name: `sealbot`, kind: `bot`, rating: 1712, games: 214, lastPlayedAt: playedAgo(0.1), ownerName: `tom`, online: true },
+    { rank: 1, name: `sealbot`, kind: `bot`, rating: 1712, games: 214, lastPlayedAt: playedAgo(0.1), ownerName: `quinn`, online: true },
     { rank: 2, name: `hextide`, kind: `bot`, rating: 1690, games: 188, lastPlayedAt: playedAgo(2), ownerName: `ana`, online: true },
-    { rank: 3, name: `tom`, kind: `human`, rating: 1503, games: 57, lastPlayedAt: playedAgo(30) },
-    { rank: 4, name: `quietlake`, kind: `bot`, rating: 1461, games: 96, lastPlayedAt: playedAgo(80), ownerName: `tom`, online: false },
+    { rank: 3, name: `quinn`, kind: `human`, rating: 1503, games: 57, lastPlayedAt: playedAgo(30) },
+    { rank: 4, name: `quietlake`, kind: `bot`, rating: 1461, games: 96, lastPlayedAt: playedAgo(80), ownerName: `quinn`, online: false },
     { rank: 5, name: `ana`, kind: `human`, rating: 1402, games: 49, lastPlayedAt: playedAgo(200) },
     { rank: 6, name: `driftwood`, kind: `bot`, rating: 1388, games: 71, lastPlayedAt: playedAgo(24 * 45), ownerName: `bruno`, online: false },
 ];
@@ -127,7 +127,7 @@ export const leaderboard: LeaderboardEntry[] = [
 export const bots: BotListing[] = [
     {
         name: `sealbot`,
-        ownerName: `tom`,
+        ownerName: `quinn`,
         online: true,
         openForChallenges: true,
         rating: 1712,
@@ -135,7 +135,7 @@ export const bots: BotListing[] = [
         liveGames: 0,
         about: `A clean-room HeXO engine with a rotation opener.`,
         version: `0.3.1`,
-        repoUrl: `https://github.com/tom/sealbot`,
+        repoUrl: `https://github.com/quinn/sealbot`,
         accepts: { turnMs: [5000, 60000], match: true, unlimited: true },
     },
     {
@@ -151,7 +151,7 @@ export const bots: BotListing[] = [
     },
     {
         name: `quietlake`,
-        ownerName: `tom`,
+        ownerName: `quinn`,
         online: false,
         openForChallenges: false,
         rating: 1461,
@@ -166,7 +166,7 @@ const seat = {
     quietlake: { name: `quietlake`, rating: 1461, provisional: true, kind: `bot` },
     driftwood: { name: `driftwood`, rating: 1388, provisional: false, kind: `bot` },
     ember: { name: `ember`, rating: 1320, provisional: true, kind: `bot` },
-    tom: { name: `tom`, rating: 1503, provisional: false, kind: `user` },
+    quinn: { name: `quinn`, rating: 1503, provisional: false, kind: `user` },
     ana: { name: `ana`, rating: 1402, provisional: false, kind: `user` },
     guest: { name: `Guest k3f9`, rating: null, provisional: false, kind: `guest` },
 } as const;
@@ -232,7 +232,7 @@ export const liveGames: LiveGameEntry[] = (
     [
         [seat.sealbot, seat.guest],
         [seat.hextide, seat.sealbot],
-        [seat.tom, seat.quietlake],
+        [seat.quinn, seat.quietlake],
         [seat.driftwood, seat.hextide],
         [seat.guest, seat.driftwood],
         [seat.quietlake, seat.sealbot],
@@ -240,7 +240,7 @@ export const liveGames: LiveGameEntry[] = (
         [seat.sealbot, seat.driftwood],
         [seat.guest, seat.ember],
         [seat.quietlake, seat.driftwood],
-        [seat.tom, seat.ember],
+        [seat.quinn, seat.ember],
         [seat.hextide, seat.quietlake],
     ] as const
 ).map(([x, o], index) => {
@@ -281,7 +281,7 @@ const runningTournament: TournamentDetail = {
     openingPlies: 5,
     maxEntrants: 12,
     entries: [
-        playing(`sealbot`, `tom`, 1712),
+        playing(`sealbot`, `quinn`, 1712),
         playing(`hextide`, `ana`, 1690),
         playing(`driftwood`, `bruno`, 1388),
         playing(`ember`, `cleo`, 1320),
@@ -314,7 +314,7 @@ const runningTournament: TournamentDetail = {
         },
     ],
     standings: [
-        { rank: 1, bot: `sealbot`, ownerName: `tom`, points: 2, asX: 1, asO: 1, withdrawn: false },
+        { rank: 1, bot: `sealbot`, ownerName: `quinn`, points: 2, asX: 1, asO: 1, withdrawn: false },
         { rank: 2, bot: `driftwood`, ownerName: `bruno`, points: 2, asX: 1, asO: 1, withdrawn: false },
         { rank: 3, bot: `ember`, ownerName: `cleo`, points: 1, asX: 0, asO: 1, withdrawn: false },
         { rank: 4, bot: `hextide`, ownerName: `ana`, points: 0, asX: 0, asO: 0, withdrawn: false },
@@ -341,7 +341,7 @@ const finishedTournament: TournamentDetail = {
         })),
     })),
     standings: [
-        { rank: 1, bot: `sealbot`, ownerName: `tom`, points: 4, asX: 2, asO: 2, withdrawn: false },
+        { rank: 1, bot: `sealbot`, ownerName: `quinn`, points: 4, asX: 2, asO: 2, withdrawn: false },
         { rank: 2, bot: `driftwood`, ownerName: `bruno`, points: 3, asX: 2, asO: 1, withdrawn: false },
         { rank: 2, bot: `hextide`, ownerName: `ana`, points: 3, asX: 2, asO: 1, withdrawn: false },
         { rank: 4, bot: `ember`, ownerName: `cleo`, points: 2, asX: 1, asO: 1, withdrawn: true },
@@ -350,7 +350,7 @@ const finishedTournament: TournamentDetail = {
     live: [],
 };
 
-// One waiting a few hours, two bots entered; tom, signed in by default, has entered none.
+// One waiting a few hours, two bots entered; quinn, signed in by default, has entered none.
 const waitingTournament: TournamentDetail = {
     ...runningTournament,
     id: `t_wintercup202`,
@@ -433,7 +433,7 @@ const originCells: GameSnapshot[`board`][`cells`] = [
 // opens the game watches it.
 function facing(bot: string, rating: number): GameSnapshot[`players`] {
     return {
-        x: { name: `tom`, rating: 1503, provisional: false, kind: `user` },
+        x: { name: `quinn`, rating: 1503, provisional: false, kind: `user` },
         o: { name: bot, rating, provisional: false, kind: `bot` },
     };
 }
@@ -487,7 +487,7 @@ export const games: Record<string, GameSnapshot> = {
         clock: { mode: `match`, remainingMainMs: { x: 227_000, o: 252_000 } },
     },
     // Games before their first turn, the opening alone on the board, so
-    // the rundown stands over the stage: one the bot opens, one tom opens.
+    // the rundown stands over the stage: one the bot opens, one quinn opens.
     fresh: {
         gameId: `fresh`,
         players: facing(`sealbot`, 1712),
@@ -722,7 +722,7 @@ function finishedPage(state: World, params: URLSearchParams): { status: 200; bod
 
 export function world(overrides: Partial<World> = {}): World {
     return {
-        me: { kind: `user`, name: `tom`, rating: 1503, provisional: false, discord: { username: `tom.hex`, displayName: `Tom` }, liveGames: [] },
+        me: { kind: `user`, name: `quinn`, rating: 1503, provisional: false, discord: { username: `quinn.hex`, displayName: `Quinn` }, liveGames: [] },
         leaderboard,
         bots,
         games: structuredClone(games),

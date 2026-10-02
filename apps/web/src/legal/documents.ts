@@ -10,7 +10,7 @@ import {
     minimumAge,
     oauthCookieName,
     oauthMaxAgeSeconds,
-    sessionCookieName,
+    secureSessionCookieName,
     sessionMaxAgeSeconds,
     signupCookieName,
     signupMaxAgeSeconds,
@@ -36,7 +36,8 @@ export const placeholderPattern = /\{\{\s*([\w.]+)\s*\}\}/g;
  */
 export const siteFacts: ReadonlyMap<string, string> = new Map([
     [`site.name`, siteName],
-    [`site.sessionCookie`, sessionCookieName],
+    // The published site runs on TLS, where the cookie carries its prefix.
+    [`site.sessionCookie`, secureSessionCookieName],
     [`site.sessionDays`, String(sessionMaxAgeSeconds / 86_400)],
     [`site.oauthCookie`, oauthCookieName],
     [`site.oauthMinutes`, String(oauthMaxAgeSeconds / 60)],

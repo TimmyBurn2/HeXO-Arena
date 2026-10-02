@@ -129,16 +129,16 @@ export class TournamentScheduler {
         if (this.#deps.draining()) return;
         const now = this.#now();
         this.#createFromRules(now);
-        // A start is a pass of its own; the first round begins on the next.
-        if (this.#running() === null) {
-            this.#startDue(now);
+        // A pause starts nothing, a due tournament included, which starts on
+        // the first pass after the resume; the grace counts again from there.
+        if (isPaused(this.#query)) {
+            this.#graceUntil.clear();
             return;
         }
         const running = this.#running();
-        if (running === null) return;
-        // A pause starts nothing; the grace counts again from the resume.
-        if (isPaused(this.#query)) {
-            this.#graceUntil.clear();
+        // A start is a pass of its own; the first round begins on the next.
+        if (running === null) {
+            this.#startDue(now);
             return;
         }
         this.#advance(running, now);

@@ -4,7 +4,7 @@ import {
     guestIdleSeconds,
     oauthCookieName,
     oauthMaxAgeSeconds,
-    sessionCookieName,
+    secureSessionCookieName,
     sessionMaxAgeSeconds,
     signupCookieName,
     signupMaxAgeSeconds,
@@ -133,7 +133,7 @@ describe('LegalScreen', () => {
         render(<LegalScreen page="privacy" />);
         await screen.findByRole(`heading`, { name: `Cookies and browser storage` });
         const storage = section(`Cookies and browser storage`).textContent;
-        expect(storage).toContain(`The cookie ${sessionCookieName}, set when you sign in`);
+        expect(storage).toContain(`The cookie ${secureSessionCookieName}, set when you sign in`);
         expect(storage).toContain(`It lasts ${String(sessionMaxAgeSeconds / 86_400)} days after sign-in`);
         expect(storage).toContain(`The cookie ${oauthCookieName}, set when you start a sign-in with Discord`);
         expect(storage).toContain(`It lasts ${String(oauthMaxAgeSeconds / 60)} minutes, or until Discord sends you back.`);

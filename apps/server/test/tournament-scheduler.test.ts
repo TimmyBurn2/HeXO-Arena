@@ -1,4 +1,5 @@
 import { tournamentPresenceGraceMs, tournamentRoundGapMs } from '@hexo-arena/contract';
+import http from 'node:http';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { findBot } from '../src/bots';
 import { createQuery } from '../src/db';
@@ -280,11 +281,44 @@ describe('the tournament scheduler', () => {
         expect(world.tournaments.isReserved(botId(`delta`))).toBe(false);
     });
 
-    it('starts no game while the site is paused, and plays on after the resume', () => {
+    it('starts no tournament while the site is paused, and starts it on the first tick after the resume', () => {
         enter(`alpha`, `beta`, `gamma`);
         online(`alpha`, `beta`, `gamma`);
         world.admin({ op: `pause`, reason: `incident` });
         tick(start());
+        tick(start() + 60_000);
+        expect(status()).toBe(`scheduled`);
+        expect(Object.values(entries()).map((entry) => entry.state)).toEqual([`entered`, `entered`, `entered`]);
+        world.admin({ op: `resume`, reason: `over` });
+        tick(start() + 61_000);
+        expect(status()).toBe(`running`);
+        expect(entries()).toMatchObject({ alpha: { state: `playing` }, beta: { state: `playing` }, gamma: { state: `playing` } });
+    });
+
+    it('admits a reserved bot\'s stream while the site is paused', async () => {
+        enter(`alpha`, `beta`, `gamma`, `delta`);
+        online(`alpha`, `beta`, `gamma`);
+        tick(start());
+        world.admin({ op: `pause`, reason: `incident` });
+        offline(`alpha`);
+        const address = await world.app.listen({ host: `127.0.0.1`, port: 0 });
+        const statusOf = (name: BotName) =>
+            new Promise<number>((resolve, reject) => {
+                const request = http.get(`${address}/api/bot/stream`, { headers: { authorization: `Bearer ${tokens.get(name) ?? ``}` } }, (response) => {
+                    resolve(response.statusCode ?? 0);
+                    request.destroy();
+                });
+                request.on(`error`, reject);
+            });
+        expect(await statusOf(`alpha`)).toBe(200);
+        expect(await statusOf(`delta`)).toBe(503);
+    });
+
+    it('starts no game while the site is paused, and plays on after the resume', () => {
+        enter(`alpha`, `beta`, `gamma`);
+        online(`alpha`, `beta`, `gamma`);
+        tick(start());
+        world.admin({ op: `pause`, reason: `incident` });
         tick(start() + 1_000);
         expect(pairings()[0]?.game1).toBe(`pending`);
         world.admin({ op: `resume`, reason: `over` });

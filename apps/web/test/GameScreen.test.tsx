@@ -24,7 +24,7 @@ const finishedCells = [
 
 const players = {
     x: { name: `hextide`, rating: 1690, provisional: false, kind: `bot` as const },
-    o: { name: `tom`, rating: 1503, provisional: false, kind: `user` as const },
+    o: { name: `quinn`, rating: 1503, provisional: false, kind: `user` as const },
 };
 
 const runningSnapshot = {
@@ -63,12 +63,12 @@ const freshSnapshot = { ...runningSnapshot, gameId: `g-new`, toMove: `x` } as Ga
 
 const records: Record<string, unknown> = {
     hextide: { name: `hextide`, kind: `bot`, rating: 1690, deviation: 48, provisional: false, rank: 2, games: 120, won: 70, lost: 48, undecided: 2, asX: { games: 60, won: 36 }, asO: { games: 60, won: 34 }, forfeits: { disconnect: 0, terminated: 0 }, opponents: [], firstGameAt: `2026-09-01T10:00:00Z`, lastGameAt: `2026-10-01T10:00:00Z`, placings: [] },
-    tom: { name: `tom`, kind: `human`, rating: 1503, deviation: 96, provisional: true, rank: null, games: 14, won: 6, lost: 8, undecided: 0, asX: { games: 7, won: 3 }, asO: { games: 7, won: 3 }, forfeits: { disconnect: 0, terminated: 0 }, opponents: [], firstGameAt: `2026-09-20T10:00:00Z`, lastGameAt: `2026-10-01T10:00:00Z` },
+    quinn: { name: `quinn`, kind: `human`, rating: 1503, deviation: 96, provisional: true, rank: null, games: 14, won: 6, lost: 8, undecided: 0, asX: { games: 7, won: 3 }, asO: { games: 7, won: 3 }, forfeits: { disconnect: 0, terminated: 0 }, opponents: [], firstGameAt: `2026-09-20T10:00:00Z`, lastGameAt: `2026-10-01T10:00:00Z` },
 };
 
 // One finished game of a player's history, against pebble, won or lost from their seat.
 function past(name: string, index: number, won: boolean) {
-    const seat = { name, rating: 1500, provisional: false, kind: name === `tom` ? `user` : `bot` };
+    const seat = { name, rating: 1500, provisional: false, kind: name === `quinn` ? `user` : `bot` };
     const other = { name: `pebble`, rating: 1500, provisional: false, kind: `bot` };
     return { gameId: `g-${name}-${String(index)}`, players: { x: seat, o: other }, winner: won ? `x` : `o`, reason: `six-in-a-row`, timeControl: { mode: `unlimited` }, openingPlies: 1, turns: 20, finishedAt: `2026-10-01T10:00:00Z`, rated: true, voided: false };
 }
@@ -138,9 +138,9 @@ describe('GameScreen', () => {
         expect(document.querySelector(`.board-control`)?.getAttribute(`aria-label`)).toBe(`Board, your turn: 2 stones`);
         expect(document.querySelector(`.board-control`)?.getAttribute(`tabindex`)).toBe(`0`);
         await waitFor(() => {
-            expect(document.title).toBe(`hextide vs tom - HeXO Arena`);
+            expect(document.title).toBe(`hextide vs quinn - HeXO Arena`);
         });
-        expect(document.querySelector(`meta[name="description"]`)?.getAttribute(`content`)).toBe(`Live; tom to move; turn clock 50 s`);
+        expect(document.querySelector(`meta[name="description"]`)?.getAttribute(`content`)).toBe(`Live; quinn to move; turn clock 50 s`);
     });
 
     it('show the shared turn clock on the chip of the side to move alone', async () => {
@@ -362,7 +362,7 @@ describe('GameScreen', () => {
         expect(document.querySelector(`.peek-line`)?.textContent).toBe(`hextide won with six in a row`);
         fireEvent.keyDown(window, { key: `m` });
         await waitFor(() => {
-            expect(document.title).toBe(`hextide vs tom - HeXO Arena`);
+            expect(document.title).toBe(`hextide vs quinn - HeXO Arena`);
         });
         expect(document.querySelector(`meta[name="description"]`)?.getAttribute(`content`)).toBe(`hextide won with six in a row`);
     });
@@ -784,26 +784,26 @@ describe('GameScreen for a watcher', () => {
     it('name both players on their chips and leave the board without selection or keys', async () => {
         stubGame(watched(runningSnapshot));
         render(<GameScreen gameId="g-run" />);
-        expect(await screen.findByRole(`heading`, { name: `hextide vs tom` })).toBeTruthy();
-        expect(document.querySelector(`.hud-top-left .hud-name`)?.textContent).toBe(`tom`);
+        expect(await screen.findByRole(`heading`, { name: `hextide vs quinn` })).toBeTruthy();
+        expect(document.querySelector(`.hud-top-left .hud-name`)?.textContent).toBe(`quinn`);
         expect(document.querySelector(`.hud-bottom-left .hud-name`)?.textContent).toBe(`hextideBOT`);
-        expect(document.querySelector(`.hud-bottom-center .hud-turn`)?.textContent).toBe(`tom is thinking`);
+        expect(document.querySelector(`.hud-bottom-center .hud-turn`)?.textContent).toBe(`quinn is thinking`);
         expect(document.querySelector(`.hud-bottom-center .tag`)?.textContent).toBe(`watching`);
         const control = document.querySelector(`.board-control`);
         expect(control?.getAttribute(`role`)).toBe(`group`);
         expect(control?.getAttribute(`tabindex`)).toBe(`0`);
-        expect(control?.getAttribute(`aria-label`)).toBe(`Board, watching hextide vs tom, tom to move`);
+        expect(control?.getAttribute(`aria-label`)).toBe(`Board, watching hextide vs quinn, quinn to move`);
         fireEvent.click(document.querySelector(`polygon.cell`) as Element);
         expect(document.querySelector(`.ring-pending`)).toBe(null);
         await waitFor(() => {
-            expect(document.title).toBe(`hextide vs tom - HeXO Arena`);
+            expect(document.title).toBe(`hextide vs quinn - HeXO Arena`);
         });
     });
 
     it('keep the record and facts in the drawer and drop the actions', async () => {
         stubGame(watched(runningSnapshot));
         render(<GameScreen gameId="g-run" />);
-        await screen.findByRole(`heading`, { name: `hextide vs tom` });
+        await screen.findByRole(`heading`, { name: `hextide vs quinn` });
         await openWithM();
         fireEvent.click(screen.getByRole(`tab`, { name: `Game` }));
         expect(screen.queryByRole(`button`, { name: `Resign` })).toBe(null);
@@ -815,7 +815,7 @@ describe('GameScreen for a watcher', () => {
     it('read a refused stream as a busy one, calmly, while a plain read still answers', async () => {
         stubGame(watched(runningSnapshot));
         render(<GameScreen gameId="g-run" />);
-        await screen.findByRole(`heading`, { name: `hextide vs tom` });
+        await screen.findByRole(`heading`, { name: `hextide vs quinn` });
         act(() => {
             FakeEventSource.latest().fail(true);
         });
@@ -840,7 +840,7 @@ describe('GameScreen for a watcher', () => {
     it('hold the frame a stepped-back watcher left as stones land, and leave the record closed at the finish', async () => {
         stubGame(watched(runningSnapshot));
         render(<GameScreen gameId="g-run" />);
-        await screen.findByRole(`heading`, { name: `hextide vs tom` });
+        await screen.findByRole(`heading`, { name: `hextide vs quinn` });
         const frame = () => document.querySelector(`.board-camera .board-svg`)?.getAttribute(`viewBox`);
         const opened = frame();
         const stream = FakeEventSource.latest();
@@ -870,7 +870,7 @@ describe('GameScreen for a watcher', () => {
     it('open the record at the finish of a game the watcher follows', async () => {
         stubGame(watched(runningSnapshot));
         render(<GameScreen gameId="g-run" />);
-        await screen.findByRole(`heading`, { name: `hextide vs tom` });
+        await screen.findByRole(`heading`, { name: `hextide vs quinn` });
         act(() => {
             FakeEventSource.latest().emit(`finish`, { winner: `x`, reason: `timeout`, voided: false, clock: { mode: `turn`, remainingTurnMs: 0 } });
         });
@@ -899,11 +899,11 @@ describe('GameScreen for a watcher', () => {
         );
         stubEventSource(watched(finishedSnapshot));
         render(<GameScreen gameId="g-end" />);
-        await screen.findByRole(`heading`, { name: `hextide vs tom` });
+        await screen.findByRole(`heading`, { name: `hextide vs quinn` });
         await openWithM();
         fireEvent.click(screen.getByRole(`tab`, { name: `Game` }));
         const row = (await screen.findByRole(`link`, { name: `41 games` })).closest<HTMLElement>(`.facts-row`);
-        expect(row?.querySelector(`dd`)?.textContent).toBe(`hextide won 24 and tom 15 of their 41 games; 2 voided games are left out`);
+        expect(row?.querySelector(`dd`)?.textContent).toBe(`hextide won 24 and quinn 15 of their 41 games; 2 voided games are left out`);
     });
 
     it('lay a rundown above the board before the first turn: each player\'s rating and deviation, expected score, and last five results, and their head to head', async () => {
@@ -912,14 +912,14 @@ describe('GameScreen for a watcher', () => {
         const card = await screen.findByRole(`region`, { name: `Rundown` });
         await within(card).findByText(`0.74`);
         const sides = [...card.querySelectorAll(`.rundown-side`)];
-        expect(sides.map((side) => side.querySelector(`.rundown-name`)?.textContent)).toEqual([`hextideBOT`, `tom`]);
+        expect(sides.map((side) => side.querySelector(`.rundown-name`)?.textContent)).toEqual([`hextideBOT`, `quinn`]);
         expect(sides.map((side) => side.querySelector(`.rundown-rating`)?.textContent)).toEqual([`1690`, `1503?`]);
         expect(sides.map((side) => side.querySelector(`.rundown-deviation`)?.textContent)).toEqual([`deviation 48`, `deviation 96`]);
         // Each side's E from the contract's function: the opponent's deviation is what counts.
         expect(sides.map((side) => side.querySelector(`.rundown-expected`)?.textContent)).toEqual([`Expected score0.74`, `Expected score0.26`]);
         expect(sides.map((side) => side.querySelector(`.rundown-form`)?.getAttribute(`aria-label`))).toEqual([`Last 5: won, won, lost, won, lost`, `Last 2: lost, won`]);
-        expect(card.querySelector(`.rundown-meetings`)?.textContent).toBe(`hextide won 24 and tom 15 of their 41 games`);
-        expect(within(card).getByRole(`link`, { name: `41 games` }).getAttribute(`href`)).toBe(`/games?player=hextide&vs=tom`);
+        expect(card.querySelector(`.rundown-meetings`)?.textContent).toBe(`hextide won 24 and quinn 15 of their 41 games`);
+        expect(within(card).getByRole(`link`, { name: `41 games` }).getAttribute(`href`)).toBe(`/games?player=hextide&vs=quinn`);
         // The card keeps its own room above the position, which the camera leaves clear.
         expect(document.querySelector<HTMLElement>(`.board-host`)?.hasAttribute(`data-rundown`)).toBe(true);
     });
@@ -987,25 +987,25 @@ describe('GameScreen for a watcher', () => {
         );
         stubEventSource(watched(finishedSnapshot));
         render(<GameScreen gameId="g-end" />);
-        await screen.findByRole(`heading`, { name: `hextide vs tom` });
+        await screen.findByRole(`heading`, { name: `hextide vs quinn` });
         await openWithM();
         fireEvent.click(screen.getByRole(`tab`, { name: `Game` }));
         const line = await screen.findByRole(`link`, { name: `41 games` });
-        expect(line.getAttribute(`href`)).toBe(`/games?player=hextide&vs=tom`);
+        expect(line.getAttribute(`href`)).toBe(`/games?player=hextide&vs=quinn`);
         const row = line.closest<HTMLElement>(`.facts-row`);
         if (row === null) throw new Error(`the line stands in no facts row`);
         expect(row.querySelector(`dt`)?.textContent).toBe(`Head to head`);
-        expect(row.querySelector(`dd`)?.textContent).toBe(`hextide won 24 and tom 15 of their 41 games`);
+        expect(row.querySelector(`dd`)?.textContent).toBe(`hextide won 24 and quinn 15 of their 41 games`);
         expect(within(row).getByRole(`link`, { name: `hextide` }).getAttribute(`href`)).toBe(`/bots/hextide`);
-        expect(within(row).getByRole(`link`, { name: `tom` }).getAttribute(`href`)).toBe(`/players/tom`);
-        expect(reads).toContain(`/api/games/finished?player=hextide&vs=tom`);
+        expect(within(row).getByRole(`link`, { name: `quinn` }).getAttribute(`href`)).toBe(`/players/quinn`);
+        expect(reads).toContain(`/api/games/finished?player=hextide&vs=quinn`);
     });
 
     it('name a tournament game\'s place on the Game tab, leading to its tournament', async () => {
         const tournamentGame = { ...watched(finishedSnapshot), tournament: { id: `t_autumnrobin1`, name: `Autumn round robin`, round: 4, game: 2 } } as GameSnapshot;
         stubGame(tournamentGame);
         render(<GameScreen gameId="g-end" />);
-        await screen.findByRole(`heading`, { name: `hextide vs tom` });
+        await screen.findByRole(`heading`, { name: `hextide vs quinn` });
         await openWithM();
         fireEvent.click(screen.getByRole(`tab`, { name: `Game` }));
         const line = await screen.findByRole(`link`, { name: `Autumn round robin, round 4, game 2 of 2` });
@@ -1029,7 +1029,7 @@ describe('GameScreen for a watcher', () => {
         render(<GameScreen gameId="g-end" />);
         expect(await screen.findByText(`hextide won with six in a row`, { selector: `.hud-result` })).toBeTruthy();
         await waitFor(() => {
-            expect(document.title).toBe(`hextide vs tom - HeXO Arena`);
+            expect(document.title).toBe(`hextide vs quinn - HeXO Arena`);
         });
     });
 });

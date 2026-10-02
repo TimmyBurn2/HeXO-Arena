@@ -65,8 +65,12 @@ function fillText(text: string, fill: (name: string) => Filling): string | null 
 
 // Only addresses that lead somewhere a reader expects become links: the
 // site's own pages, a fragment, the web, and mail.
+// A path is read as the browser reads it, against the page's origin,
+// since the browser takes `/\host` to another site as it does `//host`.
 function safeHref(href: string): boolean {
-    return /^(?:https?:\/\/|mailto:|\/(?!\/)|#)/i.test(href);
+    if (/^(?:https?:\/\/|mailto:|#)/i.test(href)) return true;
+    const origin = window.location.origin;
+    return href.startsWith(`/`) && URL.canParse(href, origin) && new URL(href, origin).origin === origin;
 }
 
 // The lexer runs without extensions, so every token is one of marked's own.

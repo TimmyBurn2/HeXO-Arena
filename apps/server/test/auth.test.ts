@@ -137,11 +137,11 @@ describe('GET /api/auth/discord/callback, a known account', () => {
         await app.close();
     });
 
-    it('marks the session cookie Secure when the public origin is https', async () => {
+    it('marks the session cookie Secure, under its __Host- name, when the public origin is https', async () => {
         const { app } = await createTestApp({ secureCookies: true });
         await signUpWithDiscord(app, `tester`);
         const response = await returnFrom(app, await startDiscordSignIn(app), `code=abc`);
-        expect(response.cookies.find((entry) => entry.name === `hexo_arena_session`)?.secure).toBe(true);
+        expect(response.cookies.find((entry) => entry.name === `__Host-hexo_arena_session`)?.secure).toBe(true);
         await app.close();
     });
 

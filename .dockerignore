@@ -1,11 +1,19 @@
+# Matched at any depth: a pattern without **/ matches only at the root.
 .git
-node_modules
-dist
-coverage
-data
-*.sqlite
-*.sqlite-wal
-*.sqlite-shm
-.env
+**/node_modules
+**/dist
+**/coverage
+**/data
+**/*.sqlite*
+**/*.tsbuildinfo
+**/.env
+**/.env.*
+!.env.example
 # A deployment's legal details hold the operator's real name and address.
-legal/details.json
+**/legal/details.json
+apps/web/e2e/shots
+apps/web/e2e/results
+# Local working folders that are never committed.
+design
+.wt
+.claude

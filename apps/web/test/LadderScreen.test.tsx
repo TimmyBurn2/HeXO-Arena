@@ -5,9 +5,9 @@ import { meStore } from '../src/me';
 import { LadderScreen } from '../src/screens/LadderScreen';
 
 const board = [
-    { rank: 1, name: `sealbot`, kind: `bot`, rating: 1712, games: 214, lastPlayedAt: `2026-10-01T08:00:00Z`, ownerName: `tom`, online: true },
+    { rank: 1, name: `sealbot`, kind: `bot`, rating: 1712, games: 214, lastPlayedAt: `2026-10-01T08:00:00Z`, ownerName: `quinn`, online: true },
     { rank: 2, name: `hextide`, kind: `bot`, rating: 1690, games: 188, lastPlayedAt: `2026-09-30T08:00:00Z`, ownerName: `ana`, online: false },
-    { rank: 3, name: `tom`, kind: `human`, rating: 1503, games: 57, lastPlayedAt: `2026-09-29T08:00:00Z` },
+    { rank: 3, name: `quinn`, kind: `human`, rating: 1503, games: 57, lastPlayedAt: `2026-09-29T08:00:00Z` },
 ];
 
 function stubBoard(rows: unknown[], status = 200): void {
@@ -25,7 +25,7 @@ afterEach(() => {
 });
 
 const roster = [
-    { name: `sealbot`, ownerName: `tom`, online: true, openForChallenges: true, rating: 1712, provisional: false, liveGames: 0, accepts: { turnMs: [5000, 60000], match: true, unlimited: true } },
+    { name: `sealbot`, ownerName: `quinn`, online: true, openForChallenges: true, rating: 1712, provisional: false, liveGames: 0, accepts: { turnMs: [5000, 60000], match: true, unlimited: true } },
     { name: `hextide`, ownerName: `ana`, online: false, openForChallenges: false, rating: 1690, provisional: false, liveGames: 0 },
 ];
 
@@ -46,7 +46,7 @@ function serve(answer: (search: string) => unknown, me: unknown = null): string[
     return reads;
 }
 
-const tom = { kind: `user`, name: `tom`, rating: 1503, provisional: false, discord: null, liveGames: [] };
+const quinn = { kind: `user`, name: `quinn`, rating: 1503, provisional: false, discord: null, liveGames: [] };
 
 describe('LadderScreen', () => {
     it('render the whole board: rank, player with presence and owner, rating, games, and last played', async () => {
@@ -55,13 +55,13 @@ describe('LadderScreen', () => {
         const table = await screen.findByRole(`table`);
         expect([...table.querySelectorAll(`th`)].map((head) => head.textContent)).toEqual([`Rank`, `Player`, `Rating`, `Games`, `Last played`]);
         const first = table.querySelector(`tbody tr`) as HTMLElement;
-        expect([...first.querySelectorAll(`td`)].map((cell) => cell.textContent)).toEqual([`1`, `sealbotBOTby tom`, `1712`, `214`, expect.stringMatching(/ago$/u)]);
+        expect([...first.querySelectorAll(`td`)].map((cell) => cell.textContent)).toEqual([`1`, `sealbotBOTby quinn`, `1712`, `214`, expect.stringMatching(/ago$/u)]);
         expect(first.querySelector(`.dot`)?.getAttribute(`title`)).toBe(`Online`);
         expect(table.querySelector(`tbody tr:nth-child(2) .dot.offline`)).toBeTruthy();
         expect(table.querySelector(`tbody tr:nth-child(3) .dot`)).toBe(null);
         expect(screen.getAllByRole(`link`, { name: /sealbot/ })[0]?.getAttribute(`href`)).toBe(`/bots/sealbot`);
-        expect(document.querySelector(`a[href="/bots/tom"]`)).toBe(null);
-        expect(first.querySelector(`.ladder-owner a`)?.getAttribute(`href`)).toBe(`/players/tom`);
+        expect(document.querySelector(`a[href="/bots/quinn"]`)).toBe(null);
+        expect(first.querySelector(`.ladder-owner a`)?.getAttribute(`href`)).toBe(`/players/quinn`);
     });
 
     it('stand the top three on a podium of 5, 6, and 4 stones, the six won, labelled for a reader', async () => {
@@ -69,14 +69,14 @@ describe('LadderScreen', () => {
         render(<LadderScreen />);
         const podium = await screen.findByRole(`region`, { name: `Top of the ladder` });
         const [wide] = within(podium).getAllByRole(`img`);
-        expect(wide?.getAttribute(`aria-label`)).toBe(`Podium: first sealbot, 1712; second hextide, 1690; third tom, 1503`);
+        expect(wide?.getAttribute(`aria-label`)).toBe(`Podium: first sealbot, 1712; second hextide, 1690; third quinn, 1503`);
         expect(wide?.querySelectorAll(`g.stone`)).toHaveLength(15);
         expect(wide?.querySelectorAll(`polyline.win-line`)).toHaveLength(1);
         const plates = [...podium.querySelectorAll(`.podium-slot`)];
         expect(plates.map((plate) => plate.className)).toEqual([`podium-slot p1`, `podium-slot p2`, `podium-slot p3`]);
-        expect(plates[0]?.textContent).toBe(`1sealbotBOT1712by tom, 214 gamesPlay`);
-        expect(plates[0]?.querySelector(`.podium-meta a`)?.getAttribute(`href`)).toBe(`/players/tom`);
-        expect(plates[2]?.textContent).toBe(`3tom150357 games`);
+        expect(plates[0]?.textContent).toBe(`1sealbotBOT1712by quinn, 214 gamesPlay`);
+        expect(plates[0]?.querySelector(`.podium-meta a`)?.getAttribute(`href`)).toBe(`/players/quinn`);
+        expect(plates[2]?.textContent).toBe(`3quinn150357 games`);
         // Only a bot that would start a game now offers Play.
         await waitFor(() => {
             expect(within(podium).getAllByRole(`link`, { name: /^Play / }).map((link) => link.getAttribute(`href`))).toEqual([`/play?bot=sealbot`]);
@@ -124,7 +124,7 @@ describe('LadderScreen', () => {
     });
 
     it('say where the signed-in player stands and take them to their row, clearing the search', async () => {
-        serve(() => board, tom);
+        serve(() => board, quinn);
         render(<LadderScreen />);
         expect(await screen.findByText(`You are 3rd with 1503`)).toBeTruthy();
         fireEvent.change(screen.getByLabelText(`Find a name`), { target: { value: `seal` } });
@@ -137,7 +137,7 @@ describe('LadderScreen', () => {
     });
 
     it('tell a provisional player their rating is still settling', async () => {
-        serve(() => board, { ...tom, name: `newcomer`, provisional: true });
+        serve(() => board, { ...quinn, name: `newcomer`, provisional: true });
         render(<LadderScreen />);
         expect(await screen.findByText(`Your rating is still settling; you join the ladder once it is no longer provisional.`)).toBeTruthy();
         expect(screen.queryByRole(`button`, { name: `Show my row` })).toBe(null);
@@ -159,7 +159,7 @@ describe('LadderScreen', () => {
                         JSON.stringify(
                             url.startsWith(`/api/bots`)
                                 ? [
-                                      { name: `sealbot`, ownerName: `tom`, online: true, openForChallenges: true, rating: 1712, provisional: false, liveGames: 0 },
+                                      { name: `sealbot`, ownerName: `quinn`, online: true, openForChallenges: true, rating: 1712, provisional: false, liveGames: 0 },
                                       { name: `hextide`, ownerName: `ana`, online: true, openForChallenges: false, rating: 1690, provisional: false, liveGames: 0 },
                                   ]
                                 : board,
@@ -281,7 +281,7 @@ describe('LadderScreen', () => {
             vi.fn((url: string) =>
                 Promise.resolve(
                     new Response(
-                        JSON.stringify(url === `/api/me` ? { kind: `user`, name: `tom`, rating: 1503, provisional: false, discord: null, liveGames: [] } : board),
+                        JSON.stringify(url === `/api/me` ? { kind: `user`, name: `quinn`, rating: 1503, provisional: false, discord: null, liveGames: [] } : board),
                     ),
                 ),
             ),
@@ -291,7 +291,7 @@ describe('LadderScreen', () => {
         render(<LadderScreen />);
         await screen.findByRole(`table`);
         await waitFor(() => {
-            expect(document.querySelector(`tr.you .player-name`)?.textContent).toBe(`tom`);
+            expect(document.querySelector(`tr.you .player-name`)?.textContent).toBe(`quinn`);
         });
         expect(document.querySelectorAll(`tr.you`)).toHaveLength(1);
         meStore.reset();

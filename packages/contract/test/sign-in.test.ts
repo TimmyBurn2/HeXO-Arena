@@ -91,7 +91,7 @@ describe('who the session names', () => {
 
 describe('the dev login', () => {
     it('takes a chosen name, or a Discord account with an optional return path', () => {
-        expect(devLoginRequestSchema.safeParse({ name: `tom` }).success).toBe(true);
+        expect(devLoginRequestSchema.safeParse({ name: `quinn` }).success).toBe(true);
         expect(devLoginRequestSchema.safeParse({ discord: { username: `mira.hex`, displayName: `Mira` } }).success).toBe(true);
         expect(devLoginRequestSchema.safeParse({ discord: { username: `mira.hex`, displayName: null }, next: `/connect` }).success).toBe(true);
         expect(devLoginRequestSchema.safeParse({ discord: { username: `mira.hex`, displayName: null }, next: `//evil.example` }).success).toBe(false);

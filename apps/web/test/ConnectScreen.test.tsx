@@ -156,12 +156,12 @@ describe('ConnectScreen', () => {
     it('mark the sign-in step done for a signed-in user', async () => {
         vi.stubGlobal(
             `fetch`,
-            vi.fn(() => Promise.resolve(new Response(JSON.stringify({ kind: `user`, name: `tom`, rating: 1503, provisional: false, discord: null, liveGames: [] })))),
+            vi.fn(() => Promise.resolve(new Response(JSON.stringify({ kind: `user`, name: `quinn`, rating: 1503, provisional: false, discord: null, liveGames: [] })))),
         );
         meStore.reset();
         meStore.start();
         render(<ConnectScreen />);
-        expect(await screen.findByRole(`heading`, { name: `Signed in as tom` })).toBeTruthy();
+        expect(await screen.findByRole(`heading`, { name: `Signed in as quinn` })).toBeTruthy();
         expect(screen.queryByRole(`link`, { name: `Sign in with Discord` })).toBe(null);
         meStore.reset();
     });
@@ -169,13 +169,13 @@ describe('ConnectScreen', () => {
     it('take focus to the bot name when an account was just made on the way here, once', async () => {
         vi.stubGlobal(
             `fetch`,
-            vi.fn(() => Promise.resolve(new Response(JSON.stringify({ kind: `user`, name: `tom`, rating: 1000, provisional: true, discord: null, liveGames: [] })))),
+            vi.fn(() => Promise.resolve(new Response(JSON.stringify({ kind: `user`, name: `quinn`, rating: 1000, provisional: true, discord: null, liveGames: [] })))),
         );
         window.history.pushState({ landing: `bot-name` }, ``, `/connect`);
         meStore.reset();
         meStore.start();
         render(<ConnectScreen />);
-        await screen.findByRole(`heading`, { name: `Signed in as tom` });
+        await screen.findByRole(`heading`, { name: `Signed in as quinn` });
         await waitFor(() => {
             expect(document.activeElement).toBe(screen.getByRole(`textbox`, { name: `Bot name` }));
         });

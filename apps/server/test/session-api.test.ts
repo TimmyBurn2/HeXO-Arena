@@ -163,3 +163,58 @@ describe('POST /api/auth/guest', () => {
         await arena.app.close();
     });
 });
+
+describe('cross-origin writes', () => {
+    let arena: TestApp;
+
+    afterEach(async () => {
+        await arena.app.close();
+    });
+
+    function logout(session: string | undefined, site: string | undefined) {
+        return arena.app.inject({
+            method: `POST`,
+            url: logoutPath,
+            ...(session !== undefined && { cookies: { hexo_arena_session: session } }),
+            ...(site !== undefined && { headers: { 'sec-fetch-site': site } }),
+        });
+    }
+
+    it('refuses a write carrying the session from another origin with 403, and the session stands', async () => {
+        arena = await createTestApp();
+        const session = await loginAs(arena.app, `alice`);
+        for (const site of [`same-site`, `cross-site`, `none`]) {
+            const refused = await logout(session, site);
+            expect(refused.statusCode).toBe(403);
+            expect(refused.json()).toEqual({ error: `a write from another origin carries no session`, code: `cross_origin` });
+        }
+        expect(await readMe(arena, session)).toMatchObject({ kind: `user`, name: `alice` });
+    });
+
+    it('lets the site itself, a client sending no fetch metadata, and a request without the session through', async () => {
+        arena = await createTestApp();
+        expect((await logout(await loginAs(arena.app, `alice`), `same-origin`)).statusCode).toBe(204);
+        expect((await logout(await loginAs(arena.app, `alice`), undefined)).statusCode).toBe(204);
+        expect((await logout(undefined, `cross-site`)).statusCode).toBe(204);
+        const read = await arena.app.inject({ method: `GET`, url: mePath, cookies: { hexo_arena_session: await loginAs(arena.app, `alice`) }, headers: { 'sec-fetch-site': `cross-site` } });
+        expect(read.statusCode).toBe(200);
+    });
+});
+
+describe('the session cookie over TLS', () => {
+    it('carries the __Host- prefix, Secure, and the root path, and the plain name signs nobody in', async () => {
+        const arena = await createTestApp({ secureCookies: true });
+        const login = await arena.app.inject({ method: `POST`, url: devLoginPath, payload: { name: `alice` } });
+        const cookie = login.cookies.find((entry) => entry.name === `__Host-hexo_arena_session`);
+        expect(cookie).toMatchObject({ secure: true, path: `/`, httpOnly: true, sameSite: `Lax` });
+        expect(cookie?.domain).toBeUndefined();
+        const token = cookie?.value ?? ``;
+        const as = async (cookies: Record<string, string>) => meSchema.parse((await arena.app.inject({ method: `GET`, url: mePath, cookies })).json());
+        expect(await as({ '__Host-hexo_arena_session': token })).toMatchObject({ kind: `user`, name: `alice` });
+        expect(await as({ hexo_arena_session: token })).toBeNull();
+        const out = await arena.app.inject({ method: `POST`, url: logoutPath, cookies: { '__Host-hexo_arena_session': token } });
+        expect(out.cookies.find((entry) => entry.name === `__Host-hexo_arena_session`)).toMatchObject({ value: ``, secure: true, path: `/` });
+        expect(await as({ '__Host-hexo_arena_session': token })).toBeNull();
+        await arena.app.close();
+    });
+});

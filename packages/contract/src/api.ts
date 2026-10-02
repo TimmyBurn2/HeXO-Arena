@@ -14,7 +14,19 @@ export const botTokenPath = `/api/bots/{name}/token`;
 export const botStreamPath = `/api/bot/stream`;
 export const botAccountPath = `/api/bot/account`;
 
+/** The session cookie where the site runs without TLS, as in development. */
 export const sessionCookieName = `hexo_arena_session`;
+
+/**
+ * The session cookie over TLS: with the prefix, a browser refuses one a
+ * sibling subdomain sets, so no other site under the domain can plant a session.
+ */
+export const secureSessionCookieName = `__Host-${sessionCookieName}`;
+
+/** The session cookie's name where cookies carry Secure, or where they do not. */
+export function sessionCookieNameFor(secure: boolean): string {
+    return secure ? secureSessionCookieName : sessionCookieName;
+}
 
 /** How long an account's session, and its cookie, last after sign-in. */
 export const sessionMaxAgeSeconds = 30 * 24 * 60 * 60;
@@ -168,13 +180,21 @@ export const botCreateErrorCodes = [
     `name_taken`,
 ] as const;
 
+/** Control characters, and the marks that reorder text around them: never shown back as a player wrote them. */
+export const controlOrBidiPattern = /[\p{Cc}\u061c\u200e\u200f\u202a-\u202e\u2066-\u2069]/u;
+
+// A declaration is shown on the bot's pages as written, so it refuses what
+// would hide or reorder the text around it. A refinement publishes no
+// pattern, and a value stored before it still reads back.
+const shownAsWritten = { check: (text: string) => !controlOrBidiPattern.test(text), message: `control and bidirectional characters are refused` };
+
 // The self-declaration the token-holding process sends; every field
 // optional, each present field replacing the stored one. Strict, so a
 // typo'd key answers 400 instead of silently declaring nothing.
 export const accountDeclarationSchema = z
     .strictObject({
-        about: botAboutSchema.optional(),
-        version: botVersionSchema.optional(),
+        about: botAboutSchema.refine(shownAsWritten.check, shownAsWritten.message).optional(),
+        version: botVersionSchema.refine(shownAsWritten.check, shownAsWritten.message).optional(),
         repoUrl: botRepoUrlSchema.optional(),
         accepts: acceptsSchema.optional(),
     })

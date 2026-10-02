@@ -1,4 +1,15 @@
-import { botWithTokenSchema, botsPath, devLoginPath, discordCallbackPath, discordLoginHref, discordLoginPath, oauthCookieName, signupPath } from '@hexo-arena/contract';
+import {
+    botWithTokenSchema,
+    botsPath,
+    devLoginPath,
+    discordCallbackPath,
+    discordLoginHref,
+    discordLoginPath,
+    oauthCookieName,
+    secureSessionCookieName,
+    sessionCookieName,
+    signupPath,
+} from '@hexo-arena/contract';
 import { buildApp, type BuiltApp } from '../src/app';
 import { openDatabase, runMigrations, type Sqlite } from '../src/db';
 import type { DiscordIdentity, DiscordOAuth } from '../src/discord';
@@ -135,7 +146,7 @@ export async function signUpWithDiscord(app: TestApp[`app`], name: string): Prom
     const signup = back.cookies.find((entry) => entry.name === `hexo_arena_signup`)?.value;
     if (signup === undefined) throw new Error(`the callback held no sign-up: ${String(back.headers.location)}`);
     const created = await app.inject({ method: `POST`, url: signupPath, payload: { name }, cookies: { hexo_arena_signup: signup } });
-    const session = created.cookies.find((entry) => entry.name === `hexo_arena_session`)?.value;
+    const session = created.cookies.find((entry) => entry.name === sessionCookieName || entry.name === secureSessionCookieName)?.value;
     if (created.statusCode !== 201 || session === undefined) throw new Error(`the sign-up failed: ${created.body}`);
     return session;
 }

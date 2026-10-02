@@ -3,14 +3,17 @@ import {
     archiveReadLimit,
     botManagementLimit,
     clientRequestLimit,
+    discordExchangeLimit,
     engineDialLimit,
     guestMintLimit,
+    guestMintPrefixLimit,
     guestPath,
     principalRequestLimit,
     publicRequestLimit,
     requestBodyLimitBytes,
     sessionCookieName,
     signInStartLimit,
+    signInStartPrefixLimit,
     streamOpenLimit,
 } from '@hexo-arena/contract';
 import { mkdtempSync, writeFileSync } from 'node:fs';
@@ -163,6 +166,9 @@ describe('request limits', () => {
             engineDial: engineDialLimit,
             guestMint: guestMintLimit,
             signInStart: signInStartLimit,
+            guestMintPrefix: guestMintPrefixLimit,
+            signInStartPrefix: signInStartPrefixLimit,
+            discordExchange: discordExchangeLimit,
             archiveRead: archiveReadLimit,
             archiveReadGlobal: archiveReadGlobalLimit,
         });

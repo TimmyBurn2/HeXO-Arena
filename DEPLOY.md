@@ -243,8 +243,8 @@ docker run --rm --network none -v hexo-arena_backup:/backup:ro -v hexo-arena-res
   cp /backup/hexo-arena-YYYY-MM-DD.sqlite /data/hexo-arena.sqlite
 docker run --rm --network none -v hexo-arena-restore-test:/data "$image" \
   node -e "const db = new (require('better-sqlite3'))('/data/hexo-arena.sqlite'); console.log(db.pragma('integrity_check', { simple: true }), db.prepare('select count(*) as games from games').get())"
-# A production boot names a proxy address; with no network, any will do.
-docker run -d --name hexo-arena-restore-test --network none -e TRUSTED_PROXY=127.0.0.1 \
+# A production boot names a proxy address and an https origin; with no network, any will do.
+docker run -d --name hexo-arena-restore-test --network none -e TRUSTED_PROXY=127.0.0.1 -e PUBLIC_ORIGIN=https://localhost \
   -v hexo-arena-restore-test:/data --tmpfs /run/hexo-arena:mode=0700,uid=10001,gid=10001 "$image"
 docker exec hexo-arena-restore-test hexo-arena-admin status
 docker rm -f hexo-arena-restore-test

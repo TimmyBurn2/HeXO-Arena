@@ -11,7 +11,7 @@ function snapshot(
         you: `o`,
         players: {
             x: { name: `hextide`, rating: 1690, provisional: false, kind: `bot` },
-            o: { name: `tom`, rating: 1503, provisional: false, kind: `user` },
+            o: { name: `quinn`, rating: 1503, provisional: false, kind: `user` },
         },
         openingPlies: 3,
         board: { cells },

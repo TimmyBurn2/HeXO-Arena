@@ -18,9 +18,10 @@ import { and, asc, desc, eq, inArray, isNull, sql, type SQL, type SQLWrapper } f
 import type { FastifyInstance } from 'fastify';
 import type { Query } from './db';
 import { bots, gameRatings, games, tournamentEntries, tournamentPairings, tournaments, users } from './db/schema';
+import type { Ladder } from './ladder';
 import { activeSince } from './leaderboard-api';
 import { isProvisional, type PlayerRef } from './rating';
-import { rankablePlayers, readRating } from './rating-store';
+import { readRating } from './rating-store';
 import { standingsOf, storedSlot } from './round-robin';
 
 const isoOf = (seconds: number) => new Date(seconds * 1000).toISOString().replace(/\.\d{3}Z$/u, `Z`);
@@ -126,7 +127,7 @@ function placingsOf(query: Query, botId: string): NonNullable<PlayerRecord[`plac
 }
 
 /** A player's record over every finished game but aborted and voided ones; null for a name no player holds. */
-export function playerRecord(query: Query, name: string, nowMs: number): PlayerRecord | null {
+export function playerRecord(query: Query, ladder: Pick<Ladder, `read`>, name: string, nowMs: number): PlayerRecord | null {
     const player = resolve(query, name);
     if (player === null) return null;
     const rows = playedRows(query, player);
@@ -160,8 +161,7 @@ export function playerRecord(query: Query, name: string, nowMs: number): PlayerR
     const nameOf = (id: string) => names.get(id) ?? id;
     const mostPlayed = [...met.entries()].sort((one, two) => two[1].games - one[1].games || nameOf(one[0]).localeCompare(nameOf(two[0]))).slice(0, playerOpponentsCap);
     const rating = readRating(query, player);
-    const ladder = rankablePlayers(query, { kind: `all`, activeSince: activeSince(nowMs) });
-    const rank = ladder.findIndex((entry) => entry.kind === player.kind && entry.name === player.name);
+    const rank = ladder.read(`all`, activeSince(nowMs)).findIndex((entry) => entry.kind === player.kind && entry.name === player.name);
     const times = rows.map((row) => row.finishedAt);
     return {
         name: player.name,
@@ -238,11 +238,11 @@ export interface PlayerReads {
  * The player reads, memoized per name: the API and the link previews read
  * through the same memo, so a burst of either costs one read.
  */
-export function createPlayerReads(deps: { query: Query; now: () => number }): PlayerReads {
+export function createPlayerReads(deps: { query: Query; ladder: Pick<Ladder, `read`>; now: () => number }): PlayerReads {
     const records = remembering<PlayerRecord>(deps.now, (record) => JSON.stringify(playerRecordSchema.parse(record)));
     const histories = remembering<RatingPoint[]>(deps.now, (history) => JSON.stringify(ratingHistorySchema.parse(history)));
     return {
-        record: (name) => records(nameKeyOf(name), () => playerRecord(deps.query, name, deps.now())),
+        record: (name) => records(nameKeyOf(name), () => playerRecord(deps.query, deps.ladder, name, deps.now())),
         history: (name, range) => histories(`${range} ${nameKeyOf(name)}`, () => ratingHistory(deps.query, name, range, deps.now())),
     };
 }

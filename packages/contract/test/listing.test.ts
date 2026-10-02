@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { botConcurrentGameCap, botListingSchema, humanSeedRating } from '../src/index';
 
-const listing = { name: `sealbot`, ownerName: `tom`, online: true, openForChallenges: true, rating: 1712, provisional: false };
+const listing = { name: `sealbot`, ownerName: `quinn`, online: true, openForChallenges: true, rating: 1712, provisional: false };
 
 describe('botListingSchema', () => {
     it(`carries the bot's live games, from none to its cap of ${String(botConcurrentGameCap)}`, () => {

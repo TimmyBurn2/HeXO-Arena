@@ -14,14 +14,15 @@ const serializers = {
     req: (request: FastifyRequest) => ({ method: request.method, route: request.routeOptions.url ?? null }),
 };
 
-class RouteLogController extends LogController {
-    // Fastify's own line quotes the raw url; the response body stays Fastify's.
-    override routeNotFound(request: FastifyRequest): void {
-        if (this.isLogDisabled(request)) return;
-        request.log.info(`route not found`);
-    }
+/** Logs a client error by its code and status alone: its message may quote what the client sent. */
+export function logClientError(error: unknown, reply: FastifyReply): void {
+    const fields = typeof error === `object` && error !== null ? error : {};
+    const code = `code` in fields ? fields.code : undefined;
+    const statusCode = `statusCode` in fields ? fields.statusCode : undefined;
+    reply.log.info({ res: reply, err: { code, statusCode } }, `client error`);
+}
 
-    // A client error's message may quote what the client sent; its code cannot.
+class RouteLogController extends LogController {
     // Server errors keep message and stack, which are the server's own.
     override defaultErrorLog(error: Error, request: FastifyRequest, reply: FastifyReply): void {
         if (reply.statusCode >= 500) {
@@ -29,9 +30,7 @@ class RouteLogController extends LogController {
             return;
         }
         if (this.isLogDisabled(request)) return;
-        const code = `code` in error ? error.code : undefined;
-        const statusCode = `statusCode` in error ? error.statusCode : undefined;
-        reply.log.info({ res: reply, err: { code, statusCode } }, `client error`);
+        logClientError(error, reply);
     }
 }
 

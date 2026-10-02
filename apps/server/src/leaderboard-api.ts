@@ -1,8 +1,7 @@
 import { leaderboardActiveDays, leaderboardCap, leaderboardPath, leaderboardQuerySchema, leaderboardSchema, type LeaderboardEntry } from '@hexo-arena/contract';
 import type { FastifyInstance } from 'fastify';
-import type { Query } from './db';
+import type { Ladder } from './ladder';
 import type { PresenceRegistry } from './presence';
-import { rankablePlayers } from './rating-store';
 
 const secondsPerDay = 86_400;
 
@@ -15,14 +14,15 @@ function isoOf(seconds: number): string {
     return new Date(seconds * 1000).toISOString().replace(/\.\d{3}Z$/u, `Z`);
 }
 
-export function registerLeaderboardApi(app: FastifyInstance, deps: { query: Query; presence: PresenceRegistry; now: () => number }): void {
+export function registerLeaderboardApi(app: FastifyInstance, deps: { ladder: Pick<Ladder, `read`>; presence: PresenceRegistry; now: () => number }): void {
     app.get(leaderboardPath, { config: { limit: `public` } }, async (request, reply) => {
         const parsed = leaderboardQuerySchema.safeParse(request.query);
         if (!parsed.success) {
             return reply.code(400).send({ error: `kind must be bots, humans, or all, and active 30d or all`, code: `bad_request` });
         }
         const { kind, active } = parsed.data;
-        const board = rankablePlayers(deps.query, { kind, activeSince: active === `all` ? null : activeSince(deps.now()) })
+        const board = deps.ladder
+            .read(kind, active === `all` ? null : activeSince(deps.now()))
             .slice(0, leaderboardCap)
             .map((player, index): LeaderboardEntry => {
                 const entry = { rank: index + 1, name: player.name, rating: Math.round(player.rating), games: player.games, lastPlayedAt: isoOf(player.lastPlayedAt) };

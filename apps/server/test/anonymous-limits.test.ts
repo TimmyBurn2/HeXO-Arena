@@ -2,8 +2,11 @@ import {
     archiveReadGlobalLimit,
     archiveReadLimit,
     clientWatcherCap,
+    discordCallbackPath,
+    discordExchangeLimit,
     discordLoginPath,
     guestMintLimit,
+    guestMintPrefixLimit,
     guestPath,
     seatWatcherCap,
     sessionCookieName,
@@ -14,7 +17,7 @@ import http from 'node:http';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { findBot } from '../src/bots';
 import { createQuery } from '../src/db';
-import { createTestApp, FakeStreamSocket, loginAs, mintBot, roomyLimits, type TestApp } from './helpers';
+import { createTestApp, fakeDiscord, FakeStreamSocket, loginAs, mintBot, roomyLimits, startDiscordSignIn, type StartedSignIn, type TestApp } from './helpers';
 
 let world: TestApp | null = null;
 
@@ -166,5 +169,59 @@ describe('anonymous limits per client', () => {
         expect((await read(`203.0.113.82`)).statusCode).toBe(429);
         vi.advanceTimersByTime(archiveReadLimit.refillMs);
         expect((await read(`203.0.113.80`)).statusCode).toBe(200);
+    });
+});
+
+describe('anonymous limits per IPv6 /48', () => {
+    it('stop guest mints spread over the /64s of one /48 at four clients\' worth, while another /48 mints', async () => {
+        const arena = await start(clocked());
+        const mint = (address: string) => arena.app.inject({ method: `POST`, url: guestPath, ...from(address) });
+        for (let network = 0; network < 4; network += 1) {
+            for (let minted = 0; minted < guestMintLimit.burst; minted += 1) expect((await mint(`2001:db8:5:${String(network)}::1`)).statusCode).toBe(201);
+        }
+        const refused = await mint(`2001:db8:5:4::1`);
+        expect(refused.statusCode).toBe(429);
+        expect(refused.json()).toMatchObject({ code: `rate_limited` });
+        expect(refused.headers[`retry-after`]).toBe(String(guestMintPrefixLimit.refillMs / 1000));
+        expect((await mint(`2001:db8:6::1`)).statusCode).toBe(201);
+        vi.advanceTimersByTime(guestMintPrefixLimit.refillMs);
+        expect((await mint(`2001:db8:5:4::1`)).statusCode).toBe(201);
+    });
+
+    it('send sign-ins spread over the /64s of one /48 back busy past four clients\' worth', async () => {
+        const arena = await start(clocked());
+        const login = (address: string) => arena.app.inject({ method: `GET`, url: `${discordLoginPath}?next=/play`, ...from(address) });
+        for (let network = 0; network < 4; network += 1) {
+            for (let started = 0; started < signInStartLimit.burst; started += 1) expect((await login(`2001:db8:7:${String(network)}::1`)).headers.location).toMatch(/^https:\/\/discord/u);
+        }
+        expect((await login(`2001:db8:7:4::1`)).headers.location).toBe(`/play?signin=busy`);
+        expect((await login(`2001:db8:8::1`)).headers.location).toMatch(/^https:\/\/discord/u);
+    });
+});
+
+describe('the Discord exchange limit', () => {
+    it('send callbacks past the burst back busy without asking Discord, and let one through once a token returns', async () => {
+        const fake = fakeDiscord({ id: `9`, username: `flood` });
+        const exchanged: string[] = [];
+        const arena = await start({
+            ...clocked(),
+            discord: {
+                ...fake.oauth,
+                exchange: (code) => {
+                    exchanged.push(code);
+                    return fake.oauth.exchange(code);
+                },
+            },
+        });
+        const started: StartedSignIn[] = [];
+        for (let sign = 0; sign < discordExchangeLimit.burst + 2; sign += 1) started.push(await startDiscordSignIn(arena.app));
+        const back = async (sign: StartedSignIn | undefined) =>
+            (await arena.app.inject({ method: `GET`, url: `${discordCallbackPath}?code=c&state=${encodeURIComponent(sign?.state ?? ``)}`, cookies: sign?.cookies ?? {} })).headers.location;
+        for (const sign of started.slice(0, discordExchangeLimit.burst)) expect(await back(sign)).toBe(`/welcome`);
+        expect(await back(started[discordExchangeLimit.burst])).toBe(`/?signin=busy`);
+        expect(exchanged).toHaveLength(discordExchangeLimit.burst);
+        vi.advanceTimersByTime(discordExchangeLimit.refillMs);
+        expect(await back(started[discordExchangeLimit.burst + 1])).toBe(`/welcome`);
+        expect(exchanged).toHaveLength(discordExchangeLimit.burst + 1);
     });
 });

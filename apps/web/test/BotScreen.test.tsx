@@ -7,7 +7,7 @@ import { botApiRepository } from '../src/site-links';
 
 const sealbot = {
     name: `sealbot`,
-    ownerName: `tom`,
+    ownerName: `quinn`,
     online: true,
     openForChallenges: true,
     rating: 1712,
@@ -15,7 +15,7 @@ const sealbot = {
     liveGames: 0,
     about: `A clean-room HeXO engine with a rotation opener.`,
     version: `0.3.1`,
-    repoUrl: `https://github.com/tom/sealbot`,
+    repoUrl: `https://github.com/quinn/sealbot`,
     accepts: { turnMs: [5000, 60000], match: true, unlimited: true },
 };
 
@@ -37,7 +37,7 @@ function history(player: string): unknown {
     const games = Array.from({ length: 12 }, (_, index) => ({
         gameId: `g-${String(index)}`,
         players: {
-            x: { name: player, rating: 1700, provisional: false, kind: player === `tom` ? `user` : `bot` },
+            x: { name: player, rating: 1700, provisional: false, kind: player === `quinn` ? `user` : `bot` },
             o: { name: `hextide`, rating: 1690, provisional: false, kind: `bot` },
         },
         winner: index % 2 === 0 ? `x` : `o`,
@@ -132,20 +132,20 @@ describe('BotScreen', () => {
         expect(await screen.findByRole(`heading`, { name: `sealbot` })).toBeTruthy();
         expect(screen.getByText(`A clean-room HeXO engine with a rotation opener.`)).toBeTruthy();
         expect(screen.getByText(`5 to 60 s`)).toBeTruthy();
-        const owner = screen.getByRole(`link`, { name: `tom` });
-        expect(owner.parentElement?.textContent).toBe(`By tom`);
-        expect(owner.getAttribute(`href`)).toBe(`/players/tom`);
+        const owner = screen.getByRole(`link`, { name: `quinn` });
+        expect(owner.parentElement?.textContent).toBe(`By quinn`);
+        expect(owner.getAttribute(`href`)).toBe(`/players/quinn`);
         expect(document.querySelector(`.bot-rating-number`)?.textContent).toBe(`1712`);
         // The repository reads whole and may break only after a slash.
-        const repo = document.querySelector(`a[href="https://github.com/tom/sealbot"]`);
-        expect(repo?.textContent).toBe(`github.com/tom/sealbot`);
+        const repo = document.querySelector(`a[href="https://github.com/quinn/sealbot"]`);
+        expect(repo?.textContent).toBe(`github.com/quinn/sealbot`);
         expect(repo?.querySelectorAll(`wbr`)).toHaveLength(2);
         expect(screen.getByRole(`link`, { name: `Play sealbot` }).getAttribute(`href`)).toBe(`/play?bot=sealbot`);
         await waitFor(() => {
             expect(document.title).toBe(`sealbot - HeXO Arena`);
         });
         expect(document.querySelector(`meta[name="description"]`)?.getAttribute(`content`)).toBe(
-            `HeXO bot by tom, rated 1712, online and open for challenges. A clean-room HeXO engine with a rotation opener`,
+            `HeXO bot by quinn, rated 1712, online and open for challenges. A clean-room HeXO engine with a rotation opener`,
         );
     });
 
@@ -186,7 +186,7 @@ describe('BotScreen', () => {
         vi.stubGlobal(
             `fetch`,
             vi.fn((url: string) =>
-                Promise.resolve(new Response(JSON.stringify(url === `/api/me` ? { kind: `user`, name: `tom`, rating: 1503, provisional: false, discord: null, liveGames: [] } : [bare]))),
+                Promise.resolve(new Response(JSON.stringify(url === `/api/me` ? { kind: `user`, name: `quinn`, rating: 1503, provisional: false, discord: null, liveGames: [] } : [bare]))),
             ),
         );
         meStore.reset();
@@ -255,14 +255,14 @@ describe('BotScreen', () => {
         });
         expect(screen.queryByRole(`heading`, { name: `Owner tools` })).toBe(null);
         cleanup();
-        serveAs(`tom`, []);
+        serveAs(`quinn`, []);
         render(<BotScreen name="sealbot" />);
         expect(await screen.findByRole(`heading`, { name: `Owner tools` })).toBeTruthy();
     });
 
     it('rotate the token only on the second click and show the new one once', async () => {
         const writes: { method: string; url: string }[] = [];
-        serveAs(`tom`, writes);
+        serveAs(`quinn`, writes);
         render(<BotScreen name="sealbot" />);
         fireEvent.click(await screen.findByRole(`button`, { name: `Rotate token` }));
         expect(writes).toEqual([]);
@@ -272,7 +272,7 @@ describe('BotScreen', () => {
     });
 
     it('name the delete confirmation with a label on screen', async () => {
-        serveAs(`tom`, []);
+        serveAs(`quinn`, []);
         render(<BotScreen name="sealbot" />);
         const field = await screen.findByRole(`textbox`, { name: `Type sealbot to confirm` });
         expect(document.querySelector(`label[for="${field.id}"]`)?.textContent).toBe(`Type sealbot to confirm`);
@@ -281,7 +281,7 @@ describe('BotScreen', () => {
 
     it('delete only after the name is typed, and explain a seated bot', async () => {
         const writes: { method: string; url: string }[] = [];
-        serveAs(`tom`, writes, 409);
+        serveAs(`quinn`, writes, 409);
         render(<BotScreen name="sealbot" />);
         const remove = await screen.findByRole(`button`, { name: `Delete sealbot` });
         expect(remove.hasAttribute(`disabled`)).toBe(true);
@@ -301,7 +301,7 @@ describe('BotScreen', () => {
                         new Response(JSON.stringify({ error: `slow down`, code: `rate_limited` }), { status: 429, headers: { 'retry-after': `42` } }),
                     );
                 }
-                const body = url === `/api/me` ? { kind: `user`, name: `tom`, rating: 1503, provisional: false, discord: null, liveGames: [] } : [sealbot];
+                const body = url === `/api/me` ? { kind: `user`, name: `quinn`, rating: 1503, provisional: false, discord: null, liveGames: [] } : [sealbot];
                 return Promise.resolve(new Response(JSON.stringify(body)));
             }),
         );

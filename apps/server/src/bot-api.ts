@@ -30,6 +30,7 @@ export interface BotApiDeps {
     // so a page can tell a busy bot before a start fails.
     games: Pick<GameRegistry, `activeGameCount`>;
     limits: CredentialLimits;
+    reservations: { isReserved: (botId: string) => boolean };
 }
 
 // Sends the failure itself and yields null, so handlers stay flat.
@@ -47,7 +48,7 @@ export function requireBot(query: Query, request: FastifyRequest, reply: Fastify
 }
 
 export function registerBotApi(app: FastifyInstance, deps: BotApiDeps): void {
-    const { query, presence, gate, games, limits } = deps;
+    const { query, presence, gate, games, limits, reservations } = deps;
 
     app.get(botStreamPath, { config: { limit: `stream` } }, async (request, reply) => {
         const bot = requireBot(query, request, reply);
@@ -58,7 +59,9 @@ export function registerBotApi(app: FastifyInstance, deps: BotApiDeps): void {
         if (!parsed.success) {
             return reply.code(400).send({ error: `the open parameter must be exactly 1`, code: `bad_request` });
         }
-        if (gate.refuse(reply)) return reply;
+        // A pause starts nothing new, but a bot coming back to a live game or
+        // a running tournament keeps what it holds instead of forfeiting it.
+        if (games.activeGameCount(bot.id) === 0 && !reservations.isReserved(bot.id) && gate.refuse(reply)) return reply;
         // Writing on reply.raw bypasses serialization and anything that
         // buffers; hijack keeps the framework from answering on its own.
         // Headers flush eagerly: a bot with no replay lines must not wait

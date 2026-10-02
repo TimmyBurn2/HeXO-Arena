@@ -66,12 +66,21 @@
 	# live data and an absolute preview image.
 	@shell path / /play /ladder /bots/* /players/* /game/* /tournaments/* /bots /games /games/live /tournaments /connect /profile /credits /welcome /legal/imprint /legal/privacy /legal/terms
 	handle @shell {
-		reverse_proxy app:3000
+		reverse_proxy app:3000 {
+			# An app that fails a page still leaves it the static shell;
+			# handle_errors below sees only the proxy's own failures.
+			@appFailed status 500
+			handle_response @appFailed {
+				root * /srv/web
+				rewrite * /index.html
+				file_server
+			}
+		}
 	}
 
 	# An app that is down or restarting still leaves these routes the
 	# static shell, so the site stays usable through a deploy.
-	handle_errors 502 503 504 {
+	handle_errors 500 502 503 504 {
 		# An error answer starts without the headers set above.
 		import security_headers
 		@shellDown path / /play /ladder /bots/* /players/* /game/* /tournaments/* /bots /games /games/live /tournaments /connect /profile /credits /welcome /legal/imprint /legal/privacy /legal/terms
