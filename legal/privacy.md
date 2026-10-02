@@ -88,6 +88,17 @@ A guest has no player page and cannot be searched for.
 
 Legal basis: Art. 6(1)(b) GDPR; for keeping guest games, Art. 6(1)(f) GDPR, legitimate interest: a complete public record of each bot's games.
 
+## Analysis
+
+A bot may send its evaluation of each move it plays, and of up to two moves it considered; these are stored with the game and published once it is over.
+A signed-in user may ask a community bot, one that declared itself an analyzer, to read a finished game; its reading is published with the game as that bot's opinion, under its name, version, and owner.
+{{site.name}} stores who asked for each reading, which is not public and counts the daily requests; it is removed when the account is deleted.
+Positions read on the analysis board are never stored with you: the readings stay in the server's memory for at most a day, shared by everyone who asks, and the count of your readings that day stays in memory only.
+
+The switch on your Profile page leaves your games out of public analysis: the readings of every game you played are deleted, no new ones are made, and the bots' own evaluations of those games are no longer shown.
+
+Legal basis: Art. 6(1)(f) GDPR, legitimate interest: letting players and bot authors study finished games.
+
 ## Cookies and browser storage
 
 - The cookie {{site.sessionCookie}}, set when you sign in or start playing as a guest: a random session reference, first-party and not readable by scripts.
@@ -96,7 +107,7 @@ Legal basis: Art. 6(1)(b) GDPR; for keeping guest games, Art. 6(1)(f) GDPR, legi
   It lasts {{site.oauthMinutes}} minutes, or until Discord sends you back.
 - The cookie {{site.signupCookie}}, set when a first sign-in returns from Discord: a random reference to the unfinished sign-up, first-party and not readable by scripts.
   It lasts {{site.signupMinutes}} minutes, or until you create the account or cancel.
-- Browser storage (localStorage) under {{site.themeKey}}, {{site.boardKey}}, {{site.drawerKey}}, and {{site.playKey}}: your theme, your board settings, whether the game panel stays pinned, and the opponent and clock of your last game.
+- Browser storage (localStorage) under {{site.themeKey}}, {{site.boardKey}}, {{site.drawerKey}}, {{site.playKey}}, and {{site.analysisSettingsKey}}: your theme, your board settings, whether the game panel stays pinned, the opponent and clock of your last game, and the analyzer, lines, and time you ask positions read with.
   It is written only when you change a setting or start a game, and never sent to the server.
 - Session storage (sessionStorage) under {{site.analysisKey}}: the turns and variations on the analysis board, a stored game by its id.
   It lasts until the tab closes, and is never sent to the server.

@@ -1,5 +1,17 @@
 import type { Page, Route } from '@playwright/test';
 import {
+    analysisListSchema,
+    analysisRequestSchema,
+    communityAnalysisSchema,
+    meUpdateRequestSchema,
+    positionCheckRequestSchema,
+    positionReadingRequestSchema,
+    positionReadingSchema,
+    userMeSchema,
+    type AnalysisFailure,
+    type AnalysisLine,
+    type AnalysisList,
+    type PositionReadingRequest,
     accountExportSchema,
     deleteAccountRequestSchema,
     reportFormMetaName,
@@ -89,6 +101,58 @@ export interface World {
     devAccounts: DevAccount[] | null;
     // Whether the page's shell names the report form, as the server's does where the deployment takes reports.
     reportForm: boolean;
+    // The bots that declare an analyzer, as the directory lists them under analyzer=1.
+    analyzers: BotListing[];
+    // How each position request answers.
+    positions: PositionAnswer;
+    // Every position request so far, in order.
+    asked: PositionReadingRequest[];
+    // Each finished game's readings by id; a game not named has none.
+    analyses: Record<string, AnalysisList>;
+}
+
+/**
+ * How the analysis board's position requests answer: a reading of lines
+ * the mock picks next to the stones, or `lines` as given; queued `times`
+ * times before that, naming the analyzer once `chosen`; held without an
+ * answer; failed; or refused.
+ */
+export type PositionAnswer =
+    | { kind: `done`; cached?: boolean; lines?: AnalysisLine[]; queued?: { ahead: number; times: number; chosen?: boolean } }
+    | { kind: `held` }
+    | { kind: `failed`; failure: AnalysisFailure }
+    | { kind: `refused`; status: number; code: string; retryAfter?: number };
+
+/** Two analyzers online, one reading up to 5 s and three lines, one up to 2 s and two, and one offline. */
+export const analyzerBots: BotListing[] = [
+    { name: `kestrel`, ownerName: `tom`, online: true, openForChallenges: false, rating: 1500, provisional: true, liveGames: 0, levels: null, version: `0.9`, analyzer: { maxSeconds: 5, lines: 3, whilePlaying: false, ready: true } },
+    { name: `driftwood`, ownerName: `mika`, online: true, openForChallenges: false, rating: 1500, provisional: true, liveGames: 0, levels: null, analyzer: { maxSeconds: 2, lines: 2, whilePlaying: false, ready: true } },
+    { name: `slowpoke`, ownerName: `ana`, online: false, openForChallenges: false, rating: 1500, provisional: true, liveGames: 0, levels: null, analyzer: { maxSeconds: 10, lines: 1, whilePlaying: false, ready: false } },
+];
+
+// Each line's heuristic for the side to move, x-positive as the wire has it.
+const mockHeuristics: Record<Side, readonly number[]> = { x: [0.31, 0.18, -0.05], o: [-0.12, -0.07, 0.02] };
+
+// Lines the mock analyzer reads: empty cells next to the stones, nearest
+// the newest first, paired in order, so every line is legal.
+function mockLines(request: PositionReadingRequest, count: number): AnalysisLine[] {
+    const taken = new Set(request.cells.map((cell) => `${String(cell.x)},${String(cell.y)}`));
+    const steps = [[1, 0], [0, 1], [-1, 1], [-1, 0], [0, -1], [1, -1]] as const;
+    const free: { x: number; y: number }[] = [];
+    for (const stone of [...request.cells].reverse()) {
+        for (const [dx, dy] of steps) {
+            const cell = { x: stone.x + dx, y: stone.y + dy };
+            const key = `${String(cell.x)},${String(cell.y)}`;
+            if (taken.has(key)) continue;
+            taken.add(key);
+            free.push(cell);
+        }
+    }
+    return Array.from({ length: count }, (_, index) => {
+        const first = free[index * 2] ?? { x: 0, y: 0 };
+        const second = free[index * 2 + 1] ?? { x: 0, y: 0 };
+        return { cells: [first, second], heuristic: mockHeuristics[request.toMove][index] ?? 0 };
+    });
 }
 
 // Three strengths, weakest first, the middle one rated, as the alpha-beta example declares them.
@@ -109,14 +173,14 @@ const atQuick = { id: `quick`, label: `quick`, budget: { timeMs: 200 } } as cons
 // one taking turn clocks of 10 to 60 s only, one closed, one offline.
 const full = { turnMs: [5000, 300000], match: true, unlimited: true };
 export const playBots: BotListing[] = [
-    { name: `sealbot`, ownerName: `bruno`, online: true, openForChallenges: true, rating: 1712, provisional: false, liveGames: 4, levels: null, accepts: { turnMs: [5000, 60000], match: true, unlimited: false } },
-    { name: `hextide`, ownerName: `ana`, online: true, openForChallenges: true, rating: 1690, provisional: false, liveGames: 1, levels: strengths, accepts: { turnMs: [5000, 60000], match: true, unlimited: false } },
-    { name: `devbot-b`, ownerName: `devowner-b`, online: true, openForChallenges: true, rating: 1538, provisional: false, liveGames: 0, levels: null, accepts: full },
-    { name: `devbot-a`, ownerName: `devowner-a`, online: true, openForChallenges: true, rating: 1520, provisional: false, liveGames: 2, levels: null, accepts: full },
-    { name: `devbot-c`, ownerName: `devowner-c`, online: true, openForChallenges: true, rating: 1514, provisional: false, liveGames: 0, levels: null, accepts: full },
-    { name: `quietlake`, ownerName: `dmitri`, online: true, openForChallenges: true, rating: 1420, provisional: true, liveGames: 0, levels: null, accepts: { turnMs: [10000, 60000], match: false, unlimited: false } },
-    { name: `pebble`, ownerName: `ana`, online: true, openForChallenges: false, rating: 1388, provisional: true, liveGames: 0, levels: null, accepts: { turnMs: [5000, 30000], match: false, unlimited: true } },
-    { name: `lantern`, ownerName: `ana`, online: false, openForChallenges: false, rating: 1500, provisional: true, liveGames: 0, levels: null },
+    { name: `sealbot`, ownerName: `bruno`, online: true, openForChallenges: true, rating: 1712, provisional: false, liveGames: 4, levels: null, analyzer: null, accepts: { turnMs: [5000, 60000], match: true, unlimited: false } },
+    { name: `hextide`, ownerName: `ana`, online: true, openForChallenges: true, rating: 1690, provisional: false, liveGames: 1, levels: strengths, analyzer: null, accepts: { turnMs: [5000, 60000], match: true, unlimited: false } },
+    { name: `devbot-b`, ownerName: `devowner-b`, online: true, openForChallenges: true, rating: 1538, provisional: false, liveGames: 0, levels: null, analyzer: null, accepts: full },
+    { name: `devbot-a`, ownerName: `devowner-a`, online: true, openForChallenges: true, rating: 1520, provisional: false, liveGames: 2, levels: null, analyzer: null, accepts: full },
+    { name: `devbot-c`, ownerName: `devowner-c`, online: true, openForChallenges: true, rating: 1514, provisional: false, liveGames: 0, levels: null, analyzer: null, accepts: full },
+    { name: `quietlake`, ownerName: `dmitri`, online: true, openForChallenges: true, rating: 1420, provisional: true, liveGames: 0, levels: null, analyzer: null, accepts: { turnMs: [10000, 60000], match: false, unlimited: false } },
+    { name: `pebble`, ownerName: `ana`, online: true, openForChallenges: false, rating: 1388, provisional: true, liveGames: 0, levels: null, analyzer: null, accepts: { turnMs: [5000, 30000], match: false, unlimited: true } },
+    { name: `lantern`, ownerName: `ana`, online: false, openForChallenges: false, rating: 1500, provisional: true, liveGames: 0, levels: null, analyzer: null },
 ];
 
 export const signup: Signup = { discord: { username: `mira.hex`, displayName: `Mira` }, suggestedName: `mira-hex`, next: `/connect` };
@@ -157,6 +221,7 @@ export const bots: BotListing[] = [
         provisional: false,
         liveGames: 0,
         levels: strengths,
+        analyzer: null,
         about: `A clean-room HeXO engine with a rotation opener.`,
         version: `0.3.1`,
         repoUrl: `https://github.com/quinn/sealbot`,
@@ -171,6 +236,7 @@ export const bots: BotListing[] = [
         provisional: false,
         liveGames: 0,
         levels: null,
+        analyzer: null,
         version: `2.0.0`,
         accepts: { turnMs: null, match: true, unlimited: true },
     },
@@ -183,6 +249,7 @@ export const bots: BotListing[] = [
         provisional: true,
         liveGames: 0,
         levels: null,
+        analyzer: null,
     },
 ];
 
@@ -735,9 +802,9 @@ export const games: Record<string, GameSnapshot> = {
 // frozen board can show the newest.
 const finishedAt = (minutesAgo: number) => new Date(Date.now() - minutesAgo * 60_000).toISOString();
 export const recentGames: FinishedGameEntry[] = [
-    { gameId: `won`, players: facing(`hextide`, 1690), winner: `x`, reason: `six-in-a-row`, timeControl: { mode: `turn`, turnTimeMs: 30_000 }, openingPlies: 1, turns: 12, finishedAt: finishedAt(3), rated: true, voided: false },
-    { gameId: `five-finished`, players: facing(`sealbot`, 1712), winner: `o`, reason: `surrender`, timeControl: { mode: `turn`, turnTimeMs: 30_000 }, openingPlies: 5, turns: 5, finishedAt: finishedAt(41), rated: true, voided: false },
-    { gameId: `nine-finished`, players: facing(`sealbot`, 1712), winner: `x`, reason: `timeout`, timeControl: { mode: `turn`, turnTimeMs: 30_000 }, openingPlies: 9, turns: 6, finishedAt: finishedAt(95), rated: true, voided: false },
+    { gameId: `won`, players: facing(`hextide`, 1690), winner: `x`, reason: `six-in-a-row`, timeControl: { mode: `turn`, turnTimeMs: 30_000 }, openingPlies: 1, turns: 12, finishedAt: finishedAt(3), rated: true, voided: false, analyses: 0 },
+    { gameId: `five-finished`, players: facing(`sealbot`, 1712), winner: `o`, reason: `surrender`, timeControl: { mode: `turn`, turnTimeMs: 30_000 }, openingPlies: 5, turns: 5, finishedAt: finishedAt(41), rated: true, voided: false, analyses: 0 },
+    { gameId: `nine-finished`, players: facing(`sealbot`, 1712), winner: `x`, reason: `timeout`, timeControl: { mode: `turn`, turnTimeMs: 30_000 }, openingPlies: 9, turns: 6, finishedAt: finishedAt(95), rated: true, voided: false, analyses: 0 },
     ...(
         [
             [seat.hextide, seat.sealbot, `o`, `six-in-a-row`],
@@ -757,14 +824,15 @@ export const recentGames: FinishedGameEntry[] = [
         finishedAt: finishedAt(180 + 600 * index),
         rated: winner !== null,
         voided: false,
+        analyses: 0,
     })),
 ];
 
 /** The latest results with a deleted player's game and a guest's on top, as the list names them. */
 export const keptNames: FinishedGameEntry[] = [
-    { gameId: `gone`, players: { x: seat.sealbot, o: seat.gone }, winner: `x`, reason: `six-in-a-row`, timeControl: { mode: `turn`, turnTimeMs: 30_000 }, openingPlies: 1, turns: 14, finishedAt: finishedAt(1), rated: true, voided: false },
-    { gameId: `guest-finished`, players: { x: { ...seat.sealbot, rating: null }, o: seat.guest }, winner: `o`, reason: `surrender`, timeControl: { mode: `turn`, turnTimeMs: 30_000 }, openingPlies: 1, turns: 9, finishedAt: finishedAt(2), rated: false, voided: false },
-    { gameId: `practice-finished`, players: { x: { ...seat.quinn, rating: null }, o: seat.quietlakeQuick }, winner: `x`, reason: `six-in-a-row`, timeControl: { mode: `turn`, turnTimeMs: 30_000 }, openingPlies: 1, turns: 11, finishedAt: finishedAt(2.5), rated: false, voided: false },
+    { gameId: `gone`, players: { x: seat.sealbot, o: seat.gone }, winner: `x`, reason: `six-in-a-row`, timeControl: { mode: `turn`, turnTimeMs: 30_000 }, openingPlies: 1, turns: 14, finishedAt: finishedAt(1), rated: true, voided: false, analyses: 0 },
+    { gameId: `guest-finished`, players: { x: { ...seat.sealbot, rating: null }, o: seat.guest }, winner: `o`, reason: `surrender`, timeControl: { mode: `turn`, turnTimeMs: 30_000 }, openingPlies: 1, turns: 9, finishedAt: finishedAt(2), rated: false, voided: false, analyses: 0 },
+    { gameId: `practice-finished`, players: { x: { ...seat.quinn, rating: null }, o: seat.quietlakeQuick }, winner: `x`, reason: `six-in-a-row`, timeControl: { mode: `turn`, turnTimeMs: 30_000 }, openingPlies: 1, turns: 11, finishedAt: finishedAt(2.5), rated: false, voided: false, analyses: 0 },
     ...recentGames,
 ];
 
@@ -787,6 +855,7 @@ export function rivalry(count: number): FinishedGameEntry[] {
             finishedAt: finishedAt(240 + 37 * index),
             rated: winner !== null,
             voided: false,
+            analyses: 0,
         };
     });
 }
@@ -823,6 +892,7 @@ function finishedPage(state: World, params: URLSearchParams): { status: 200; bod
         if (query.reason !== undefined && game.reason !== query.reason) return false;
         if (query.clock !== undefined && game.timeControl.mode !== query.clock) return false;
         if (query.opening !== undefined && String(game.openingPlies) !== query.opening) return false;
+        if (query.analyzed === `1` && game.analyses === 0) return false;
         return query.before === undefined || Date.parse(game.finishedAt) < Date.parse(`${query.before}T00:00:00Z`);
     });
     const page = query.page === undefined ? 1 : Number(query.page);
@@ -846,7 +916,7 @@ function finishedPage(state: World, params: URLSearchParams): { status: 200; bod
 
 export function world(overrides: Partial<World> = {}): World {
     return {
-        me: { kind: `user`, name: `quinn`, rating: 1503, provisional: false, discord: { username: `quinn.hex`, displayName: `Quinn` }, liveGames: [] },
+        me: { kind: `user`, name: `quinn`, rating: 1503, provisional: false, discord: { username: `quinn.hex`, displayName: `Quinn` }, liveGames: [], analysisOptOut: false, analysisLeft: { positions: 300, games: 10 } },
         leaderboard,
         bots,
         games: structuredClone(games),
@@ -867,6 +937,10 @@ export function world(overrides: Partial<World> = {}): World {
         reportForm: true,
         // A running tournament reserves its bots on Play, so a world takes one only when it asks.
         tournaments: structuredClone(tournaments.filter((entry) => entry.status !== `running`)),
+        analyzers: analyzerBots,
+        positions: { kind: `done` },
+        asked: [],
+        analyses: {},
         // A world owns its data, so an entry one test makes stays out of the next.
         ...structuredClone(overrides),
     };
@@ -1004,6 +1078,71 @@ function historyOf(record: PlayerRecord, range: RatingRange): RatingPoint[] {
     });
 }
 
+// The position request as the server answers it: signed-in users only,
+// the world's answer, the day's count going down by each reading not kept.
+async function answerPosition(route: Route, state: World, request: PositionReadingRequest): Promise<void> {
+    state.asked.push(request);
+    const me = state.me;
+    if (me?.kind !== `user`) {
+        await json(route, 401, { error: `no session`, code: `unauthorized` });
+        return;
+    }
+    const answer = state.positions;
+    const left = me.analysisLeft.positions;
+    const analyzer = analyzerBots.find((bot) => bot.name === request.analyzer) ?? analyzerBots[0];
+    const ref = { name: analyzer?.name ?? `kestrel`, version: analyzer?.version ?? null, ownerName: analyzer?.ownerName ?? null };
+    switch (answer.kind) {
+        case `held`:
+            return;
+        case `refused`:
+            await route.fulfill({
+                status: answer.status,
+                contentType: `application/json`,
+                headers: answer.retryAfter === undefined ? {} : { 'retry-after': String(answer.retryAfter) },
+                body: JSON.stringify({ error: `refused`, code: answer.code }),
+            });
+            return;
+        case `failed`:
+            await json(route, 200, positionReadingSchema.parse({ status: `failed`, analyzer: ref, failure: answer.failure, left }));
+            return;
+        case `done`: {
+            if (answer.queued !== undefined && answer.queued.times > 0) {
+                answer.queued.times -= 1;
+                await json(route, 200, positionReadingSchema.parse({ status: `queued`, ahead: answer.queued.ahead, ...(answer.queued.chosen === true ? { analyzer: ref } : {}), left }));
+                return;
+            }
+            const cached = answer.cached === true;
+            if (!cached && left === 0) {
+                const midnight = new Date();
+                midnight.setUTCHours(24, 0, 0, 0);
+                await route.fulfill({
+                    status: 429,
+                    contentType: `application/json`,
+                    headers: { 'retry-after': String(Math.ceil((midnight.getTime() - Date.now()) / 1000)) },
+                    body: JSON.stringify({ error: `the day's readings are spent`, code: `analysis_limit` }),
+                });
+                return;
+            }
+            const now = cached ? left : left - 1;
+            state.me = { ...me, analysisLeft: { ...me.analysisLeft, positions: now } };
+            const cap = analyzer?.analyzer;
+            const lines = answer.lines ?? mockLines(request, Math.min(request.lines, cap?.lines ?? 3));
+            const reading = {
+                status: `done`,
+                analyzer: ref,
+                seconds: Math.min(request.seconds, cap?.maxSeconds ?? 10),
+                elapsedMs: 1830,
+                readAt: finishedAt(0),
+                cached,
+                lines,
+                left: now,
+            };
+            await json(route, 200, positionReadingSchema.parse(reading));
+            return;
+        }
+    }
+}
+
 function unloadable(path: string, screen: string | null): boolean {
     const name = screen === null ? undefined : /([^/]+)\.tsx?$/u.exec(screen)?.[1];
     return path === screen || (name !== undefined && new RegExp(`^/assets/${name}-[\\w-]+\\.js$`, `u`).test(path));
@@ -1069,6 +1208,57 @@ export async function serve(page: Page, state: World): Promise<void> {
 
         if (path === `/api/me` && method === `GET`) {
             await json(route, 200, meSchema.parse(state.me));
+            return;
+        }
+        if (path === `/api/me` && method === `PATCH`) {
+            if (state.me?.kind !== `user`) {
+                await json(route, 401, { error: `no session`, code: `unauthorized` });
+                return;
+            }
+            const changes = meUpdateRequestSchema.parse(request.postDataJSON());
+            state.me = { ...state.me, ...(changes.analysisOptOut === undefined ? {} : { analysisOptOut: changes.analysisOptOut }) };
+            await json(route, 200, userMeSchema.parse(state.me));
+            return;
+        }
+        if (path === `/api/analysis/positions` && method === `POST`) {
+            await answerPosition(route, state, positionReadingRequestSchema.parse(request.postDataJSON()));
+            return;
+        }
+        if (path === `/api/analysis/check` && method === `POST`) {
+            positionCheckRequestSchema.parse(request.postDataJSON());
+            await route.fulfill({ status: 204 });
+            return;
+        }
+        const analysesPath = /^\/api\/games\/([^/]+)\/analyses$/u.exec(path);
+        if (analysesPath !== null) {
+            const id = decodeURIComponent(analysesPath[1] ?? ``);
+            const snapshot = state.games[id];
+            const listed = state.finished.some((game) => game.gameId === id);
+            if (snapshot === undefined && !listed) {
+                await json(route, 404, { error: `no such game`, code: `not_found` });
+            } else if (snapshot?.status === `in-progress`) {
+                await json(route, 409, { error: `the game is live`, code: `game_live` });
+            } else if (method === `GET`) {
+                await json(route, 200, analysisListSchema.parse(state.analyses[id] ?? { analyses: [], optedOut: false }));
+            } else if (state.me?.kind !== `user`) {
+                await json(route, 401, { error: `no session`, code: `unauthorized` });
+            } else {
+                analysisRequestSchema.parse(request.postDataJSON() ?? {});
+                const queued = communityAnalysisSchema.parse({
+                    kind: `community`,
+                    analysisId: `a_0f8d2c4e-1b3a-4c5d-8e9f-0a1b2c3d4e5f`,
+                    analyzer: null,
+                    status: `queued`,
+                    requestedAt: finishedAt(0),
+                    finishedAt: null,
+                    queuePosition: 1,
+                    progress: { done: 0, of: 40 },
+                    seconds: 2,
+                    turns: [],
+                });
+                state.analyses[id] = { analyses: [...(state.analyses[id]?.analyses ?? []), queued], optedOut: false };
+                await json(route, 202, queued);
+            }
             return;
         }
         if (path === `/api/auth/logout` && method === `POST`) {
@@ -1139,7 +1329,7 @@ export async function serve(page: Page, state: World): Promise<void> {
             } else if (state.create === `created`) {
                 const body = request.postDataJSON() as { name: string };
                 state.signup = null;
-                state.me = { kind: `user`, name: body.name, rating: 1000, provisional: true, discord: held.discord, liveGames: [] };
+                state.me = { kind: `user`, name: body.name, rating: 1000, provisional: true, discord: held.discord, liveGames: [], analysisOptOut: false, analysisLeft: { positions: 300, games: 10 } };
                 await json(route, 201, { name: body.name });
             } else if (state.create === `failed`) {
                 await json(route, 500, { error: `boom`, code: `internal` });
@@ -1213,7 +1403,8 @@ export async function serve(page: Page, state: World): Promise<void> {
         }
         if (path === `/api/bots` && method === `GET`) {
             const online = url.searchParams.get(`online`) === `1`;
-            const rows = state.bots.filter((bot) => !online || bot.online);
+            const analyzers = url.searchParams.get(`analyzer`) === `1`;
+            const rows = (analyzers ? state.analyzers : state.bots).filter((bot) => !online || bot.online);
             await json(route, 200, botListingSchema.array().parse(rows));
             return;
         }
@@ -1320,7 +1511,7 @@ export async function serve(page: Page, state: World): Promise<void> {
                 await json(route, 403, { error: `the account is banned`, code: `banned` });
                 return;
             }
-            state.me = { kind: `user`, name: body.name, rating: persona?.rating ?? 1000, provisional: persona?.provisional ?? true, discord: null, liveGames: [] };
+            state.me = { kind: `user`, name: body.name, rating: persona?.rating ?? 1000, provisional: persona?.provisional ?? true, discord: null, liveGames: [], analysisOptOut: false, analysisLeft: { positions: 300, games: 10 } };
             await json(route, 200, { name: body.name });
             return;
         }

@@ -4,7 +4,7 @@ import type { Me } from '@hexo-arena/contract';
 import { looks, wear } from './matrix';
 import { serve, world } from './mock-api';
 
-const quinn: Me = { kind: `user`, name: `quinn`, rating: 1503, provisional: false, discord: null, liveGames: [] };
+const quinn: Me = { kind: `user`, name: `quinn`, rating: 1503, provisional: false, discord: null, liveGames: [], analysisOptOut: false, analysisLeft: { positions: 300, games: 10 } };
 const guest: Me = { kind: `guest`, name: `Guest k3f9`, liveGames: [] };
 
 async function visit(page: Page, width: number, me: Me, height = 900): Promise<void> {
@@ -179,6 +179,8 @@ for (const width of [1280, 390, 320]) {
             provisional: false,
             discord: { username: `owner.of.sealbot.and.two.more.xy`, displayName: `The Owner Of Sealbot And Two Mor` },
             liveGames: [],
+            analysisOptOut: false,
+            analysisLeft: { positions: 300, games: 10 },
         });
         await who(page).click();
         await menu(page).waitFor();
@@ -199,7 +201,7 @@ for (const width of [1280, 390, 320]) {
 // beside the pattern and with the rating under it.
 for (const [name, width] of [[`quietowner12`, 1280], [`quietowner12`, 768], [`quietowner-longer-21`, 390]] as const) {
     test(`the ${String(name.length)}-character name ${name} takes one line in the menu at ${String(width)} px`, async ({ page }) => {
-        await visit(page, width, { kind: `user`, name, rating: 1420, provisional: true, discord: null, liveGames: [] });
+        await visit(page, width, { kind: `user`, name, rating: 1420, provisional: true, discord: null, liveGames: [], analysisOptOut: false, analysisLeft: { positions: 300, games: 10 } });
         await who(page).click();
         await menu(page).waitFor();
         const head = await menu(page).evaluate((dialog) => {

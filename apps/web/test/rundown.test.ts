@@ -14,6 +14,7 @@ function game(x: string, o: string, winner: `x` | `o` | null, extra: Partial<Fin
         finishedAt: `2026-10-01T10:00:00Z`,
         rated: winner !== null,
         voided: false,
+        analyses: 0,
         ...extra,
     };
 }

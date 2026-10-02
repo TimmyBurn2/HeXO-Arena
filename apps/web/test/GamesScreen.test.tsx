@@ -20,6 +20,7 @@ function game(index: number, overrides: Partial<FinishedGameEntry> = {}): Finish
         finishedAt: new Date(Date.now() - 3 * 3_600_000 - index * 60_000).toISOString(),
         rated: true,
         voided: false,
+        analyses: 0,
         ...overrides,
     };
 }
@@ -119,7 +120,7 @@ describe('GamesScreen', () => {
         expect(screen.queryByLabelText(`Against`)).toBe(null);
         const panel = openFilters();
         expect(within(panel).getByText(`Against, Side, Won, and Lost wait for a name in Player.`)).toBeTruthy();
-        expect([...panel.querySelectorAll(`label`)].map((label) => label.textContent)).toEqual([`Against`, `Result`, `Side`, `Ending`, `Clock`, `Opening`, `Who played`, `Before`]);
+        expect([...panel.querySelectorAll(`label`)].map((label) => label.textContent)).toEqual([`Against`, `Result`, `Side`, `Ending`, `Clock`, `Opening`, `Who played`, `Analysis`, `Before`]);
         expect(within(panel).getByLabelText(`Opening`).getAttribute(`aria-describedby`)).toBe(`games-opening-note`);
         expect(document.getElementById(`games-opening-note`)?.textContent).toBe(`Opening counts the stones on the board before the first turn, the origin and random ones near it.`);
         for (const name of [`Against`, `Side`]) expect(within(panel).getByLabelText<HTMLInputElement>(name).disabled).toBe(true);

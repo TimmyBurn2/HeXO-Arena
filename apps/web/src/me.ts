@@ -1,6 +1,6 @@
 import { useSyncExternalStore } from 'react';
-import type { Me } from '@hexo-arena/contract';
-import { deleteAccount, fetchMe, signOut, startGuest } from './api/client';
+import type { Me, MeUpdateRequest } from '@hexo-arena/contract';
+import { deleteAccount, fetchMe, signOut, startGuest, updateMe } from './api/client';
 import { text } from './text';
 
 export type MeState = { status: `loading` } | { status: `ready`; me: Me };
@@ -63,6 +63,16 @@ export const meStore = {
         await deleteAccount(name);
         deleted();
         await refresh();
+    },
+    /** Change the signed-in user's settings; the user the server answers with is who the browser is then. */
+    async update(changes: MeUpdateRequest): Promise<void> {
+        const me = await updateMe(changes);
+        set({ status: `ready`, me });
+    },
+    /** The positions the signed-in user may still have read today, as an answer of the server counted them. */
+    positionsLeft(left: number): void {
+        if (current.status !== `ready` || current.me?.kind !== `user` || current.me.analysisLeft.positions === left) return;
+        set({ status: `ready`, me: { ...current.me, analysisLeft: { ...current.me.analysisLeft, positions: left } } });
     },
     /** Become a guest, or keep the guest this browser already is. */
     async guest(): Promise<void> {

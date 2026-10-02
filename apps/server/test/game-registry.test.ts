@@ -1237,3 +1237,90 @@ describe('bot-vs-bot games', () => {
         expect(crossSocket.lastHeartbeat()?.waiting).toBe(true);
     });
 });
+
+describe('a bot\'s own view', () => {
+    let world: Harness;
+    let socket: FakeEngineSocket;
+    let gameId: string;
+    let token: string;
+    let live: Map<string, number>;
+
+    beforeEach(() => {
+        vi.useFakeTimers();
+        const sqlite = openDatabase(`:memory:`);
+        runMigrations(sqlite);
+        const query = createQuery(sqlite);
+        seedPair(query);
+        const presence = new PresenceRegistry();
+        const watchers = new GameWatchers();
+        live = new Map();
+        const games = new GameRegistry({
+            query,
+            presence,
+            watchers,
+            generation: beginGeneration(query),
+            random: humanCircles,
+            live: {
+                update: (id, stones) => live.set(id, stones.length),
+                remove: (id) => live.delete(id),
+            },
+        });
+        wirePresence(presence, games);
+        const stream = new FakeStreamSocket();
+        presence.attach(bot.id, stream, true);
+        world = { sqlite, presence, watchers, games, stream, events: () => stream.writes.splice(0).filter((line) => line.trim() !== ``).map((line) => JSON.parse(line) as StreamEvent), dispose: () => sqlite.close() };
+        gameId = world.games.createGame({ person: user, bot, timeControl: unlimitedControl, openingPlies: 3 }).gameId;
+        const start = latestEvent(world, `gameStart`);
+        if (start?.type !== `gameStart`) throw new Error(`no gameStart`);
+        token = start.engine.token;
+        socket = new FakeEngineSocket();
+        if (world.games.attachSession(gameId, token, socket) === null) throw new Error(`attach failed`);
+    });
+
+    afterEach(() => {
+        world.dispose();
+        vi.useRealTimers();
+    });
+
+    function answerBot(move: object, considerations?: object[]): void {
+        const request = socket.moveRequests().at(-1);
+        const claimed = world.games.claimSession(gameId, token);
+        if (request === undefined || claimed === null) throw new Error(`no request`);
+        world.games.sessionMessage(claimed.side, claimed.game, JSON.stringify({ type: `move_response`, move, ...(considerations === undefined ? {} : { considerations }), request_id: request.request_id }));
+    }
+
+    function ownRows(): unknown[] {
+        return world.sqlite.prepare(`select seq, rank, heuristic, win_in as winIn from own_lines order by seq, rank`).all();
+    }
+
+    it('keeps the evaluation a bot sends with its move and up to two considerations, best first', () => {
+        answerBot({ pieces: crossTurn(0).pieces, evaluation: { heuristic: 0.25 } }, [
+            { pieces: crossTurn(1).pieces, evaluation: { heuristic: 0.2 } },
+            { pieces: crossTurn(2).pieces },
+            { pieces: [{ q: 2, r: 2 }, { q: 3, r: 2 }], evaluation: { heuristic: 0.1 } },
+            { pieces: [{ q: 2, r: 3 }, { q: 3, r: 3 }], evaluation: { heuristic: 0 } },
+        ]);
+        expect(ownRows()).toEqual([
+            { seq: 1, rank: 0, heuristic: 0.25, winIn: null },
+            { seq: 1, rank: 1, heuristic: 0.2, winIn: null },
+            { seq: 1, rank: 2, heuristic: 0.1, winIn: null },
+        ]);
+    });
+
+    it('drops a view whose move has no evaluation or a false one, and never forfeits for it', () => {
+        answerBot({ pieces: crossTurn(0).pieces }, [{ pieces: crossTurn(1).pieces, evaluation: { heuristic: 0.2 } }]);
+        expect(ownRows()).toEqual([]);
+        world.games.humanMove(gameId, user, [wireToInternal(circleTurn(0).pieces[0]), wireToInternal(circleTurn(0).pieces[1])]);
+        answerBot({ pieces: crossTurn(1).pieces, evaluation: { win_in: 0 } });
+        expect(ownRows()).toEqual([]);
+        expect(world.games.isLive(gameId)).toBe(true);
+    });
+
+    it('keeps the live guard on each game\'s latest board, from its start to its finish', () => {
+        expect(live.get(gameId)).toBe(3);
+        answerBot({ pieces: crossTurn(0).pieces });
+        expect(live.get(gameId)).toBe(5);
+        world.games.abort(gameId);
+        expect(live.has(gameId)).toBe(false);
+    });
+});

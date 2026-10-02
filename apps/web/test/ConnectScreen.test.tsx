@@ -156,7 +156,7 @@ describe('ConnectScreen', () => {
     it('mark the sign-in step done for a signed-in user', async () => {
         vi.stubGlobal(
             `fetch`,
-            vi.fn(() => Promise.resolve(new Response(JSON.stringify({ kind: `user`, name: `quinn`, rating: 1503, provisional: false, discord: null, liveGames: [] })))),
+            vi.fn(() => Promise.resolve(new Response(JSON.stringify({ kind: `user`, name: `quinn`, rating: 1503, provisional: false, discord: null, liveGames: [], analysisOptOut: false, analysisLeft: { positions: 300, games: 10 } })))),
         );
         meStore.reset();
         meStore.start();
@@ -169,7 +169,7 @@ describe('ConnectScreen', () => {
     it('take focus to the bot name when an account was just made on the way here, once', async () => {
         vi.stubGlobal(
             `fetch`,
-            vi.fn(() => Promise.resolve(new Response(JSON.stringify({ kind: `user`, name: `quinn`, rating: 1000, provisional: true, discord: null, liveGames: [] })))),
+            vi.fn(() => Promise.resolve(new Response(JSON.stringify({ kind: `user`, name: `quinn`, rating: 1000, provisional: true, discord: null, liveGames: [], analysisOptOut: false, analysisLeft: { positions: 300, games: 10 } })))),
         );
         window.history.pushState({ landing: `bot-name` }, ``, `/connect`);
         meStore.reset();

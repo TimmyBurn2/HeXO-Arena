@@ -1,5 +1,6 @@
-import type { FinishReason, Levels, Side, StreamEvent } from '@hexo-arena/contract';
+import type { AnalyzerDeclaration, FinishReason, Levels, Side, StreamEvent } from '@hexo-arena/contract';
 import { setTimeout as sleep } from 'node:timers/promises';
+import { analyze, type AnalysisSession } from './analyzer';
 import { ApiError, type ArenaClient } from './client';
 import { paceAt } from './levels';
 import { playGame, type EngineSession, type Strategy } from './player';
@@ -11,6 +12,8 @@ export interface HostedBot {
     readonly name: string;
     readonly strategy: Strategy;
     readonly levels?: Levels;
+    /** Set for the bot that reads positions as an analyzer, as it declares. */
+    readonly analyzer?: AnalyzerDeclaration;
     token: string;
 }
 
@@ -63,6 +66,7 @@ export function hostBots(bots: readonly HostedBot[], options: HostOptions): BotH
     // A function, not a read: narrowing would pin the flag across awaits.
     const stopped = (): boolean => controller.signal.aborted;
     const sessions = new Map<HostedBot, Map<string, EngineSession>>();
+    const readers = new Map<HostedBot, AnalysisSession>();
     const seats = new Map<string, { opponent: string; side: Side }>();
 
     function onEvent(bot: HostedBot, event: StreamEvent): void {
@@ -119,6 +123,25 @@ export function hostBots(bots: readonly HostedBot[], options: HostOptions): BotH
             case `challengeCanceled`:
             case `challengeDeclined`:
                 return;
+            // Each offer replaces the last, so the session dialed on it replaces the one held.
+            case `analysisSession`: {
+                if (bot.analyzer === undefined) return;
+                readers.get(bot)?.close();
+                const reader = analyze({
+                    url: client.engineUrl(event.engine.socketUrl, event.engine.token),
+                    lines: bot.analyzer.lines,
+                    random: options.random,
+                    thinkMs: () => 300,
+                    log: (line) => {
+                        log(`${bot.name} reading: ${line}`);
+                    },
+                    closed: () => {
+                        if (readers.get(bot) === reader) readers.delete(bot);
+                    },
+                });
+                readers.set(bot, reader);
+                return;
+            }
             default: {
                 const unknown: never = event;
                 return unknown;
@@ -178,6 +201,8 @@ export function hostBots(bots: readonly HostedBot[], options: HostOptions): BotH
     return {
         stop: async () => {
             controller.abort();
+            for (const reader of readers.values()) reader.close();
+            readers.clear();
             for (const games of sessions.values()) {
                 for (const session of games.values()) session.close();
                 games.clear();

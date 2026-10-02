@@ -370,3 +370,78 @@ describe('the bot levels migration', () => {
         expect(() => game.run(`g7`, `x`, null, `{"note":"${`n`.repeat(1024)}"}`)).toThrow(/CHECK/);
     });
 });
+
+describe('the analyzers migration', () => {
+    let sqlite: Sqlite;
+    let folder: string;
+
+    afterEach(() => {
+        sqlite.close();
+        rmSync(folder, { recursive: true, force: true });
+    });
+
+    it('keeps every bot, user, game, and move, opted in and undeclared, and holds readings to their checks', () => {
+        sqlite = openDatabase(`:memory:`);
+        folder = migrationsUpTo(20);
+        migrate(drizzle(sqlite), { migrationsFolder: folder });
+        sqlite.exec(`
+            insert into name_reservations (name_key) values ('owner'), ('alpha'), ('beta');
+            insert into users (id, discord_id, name, name_key, created_at) values ('u1', 'd1', 'owner', 'owner', 1);
+            insert into bots (id, owner_id, name, name_key, token_hash, scope, created_at)
+                values ('b1', 'u1', 'alpha', 'alpha', 'h1', 'bot:play', 1), ('b2', 'u1', 'beta', 'beta', 'h2', 'bot:play', 1);
+            insert into games (id, user_id, bot_id, user_side, time_control, opening_cells, winner, finish_reason, created_at, finished_at, finish_seq)
+                values ('human', 'u1', 'b1', 'x', '{"mode":"unlimited"}', '[]', 'x', 'surrender', 1, 2, 1);
+            insert into moves (game_id, seq, side, first_x, first_y, second_x, second_y, created_at) values ('human', 1, 'o', 1, 0, 2, 0, 1);
+            insert into admin_actions (actor, action, target, reason, at) values ('operator', 'pause', null, 'maintenance', 1);
+        `);
+        runMigrations(sqlite);
+        expect(sqlite.prepare(`select id, analyzer_max_seconds as s, analyzer_lines as l, analyzer_while_playing as w from bots order by id`).all()).toEqual([
+            { id: `b1`, s: null, l: null, w: null },
+            { id: `b2`, s: null, l: null, w: null },
+        ]);
+        expect(sqlite.prepare(`select analysis_opt_out as out from users`).all()).toEqual([{ out: 0 }]);
+        expect(sqlite.prepare(`select count(*) as n from moves`).get()).toEqual({ n: 1 });
+        expect(sqlite.pragma(`foreign_key_check`)).toEqual([]);
+
+        const declare = sqlite.prepare(`update bots set analyzer_max_seconds = ?, analyzer_lines = ?, analyzer_while_playing = ? where id = 'b2'`);
+        expect(() => declare.run(2, 3, 0)).not.toThrow();
+        expect(() => declare.run(null, null, null)).not.toThrow();
+        for (const values of [[11, 3, 0], [2, 4, 0], [2, 3, 2], [2, null, 0], [null, null, 1]]) {
+            expect(() => declare.run(...values), JSON.stringify(values)).toThrow(/CHECK/);
+        }
+        expect(() => sqlite.prepare(`update users set analysis_opt_out = 2`).run()).toThrow(/CHECK/);
+
+        const own = sqlite.prepare(`insert into own_lines (game_id, seq, rank, first_x, first_y, second_x, second_y, heuristic, win_in) values ('human', ?, ?, 1, 1, 2, 2, ?, ?)`);
+        expect(() => own.run(1, 0, 0.5, null)).not.toThrow();
+        expect(() => own.run(1, 1, null, -3)).not.toThrow();
+        expect(() => own.run(1, 3, 0.5, null)).toThrow(/CHECK/);
+        expect(() => own.run(1, 2, null, null)).toThrow(/CHECK/);
+        expect(() => own.run(1, 2, null, 0)).toThrow(/CHECK/);
+        expect(() => own.run(2, 0, 0.5, null)).toThrow(/FOREIGN KEY/);
+
+        const reading = sqlite.prepare(`insert into analyses (id, game_id, analyzer_bot_id, requested_by, status, failure, failed_turn, seconds, created_at, finished_at) values (?, 'human', ?, 'u1', ?, ?, ?, 2, 1, ?)`);
+        expect(() => reading.run(`a1`, null, `queued`, null, null, null)).not.toThrow();
+        expect(() => reading.run(`a2`, `b2`, `done`, null, null, 5)).not.toThrow();
+        expect(() => reading.run(`a3`, null, `failed`, `expired`, null, 5)).not.toThrow();
+        expect(() => reading.run(`a4`, `b2`, `failed`, `timeout`, 3, 5)).not.toThrow();
+        expect(() => reading.run(`a5`, `b2`, `done`, null, null, 6)).toThrow(/UNIQUE/);
+        for (const [id, bot, status, failure, turn, finished] of [
+            [`b1`, `b2`, `queued`, null, null, null],
+            [`b2`, null, `running`, null, null, null],
+            [`b3`, `b1`, `failed`, null, null, 5],
+            [`b4`, `b1`, `failed`, `lazy`, null, 5],
+            [`b5`, `b1`, `done`, null, 2, 5],
+            [`b6`, `b1`, `done`, null, null, null],
+        ] as const) {
+            expect(() => reading.run(id, bot, status, failure, turn, finished), id).toThrow(/CHECK/);
+        }
+        sqlite.prepare(`insert into analysis_lines (analysis_id, turn, rank, first_x, first_y, second_x, second_y, heuristic) values ('a2', 1, 0, 1, 1, 2, 2, 0.1)`).run();
+        sqlite.prepare(`delete from analyses where id = 'a2'`).run();
+        expect(sqlite.prepare(`select count(*) as n from analysis_lines`).get()).toEqual({ n: 0 });
+        sqlite.prepare(`delete from users where id = 'u1'`).run();
+        expect(sqlite.prepare(`select count(*) as n from analyses`).get()).toEqual({ n: 0 });
+
+        expect(sqlite.prepare(`select action from admin_actions`).all()).toEqual([{ action: `pause` }]);
+        expect(() => sqlite.prepare(`insert into admin_actions (actor, action, target, reason, at) values ('operator', 'delete-analysis', 'a1', 'lied', 2)`).run()).not.toThrow();
+    });
+});

@@ -21,7 +21,7 @@ import {
     siteName,
     type LegalPage,
 } from '@hexo-arena/contract';
-import { analysisStorageKey } from '../analysis/storage-key';
+import { analysisSettingsStorageKey, analysisStorageKey } from '../analysis/storage-key';
 import { boardSettingsStorageKey } from '../board/board-settings';
 import { drawerPinnedStorageKey } from '../game/use-drawer';
 import { playStorageKey } from '../play/setup';
@@ -55,6 +55,7 @@ export const siteFacts: ReadonlyMap<string, string> = new Map([
     [`site.drawerKey`, drawerPinnedStorageKey],
     [`site.playKey`, playStorageKey],
     [`site.analysisKey`, analysisStorageKey],
+    [`site.analysisSettingsKey`, analysisSettingsStorageKey],
     [`site.minimumAge`, String(minimumAge)],
     [`site.guardianAge`, String(guardianPermissionAge)],
     [`site.botApi`, botApiRepository],

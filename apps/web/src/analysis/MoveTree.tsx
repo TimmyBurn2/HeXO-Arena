@@ -46,15 +46,26 @@ export function MoveTree({ tree, gameTurns, at, onGo, actions }: {
     }, [tree.root]);
 
     // The current row stays in view inside the tree's own scroll, never
-    // scrolling the page, where the tree flows on a phone.
+    // scrolling the page, where the tree flows on a phone; the panel above
+    // the tree grows and shrinks with the analyzer's lines, so a resize
+    // brings it back into view too.
     useEffect(() => {
-        const list = listRef.current;
-        const host = list?.parentElement;
-        const row = list?.querySelector<HTMLElement>(`[aria-current="step"]`);
-        if (host === null || host === undefined || row === null || row === undefined || host.scrollHeight <= host.clientHeight) return;
-        const top = row.getBoundingClientRect().top - host.getBoundingClientRect().top;
-        if (top < 0) host.scrollTop += top;
-        else if (top + row.offsetHeight > host.clientHeight) host.scrollTop += top + row.offsetHeight - host.clientHeight;
+        const host = listRef.current?.parentElement;
+        if (host === null || host === undefined) return;
+        function keepInView() {
+            const row = listRef.current?.querySelector<HTMLElement>(`[aria-current="step"]`);
+            if (host === null || host === undefined || row === null || row === undefined || host.scrollHeight <= host.clientHeight) return;
+            const top = row.getBoundingClientRect().top - host.getBoundingClientRect().top;
+            if (top < 0) host.scrollTop += top;
+            else if (top + row.offsetHeight > host.clientHeight) host.scrollTop += top + row.offsetHeight - host.clientHeight;
+        }
+        keepInView();
+        if (typeof ResizeObserver === `undefined`) return;
+        const watcher = new ResizeObserver(keepInView);
+        watcher.observe(host);
+        return () => {
+            watcher.disconnect();
+        };
     }, [at, tree]);
 
     const rowsOf = (first: NodeId | undefined): ReactNode[] => {

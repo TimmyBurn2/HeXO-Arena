@@ -25,8 +25,8 @@ afterEach(() => {
 });
 
 const roster = [
-    { name: `sealbot`, ownerName: `quinn`, online: true, openForChallenges: true, rating: 1712, provisional: false, liveGames: 0, levels: null, accepts: { turnMs: [5000, 60000], match: true, unlimited: true } },
-    { name: `hextide`, ownerName: `ana`, online: false, openForChallenges: false, rating: 1690, provisional: false, liveGames: 0, levels: null },
+    { name: `sealbot`, ownerName: `quinn`, online: true, openForChallenges: true, rating: 1712, provisional: false, liveGames: 0, levels: null, analyzer: null, accepts: { turnMs: [5000, 60000], match: true, unlimited: true } },
+    { name: `hextide`, ownerName: `ana`, online: false, openForChallenges: false, rating: 1690, provisional: false, liveGames: 0, levels: null, analyzer: null },
 ];
 
 // The board answers by its query, the roster and the session by path.
@@ -46,7 +46,7 @@ function serve(answer: (search: string) => unknown, me: unknown = null): string[
     return reads;
 }
 
-const quinn = { kind: `user`, name: `quinn`, rating: 1503, provisional: false, discord: null, liveGames: [] };
+const quinn = { kind: `user`, name: `quinn`, rating: 1503, provisional: false, discord: null, liveGames: [], analysisOptOut: false, analysisLeft: { positions: 300, games: 10 } };
 
 describe('LadderScreen', () => {
     it('render the whole board: rank, player with presence and owner, rating, games, and last played', async () => {
@@ -159,8 +159,8 @@ describe('LadderScreen', () => {
                         JSON.stringify(
                             url.startsWith(`/api/bots`)
                                 ? [
-                                      { name: `sealbot`, ownerName: `quinn`, online: true, openForChallenges: true, rating: 1712, provisional: false, liveGames: 0, levels: null },
-                                      { name: `hextide`, ownerName: `ana`, online: true, openForChallenges: false, rating: 1690, provisional: false, liveGames: 0, levels: null },
+                                      { name: `sealbot`, ownerName: `quinn`, online: true, openForChallenges: true, rating: 1712, provisional: false, liveGames: 0, levels: null, analyzer: null },
+                                      { name: `hextide`, ownerName: `ana`, online: true, openForChallenges: false, rating: 1690, provisional: false, liveGames: 0, levels: null, analyzer: null },
                                   ]
                                 : board,
                         ),
@@ -281,7 +281,7 @@ describe('LadderScreen', () => {
             vi.fn((url: string) =>
                 Promise.resolve(
                     new Response(
-                        JSON.stringify(url === `/api/me` ? { kind: `user`, name: `quinn`, rating: 1503, provisional: false, discord: null, liveGames: [] } : board),
+                        JSON.stringify(url === `/api/me` ? { kind: `user`, name: `quinn`, rating: 1503, provisional: false, discord: null, liveGames: [], analysisOptOut: false, analysisLeft: { positions: 300, games: 10 } } : board),
                     ),
                 ),
             ),

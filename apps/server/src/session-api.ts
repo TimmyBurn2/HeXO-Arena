@@ -1,6 +1,7 @@
 import {
     accountExportSchema,
     deleteAccountRequestSchema,
+    meUpdateRequestSchema,
     guestPath,
     guestRetryAfterSeconds,
     logoutPath,
@@ -10,9 +11,12 @@ import {
     sessionMaxAgeSeconds,
     type GuestMe,
     type Me,
+    type UserMe,
 } from '@hexo-arena/contract';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { accountExport } from './account-export';
+import type { AnalysisService } from './analysis-service';
+import { userOptedOut } from './analysis-store';
 import { recordAdminAction } from './admin-store';
 import type { Query } from './db';
 import { eraseUser, type ErasureDeps, type ErasureJournal } from './erasure';
@@ -21,7 +25,7 @@ import type { GuestSessions } from './guests';
 import type { Ladder } from './ladder';
 import { refuseRate, type ClientLimits, type CredentialLimits } from './request-limits';
 import { streamPlayerOf } from './rating-store';
-import { deleteSession, findSessionUser, sessionUser } from './sessions';
+import { deleteSession, findSessionUser, sessionUser, type SessionUser } from './sessions';
 
 export interface SessionApiDeps {
     query: Query;
@@ -33,6 +37,7 @@ export interface SessionApiDeps {
     erasure: Omit<ErasureDeps, `games`>;
     erasures: Pick<ErasureJournal, `record`> | null;
     ladder: Pick<Ladder, `clear`>;
+    analysis: Pick<AnalysisService, `setOptOut` | `positionsLeft` | `gamesLeft`>;
     now: () => number;
 }
 
@@ -107,9 +112,22 @@ function meOf(deps: SessionApiDeps, token: string | undefined): Me {
     const guest = guests.find(token);
     if (guest !== null) return { kind: `guest`, name: guest.name, liveGames: games.liveGamesOf({ kind: `guest`, id: guest.id }) };
     const user = findSessionUser(query, token);
-    if (user === null) return null;
+    return user === null ? null : userMeOf(deps, user);
+}
+
+function userMeOf(deps: SessionApiDeps, user: SessionUser): UserMe {
+    const { query, games, analysis } = deps;
     const { rating, provisional } = streamPlayerOf(query, { kind: `human`, id: user.id }, user.name);
-    return { kind: `user`, name: user.name, rating, provisional, discord: user.discord, liveGames: games.liveGamesOf({ kind: `user`, id: user.id }) };
+    return {
+        kind: `user`,
+        name: user.name,
+        rating,
+        provisional,
+        discord: user.discord,
+        liveGames: games.liveGamesOf({ kind: `user`, id: user.id }),
+        analysisOptOut: userOptedOut(query, user.id),
+        analysisLeft: { positions: analysis.positionsLeft(user.id), games: analysis.gamesLeft(user.id) },
+    };
 }
 
 export function registerSessionApi(app: FastifyInstance, deps: SessionApiDeps): void {
@@ -117,6 +135,16 @@ export function registerSessionApi(app: FastifyInstance, deps: SessionApiDeps): 
 
     app.get(mePath, { config: { limit: `public` } }, async (request, reply) => {
         return reply.code(200).send(meOf(deps, request.sessionToken));
+    });
+
+    app.patch(mePath, { config: { limit: `principal` } }, async (request, reply) => {
+        const user = sessionUser(query, request);
+        if (user === null) return reply.code(401).send({ error: `no session`, code: `unauthorized` });
+        if (limits.refuse(reply, `principal`, `user:${user.id}`)) return reply;
+        const parsed = meUpdateRequestSchema.safeParse(request.body);
+        if (!parsed.success) return reply.code(400).send({ error: `the request fails validation`, code: `bad_request` });
+        if (parsed.data.analysisOptOut !== undefined) deps.analysis.setOptOut(user.id, parsed.data.analysisOptOut);
+        return reply.code(200).send(userMeOf(deps, user));
     });
 
     app.post(logoutPath, { config: { limit: `public` } }, async (request, reply) => {

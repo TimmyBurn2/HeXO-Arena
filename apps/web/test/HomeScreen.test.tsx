@@ -17,6 +17,7 @@ function listing(name: string, rating: number, online = true): BotListing {
         provisional: true,
         liveGames: 0,
         levels: null,
+        analyzer: null,
         accepts: { turnMs: [5_000, 60_000], match: true, unlimited: true },
     };
 }
@@ -45,6 +46,7 @@ function result(index: number): FinishedGameEntry {
         finishedAt: new Date(Date.now() - (index + 1) * 600_000).toISOString(),
         rated: true,
         voided: false,
+        analyses: 0,
     };
 }
 
@@ -206,7 +208,7 @@ describe('HomeScreen', () => {
     it('leads back to the reader\'s own live games, and drops one that ended', async () => {
         const mine = live(`mine`, { name: `quinn`, rating: 1500, provisional: false, kind: `user` }, bot(`hextide`, 1600));
         const gone = live(`gone`, bot(`pebble`, 1400), { name: `quinn`, rating: 1500, provisional: false, kind: `user` });
-        serve({ me: { kind: `user`, name: `quinn`, rating: 1500, provisional: false, discord: null, liveGames: [mine, gone] }, live: [mine] });
+        serve({ me: { kind: `user`, name: `quinn`, rating: 1500, provisional: false, discord: null, liveGames: [mine, gone], analysisOptOut: false, analysisLeft: { positions: 300, games: 10 } }, live: [mine] });
         meStore.start();
         render(<HomeScreen />);
         const yours = (await screen.findByRole(`heading`, { name: `Your games` })).closest(`section`);

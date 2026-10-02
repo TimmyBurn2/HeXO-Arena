@@ -48,7 +48,7 @@ describe('AppShell', () => {
             `fetch`,
             vi.fn((url: string) =>
                 Promise.resolve(
-                    new Response(url === `/api/me` ? JSON.stringify({ kind: `user`, name: `quinn`, rating: 1503, provisional: false, discord: null, liveGames: [] }) : null, {
+                    new Response(url === `/api/me` ? JSON.stringify({ kind: `user`, name: `quinn`, rating: 1503, provisional: false, discord: null, liveGames: [], analysisOptOut: false, analysisLeft: { positions: 300, games: 10 } }) : null, {
                         status: 200,
                     }),
                 ),

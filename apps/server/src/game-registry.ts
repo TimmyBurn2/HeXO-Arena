@@ -11,6 +11,8 @@ import {
     sessionHeartbeatMs,
     sessionTokenTtlMs,
     sideOf,
+    playerOf,
+    ownConsiderationsMax,
     engineStrayFrameCap,
     gameTurnCap,
     orphanForfeitMs,
@@ -29,6 +31,7 @@ import {
     type OpeningPlies,
     type SeatLevel,
     type SeatPlayer,
+    type AnalysisLine,
     type Side,
     type StreamEvent,
     type TimeControl,
@@ -62,6 +65,9 @@ import { streamPlayerOf } from './rating-store';
 import { isCurrentGeneration } from './site-state';
 import { randomToken } from './tokens';
 import type { GameWatchers } from './watchers';
+import { ownLines } from './analysis-checks';
+import { insertOwnLines } from './analysis-store';
+import type { LiveGuard } from './live-guard';
 
 type Timer = ReturnType<typeof setTimeout>;
 
@@ -196,6 +202,8 @@ export interface RegistryDeps {
     presence: PresenceRegistry;
     watchers: GameWatchers;
     generation: number;
+    // Each live game's latest position, as the guard on analysis reads it.
+    live?: Pick<LiveGuard, `update` | `remove`>;
     random?: () => number;
     randomIndex?: (bound: number) => number;
 }
@@ -414,12 +422,15 @@ export class GameRegistry {
     readonly #random: () => number;
     readonly #randomIndex: (bound: number) => number;
     readonly #finishListeners: ((finished: FinishedGameNote) => void)[] = [];
+    readonly #startListeners: ((botIds: readonly string[]) => void)[] = [];
+    readonly #live: Pick<LiveGuard, `update` | `remove`> | null;
 
     constructor(deps: RegistryDeps) {
         this.#query = deps.query;
         this.#presence = deps.presence;
         this.#watchers = deps.watchers;
         this.#generation = deps.generation;
+        this.#live = deps.live ?? null;
         // The crypto source is the default; the injection seam exists so
         // tests can script a draw.
         this.#random = deps.random ?? randomFloat;
@@ -487,6 +498,7 @@ export class GameRegistry {
             wallTimer: null,
         };
         this.#games.set(gameId, game);
+        this.#started(game);
         this.#armClock(game, initialClock(game.timeControl));
         this.#armWallCap(game);
         this.#requestBotMove(game);
@@ -542,6 +554,7 @@ export class GameRegistry {
             wallTimer: null,
         };
         this.#games.set(gameId, game);
+        this.#started(game);
         this.#armClock(game, initialClock(game.timeControl));
         this.#armWallCap(game);
         this.#requestBotMove(game);
@@ -590,12 +603,24 @@ export class GameRegistry {
         const tournament = findGameTournament(this.#query, gameId);
         if (tournament !== undefined) game.tournament = tournament;
         this.#games.set(gameId, game);
+        this.#started(game);
         this.#armClock(game, initialClock(game.timeControl));
         this.#armWallCap(game);
         this.#requestBotMove(game);
         this.#presence.send(input.x.id, this.#gameStartEvent(game, `x`));
         this.#presence.send(input.o.id, this.#gameStartEvent(game, `o`));
         return { gameId, opening };
+    }
+
+    /** Tells a listener of every start, with the bots seated. */
+    onStart(listener: (botIds: readonly string[]) => void): void {
+        this.#startListeners.push(listener);
+    }
+
+    #started(game: LiveGame): void {
+        this.#live?.update(game.id, game.position.stones);
+        const botIds = [game.seats.x, game.seats.o].flatMap((seat) => (seat.kind === `bot` ? [seat.botId] : []));
+        for (const listener of this.#startListeners) listener(botIds);
     }
 
     /** Tells a listener of every finish, after it is recorded. */
@@ -847,7 +872,8 @@ export class GameRegistry {
             this.#finish(game, opponentOf(side), `terminated`);
             return;
         }
-        this.#completeTurn(game, cells, side, applied);
+        const own = ownLines({ stones: game.position.stones, toMove: playerOf(side) }, packet.data, ownConsiderationsMax);
+        this.#completeTurn(game, cells, side, applied, own ?? []);
     }
 
     #completeTurn(
@@ -855,6 +881,7 @@ export class GameRegistry {
         cells: readonly [Coord, Coord],
         side: Side,
         applied: { position: Position; win: Win | null },
+        own: readonly AnalysisLine[] = [],
     ): void {
         const placedBefore = game.position.stones.length;
         // A turn starts on an odd ply, 2t - 1,
@@ -865,6 +892,7 @@ export class GameRegistry {
         game.position = applied.position;
         game.turnLog = [...game.turnLog, { side, cells }];
         insertMove(this.#query, { gameId: game.id, seq: game.nextSeq, side, cells });
+        insertOwnLines(this.#query, game.id, game.nextSeq, own);
         game.nextSeq += 1;
         if (applied.win === null) this.#advanceClock(game, side);
         this.#watchers.publish(game.id, {
@@ -887,6 +915,7 @@ export class GameRegistry {
             this.#finish(game, null, `terminated`);
             return;
         }
+        this.#live?.update(game.id, applied.position.stones);
         this.#requestBotMove(game);
     }
 
@@ -1131,6 +1160,7 @@ export class GameRegistry {
 
     #finish(game: LiveGame, winner: Side | null, reason: FinishReason): void {
         if (!this.#games.delete(game.id)) return;
+        this.#live?.remove(game.id);
         const clock = liveClockView(game);
         clearClockTimer(game.clock);
         if (game.wallTimer !== null) {

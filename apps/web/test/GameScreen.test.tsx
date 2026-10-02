@@ -70,7 +70,7 @@ const records: Record<string, unknown> = {
 function past(name: string, index: number, won: boolean) {
     const seat = { name, rating: 1500, provisional: false, kind: name === `quinn` ? `user` : `bot` };
     const other = { name: `pebble`, rating: 1500, provisional: false, kind: `bot` };
-    return { gameId: `g-${name}-${String(index)}`, players: { x: seat, o: other }, winner: won ? `x` : `o`, reason: `six-in-a-row`, timeControl: { mode: `unlimited` }, openingPlies: 1, turns: 20, finishedAt: `2026-10-01T10:00:00Z`, rated: true, voided: false };
+    return { gameId: `g-${name}-${String(index)}`, players: { x: seat, o: other }, winner: won ? `x` : `o`, reason: `six-in-a-row`, timeControl: { mode: `unlimited` }, openingPlies: 1, turns: 20, finishedAt: `2026-10-01T10:00:00Z`, rated: true, voided: false, analyses: 0 };
 }
 
 // The game, both players' records and histories, and their meetings, as the rundown reads them.

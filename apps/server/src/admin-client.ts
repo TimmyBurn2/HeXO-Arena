@@ -31,7 +31,8 @@ export const adminUsage = `usage: hexo-arena-admin <op> [target] [--reason <text
   tournament-schedule add --weekday mon|tue|wed|thu|fri|sat|sun --time <HH:MM UTC> --name <text; {date} becomes the start's date> --clock turn:<s>|match:<min>+<s> [--opening <plies>] [--max <bots>] [--ahead <days>] --reason <text>
   tournament-schedule list
   tournament-schedule remove <ruleId> --reason <text>
-  report-close <reportId> --reason <note>`;
+  report-close <reportId> --reason <note>
+  delete-analysis <analysisId> --reason <text>`;
 
 export type ParsedArgs = { kind: `request`; request: AdminRequest } | { kind: `usage`; error: string };
 
@@ -83,7 +84,7 @@ function requestBody(op: string, target: string | undefined, flags: Flags): Reco
             ...reason,
         };
     }
-    if (op === `tournament-cancel`) return { op, id: target, ...reason };
+    if (op === `tournament-cancel` || op === `delete-analysis`) return { op, id: target, ...reason };
     if (op === `tournament-schedule-add`) {
         const opening = numberFlag(flags.opening);
         const max = numberFlag(flags.max);

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type ClipboardEvent, type KeyboardEvent } from 'react';
 import type { AxialCoord, Side } from '@hexo-arena/contract';
 import { hexDistance, placementRadius } from '@hexo-arena/rules';
-import { Board, type BoardStone } from '../board/Board';
+import { Board, type BoardLines, type BoardStone } from '../board/Board';
 import { useBoardSettings } from '../board/board-settings';
 import { useBoardCamera } from '../board/camera';
 import { text } from '../text';
@@ -25,7 +25,7 @@ const sixKeys: Readonly<Record<string, AxialCoord>> = {
  * through the turns otherwise, as the screen reads them.
  * A paste on the board hands its text to `onPaste`.
  */
-export function AnalysisBoard({ stones, frame, field, mark, toMove, lastMove, winLine, label, onCell, onPaste }: {
+export function AnalysisBoard({ stones, frame, field, mark, toMove, lastMove, winLine, lines, preview, label, onCell, onPaste }: {
     stones: readonly BoardStone[];
     // The position the camera frames, which holds `stones`.
     frame: readonly AxialCoord[];
@@ -35,6 +35,9 @@ export function AnalysisBoard({ stones, frame, field, mark, toMove, lastMove, wi
     toMove: Side;
     lastMove: readonly AxialCoord[];
     winLine: readonly AxialCoord[];
+    // An analyzer's lines, and the one pointed at, shown as the stones it would place.
+    lines?: BoardLines | undefined;
+    preview?: { readonly side: Side; readonly cells: readonly AxialCoord[] } | undefined;
     label: string;
     onCell: (cell: AxialCoord) => void;
     onPaste: (pasted: string) => void;
@@ -114,6 +117,8 @@ export function AnalysisBoard({ stones, frame, field, mark, toMove, lastMove, wi
                         ...(walking ? { focus } : {}),
                         ...(winLine.length === 0 ? {} : { winLine }),
                         lastMove,
+                        lines,
+                        preview,
                     }}
                     onCellClick={onCell}
                 />

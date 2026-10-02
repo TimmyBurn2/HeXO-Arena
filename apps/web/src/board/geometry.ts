@@ -12,6 +12,9 @@ const ringScale = 0.92;
 // the stone number.
 const markScale = 0.69;
 
+// A line's mark sits well inside its cell, so its letters stay clear of the cell's edge.
+const lineMarkScale = 0.7;
+
 // Frame breathing room around the outermost cell centers.
 const viewBoxPad = cellSize * 1.35;
 
@@ -71,6 +74,11 @@ export function ringPoints(): string {
 /** The stone outline for the hex style, at the stone radius the sheet sets. */
 export function stonePoints(flat = false): string {
     return hexPoints(stoneRadius(), flat);
+}
+
+/** The hollow hexagon that marks a cell of an analyzer's line. */
+export function lineMarkPoints(): string {
+    return hexPoints(cellSize * lineMarkScale);
 }
 
 /** The inset hexagon a theme may edge a stone with. */

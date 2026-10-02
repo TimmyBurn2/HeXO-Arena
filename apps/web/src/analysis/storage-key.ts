@@ -3,3 +3,6 @@
  * a module of its own, so the legal pages read it without the board's code.
  */
 export const analysisStorageKey = `hexo-arena.analysis.v1`;
+
+/** Where this browser keeps the analysis settings, as the privacy policy names it. */
+export const analysisSettingsStorageKey = `hexo-arena.analysis-settings.v1`;

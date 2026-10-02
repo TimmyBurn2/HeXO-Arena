@@ -10,7 +10,7 @@ import {
     signupMaxAgeSeconds,
 } from '@hexo-arena/contract';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { analysisStorageKey } from '../src/analysis/storage-key';
+import { analysisSettingsStorageKey, analysisStorageKey } from '../src/analysis/storage-key';
 import { boardSettingsStorageKey } from '../src/board/board-settings';
 import { drawerPinnedStorageKey } from '../src/game/use-drawer';
 import { legalStore } from '../src/legal/documents';
@@ -169,7 +169,7 @@ describe('LegalScreen', () => {
         expect(storage).toContain(`It lasts ${String(sessionMaxAgeSeconds / 86_400)} days after sign-in`);
         expect(storage).toContain(`The cookie ${oauthCookieName}, set when you start a sign-in with Discord`);
         expect(storage).toContain(`It lasts ${String(oauthMaxAgeSeconds / 60)} minutes, or until Discord sends you back.`);
-        expect(storage).toContain(`under ${themeStorageKey}, ${boardSettingsStorageKey}, ${drawerPinnedStorageKey}, and ${playStorageKey}:`);
+        expect(storage).toContain(`under ${themeStorageKey}, ${boardSettingsStorageKey}, ${drawerPinnedStorageKey}, ${playStorageKey}, and ${analysisSettingsStorageKey}:`);
         expect(storage).toContain(`Session storage (sessionStorage) under ${analysisStorageKey}: the turns and variations on the analysis board`);
         expect(section(`Playing as a guest`).textContent).toContain(
             `when you end it or sign in with Discord, when the server restarts, or after ${String(guestIdleSeconds / 3_600)} hours without a request while no game runs.`,

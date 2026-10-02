@@ -17,6 +17,8 @@ import { and, asc, eq, inArray, isNotNull, or, type SQL } from 'drizzle-orm';
 import type { Query } from './db';
 import { adminActions, bots, challenges, gameRatings, games, moves, ratings, sessions, tournamentEntries, tournaments, users } from './db/schema';
 import { findGame, type GameRecord } from './game-store';
+import { requestsOf } from './analysis-store';
+import { storedAnalyzer } from './bots';
 import { namedTargetActions } from './moderation';
 import { shownBot } from './shown-names';
 
@@ -108,7 +110,7 @@ export function accountExport(query: Query, userId: string, nowMs: number): Acco
     const named = new Set([nameKeyOf(user.name), ...botRows.filter((bot) => bot.deletedAt === null).map((bot) => bot.nameKey)]);
     return {
         exportedAt: isoOf(Math.floor(nowMs / 1000)),
-        account: { id: user.id, name: user.name, discordId: user.discordId, createdAt: isoOf(user.createdAt), bannedAt: isoOrNull(user.bannedAt) },
+        account: { id: user.id, name: user.name, discordId: user.discordId, createdAt: isoOf(user.createdAt), bannedAt: isoOrNull(user.bannedAt), analysisOptOut: user.analysisOptOut === 1 },
         sessions: query
             .select({ createdAt: sessions.createdAt, expiresAt: sessions.expiresAt, discordUsername: sessions.discordUsername, discordDisplayName: sessions.discordDisplayName })
             .from(sessions)
@@ -126,6 +128,7 @@ export function accountExport(query: Query, userId: string, nowMs: number): Acco
             repoUrl: bot.repoUrl,
             accepts: bot.accepts === null ? null : acceptsSchema.parse(JSON.parse(bot.accepts)),
             levels: bot.levels === null ? null : levelsSchema.parse(JSON.parse(bot.levels)),
+            analyzer: storedAnalyzer(bot),
             delistedAt: isoOrNull(bot.delistedAt),
             deletedAt: isoOrNull(bot.deletedAt),
             rating: ratingOf(ratings.botId, bot.id),
@@ -192,6 +195,7 @@ export function accountExport(query: Query, userId: string, nowMs: number): Acco
                           createdAt: isoOf(challenge.createdAt),
                           decidedAt: isoOrNull(challenge.decidedAt),
                       })),
+        analyses: requestsOf(query, userId).map((request) => ({ id: request.id, gameId: request.gameId, status: request.status, requestedAt: isoOf(request.createdAt) })),
         moderation: query
             .select({ action: adminActions.action, target: adminActions.target, reason: adminActions.reason, at: adminActions.at })
             .from(adminActions)

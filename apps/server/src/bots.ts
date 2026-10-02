@@ -5,6 +5,7 @@ import {
     nameKeyOf,
     type Accepts,
     type AccountDeclaration,
+    type Analyzer,
     type BotAccount,
     type Levels,
 } from '@hexo-arena/contract';
@@ -33,7 +34,11 @@ export interface BotRow {
     repoUrl?: string;
     accepts?: Accepts;
     levels: Levels | null;
+    analyzer: StoredAnalyzer | null;
 }
+
+/** An analyzer as the bot declared it; whether it can read now is the analysis session's to say. */
+export type StoredAnalyzer = Omit<Analyzer, `ready`>;
 
 interface DeclarationColumns {
     about: string | null;
@@ -41,6 +46,9 @@ interface DeclarationColumns {
     repoUrl: string | null;
     accepts: string | null;
     levels: string | null;
+    analyzerMaxSeconds: number | null;
+    analyzerLines: number | null;
+    analyzerWhilePlaying: number | null;
 }
 
 const declarationColumns = {
@@ -49,14 +57,26 @@ const declarationColumns = {
     repoUrl: bots.repoUrl,
     accepts: bots.accepts,
     levels: bots.levels,
+    analyzerMaxSeconds: bots.analyzerMaxSeconds,
+    analyzerLines: bots.analyzerLines,
+    analyzerWhilePlaying: bots.analyzerWhilePlaying,
 };
+
+type DeclarationView = Pick<BotRow, `about` | `version` | `repoUrl` | `accepts` | `levels` | `analyzer`>;
+
+/** The analyzer the columns hold, which the schema keeps all set or all null. */
+export function storedAnalyzer(row: Pick<DeclarationColumns, `analyzerMaxSeconds` | `analyzerLines` | `analyzerWhilePlaying`>): StoredAnalyzer | null {
+    if (row.analyzerMaxSeconds === null || row.analyzerLines === null || row.analyzerWhilePlaying === null) return null;
+    return { maxSeconds: row.analyzerMaxSeconds, lines: row.analyzerLines, whilePlaying: row.analyzerWhilePlaying === 1 };
+}
 
 // Absent, not null: the wire shape omits a text field or accepts the bot
 // never declared, so the row nulls are dropped here and never cross a
-// boundary again; levels alone read as null until declared.
-function declarationView(row: DeclarationColumns): Pick<BotRow, `about` | `version` | `repoUrl` | `accepts` | `levels`> {
-    const view: Pick<BotRow, `about` | `version` | `repoUrl` | `accepts` | `levels`> = {
+// boundary again; levels and the analyzer alone read as null until declared.
+function declarationView(row: DeclarationColumns): DeclarationView {
+    const view: DeclarationView = {
         levels: row.levels === null ? null : levelsSchema.parse(JSON.parse(row.levels)),
+        analyzer: storedAnalyzer(row),
     };
     if (row.about !== null) view.about = row.about;
     if (row.version !== null) view.version = row.version;
@@ -169,7 +189,7 @@ export function findBot(query: Query, nameKey: string): BotRow | undefined {
           };
 }
 
-export type BotDeclaration = Omit<BotAccount, `rating` | `provisional`>;
+export type BotDeclaration = Omit<BotAccount, `rating` | `provisional` | `analyzer`> & { analyzer: StoredAnalyzer | null };
 
 export function readBotDeclaration(query: Query, botId: string): BotDeclaration | undefined {
     const row = query
@@ -188,6 +208,11 @@ export function updateBotDeclaration(query: Query, botId: string, changes: Accou
         if (changes.repoUrl !== undefined) set.repoUrl = clearableText(changes.repoUrl);
         if (changes.accepts !== undefined) set.accepts = JSON.stringify(changes.accepts);
         if (changes.levels !== undefined) set.levels = changes.levels === null ? null : JSON.stringify(changes.levels);
+        if (changes.analyzer !== undefined) {
+            set.analyzerMaxSeconds = changes.analyzer?.maxSeconds ?? null;
+            set.analyzerLines = changes.analyzer?.lines ?? null;
+            set.analyzerWhilePlaying = changes.analyzer === null ? null : Number(changes.analyzer.whilePlaying);
+        }
         const [row] =
             Object.keys(set).length === 0
                 ? tx

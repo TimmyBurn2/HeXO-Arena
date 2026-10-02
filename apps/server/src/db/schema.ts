@@ -2,6 +2,10 @@ import { check, foreignKey, index, integer, primaryKey, real, sqliteTable, text,
 import { sql, type SQL } from 'drizzle-orm';
 import type { AnySQLiteColumn } from 'drizzle-orm/sqlite-core';
 import {
+    analysisHeuristicLimit,
+    analysisLinesMax,
+    analysisWinInLimit,
+    analyzerMaxSecondsCap,
     discordNameMaxLength,
     nextPathMaxLength,
     requestBodyLimitBytes,
@@ -19,20 +23,26 @@ export const nameReservations = sqliteTable(`name_reservations`, {
     nameKey: text(`name_key`).primaryKey(),
 });
 
-export const users = sqliteTable(`users`, {
-    id: text(`id`).primaryKey(),
-    discordId: text(`discord_id`).notNull().unique(),
-    name: text(`name`).notNull(),
-    nameKey: text(`name_key`)
-        .notNull()
-        .unique()
-        .references(() => nameReservations.nameKey),
-    bannedAt: integer(`banned_at`),
-    // Set when the user is forgotten but their games are kept: the row then
-    // carries a deleted-<n> placeholder name and no Discord identity.
-    deletedAt: integer(`deleted_at`),
-    createdAt: integer(`created_at`).notNull(),
-});
+export const users = sqliteTable(
+    `users`,
+    {
+        id: text(`id`).primaryKey(),
+        discordId: text(`discord_id`).notNull().unique(),
+        name: text(`name`).notNull(),
+        nameKey: text(`name_key`)
+            .notNull()
+            .unique()
+            .references(() => nameReservations.nameKey),
+        bannedAt: integer(`banned_at`),
+        // Set when the user is forgotten but their games are kept: the row then
+        // carries a deleted-<n> placeholder name and no Discord identity.
+        deletedAt: integer(`deleted_at`),
+        createdAt: integer(`created_at`).notNull(),
+        // 1 keeps every game the user played out of public analysis.
+        analysisOptOut: integer(`analysis_opt_out`).notNull().default(0),
+    },
+    (table) => [check(`users_analysis_opt_out_check`, sql`${table.analysisOptOut} in (0, 1)`)],
+);
 
 // Bounds from the contract, written into the checks as literals.
 const nameMax = sql.raw(String(discordNameMaxLength));
@@ -107,6 +117,19 @@ export const pendingSignups = sqliteTable(
     ],
 );
 
+const analyzerSecondsMax = sql.raw(String(analyzerMaxSecondsCap));
+const linesMax = sql.raw(String(analysisLinesMax));
+const winInMax = sql.raw(String(analysisWinInLimit));
+const heuristicMax = sql.raw(String(analysisHeuristicLimit));
+
+// A line read at a position: two cells and the evaluation of the board after them, one value at least.
+const lineChecks = (name: string, table: { heuristic: AnySQLiteColumn; winIn: AnySQLiteColumn; rank: AnySQLiteColumn }) => [
+    check(`${name}_rank_check`, sql`${table.rank} between 0 and ${sql.raw(String(analysisLinesMax - 1))}`),
+    check(`${name}_value_check`, sql`${table.heuristic} is not null or ${table.winIn} is not null`),
+    check(`${name}_heuristic_check`, sql`${table.heuristic} is null or abs(${table.heuristic}) <= ${heuristicMax}`),
+    check(`${name}_win_in_check`, sql`${table.winIn} is null or (${table.winIn} <> 0 and abs(${table.winIn}) <= ${winInMax})`),
+];
+
 // A stored level is a json object, held to a bound: a declaration's levels
 // never outgrow the body that carried them, and a game seat keeps one
 // level without its about, well under a kilobyte.
@@ -139,6 +162,10 @@ export const bots = sqliteTable(
         repoUrl: text(`repo_url`),
         accepts: text(`accepts`),
         levels: text(`levels`),
+        // The analyzer the bot declared, all three set or all three null.
+        analyzerMaxSeconds: integer(`analyzer_max_seconds`),
+        analyzerLines: integer(`analyzer_lines`),
+        analyzerWhilePlaying: integer(`analyzer_while_playing`),
         delistedAt: integer(`delisted_at`),
         // Set when a bot with rated games is deleted: the row stays so the
         // game log stays whole, under a deleted-<n> placeholder name.
@@ -150,6 +177,12 @@ export const bots = sqliteTable(
         uniqueIndex(`bots_id_owner_idx`).on(table.id, table.ownerId),
         check(`bots_scope_check`, sql`${table.scope} in ('bot:play')`),
         check(`bots_levels_check`, jsonObject(table.levels, levelsMax)),
+        check(`bots_analyzer_max_seconds_check`, sql`${table.analyzerMaxSeconds} is null or ${table.analyzerMaxSeconds} between 1 and ${analyzerSecondsMax}`),
+        check(`bots_analyzer_lines_check`, sql`${table.analyzerLines} is null or ${table.analyzerLines} between 1 and ${linesMax}`),
+        check(
+            `bots_analyzer_check`,
+            sql`(${table.analyzerWhilePlaying} is null or ${table.analyzerWhilePlaying} in (0, 1)) and (${table.analyzerMaxSeconds} is null) = (${table.analyzerLines} is null) and (${table.analyzerLines} is null) = (${table.analyzerWhilePlaying} is null)`,
+        ),
     ],
 );
 
@@ -291,6 +324,95 @@ export const moves = sqliteTable(
     ],
 );
 
+// A bot's own evaluation of a turn it played, rank 0, and of up to two
+// turns it considered, ranks 1 and 2, best first; published once the game
+// has finished.
+export const ownLines = sqliteTable(
+    `own_lines`,
+    {
+        gameId: text(`game_id`).notNull(),
+        seq: integer(`seq`).notNull(),
+        rank: integer(`rank`).notNull(),
+        firstX: integer(`first_x`).notNull(),
+        firstY: integer(`first_y`).notNull(),
+        secondX: integer(`second_x`).notNull(),
+        secondY: integer(`second_y`).notNull(),
+        heuristic: real(`heuristic`),
+        winIn: integer(`win_in`),
+    },
+    (table) => [
+        primaryKey({ columns: [table.gameId, table.seq, table.rank] }),
+        foreignKey({ columns: [table.gameId, table.seq], foreignColumns: [moves.gameId, moves.seq] }).onDelete(`cascade`),
+        ...lineChecks(`own_lines`, table),
+    ],
+);
+
+// A whole finished game read by a community analyzer on request. The
+// analyzer is set once one takes the request, and its version is the one it
+// declared then; lines are written only when the reading is done.
+// A requester's account may go while the reading stays.
+// A reading goes with its game, and with the analyzer that read or was named for it.
+export const analyses = sqliteTable(
+    `analyses`,
+    {
+        id: text(`id`).primaryKey(),
+        gameId: text(`game_id`)
+            .notNull()
+            .references(() => games.id, { onDelete: `cascade` }),
+        analyzerBotId: text(`analyzer_bot_id`).references(() => bots.id, { onDelete: `cascade` }),
+        analyzerVersion: text(`analyzer_version`),
+        // The analyzer the requester named, if any; only it may take the request.
+        namedBotId: text(`named_bot_id`).references(() => bots.id, { onDelete: `cascade` }),
+        requestedBy: text(`requested_by`).references(() => users.id, { onDelete: `set null` }),
+        status: text(`status`).notNull(),
+        failure: text(`failure`),
+        failedTurn: integer(`failed_turn`),
+        seconds: integer(`seconds`).notNull(),
+        createdAt: integer(`created_at`).notNull(),
+        startedAt: integer(`started_at`),
+        finishedAt: integer(`finished_at`),
+    },
+    (table) => [
+        index(`analyses_game_id_idx`).on(table.gameId),
+        index(`analyses_analyzer_bot_id_idx`).on(table.analyzerBotId),
+        index(`analyses_named_bot_id_idx`).on(table.namedBotId),
+        // Leads with the foreign key, and serves the count of a user's requests a day.
+        index(`analyses_requested_by_created_idx`).on(table.requestedBy, table.createdAt),
+        // One analyzer reads one game once, failures aside.
+        uniqueIndex(`analyses_game_analyzer_idx`).on(table.gameId, table.analyzerBotId).where(sql`${table.status} <> 'failed'`),
+        check(`analyses_status_check`, sql`${table.status} in ('queued', 'running', 'done', 'failed')`),
+        check(
+            `analyses_failure_check`,
+            sql`(${table.status} = 'failed') = (${table.failure} is not null) and coalesce(${table.failure}, 'timeout') in ('timeout', 'illegal', 'no_evaluation', 'inconsistent', 'disconnect', 'protocol', 'expired')`,
+        ),
+        check(`analyses_failed_turn_check`, sql`${table.failedTurn} is null or (${table.failedTurn} >= 1 and ${table.status} = 'failed')`),
+        // A request no analyzer took ends as expired, with none.
+        check(`analyses_analyzer_check`, sql`((${table.status} = 'queued') = (${table.analyzerBotId} is null)) or (${table.status} = 'failed' and ${table.analyzerBotId} is null)`),
+        check(`analyses_version_check`, sql`${table.analyzerVersion} is null or length(${table.analyzerVersion}) <= 64`),
+        check(`analyses_seconds_check`, sql`${table.seconds} between 1 and ${analyzerSecondsMax}`),
+        check(`analyses_finished_check`, sql`(${table.status} in ('done', 'failed')) = (${table.finishedAt} is not null)`),
+    ],
+);
+
+// A finished reading's lines at the position before each turn, best first.
+export const analysisLines = sqliteTable(
+    `analysis_lines`,
+    {
+        analysisId: text(`analysis_id`)
+            .notNull()
+            .references(() => analyses.id, { onDelete: `cascade` }),
+        turn: integer(`turn`).notNull(),
+        rank: integer(`rank`).notNull(),
+        firstX: integer(`first_x`).notNull(),
+        firstY: integer(`first_y`).notNull(),
+        secondX: integer(`second_x`).notNull(),
+        secondY: integer(`second_y`).notNull(),
+        heuristic: real(`heuristic`),
+        winIn: integer(`win_in`),
+    },
+    (table) => [primaryKey({ columns: [table.analysisId, table.turn, table.rank] }), check(`analysis_lines_turn_check`, sql`${table.turn} >= 1`), ...lineChecks(`analysis_lines`, table)],
+);
+
 // One challenge per client request id, scoped to the challenger: the
 // unique pair carries the idempotency, and the row outlives its decision
 // so a replayed request id answers with the stored outcome. `created`
@@ -422,7 +544,7 @@ export const adminActions = sqliteTable(
     (table) => [
         check(
             `admin_actions_action_check`,
-            sql`${table.action} in ('pause', 'resume', 'ban-user', 'unban-user', 'delete-user', 'delist-bot', 'relist-bot', 'revoke-bot', 'abort-game', 'recompute-ratings', 'tournament-create', 'tournament-cancel', 'tournament-schedule-add', 'tournament-schedule-remove', 'report-close')`,
+            sql`${table.action} in ('pause', 'resume', 'ban-user', 'unban-user', 'delete-user', 'delist-bot', 'relist-bot', 'revoke-bot', 'abort-game', 'recompute-ratings', 'tournament-create', 'tournament-cancel', 'tournament-schedule-add', 'tournament-schedule-remove', 'report-close', 'delete-analysis')`,
         ),
         check(`admin_actions_reason_check`, sql`length(${table.reason}) > 0`),
     ],

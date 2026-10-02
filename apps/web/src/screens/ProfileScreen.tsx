@@ -50,6 +50,7 @@ export function ProfileScreen() {
                     <PlayerHistory player={state.me.name} title={text.games.yours} />
                     <AccountPanel
                         name={state.me.name}
+                        optedOut={state.me.analysisOptOut}
                         onDeleted={() => {
                             setDeleted(true);
                         }}

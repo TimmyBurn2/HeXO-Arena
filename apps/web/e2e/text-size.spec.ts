@@ -5,8 +5,8 @@ import { liveGames, playBots, rivalry, serve, signup, tournaments, world, type W
 
 const visitors: readonly { name: string; me: Me }[] = [
     { name: `signed-out`, me: null },
-    { name: `signed-in`, me: { kind: `user`, name: `quinn`, rating: 1503, provisional: false, discord: null, liveGames: [] } },
-    { name: `long-named`, me: { kind: `user`, name: `sealbot-owner-with-a-long-name`, rating: 1503, provisional: false, discord: { username: `owner.of.sealbot.and.two.more.xy`, displayName: `The Owner Of Sealbot And Two Mor` }, liveGames: [] } },
+    { name: `signed-in`, me: { kind: `user`, name: `quinn`, rating: 1503, provisional: false, discord: null, liveGames: [], analysisOptOut: false, analysisLeft: { positions: 300, games: 10 } } },
+    { name: `long-named`, me: { kind: `user`, name: `sealbot-owner-with-a-long-name`, rating: 1503, provisional: false, discord: { username: `owner.of.sealbot.and.two.more.xy`, displayName: `The Owner Of Sealbot And Two Mor` }, liveGames: [], analysisOptOut: false, analysisLeft: { positions: 300, games: 10 } } },
     { name: `guest`, me: { kind: `guest`, name: `Guest k3f9`, liveGames: [] } },
 ];
 
@@ -14,7 +14,8 @@ const visitors: readonly { name: string; me: Me }[] = [
 // the first sign-in's page shows its form to someone signed out,
 // and hands anyone else on to Profile.
 // Play runs on its roster, once more on a bot whose clock note sits beside Custom clock.
-const screens: readonly { name: string; path: string; world?: Partial<World> }[] = [
+// A screen that needs a signed-in visitor runs for them alone, its `then` taking it to the state checked.
+const screens: readonly { name: string; path: string; world?: Partial<World>; then?: (page: Page) => Promise<void> }[] = [
     { name: `the root`, path: `/` },
     { name: `play`, path: `/play`, world: { bots: playBots } },
     { name: `play with a limited bot`, path: `/play?bot=quietlake`, world: { bots: playBots } },
@@ -23,6 +24,14 @@ const screens: readonly { name: string; path: string; world?: Partial<World> }[]
     { name: `live games`, path: `/games/live` },
     { name: `the analysis board`, path: `/analysis` },
     { name: `a game on the analysis board`, path: `/analysis?game=long-finished&turn=12` },
+    {
+        name: `an analyzer's lines on the analysis board`,
+        path: `/analysis?game=long-finished&turn=12`,
+        then: async (page) => {
+            await page.getByRole(`switch`, { name: `Analyze` }).check();
+            await page.locator(`button.an-line`).nth(2).waitFor();
+        },
+    },
     { name: `the ladder`, path: `/ladder` },
     { name: `tournaments`, path: `/tournaments` },
     { name: `a running tournament`, path: `/tournaments/t_autumnrobin1`, world: { tournaments } },
@@ -162,7 +171,7 @@ async function faults(page: Page, width: number, longName: boolean): Promise<str
 
 for (const visitor of visitors) {
     for (const size of sizes) {
-        for (const screen of screens) {
+        for (const screen of screens.filter((entry) => entry.then === undefined || visitor.me?.kind === `user`)) {
             test(`at ${String((size / 16) * 100)}% text the ${visitor.name} bar and ${screen.name} stay inside the window from 320 to 1280 px`, async ({ page }) => {
                 const look = looks[0];
                 if (look === undefined) throw new Error(`no look registered`);
@@ -174,6 +183,7 @@ for (const visitor of visitors) {
                 await page.goto(screen.path);
                 await page.locator(`h1`).first().waitFor();
                 if (visitor.me !== null) await page.locator(`header button.identity`).waitFor();
+                await screen.then?.(page);
                 await page.evaluate(async () => {
                     await document.fonts.ready;
                 });

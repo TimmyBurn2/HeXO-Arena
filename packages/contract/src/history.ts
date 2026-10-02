@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { analysesPerGame } from './analysis';
 import { gamePlayersSchema } from './games';
 import { rankableDeviation } from './leaderboard';
 import { nameKeyOf, nameMaxLength } from './names';
@@ -40,6 +41,7 @@ export const finishedGamesQuerySchema = z
         clock: z.enum([`turn`, `match`, `unlimited`]).optional().meta({ param: { description: `The time control's mode.` } }),
         opening: z.enum([`1`, `3`, `5`, `7`, `9`]).optional().meta({ param: { description: `The opening's plies.` } }),
         before: z.iso.date().optional().meta({ param: { description: `Only games finished before this UTC date, YYYY-MM-DD.` } }),
+        analyzed: z.literal(`1`).optional().meta({ param: { description: `Present as 1, only games a community analyzer has read whole.` } }),
         page: z
             .string()
             .regex(pagePattern)
@@ -66,6 +68,12 @@ export const finishedGameEntrySchema = z
         finishedAt: z.iso.datetime(),
         rated: z.boolean().meta({ description: `False for a game without a winner, a voided one, a guest's, and one with a bot at a level other than its default.` }),
         voided: z.boolean().meta({ description: `Taken out by the operator: still listed, and counted in no record and no rating.` }),
+        analyses: z
+            .number()
+            .int()
+            .min(0)
+            .max(analysesPerGame.done)
+            .meta({ description: `Finished community readings of the whole game.` }),
     })
     .meta({
         id: `FinishedGameEntry`,

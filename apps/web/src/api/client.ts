@@ -23,6 +23,10 @@ import {
     logoutPath,
     mePath,
     meSchema,
+    meUpdateRequestSchema,
+    userMeSchema,
+    type MeUpdateRequest,
+    type UserMe,
     signupCreatedSchema,
     signupPath,
     signupRequestSchema,
@@ -146,6 +150,11 @@ export function fetchMe(): Promise<Me> {
     return getJson(mePath, meSchema);
 }
 
+/** Change the signed-in user's own settings; the answer is the user after the change. */
+export function updateMe(changes: MeUpdateRequest): Promise<UserMe> {
+    return sendJson(mePath, `PATCH`, meUpdateRequestSchema.parse(changes), userMeSchema);
+}
+
 /** End the session, account or guest; idempotent. */
 export function signOut(): Promise<void> {
     return sendEmpty(logoutPath, `POST`);
@@ -241,6 +250,12 @@ export function fetchBots(onlineOnly: boolean): Promise<BotListing[]> {
     const query = botDirectoryQuerySchema.parse(onlineOnly ? { online: `1` } : {});
     const search = query.online === `1` ? `?online=1` : ``;
     return getJson(`${botsPath}${search}`, botListingSchema.array());
+}
+
+/** The bots that declare an analyzer, online or not; each says whether it can read now. */
+export function fetchAnalyzers(): Promise<BotListing[]> {
+    const query = botDirectoryQuerySchema.parse({ analyzer: `1` });
+    return getJson(`${botsPath}?analyzer=${String(query.analyzer)}`, botListingSchema.array());
 }
 
 /** Register a bot under the signed-in account; the token shows once. */

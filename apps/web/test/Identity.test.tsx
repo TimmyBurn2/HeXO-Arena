@@ -96,7 +96,7 @@ describe('Identity', () => {
     });
 
     it('open a popover from the signed-in name with the rating, where to go, and sign-out', async () => {
-        serve({ kind: `user`, name: `quinn`, rating: 1503, provisional: false, discord: null, liveGames: [] });
+        serve({ kind: `user`, name: `quinn`, rating: 1503, provisional: false, discord: null, liveGames: [], analysisOptOut: false, analysisLeft: { positions: 300, games: 10 } });
         render(<Identity route={bots} />);
         const button = await screen.findByRole(`button`, { name: `quinn` });
         expect(button.getAttribute(`aria-expanded`)).toBe(`false`);
@@ -120,7 +120,7 @@ describe('Identity', () => {
     });
 
     it('show the person the Discord account the session came from, first in the panel, the pattern beside the name', async () => {
-        serve({ kind: `user`, name: `mira-hex`, rating: 1000, provisional: true, discord: { username: `mira.hex`, displayName: `Mira` }, liveGames: [] });
+        serve({ kind: `user`, name: `mira-hex`, rating: 1000, provisional: true, discord: { username: `mira.hex`, displayName: `Mira` }, liveGames: [], analysisOptOut: false, analysisLeft: { positions: 300, games: 10 } });
         render(<Identity route={bots} />);
         const button = await screen.findByRole(`button`, { name: `mira-hex` });
         expect(button.querySelector(`.monogram.sigil-plate svg.sigil`)).toBeTruthy();
@@ -131,12 +131,12 @@ describe('Identity', () => {
         expect(document.querySelector(`.identity-head .identity-head-mark svg.sigil`)).toBeTruthy();
         expect(screen.getByRole(`dialog`, { name: `mira-hex` })).toBeTruthy();
         cleanup();
-        serve({ kind: `user`, name: `mira-hex`, rating: 1000, provisional: true, discord: { username: `mira.hex`, displayName: null }, liveGames: [] });
+        serve({ kind: `user`, name: `mira-hex`, rating: 1000, provisional: true, discord: { username: `mira.hex`, displayName: null }, liveGames: [], analysisOptOut: false, analysisLeft: { positions: 300, games: 10 } });
         render(<Identity route={bots} />);
         fireEvent.click(await screen.findByRole(`button`, { name: `mira-hex` }));
         expect(document.querySelector(`#identity-panel .discord-line`)?.textContent).toBe(`Discord: @mira.hex`);
         cleanup();
-        serve({ kind: `user`, name: `quinn`, rating: 1503, provisional: false, discord: null, liveGames: [] });
+        serve({ kind: `user`, name: `quinn`, rating: 1503, provisional: false, discord: null, liveGames: [], analysisOptOut: false, analysisLeft: { positions: 300, games: 10 } });
         render(<Identity route={bots} />);
         fireEvent.click(await screen.findByRole(`button`, { name: `quinn` }));
         expect(document.querySelector(`.discord-line`)).toBe(null);
@@ -153,7 +153,7 @@ describe('Identity', () => {
     });
 
     it('show a provisional rating as the dim trailing question', async () => {
-        serve({ kind: `user`, name: `quietowner`, rating: 1420, provisional: true, discord: null, liveGames: [] });
+        serve({ kind: `user`, name: `quietowner`, rating: 1420, provisional: true, discord: null, liveGames: [], analysisOptOut: false, analysisLeft: { positions: 300, games: 10 } });
         render(<Identity route={bots} />);
         fireEvent.click(await screen.findByRole(`button`, { name: `quietowner` }));
         const rating = document.querySelector(`.identity-head-rating`);
@@ -162,7 +162,7 @@ describe('Identity', () => {
     });
 
     it('mark the page the panel links to as current', async () => {
-        serve({ kind: `user`, name: `quinn`, rating: 1503, provisional: false, discord: null, liveGames: [] });
+        serve({ kind: `user`, name: `quinn`, rating: 1503, provisional: false, discord: null, liveGames: [], analysisOptOut: false, analysisLeft: { positions: 300, games: 10 } });
         render(<Identity route={{ name: `profile` }} />);
         const button = await screen.findByRole(`button`, { name: `quinn` });
         expect(button.classList.contains(`active`)).toBe(true);
@@ -198,7 +198,7 @@ describe('Identity', () => {
     });
 
     it('close on Esc and the close button, handing focus back to the button', async () => {
-        serve({ kind: `user`, name: `quinn`, rating: 1503, provisional: false, discord: null, liveGames: [] });
+        serve({ kind: `user`, name: `quinn`, rating: 1503, provisional: false, discord: null, liveGames: [], analysisOptOut: false, analysisLeft: { positions: 300, games: 10 } });
         render(<Identity route={bots} />);
         const button = await screen.findByRole(`button`, { name: `quinn` });
         fireEvent.click(button);
@@ -215,7 +215,7 @@ describe('Identity', () => {
     });
 
     it('close when focus moves back past its button, leaving focus where it went', async () => {
-        serve({ kind: `user`, name: `quinn`, rating: 1503, provisional: false, discord: null, liveGames: [] });
+        serve({ kind: `user`, name: `quinn`, rating: 1503, provisional: false, discord: null, liveGames: [], analysisOptOut: false, analysisLeft: { positions: 300, games: 10 } });
         render(
             <>
                 <a href="/bots">before</a>
@@ -237,7 +237,7 @@ describe('Identity', () => {
     });
 
     it('close on a link, leaving focus to the next screen', async () => {
-        serve({ kind: `user`, name: `quinn`, rating: 1503, provisional: false, discord: null, liveGames: [] });
+        serve({ kind: `user`, name: `quinn`, rating: 1503, provisional: false, discord: null, liveGames: [], analysisOptOut: false, analysisLeft: { positions: 300, games: 10 } });
         render(<Identity route={bots} />);
         const button = await screen.findByRole(`button`, { name: `quinn` });
         fireEvent.click(button);
@@ -249,14 +249,14 @@ describe('Identity', () => {
 
     it('open as a modal sheet below the phone breakpoint', async () => {
         stubPhone();
-        serve({ kind: `user`, name: `quinn`, rating: 1503, provisional: false, discord: null, liveGames: [] });
+        serve({ kind: `user`, name: `quinn`, rating: 1503, provisional: false, discord: null, liveGames: [], analysisOptOut: false, analysisLeft: { positions: 300, games: 10 } });
         render(<Identity route={bots} />);
         fireEvent.click(await screen.findByRole(`button`, { name: `quinn` }));
         expect(panel()?.dataset.mode).toBe(`sheet`);
     });
 
     it('keep at most one of settings and who is here open', async () => {
-        serve({ kind: `user`, name: `quinn`, rating: 1503, provisional: false, discord: null, liveGames: [] });
+        serve({ kind: `user`, name: `quinn`, rating: 1503, provisional: false, discord: null, liveGames: [], analysisOptOut: false, analysisLeft: { positions: 300, games: 10 } });
         render(
             <>
                 <Settings />
@@ -279,7 +279,7 @@ describe('Identity', () => {
 
     it('sign out from the panel and put focus on the sign-in that takes its place', async () => {
         const posts: string[] = [];
-        serve({ kind: `user`, name: `quinn`, rating: 1503, provisional: false, discord: null, liveGames: [] }, posts);
+        serve({ kind: `user`, name: `quinn`, rating: 1503, provisional: false, discord: null, liveGames: [], analysisOptOut: false, analysisLeft: { positions: 300, games: 10 } }, posts);
         render(<Identity route={bots} />);
         fireEvent.click(await screen.findByRole(`button`, { name: `quinn` }));
         fireEvent.click(screen.getByRole(`button`, { name: `Sign out` }));
@@ -309,7 +309,7 @@ describe('Identity', () => {
     });
 
     it('say so and keep the panel when sign-out does not land', async () => {
-        serve({ kind: `user`, name: `quinn`, rating: 1503, provisional: false, discord: null, liveGames: [] }, [], 500);
+        serve({ kind: `user`, name: `quinn`, rating: 1503, provisional: false, discord: null, liveGames: [], analysisOptOut: false, analysisLeft: { positions: 300, games: 10 } }, [], 500);
         render(<Identity route={bots} />);
         fireEvent.click(await screen.findByRole(`button`, { name: `quinn` }));
         fireEvent.click(screen.getByRole(`button`, { name: `Sign out` }));

@@ -119,6 +119,12 @@ components:
       headers:
         Retry-After:
           $ref: "#/components/headers/RetryAfter"
+    SignedInUser:
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/UnauthorizedError"
+      description: "No signed-in user: a guest, or no session at all."
     Unauthorized:
       content:
         application/json:
@@ -151,13 +157,15 @@ components:
         - unlimited
       type: object
     Account:
-      description: levels is null until the bot declares them.
+      description: levels and analyzer are null until the bot declares them.
       properties:
         about:
           maxLength: 280
           type: string
         accepts:
           $ref: "#/components/schemas/Accepts"
+        analyzer:
+          $ref: "#/components/schemas/Analyzer"
         levels:
           $ref: "#/components/schemas/Levels"
         name:
@@ -182,6 +190,7 @@ components:
         - rating
         - provisional
         - levels
+        - analyzer
       type: object
     AccountDeclaration:
       additionalProperties: false
@@ -195,6 +204,8 @@ components:
           type: string
         accepts:
           $ref: "#/components/schemas/Accepts"
+        analyzer:
+          $ref: "#/components/schemas/AnalyzerDeclaration"
         levels:
           $ref: "#/components/schemas/Levels"
         repoUrl:
@@ -215,6 +226,8 @@ components:
       properties:
         account:
           properties:
+            analysisOptOut:
+              type: boolean
             bannedAt:
               format: date-time
               nullable: true
@@ -234,7 +247,28 @@ components:
             - discordId
             - createdAt
             - bannedAt
+            - analysisOptOut
           type: object
+        analyses:
+          description: Whole-game readings the account asked for.
+          items:
+            properties:
+              gameId:
+                type: string
+              id:
+                type: string
+              requestedAt:
+                format: date-time
+                type: string
+              status:
+                $ref: "#/components/schemas/AnalysisStatus"
+            required:
+              - id
+              - gameId
+              - status
+              - requestedAt
+            type: object
+          type: array
         bots:
           items:
             properties:
@@ -243,6 +277,20 @@ components:
                 type: string
               accepts:
                 $ref: "#/components/schemas/Accepts"
+              analyzer:
+                nullable: true
+                properties:
+                  lines:
+                    type: integer
+                  maxSeconds:
+                    type: integer
+                  whilePlaying:
+                    type: boolean
+                required:
+                  - maxSeconds
+                  - lines
+                  - whilePlaying
+                type: object
               createdAt:
                 format: date-time
                 type: string
@@ -277,6 +325,7 @@ components:
               - repoUrl
               - accepts
               - levels
+              - analyzer
               - delistedAt
               - deletedAt
               - rating
@@ -565,7 +614,296 @@ components:
         - games
         - tournamentEntries
         - challenges
+        - analyses
         - moderation
+      type: object
+    Analysis:
+      discriminator:
+        mapping:
+          community: "#/components/schemas/CommunityAnalysis"
+          own: "#/components/schemas/OwnAnalysis"
+        propertyName: kind
+      oneOf:
+        - $ref: "#/components/schemas/CommunityAnalysis"
+        - $ref: "#/components/schemas/OwnAnalysis"
+    AnalysisCells:
+      description: A position's stones with their sides, in any order, 401 at most, each x and y within
+        4096 of the origin; one stone a cell, and no six on the board.
+      items:
+        properties:
+          side:
+            enum:
+              - x
+              - o
+            type: string
+          x:
+            type: integer
+          y:
+            type: integer
+        required:
+          - x
+          - y
+          - side
+        type: object
+      maxItems: 401
+      minItems: 1
+      type: array
+    AnalysisFailure:
+      description: "Why a reading failed: no answer within its seconds and a grace (timeout); a line that
+        is not a legal turn, or repeats one (illegal); a move without an evaluation (no_evaluation);
+        an evaluation out of bounds or contradicting the board (inconsistent); the analyzer hung up
+        (disconnect) or broke the session's protocol (protocol); no analyzer took the request in
+        time (expired)."
+      enum:
+        - timeout
+        - illegal
+        - no_evaluation
+        - inconsistent
+        - disconnect
+        - protocol
+        - expired
+      type: string
+    AnalysisLeft:
+      description: "What the user may still ask of analyzers this UTC day: positions read, and whole games
+        requested."
+      properties:
+        games:
+          maximum: 10
+          minimum: 0
+          type: integer
+        positions:
+          maximum: 300
+          minimum: 0
+          type: integer
+      required:
+        - positions
+        - games
+      type: object
+    AnalysisLine:
+      description: A turn and the evaluation of the board after it, x-positive; heuristic, winIn, or both.
+      properties:
+        cells:
+          description: The turn's two stones in order; when the first completes six, the second is never played.
+          items:
+            properties:
+              x:
+                type: integer
+              y:
+                type: integer
+            required:
+              - x
+              - y
+            type: object
+          maxItems: 2
+          minItems: 2
+          type: array
+        heuristic:
+          description: The analyzer's heuristic, positive for x, on a scale of about -1 to 1.
+          maximum: 1000000
+          minimum: -1000000
+          type: number
+        winIn:
+          description: Turns to a forced win, the side to move's turn counted first, positive when x wins;
+            never zero.
+          maximum: 1000
+          minimum: -1000
+          type: integer
+      required:
+        - cells
+      type: object
+    AnalysisList:
+      properties:
+        analyses:
+          description: Community readings, finished first, then queued or running, then the latest failed one;
+            then each bot seat's own.
+          items:
+            $ref: "#/components/schemas/Analysis"
+          maxItems: 6
+          type: array
+        optedOut:
+          description: True when a player asked that their games stay out of public analysis; the list is then
+            empty.
+          type: boolean
+      required:
+        - analyses
+        - optedOut
+      type: object
+    AnalysisListConflictError:
+      properties:
+        code:
+          enum:
+            - game_live
+          type: string
+        error:
+          type: string
+      required:
+        - error
+        - code
+      type: object
+    AnalysisRequest:
+      properties:
+        analyzer:
+          description: The analyzer to ask, by name; any eligible one when absent.
+          pattern: ^[A-Za-z][A-Za-z0-9_-]{0,28}[A-Za-z0-9]$
+          type: string
+      type: object
+    AnalysisRequestConflictError:
+      properties:
+        code:
+          enum:
+            - analysis_pending
+            - analysis_full
+            - pending_limit
+            - not_analysable
+            - no_analyzer
+            - opted_out
+            - game_live
+          type: string
+        error:
+          type: string
+      required:
+        - error
+        - code
+      type: object
+    AnalysisRequestQuotaError:
+      properties:
+        code:
+          enum:
+            - analysis_limit
+            - analysis_queue_full
+            - rate_limited
+          type: string
+        error:
+          type: string
+      required:
+        - error
+        - code
+      type: object
+    AnalysisSession:
+      properties:
+        socketUrl:
+          description: The analysis session's path on the API's origin, dialed as a game's engine session is.
+          type: string
+        token:
+          description: "The analysis token (has_...): it opens the bot's analysis session until 60 s after the
+            line that carried it; a later analysisSession line replaces it."
+          type: string
+      required:
+        - socketUrl
+        - token
+      type: object
+    AnalysisSessionEvent:
+      description: "Sent only to a bot that declares an analyzer: as the stream opens, after a declaration
+        turns it on, and 5 s after its analysis session closes while the stream stays open."
+      properties:
+        engine:
+          $ref: "#/components/schemas/AnalysisSession"
+        type:
+          enum:
+            - analysisSession
+          type: string
+      required:
+        - type
+        - engine
+      type: object
+    AnalysisStatus:
+      enum:
+        - queued
+        - running
+        - done
+        - failed
+      type: string
+    AnalysisTurn:
+      properties:
+        lines:
+          items:
+            $ref: "#/components/schemas/AnalysisLine"
+          maxItems: 3
+          minItems: 1
+          type: array
+        toMove:
+          enum:
+            - x
+            - o
+          type: string
+        turn:
+          description: The turn played from the position; one past the last turn reads the final board.
+          maximum: 501
+          minimum: 1
+          type: integer
+      required:
+        - turn
+        - toMove
+        - lines
+      type: object
+    Analyzer:
+      description: The analyzer the bot declared; null until it declares one, and once it withdraws.
+      nullable: true
+      properties:
+        lines:
+          maximum: 3
+          minimum: 1
+          type: integer
+        maxSeconds:
+          maximum: 10
+          minimum: 1
+          type: integer
+        ready:
+          description: True while the bot holds its analysis session open.
+          type: boolean
+        whilePlaying:
+          type: boolean
+      required:
+        - maxSeconds
+        - lines
+        - whilePlaying
+        - ready
+      type: object
+    AnalyzerDeclaration:
+      additionalProperties: false
+      description: Opts the bot in to reading positions sent on its analysis session, from the website's
+        analysis board and from finished games. Declaring it promises the htttx basic_websocket
+        capabilities free_setup, resettable_state, dual_sided, request_id, move_time_limit, and
+        interruptible.
+      nullable: true
+      properties:
+        lines:
+          description: "Lines the bot answers per position: its move, then up to two considerations, each with
+            an evaluation."
+          maximum: 3
+          minimum: 1
+          type: integer
+        maxSeconds:
+          default: 2
+          description: The most seconds the bot reads one position for; a person picks up to it. 2 when absent.
+          maximum: 10
+          minimum: 1
+          type: integer
+        whilePlaying:
+          default: false
+          description: True to take positions while the bot plays a game; false, the default, takes them only
+            between games.
+          type: boolean
+      required:
+        - lines
+      type: object
+    AnalyzerRef:
+      description: A community bot whose reading this is; no analyzer is official.
+      properties:
+        name:
+          type: string
+        ownerName:
+          description: Null once the owner's account is deleted.
+          nullable: true
+          type: string
+        version:
+          description: The version the bot declared when it read; null if none.
+          nullable: true
+          type: string
+      required:
+        - name
+        - version
+        - ownerName
       type: object
     BadRequestError:
       properties:
@@ -633,13 +971,16 @@ components:
         - code
       type: object
     BotListing:
-      description: The declaration fields are absent until the bot declares them, and levels is null.
+      description: The declaration fields are absent until the bot declares them, and levels and analyzer
+        are null.
       properties:
         about:
           maxLength: 280
           type: string
         accepts:
           $ref: "#/components/schemas/Accepts"
+        analyzer:
+          $ref: "#/components/schemas/Analyzer"
         levels:
           $ref: "#/components/schemas/Levels"
         liveGames:
@@ -682,6 +1023,7 @@ components:
         - provisional
         - liveGames
         - levels
+        - analyzer
       type: object
     BotNameError:
       properties:
@@ -850,6 +1192,73 @@ components:
         - error
         - code
       type: object
+    CommunityAnalysis:
+      description: A whole finished game read by a community analyzer on request; analyzer is null while
+        none has taken it, and failure is present once it failed.
+      properties:
+        analysisId:
+          type: string
+        analyzer:
+          allOf:
+            - $ref: "#/components/schemas/AnalyzerRef"
+            - nullable: true
+        failedTurn:
+          description: The turn whose position failed, when one did.
+          minimum: 1
+          type: integer
+        failure:
+          $ref: "#/components/schemas/AnalysisFailure"
+        finishedAt:
+          format: date-time
+          nullable: true
+          type: string
+        kind:
+          enum:
+            - community
+          type: string
+        progress:
+          description: Positions read, of those to read.
+          properties:
+            done:
+              minimum: 0
+              type: integer
+            of:
+              minimum: 0
+              type: integer
+          required:
+            - done
+            - of
+          type: object
+        queuePosition:
+          description: Present while queued; 1 is next.
+          minimum: 1
+          type: integer
+        requestedAt:
+          format: date-time
+          type: string
+        seconds:
+          description: Seconds each position is read for.
+          maximum: 10
+          minimum: 1
+          type: integer
+        status:
+          $ref: "#/components/schemas/AnalysisStatus"
+        turns:
+          description: Readings so far, in turn order, from the first turn after the opening.
+          items:
+            $ref: "#/components/schemas/AnalysisTurn"
+          type: array
+      required:
+        - kind
+        - analysisId
+        - analyzer
+        - status
+        - requestedAt
+        - finishedAt
+        - progress
+        - seconds
+        - turns
+      type: object
     DeleteAccountRequest:
       additionalProperties: false
       properties:
@@ -950,6 +1359,11 @@ components:
       description: A finished game as the history lists it. Each seat's rating is the one it stood at
         before this result, and provisional says whether its deviation was above 75 after it.
       properties:
+        analyses:
+          description: Finished community readings of the whole game.
+          maximum: 2
+          minimum: 0
+          type: integer
         finishedAt:
           format: date-time
           type: string
@@ -992,6 +1406,7 @@ components:
         - finishedAt
         - rated
         - voided
+        - analyses
       type: object
     FinishedGamesPage:
       description: A page past the last one the filters reach lists no game.
@@ -1773,6 +2188,14 @@ components:
         - cells
         - clock
       type: object
+    MeUpdate:
+      additionalProperties: false
+      properties:
+        analysisOptOut:
+          description: True deletes the community readings of every game the user played and hides the bots'
+            own views of them; false lets new requests in.
+          type: boolean
+      type: object
     MoveError:
       properties:
         code:
@@ -1883,6 +2306,32 @@ components:
         - 7
         - 9
       type: integer
+    OwnAnalysis:
+      description: What a bot said of its own moves while it played; a bot judging itself is no judgment.
+      properties:
+        kind:
+          enum:
+            - own
+          type: string
+        player:
+          description: The bot's name as the game shows it.
+          type: string
+        side:
+          enum:
+            - x
+            - o
+          type: string
+        turns:
+          description: "Each turn the bot evaluated: its move first, then up to 2 considerations."
+          items:
+            $ref: "#/components/schemas/AnalysisTurn"
+          type: array
+      required:
+        - kind
+        - side
+        - player
+        - turns
+      type: object
     OwnLiveGames:
       description: The person's live games, newest first.
       items:
@@ -2104,6 +2553,182 @@ components:
         - opponents
         - firstGameAt
         - lastGameAt
+      type: object
+    PositionCheck:
+      properties:
+        cells:
+          $ref: "#/components/schemas/AnalysisCells"
+        toMove:
+          enum:
+            - x
+            - o
+          type: string
+      required:
+        - cells
+        - toMove
+      type: object
+    PositionCheckError:
+      properties:
+        code:
+          enum:
+            - live_position
+            - seated
+          type: string
+        error:
+          type: string
+      required:
+        - error
+        - code
+      type: object
+    PositionReading:
+      description: "queued: the request was held 10 s without an answer; posting the same position again
+        waits on the same request, and analyzer names the one it waits for once one is chosen. A
+        failed reading costs nothing; left counts the positions the caller may still have read this
+        UTC day."
+      oneOf:
+        - properties:
+            analyzer:
+              $ref: "#/components/schemas/AnalyzerRef"
+            cached:
+              description: True for a reading kept from an earlier request, which costs nothing.
+              type: boolean
+            elapsedMs:
+              description: How long it took to answer.
+              minimum: 0
+              type: integer
+            left:
+              maximum: 300
+              minimum: 0
+              type: integer
+            lines:
+              description: Best first.
+              items:
+                $ref: "#/components/schemas/AnalysisLine"
+              maxItems: 3
+              minItems: 1
+              type: array
+            readAt:
+              format: date-time
+              type: string
+            seconds:
+              description: The seconds the analyzer was given.
+              maximum: 10
+              minimum: 1
+              type: integer
+            status:
+              enum:
+                - done
+              type: string
+          required:
+            - status
+            - analyzer
+            - seconds
+            - elapsedMs
+            - readAt
+            - cached
+            - lines
+            - left
+          type: object
+        - properties:
+            ahead:
+              description: Positions the analyzer reads before this one.
+              minimum: 0
+              type: integer
+            analyzer:
+              $ref: "#/components/schemas/AnalyzerRef"
+            left:
+              maximum: 300
+              minimum: 0
+              type: integer
+            status:
+              enum:
+                - queued
+              type: string
+          required:
+            - status
+            - ahead
+            - left
+          type: object
+        - properties:
+            analyzer:
+              $ref: "#/components/schemas/AnalyzerRef"
+            failure:
+              $ref: "#/components/schemas/AnalysisFailure"
+            left:
+              maximum: 300
+              minimum: 0
+              type: integer
+            status:
+              enum:
+                - failed
+              type: string
+          required:
+            - status
+            - analyzer
+            - failure
+            - left
+          type: object
+    PositionReadingConflictError:
+      properties:
+        code:
+          enum:
+            - live_position
+            - seated
+            - no_analyzer
+            - superseded
+          type: string
+        error:
+          type: string
+      required:
+        - error
+        - code
+      type: object
+    PositionReadingQuotaError:
+      properties:
+        code:
+          enum:
+            - analysis_limit
+            - analysis_busy
+            - rate_limited
+          type: string
+        error:
+          type: string
+      required:
+        - error
+        - code
+      type: object
+    PositionReadingRequest:
+      properties:
+        analyzer:
+          description: The analyzer to ask, by name; null for any ready one.
+          nullable: true
+          pattern: ^[A-Za-z][A-Za-z0-9_-]{0,28}[A-Za-z0-9]$
+          type: string
+        cells:
+          $ref: "#/components/schemas/AnalysisCells"
+        lines:
+          description: Lines to read; an analyzer declaring fewer answers its own number.
+          maximum: 3
+          minimum: 1
+          type: integer
+        seconds:
+          description: Seconds to read for; an analyzer declaring fewer reads for its own most.
+          enum:
+            - 1
+            - 2
+            - 5
+          type: integer
+        toMove:
+          enum:
+            - x
+            - o
+          type: string
+      required:
+        - cells
+        - toMove
+        - analyzer
+        - lines
+        - seconds
       type: object
     Provisional:
       description: True while the rating deviation is above 75.
@@ -2343,6 +2968,7 @@ components:
     StreamEvent:
       discriminator:
         mapping:
+          analysisSession: "#/components/schemas/AnalysisSessionEvent"
           challenge: "#/components/schemas/ChallengeCreatedEvent"
           challengeCanceled: "#/components/schemas/ChallengeCanceledEvent"
           challengeDeclined: "#/components/schemas/ChallengeDeclinedEvent"
@@ -2357,6 +2983,7 @@ components:
         - $ref: "#/components/schemas/ChallengeCreatedEvent"
         - $ref: "#/components/schemas/ChallengeCanceledEvent"
         - $ref: "#/components/schemas/ChallengeDeclinedEvent"
+        - $ref: "#/components/schemas/AnalysisSessionEvent"
     TimeControl:
       description: turn gives each turn turnTimeMs, and unused time is lost; match gives each side
         mainTimeMs for the game, adding incrementMs after each of its turns; unlimited has no clock.
@@ -2799,6 +3426,11 @@ components:
     User:
       description: discord is null for a session made without Discord.
       properties:
+        analysisLeft:
+          $ref: "#/components/schemas/AnalysisLeft"
+        analysisOptOut:
+          description: True when the user asked that their games stay out of public analysis.
+          type: boolean
         discord:
           allOf:
             - $ref: "#/components/schemas/DiscordNames"
@@ -2822,6 +3454,8 @@ components:
         - provisional
         - discord
         - liveGames
+        - analysisOptOut
+        - analysisLeft
       type: object
     WatcherLimitError:
       properties:
@@ -2862,9 +3496,99 @@ components:
       type: apiKey
 info:
   title: HeXO Arena
-  version: 0.38.0
+  version: 0.39.0
 openapi: 3.0.3
 paths:
+  /api/analysis/check:
+    post:
+      description: "For an engine the browser runs itself: the same refusal a position request meets,
+        without asking any analyzer. A caller without a session meets only the position's."
+      operationId: checkPosition
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PositionCheck"
+        required: true
+      responses:
+        "204":
+          description: No live game stands in the way.
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PositionCheckError"
+          description: The position is a live game's, or leads on from one (live_position); or the caller sits
+            in a live game (seated).
+        "413":
+          $ref: "#/components/responses/PayloadTooLarge"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+      security:
+        - sessionCookie: []
+        - {}
+      summary: Clear a position against live games.
+      tags:
+        - Analysis
+  /api/analysis/positions:
+    post:
+      description: Held up to 10 s for a reading by the named analyzer, or any ready one, which reads for
+        the asked seconds up to its own most. A kept reading answers at once and costs nothing.
+        Refused for a position a live game holds or runs on from, and to a caller seated in a live
+        game.
+      operationId: requestPositionReading
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PositionReadingRequest"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PositionReading"
+          description: The reading, a place in the queue, or a failure.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BadRequestError"
+          description: Validation failed, or the position holds two stones on a cell or a six (bad_request).
+        "401":
+          $ref: "#/components/responses/SignedInUser"
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PositionReadingConflictError"
+          description: A live game holds the position, held it a turn or two ago, or leads to it within 10
+            turns, under any turn, mirror, color swap, or shift (live_position); the caller sits in
+            a live game (seated); no ready analyzer takes it (no_analyzer); or a newer request from
+            the caller replaced it (superseded).
+        "413":
+          $ref: "#/components/responses/PayloadTooLarge"
+        "429":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PositionReadingQuotaError"
+          description: The caller's 300 positions this UTC day are spent (analysis_limit), until 00:00 UTC,
+            which Retry-After names; the analyzers' queues are full (analysis_busy), retry after 10
+            s; or a user sent more than 10 at once, then 1 every 2 s (rate_limited).
+          headers:
+            Retry-After:
+              $ref: "#/components/headers/RetryAfter"
+        "503":
+          $ref: "#/components/responses/Paused"
+      security:
+        - sessionCookie: []
+      summary: Ask an analyzer to read a position.
+      tags:
+        - Analysis
   /api/auth/discord/callback:
     get:
       description: "Requests the identify scope only and keeps the Discord id, username, and display name.
@@ -2997,10 +3721,10 @@ paths:
         - Account
     patch:
       description: Each present field replaces the stored one; an empty string clears a text field,
-        accepts and levels are replaced whole, and levels null clears them. An unknown key answers
-        400. A challenge or game outside accepts answers clock_not_accepted. A player on the website
-        picks a declared level, which gameStart.level names; challenges and tournaments play the
-        default.
+        accepts, levels, and analyzer are replaced whole, and null clears levels or withdraws the
+        analyzer. An unknown key answers 400. A challenge or game outside accepts answers
+        clock_not_accepted. A player on the website picks a declared level, which gameStart.level
+        names; challenges and tournaments play the default.
       operationId: updateAccount
       requestBody:
         content:
@@ -3027,9 +3751,60 @@ paths:
           $ref: "#/components/responses/RateLimited"
       security:
         - bearerAuth: []
-      summary: Declare the bot's about, version, repo, what it accepts, and its levels.
+      summary: Declare the bot's about, version, repo, what it accepts, its levels, and its analyzer.
       tags:
         - Account
+  /api/bot/analysis/socket:
+    get:
+      description: "Speaks htttx basic_websocket v1-alpha, the server as client, one position at a time:
+        setup with the position's stones, then move_request with previous empty, side,
+        move_time_limit, and request_id. The bot answers move_response with move.evaluation and
+        considerations up to its declared lines, best first. interrupt drops the outstanding request
+        unanswered. Analysis never counts toward the game cap."
+      operationId: openAnalysisSession
+      parameters:
+        - description: The analysis token from the analysisSession line.
+          in: query
+          name: token
+          required: true
+          schema:
+            type: string
+      responses:
+        "101":
+          description: Switching protocols; the analysis session is open, and a new connection replaces the
+            previous one. A bot with a live game is sent nothing unless it declared whilePlaying,
+            and a game's move request never waits on a reading. A reading fails when the answer
+            comes more than 3 s past move_time_limit, a line is no legal turn from the position or
+            repeats one, the move carries no evaluation, or an evaluation contradicts the board or
+            passes a win_in of 1000 or a heuristic of 1000000 either way. 3 failures within 10
+            minutes bench the analyzer for 10 minutes. heartbeat, frame sizes, stray frames, and
+            closes are as on the engine session; withdrawing the declaration closes the session.
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UnauthorizedError"
+          description: Missing, unknown, expired, or replaced analysis token.
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NotFoundError"
+          description: The bot no longer declares an analyzer.
+        "429":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RateLimitedError"
+          description: A bot dials its analysis session at most 5 at once, then 1 every 10 s (rate_limited),
+            or too many requests; a refused dial leaves an open session alone.
+          headers:
+            Retry-After:
+              $ref: "#/components/headers/RetryAfter"
+      security: []
+      summary: Open the analysis session.
+      tags:
+        - Analysis session
   /api/bot/challenge/{challengeId}/accept:
     post:
       description: Only the challenged bot may accept. The game starts at once, and both bots receive gameStart.
@@ -3268,7 +4043,8 @@ paths:
             closes with 1009 for a bot frame over 16 KiB, with 1008 after more than 10 frames in one
             session that answer no outstanding request, a malformed frame, or a protocol violation,
             and with 1008 when more than 128 KiB go unread. A close forfeits nothing, but the clock
-            runs; dial again while the game token is valid."
+            runs; dial again while the game token is valid. A move's evaluation and up to two
+            considerations, when present, are published with the finished game."
         "404":
           content:
             application/json:
@@ -3348,6 +4124,14 @@ paths:
         - description: Present as 1, narrows the roster to bots holding a stream open.
           in: query
           name: online
+          required: false
+          schema:
+            enum:
+              - "1"
+            type: string
+        - description: Present as 1, narrows the roster to bots that declare an analyzer.
+          in: query
+          name: analyzer
           required: false
           schema:
             enum:
@@ -3658,6 +4442,14 @@ paths:
           schema:
             format: date
             type: string
+        - description: Present as 1, only games a community analyzer has read whole.
+          in: query
+          name: analyzed
+          required: false
+          schema:
+            enum:
+              - "1"
+            type: string
         - description: The page, from 1 to 10; the first when absent.
           in: query
           name: page
@@ -3706,6 +4498,92 @@ paths:
       summary: Read any game.
       tags:
         - Games
+  /api/games/{gameId}/analyses:
+    get:
+      description: "Community readings, with the lines read so far, and each bot seat's own view: the
+        evaluation and considerations it sent with its moves. A page polls every 3 s while one is
+        queued or running. A game's readings are read at most once every 1 s, every caller then
+        getting one body."
+      operationId: listAnalyses
+      parameters:
+        - $ref: "#/components/parameters/GameId"
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AnalysisList"
+          description: The readings.
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AnalysisListConflictError"
+          description: The game is live (game_live); its readings open once it ends.
+        "429":
+          $ref: "#/components/responses/RateLimited"
+      security: []
+      summary: Read a finished game's readings.
+      tags:
+        - Analysis
+    post:
+      description: A community analyzer reads each position from the first turn after the opening, 2 s
+        each. A game holds 2 finished readings from different analyzers and owners, and 1 pending.
+        No analyzer reads a game its owner's account or bots played. A request waits 60 minutes for
+        an analyzer at most.
+      operationId: requestAnalysis
+      parameters:
+        - $ref: "#/components/parameters/GameId"
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AnalysisRequest"
+        required: false
+      responses:
+        "202":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CommunityAnalysis"
+          description: The request, queued.
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/SignedInUser"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AnalysisRequestConflictError"
+          description: The game has a reading pending (analysis_pending) or 2 finished (analysis_full); the
+            caller has requests pending at their cap (pending_limit); the game runs past the turn
+            cap or holds no turn to read (not_analysable); no analyzer may take it (no_analyzer); a
+            player in it opted out (opted_out); or it is live (game_live).
+        "413":
+          $ref: "#/components/responses/PayloadTooLarge"
+        "429":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AnalysisRequestQuotaError"
+          description: The caller's 10 requests this UTC day are spent (analysis_limit), until 00:00 UTC,
+            which Retry-After names; 50 games wait across the site (analysis_queue_full), retry
+            after 60 s; or too many requests (rate_limited).
+          headers:
+            Retry-After:
+              $ref: "#/components/headers/RetryAfter"
+        "503":
+          $ref: "#/components/responses/Paused"
+      security:
+        - sessionCookie: []
+      summary: Ask for a finished game to be read whole.
+      tags:
+        - Analysis
   /api/games/{gameId}/events:
     get:
       description: "Server-sent events: on open a snapshot, then a turn event per applied turn, then a
@@ -3926,6 +4804,36 @@ paths:
         - sessionCookie: []
         - {}
       summary: Who the session names.
+      tags:
+        - Auth
+    patch:
+      description: Each present field replaces the stored one. While a user is opted out, requests to read
+        their games are refused; positions on the analysis board stay readable.
+      operationId: updateMe
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MeUpdate"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+          description: The user after the change.
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/SignedInUser"
+        "413":
+          $ref: "#/components/responses/PayloadTooLarge"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+      security:
+        - sessionCookie: []
+      summary: Change the signed-in user's settings.
       tags:
         - Auth
   /api/me/export:

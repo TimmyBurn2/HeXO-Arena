@@ -98,6 +98,12 @@
         animation: fade-in var(--dur-fast) var(--ease) both;
     }
 
+    /* A line pointed at shows its stones over its marks, plainer than a
+       stone and stronger than the pending mark's ghost. */
+    .ghost.preview {
+        opacity: var(--board-preview-opacity);
+    }
+
     .numbers {
         pointer-events: none;
     }
@@ -175,6 +181,62 @@
         stroke-width: var(--board-win-w);
         stroke-linecap: round;
         vector-effect: non-scaling-stroke;
+    }
+
+    /* An analyzer's line: hollow cells in the mover's color, lettered, the
+       best line solid and the others dashed; a casing in the board's own
+       color keeps each edge clear of the cell gaps under it. */
+    .line-mark {
+        pointer-events: none;
+    }
+
+    .line-casing {
+        fill: none;
+        stroke: var(--board-bg);
+        stroke-width: var(--board-line-mark-casing-w);
+    }
+
+    .line-hex {
+        fill: var(--board-bg);
+        fill-opacity: var(--board-line-mark-fill-opacity);
+        stroke-width: var(--board-line-mark-other-w);
+        stroke-dasharray: var(--board-line-mark-dash);
+    }
+
+    .line-mark.best .line-hex {
+        stroke-width: var(--board-line-mark-w);
+        stroke-dasharray: none;
+    }
+
+    .line-x .line-hex {
+        stroke: var(--board-stone-x);
+    }
+
+    .line-o .line-hex {
+        stroke: var(--board-stone-o);
+    }
+
+    .line-letters {
+        font-family: var(--font-sans);
+        font-weight: var(--weight-display);
+        font-size: var(--board-line-letter-1);
+        text-anchor: middle;
+    }
+
+    .line-letters.letters-2 {
+        font-size: var(--board-line-letter-2);
+    }
+
+    .line-letters.letters-3 {
+        font-size: var(--board-line-letter-3);
+    }
+
+    .line-x .line-letters {
+        fill: var(--board-stone-x);
+    }
+
+    .line-o .line-letters {
+        fill: var(--board-stone-o);
     }
 
     .theme-swatch {

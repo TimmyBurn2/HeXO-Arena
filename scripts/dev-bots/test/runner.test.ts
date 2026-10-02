@@ -1,4 +1,4 @@
-import { botAccountPath, botListingSchema, botsPath, gamesPath } from '@hexo-arena/contract';
+import { analysisPositionsPath, botAccountPath, botListingSchema, botsPath, gamesPath, positionReadingSchema } from '@hexo-arena/contract';
 import { existsSync, mkdtempSync, readFileSync, rmSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -7,6 +7,7 @@ import { z } from 'zod';
 import { createQuery } from '../../../apps/server/src/db';
 import { games } from '../../../apps/server/src/db/schema';
 import { createTestApp, loginAs, mintBot, type TestApp } from '../../../apps/server/test/helpers';
+import { devAnalyzer } from '../src/analyzer';
 import { devLevels } from '../src/levels';
 import { NotADevServer, saveTokens, startDevBots, type DevBots } from '../src/runner';
 
@@ -176,6 +177,34 @@ describe('the dev bot runner', () => {
         });
         expect(created.statusCode).toBe(201);
         await until(() => lines.some((line) => /^devbot-a plays quinn as [xo] in g_\S+ at quick$/u.test(line)), 5_000);
+    });
+
+    it('reads a person\'s position on its analyzer bot through the real routes', async () => {
+        const booted = await boot(true);
+        await start();
+        const ready = async () => botListingSchema.array().parse(await (await fetch(`${origin}${botsPath}?analyzer=1`)).json());
+        let analyzers = await ready();
+        while (analyzers[0]?.analyzer?.ready !== true) {
+            await new Promise((resolve) => setTimeout(resolve, 20));
+            analyzers = await ready();
+        }
+        expect(analyzers.map((bot) => [bot.name, bot.analyzer])).toEqual([[`devbot-a`, { ...devAnalyzer, ready: true }]]);
+        const quinn = await loginAs(booted.app, `quinn`);
+        const cells = [
+            { x: 0, y: 0, side: `x` },
+            { x: 1, y: 0, side: `o` },
+            { x: 0, y: 1, side: `o` },
+        ];
+        const read = await booted.app.inject({
+            method: `POST`,
+            url: analysisPositionsPath,
+            cookies: { hexo_arena_session: quinn },
+            payload: { cells, toMove: `x`, analyzer: `devbot-a`, lines: 3, seconds: 1 },
+        });
+        expect(read.statusCode).toBe(200);
+        const reading = positionReadingSchema.parse(read.json());
+        expect(reading).toMatchObject({ status: `done`, analyzer: { name: `devbot-a` }, seconds: 1, cached: false });
+        expect(reading.status === `done` ? reading.lines.length : 0).toBe(3);
     });
 
     it('refuses a target without the dev login route and creates nothing', async () => {

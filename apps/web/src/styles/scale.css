@@ -127,6 +127,13 @@
         --analysis-mini-w: 9rem;
         --analysis-turn-w: 2.25rem;
         --analysis-tool-label-w: 5.5rem;
+        --analysis-bar-w: 0.75rem;
+        --analysis-bar-h: 0.5rem;
+        --analysis-value-w: 6.5rem;
+        --analysis-letter-w: 1.5rem;
+        --analysis-letter-h: 1.7rem;
+        /* a line or the eval bar waiting for its reading */
+        --analysis-held-opacity: 0.4;
         --sheet-peek-h: 4.5rem;
         --sheet-peek-replay-h: 8.25rem;
         --swatch-size: 0.875rem;
@@ -181,6 +188,19 @@
         --board-frontier-dash: 5 4;
         /* the pending mark previews its stone at this strength */
         --board-ghost-opacity: 0.35;
+        /* a line pointed at previews its stones at this strength */
+        --board-preview-opacity: 0.7;
+        /* an analyzer's line on the board: the best one's edge, the
+           others' dashed edge, the casing round both, and how much of the
+           cell under it the hollow cell lets through */
+        --board-line-mark-w: 3.5px;
+        --board-line-mark-other-w: 2.5px;
+        --board-line-mark-dash: 5 4;
+        --board-line-mark-casing-w: 7px;
+        --board-line-mark-fill-opacity: 0.55;
+        --board-line-letter-1: 0.9375rem;
+        --board-line-letter-2: 0.75rem;
+        --board-line-letter-3: 0.625rem;
         /* a pattern's unlit cells, and a guest's empty rosette */
         --sigil-trace-opacity: 0.2;
         --sigil-guest-opacity: 0.35;

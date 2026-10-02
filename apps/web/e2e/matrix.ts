@@ -94,6 +94,8 @@ const longNamed: World[`me`] = {
     provisional: false,
     discord: { username: `owner.of.sealbot.and.two.more.xy`, displayName: `The Owner Of Sealbot And Two Mor` },
     liveGames: [],
+    analysisOptOut: false,
+    analysisLeft: { positions: 300, games: 10 },
 };
 const welcoming = (overrides: Partial<World> = {}) => world({ me: null, signup, ...overrides });
 
@@ -124,7 +126,7 @@ export const shots: readonly Shot[] = [
     {
         name: `home-your-games`,
         path: `/`,
-        world: world({ live: liveGames, me: { kind: `user`, name: `quinn`, rating: 1503, provisional: false, discord: null, liveGames: liveGames.filter((game) => game.players.x.name === `quinn`) } }),
+        world: world({ live: liveGames, me: { kind: `user`, name: `quinn`, rating: 1503, provisional: false, discord: null, liveGames: liveGames.filter((game) => game.players.x.name === `quinn`), analysisOptOut: false, analysisLeft: { positions: 300, games: 10 } } }),
         ready: `.your-game`,
         framed: true,
     },
@@ -155,7 +157,7 @@ export const shots: readonly Shot[] = [
     {
         name: `ladder-settling`,
         path: `/ladder`,
-        world: world({ me: { kind: `user`, name: `newcomer`, rating: 1000, provisional: true, discord: null, liveGames: [] } }),
+        world: world({ me: { kind: `user`, name: `newcomer`, rating: 1000, provisional: true, discord: null, liveGames: [], analysisOptOut: false, analysisLeft: { positions: 300, games: 10 } } }),
         ready: `.ladder-you`,
         framed: true,
     },
@@ -178,7 +180,7 @@ export const shots: readonly Shot[] = [
     {
         name: `menu-identity-provisional`,
         path: `/profile`,
-        world: world({ me: { kind: `user`, name: `quietowner`, rating: 1420, provisional: true, discord: null, liveGames: [] } }),
+        world: world({ me: { kind: `user`, name: `quietowner`, rating: 1420, provisional: true, discord: null, liveGames: [], analysisOptOut: false, analysisLeft: { positions: 300, games: 10 } } }),
         ready: `h1`,
         framed: true,
         after: openIdentity,
@@ -263,7 +265,7 @@ export const shots: readonly Shot[] = [
     {
         name: `bot-visitor`,
         path: `/bots/sealbot`,
-        world: world({ me: { kind: `user`, name: `ana`, rating: 1402, provisional: false, discord: null, liveGames: [] } }),
+        world: world({ me: { kind: `user`, name: `ana`, rating: 1402, provisional: false, discord: null, liveGames: [], analysisOptOut: false, analysisLeft: { positions: 300, games: 10 } } }),
         ready: `h1`,
         framed: true,
     },
@@ -332,7 +334,7 @@ export const shots: readonly Shot[] = [
     {
         name: `profile-delete-refused`,
         path: `/profile`,
-        world: world({ live: liveGames, me: { kind: `user`, name: `quinn`, rating: 1503, provisional: false, discord: null, liveGames: liveGames.filter((game) => game.players.x.name === `quinn`) } }),
+        world: world({ live: liveGames, me: { kind: `user`, name: `quinn`, rating: 1503, provisional: false, discord: null, liveGames: liveGames.filter((game) => game.players.x.name === `quinn`), analysisOptOut: false, analysisLeft: { positions: 300, games: 10 } } }),
         ready: `.rating-chart-plot`,
         framed: true,
         after: async (page) => {
@@ -416,6 +418,41 @@ export const shots: readonly Shot[] = [
         },
     },
     { name: `analysis-live`, path: `/analysis?game=running`, world: world(), ready: `.empty`, framed: true },
+    {
+        name: `analysis-reading`,
+        path: `/analysis?game=long-finished&turn=12`,
+        world: world(),
+        ready: `.an-tree .an-row`,
+        framed: true,
+        board: true,
+        after: async (page) => {
+            await page.getByRole(`switch`, { name: `Analyze` }).check();
+            await page.locator(`button.an-line`).nth(2).waitFor();
+            await page.locator(`button.an-line`).nth(1).hover();
+        },
+    },
+    {
+        name: `analysis-settings`,
+        path: `/analysis?game=long-finished&turn=12`,
+        world: world(),
+        ready: `.an-tree .an-row`,
+        framed: true,
+        after: async (page) => {
+            await page.getByRole(`button`, { name: `Analysis settings` }).click();
+            await page.locator(`.an-analyzer`).first().waitFor();
+        },
+    },
+    {
+        name: `analysis-refused`,
+        path: `/analysis?game=long-finished&turn=12`,
+        world: world({ positions: { kind: `refused`, status: 409, code: `live_position` } }),
+        ready: `.an-tree .an-row`,
+        framed: true,
+        after: async (page) => {
+            await page.getByRole(`switch`, { name: `Analyze` }).check();
+            await page.locator(`.an-trouble`).waitFor();
+        },
+    },
     { name: `analysis-missing`, path: `/analysis?game=nope`, world: world(), ready: `.empty`, framed: true },
     { name: `analysis-loading`, path: `/analysis?game=long-finished`, world: world({ stall: true }), ready: `.an-message[aria-busy]`, framed: true },
     { name: `analysis-error`, path: `/analysis?game=long-finished`, world: world({ broken: true }), ready: `.empty`, framed: true },

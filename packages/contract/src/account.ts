@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { analysisStatusSchema } from './analysis';
 import { acceptsSchema } from './api';
 import { axialCoordSchema } from './board';
 import { gameCellSchema } from './games';
@@ -56,6 +57,7 @@ export const accountExportSchema = z
             discordId: z.string(),
             createdAt: time,
             bannedAt: time.nullable(),
+            analysisOptOut: z.boolean(),
         }),
         sessions: z.array(
             z.object({
@@ -76,6 +78,7 @@ export const accountExportSchema = z
                 repoUrl: z.string().nullable(),
                 accepts: acceptsSchema.nullable(),
                 levels: levelsSchema.nullable(),
+                analyzer: z.object({ maxSeconds: z.number().int(), lines: z.number().int(), whilePlaying: z.boolean() }).nullable(),
                 delistedAt: time.nullable(),
                 deletedAt: time.nullable(),
                 rating: exportedRatingSchema.nullable(),
@@ -122,6 +125,9 @@ export const accountExportSchema = z
                 decidedAt: time.nullable(),
             }),
         ),
+        analyses: z
+            .array(z.object({ id: z.string(), gameId: z.string(), status: analysisStatusSchema, requestedAt: time }))
+            .meta({ description: `Whole-game readings the account asked for.` }),
         moderation: z.array(z.object({ action: z.string(), target: z.string().nullable(), reason: z.string(), at: time })),
     })
     .meta({

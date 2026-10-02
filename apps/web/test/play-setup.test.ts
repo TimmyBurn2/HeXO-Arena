@@ -28,6 +28,7 @@ const bot = (name: string, rating: number, extra: Partial<BotListing> = {}): Bot
     provisional: false,
     liveGames: 0,
     levels: null,
+    analyzer: null,
     accepts: full,
     ...extra,
 });

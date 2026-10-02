@@ -50,6 +50,7 @@ function latest(gameId: string): FinishedGameEntry {
         finishedAt: `2026-10-01T10:00:00.000Z`,
         rated: true,
         voided: false,
+        analyses: 0,
     };
 }
 

@@ -22,7 +22,7 @@ const results = [
     [`x`, `six-in-a-row`],
     [`o`, `timeout`],
 ] as const;
-const quinn: Me = { kind: `user`, name: `quinn`, rating: 1503, provisional: false, discord: null, liveGames: [] };
+const quinn: Me = { kind: `user`, name: `quinn`, rating: 1503, provisional: false, discord: null, liveGames: [], analysisOptOut: false, analysisLeft: { positions: 300, games: 10 } };
 const seats = [
     [`watching`, null],
     [`seated`, quinn],

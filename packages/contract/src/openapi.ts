@@ -3,6 +3,43 @@ import { stringify } from 'yaml';
 import type { ZodType } from 'zod';
 import { errorBodySchema } from './api';
 import {
+    analysesMemoMs,
+    analysesPerGame,
+    analysesPollMs,
+    analysisCheckPath,
+    analysisGraceMs,
+    analysisHeuristicLimit,
+    analysisListConflictErrorCodes,
+    analysisListSchema,
+    analysisPositionsPath,
+    analysisQueueCap,
+    analysisQueueExpiryMs,
+    analysisQueueRetryAfterSeconds,
+    analysisRequestConflictErrorCodes,
+    analysisRequestQuotaErrorCodes,
+    analysisRequestSchema,
+    analysisRequestsPerUserDay,
+    analysisWinInLimit,
+    analyzerBenchMs,
+    analyzerStrikeLimit,
+    analyzerStrikeWindowMs,
+    botAnalysisSocketPath,
+    communityAnalysisSchema,
+    gameAnalysesPath,
+    liveGuardAheadTurns,
+    meUpdateRequestSchema,
+    positionBusyRetryAfterSeconds,
+    positionCheckErrorCodes,
+    positionCheckRequestSchema,
+    positionHoldMs,
+    positionReadingConflictErrorCodes,
+    positionReadingQuotaErrorCodes,
+    positionReadingRequestSchema,
+    positionReadingSchema,
+    positionReadingsPerUserDay,
+    positionRequestLimit,
+    userMeSchema,
+    wholeGameSeconds,
     accountDeclarationSchema,
     accountExportLimit,
     accountExportSchema,
@@ -213,6 +250,12 @@ const challengeForbiddenError = errorBodySchema([...botForbiddenErrorCodes, ...c
 const challengeAcceptError = errorBodySchema([...badRequestErrorCodes, ...challengeAcceptErrorCodes]).meta({
     id: `ChallengeAcceptError`,
 });
+const positionCheckError = errorBodySchema(positionCheckErrorCodes).meta({ id: `PositionCheckError` });
+const positionReadingConflictError = errorBodySchema(positionReadingConflictErrorCodes).meta({ id: `PositionReadingConflictError` });
+const positionReadingQuotaError = errorBodySchema([...positionReadingQuotaErrorCodes, ...rateLimitedErrorCodes]).meta({ id: `PositionReadingQuotaError` });
+const analysisRequestConflictError = errorBodySchema(analysisRequestConflictErrorCodes).meta({ id: `AnalysisRequestConflictError` });
+const analysisRequestQuotaError = errorBodySchema([...analysisRequestQuotaErrorCodes, ...rateLimitedErrorCodes]).meta({ id: `AnalysisRequestQuotaError` });
+const analysisListConflictError = errorBodySchema(analysisListConflictErrorCodes).meta({ id: `AnalysisListConflictError` });
 
 // A raw component cannot hold a zod schema, so it points at a named one;
 // each such schema also goes to the generator, or its $ref would dangle.
@@ -240,6 +283,7 @@ function registerSharedComponents(registry: OpenAPIRegistry, surface: `site` | `
             unauthorizedError,
         ),
         botUnauthorized: response(`BotUnauthorized`, `Missing, unknown, or rotated bot token.`, unauthorizedError),
+        signedInUser: response(`SignedInUser`, `No signed-in user: a guest, or no session at all.`, unauthorizedError),
         banned: response(
             `Banned`,
             `The bot's owner is banned; after the ban lifts, the owner must rotate the token.`,
@@ -453,6 +497,27 @@ function registerSiteSurface(registry: OpenAPIRegistry, shared: SharedComponents
                 description: `The session's user or guest, or null.`,
                 content: { 'application/json': { schema: meSchema } },
             },
+        },
+    });
+
+    registry.registerPath({
+        method: 'patch',
+        path: mePath,
+        summary: `Change the signed-in user's settings.`,
+        operationId: 'updateMe',
+        tags: ['Auth'],
+        security: [{ sessionCookie: [] }],
+        description: `Each present field replaces the stored one. While a user is opted out, requests to read their games are refused; positions on the analysis board stay readable.`,
+        request: {
+            body: { required: true, content: { 'application/json': { schema: meUpdateRequestSchema } } },
+        },
+        responses: {
+            200: {
+                description: `The user after the change.`,
+                content: { 'application/json': { schema: userMeSchema } },
+            },
+            400: shared.badRequest,
+            401: shared.signedInUser,
         },
     });
 
@@ -818,6 +883,7 @@ function registerSiteSurface(registry: OpenAPIRegistry, shared: SharedComponents
 
     registerTournamentPaths(registry, shared);
     registerPlayerPaths(registry, shared);
+    registerAnalysisPaths(registry, shared);
 
     registry.registerPath({
         method: 'post',
@@ -879,6 +945,117 @@ function registerPlayerPaths(registry: OpenAPIRegistry, shared: SharedComponents
             200: { description: `The history.`, content: { 'application/json': { schema: ratingHistorySchema } } },
             400: shared.badRequest,
             404: shared.notFound,
+        },
+    });
+}
+
+function registerAnalysisPaths(registry: OpenAPIRegistry, shared: SharedComponents) {
+    const untilMidnight = `until 00:00 UTC, which Retry-After names`;
+
+    registry.registerPath({
+        method: 'post',
+        path: analysisPositionsPath,
+        summary: 'Ask an analyzer to read a position.',
+        operationId: 'requestPositionReading',
+        tags: ['Analysis'],
+        security: [{ sessionCookie: [] }],
+        description: `Held up to ${seconds(positionHoldMs)} s for a reading by the named analyzer, or any ready one, which reads for the asked seconds up to its own most. A kept reading answers at once and costs nothing. Refused for a position a live game holds or runs on from, and to a caller seated in a live game.`,
+        request: {
+            body: { required: true, content: { 'application/json': { schema: positionReadingRequestSchema } } },
+        },
+        responses: {
+            200: {
+                description: `The reading, a place in the queue, or a failure.`,
+                content: { 'application/json': { schema: positionReadingSchema } },
+            },
+            400: {
+                description: `Validation failed, or the position holds two stones on a cell or a six (bad_request).`,
+                content: { 'application/json': { schema: badRequestError } },
+            },
+            401: shared.signedInUser,
+            409: {
+                description: `A live game holds the position, held it a turn or two ago, or leads to it within ${String(liveGuardAheadTurns)} turns, under any turn, mirror, color swap, or shift (live_position); the caller sits in a live game (seated); no ready analyzer takes it (no_analyzer); or a newer request from the caller replaced it (superseded).`,
+                content: { 'application/json': { schema: positionReadingConflictError } },
+            },
+            429: {
+                description: `The caller's ${String(positionReadingsPerUserDay)} positions this UTC day are spent (analysis_limit), ${untilMidnight}; the analyzers' queues are full (analysis_busy), retry after ${String(positionBusyRetryAfterSeconds)} s; or a user sent more than ${rateText(positionRequestLimit)} (rate_limited).`,
+                headers: { 'Retry-After': shared.retryAfter },
+                content: { 'application/json': { schema: positionReadingQuotaError } },
+            },
+            503: shared.paused,
+        },
+    });
+
+    registry.registerPath({
+        method: 'post',
+        path: analysisCheckPath,
+        summary: 'Clear a position against live games.',
+        operationId: 'checkPosition',
+        tags: ['Analysis'],
+        security: [{ sessionCookie: [] }, {}],
+        description: `For an engine the browser runs itself: the same refusal a position request meets, without asking any analyzer. A caller without a session meets only the position's.`,
+        request: {
+            body: { required: true, content: { 'application/json': { schema: positionCheckRequestSchema } } },
+        },
+        responses: {
+            204: { description: `No live game stands in the way.` },
+            400: shared.badRequest,
+            409: {
+                description: `The position is a live game's, or leads on from one (live_position); or the caller sits in a live game (seated).`,
+                content: { 'application/json': { schema: positionCheckError } },
+            },
+        },
+    });
+
+    registry.registerPath({
+        method: 'post',
+        path: gameAnalysesPath,
+        summary: 'Ask for a finished game to be read whole.',
+        operationId: 'requestAnalysis',
+        tags: ['Analysis'],
+        security: [{ sessionCookie: [] }],
+        description: `A community analyzer reads each position from the first turn after the opening, ${String(wholeGameSeconds)} s each. A game holds ${String(analysesPerGame.done)} finished readings from different analyzers and owners, and ${String(analysesPerGame.pending)} pending. No analyzer reads a game its owner's account or bots played. A request waits ${String(analysisQueueExpiryMs / 60_000)} minutes for an analyzer at most.`,
+        parameters: [shared.gameId],
+        request: {
+            body: { required: false, content: { 'application/json': { schema: analysisRequestSchema } } },
+        },
+        responses: {
+            202: {
+                description: `The request, queued.`,
+                content: { 'application/json': { schema: communityAnalysisSchema } },
+            },
+            400: shared.badRequest,
+            401: shared.signedInUser,
+            404: shared.notFound,
+            409: {
+                description: `The game has a reading pending (analysis_pending) or ${String(analysesPerGame.done)} finished (analysis_full); the caller has requests pending at their cap (pending_limit); the game runs past the turn cap or holds no turn to read (not_analysable); no analyzer may take it (no_analyzer); a player in it opted out (opted_out); or it is live (game_live).`,
+                content: { 'application/json': { schema: analysisRequestConflictError } },
+            },
+            429: {
+                description: `The caller's ${String(analysisRequestsPerUserDay)} requests this UTC day are spent (analysis_limit), ${untilMidnight}; ${String(analysisQueueCap)} games wait across the site (analysis_queue_full), retry after ${String(analysisQueueRetryAfterSeconds)} s; or too many requests (rate_limited).`,
+                headers: { 'Retry-After': shared.retryAfter },
+                content: { 'application/json': { schema: analysisRequestQuotaError } },
+            },
+            503: shared.paused,
+        },
+    });
+
+    registry.registerPath({
+        method: 'get',
+        path: gameAnalysesPath,
+        summary: `Read a finished game's readings.`,
+        operationId: 'listAnalyses',
+        tags: ['Analysis'],
+        security: [],
+        description: `Community readings, with the lines read so far, and each bot seat's own view: the evaluation and considerations it sent with its moves. A page polls every ${seconds(analysesPollMs)} s while one is queued or running. A game's readings are read at most once every ${seconds(analysesMemoMs)} s, every caller then getting one body.`,
+        parameters: [shared.gameId],
+        responses: {
+            200: { description: `The readings.`, content: { 'application/json': { schema: analysisListSchema } } },
+            404: shared.notFound,
+            409: {
+                description: `The game is live (game_live); its readings open once it ends.`,
+                content: { 'application/json': { schema: analysisListConflictError } },
+            },
         },
     });
 }
@@ -982,6 +1159,13 @@ function registerBotSurface(registry: OpenAPIRegistry, shared: SharedComponents)
                 description: `Present as 1, narrows the roster to bots holding a stream open.`,
                 schema: { type: 'string', enum: ['1'] },
             },
+            {
+                name: 'analyzer',
+                in: 'query',
+                required: false,
+                description: `Present as 1, narrows the roster to bots that declare an analyzer.`,
+                schema: { type: 'string', enum: ['1'] },
+            },
         ],
         responses: {
             200: {
@@ -1051,12 +1235,12 @@ function registerBotSurface(registry: OpenAPIRegistry, shared: SharedComponents)
     registry.registerPath({
         method: 'patch',
         path: botAccountPath,
-        summary: `Declare the bot's about, version, repo, what it accepts, and its levels.`,
+        summary: `Declare the bot's about, version, repo, what it accepts, its levels, and its analyzer.`,
         operationId: 'updateAccount',
         tags: ['Account'],
         security: [{ bearerAuth: [] }],
         description: [
-            `Each present field replaces the stored one; an empty string clears a text field, accepts and levels are replaced whole, and levels null clears them. An unknown key answers 400. A challenge or game outside accepts answers clock_not_accepted.`,
+            `Each present field replaces the stored one; an empty string clears a text field, accepts, levels, and analyzer are replaced whole, and null clears levels or withdraws the analyzer. An unknown key answers 400. A challenge or game outside accepts answers clock_not_accepted.`,
             `A player on the website picks a declared level, which gameStart.level names; challenges and tournaments play the default.`,
         ].join(` `),
         request: {
@@ -1116,6 +1300,7 @@ function registerBotSurface(registry: OpenAPIRegistry, shared: SharedComponents)
                     `No frame the server sends exceeds ${kib(serverLineLimitBytes)} KiB.`,
                     `It closes with 1009 for a bot frame over ${kib(engineFrameLimitBytes)} KiB, with 1008 after more than ${String(engineStrayFrameCap)} frames in one session that answer no outstanding request, a malformed frame, or a protocol violation, and with 1008 when more than ${kib(streamBacklogLimitBytes)} KiB go unread.`,
                     `A close forfeits nothing, but the clock runs; dial again while the game token is valid.`,
+                    `A move's evaluation and up to two considerations, when present, are published with the finished game.`,
                 ].join(` `),
             },
             404: {
@@ -1124,6 +1309,54 @@ function registerBotSurface(registry: OpenAPIRegistry, shared: SharedComponents)
             },
             429: {
                 description: `A seat dials at most ${rateText(engineDialLimit)} (rate_limited), or too many requests; a refused dial leaves an open session alone. Retry after Retry-After.`,
+                headers: { 'Retry-After': shared.retryAfter },
+                content: { 'application/json': { schema: rateLimitedError } },
+            },
+        },
+    });
+
+    registry.registerPath({
+        method: 'get',
+        path: botAnalysisSocketPath,
+        summary: 'Open the analysis session.',
+        operationId: 'openAnalysisSession',
+        tags: ['Analysis session'],
+        security: [],
+        description: [
+            `Speaks htttx basic_websocket v1-alpha, the server as client, one position at a time: setup with the position's stones, then move_request with previous empty, side, move_time_limit, and request_id.`,
+            `The bot answers move_response with move.evaluation and considerations up to its declared lines, best first.`,
+            `interrupt drops the outstanding request unanswered.`,
+            `Analysis never counts toward the game cap.`,
+        ].join(` `),
+        parameters: [
+            {
+                name: 'token',
+                in: 'query',
+                required: true,
+                description: `The analysis token from the analysisSession line.`,
+                schema: { type: 'string' },
+            },
+        ],
+        responses: {
+            101: {
+                description: [
+                    `Switching protocols; the analysis session is open, and a new connection replaces the previous one.`,
+                    `A bot with a live game is sent nothing unless it declared whilePlaying, and a game's move request never waits on a reading.`,
+                    `A reading fails when the answer comes more than ${seconds(analysisGraceMs)} s past move_time_limit, a line is no legal turn from the position or repeats one, the move carries no evaluation, or an evaluation contradicts the board or passes a win_in of ${String(analysisWinInLimit)} or a heuristic of ${String(analysisHeuristicLimit)} either way.`,
+                    `${String(analyzerStrikeLimit)} failures within ${String(analyzerStrikeWindowMs / 60_000)} minutes bench the analyzer for ${String(analyzerBenchMs / 60_000)} minutes.`,
+                    `heartbeat, frame sizes, stray frames, and closes are as on the engine session; withdrawing the declaration closes the session.`,
+                ].join(` `),
+            },
+            401: {
+                description: `Missing, unknown, expired, or replaced analysis token.`,
+                content: { 'application/json': { schema: unauthorizedError } },
+            },
+            404: {
+                description: `The bot no longer declares an analyzer.`,
+                content: { 'application/json': { schema: notFoundError } },
+            },
+            429: {
+                description: `A bot dials its analysis session at most ${rateText(engineDialLimit)} (rate_limited), or too many requests; a refused dial leaves an open session alone.`,
                 headers: { 'Retry-After': shared.retryAfter },
                 content: { 'application/json': { schema: rateLimitedError } },
             },

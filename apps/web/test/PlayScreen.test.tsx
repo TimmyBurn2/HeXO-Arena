@@ -19,6 +19,7 @@ const bot = (name: string, rating: number, extra: Partial<BotListing> = {}): Bot
     provisional: false,
     liveGames: 0,
     levels: null,
+    analyzer: null,
     accepts: full,
     ...extra,
 });
@@ -43,7 +44,7 @@ const levels = {
 };
 const withLevels = roster.map((listed) => (listed.name === `hextide` ? { ...listed, levels } : listed));
 
-const quinn: Me = { kind: `user`, name: `quinn`, rating: 1503, provisional: false, discord: null, liveGames: [] };
+const quinn: Me = { kind: `user`, name: `quinn`, rating: 1503, provisional: false, discord: null, liveGames: [], analysisOptOut: false, analysisLeft: { positions: 300, games: 10 } };
 const snapshot = {
     gameId: `g1`,
     players: {
@@ -569,7 +570,7 @@ describe('PlayScreen', () => {
             };
         };
         const liveGames = [game(`g1`, `hextide`, `x`), game(`g2`, `pebble`, `o`), game(`g3`, `lantern`, `x`)];
-        serve({ me: { kind: `user`, name: `quinn`, rating: 1503, provisional: false, discord: null, liveGames }, start: refused(400, `human_busy`) });
+        serve({ me: { kind: `user`, name: `quinn`, rating: 1503, provisional: false, discord: null, liveGames, analysisOptOut: false, analysisLeft: { positions: 300, games: 10 } }, start: refused(400, `human_busy`) });
         render(<PlayScreen />);
         await ready();
         const sessionReads = () => vi.mocked(fetch).mock.calls.filter(([url]) => url === `/api/me`).length;

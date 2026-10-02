@@ -17,6 +17,7 @@ export interface ErasureDeps {
     presence: Pick<PresenceRegistry, `close`>;
     challenges: Pick<ChallengeRegistry, `withdrawFor`>;
     tournaments: Pick<TournamentScheduler, `withdraw`>;
+    analysis: { withdraw: (botId: string) => void };
 }
 
 /**
@@ -31,6 +32,7 @@ export function eraseUser(deps: ErasureDeps, tx: Query, userId: string): UserDel
     for (const botId of liveBotIdsOf(tx, userId)) {
         aborted += deps.games.abortForBot(botId);
         deps.presence.close(botId);
+        deps.analysis.withdraw(botId);
         deps.challenges.withdrawFor(botId);
         deps.tournaments.withdraw(botId, `deleted`);
     }
