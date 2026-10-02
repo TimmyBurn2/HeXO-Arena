@@ -255,3 +255,17 @@ export function gameMeta(headline: GameHeadline): PageMeta {
     }
     return { title, description: resultSentence(headline, headline.names) };
 }
+
+/** A finished game's headline, all an analysis page names of the game it opens. */
+export type FinishedHeadline = Extract<GameHeadline, { readonly status: `finished` }>;
+
+/** The analysis board's meta: the board alone, or the finished game it opens, named as its own page names it. */
+export function analysisMeta(game?: FinishedHeadline): PageMeta {
+    if (game === undefined) {
+        return {
+            title: pageTitle(`Analysis`),
+            description: `Play HeXO turns for both sides, step through finished games, set up positions, and read or write HTTTX notation`,
+        };
+    }
+    return { title: pageTitle(`Analysis: ${game.names.x} vs ${game.names.o}`), description: resultSentence(game, game.names) };
+}

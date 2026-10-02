@@ -21,6 +21,9 @@ const envShape = z.object({
     // Exactly `1` makes SIGTERM stop at once like SIGINT: tsx watch
     // restarts with SIGTERM and kills 5 s later, so a drain only delays them.
     DEV_FAST_STOP: z.string().default(``),
+    // Exactly `on` takes reports through the site's form; any other value
+    // leaves the form's route unregistered and the site without the form.
+    REPORT_FORM: z.string().default(``),
     // The container mounts a private tmpfs at /run/hexo-arena; the default
     // keeps a bare `pnpm dev` beside the database.
     ADMIN_SOCKET_PATH: z.string().min(1).default(`data/run/admin.sock`),
@@ -80,10 +83,11 @@ const envSchema = envShape
         message: `PUBLIC_ORIGIN must be an https origin with no path when NODE_ENV is production`,
         path: [`PUBLIC_ORIGIN`],
     })
-    .transform(({ DEV_LOGIN, DEV_FAST_STOP, TRUSTED_PROXY, ...env }) => ({
+    .transform(({ DEV_LOGIN, DEV_FAST_STOP, REPORT_FORM, TRUSTED_PROXY, ...env }) => ({
         ...env,
         DEV_LOGIN: DEV_LOGIN === `1`,
         DEV_FAST_STOP: DEV_FAST_STOP === `1`,
+        REPORT_FORM: REPORT_FORM === `on`,
         TRUSTED_PROXY: TRUSTED_PROXY === `` ? null : TRUSTED_PROXY,
     }));
 

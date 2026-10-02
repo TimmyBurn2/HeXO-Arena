@@ -1,5 +1,6 @@
 import { legalPages } from '@hexo-arena/contract';
 import { beforeEach } from 'vitest';
+import { reportForm } from '../src/report-form';
 import { onlyLegal } from './legal-deploy';
 
 // jsdom ships the dialog element without its show methods, and its
@@ -28,6 +29,9 @@ if (typeof Element !== `undefined`) {
 
 // The repository's deployment has every legal document; a test about one
 // missing serves its own.
+// It takes reports through the site's form too; a test about one that
+// does not turns the form off.
 beforeEach(() => {
     onlyLegal(...legalPages);
+    reportForm.reset(true);
 });

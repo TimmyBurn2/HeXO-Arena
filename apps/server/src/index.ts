@@ -36,6 +36,7 @@ const { app, admin, drain: drainApp } = await buildApp({
     publicOrigin: env.PUBLIC_ORIGIN,
     trustedProxy: env.TRUSTED_PROXY,
     ...(env.WEB_INDEX_PATH !== `` && { webIndexPath: env.WEB_INDEX_PATH }),
+    reportForm: env.REPORT_FORM,
     ...(env.BACKUP_DIR !== `` && { backup: { dir: env.BACKUP_DIR, keep: env.BACKUP_KEEP } }),
     // Kept a day past the oldest backup, which a restore may bring back.
     erasures: { path: erasureJournalPath(env.DATABASE_PATH), keepDays: env.BACKUP_KEEP + 1 },

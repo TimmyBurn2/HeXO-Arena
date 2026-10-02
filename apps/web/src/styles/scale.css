@@ -120,6 +120,13 @@
         --topbar-h-sm: 3.75rem;
         --tabbar-h: 3.5rem;
         --drawer-w: 21rem;
+        --analysis-panel-w: 25rem;
+        --analysis-panel-narrow-w: 20rem;
+        --analysis-phone-board-h: 26rem;
+        --analysis-dialog-w: 36rem;
+        --analysis-mini-w: 9rem;
+        --analysis-turn-w: 2.25rem;
+        --analysis-tool-label-w: 5.5rem;
         --sheet-peek-h: 4.5rem;
         --sheet-peek-replay-h: 8.25rem;
         --swatch-size: 0.875rem;

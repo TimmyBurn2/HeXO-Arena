@@ -10,10 +10,12 @@ import {
     signupMaxAgeSeconds,
 } from '@hexo-arena/contract';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { analysisStorageKey } from '../src/analysis/storage-key';
 import { boardSettingsStorageKey } from '../src/board/board-settings';
 import { drawerPinnedStorageKey } from '../src/game/use-drawer';
 import { legalStore } from '../src/legal/documents';
 import { playStorageKey } from '../src/play/setup';
+import { reportForm } from '../src/report-form';
 import { LegalScreen } from '../src/screens/LegalScreen';
 import { themeStorageKey } from '../src/theme/themes';
 import { deploy, details, template } from './legal-deploy';
@@ -168,6 +170,7 @@ describe('LegalScreen', () => {
         expect(storage).toContain(`The cookie ${oauthCookieName}, set when you start a sign-in with Discord`);
         expect(storage).toContain(`It lasts ${String(oauthMaxAgeSeconds / 60)} minutes, or until Discord sends you back.`);
         expect(storage).toContain(`under ${themeStorageKey}, ${boardSettingsStorageKey}, ${drawerPinnedStorageKey}, and ${playStorageKey}:`);
+        expect(storage).toContain(`Session storage (sessionStorage) under ${analysisStorageKey}: the turns and variations on the analysis board`);
         expect(section(`Playing as a guest`).textContent).toContain(
             `when you end it or sign in with Discord, when the server restarts, or after ${String(guestIdleSeconds / 3_600)} hours without a request while no game runs.`,
         );
@@ -235,6 +238,38 @@ describe('LegalScreen', () => {
         expect(section(`Playing as a guest`).textContent).toContain(
             `Guest games are unrated and join the public record like every other game, shown and kept under the random label, which is all a game keeps of a guest`,
         );
+    });
+
+    it('name the report form and its page in the privacy policy, the terms, and the imprint only where the deployment takes reports through it', async () => {
+        deploy(details);
+        render(<LegalScreen page="terms" />);
+        await screen.findByRole(`heading`, { name: `Reporting` });
+        expect(section(`Reporting`).textContent).toContain(`Report unlawful content or abuse with the report form, linked at the foot of every page, or write to contact@arena.example`);
+        cleanup();
+        render(<LegalScreen page="imprint" />);
+        await screen.findByRole(`heading`, { name: `Reporting content` });
+        expect(within(section(`Reporting content`)).getByRole(`link`, { name: `report form` }).getAttribute(`href`)).toBe(`/report`);
+        cleanup();
+        reportForm.reset(false);
+        render(<LegalScreen page="privacy" />);
+        await screen.findByRole(`heading`, { name: `Writing to the operator` });
+        expect(screen.queryByRole(`heading`, { name: `Reports` })).toBe(null);
+        expect(within(screen.getByRole(`navigation`, { name: `On this page` })).queryByRole(`link`, { name: `Reports` })).toBe(null);
+        expect(section(`Writing to the operator`).textContent).toContain(`used to answer you or to handle your report`);
+        expect(screen.queryByRole(`link`, { name: `report form` })).toBe(null);
+        expect(document.body.textContent).not.toContain(`{{`);
+        cleanup();
+        render(<LegalScreen page="terms" />);
+        await screen.findByRole(`heading`, { name: `Reporting` });
+        expect(section(`Reporting`).textContent).toBe(
+            `ReportingReport unlawful content or abuse by writing to contact@arena.example with the link and what is wrong and why. You get a confirmation, and a decision where you leave an email address. In an emergency, call the police first.`,
+        );
+        expect(within(section(`Reporting`)).getByRole(`link`, { name: `contact@arena.example` }).getAttribute(`href`)).toBe(`mailto:contact@arena.example`);
+        cleanup();
+        render(<LegalScreen page="imprint" />);
+        await screen.findByRole(`heading`, { name: `Reporting content` });
+        expect(section(`Reporting content`).textContent).toBe(`Reporting contentReport unlawful content or abuse to contact@arena.example; Reporting in the Terms of use says what to include.`);
+        expect(screen.queryByRole(`link`, { name: `report form` })).toBe(null);
     });
 
     it('run the terms under the operator name and email, needing no Impressum, and link the privacy policy section on deletion', async () => {

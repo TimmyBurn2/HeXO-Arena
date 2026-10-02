@@ -213,6 +213,7 @@ host.
 | `ADMIN_ACTOR` | the name audit rows give the operator; default `operator` |
 | `BACKUP_KEEP` | how many nightly backups to keep; default 14 |
 | `BACKUP_HOUR_UTC` | the UTC hour of the nightly backup and purge; default 3 |
+| `REPORT_FORM` | `on` opens the report form at `/report`, its links, and `POST /api/reports`; default off, where the legal texts name the contact email alone |
 
 ```sh
 chmod 0600 ~/hexo-arena/.env ~/hexo-arena/hexo-arena.env

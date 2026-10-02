@@ -27,5 +27,10 @@ Write in English or German.
 
 ## Reporting content
 
+{{#site.reportForm}}
 Report unlawful content or abuse with the [report form](/report), or to [{{operator.email}}](mailto:{{operator.email}});
+{{/site.reportForm}}
+{{^site.reportForm}}
+Report unlawful content or abuse to [{{operator.email}}](mailto:{{operator.email}});
+{{/site.reportForm}}
 [Reporting](/legal/terms#reporting) in the Terms of use says what to include.

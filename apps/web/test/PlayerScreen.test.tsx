@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { reportForm } from '../src/report-form';
 import { PlayerScreen } from '../src/screens/PlayerScreen';
 
 const record = {
@@ -94,6 +95,15 @@ describe('PlayerScreen', () => {
         render(<PlayerScreen name="ana" />);
         const link = await screen.findByRole(`link`, { name: `Report ana` });
         expect(link.getAttribute(`href`)).toBe(`/report?subject=%2Fplayers%2Fana`);
+    });
+
+    it('leads nowhere to report the player where the deployment takes no reports through its form', async () => {
+        reportForm.reset(false);
+        stubPlayer(record);
+        render(<PlayerScreen name="ana" />);
+        await screen.findByRole(`heading`, { level: 1, name: `ana` });
+        expect(screen.queryByRole(`link`, { name: `Report ana` })).toBe(null);
+        expect(document.querySelector(`.report-line`)).toBe(null);
     });
 
     it('reads the history for the period chosen, a year at first', async () => {

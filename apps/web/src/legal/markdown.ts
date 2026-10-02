@@ -52,6 +52,23 @@ function decode(text: string): string {
     });
 }
 
+/**
+ * A passage between `{{#name}}` and `{{/name}}`, each on a line of its
+ * own, which holds only where the name has a value; opened with
+ * `{{^name}}`, only where the deployment leaves it out.
+ */
+export const passagePattern = /^\{\{([#^])\s*([\w.]+)\s*\}\}[ \t]*\r?\n([\s\S]*?)^\{\{\/\s*\2\s*\}\}[ \t]*(?:\r?\n|$)/gmu;
+
+// A name nobody knows leaves the passage as written, markers and all, so
+// a misspelling is plain on the page.
+function passages(markdown: string, fill: (name: string) => Filling): string {
+    return markdown.replace(passagePattern, (whole: string, mark: string, name: string, body: string) => {
+        const filling = fill(name).kind;
+        if (filling === `unknown`) return whole;
+        return (filling === `value`) === (mark === `#`) ? body : ``;
+    });
+}
+
 // Null when the text names a value this deployment leaves out, which
 // takes the whole block holding it away.
 function fillText(text: string, fill: (name: string) => Filling): string | null {
@@ -249,10 +266,10 @@ function slugger(): (heading: string) => string {
  * and one section per second-level heading, each placeholder filled.
  * A paragraph, list item, or table row naming a value the deployment
  * leaves out is left out with it; a paragraph broken into lines loses
- * only that line.
+ * only that line; a passage keeps or drops whatever it holds.
  */
 export function layoutLegal(markdown: string, fill: (name: string) => Filling): LegalLayout {
-    const all = blocks(new Lexer({ gfm: true }).lex(markdown), fill);
+    const all = blocks(new Lexer({ gfm: true }).lex(passages(markdown, fill)), fill);
     const slug = slugger();
     let title: readonly Inline[] | null = null;
     const lead: Block[] = [];

@@ -67,6 +67,9 @@ export interface AppDeps {
     // The deployed index.html; when set, the root, ladder, bot, and game
     // routes answer with the shell carrying live og meta. Dev leaves it to Vite.
     webIndexPath?: string;
+    // Whether the site takes reports through its form; off, the form's
+    // route is unknown and the shell leaves the form out.
+    reportForm?: boolean;
     random?: () => number;
     logger?: LogTarget;
     // Caddy's address on the internal network, whose forwarded client address counts;
@@ -265,11 +268,21 @@ export async function buildApp(deps: AppDeps): Promise<BuiltApp> {
         ladder,
         now: deps.now ?? Date.now,
     });
-    registerReportApi(app, { query, limits });
+    if (deps.reportForm === true) registerReportApi(app, { query, limits });
     registerSignInApi(app, { query, guests, discord: deps.discord, secureCookies: deps.secureCookies, devLogin: deps.devLogin, limits });
     if (deps.devLogin) registerDevAccountsApi(app, { query });
     if (deps.webIndexPath !== undefined) {
-        registerOgShell(app, { query, presence, games, ladder, players: playerReads, indexPath: deps.webIndexPath, publicOrigin: deps.publicOrigin, now: deps.now ?? Date.now });
+        registerOgShell(app, {
+            query,
+            presence,
+            games,
+            ladder,
+            players: playerReads,
+            indexPath: deps.webIndexPath,
+            publicOrigin: deps.publicOrigin,
+            reportForm: deps.reportForm ?? false,
+            now: deps.now ?? Date.now,
+        });
     }
     const backupPolicy = deps.backup;
     const admin = createAdminHandler({

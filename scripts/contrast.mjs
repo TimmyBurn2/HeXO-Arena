@@ -146,6 +146,9 @@ export const pairs = [
     [`accent on hover`, `--c-accent`, `--c-bg-hover`, 4.5],
     [`warn on base`, `--c-warn`, `--c-bg`, 4.5],
     [`warn on raised`, `--c-warn`, `--c-bg-raised`, 4.5],
+    // The set-up check line says ready or why not on an overlay card.
+    [`good on overlay`, `--c-good`, `--c-bg-overlay`, 4.5],
+    [`warn on overlay`, `--c-warn`, `--c-bg-overlay`, 4.5],
     [`text on bad solid`, `--c-text-on-accent`, `--c-bad-solid`, 4.5],
     [`text on discord`, `--c-on-discord`, `--c-discord`, 4.5],
     [`text on discord hover`, `--c-on-discord`, `--c-discord-hover`, 4.5],

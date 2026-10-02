@@ -8,9 +8,11 @@ import { text } from '../text';
 import { Clock } from './Clock';
 import type { TurnStatus } from './GameBoard';
 import type { GameLink } from './use-game';
-import type { Replay } from './replay';
+import { gameLink } from '../analysis/links';
+import { turnOf, type Replay } from './replay';
 import { LiveSwitch, Scrubber } from './Scrubber';
 import { resultLine } from './snapshot-views';
+import './hud.css';
 
 /**
  * The side's clock at the read: match clocks on both chips, the shared turn
@@ -157,6 +159,9 @@ export function TurnChip({ snapshot, you, status, link, replay }: {
                     <span className="hud-result" role="status">
                         {resultLine(snapshot)}
                     </span>
+                    <Link to={gameLink(snapshot.gameId, replay === null ? null : turnOf(replay.shown))} className="hud-analysis">
+                        {text.game.openInAnalysis}
+                    </Link>
                 </span>
             </Chip>
         );

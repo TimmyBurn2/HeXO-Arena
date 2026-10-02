@@ -51,6 +51,15 @@ function layoutOf(route: Route): Layout {
     return route.name === `game` ? `immersive` : `framed`;
 }
 
+/**
+ * Whether a framed screen spans the window under the bar, edge to edge,
+ * instead of the shell's centered column: the analysis board's workspace
+ * fills the window as the game stage does.
+ */
+export function spansWindow(route: Route): boolean {
+    return route.name === `analysis`;
+}
+
 /** Whether the screen at this route sits in the site's frame, its own or lent. */
 export function useFramed(route: Route): boolean {
     const lentNow = useFrameLent();

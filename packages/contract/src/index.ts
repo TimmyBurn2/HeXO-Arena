@@ -10,6 +10,7 @@ export const healthzPath = `/healthz`;
 
 export * from './account';
 export * from './admin';
+export * from './analysis';
 export * from './api';
 export * from './axial';
 export * from './board';
@@ -19,6 +20,7 @@ export * from './game-events';
 export * from './games';
 export * from './history';
 export * from './htttx';
+export * from './judgments';
 export * from './leaderboard';
 export * from './legal';
 export * from './levels';

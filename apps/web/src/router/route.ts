@@ -1,4 +1,5 @@
-import { legalPagePath, legalPages, reportPagePath, welcomePath, type LegalPage } from '@hexo-arena/contract';
+import { analysisPagePath, legalPagePath, legalPages, reportPagePath, welcomePath, type LegalPage } from '@hexo-arena/contract';
+import { reportForm } from '../report-form';
 
 export type Route =
     | { readonly name: `home` }
@@ -11,6 +12,7 @@ export type Route =
     | { readonly name: `player`; readonly player: string }
     | { readonly name: `games` }
     | { readonly name: `live-games` }
+    | { readonly name: `analysis` }
     | { readonly name: `connect` }
     | { readonly name: `profile` }
     | { readonly name: `credits` }
@@ -37,11 +39,12 @@ export function parseRoute(pathname: string): Route {
     if (head === `players` && segments.length === 2 && second !== undefined) return { name: `player`, player: safeDecode(second) };
     if (head === `games` && segments.length === 1) return { name: `games` };
     if (head === `games` && second === `live` && segments.length === 2) return { name: `live-games` };
+    if (head === `analysis` && segments.length === 1) return { name: `analysis` };
     if (head === `connect` && segments.length === 1) return { name: `connect` };
     if (head === `profile` && segments.length === 1) return { name: `profile` };
     if (head === `credits` && segments.length === 1) return { name: `credits` };
     if (head === `welcome` && segments.length === 1) return { name: `welcome` };
-    if (head === `report` && segments.length === 1) return { name: `report` };
+    if (head === `report` && segments.length === 1 && reportForm.on()) return { name: `report` };
     if (head === `legal` && segments.length === 2) {
         const page = legalPages.find((candidate) => candidate === second);
         if (page !== undefined) return { name: `legal`, page };
@@ -74,6 +77,8 @@ export function routePath(route: Route): string {
             return `/games`;
         case `live-games`:
             return `/games/live`;
+        case `analysis`:
+            return analysisPagePath;
         case `connect`:
             return `/connect`;
         case `profile`:

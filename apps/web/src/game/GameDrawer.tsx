@@ -22,7 +22,7 @@ const tabs: readonly { id: DrawerTab; label: string }[] = [
  * A right-hand drawer on wide screens, a bottom sheet on phones whose peek
  * keeps the player's own chip in reach.
  */
-export function GameDrawer({ drawer, feed, current, facts, meetings, rundown, tournament, running, timed, onResign, peek }: {
+export function GameDrawer({ drawer, feed, current, facts, meetings, rundown, tournament, analysis, running, timed, onResign, peek }: {
     drawer: Drawer;
     feed: readonly FeedLine[];
     // The feed line the board shows; a replay may stand before the newest.
@@ -34,6 +34,8 @@ export function GameDrawer({ drawer, feed, current, facts, meetings, rundown, to
     rundown: ReactNode;
     // The tournament game's place, leading to its tournament; null for any other game.
     tournament: ReactNode;
+    // Where a finished game opens on the analysis board, at the turn on screen; null while it runs.
+    analysis: string | null;
     running: boolean;
     // Whether a clock runs down while nobody moves, as unlimited games have none.
     timed: boolean;
@@ -163,7 +165,7 @@ export function GameDrawer({ drawer, feed, current, facts, meetings, rundown, to
                     {drawer.tab === `game` ? (
                         <>
                             {rundown}
-                            <GameFacts facts={facts} meetings={meetings} tournament={tournament} running={running} timed={timed} onResign={onResign} />
+                            <GameFacts facts={facts} meetings={meetings} tournament={tournament} analysis={analysis} running={running} timed={timed} onResign={onResign} />
                         </>
                     ) : null}
                 </div>
@@ -243,10 +245,11 @@ function key(name: string) {
     return <kbd>{name}</kbd>;
 }
 
-function GameFacts({ facts, meetings, tournament, running, timed, onResign }: {
+function GameFacts({ facts, meetings, tournament, analysis, running, timed, onResign }: {
     facts: readonly (readonly [string, string])[];
     meetings: ReactNode;
     tournament: ReactNode;
+    analysis: string | null;
     running: boolean;
     timed: boolean;
     onResign: (() => Promise<Sent>) | null;
@@ -306,6 +309,11 @@ function GameFacts({ facts, meetings, tournament, running, timed, onResign }: {
                 <Link to="/" className="btn btn-ghost">
                     {text.drawer.leave}
                 </Link>
+                {analysis === null ? null : (
+                    <Link to={analysis} className="btn btn-ghost">
+                        {text.game.openInAnalysis}
+                    </Link>
+                )}
                 {playing ? (
                     // Held, not disabled, through the request and the wait, so focus stays on it.
                     <button

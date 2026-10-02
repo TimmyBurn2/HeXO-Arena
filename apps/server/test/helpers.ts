@@ -90,6 +90,7 @@ export async function createTestApp(options?: {
     random?: () => number;
     logger?: LogTarget;
     webIndexPath?: string;
+    reportForm?: boolean;
     trustedProxy?: string;
     now?: () => number;
     limits?: LimitTable;
@@ -113,6 +114,8 @@ export async function createTestApp(options?: {
         ...(options?.random !== undefined && { random: options.random }),
         ...(options?.logger !== undefined && { logger: options.logger }),
         ...(options?.webIndexPath !== undefined && { webIndexPath: options.webIndexPath }),
+        // On unless a test turns it off, so the form's route and its limits stay under test.
+        reportForm: options?.reportForm ?? true,
         ...(options?.trustedProxy !== undefined && { trustedProxy: options.trustedProxy }),
         ...(options?.now !== undefined && { now: options.now }),
         ...(options?.limits !== undefined && { limits: options.limits }),

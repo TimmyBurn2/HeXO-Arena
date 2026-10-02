@@ -7,6 +7,12 @@ export const reportsPath = `/api/reports`;
 /** Where the report form lives; the page it is opened from rides along as the subject. */
 export const reportPagePath = `/report`;
 
+/**
+ * The meta tag, `content="on"`, by which the page's shell says the site
+ * takes reports through its form; a shell without it leaves the form out.
+ */
+export const reportFormMetaName = `report-form`;
+
 /** The query parameter that carries the subject into the report form. */
 export const reportSubjectParam = `subject`;
 

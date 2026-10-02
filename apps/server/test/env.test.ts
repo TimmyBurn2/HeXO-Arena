@@ -52,3 +52,11 @@ describe('PUBLIC_ORIGIN', () => {
         expect(parseEnv({}).PUBLIC_ORIGIN).toBe(`http://localhost:3000`);
     });
 });
+
+describe('REPORT_FORM', () => {
+    it('turns the report form on at exactly on, and leaves it off unset or at any other value', () => {
+        expect(parseEnv({}).REPORT_FORM).toBe(false);
+        expect(parseEnv({ REPORT_FORM: `on` }).REPORT_FORM).toBe(true);
+        for (const value of [``, `1`, `true`, `ON`, `off`]) expect(parseEnv({ REPORT_FORM: value }).REPORT_FORM, value).toBe(false);
+    });
+});

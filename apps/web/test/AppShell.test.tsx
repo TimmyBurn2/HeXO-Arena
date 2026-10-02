@@ -6,6 +6,7 @@ import { AppShell } from '../src/AppShell';
 import { SiteLinks } from '../src/components/SiteLinks';
 import { legalStore } from '../src/legal/documents';
 import { meStore } from '../src/me';
+import { reportForm } from '../src/report-form';
 import { navigate } from '../src/router/use-route';
 import { sourceLink } from '../src/site-links';
 import { stubEventSource } from './event-source';
@@ -91,7 +92,7 @@ describe('AppShell', () => {
         render(<AppShell />);
         expect(topbar().querySelector(`.nav-links .nav-link`)?.textContent).toBe(`Play`);
         expect(topLink(`Play`).getAttribute(`href`)).toBe(`/play`);
-        expect(topbar().querySelectorAll(`.nav-links .nav-link`).length).toBe(5);
+        expect(topbar().querySelectorAll(`.nav-links .nav-link`).length).toBe(6);
         expect(topLink(`Ladder`).getAttribute(`href`)).toBe(`/ladder`);
         expect(topLink(`HeXO Arena`).getAttribute(`href`)).toBe(`/`);
 
@@ -139,8 +140,8 @@ describe('AppShell', () => {
         render(<AppShell />);
         const tabbar = document.querySelector(`nav.tabbar`) as HTMLElement;
         const labels = (root: Element) => [...root.querySelectorAll(`a`)].map((a) => a.textContent);
-        expect(labels(tabbar)).toEqual([`Home`, `Play`, `Games`, `Ladder`, `Bots`]);
-        expect(labels(topbar().querySelector(`nav.nav-links`) as HTMLElement)).toEqual([`Play`, `Games`, `Ladder`, `Bots`, `Build a bot`]);
+        expect(labels(tabbar)).toEqual([`Home`, `Play`, `Games`, `Analysis`, `Ladder`, `Bots`]);
+        expect(labels(topbar().querySelector(`nav.nav-links`) as HTMLElement)).toEqual([`Play`, `Games`, `Analysis`, `Ladder`, `Bots`, `Build a bot`]);
         expect(document.querySelector(`a[href="/profile"]`)).toBe(null);
         await waitFor(() => {
             expect(tabbar.querySelector(`a[aria-current="page"]`)?.textContent).toBe(`Bots`);
@@ -279,6 +280,25 @@ describe('AppShell', () => {
         await waitFor(() => {
             expect(document.querySelector(`footer.site-footer`)).toBe(null);
         });
+    });
+
+    it('leave the report form out of every footer and answer its page as missing where the deployment takes no reports through it', async () => {
+        reportForm.reset(false);
+        stubHealthOk();
+        stubEventSource(null);
+        render(<AppShell />);
+        for (const path of [`/`, `/bots/sealbot`, `/legal/privacy`, `/nowhere`]) {
+            navigate(path);
+            await waitFor(() => {
+                expect(document.querySelector(`footer.site-footer`)).toBeTruthy();
+            });
+            const footer = document.querySelector(`footer.site-footer`) as HTMLElement;
+            expect([...footer.querySelectorAll(`ul`)].at(-1)?.textContent).toBe(`Impressum / Legal noticePrivacyTermsLicenses`);
+        }
+        navigate(`/report?subject=%2Fbots%2Fsealbot`);
+        expect(await screen.findByRole(`heading`, { level: 1, name: `Not found` })).toBeTruthy();
+        expect(document.querySelector(`.report-form`)).toBe(null);
+        expect(document.title).toBe(`Not found - HeXO Arena`);
     });
 
     it('frame a game that does not exist as any missing page', async () => {

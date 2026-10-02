@@ -1,4 +1,5 @@
 import {
+    analysisMeta,
     botsMeta,
     connectMeta,
     creditsMeta,
@@ -51,6 +52,8 @@ export function routeMeta(route: Route): PageMeta {
             return gamesMeta;
         case `live-games`:
             return liveGamesMeta;
+        case `analysis`:
+            return analysisMeta();
         case `connect`:
             return connectMeta;
         case `profile`:

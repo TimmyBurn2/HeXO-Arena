@@ -7,6 +7,18 @@
         padding: var(--space-5) var(--shell-pad) var(--space-8);
     }
 
+    .shell-wide {
+        max-width: none;
+        padding: 0;
+    }
+
+    /* A wide screen still loading keeps its word off the window's edge. */
+    .shell-wide > .note {
+        max-width: var(--shell-max);
+        margin: 0 auto;
+        padding: var(--space-5) var(--shell-pad);
+    }
+
     /* A message in place of the game, without the frame; the shell's sheet
        holds it, since the game's own sheet may be what failed to load. */
     .stage-message {
@@ -211,11 +223,28 @@
             flex: 1 1 auto;
             font-size: var(--text-xs);
         }
+    }
 
-        /* Five labels cannot stay apart here, and the wordmark in the bar
-           already leads home, so the Home tab steps aside. */
+    /* Six labels cannot stay apart here, and the wordmark in the bar
+       already leads home, so the Home tab steps aside. */
+    @media (max-width: 23rem) {
         .tabbar .tab-link[href='/'] {
             display: none;
+        }
+    }
+
+    /* Large text on a phone leaves no row room for five labels, so the
+       tabs stand in two rows of three, Home among them again, within the
+       bar's own height. */
+    @media (max-width: 12.5rem) {
+        .tabbar {
+            flex-wrap: wrap;
+        }
+
+        .tabbar .tab-link,
+        .tabbar .tab-link[href='/'] {
+            display: flex;
+            flex: 1 0 33%;
         }
     }
 
@@ -249,6 +278,15 @@
 
         .brand {
             margin-inline-end: var(--space-2);
+        }
+    }
+
+    /* Below this width the six labels leave a sign-in no room, so Build a
+       bot steps aside, as on phones: the footer and the menu under who is
+       here still lead there. */
+    @media (max-width: 59rem) {
+        .nav-links .nav-link[href='/connect'] {
+            display: none;
         }
     }
 

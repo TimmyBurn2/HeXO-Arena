@@ -2,7 +2,7 @@ import { lazy, Suspense, useEffect, useRef, useState, useSyncExternalStore } fro
 import { signInFailureParam, signInFailureSchema, siteName, type SignInFailure } from '@hexo-arena/contract';
 import { Mark } from './components/Mark';
 import { SiteFooter } from './components/SiteFooter';
-import { useFramed } from './frame';
+import { spansWindow, useFramed } from './frame';
 import { Identity } from './identity/Identity';
 import { useLegalSlots } from './legal/links';
 import { Link } from './router/Link';
@@ -55,6 +55,10 @@ const LiveGamesScreen = lazy(async () => {
     const module = await loadScreen(async () => import(`./screens/LiveGamesScreen`));
     return { default: module.LiveGamesScreen };
 });
+const AnalysisScreen = lazy(async () => {
+    const module = await loadScreen(async () => import(`./screens/AnalysisScreen`));
+    return { default: module.AnalysisScreen };
+});
 const ConnectScreen = lazy(async () => {
     const module = await loadScreen(async () => import(`./screens/ConnectScreen`));
     return { default: module.ConnectScreen };
@@ -104,6 +108,7 @@ const nav: readonly NavEntry[] = [
     { route: { name: `home` }, label: text.shell.nav.home, screens: [`home`], bar: false, phoneTab: true },
     { route: { name: `play` }, label: text.shell.nav.play, screens: [`play`], bar: true, phoneTab: true },
     { route: { name: `games` }, label: text.shell.nav.games, screens: [`games`, `live-games`], bar: true, phoneTab: true },
+    { route: { name: `analysis` }, label: text.shell.nav.analysis, screens: [`analysis`], bar: true, phoneTab: true },
     { route: { name: `ladder` }, label: text.shell.nav.ladder, screens: [`ladder`, `tournaments`, `tournament`], bar: true, phoneTab: true },
     { route: { name: `bots` }, label: text.shell.nav.bots, screens: [`bots`, `bot`], bar: true, phoneTab: true },
     { route: { name: `connect` }, label: text.shell.nav.build, screens: [`connect`], bar: true, phoneTab: false },
@@ -207,7 +212,7 @@ export function AppShell() {
                     </div>
                 ) : null}
             </div>
-            <main className={framed ? `shell` : undefined} id="main" ref={mainRef} tabIndex={-1}>
+            <main className={framed ? (spansWindow(route) ? `shell shell-wide` : `shell`) : undefined} id="main" ref={mainRef} tabIndex={-1}>
                 <RouteBoundary layout={framed ? `framed` : `immersive`} resetKey={routePath(route)}>
                     <Suspense fallback={framed ? <p className="note">{text.states.loading}</p> : null}>
                         <RouteView route={route} />
@@ -250,6 +255,8 @@ function RouteView({ route }: { route: Route }) {
             return <GamesScreen />;
         case `live-games`:
             return <LiveGamesScreen />;
+        case `analysis`:
+            return <AnalysisScreen />;
         case `connect`:
             return <ConnectScreen />;
         case `profile`:

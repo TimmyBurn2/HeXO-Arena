@@ -8,6 +8,7 @@ const routes = [
     { name: `bots` },
     { name: `bot`, bot: `sealbot` },
     { name: `live-games` },
+    { name: `analysis` },
     { name: `connect` },
     { name: `profile` },
     { name: `credits` },
@@ -25,6 +26,7 @@ describe('routeMeta', () => {
         expect(routeMeta({ name: `bots` }).title).toBe(`Bots - HeXO Arena`);
         expect(routeMeta({ name: `connect` }).title).toBe(`Build a bot - HeXO Arena`);
         expect(routeMeta({ name: `live-games` }).title).toBe(`Live games - HeXO Arena`);
+        expect(routeMeta({ name: `analysis` }).title).toBe(`Analysis - HeXO Arena`);
         expect(routeMeta({ name: `profile` }).title).toBe(`Profile - HeXO Arena`);
         expect(routeMeta({ name: `credits` }).title).toBe(`Credits - HeXO Arena`);
         expect(routeMeta({ name: `welcome` }).title).toBe(`Create your account - HeXO Arena`);

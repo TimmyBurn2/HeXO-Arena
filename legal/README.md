@@ -65,6 +65,11 @@ A key the file does not know, or a required one it lacks, makes it invalid:
 every document naming a detail is then left out, and the browser console
 and the app's boot log name the key at fault.
 
+The passages about the report form stand between `{{#site.reportForm}}`
+and `{{/site.reportForm}}`, each on a line of its own, and show only where
+the server's `REPORT_FORM` is `on`; those between `{{^site.reportForm}}`
+and `{{/site.reportForm}}` show only where it is off.
+
 `{{site.name}}` and the other `site.` placeholders come from the site's
 code, such as the cookie names and how long records are kept; leave them as
 they are.

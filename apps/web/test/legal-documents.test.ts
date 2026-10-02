@@ -3,7 +3,9 @@ import { join } from 'node:path';
 import { legalDetailsExampleFile, legalDetailsFaults, legalDetailsPath, legalDetailsSchema, legalDocumentPath, legalPages } from '@hexo-arena/contract';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { exampleDetailsFile, legalFileRoutes } from '../build/legal';
-import { legalStore, placeholderPattern, siteFacts, type LegalState } from '../src/legal/documents';
+import { legalStore, placeholderPattern, reportFormFact, siteFacts, type LegalState } from '../src/legal/documents';
+import { passagePattern } from '../src/legal/markdown';
+import { reportForm } from '../src/report-form';
 import { deploy, details, template } from './legal-deploy';
 import { legalDetailNames } from '../src/legal/details';
 
@@ -113,6 +115,14 @@ describe('the legal documents a deployment serves', () => {
         expect(fill?.(`operator.nmae`)).toEqual({ kind: `unknown` });
         expect(fill?.(`site.nothing`)).toEqual({ kind: `unknown` });
     });
+
+    it('fill the report form with its page where the deployment takes reports through it, and leave it out elsewhere', async () => {
+        deploy(details);
+        const fill = (await settled()).documents.get(`privacy`)?.fill;
+        expect(fill?.(reportFormFact)).toEqual({ kind: `value`, text: `/report` });
+        reportForm.reset(false);
+        expect(fill?.(reportFormFact)).toEqual({ kind: `absent` });
+    });
 });
 
 describe('the repository legal folder', () => {
@@ -120,6 +130,11 @@ describe('the repository legal folder', () => {
         const used = new Set(legalPages.flatMap((page) => [...template(page).matchAll(placeholderPattern)].map((match) => match[1] ?? ``)));
         expect([...used].filter((name) => !siteFacts.has(name) && !legalDetailNames.has(name))).toEqual([]);
         expect([...siteFacts.keys()].filter((name) => !used.has(name))).toEqual([]);
+    });
+
+    it('opens passages on the report form alone, on in one document and off in another', () => {
+        const passages = legalPages.flatMap((page) => [...template(page).matchAll(passagePattern)].map((match) => `${match[1] ?? ``}${match[2] ?? ``}`));
+        expect(new Set(passages)).toEqual(new Set([`#${reportFormFact}`, `^${reportFormFact}`]));
     });
 
     it('holds an example of the details that matches them and holds a placeholder in every value, so no real value can hide in it', () => {

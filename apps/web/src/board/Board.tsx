@@ -17,7 +17,8 @@ import './Board.css';
 
 export interface BoardStone extends AxialCoord {
     side: Side;
-    number: number;
+    // Null for a stone placed by hand rather than played, which has no place in the order.
+    number: number | null;
 }
 
 export interface BoardOverlays {
@@ -41,6 +42,8 @@ export interface BoardProps {
     // Whether the frontier's edge draws; a framed mini leaves it out, since
     // its frame cuts through the field.
     edge?: boolean | undefined;
+    // The cells the field grows round; absent, the stones.
+    field?: readonly AxialCoord[] | undefined;
     onCellClick?: ((cell: AxialCoord) => void) | undefined;
 }
 
@@ -115,6 +118,7 @@ const Stone = memo(function Stone({ stone, fresh, shine }: { stone: BoardStone; 
 // `cut` draws the digit into the win line's mask rather than onto its stone.
 const StoneNumber = memo(function StoneNumber({ stone, cut = false }: { stone: BoardStone; cut?: boolean }) {
     const { cx, cy } = hexCenter(stone);
+    if (stone.number === null) return null;
     return (
         <text className={`number ${cut ? `cut` : `n-${stone.side}`}`} dy="0.35em" transform={translate(cx, cy)}>
             {String(stone.number)}
@@ -128,8 +132,8 @@ const StoneNumber = memo(function StoneNumber({ stone, cut = false }: { stone: B
  * Nothing renders outside the frontier, so an illegal distance cannot be
  * clicked at all.
  */
-export function Board({ stones, settings, label, overlays, scale, frame, edge = frame === undefined, onCellClick }: BoardProps) {
-    const field = useMemo(() => frontierCells(stones), [stones]);
+export function Board({ stones, settings, label, overlays, scale, frame, edge = frame === undefined, field: anchors, onCellClick }: BoardProps) {
+    const field = useMemo(() => frontierCells(anchors ?? stones), [anchors, stones]);
     const outline = useMemo(() => frontierOutline(field), [field]);
     const viewBox = useMemo(() => frame ?? viewBoxOf(field), [frame, field]);
     // A framed board draws only the cells whose hexagon can reach into view.

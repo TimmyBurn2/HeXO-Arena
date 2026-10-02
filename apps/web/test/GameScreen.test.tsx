@@ -159,7 +159,7 @@ describe('GameScreen', () => {
         await openWithM();
         expect(document.querySelectorAll(`.feed .feed-line`)).toHaveLength(1);
         // The opening line keeps each turn's stones together: the origin, then one pair.
-        expect([...document.querySelectorAll(`.feed .feed-group`)].map((group) => group.textContent)).toEqual([`x: (0,0)`, `o: (1,-1) (0,1)`]);
+        expect([...document.querySelectorAll(`.feed .feed-group`)].map((group) => group.textContent)).toEqual([`x: [0,0]`, `o: [0,1] [1,-1]`]);
         // The opening's label shows its turn span and reads it out in words,
         // in the feed and in the peek that repeats the last line.
         for (const label of [`.feed-n`, `.peek-line`]) {

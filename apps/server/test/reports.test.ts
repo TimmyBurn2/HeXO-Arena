@@ -31,6 +31,14 @@ function rows(arena: TestApp): unknown[] {
 }
 
 describe('POST /api/reports', () => {
+    it('answers as an unknown route and stores nothing while the form is off', async () => {
+        const arena = await start({ reportForm: false });
+        const sent = await arena.app.inject({ method: `POST`, url: reportsPath, payload: report, ...from(`203.0.113.7`) });
+        expect(sent.statusCode).toBe(404);
+        expect(sent.json()).toEqual({ error: `not found`, code: `not_found` });
+        expect(rows(arena)).toEqual([]);
+    });
+
     it('stores a report from a signed-out visitor, open, and answers its number', async () => {
         const arena = await start();
         const sent = await arena.app.inject({ method: `POST`, url: reportsPath, payload: report, ...from(`203.0.113.7`) });
