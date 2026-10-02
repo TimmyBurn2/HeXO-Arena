@@ -243,7 +243,17 @@ function summaryOf(query: Query, row: TournamentRow): TournamentSummary {
         const entry = entries.find((candidate) => candidate.botId === top?.bot);
         winner = entry === undefined ? null : { name: entry.bot, ownerName: entry.ownerName };
     }
-    return { ...summaryBase(row), entrants, winner };
+    return { ...summaryBase(row), entrants, winner, round: row.status === `running` ? roundOf(pairingViews(query, row.id)) : null };
+}
+
+// The first round with a game still to finish, or the last once none has.
+function roundOf(pairings: readonly PairingView[]): TournamentSummary[`round`] {
+    const rounds = [...new Set(pairings.map((pairing) => pairing.round))].sort((one, two) => one - two);
+    const last = rounds.at(-1);
+    if (last === undefined) return null;
+    const open = (round: number) =>
+        pairings.some((pairing) => pairing.round === round && pairing.scored.games.some((game) => game.kind === `pending` || game.kind === `live`));
+    return { current: rounds.find(open) ?? last, of: rounds.length };
 }
 
 /** One tournament as the list holds it; null for an unknown id. */

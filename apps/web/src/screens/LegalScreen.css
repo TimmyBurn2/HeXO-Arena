@@ -91,16 +91,32 @@
 
     .legal-section p,
     .legal-section ul,
-    .legal-section address {
+    .legal-section ol,
+    .legal-section blockquote,
+    .legal-section pre,
+    .legal-section .legal-table {
         margin: 0 0 var(--space-3);
         line-height: var(--leading-normal);
+    }
+
+    .legal-section h3,
+    .legal-section h4,
+    .legal-section h5,
+    .legal-section h6 {
+        margin: var(--space-4) 0 var(--space-2);
+        font-size: var(--text-base);
+    }
+
+    .legal-section blockquote > :last-child {
+        margin-bottom: 0;
     }
 
     .legal-section > :last-child {
         margin-bottom: 0;
     }
 
-    .legal-section ul {
+    .legal-section ul,
+    .legal-section ol {
         padding-left: var(--space-5);
     }
 
@@ -109,15 +125,31 @@
     }
 
     /* A link inside running text needs more than its hue, as in any paragraph. */
-    .legal-section li a:not([class]) {
+    .legal-section li a:not([class]),
+    .legal-section td a:not([class]) {
         text-decoration: underline;
         text-underline-offset: var(--underline-offset);
     }
 
-    .legal-section address {
-        display: flex;
-        flex-direction: column;
-        font-style: normal;
+    /* A wide table scrolls inside its own frame, never the page. */
+    .legal-table {
+        overflow-x: auto;
+    }
+
+    .legal-table table {
+        border-collapse: collapse;
+    }
+
+    .legal-table th,
+    .legal-table td {
+        padding: var(--space-1) var(--space-3) var(--space-1) 0;
+        text-align: left;
+        vertical-align: top;
+    }
+
+    .legal-section pre {
+        overflow-x: auto;
+        white-space: pre-wrap;
     }
 
     /* A long address or link breaks rather than widening the page. */

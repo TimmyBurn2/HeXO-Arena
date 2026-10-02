@@ -404,7 +404,8 @@ function factsOf(snapshot: GameSnapshot): (readonly [string, string])[] {
     ]);
     if (snapshot.you === undefined) {
         const guest = snapshot.players.x.kind === `guest` || snapshot.players.o.kind === `guest`;
-        facts.push([text.drawer.rated, guest ? text.drawer.ratedNoGuest : text.drawer.ratedYes]);
+        const voided = snapshot.status === `finished` && snapshot.voided;
+        facts.push([text.drawer.rated, guest ? text.drawer.ratedNoGuest : voided ? text.drawer.ratedNoVoided : text.drawer.ratedYes]);
     } else {
         facts.push([text.drawer.yourSide, snapshot.you]);
     }

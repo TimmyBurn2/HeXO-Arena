@@ -65,11 +65,12 @@ interface PlayedRow {
     readonly finishedAt: number;
 }
 
-// Every finished game the player sat in, aborted ones left out.
+// Every finished game the player sat in, aborted and voided ones left
+// out, as the rating leaves them.
 function playedRows(query: Query, player: PlayerRef): PlayedRow[] {
     const arms = seatsOf(player).map(
         (seat) =>
-            sql`select ${seat.side} as side, ${games.winner} as winner, ${games.finishReason} as reason, ${seat.opponent} as opponent, ${seat.opponentKind} as opponentKind, ${games.finishedAt} as finishedAt from ${games} where ${seat.column} = ${player.id} and ${games.finishedAt} is not null and ${games.finishReason} <> 'aborted'`,
+            sql`select ${seat.side} as side, ${games.winner} as winner, ${games.finishReason} as reason, ${seat.opponent} as opponent, ${seat.opponentKind} as opponentKind, ${games.finishedAt} as finishedAt from ${games} where ${seat.column} = ${player.id} and ${games.finishedAt} is not null and ${games.finishReason} <> 'aborted' and ${games.voidedAt} is null`,
     );
     return query.all<PlayedRow>(sql.join(arms, sql` union all `));
 }
@@ -124,7 +125,7 @@ function placingsOf(query: Query, botId: string): NonNullable<PlayerRecord[`plac
     });
 }
 
-/** A player's record over every finished game but aborted ones; null for a name no player holds. */
+/** A player's record over every finished game but aborted and voided ones; null for a name no player holds. */
 export function playerRecord(query: Query, name: string, nowMs: number): PlayerRecord | null {
     const player = resolve(query, name);
     if (player === null) return null;
@@ -203,42 +204,59 @@ export function ratingHistory(query: Query, name: string, range: keyof typeof ra
     return rows.reverse().map((row) => ({ gameId: row.gameId, at: isoOf(row.at), rating: Math.round(row.rating), deviation: Math.round(row.deviation), provisional: row.deviation > rankableDeviation }));
 }
 
-/**
- * The player reads: a record and a rating history per name, public and
- * memoized per name, a deletion's placeholder answering not found.
- */
-export function registerPlayerApi(app: FastifyInstance, deps: { query: Query; now: () => number }): void {
-    const memo = new Map<string, { at: number; status: number; body: string }>();
+const notFound = JSON.stringify({ error: `no player has that name`, code: `not_found` });
 
-    function remembered(key: string, read: () => { status: number; body: string }): { status: number; body: string } {
-        const now = deps.now();
+/** A read as every caller in its few seconds gets it: the value, and the answer's status and body. */
+export interface PlayerAnswer<T> {
+    readonly value: T | null;
+    readonly status: number;
+    readonly body: string;
+}
+
+function remembering<T>(now: () => number, serialize: (value: T) => string): (key: string, read: () => T | null) => PlayerAnswer<T> {
+    const memo = new Map<string, { at: number; answer: PlayerAnswer<T> }>();
+    return (key, read) => {
+        const at = now();
         const held = memo.get(key);
-        if (held !== undefined && now >= held.at && now - held.at < playerRecordMemoMs) return held;
-        const fresh = { at: now, ...read() };
-        memo.set(key, fresh);
-        for (const [stale, entry] of memo) if (now - entry.at >= playerRecordMemoMs) memo.delete(stale);
-        return fresh;
-    }
+        if (held !== undefined && at >= held.at && at - held.at < playerRecordMemoMs) return held.answer;
+        const value = read();
+        const answer = value === null ? { value, status: 404, body: notFound } : { value, status: 200, body: serialize(value) };
+        memo.set(key, { at, answer });
+        for (const [stale, entry] of memo) if (at - entry.at >= playerRecordMemoMs) memo.delete(stale);
+        return answer;
+    };
+}
 
-    const notFound = JSON.stringify({ error: `no player has that name`, code: `not_found` });
+/** The player reads, each name's read at most once in its few seconds, whoever asks. */
+export interface PlayerReads {
+    record(name: string): PlayerAnswer<PlayerRecord>;
+    history(name: string, range: keyof typeof rangeSeconds): PlayerAnswer<RatingPoint[]>;
+}
 
+/**
+ * The player reads, memoized per name: the API and the link previews read
+ * through the same memo, so a burst of either costs one read.
+ */
+export function createPlayerReads(deps: { query: Query; now: () => number }): PlayerReads {
+    const records = remembering<PlayerRecord>(deps.now, (record) => JSON.stringify(playerRecordSchema.parse(record)));
+    const histories = remembering<RatingPoint[]>(deps.now, (history) => JSON.stringify(ratingHistorySchema.parse(history)));
+    return {
+        record: (name) => records(nameKeyOf(name), () => playerRecord(deps.query, name, deps.now())),
+        history: (name, range) => histories(`${range} ${nameKeyOf(name)}`, () => ratingHistory(deps.query, name, range, deps.now())),
+    };
+}
+
+/** The player reads, public, a deletion's placeholder answering not found. */
+export function registerPlayerApi(app: FastifyInstance, deps: { reads: PlayerReads }): void {
     app.get<{ Params: { name: string } }>(`/api/players/:name`, { config: { limit: `public` } }, async (request, reply) => {
-        const { name } = request.params;
-        const answer = remembered(`record ${nameKeyOf(name)}`, () => {
-            const record = playerRecord(deps.query, name, deps.now());
-            return record === null ? { status: 404, body: notFound } : { status: 200, body: JSON.stringify(playerRecordSchema.parse(record)) };
-        });
+        const answer = deps.reads.record(request.params.name);
         return reply.code(answer.status).header(`content-type`, `application/json; charset=utf-8`).send(answer.body);
     });
 
     app.get<{ Params: { name: string } }>(`/api/players/:name/rating`, { config: { limit: `public` } }, async (request, reply) => {
         const parsed = ratingHistoryQuerySchema.safeParse(request.query);
         if (!parsed.success) return reply.code(400).send({ error: `range must be 30d, 1y, or all`, code: `bad_request` });
-        const { name } = request.params;
-        const answer = remembered(`rating ${parsed.data.range} ${nameKeyOf(name)}`, () => {
-            const history = ratingHistory(deps.query, name, parsed.data.range, deps.now());
-            return history === null ? { status: 404, body: notFound } : { status: 200, body: JSON.stringify(ratingHistorySchema.parse(history)) };
-        });
+        const answer = deps.reads.history(request.params.name, parsed.data.range);
         return reply.code(answer.status).header(`content-type`, `application/json; charset=utf-8`).send(answer.body);
     });
 }

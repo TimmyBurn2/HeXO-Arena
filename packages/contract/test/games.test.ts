@@ -96,6 +96,7 @@ describe('gameSnapshotSchema', () => {
             timeControl: { mode: `unlimited` },
             winner: null,
             reason: `aborted`,
+            voided: false,
         });
         expect(finished.status).toBe(`finished`);
         expect(`clock` in finished && finished.clock !== undefined).toBe(false);
@@ -133,7 +134,7 @@ describe('gameSnapshotSchema', () => {
         expect(gameSnapshotSchema.parse(live).timeControl).toEqual(match);
         const { timeControl: _live, ...liveWithout } = live;
         expect(gameSnapshotSchema.safeParse(liveWithout).success).toBe(false);
-        const finished = { gameId: `g1`, status: `finished`, players, openingPlies: 1, board: live.board, timeControl: turnControl, winner: `x`, reason: `six-in-a-row` };
+        const finished = { gameId: `g1`, status: `finished`, players, openingPlies: 1, board: live.board, timeControl: turnControl, winner: `x`, reason: `six-in-a-row`, voided: false };
         expect(gameSnapshotSchema.parse(finished).timeControl).toEqual(turnControl);
         const { timeControl: _finished, ...finishedWithout } = finished;
         expect(gameSnapshotSchema.safeParse(finishedWithout).success).toBe(false);

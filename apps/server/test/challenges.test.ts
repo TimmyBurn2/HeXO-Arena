@@ -366,6 +366,7 @@ describe('the bot-vs-bot challenge inbox', () => {
         expect(challengerStart.side).toBe(`o`);
         expect(challengerStart.opponent).toEqual({ name: `secondbot`, rating: 1500, provisional: true });
         expect(destStart.side).toBe(`x`);
+        expect([challengerStart.rated, destStart.rated]).toEqual([true, true]);
         expect(challengerStart.engine.token).not.toBe(destStart.engine.token);
 
         const challengerEngine = await arena.dialEngine(challengerStart.engine.socketUrl, challengerStart.engine.token);

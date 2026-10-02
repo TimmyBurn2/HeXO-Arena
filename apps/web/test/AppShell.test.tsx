@@ -1,7 +1,9 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { deploy, details, onlyLegal } from './legal-deploy';
 import { AppShell } from '../src/AppShell';
+import { legalStore } from '../src/legal/documents';
 import { meStore } from '../src/me';
 import { navigate } from '../src/router/use-route';
 import { stubEventSource } from './event-source';
@@ -255,9 +257,11 @@ describe('AppShell', () => {
             const footer = document.querySelector(`footer.site-footer`) as HTMLElement;
             expect(footer.querySelector(`.site-tagline`)?.textContent).toBe(`HeXO Arena, one ladder for bots and humans`);
             expect([...footer.querySelectorAll(`a`)].map((a) => [a.textContent, a.getAttribute(`href`), a.getAttribute(`target`)])).toEqual([
+                [`Tournaments`, `/tournaments`, null],
                 [`Build a bot`, `/connect`, null],
                 [`Credits`, `/credits`, null],
                 [`Bot API`, `https://github.com/TimmyBurn2/Hexo-Bot-Api`, null],
+                [`Source`, `https://github.com/TimmyBurn2/HeXO-Arena`, null],
                 [`Impressum / Legal notice`, `/legal/imprint`, null],
                 [`Privacy`, `/legal/privacy`, null],
                 [`Terms`, `/legal/terms`, null],
@@ -383,6 +387,68 @@ describe('AppShell', () => {
         const link = within(line).getByRole(`link`, { name: `Legal notice` });
         expect(link.getAttribute(`href`)).toBe(`/legal/imprint`);
         expect(link.matches(`p a:not([class])`)).toBe(true);
+    });
+
+    it('link the site\'s source with GitHub\'s own mark beside the word, the mark hidden from assistive tech', async () => {
+        stubHealthOk();
+        render(<AppShell />);
+        navigate(`/credits`);
+        const source = await screen.findByRole(`link`, { name: `Source` });
+        expect(source.closest(`footer.site-footer`)).toBeTruthy();
+        expect(source.getAttribute(`href`)).toBe(`https://github.com/TimmyBurn2/HeXO-Arena`);
+        expect(source.getAttribute(`rel`)).toBe(`noreferrer`);
+        const mark = source.querySelector(`svg.github-mark`);
+        expect(mark?.getAttribute(`viewBox`)).toBe(`0 0 16 16`);
+        expect(mark?.getAttribute(`aria-hidden`)).toBe(`true`);
+        expect(mark?.querySelector(`path`)?.getAttribute(`d`)?.startsWith(`M6.766 11.328c-2.063-.25-3.516-1.734-3.516-3.656`)).toBe(true);
+        expect(source.textContent).toBe(`Source`);
+    });
+
+    it('foot the screens with the licenses alone until the legal documents are read, then add those the deployment has', async () => {
+        legalStore.reset();
+        render(<AppShell />);
+        navigate(`/credits`);
+        const footer = await waitFor(() => {
+            const found = document.querySelector(`footer.site-footer`);
+            if (!(found instanceof HTMLElement)) throw new Error(`no footer yet`);
+            return found;
+        });
+        expect([...footer.querySelectorAll(`ul`)].at(-1)?.textContent).toBe(`Licenses`);
+        deploy(details, { imprint: null });
+        await waitFor(() => {
+            expect([...footer.querySelectorAll(`ul`)].at(-1)?.textContent).toBe(`PrivacyTermsLicenses`);
+        });
+        expect(footer.querySelector(`a[href="/legal/imprint"]`)).toBe(null);
+    });
+
+    it('keep the footer link of a legal document whose read failed, which the deployment most likely has', async () => {
+        stubHealthOk();
+        onlyLegal(`privacy`, `terms`);
+        const read = legalStore.read();
+        if (read.status !== `ready`) throw new Error(`the documents were not set`);
+        legalStore.reset({ ...read, failed: new Set([`imprint`]) });
+        render(<AppShell />);
+        navigate(`/credits`);
+        await waitFor(() => {
+            expect([...(document.querySelector(`footer.site-footer`)?.querySelectorAll(`ul`) ?? [])].at(-1)?.textContent).toBe(`Impressum / Legal noticePrivacyTermsLicenses`);
+        });
+    });
+
+    it('point a banned account to the privacy policy without a legal notice, and to nothing without either', async () => {
+        stubHealthOk();
+        onlyLegal(`privacy`);
+        window.history.replaceState(null, ``, `/connect?signin=banned`);
+        const { unmount } = render(<AppShell />);
+        const line = await screen.findByText(/^This Discord account is banned from HeXO Arena/u);
+        expect(line.textContent).toBe(`This Discord account is banned from HeXO Arena; the operator's contact is in the Privacy policy`);
+        expect(within(line).getByRole(`link`, { name: `Privacy policy` }).getAttribute(`href`)).toBe(`/legal/privacy`);
+        unmount();
+        onlyLegal(`terms`);
+        window.history.replaceState(null, ``, `/connect?signin=banned`);
+        render(<AppShell />);
+        const bare = await screen.findByText(/^This Discord account is banned from HeXO Arena/u);
+        expect(bare.textContent).toBe(`This Discord account is banned from HeXO Arena`);
+        expect(within(bare).queryByRole(`link`)).toBe(null);
     });
 
     it('ignore a sign-in reason it does not know, and still drop it', () => {

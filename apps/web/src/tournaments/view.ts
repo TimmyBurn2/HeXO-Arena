@@ -45,8 +45,11 @@ function hexOf(game: TournamentGame, bot: string): HexView {
             return { state: game.point === null ? `none` : game.point === bot ? `won` : `lost`, gameId };
         case `aborted`:
             return { state: `none`, gameId };
+        // The bot that came, or stayed, scores the game it never had to
+        // play; the dash is the absent one's alone.
         case `no_show`:
         case `forfeit`:
+            return { state: game.missing.includes(bot) ? `missing` : game.point === bot ? `won` : `none`, gameId };
         case `not_played`:
             return { state: `missing`, gameId };
     }
@@ -76,7 +79,19 @@ export function pairingScore(pairing: TournamentDetail[`rounds`][number][`pairin
     return [points(pairing.first), points(pairing.second)];
 }
 
-/** The bots that entered but did not play to the end, with why. */
-export function absentees(detail: TournamentDetail): TournamentDetail[`entries`] {
-    return detail.entries.filter((entry) => entry.state === `absent` || entry.state === `left_out` || entry.state === `withdrawn`);
+/** Whether a bot played a game of the tournament, whatever came of it. */
+export function playedAny(detail: TournamentDetail, bot: string): boolean {
+    return detail.rounds.some((round) =>
+        round.pairings.some((pairing) => pairing.games.some((game) => (game.outcome === `played` || game.outcome === `aborted`) && (pairing.first === bot || pairing.second === bot))),
+    );
+}
+
+/**
+ * The bots that entered but did not play to the end, with why: those that
+ * never played, and those withdrawn after they had.
+ */
+export function absentees(detail: TournamentDetail): Record<`never` | `withdrew`, TournamentDetail[`entries`]> {
+    const gone = detail.entries.filter((entry) => entry.state === `absent` || entry.state === `left_out` || entry.state === `withdrawn`);
+    const withdrew = (entry: (typeof gone)[number]) => entry.state === `withdrawn` && playedAny(detail, entry.bot);
+    return { never: gone.filter((entry) => !withdrew(entry)), withdrew: gone.filter(withdrew) };
 }

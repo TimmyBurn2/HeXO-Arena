@@ -19,6 +19,17 @@
 		reverse_proxy app:3000
 	}
 
+	# The deployment's legal documents and the details they fill in, as
+	# files from its legal folder; every other path under /legal/ is a page.
+	# Revalidated on each load, so an edit shows at once.
+	@legalFile path /legal/imprint.md /legal/privacy.md /legal/terms.md /legal/details.json
+	handle @legalFile {
+		root * /srv
+		header Cache-Control no-cache
+		encode zstd gzip
+		file_server
+	}
+
 	# Every page of the site gets its shell from the app, with og meta from
 	# live data and an absolute preview image.
 	@shell path / /play /ladder /bots/* /players/* /game/* /tournaments/* /bots /games /games/live /tournaments /connect /profile /credits /welcome /legal/imprint /legal/privacy /legal/terms
@@ -34,18 +45,6 @@
 			root * /srv/web
 			rewrite * /index.html
 			file_server
-		}
-
-		# The legal pages name the operator from the details read, so the
-		# file the app reads answers it in the app's place; an error route
-		# writes the error's status unless told otherwise.
-		@legalDown path /api/legal
-		handle @legalDown {
-			root * /etc/hexo-arena
-			rewrite * /legal-details.json
-			file_server {
-				status 200
-			}
 		}
 	}
 

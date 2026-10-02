@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { onlyLegal } from './legal-deploy';
 import { DiscordButton, DiscordSignIn } from '../src/components/DiscordButton';
 
 afterEach(() => {
@@ -93,6 +94,17 @@ describe('DiscordSignIn', () => {
         expect(within(line).getByRole(`link`, { name: `Privacy` }).getAttribute(`href`)).toBe(`/legal/privacy`);
         expect(within(line).queryByRole(`link`, { name: `Terms` })).toBe(null);
         expect(line.closest(`.discord-sign-in`)?.querySelector(`a.discord-button`)).toBeTruthy();
+    });
+
+    it('leave the privacy link out of the line when the deployment has no privacy policy', () => {
+        onlyLegal(`imprint`, `terms`);
+        const { unmount } = render(<DiscordSignIn />);
+        const line = document.querySelector(`.discord-sign-in .note`);
+        expect(line?.textContent).toBe(`Your email stays with Discord, and a first sign-in asks for your public name.`);
+        expect(line?.querySelector(`a`)).toBe(null);
+        unmount();
+        render(<DiscordSignIn guest />);
+        expect(document.querySelector(`.discord-sign-in .note`)?.textContent).toBe(`Signing in ends this guest session and its games. Your email stays with Discord.`);
     });
 
     it('let the place that holds it close before the privacy link navigates', () => {

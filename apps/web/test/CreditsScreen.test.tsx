@@ -33,7 +33,7 @@ describe('CreditsScreen', () => {
         const link = screen.getByRole(`link`, { name: `Licenses` });
         expect(link.getAttribute(`href`)).toBe(`/third-party-licenses.txt`);
         expect(link.closest(`p`)?.textContent).toBe(
-            `The open-source code your browser receives, such as React and zod, and the font are listed with their license texts under Licenses.`,
+            `The open-source code your browser receives, such as React and zod, the font, and GitHub's mark are listed with their license texts under Licenses.`,
         );
     });
 
@@ -119,7 +119,7 @@ describe('CreditsScreen', () => {
 
     it('name the owners of the marks it shows, once, under the community', () => {
         render(<CreditsScreen />);
-        const marks = screen.getByText(`Discord and YouTube are trademarks of Discord Inc. and Google LLC.`);
+        const marks = screen.getByText(`Discord, GitHub, and YouTube are trademarks of Discord Inc., GitHub Inc., and Google LLC.`);
         expect(marks.closest(`section`)?.getAttribute(`aria-labelledby`)).toBe(`credits-community`);
     });
 });

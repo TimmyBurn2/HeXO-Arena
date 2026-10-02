@@ -27,7 +27,7 @@ describe('gameTurnSchema', () => {
 
 describe('gameEventSchema', () => {
     it('pairs each event name with its own payload', () => {
-        const finish = { winner: null, reason: `aborted`, clock: { mode: `unlimited` } };
+        const finish = { winner: null, reason: `aborted`, voided: false, clock: { mode: `unlimited` } };
         expect(gameFinishSchema.parse(finish)).toEqual(finish);
         expect(gameEventSchema.parse({ event: `turn`, data: turn }).event).toBe(`turn`);
         expect(gameEventSchema.parse({ event: `finish`, data: finish }).event).toBe(`finish`);

@@ -153,10 +153,11 @@ describe('GET /api/games/finished', () => {
             turns: 1,
             finishedAt: `2026-09-30T08:49:13Z`,
             rated: true,
+            voided: false,
         });
         expect(later).toMatchObject({ gameId: second, openingPlies: 5, turns: 4, timeControl: turnClock });
         expect(later?.players.x.rating).toBeGreaterThan(1000);
-        expect(later?.players.o.rating).toBeLessThan(1500);
+        expect(later?.players.o.rating).toBe(1500);
     });
 
     it('marks games without a winner and voided games unrated', async () => {
@@ -166,6 +167,22 @@ describe('GET /api/games/finished', () => {
         const kept = finish(bots(`alpha`, `gamma`, `x`), `x`);
         const rated = new Map((await page()).games.map((game) => [game.gameId, game.rated]));
         expect([rated.get(aborted), rated.get(voided), rated.get(kept)]).toEqual([false, false, true]);
+    });
+
+    it('lists a voided game marked voided and counts it in no record, head to head included', async () => {
+        const voided = finish(bots(`alpha`, `beta`, `x`), `x`);
+        finish(bots(`alpha`, `beta`, `o`), `o`);
+        finish(bots(`beta`, `alpha`, `x`), `x`);
+        expect(voidGames(query, [voided])).toMatchObject({ kind: `voided`, count: 1 });
+        const listed = await page(`?player=alpha`);
+        expect(listed.games.map((game) => [game.gameId === voided, game.voided])).toEqual([
+            [false, false],
+            [false, false],
+            [true, true],
+        ]);
+        const record = { games: 2, won: 1, lost: 1, undecided: 0, asX: { games: 0, won: 0, lost: 0 }, asO: { games: 2, won: 1, lost: 1 } };
+        expect(listed.record).toEqual(record);
+        expect((await page(`?player=alpha&vs=beta`)).record).toEqual(record);
     });
 
     describe('filters', () => {

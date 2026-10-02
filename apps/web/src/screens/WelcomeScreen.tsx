@@ -1,13 +1,13 @@
 import { useEffect, useId, useRef, useState } from 'react';
-import { isReservedName, legalPagePath, nameKeyOf, namePattern, type Me, type Signup } from '@hexo-arena/contract';
+import { isReservedName, nameKeyOf, namePattern, type Me, type Signup } from '@hexo-arena/contract';
 import { ApiError, cancelSignup, createAccount, fetchSignup, limitedFor } from '../api/client';
 import { useWait, WaitText } from '../components/wait';
 import { DiscordSignIn } from '../components/DiscordButton';
 import { DiscordSymbol } from '../components/DiscordSymbol';
 import { Sigil } from '../components/Sigil';
 import { SkeletonRows } from '../components/states';
+import { useLegalSlots } from '../legal/links';
 import { meStore, useMe } from '../me';
-import { Link } from '../router/Link';
 import { parseRoute } from '../router/route';
 import { navigate, useRoute } from '../router/use-route';
 import { text } from '../text';
@@ -142,6 +142,7 @@ function SignupCard({ signup, held, onEnded }: { signup: Signup; held: Me; onEnd
     const limited = useWait();
     const field = useRef<HTMLInputElement>(null);
     const ids = useId();
+    const legal = useLegalSlots();
     const statusId = `${ids}-status`;
     const noteId = `${ids}-note`;
     const ruleId = `${ids}-rule`;
@@ -204,8 +205,6 @@ function SignupCard({ signup, held, onEnded }: { signup: Signup; held: Me; onEnd
         await cancelSignup().catch(() => undefined);
         navigate(signup.next, { replace: true });
     }
-
-    const page = (to: string) => (words: string) => <Link to={to}>{words}</Link>;
 
     return (
         <div className="card welcome-card">
@@ -273,7 +272,7 @@ function SignupCard({ signup, held, onEnded }: { signup: Signup; held: Me; onEnd
                 {held === null ? null : (
                     <p className="note welcome-held">{held.kind === `guest` ? text.welcome.guestNote : text.welcome.userNote(held.name)}</p>
                 )}
-                <p className="note welcome-notice">{text.welcome.notice(page(legalPagePath(`terms`)), page(legalPagePath(`privacy`)))}</p>
+                <p className="note welcome-notice">{text.welcome.notice(legal)}</p>
                 <p className="card-actions welcome-actions">
                     {/* Kept focusable while it cannot act, so a refused press
                         leaves focus where the person is. */}

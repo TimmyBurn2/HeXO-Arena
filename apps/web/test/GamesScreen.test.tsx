@@ -19,6 +19,7 @@ function game(index: number, overrides: Partial<FinishedGameEntry> = {}): Finish
         turns: 38,
         finishedAt: new Date(Date.now() - 3 * 3_600_000 - index * 60_000).toISOString(),
         rated: true,
+        voided: false,
         ...overrides,
     };
 }
@@ -67,6 +68,16 @@ describe('GamesScreen', () => {
         expect(aborted.textContent).toContain(`unlimitedOrigin only1 turn`);
         expect(screen.getByText(`Newest first; guest games are not kept, so they never show here.`)).toBeTruthy();
         expect(screen.getByText(`Page 1`)).toBeTruthy();
+    });
+
+    it('keep a voided game in the list, tagged voided beside its result', async () => {
+        serve(() => ({ games: [game(0, { voided: true, rated: false }), game(1)], next: null, previous: null, page: 1 }));
+        open(`/games`);
+        const rows = await screen.findAllByRole(`link`, { name: /hextide/u });
+        const [voided, kept] = rows as [HTMLElement, HTMLElement];
+        expect(voided.querySelector(`.game-row-result`)?.textContent).toBe(`hextide won with six in a rowvoided`);
+        expect(voided.querySelector(`.game-row-result .tag`)?.textContent).toBe(`voided`);
+        expect(kept.querySelector(`.tag`)).toBe(null);
     });
 
     it('keep Against, Result, and Side off until a player is named, and hold every filter in the address', async () => {

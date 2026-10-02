@@ -6,30 +6,15 @@ import {
     sessionMaxAgeSeconds,
     signupCookieName,
     signupMaxAgeSeconds,
-    type LegalDetails,
 } from '@hexo-arena/contract';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { boardSettingsStorageKey } from '../src/board/board-settings';
 import { drawerPinnedStorageKey } from '../src/game/use-drawer';
+import { legalStore } from '../src/legal/documents';
 import { playStorageKey } from '../src/play/setup';
 import { LegalScreen } from '../src/screens/LegalScreen';
 import { themeStorageKey } from '../src/theme/themes';
-
-const details: LegalDetails = {
-    operator: { name: `Ada Beispiel`, street: `Musterweg 7`, postcodeAndCity: `12345 Beispielstadt`, country: `Germany`, email: `contact@arena.example`, discord: `ada_b` },
-    host: { name: `Example Hosting GmbH`, street: `Serverstrasse 1`, postcodeAndCity: `54321 Rechenburg`, country: `Germany`, serverLocation: `Rechenburg, Germany` },
-    supervisoryAuthority: { name: `Example Authority`, street: `Aufsichtsplatz 2`, postcodeAndCity: `11111 Landeshausen`, country: `Germany`, url: `https://authority.example/` },
-    mailProvider: { name: `Example Mail AG`, street: `Postfach 3`, postcodeAndCity: `22222 Briefstadt`, country: `Germany` },
-};
-
-function serve(answer: () => Response): void {
-    vi.stubGlobal(
-        `fetch`,
-        vi.fn(() => Promise.resolve(answer())),
-    );
-}
-
-const ok = (body: unknown) => () => new Response(JSON.stringify(body));
+import { deploy, details, template } from './legal-deploy';
 
 // A section of the page, found by its heading.
 function section(heading: string): HTMLElement {
@@ -38,19 +23,27 @@ function section(heading: string): HTMLElement {
     return found;
 }
 
+// The lines of a paragraph broken by line breaks, as an address is.
+function lines(paragraph: Element | null | undefined): string[] {
+    return [...(paragraph?.childNodes ?? [])].filter((node) => node.nodeName !== `BR`).map((node) => node.textContent ?? ``);
+}
+
 afterEach(() => {
     cleanup();
     vi.unstubAllGlobals();
+    legalStore.reset();
 });
 
 describe('LegalScreen', () => {
     it('name the operator in the imprint with an address, a written-out mail link, and Discord beside it', async () => {
-        serve(ok(details));
+        deploy(details);
         render(<LegalScreen page="imprint" />);
         expect(screen.getByRole(`heading`, { level: 1, name: `Impressum / Legal notice` })).toBeTruthy();
-        const address = await screen.findByText(`Ada Beispiel`);
-        expect(screen.getByText(`Under sec. 18(1) Medienstaatsvertrag and sec. 5 DDG:`)).toBeTruthy();
-        expect(address.closest(`address`)?.textContent).toBe(`Ada BeispielMusterweg 712345 BeispielstadtGermany`);
+        await screen.findByRole(`heading`, { level: 2, name: `Provider` });
+        expect(screen.getByText(`Last updated 1 October 2026`).closest(`header`)).toBeTruthy();
+        const provider = section(`Provider`);
+        expect(provider.querySelector(`p`)?.textContent).toBe(`Under sec. 18(1) Medienstaatsvertrag and sec. 5 DDG:`);
+        expect(lines(provider.querySelectorAll(`p`)[1])).toEqual([`Ada Beispiel`, `Musterweg 7`, `12345 Beispielstadt`, `Germany`]);
         const mail = screen.getAllByRole(`link`, { name: `contact@arena.example` })[0];
         expect(mail?.getAttribute(`href`)).toBe(`mailto:contact@arena.example`);
         expect(screen.getByText(`Discord: ada_b`)).toBeTruthy();
@@ -60,7 +53,7 @@ describe('LegalScreen', () => {
     });
 
     it('say what the ladder, the game search, and the bot list make public, and what challenges and bot deletion keep', async () => {
-        serve(ok(details));
+        deploy(details);
         render(<LegalScreen page="privacy" />);
         await screen.findByRole(`navigation`, { name: `On this page` });
         expect(section(`Your account and public name`).textContent).toContain(
@@ -73,7 +66,8 @@ describe('LegalScreen', () => {
         expect(bots.textContent).toContain(`whether the bot is connected, whether it is open to challenges, and how many games it is playing`);
         expect(bots.textContent).toContain(`These records are not public, count toward the daily challenge limits, and have no set end yet.`);
         expect(bots.textContent).toContain(`for the challenge records, Art. 6(1)(f) GDPR, legitimate interest: enforcing fair challenge limits.`);
-        expect(within(bots).getByRole(`link`, { name: `Deleting your account` }).getAttribute(`href`)).toBe(`#deletion`);
+        expect(within(bots).getByRole(`link`, { name: `Deleting your account` }).getAttribute(`href`)).toBe(`#deleting-your-account`);
+        expect(document.getElementById(`deleting-your-account`)?.querySelector(`h2`)?.textContent).toBe(`Deleting your account`);
         // Every kind of data says how long it is kept.
         expect(bots.textContent).toContain(`A bot is kept until you delete it.`);
         expect(bots.textContent).toContain(`A bot you enter in a tournament is listed there with you as its owner, its rating at the start, its results, and its standing, all public.`);
@@ -85,18 +79,20 @@ describe('LegalScreen', () => {
     it('leave out Discord and the mail provider when the deployment names none', async () => {
         const { mailProvider: _mail, ...rest } = details;
         const { discord: _discord, ...operator } = details.operator;
-        serve(ok({ ...rest, operator }));
+        deploy({ ...rest, operator });
         const { unmount } = render(<LegalScreen page="imprint" />);
-        await screen.findByText(`Ada Beispiel`);
+        await screen.findByRole(`heading`, { name: `Contact` });
         expect(document.body.textContent).not.toContain(`Discord:`);
+        expect(section(`Contact`).querySelectorAll(`p`)).toHaveLength(2);
         unmount();
         render(<LegalScreen page="privacy" />);
         await screen.findByRole(`heading`, { name: `Who receives data` });
         expect(document.body.textContent).not.toContain(`contact mailbox`);
+        expect(section(`Who receives data`).querySelectorAll(`li`)).toHaveLength(2);
     });
 
     it('fill the privacy policy from the details and list its sections with links to each', async () => {
-        serve(ok(details));
+        deploy(details);
         render(<LegalScreen page="privacy" />);
         const contents = await screen.findByRole(`navigation`, { name: `On this page` });
         const entries = within(contents).getAllByRole(`link`);
@@ -108,17 +104,19 @@ describe('LegalScreen', () => {
         expect(text).toContain(`Example Mail AG, Postfach 3, 22222 Briefstadt, Germany, hosts the contact mailbox.`);
         expect(text).toContain(`Example Authority, Aufsichtsplatz 2, 11111 Landeshausen, Germany, https://authority.example/.`);
         expect(screen.getByRole(`link`, { name: `https://authority.example/` }).getAttribute(`href`)).toBe(`https://authority.example/`);
+        expect(text).not.toMatch(/\{\{|\}\}/u);
         // Every processing on a legitimate interest names that interest.
         for (const block of document.querySelectorAll(`.legal-section p`)) {
-            if (block.textContent.includes(`Art. 6(1)(f)`) && !block.closest(`#objection`)) expect(block.textContent).toContain(`legitimate interest:`);
+            if (block.textContent.includes(`Art. 6(1)(f)`) && !block.closest(`#right-to-object`)) expect(block.textContent).toContain(`legitimate interest:`);
         }
         expect(section(`Right to object`).classList.contains(`card`)).toBe(true);
+        expect(section(`Right to object`).querySelector(`blockquote`)).toBe(null);
         // Plain sections: the page's landmarks stay the site's own.
         expect(screen.queryAllByRole(`region`)).toHaveLength(0);
     });
 
     it('state the cookie, its lifetime, the storage keys, and the guest idle window as the code sets them', async () => {
-        serve(ok(details));
+        deploy(details);
         render(<LegalScreen page="privacy" />);
         await screen.findByRole(`heading`, { name: `Cookies and browser storage` });
         const storage = section(`Cookies and browser storage`).textContent;
@@ -131,7 +129,7 @@ describe('LegalScreen', () => {
     });
 
     it('state the request counters against flooding: a keyed hash of the address, in memory, an hour at most', async () => {
-        serve(ok(details));
+        deploy(details);
         render(<LegalScreen page="privacy" />);
         await screen.findByRole(`heading`, { name: `Visiting the site` });
         expect(section(`Visiting the site`).textContent).toContain(
@@ -140,7 +138,7 @@ describe('LegalScreen', () => {
     });
 
     it('state what a sign-in keeps from Discord, for how long, and the first sign-in held until the name is chosen', async () => {
-        serve(ok(details));
+        deploy(details);
         render(<LegalScreen page="privacy" />);
         await screen.findByRole(`heading`, { name: `Signing in with Discord` });
         const minutes = String(signupMaxAgeSeconds / 60);
@@ -161,7 +159,7 @@ describe('LegalScreen', () => {
     });
 
     it('state deletion by email and the moderation records as they are today', async () => {
-        serve(ok(details));
+        deploy(details);
         render(<LegalScreen page="privacy" />);
         await screen.findByRole(`heading`, { name: `Deleting your account` });
         const deletion = section(`Deleting your account`);
@@ -171,24 +169,24 @@ describe('LegalScreen', () => {
         );
         expect(deletion.textContent).toContain(`legitimate interest: keeping your opponents' histories and ratings whole.`);
         expect(deletion.textContent).toContain(`Nothing the site shows links a placeholder to you; the operator's record of the deletion keeps your name.`);
-        expect(section(`Moderation records`).textContent).toContain(
-            `The records have no set end yet and keep the name after the account is deleted.`,
-        );
+        expect(within(deletion).getByRole(`link`, { name: `Right to object` }).getAttribute(`href`)).toBe(`#right-to-object`);
+        expect(section(`Moderation records`).textContent).toContain(`The records have no set end yet and keep the name after the account is deleted.`);
     });
 
     it('run the terms under the operator name and link the privacy policy section on deletion', async () => {
-        serve(ok(details));
+        deploy(details);
         render(<LegalScreen page="terms" />);
         expect(await screen.findByText(/run by Ada Beispiel; see the/u)).toBeTruthy();
         expect(screen.getByRole(`link`, { name: `Impressum / Legal notice` }).getAttribute(`href`)).toBe(`/legal/imprint`);
-        expect(screen.getByRole(`link`, { name: `Deleting your account` }).getAttribute(`href`)).toBe(`/legal/privacy#deletion`);
+        expect(screen.getByRole(`link`, { name: `Deleting your account` }).getAttribute(`href`)).toBe(`/legal/privacy#deleting-your-account`);
+        expect(screen.getByRole(`link`, { name: `Bot API` }).getAttribute(`href`)).toBe(`https://github.com/TimmyBurn2/Hexo-Bot-Api`);
         expect(screen.getByRole(`navigation`, { name: `On this page` })).toBeTruthy();
         expect(section(`Accounts`).textContent).toContain(`You must be at least 16; under 18 you need permission from a parent or guardian.`);
         expect(section(`Moderation`).textContent).toContain(`abort games or take them out of the ratings`);
     });
 
     it('hold guests to the terms, say what a guest session is, and let a guest stop before changes apply', async () => {
-        serve(ok(details));
+        deploy(details);
         render(<LegalScreen page="terms" />);
         await screen.findByRole(`heading`, { name: `Guests` });
         const headings = screen.getAllByRole(`heading`, { level: 2 }).map((heading) => heading.textContent);
@@ -197,26 +195,87 @@ describe('LegalScreen', () => {
         expect(guests.textContent).toBe(
             `GuestsYou can play as a guest, without an account. These terms, the age rule included, apply to guests too. Guest games are unrated and end with the guest session; see Playing as a guest in the Privacy policy. The operator may end a guest session and its games at any time.`,
         );
-        expect(within(guests).getByRole(`link`, { name: `Playing as a guest` }).getAttribute(`href`)).toBe(`/legal/privacy#guests`);
+        expect(within(guests).getByRole(`link`, { name: `Playing as a guest` }).getAttribute(`href`)).toBe(`/legal/privacy#playing-as-a-guest`);
         expect(section(`Moderation`).textContent).toContain(`and ban or delete accounts or end guest sessions when these terms or the law are broken`);
         expect(section(`Changes`).textContent).toContain(`If you disagree, you can have your account deleted, or stop playing as a guest, before then.`);
     });
 
-    it('show the error frame with a retry when the details fail, and no text with gaps', async () => {
-        serve(() => new Response(`{}`, { status: 404 }));
+    it('hold the title and a placeholder frame until the documents are read, never text with gaps', () => {
+        legalStore.reset();
         render(<LegalScreen page="privacy" />);
-        expect(await screen.findByRole(`heading`, { name: `The legal details did not load` })).toBeTruthy();
+        expect(screen.getByRole(`heading`, { level: 1, name: `Privacy policy` })).toBeTruthy();
         expect(document.querySelectorAll(`section`)).toHaveLength(0);
-        expect(document.body.textContent).not.toMatch(/[<>[\]]/u);
-        serve(ok(details));
+        expect(document.querySelector(`.skeleton`)).toBeTruthy();
+    });
+
+    it('show a document the deployment lacks as a page that is not there, and one naming details while they are missing', async () => {
+        deploy(details, { terms: null });
+        const { unmount } = render(<LegalScreen page="terms" />);
+        expect(await screen.findByRole(`heading`, { level: 1, name: `Not found` })).toBeTruthy();
+        unmount();
+        deploy(null);
+        render(<LegalScreen page="imprint" />);
+        expect(await screen.findByRole(`heading`, { level: 1, name: `Not found` })).toBeTruthy();
+        expect(document.body.textContent).not.toMatch(/\{\{/u);
+    });
+
+    it('show a document whose read failed as the error frame, and the document once a retry reads it', async () => {
+        let up = false;
+        vi.stubGlobal(
+            `fetch`,
+            vi.fn((url: string) => {
+                if (url === `/legal/details.json`) return Promise.resolve(new Response(JSON.stringify(details), { headers: { 'content-type': `application/json` } }));
+                if (url === `/legal/terms.md` && up) return Promise.resolve(new Response(template(`terms`), { headers: { 'content-type': `text/markdown` } }));
+                return Promise.resolve(new Response(null, { status: url === `/legal/terms.md` ? 500 : 404 }));
+            }),
+        );
+        legalStore.reset();
+        legalStore.start();
+        render(<LegalScreen page="terms" />);
+        expect(await screen.findByRole(`heading`, { level: 2, name: `This document did not load` })).toBeTruthy();
+        expect(screen.getByRole(`heading`, { level: 1, name: `Terms of use` })).toBeTruthy();
+        up = true;
         fireEvent.click(screen.getByRole(`button`, { name: `Try again` }));
-        await waitFor(() => {
-            expect(screen.getByRole(`heading`, { name: `Who is responsible` })).toBeTruthy();
+        expect(await screen.findByRole(`heading`, { level: 2, name: `The service` })).toBeTruthy();
+    });
+
+    it('leave the words of a link to a document the deployment lacks unlinked, never a way to a missing page', async () => {
+        deploy(details, { imprint: null });
+        render(<LegalScreen page="terms" />);
+        const service = await screen.findByRole(`heading`, { level: 2, name: `The service` });
+        const text = service.closest(`section`);
+        expect(text?.textContent).toContain(`see the Impressum / Legal notice.`);
+        expect(screen.queryByRole(`link`, { name: `Impressum / Legal notice` })).toBe(null);
+        expect(screen.getByRole(`link`, { name: `Deleting your account` }).getAttribute(`href`)).toBe(`/legal/privacy#deleting-your-account`);
+    });
+
+    it('drop raw HTML and images from a deployment\'s own text, and never run them', async () => {
+        const ran = vi.fn();
+        vi.stubGlobal(`hexoRan`, ran);
+        deploy(details, {
+            terms: [
+                `# Terms of use`,
+                ``,
+                `## Plain`,
+                ``,
+                `<script>window.hexoRan()</script>`,
+                ``,
+                `Inline <b>bold</b> <img src="x" onerror="window.hexoRan()"> and ![a picture](https://elsewhere.example/p.png) [a trap](javascript:window.hexoRan()) here.`,
+                ``,
+                `<div onclick="window.hexoRan()">a block</div>`,
+            ].join(`\n`),
         });
+        render(<LegalScreen page="terms" />);
+        const plain = await screen.findByRole(`heading`, { level: 2, name: `Plain` });
+        const body = plain.closest(`section`);
+        expect(body?.textContent).toBe(`PlainInline bold  and  a trap here.`);
+        expect(document.querySelectorAll(`script, img, b, div[onclick]`)).toHaveLength(0);
+        expect(screen.queryByRole(`link`, { name: `a trap` })).toBe(null);
+        expect(ran).not.toHaveBeenCalled();
     });
 
     it('title the tab with the page name', async () => {
-        serve(ok(details));
+        deploy(details);
         window.history.pushState(null, ``, `/legal/terms`);
         render(<LegalScreen page="terms" />);
         await waitFor(() => {

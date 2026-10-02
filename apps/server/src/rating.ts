@@ -23,13 +23,14 @@ export interface PlayerRef {
 }
 
 /**
- * A finished game as the log holds it, with its finish in epoch seconds;
- * a null winner (aborted, wall-time) leaves every rating untouched.
+ * A finished game as the log holds it, with its start and finish in epoch
+ * seconds; a null winner (aborted, wall-time) leaves every rating untouched.
  */
 export interface FinishedGame {
     readonly x: PlayerRef;
     readonly o: PlayerRef;
     readonly winner: Side | null;
+    readonly startedAt: number;
     readonly finishedAt: number;
 }
 
@@ -84,35 +85,48 @@ export function broughtTo(standing: Standing, at: number): PlayerRating {
     return { ...standing.rating, deviation: clamp(widened.deviation, deviationFloor, deviationCap) };
 }
 
-function settle(game: FinishedGame, winner: Side, side: Side, brought: Record<Side, PlayerRating>): PlayerRating {
-    const other: Side = side === `x` ? `o` : `x`;
-    const own = brought[side];
+/** The rating an opponent counts with: its volatility plays no part. */
+export type Opponent = Pick<PlayerRating, `rating` | `deviation`>;
+
+// The cap applies to the raw move, then the floor.
+function settle(own: PlayerRating, opponent: Opponent, won: boolean): PlayerRating {
     // The time since the previous game already widened the deviation, so
     // the game itself spans no period.
-    const raw = glicko2Update(own, [{ opponent: brought[other], score: winner === side ? 1 : 0 }], glicko2Tau, 0);
+    const raw = glicko2Update(own, [{ opponent, score: won ? 1 : 0 }], glicko2Tau, 0);
     const capped = clamp(raw.rating - own.rating, -gameDeltaCap, gameDeltaCap);
-    // The halving valve: a human's result against a bot counts half, so
-    // farming a weak bot pays half.
-    const halved = game[side].kind === `human` && game[other].kind === `bot`;
-    const after = own.rating + capped;
     return {
-        rating: Math.max(ratingFloor, halved ? (own.rating + after) / 2 : after),
+        rating: Math.max(ratingFloor, own.rating + capped),
         deviation: clamp(raw.deviation, deviationFloor, deviationCap),
         volatility: Math.min(raw.volatility, volatilityCap),
     };
 }
 
+/** The side a human holds, or null in a game between two bots. */
+export function humanSideOf(game: Pick<FinishedGame, `x` | `o`>): Side | null {
+    return game.x.kind === `human` ? `x` : game.o.kind === `human` ? `o` : null;
+}
+
 /**
- * Both sides' ratings after a game, each computed from the pre-game pair,
- * so neither side's update sees the other's; a game with no winner returns
- * the pair as it stood.
+ * Both sides' ratings after a game; a game with no winner returns the pair
+ * as it stood.
+ * Between two bots each side is computed from the pre-game pair, so
+ * neither update sees the other's.
+ * Bots anchor humans: against a human the bot's rating stays as it is,
+ * and the human is rated against `botAtStart`, the bot as it stood when
+ * the game began, so no result against a bot ever moves the bot.
  * Every live update and every recomputation goes through here, which is
  * what makes the fold reproduce the stored table bit for bit.
  */
-export function rateGame(game: FinishedGame, before: Record<Side, Standing>): Record<Side, PlayerRating> {
+export function rateGame(game: FinishedGame, before: Record<Side, Standing>, botAtStart?: Opponent): Record<Side, PlayerRating> {
     if (game.winner === null) return { x: before.x.rating, o: before.o.rating };
-    const brought = { x: broughtTo(before.x, game.finishedAt), o: broughtTo(before.o, game.finishedAt) };
-    return { x: settle(game, game.winner, `x`, brought), o: settle(game, game.winner, `o`, brought) };
+    const human = humanSideOf(game);
+    if (human !== null && botAtStart === undefined) throw new Error(`a game against a human is rated against the bot at its start`);
+    if (human === null || botAtStart === undefined) {
+        const brought = { x: broughtTo(before.x, game.finishedAt), o: broughtTo(before.o, game.finishedAt) };
+        return { x: settle(brought.x, brought.o, game.winner === `x`), o: settle(brought.o, brought.x, game.winner === `o`) };
+    }
+    const rated = settle(broughtTo(before[human], game.finishedAt), botAtStart, game.winner === human);
+    return human === `x` ? { x: rated, o: before.o.rating } : { x: before.x.rating, o: rated };
 }
 
 /** Both sides' ratings around one game of the fold; after is before for a game that rates nobody. */
@@ -123,8 +137,11 @@ export interface RatingStep {
 
 /**
  * Folds a game log, in finish order, into the rating of every player who
- * has a rated game, keyed by {@link playerKey}, handing each game's step
- * to `visit` on the way.
+ * has a game with a winner, keyed by {@link playerKey}, handing each game's
+ * step to `visit` on the way.
+ * A bot facing a human counts as it stood after its last bot game that
+ * finished by the second the human game started, which the live path
+ * reads from the same log.
  * The fold is the ground truth: the stored ratings are its cache.
  */
 export function foldRatings<Game extends FinishedGame>(
@@ -133,18 +150,33 @@ export function foldRatings<Game extends FinishedGame>(
 ): Map<string, RatedPlayer> {
     const table = new Map<string, RatedPlayer>();
     const ratedAt = new Map<string, number>();
+    // Each bot's ratings after its bot games, in finish order.
+    const botGames = new Map<string, { finishedAt: number; rating: PlayerRating }[]>();
     const standing = (player: PlayerRef): Standing => ({
         rating: table.get(playerKey(player))?.rating ?? seedRating(player.kind),
         ratedAt: ratedAt.get(playerKey(player)) ?? null,
     });
+    const atStart = (bot: PlayerRef, startedAt: number): PlayerRating =>
+        botGames
+            .get(playerKey(bot))
+            ?.findLast((entry) => entry.finishedAt <= startedAt)?.rating ?? seedRating(bot.kind);
     for (const game of log) {
+        const human = humanSideOf(game);
         const before = { x: standing(game.x), o: standing(game.o) };
-        const after = rateGame(game, before);
+        const after = rateGame(game, before, human === null || game.winner === null ? undefined : atStart(game[human === `x` ? `o` : `x`], game.startedAt));
         visit?.(game, { before: { x: before.x.rating, o: before.o.rating }, after });
         if (game.winner === null) continue;
         for (const side of [`x`, `o`] as const) {
-            table.set(playerKey(game[side]), { player: game[side], rating: after[side] });
-            ratedAt.set(playerKey(game[side]), game.finishedAt);
+            const player = game[side];
+            table.set(playerKey(player), { player, rating: after[side] });
+            // A game against a human is no rated game for the bot.
+            if (player.kind === `bot` && human !== null) continue;
+            ratedAt.set(playerKey(player), game.finishedAt);
+            if (player.kind === `bot`) {
+                const entries = botGames.get(playerKey(player)) ?? [];
+                entries.push({ finishedAt: game.finishedAt, rating: after[side] });
+                botGames.set(playerKey(player), entries);
+            }
         }
     }
     return table;

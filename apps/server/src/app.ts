@@ -9,7 +9,6 @@ import {
     requestBodyLimitBytes,
     tournamentDevLeadMs,
     tournamentLeadMs,
-    type LegalDetails,
 } from '@hexo-arena/contract';
 import websocketPlugin from '@fastify/websocket';
 import cookiePlugin from '@fastify/cookie';
@@ -29,7 +28,6 @@ import { fillGameRatings } from './rating-store';
 import { engineSocketRoute, registerGameApi } from './game-api';
 import { GameRegistry, wirePresence } from './game-registry';
 import { registerLeaderboardApi } from './leaderboard-api';
-import { registerLegalApi } from './legal';
 import type { DiscordOAuth } from './discord';
 import { drain } from './drain';
 import { deleteBotByPolicy, ownedBotId } from './moderation';
@@ -43,7 +41,7 @@ import { sessionUser, sweepSessions } from './sessions';
 import { registerSignInApi } from './sign-in-api';
 import { sweepSignups } from './signups';
 import { beginGeneration, StartGate } from './site-state';
-import { registerPlayerApi } from './player-api';
+import { createPlayerReads, registerPlayerApi } from './player-api';
 import { registerTournamentApi } from './tournament-api';
 import { TournamentScheduler } from './tournament-scheduler';
 import type { GameWatchers } from './watchers';
@@ -61,9 +59,6 @@ export interface AppDeps {
     // The site's public origin, which makes the shell's preview image an
     // absolute address.
     publicOrigin: string;
-    // The operator's legal details for the legal pages; only development
-    // runs without them.
-    legalDetails: LegalDetails | null;
     // The deployed index.html; when set, the root, ladder, bot, and game
     // routes answer with the shell carrying live og meta. Dev leaves it to Vite.
     webIndexPath?: string;
@@ -186,14 +181,14 @@ export async function buildApp(deps: AppDeps): Promise<BuiltApp> {
     registerGameApi(app, { query, presence, games, watchers, gate, guests, limits, reservations: tournaments });
     registerFinishedGamesApi(app, { query, now: deps.now ?? Date.now });
     registerLeaderboardApi(app, { query, presence, now: deps.now ?? Date.now });
-    registerLegalApi(app, deps.legalDetails);
     registerTournamentApi(app, { query, presence, games, limits, now: deps.now ?? Date.now });
-    registerPlayerApi(app, { query, now: deps.now ?? Date.now });
+    const playerReads = createPlayerReads({ query, now: deps.now ?? Date.now });
+    registerPlayerApi(app, { reads: playerReads });
     registerSessionApi(app, { query, guests, games, secureCookies: deps.secureCookies, limits });
     registerSignInApi(app, { query, guests, discord: deps.discord, secureCookies: deps.secureCookies, devLogin: deps.devLogin, limits });
     if (deps.devLogin) registerDevAccountsApi(app, { query });
     if (deps.webIndexPath !== undefined) {
-        registerOgShell(app, { query, presence, games, indexPath: deps.webIndexPath, publicOrigin: deps.publicOrigin, now: deps.now ?? Date.now });
+        registerOgShell(app, { query, presence, games, players: playerReads, indexPath: deps.webIndexPath, publicOrigin: deps.publicOrigin, now: deps.now ?? Date.now });
     }
     const admin = createAdminHandler({
         query,

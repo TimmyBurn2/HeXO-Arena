@@ -10,6 +10,7 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { AppShell } from './AppShell';
 import { boardSettingsStore } from './board/board-settings';
+import { legalStore } from './legal/documents';
 import { meStore } from './me';
 import { themeStore } from './theme/themes';
 
@@ -19,6 +20,7 @@ import.meta.glob(`./styles/themes/*.css`, { eager: true });
 themeStore.start();
 boardSettingsStore.start();
 meStore.start();
+legalStore.start();
 
 const rootElement = document.getElementById(`root`);
 if (!rootElement) {

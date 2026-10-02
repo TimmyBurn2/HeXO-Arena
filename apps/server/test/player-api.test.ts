@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { createBot, findBot } from '../src/bots';
 import { createQuery, type Query } from '../src/db';
 import { insertBotGame, insertGame, recordFinish, type OpeningCell } from '../src/game-store';
-import { deleteUser } from '../src/moderation';
+import { deleteUser, voidGames } from '../src/moderation';
 import { createUserWithExactName } from '../src/users';
 import { createTestApp, roomyLimits, type TestApp } from './helpers';
 
@@ -93,6 +93,17 @@ describe('the player reads', () => {
             { name: `cid`, kind: `human`, games: 1, won: 1, lost: 0 },
         ]);
         expect(body?.firstGameAt).toMatch(/Z$/u);
+    });
+
+    it('leaves a voided game out of the record and the opponents met, as the rating leaves it', async () => {
+        bots(`alpha`, `beta`, `x`, `x`);
+        const voided = bots(`alpha`, `beta`, `x`, `x`);
+        human(`cid`, `alpha`, `o`, `o`);
+        expect(voidGames(query, [voided, `cid`])).toMatchObject({ kind: `voided`, count: 2 });
+        const { body } = await record(`alpha`);
+        expect(body).toMatchObject({ games: 1, won: 1, lost: 0, undecided: 0, asX: { games: 1, won: 1 }, asO: { games: 0, won: 0 } });
+        expect(body?.opponents).toEqual([{ name: `beta`, kind: `bot`, games: 1, won: 1, lost: 0 }]);
+        expect((await record(`cid`)).body).toMatchObject({ games: 0, won: 0, lost: 0, firstGameAt: null });
     });
 
     it('reads a human\'s record too, with no placings', async () => {

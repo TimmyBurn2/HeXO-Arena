@@ -39,6 +39,7 @@ test('the featured board holds its game until it ends, shows the result, then fe
         status: `finished`,
         winner: `x`,
         reason: `surrender`,
+        voided: false,
     };
     state.games[weak.gameId] = end;
     state.live = [strong];

@@ -63,7 +63,7 @@ describe('applyTurn', () => {
 
 describe('applyFinish', () => {
     it('finishes the board with the result and the final clock, keeping the seat', () => {
-        const finished = applyFinish({ ...running, you: `o` }, { winner: `x`, reason: `timeout`, clock: { mode: `turn`, remainingTurnMs: 0 } });
+        const finished = applyFinish({ ...running, you: `o` }, { winner: `x`, reason: `timeout`, voided: false, clock: { mode: `turn`, remainingTurnMs: 0 } });
         expect(finished).toMatchObject({ status: `finished`, winner: `x`, reason: `timeout`, you: `o` });
         expect(`toMove` in finished).toBe(false);
     });
@@ -78,7 +78,7 @@ describe('laterOf', () => {
     });
 
     it('never takes a finish back on an equal board', () => {
-        const finished = applyFinish(running, { winner: null, reason: `aborted`, clock: { mode: `turn`, remainingTurnMs: 0 } });
+        const finished = applyFinish(running, { winner: null, reason: `aborted`, voided: false, clock: { mode: `turn`, remainingTurnMs: 0 } });
         expect(laterOf(finished, running)).toBe(finished);
         expect(laterOf(running, finished)).toBe(finished);
     });

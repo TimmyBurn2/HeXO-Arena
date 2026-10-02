@@ -24,7 +24,7 @@ export function Rungs({ entries }: { entries: readonly LeaderboardEntry[] }) {
                             {entry.kind === `human` ? (
                                 <span className="rung-kind">{text.ladder.human}</span>
                             ) : owner === null ? null : (
-                                <span className="rung-owner">{text.ladder.by(owner)}</span>
+                                <span className="rung-owner">{text.ladder.by(<PlayerName name={owner} kind="human" />)}</span>
                             )}
                         </span>
                         <span className="rung-rating">{String(entry.rating)}</span>

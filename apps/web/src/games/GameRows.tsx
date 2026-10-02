@@ -8,6 +8,8 @@ import './GameRows.css';
  * Finished games as rows, each a link into its game: both seats at the
  * rating they stood at before the result, the result in words, the clock,
  * the opening, the length, and when it ended; never a rating's move.
+ * A game the operator voided stays listed, tagged, as it counts in no
+ * record.
  * A wide window lines them up under a head of columns; a narrow one makes
  * each a card with the time at its top right.
  */
@@ -35,7 +37,10 @@ export function GameRows({ games, now, label }: { games: readonly FinishedGameEn
                             <span className="game-row-vs">{text.games.versus}</span>
                             <Seat side="o" player={game.players.o} />
                         </span>
-                        <span className="game-row-result">{resultSentence(game, { x: game.players.x.name, o: game.players.o.name })}</span>
+                        <span className="game-row-result">
+                            {resultSentence(game, { x: game.players.x.name, o: game.players.o.name })}
+                            {game.voided ? <span className="tag muted">{text.games.voided}</span> : null}
+                        </span>
                         <span className="game-row-facts">
                             <span>{clockText(game.timeControl)}</span>
                             <span>{text.games.openingValue(game.openingPlies)}</span>

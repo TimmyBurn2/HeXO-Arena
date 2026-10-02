@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { onlyLegal } from './legal-deploy';
 import type { GameSnapshot } from '@hexo-arena/contract';
 import { boardSettingsStore, defaultBoardSettings } from '../src/board/board-settings';
 import { meStore } from '../src/me';
@@ -54,6 +55,7 @@ const finishedSnapshot = {
     status: `finished`,
     winner: `x`,
     reason: `six-in-a-row`,
+    voided: false,
 } as GameSnapshot;
 
 function stubGame(snapshot: GameSnapshot, status = 200): void {
@@ -350,6 +352,18 @@ describe('GameScreen', () => {
         expect(document.querySelector(`.peek-line`)?.textContent).toBe(`hextide won with six in a row`);
     });
 
+    it('tag a voided game beside its result and tell a watcher it is unrated because the operator voided it', async () => {
+        if (finishedSnapshot.status !== `finished`) throw new Error(`the finished snapshot is not finished`);
+        stubGame(watched({ ...finishedSnapshot, voided: true }));
+        render(<GameScreen gameId="g-end" />);
+        const result = await screen.findByText(`hextide won with six in a row`, { selector: `.hud-result` });
+        expect(result.closest(`.hud-replay-line`)?.querySelector(`.tag`)?.textContent).toBe(`voided`);
+        await openWithM();
+        fireEvent.click(screen.getByRole(`tab`, { name: `Game` }));
+        const rated = screen.getByText(`Rated`, { selector: `.facts dt` });
+        expect(rated.nextElementSibling?.textContent).toBe(`No, the operator voided it`);
+    });
+
     it('foot the drawer under either tab with the standing links, then the legal ones, each opening a new tab', async () => {
         stubGame(runningSnapshot);
         render(<GameScreen gameId="g-run" />);
@@ -359,9 +373,11 @@ describe('GameScreen', () => {
             fireEvent.click(screen.getByRole(`tab`, { name: tab }));
             const links = [...document.querySelectorAll(`#drawer-body .drawer-foot a`)];
             expect(links.map((link) => [link.getAttribute(`aria-label`), link.getAttribute(`href`), link.getAttribute(`target`)])).toEqual([
+                [`Tournaments, opens in a new tab`, `/tournaments`, `_blank`],
                 [`Build a bot, opens in a new tab`, `/connect`, `_blank`],
                 [`Credits, opens in a new tab`, `/credits`, `_blank`],
                 [`Bot API, opens in a new tab`, `https://github.com/TimmyBurn2/Hexo-Bot-Api`, `_blank`],
+                [`Source, opens in a new tab`, `https://github.com/TimmyBurn2/HeXO-Arena`, `_blank`],
                 [`Impressum / Legal notice, opens in a new tab`, `/legal/imprint`, `_blank`],
                 [`Privacy, opens in a new tab`, `/legal/privacy`, `_blank`],
                 [`Terms, opens in a new tab`, `/legal/terms`, `_blank`],
@@ -369,6 +385,16 @@ describe('GameScreen', () => {
             ]);
             expect(links.every((link) => link.getAttribute(`rel`) === `noreferrer`)).toBe(true);
         }
+    });
+
+    it('foot the drawer with only the legal documents the deployment has', async () => {
+        onlyLegal(`privacy`);
+        stubGame(runningSnapshot);
+        render(<GameScreen gameId="g-run" />);
+        await screen.findByRole(`heading`, { name: `hextide vs you` });
+        await openWithM();
+        const legal = [...document.querySelectorAll(`#drawer-body .drawer-foot .legal-links a`)];
+        expect(legal.map((link) => link.getAttribute(`href`))).toEqual([`/legal/privacy`, `/third-party-licenses.txt`]);
     });
 
     it('keep two tabs, Moves and Game, both reached by arrow keys either way', async () => {
@@ -690,7 +716,7 @@ describe('GameScreen', () => {
         expect(document.querySelectorAll(`g.stone`)).toHaveLength(7);
         expect(await screen.findByText(`Your turn`)).toBeTruthy();
         act(() => {
-            stream.emit(`finish`, { winner: `x`, reason: `timeout`, clock: { mode: `turn`, remainingTurnMs: 0 } });
+            stream.emit(`finish`, { winner: `x`, reason: `timeout`, voided: false, clock: { mode: `turn`, remainingTurnMs: 0 } });
         });
         expect(await screen.findByText(`hextide won on time`, { selector: `.hud-result` })).toBeTruthy();
         expect(stream.readyState).toBe(FakeEventSource.CLOSED);
@@ -774,7 +800,7 @@ describe('GameScreen for a watcher', () => {
         expect(document.querySelectorAll(`g.stone`)).toHaveLength(3);
         expect(frame()).toBe(held);
         act(() => {
-            stream.emit(`finish`, { winner: `x`, reason: `timeout`, clock: { mode: `turn`, remainingTurnMs: 0 } });
+            stream.emit(`finish`, { winner: `x`, reason: `timeout`, voided: false, clock: { mode: `turn`, remainingTurnMs: 0 } });
         });
         expect(await screen.findByText(`hextide won on time`, { selector: `.hud-result` })).toBeTruthy();
         expect(frame()).toBe(held);
@@ -789,7 +815,7 @@ describe('GameScreen for a watcher', () => {
         render(<GameScreen gameId="g-run" />);
         await screen.findByRole(`heading`, { name: `hextide vs tom` });
         act(() => {
-            FakeEventSource.latest().emit(`finish`, { winner: `x`, reason: `timeout`, clock: { mode: `turn`, remainingTurnMs: 0 } });
+            FakeEventSource.latest().emit(`finish`, { winner: `x`, reason: `timeout`, voided: false, clock: { mode: `turn`, remainingTurnMs: 0 } });
         });
         expect(await screen.findByText(`hextide won on time`, { selector: `.hud-result` })).toBeTruthy();
         await waitFor(() => {

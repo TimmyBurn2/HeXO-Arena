@@ -58,11 +58,11 @@ export const streamPlayerSchema = z
     .meta({ id: `Player` });
 export type StreamPlayer = z.infer<typeof streamPlayerSchema>;
 
-// A seat in a game: a bot or user as above, or an anonymous guest, which
-// has no rating (null) and so is never provisional.
+// A guest is never provisional. The rating is inline, since the shared
+// Rating made nullable reads as an allOf in the document.
 export const seatPlayerSchema = streamPlayerSchema
-    .extend({ rating: ratingSchema.nullable() })
-    .meta({ id: `Seat` });
+    .extend({ rating: z.number().int().nullable() })
+    .meta({ id: `Seat`, description: `A seat in a game: a bot, a player, or a guest, whose rating is null.` });
 export type SeatPlayer = z.infer<typeof seatPlayerSchema>;
 
 export const defaultOpeningPlies = 5;
@@ -164,7 +164,9 @@ export const gameStartEventSchema = z
         opponent: seatPlayerSchema,
         timeControl: timeControlSchema,
         openingPlies: openingPliesSchema,
-        rated: z.boolean().meta({ description: `False for a game against a guest, which moves no rating.` }),
+        rated: z.boolean().meta({
+            description: `Whether this game moves the bot's own rating: true only against another bot. A game against a player moves only the player's rating, and one against a guest moves none.`,
+        }),
         engine: engineSessionSchema,
     })
     .meta({

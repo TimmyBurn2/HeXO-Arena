@@ -57,6 +57,29 @@
         }
     }
 
+    /* Where one row cannot hold the five standing links, they stand three
+       to a row, then two, so a wrapped row never leaves one link alone
+       beside a full one. */
+    @media (width < 26.5rem) {
+        .site-footer .site-links:not(.legal-links) {
+            display: grid;
+            grid-template-columns: repeat(3, auto);
+            justify-content: start;
+        }
+    }
+
+    @media (width < 17.25rem) {
+        .site-footer .site-links:not(.legal-links) {
+            grid-template-columns: repeat(2, auto);
+        }
+    }
+
+    @media (width < 13.25rem) {
+        .site-footer .site-links:not(.legal-links) {
+            grid-template-columns: auto;
+        }
+    }
+
     /* Where one row cannot hold the four legal links, they stand two to a
        row. */
     @media (width < 23.5rem) {

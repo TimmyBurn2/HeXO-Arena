@@ -557,6 +557,9 @@ components:
           description: Turns on the board at the finish, the opening's included.
           minimum: 0
           type: integer
+        voided:
+          description: "Taken out by the operator: still listed, and counted in no record and no rating."
+          type: boolean
         winner:
           enum:
             - x
@@ -574,6 +577,7 @@ components:
         - turns
         - finishedAt
         - rated
+        - voided
       type: object
     FinishedGamesPage:
       properties:
@@ -797,6 +801,10 @@ components:
           $ref: "#/components/schemas/GameClock"
         reason:
           $ref: "#/components/schemas/FinishReason"
+        voided:
+          description: True for a game the operator voided while it ran, which counts in no record and no
+            rating.
+          type: boolean
         winner:
           enum:
             - x
@@ -807,6 +815,7 @@ components:
       required:
         - winner
         - reason
+        - voided
         - clock
       type: object
     GameFinishEvent:
@@ -858,9 +867,8 @@ components:
         provisional:
           $ref: "#/components/schemas/Provisional"
         rating:
-          allOf:
-            - $ref: "#/components/schemas/Rating"
-            - nullable: true
+          nullable: true
+          type: integer
       required:
         - name
         - rating
@@ -941,6 +949,10 @@ components:
               $ref: "#/components/schemas/TimeControl"
             tournament:
               $ref: "#/components/schemas/GameTournament"
+            voided:
+              description: "Taken out by the operator: the game stays readable, and counts in no record and no
+                rating."
+              type: boolean
             winner:
               enum:
                 - x
@@ -962,6 +974,7 @@ components:
             - status
             - winner
             - reason
+            - voided
           type: object
     GameStartEvent:
       description: A game the bot plays has started, or is replayed as the stream opens. A game started by
@@ -976,7 +989,8 @@ components:
         opponent:
           $ref: "#/components/schemas/Seat"
         rated:
-          description: False for a game against a guest, which moves no rating.
+          description: "Whether this game moves the bot's own rating: true only against another bot. A game
+            against a player moves only the player's rating, and one against a guest moves none."
           type: boolean
         side:
           enum:
@@ -1178,133 +1192,6 @@ components:
         - lastPlayedAt
         - kind
       type: object
-    LegalDetails:
-      additionalProperties: false
-      properties:
-        host:
-          additionalProperties: false
-          properties:
-            country:
-              maxLength: 200
-              minLength: 1
-              type: string
-            name:
-              maxLength: 200
-              minLength: 1
-              type: string
-            postcodeAndCity:
-              maxLength: 200
-              minLength: 1
-              type: string
-            serverLocation:
-              maxLength: 200
-              minLength: 1
-              type: string
-            street:
-              maxLength: 200
-              minLength: 1
-              type: string
-          required:
-            - name
-            - street
-            - postcodeAndCity
-            - country
-            - serverLocation
-          type: object
-        mailProvider:
-          additionalProperties: false
-          properties:
-            country:
-              maxLength: 200
-              minLength: 1
-              type: string
-            name:
-              maxLength: 200
-              minLength: 1
-              type: string
-            postcodeAndCity:
-              maxLength: 200
-              minLength: 1
-              type: string
-            street:
-              maxLength: 200
-              minLength: 1
-              type: string
-          required:
-            - name
-            - street
-            - postcodeAndCity
-            - country
-          type: object
-        operator:
-          additionalProperties: false
-          properties:
-            country:
-              maxLength: 200
-              minLength: 1
-              type: string
-            discord:
-              maxLength: 64
-              minLength: 1
-              type: string
-            email:
-              maxLength: 254
-              pattern: ^[^\s@]+@[^\s@]+$
-              type: string
-            name:
-              maxLength: 200
-              minLength: 1
-              type: string
-            postcodeAndCity:
-              maxLength: 200
-              minLength: 1
-              type: string
-            street:
-              maxLength: 200
-              minLength: 1
-              type: string
-          required:
-            - name
-            - street
-            - postcodeAndCity
-            - country
-            - email
-          type: object
-        supervisoryAuthority:
-          additionalProperties: false
-          properties:
-            country:
-              maxLength: 200
-              minLength: 1
-              type: string
-            name:
-              maxLength: 200
-              minLength: 1
-              type: string
-            postcodeAndCity:
-              maxLength: 200
-              minLength: 1
-              type: string
-            street:
-              maxLength: 200
-              minLength: 1
-              type: string
-            url:
-              maxLength: 2048
-              pattern: ^https:\/\/\S+$
-              type: string
-          required:
-            - name
-            - street
-            - postcodeAndCity
-            - country
-            - url
-          type: object
-      required:
-        - operator
-        - host
-        - supervisoryAuthority
-      type: object
     LiveGameEntry:
       description: A game in progress, its board and clock as its snapshot states them; a game with a
         guest seat is unrated.
@@ -1494,7 +1381,7 @@ components:
         - provisional
       type: object
     PlayerRecord:
-      description: Every finished game the player sat in counts, aborted games aside.
+      description: Every finished game the player sat in counts, aborted and voided games aside.
       properties:
         asO:
           properties:
@@ -1693,15 +1580,15 @@ components:
         - provisional
       type: object
     Seat:
+      description: "A seat in a game: a bot, a player, or a guest, whose rating is null."
       properties:
         name:
           type: string
         provisional:
           $ref: "#/components/schemas/Provisional"
         rating:
-          allOf:
-            - $ref: "#/components/schemas/Rating"
-            - nullable: true
+          nullable: true
+          type: integer
       required:
         - name
         - rating
@@ -2157,6 +2044,21 @@ components:
           type: string
         openingPlies:
           $ref: "#/components/schemas/OpeningPlies"
+        round:
+          description: While it runs, the round under way or the next to start, and how many there are; null
+            otherwise.
+          nullable: true
+          properties:
+            current:
+              minimum: 1
+              type: integer
+            of:
+              minimum: 1
+              type: integer
+          required:
+            - current
+            - of
+          type: object
         startsAt:
           format: date-time
           type: string
@@ -2192,6 +2094,7 @@ components:
         - entrants
         - maxEntrants
         - winner
+        - round
       type: object
     UnauthorizedError:
       properties:
@@ -2269,7 +2172,7 @@ components:
       type: apiKey
 info:
   title: HeXO Arena
-  version: 0.31.0
+  version: 0.32.0
 openapi: 3.0.3
 paths:
   /api/auth/discord/callback:
@@ -3262,26 +3165,6 @@ paths:
       summary: List rankable players by rating.
       tags:
         - Directory
-  /api/legal:
-    get:
-      description: The values the legal pages show, read once at start from the deployment's file; a
-        development server without the file answers 404.
-      operationId: getLegalDetails
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/LegalDetails"
-          description: The legal details.
-        "404":
-          $ref: "#/components/responses/NotFound"
-        "429":
-          $ref: "#/components/responses/RateLimited"
-      security: []
-      summary: The operator's legal details.
-      tags:
-        - Site
   /api/me:
     get:
       description: Reads the session cookie alone; without a live session the answer is null, never 401.

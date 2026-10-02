@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { frameOf, GameWatchers } from '../src/watchers';
 import { FakeStreamSocket } from './helpers';
 
-const finish: GameEvent = { event: `finish`, data: { winner: `x`, reason: `surrender`, clock: { mode: `unlimited` } } };
+const finish: GameEvent = { event: `finish`, data: { winner: `x`, reason: `surrender`, voided: false, clock: { mode: `unlimited` } } };
 
 function snapshotEvent(gameId: string): GameEvent {
     return {

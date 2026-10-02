@@ -34,6 +34,21 @@
         color: var(--c-text);
     }
 
+    /* GitHub's mark beside the link to the place it names, in the one
+       color the brand sheet gives it, never the link's hue. */
+    .github-mark {
+        flex: none;
+        width: var(--github-mark-h);
+        height: var(--github-mark-h);
+        fill: var(--c-github);
+    }
+
+    @media (forced-colors: active) {
+        .github-mark {
+            fill: CanvasText;
+        }
+    }
+
     .new-tab-mark {
         width: var(--text-sm);
         height: var(--text-sm);

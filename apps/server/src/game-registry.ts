@@ -682,6 +682,7 @@ export class GameRegistry {
             timeControl: record.timeControl,
             winner: record.winner,
             reason: record.finishReason,
+            voided: record.voided,
             ...(tournament === undefined ? {} : { tournament }),
         };
     }
@@ -1100,7 +1101,9 @@ export class GameRegistry {
             opponent: this.#playerOf(game.seats[opponentOf(side)]),
             timeControl: game.timeControl,
             openingPlies: game.openingPlies,
-            rated: !isGuestGame(game),
+            // Bots anchor humans: a game against a person moves the bot's
+            // rating never, only the person's.
+            rated: humanSide(game) === null,
             engine: {
                 socketUrl: botGameSocketPath.replace(`{gameId}`, game.id),
                 token: seat.sessionToken.token,
@@ -1129,24 +1132,27 @@ export class GameRegistry {
 
     #finish(game: LiveGame, winner: Side | null, reason: FinishReason): void {
         if (!this.#games.delete(game.id)) return;
-        this.#watchers.end(game.id, { event: `finish`, data: { winner, reason, clock: liveClockView(game) } });
+        const clock = liveClockView(game);
         clearClockTimer(game.clock);
         if (game.wallTimer !== null) {
             clearTimeout(game.wallTimer);
             game.wallTimer = null;
         }
         const human = humanSide(game);
+        let voided = false;
         if (human?.seat.person.kind === `guest`) {
             this.#finishedGuestGames.set(game.id, {
                 guestId: human.seat.person.id,
                 guestSide: human.side,
-                snapshot: { ...this.#publicView(game), status: `finished`, winner, reason },
+                snapshot: { ...this.#publicView(game), status: `finished`, winner, reason, voided },
                 headline: { status: `finished`, names: seatNames(game), winner, reason, turns: turnsOnBoard(game.position.stones.length) },
             });
             this.#boundFinishedGuestGames(human.seat.person.id, game.id);
         } else {
-            recordFinish(this.#query, game.id, { winner, reason });
+            voided = recordFinish(this.#query, game.id, { winner, reason }).voided;
         }
+        // The watchers learn a game the operator voided while it ran with its result.
+        this.#watchers.end(game.id, { event: `finish`, data: { winner, reason, voided, clock } });
         for (const side of [`x`, `o`] as const) {
             const seat = game.seats[side];
             if (seat.kind !== `bot`) continue;

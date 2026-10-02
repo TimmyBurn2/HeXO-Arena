@@ -888,7 +888,7 @@ describe('persistence', () => {
         expect(world.games.snapshotFor(own[1] ?? ``, null)).not.toBe(null);
     }, 30_000);
 
-    it('rates both sides when a game ends with a winner', () => {
+    it('rates the person alone when a game against a bot ends with a winner', () => {
         const created = world.games.createGame({
             person: user,
             bot,
@@ -898,7 +898,7 @@ describe('persistence', () => {
         world.games.humanResign(created.gameId, user);
         const query = createQuery(world.sqlite);
         expect(readRating(query, { kind: `human`, id: user.id }).rating).toBeLessThan(1000);
-        expect(readRating(query, { kind: `bot`, id: bot.id }).rating).toBeGreaterThan(1500);
+        expect(readRating(query, { kind: `bot`, id: bot.id }).rating).toBe(1500);
     });
 
     it('aborts whatever an earlier process left unfinished', () => {
@@ -1067,7 +1067,7 @@ describe('bot-vs-bot games', () => {
         expect(turns.at(-1)?.cells).toEqual(board.slice(-1).map((cell) => ({ x: cell.x, y: cell.y })));
         expect(events.at(-1)).toEqual({
             event: `finish`,
-            data: { winner: `x`, reason: `six-in-a-row`, clock: { mode: `unlimited` } },
+            data: { winner: `x`, reason: `six-in-a-row`, voided: false, clock: { mode: `unlimited` } },
         });
         expect(watcher.ended).toBe(true);
     });

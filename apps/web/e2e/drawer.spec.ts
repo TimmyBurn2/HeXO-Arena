@@ -138,8 +138,10 @@ for (const layout of [
         for (const tab of [`Moves`, `Game`]) {
             await page.getByRole(`tab`, { name: tab }).click();
             for (const name of [
+                `Tournaments, opens in a new tab`,
                 `Credits, opens in a new tab`,
                 `Bot API, opens in a new tab`,
+                `Source, opens in a new tab`,
                 `Impressum / Legal notice, opens in a new tab`,
                 `Privacy, opens in a new tab`,
                 `Terms, opens in a new tab`,
@@ -195,7 +197,7 @@ test('the drawer foot keeps every link inside a 320 px phone at 175 and 200% tex
         const foot = page.locator(`#drawer-body .drawer-foot`);
         await foot.waitFor();
         const rights = await foot.locator(`a`).evaluateAll((links) => links.map((link) => link.getBoundingClientRect().right));
-        expect(rights.length).toBe(7);
+        expect(rights.length).toBe(9);
         for (const right of rights) expect(right).toBeLessThanOrEqual(320);
     }
 });

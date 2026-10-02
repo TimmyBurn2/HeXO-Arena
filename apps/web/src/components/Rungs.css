@@ -69,7 +69,7 @@
     }
 
     /* A name stays whole beside its badge and breaks only when wider than the rung. */
-    .rung-name .player-name {
+    .rung-name > .player-name {
         flex: none;
         max-width: 100%;
         min-width: 0;

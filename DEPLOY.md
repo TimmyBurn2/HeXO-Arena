@@ -62,7 +62,7 @@ project and prefixes the volume names (`hexo-arena_data`, `hexo-arena_backup`).
   Caddyfile           copy of docker/prod/Caddyfile
   .env                compose interpolation, 0600
   hexo-arena.env      app settings and secrets, 0600
-  legal-details.json  the operator's legal details, 0644
+  legal/              the deployment's legal documents and their details
 ```
 
 `.env`:
@@ -93,40 +93,22 @@ Never set `DEV_LOGIN` or `DEV_FAST_STOP`: in production any value fails the boot
 chmod 0600 .env hexo-arena.env
 ```
 
-### Legal details
+### Legal documents
 
-`legal-details.json` holds what the imprint and the privacy policy name:
-
-- the operator: name, street and number, postcode and city, country, a
-  contact email a person reads, and optionally a Discord handle;
-- the host: name, postal address, and where the server stands;
-- the supervisory authority: name, postal address, and web address;
-- optionally the provider of the contact mailbox: name and postal address.
-
-Every postal address takes the same three keys: `street`,
-`postcodeAndCity`, and `country`.
-
-Start from `apps/server/legal-details.example.json` and replace every
-`<...>` value.
-`.gitignore` and `.dockerignore` exclude the file's name.
-
-The compose file mounts it read-only at `/etc/hexo-arena/legal-details.json`,
-where the image's `LEGAL_DETAILS_PATH` points, and does not start the app
-without it.
-Caddy mounts the same file at the same path and answers the details read
-while the app is down or restarting.
-A production boot refuses a file it cannot read, one that fails the schema,
-and one where any value still holds `<` or `>`; the log names the key, never
-the value.
-Every value is public on the legal pages, and the app's and Caddy's uids
-must read the file:
+`legal/` holds the Impressum, the privacy policy, and the terms, and the
+`details.json` they fill in.
+Copy the repository's `legal/` folder and follow its `README.md`: what to
+fill in, and which documents are required where.
+Caddy mounts the folder read-only and serves those four files; an edit
+shows on the next page load.
+Every document is optional: the site links only those the folder has, and
+the app, which mounts it read-only too, logs one line at boot naming the
+missing ones.
+Every value in it is public, and Caddy's uid must read it:
 
 ```sh
-chmod 0644 legal-details.json
+chmod -R a+rX legal
 ```
-
-The app reads the file once at boot; after an edit, `docker compose restart app`.
-Caddy reads it on each request it answers, so it needs no restart.
 
 ## Deploy
 
@@ -400,8 +382,9 @@ TLS and proxying:
 - [ ] `https://<domain>/legal/imprint` shows the operator's name, address, and
   email, and `https://<domain>/legal/privacy` the host, server location, and
   authority, with no `<` placeholder anywhere.
-- [ ] With the app stopped, `curl -s -o /dev/null -w '%{http_code}' https://<domain>/api/legal`
-  still prints `200`, and the imprint still names the operator.
+- [ ] With the app stopped, the legal pages still show in full.
+- [ ] `curl -s https://<domain>/legal/details.json` prints the details, and
+  `curl -s https://<domain>/legal/README.md` the site's page, not the file.
 
 Drain and backup:
 

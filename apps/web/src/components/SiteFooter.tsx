@@ -1,5 +1,6 @@
 import { siteName, siteTagline } from '@hexo-arena/contract';
-import { legalLinks, siteLinks } from '../site-links';
+import { useLegalLinks } from '../legal/links';
+import { siteLinks } from '../site-links';
 import { SiteLinks } from './SiteLinks';
 import './SiteFooter.css';
 
@@ -8,6 +9,7 @@ import './SiteFooter.css';
  * and the legal links as the last group, at the bottom right.
  */
 export function SiteFooter() {
+    const legalLinks = useLegalLinks();
     return (
         <footer className="site-footer">
             <div className="site-footer-inner">

@@ -2,6 +2,7 @@ import { Link } from '../router/Link';
 import { usePath } from '../router/use-route';
 import type { SiteLink } from '../site-links';
 import { text } from '../text';
+import { GitHubMark } from './GitHubMark';
 import './SiteLinks.css';
 
 /**
@@ -30,6 +31,7 @@ function HereLink({ link }: { link: SiteLink }) {
     }
     return (
         <a href={link.href} rel="noreferrer">
+            {link.mark === `github` ? <GitHubMark /> : null}
             {link.label}
         </a>
     );
@@ -43,6 +45,7 @@ function NewTabLink({ link }: { link: SiteLink }) {
             rel="noreferrer"
             aria-label={text.shell.opensInNewTab(link.label)}
         >
+            {link.kind === `external` && link.mark === `github` ? <GitHubMark /> : null}
             {link.label}
             <svg className="new-tab-mark" viewBox="0 0 24 24" aria-hidden="true">
                 <path d="M8 16L16 8M10 8h6v6" />

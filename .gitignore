@@ -10,6 +10,6 @@ data/
 .env.*
 !.env.example
 # A deployment's legal details hold the operator's real name and address.
-legal-details.json
+legal/details.json
 apps/web/e2e/shots/
 apps/web/e2e/results/

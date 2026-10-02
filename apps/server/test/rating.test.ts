@@ -30,8 +30,8 @@ function fresh(value: PlayerRating): Standing {
     return { rating: value, ratedAt: null };
 }
 
-function game(x: PlayerRef, o: PlayerRef, winner: FinishedGame[`winner`], finishedAt = start): FinishedGame {
-    return { x, o, winner, finishedAt };
+function game(x: PlayerRef, o: PlayerRef, winner: FinishedGame[`winner`], finishedAt = start, startedAt = finishedAt): FinishedGame {
+    return { x, o, winner, startedAt, finishedAt };
 }
 
 // Step 6 of the paper over a number of periods, on the Glicko scale.
@@ -63,20 +63,32 @@ describe('rateGame', () => {
         expect(after).toEqual({ x: plainX, o: plainO });
     });
 
-    it('averages a human result against a bot with the pre-game rating and leaves the bot whole', () => {
+    it('moves only the human in a game against a bot, in full, against the bot as it stood at the start', () => {
         const before = { x: fresh(rating(1100, 150)), o: fresh(rating(1300, 150)) };
-        const asHuman = rateGame(game(human, botA, `x`), before);
-        const asBot = rateGame(game(botB, botA, `x`), before);
-        expect(asHuman.x.rating).toBeCloseTo((1100 + asBot.x.rating) / 2, 9);
-        expect(asHuman.x.deviation).toBe(asBot.x.deviation);
-        expect(asHuman.o).toEqual(asBot.o);
+        const atStart = rating(1250, 60);
+        for (const winner of [`x`, `o`] as const) {
+            const after = rateGame(game(human, botA, winner), before, atStart);
+            expect(after.x).toEqual(glicko2Update(before.x.rating, [{ opponent: atStart, score: winner === `x` ? 1 : 0 }], 0.5, 0));
+            expect(after.o).toEqual(before.o.rating);
+        }
     });
 
-    it('halves a human loss to a bot as well as a gain', () => {
-        const before = { x: fresh(rating(1100, 150)), o: fresh(rating(1300, 150)) };
-        const asHuman = rateGame(game(human, botA, `o`), before);
-        const asBot = rateGame(game(botB, botA, `o`), before);
-        expect(1100 - asHuman.x.rating).toBeCloseTo((1100 - asBot.x.rating) / 2, 9);
+    it('rates the human on either side, the bot left as it stands', () => {
+        const before = { x: fresh(rating(1300, 150)), o: fresh(rating(1100, 150)) };
+        const after = rateGame(game(botA, human, `o`), before, rating(1300, 150));
+        expect(after.o.rating).toBeGreaterThan(1100);
+        expect(after.x).toEqual(before.x.rating);
+    });
+
+    it('caps a human game at 400 points, then holds the floor of 400', () => {
+        const gain = rateGame(game(human, botA, `x`), { x: fresh(rating(1000, 500, 0.09)), o: fresh(rating(2500, 45)) }, rating(2500, 45));
+        expect(gain.x.rating).toBe(1400);
+        const loss = rateGame(game(human, botA, `o`), { x: fresh(rating(420, 100)), o: fresh(rating(400, 45)) }, rating(400, 45));
+        expect(loss.x.rating).toBe(400);
+    });
+
+    it('refuses a decided game against a human without the bot as it stood at the start', () => {
+        expect(() => rateGame(game(human, botA, `x`), { x: fresh(rating(1100, 150)), o: fresh(rating(1300, 150)) })).toThrow(/start/u);
     });
 
     it('caps a single game at 400 points either way', () => {
@@ -98,7 +110,7 @@ describe('rateGame', () => {
 
     it('leaves both sides as they stood when the game has no winner', () => {
         const before = { x: { rating: rating(1100, 150), ratedAt: start - 30 * day }, o: fresh(rating(1300, 150)) };
-        expect(rateGame(game(human, botA, null), before)).toEqual({ x: before.x.rating, o: before.o.rating });
+        expect(rateGame(game(human, botA, null), before, rating(1300, 150))).toEqual({ x: before.x.rating, o: before.o.rating });
     });
 
     it('rates a game from the deviation each side brings to it', () => {
@@ -144,9 +156,56 @@ describe('broughtTo', () => {
 describe('foldRatings', () => {
     it('starts every player from the seed for their kind', () => {
         const table = foldRatings([game(human, botA, `x`)]);
-        const direct = rateGame(game(human, botA, `x`), { x: fresh(seedRating(`human`)), o: fresh(seedRating(`bot`)) });
+        const direct = rateGame(game(human, botA, `x`), { x: fresh(seedRating(`human`)), o: fresh(seedRating(`bot`)) }, seedRating(`bot`));
         expect(table.get(`human:h1`)?.rating).toEqual(direct.x);
-        expect(table.get(`bot:b1`)?.rating).toEqual(direct.o);
+        expect(table.get(`bot:b1`)?.rating).toEqual(seedRating(`bot`));
+    });
+
+    it('moves only the human when a human beats a bot many times, the bot staying at its seed', () => {
+        const log = Array.from({ length: 60 }, (_, index) => game(human, botA, `x`, start + index * 600));
+        const steps: RatingStep[] = [];
+        const table = foldRatings(log, (_, step) => steps.push(step));
+        expect(table.get(`bot:b1`)?.rating).toEqual(seedRating(`bot`));
+        expect(steps.every((step) => step.before.o === step.after.o)).toBe(true);
+        const climbed = steps.map((step) => step.after.x.rating);
+        expect(climbed.every((value, index) => index === 0 || value >= (climbed[index - 1] ?? 0))).toBe(true);
+        expect(climbed.at(-1)).toBeGreaterThan(1500);
+    });
+
+    it('rates a human against the bot as it stood when their game started, not after the bot games finished during it', () => {
+        const opener = game(botA, botB, `x`, start);
+        const during = game(botA, botB, `x`, start + 2 * day);
+        const humanGame = game(human, botA, `x`, start + 3 * day, start + day);
+        const steps: RatingStep[] = [];
+        foldRatings([opener, during, humanGame], (_, step) => steps.push(step));
+        const [first, second, third] = steps;
+        if (first === undefined || second === undefined || third === undefined) throw new Error(`a step is missing`);
+        const expected = rateGame(humanGame, { x: fresh(seedRating(`human`)), o: { rating: second.after.x, ratedAt: start + 2 * day } }, first.after.x);
+        expect(third.after.x).toEqual(expected.x);
+        expect(third.after.x).not.toEqual(rateGame(humanGame, { x: fresh(seedRating(`human`)), o: { rating: second.after.x, ratedAt: null } }, second.after.x).x);
+        expect(third.before.o).toEqual(second.after.x);
+        expect(third.after.o).toEqual(second.after.x);
+    });
+
+    it('counts a bot game that finished in the second its human game started as before the start', () => {
+        const opener = game(botA, botB, `x`, start);
+        const humanGame = game(human, botA, `o`, start + day, start);
+        const steps: RatingStep[] = [];
+        foldRatings([opener, humanGame], (_, step) => steps.push(step));
+        const atStart = steps[0]?.after.x;
+        if (atStart === undefined) throw new Error(`no opener step`);
+        expect(steps[1]?.after.x).toEqual(rateGame(humanGame, { x: fresh(seedRating(`human`)), o: { rating: atStart, ratedAt: start } }, atStart).x);
+    });
+
+    it('widens a bot by the time since its previous bot game, which a human game does not reset', () => {
+        const opener = game(botA, botB, `x`, start);
+        const log = [opener, game(human, botA, `x`, start + 10 * day), game(botA, botB, `x`, start + 20 * day)];
+        const steps: RatingStep[] = [];
+        foldRatings(log, (_, step) => steps.push(step));
+        const last = steps[2];
+        if (last === undefined) throw new Error(`no step for the last game`);
+        const expected = rateGame(game(botA, botB, `x`, start + 20 * day), { x: { rating: last.before.x, ratedAt: start }, o: { rating: last.before.o, ratedAt: start } });
+        expect(last.after).toEqual(expected);
     });
 
     it('chains each game from the ratings the previous games left, widened by the time between', () => {
@@ -161,7 +220,7 @@ describe('foldRatings', () => {
 
     it('widens each player by the time since their own previous rated game, which a game without a winner does not reset', () => {
         const log = [
-            game(botA, human, `x`, start),
+            game(botA, botB, `x`, start),
             game(botB, human, `o`, start + 10 * day),
             game(botA, botB, null, start + 15 * day),
             game(botA, botB, `x`, start + 20 * day),
@@ -172,7 +231,7 @@ describe('foldRatings', () => {
         if (last === undefined) throw new Error(`no step for the last game`);
         const expected = rateGame(log[3] ?? game(botA, botB, null), {
             x: { rating: last.before.x, ratedAt: start },
-            o: { rating: last.before.o, ratedAt: start + 10 * day },
+            o: { rating: last.before.o, ratedAt: start },
         });
         expect(table.get(`bot:b1`)?.rating).toEqual(expected.x);
         expect(table.get(`bot:b2`)?.rating).toEqual(expected.o);

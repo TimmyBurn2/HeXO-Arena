@@ -88,6 +88,7 @@
         --credit-who-w: 15rem;
         --credit-terms-w: 17rem;
         --legal-contents-w: 15rem;
+        --sheet-panel-min-h: 10rem;
         --identity-size: 4rem;
         --mark-size: 2.5rem;
         --mark-size-sm: 2rem;
@@ -122,6 +123,7 @@
         /* Discord's smallest symbol on screen is 20 px tall, with a third
            of its width clear around it. */
         --discord-symbol-h: 1.25rem;
+        --github-mark-h: 1rem;
         --discord-symbol-space: 0.625rem;
         --discord-plate-size: 3rem;
         --play-card-w: 27rem;

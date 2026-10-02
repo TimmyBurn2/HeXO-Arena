@@ -33,7 +33,7 @@ import type { GameRegistry } from './game-registry';
 import type { PresenceRegistry } from './presence';
 import { isProvisional } from './rating';
 import { activeSince } from './leaderboard-api';
-import { playerRecord } from './player-api';
+import type { PlayerReads } from './player-api';
 import { rankablePlayers } from './rating-store';
 import { tournamentSummary } from './tournament-api';
 
@@ -41,6 +41,8 @@ export interface OgShellDeps {
     query: Query;
     presence: PresenceRegistry;
     games: GameRegistry;
+    // The player API's own reads, so a preview never reads past its memo.
+    players: PlayerReads;
     indexPath: string;
     publicOrigin: string;
     now: () => number;
@@ -172,7 +174,7 @@ export function registerOgShell(app: FastifyInstance, deps: OgShellDeps): void {
 
     // A bot's name previews as a missing page here, as its own page is under Bots.
     app.get<{ Params: { name: string } }>(`/players/:name`, { config: { limit: `shell` } }, async (request, reply) => {
-        const record = playerRecord(query, request.params.name, now());
+        const record = deps.players.record(request.params.name).value;
         return record === null || record.kind === `bot` ? sendShell(reply, 404, notFoundMeta) : sendShell(reply, 200, playerMeta(record.name, record));
     });
 

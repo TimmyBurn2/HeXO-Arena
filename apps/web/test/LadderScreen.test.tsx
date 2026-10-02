@@ -61,6 +61,7 @@ describe('LadderScreen', () => {
         expect(table.querySelector(`tbody tr:nth-child(3) .dot`)).toBe(null);
         expect(screen.getAllByRole(`link`, { name: /sealbot/ })[0]?.getAttribute(`href`)).toBe(`/bots/sealbot`);
         expect(document.querySelector(`a[href="/bots/tom"]`)).toBe(null);
+        expect(first.querySelector(`.ladder-owner a`)?.getAttribute(`href`)).toBe(`/players/tom`);
     });
 
     it('stand the top three on a podium of 5, 6, and 4 stones, the six won, labelled for a reader', async () => {
@@ -74,6 +75,7 @@ describe('LadderScreen', () => {
         const plates = [...podium.querySelectorAll(`.podium-slot`)];
         expect(plates.map((plate) => plate.className)).toEqual([`podium-slot p1`, `podium-slot p2`, `podium-slot p3`]);
         expect(plates[0]?.textContent).toBe(`1sealbotBOT1712by tom, 214 gamesPlay`);
+        expect(plates[0]?.querySelector(`.podium-meta a`)?.getAttribute(`href`)).toBe(`/players/tom`);
         expect(plates[2]?.textContent).toBe(`3tom150357 games`);
         // Only a bot that would start a game now offers Play.
         await waitFor(() => {

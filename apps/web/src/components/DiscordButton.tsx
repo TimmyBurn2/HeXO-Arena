@@ -1,6 +1,6 @@
 import type { Ref, SyntheticEvent } from 'react';
-import { discordLoginHref, legalPagePath, nextPathOf } from '@hexo-arena/contract';
-import { Link } from '../router/Link';
+import { discordLoginHref, nextPathOf } from '@hexo-arena/contract';
+import { useLegalSlots } from '../legal/links';
 import { usePath } from '../router/use-route';
 import { text } from '../text';
 import { DiscordSymbol } from './DiscordSymbol';
@@ -61,11 +61,7 @@ export function DiscordButton({ ref, next, guard = false }: { ref?: Ref<HTMLAnch
  * it can close first.
  */
 export function DiscordSignIn({ onNavigate, next, guest = false }: { onNavigate?: () => void; next?: string; guest?: boolean }) {
-    const privacy = (words: string) => (
-        <Link to={legalPagePath(`privacy`)} {...(onNavigate === undefined ? {} : { onNavigate })}>
-            {words}
-        </Link>
-    );
+    const { privacy } = useLegalSlots(onNavigate);
     return (
         <div className="discord-sign-in">
             <DiscordButton {...(next === undefined ? {} : { next })} />

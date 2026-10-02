@@ -58,6 +58,7 @@ export const finishedGameEntrySchema = z
         turns: z.number().int().min(0).meta({ description: `Turns on the board at the finish, the opening's included.` }),
         finishedAt: z.iso.datetime(),
         rated: z.boolean().meta({ description: `False for a game without a winner and for a voided one.` }),
+        voided: z.boolean().meta({ description: `Taken out by the operator: still listed, and counted in no record and no rating.` }),
     })
     .meta({
         id: `FinishedGameEntry`,
@@ -83,7 +84,7 @@ export const finishedGamesRecordSchema = z
     })
     .meta({
         id: `FinishedGamesRecord`,
-        description: `The named player's record over every game the filters select, past the page cap: wins, losses, and games without a winner, in all and by side.`,
+        description: `The named player's record over every game the filters select but voided ones, past the page cap: wins, losses, and games without a winner, in all and by side.`,
     });
 export type FinishedGamesRecord = z.infer<typeof finishedGamesRecordSchema>;
 

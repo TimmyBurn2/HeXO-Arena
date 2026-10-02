@@ -1,14 +1,15 @@
-import { useEffect, useRef, useState, type MouseEvent } from 'react';
-import { humanGameCooldownSeconds, legalPagePath, type BotListing, type OpeningPlies, type TimeControl } from '@hexo-arena/contract';
+import { useEffect, useRef, useState, type MouseEvent, type ReactNode } from 'react';
+import { humanGameCooldownSeconds, type BotListing, type OpeningPlies, type TimeControl } from '@hexo-arena/contract';
 import { ApiError, createGame, limitedFor } from '../api/client';
 import { DiscordButton } from '../components/DiscordButton';
 import { WaitText } from '../components/wait';
+import { useLegalSlots } from '../legal/links';
 import { meStore, useMe } from '../me';
 import { Link } from '../router/Link';
 import { navigate } from '../router/use-route';
 import { siteStatusStore } from '../site-status';
 import { text } from '../text';
-import { readinessOf, writePlayed } from './setup';
+import { readinessOf, writePlayed, type Holder } from './setup';
 
 // What the start area last heard back:
 // nothing yet, a request in flight,
@@ -19,7 +20,7 @@ import { readinessOf, writePlayed } from './setup';
 type Outcome =
     | { kind: `idle` }
     | { kind: `sending` }
-    | { kind: `line`; text: string; refused: Refused | null }
+    | { kind: `line`; text: ReactNode; refused: Refused | null }
     | { kind: `capped` }
     | { kind: `wait`; until: number; seconds: number; line: (seconds: number) => string }
     | { kind: `stale`; was: `guest` | `user` };
@@ -63,10 +64,12 @@ export function StartArea({
     reads,
     onRefused,
     reserved,
+    holder,
 }: {
     bot: BotListing;
-    // The bots the running tournament holds.
+    // The bots the running tournament holds, and that tournament.
     reserved: ReadonlySet<string>;
+    holder: Holder | null;
     clock: TimeControl;
     opening: OpeningPlies;
     path: string;
@@ -79,6 +82,8 @@ export function StartArea({
     onRefused: () => void;
 }) {
     const me = useMe();
+    const legal = useLegalSlots();
+    const held = holder === null ? null : <Link to={`/tournaments/${encodeURIComponent(holder.id)}`}>{holder.name}</Link>;
     const [outcome, setOutcome] = useState<Outcome>({ kind: `idle` });
     const [now, setNow] = useState(() => Date.now());
     const warning = useRef<HTMLParagraphElement>(null);
@@ -191,7 +196,7 @@ export function StartArea({
                 code === `paused`
                     ? errors[code]()
                     : code === `bot_busy` && reserved.has(bot.name)
-                      ? text.play.unavailable.tournament(bot.name)
+                      ? text.play.unavailable.tournament(bot.name, held)
                       : code === `bot_busy` || code === `clock_not_accepted` || code === `not_open` || code === `delisted` || code === `not_found`
                       ? errors[code](bot.name)
                       : text.play.failed;
@@ -203,7 +208,7 @@ export function StartArea({
         }
     }
 
-    const unavailable = state === `ready` ? null : text.play.unavailable[state](bot.name);
+    const unavailable = state === `ready` ? null : state === `tournament` ? text.play.unavailable.tournament(bot.name, held) : text.play.unavailable[state](bot.name);
     const cooling = outcome.kind === `wait` ? Math.max(1, Math.ceil((outcome.until - now) / 1000)) : null;
     const blocked = paused || unavailable !== null || cooling !== null || moved || outcome.kind === `sending` || (stale && visitor !== null);
     // Where the list kept the bot and moved its clock, the line says so, whatever the refusal was.
@@ -220,9 +225,8 @@ export function StartArea({
         { key: `notice`, text: notice },
         { key: `outcome`, text: unavailable === null && notice === null ? outcomeLine : null },
         { key: `unavailable`, text: unavailable },
-    ].filter((line): line is { key: string; text: string } => line.text !== null);
+    ].filter((line): line is { key: string; text: ReactNode } => line.text !== null);
 
-    const page = (to: string) => (words: string) => <Link to={to}>{words}</Link>;
     const primary = (label: string, asGuest: boolean) => (
         <button
             type="button"
@@ -276,7 +280,7 @@ export function StartArea({
                         <DiscordButton next={path} guard />
                     </div>
                     {paused ? <p className="note">{text.play.paused}</p> : null}
-                    <p className="note start-notice">{text.play.notice(page(legalPagePath(`terms`)), page(legalPagePath(`privacy`)))}</p>
+                    <p className="note start-notice">{text.play.notice(legal)}</p>
                 </>
             ) : (
                 <>

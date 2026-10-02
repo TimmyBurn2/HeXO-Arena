@@ -61,7 +61,9 @@ describe('BotsScreen', () => {
         stubDirectory(directory);
         render(<BotsScreen />);
         expect(await screen.findByRole(`table`)).toBeTruthy();
-        expect(screen.getByText(`tom`).tagName).toBe(`TD`);
+        const owner = screen.getByRole(`link`, { name: `tom` });
+        expect(owner.closest(`td`)?.textContent).toBe(`tom`);
+        expect(owner.getAttribute(`href`)).toBe(`/players/tom`);
         expect(screen.getByText(`turn 5 to 60 s, match, unlimited`)).toBeTruthy();
         expect(screen.getByText(`match, unlimited`)).toBeTruthy();
         expect(document.querySelectorAll(`tbody tr`).length).toBe(2);

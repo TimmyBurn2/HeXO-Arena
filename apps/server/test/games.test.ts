@@ -471,7 +471,8 @@ describe('a human plays a connected bot end to end', () => {
         expect(snapshot.you).toBe(`o`);
         expect(snapshot.board.cells).toEqual([{ x: 0, y: 0, side: `x` }]);
         const start = await gameStartOn(bot.stream);
-        expect(start.rated).toBe(true);
+        // Only the player's rating moves in a game against a bot.
+        expect(start.rated).toBe(false);
         expect(start.engine.socketUrl).toBe(`/api/bot/game/${gameId}/socket`);
         const engine = await arena.dialEngine(start.engine.socketUrl, start.engine.token);
         // The setup packet is origin-only; the request only comes once the

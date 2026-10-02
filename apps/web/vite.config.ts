@@ -1,9 +1,10 @@
 import react from '@vitejs/plugin-react';
 import { defineConfig } from 'vitest/config';
+import { legalFiles } from './build/legal.ts';
 import { licenseFileName, thirdPartyLicenses } from './build/licenses.ts';
 
 export default defineConfig({
-    plugins: [react(), thirdPartyLicenses()],
+    plugins: [react(), thirdPartyLicenses(), legalFiles()],
     // At the site's root under a plain name, not in Vite's default dot
     // directory, so the static server hands it out like any file.
     build: { license: { fileName: licenseFileName } },

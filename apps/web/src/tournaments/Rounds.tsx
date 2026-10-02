@@ -17,28 +17,9 @@ export function Rounds({ detail, only, except }: { detail: TournamentDetail; onl
         <div key={round.round} className="round">
             {only === undefined ? <h3 className="round-title">{text.tournaments.round(round.round)}</h3> : null}
             <ul className="round-pairings">
-                {round.pairings.map((pairing) => {
-                    const [first, second] = pairingScore(pairing);
-                    return (
-                        <li key={`${pairing.first} ${pairing.second}`} className="round-pairing">
-                            <span className="round-names">{text.tournaments.pairingLine(pairing.first, pairing.second)}</span>
-                            <span className="round-score">{text.tournaments.score(first, second)}</span>
-                            <span className="round-games">
-                                {pairing.games.map((game, index) =>
-                                    game.gameId === null ? (
-                                        <span key={index} className="round-game muted">
-                                            {text.tournaments.outcomes[game.outcome === `played` || game.outcome === `aborted` ? `none` : game.outcome]}
-                                        </span>
-                                    ) : (
-                                        <Link key={index} to={`/game/${encodeURIComponent(game.gameId)}`} className="round-game">
-                                            {gameWords(game, index)}
-                                        </Link>
-                                    ),
-                                )}
-                            </span>
-                        </li>
-                    );
-                })}
+                {round.pairings.map((pairing) => (
+                    <PairingItem key={`${pairing.first} ${pairing.second}`} pairing={pairing} />
+                ))}
             </ul>
             {round.rest === null ? null : <p className="note round-rest">{text.tournaments.rest(round.rest)}</p>}
         </div>
@@ -54,8 +35,48 @@ export function Rounds({ detail, only, except }: { detail: TournamentDetail; onl
     );
 }
 
+/** One bot's pairings, a round to a line, newest first, as a standings row opens them on a phone. */
+export function BotPairings({ detail, bot, id }: { detail: TournamentDetail; bot: string; id: string }) {
+    const met = detail.rounds.flatMap((round) =>
+        round.pairings.filter((pairing) => pairing.first === bot || pairing.second === bot).map((pairing) => ({ round: round.round, pairing })),
+    );
+    return (
+        <ul className="round-pairings bot-pairings" id={id}>
+            {met.reverse().map(({ round, pairing }) => (
+                <PairingItem key={round} pairing={pairing} round={round} />
+            ))}
+        </ul>
+    );
+}
+
+type Pairing = TournamentDetail[`rounds`][number][`pairings`][number];
+
+function PairingItem({ pairing, round }: { pairing: Pairing; round?: number }) {
+    const [first, second] = pairingScore(pairing);
+    return (
+        <li className="round-pairing">
+            {round === undefined ? null : <span className="round-of">{text.tournaments.round(round)}</span>}
+            <span className="round-names">{text.tournaments.pairingLine(pairing.first, pairing.second)}</span>
+            <span className="round-score">{text.tournaments.score(first, second)}</span>
+            <span className="round-games">
+                {pairing.games.map((game, index) =>
+                    game.gameId === null ? (
+                        <span key={index} className="round-game muted">
+                            {text.tournaments.outcomes[game.outcome === `played` || game.outcome === `aborted` ? `none` : game.outcome]}
+                        </span>
+                    ) : (
+                        <Link key={index} to={`/game/${encodeURIComponent(game.gameId)}`} className="round-game">
+                            {gameWords(game, index)}
+                        </Link>
+                    ),
+                )}
+            </span>
+        </li>
+    );
+}
+
 // A game's link names it by its number and how it stands.
-function gameWords(game: TournamentDetail[`rounds`][number][`pairings`][number][`games`][number], index: number): string {
+function gameWords(game: Pairing[`games`][number], index: number): string {
     const outcome =
         game.outcome === `played`
             ? game.point === null

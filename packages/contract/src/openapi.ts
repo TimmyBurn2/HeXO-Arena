@@ -113,8 +113,6 @@ import {
     tournamentPresenceGraceMs,
     tournamentsPath,
     tournamentWaitingCap,
-    legalDetailsPath,
-    legalDetailsSchema,
     liveGameEntrySchema,
     liveGameListCap,
     liveGameListMemoMs,
@@ -309,23 +307,6 @@ function registerSiteSurface(registry: OpenAPIRegistry, shared: SharedComponents
         responses: {
             200: { description: 'The process is up and serving.' },
             503: { description: 'The process is up and paused.' },
-        },
-    });
-
-    registry.registerPath({
-        method: 'get',
-        path: legalDetailsPath,
-        summary: `The operator's legal details.`,
-        operationId: 'getLegalDetails',
-        tags: ['Site'],
-        security: [],
-        description: `The values the legal pages show, read once at start from the deployment's file; a development server without the file answers 404.`,
-        responses: {
-            200: {
-                description: `The legal details.`,
-                content: { 'application/json': { schema: legalDetailsSchema } },
-            },
-            404: shared.notFound,
         },
     });
 

@@ -1,4 +1,5 @@
 import {
+    gameSnapshotSchema,
     gameEventSchema,
     gameWatcherCap,
     guestPath,
@@ -12,6 +13,7 @@ import http from 'node:http';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { findBot } from '../src/bots';
 import { createQuery } from '../src/db';
+import { voidGames } from '../src/moderation';
 import { createTestApp, FakeStreamSocket, loginAs, mintBot, type TestApp } from './helpers';
 
 // A draw of 0.9 seats the human on o, and after the origin alone o moves first.
@@ -173,10 +175,20 @@ describe('the game event stream', () => {
         expect(resigned.statusCode).toBe(200);
         expect(await watcher.next()).toEqual({
             event: `finish`,
-            data: { winner: `x`, reason: `surrender`, clock: { mode: `unlimited` } },
+            data: { winner: `x`, reason: `surrender`, voided: false, clock: { mode: `unlimited` } },
         });
         await watcher.ended;
         expect(world.watchers.unseatedCount()).toBe(0);
+    });
+
+    it('finishes a game the operator voided while it ran as voided, in the finish and in the snapshot after', async () => {
+        const watcher = await watch(port, gameId);
+        await watcher.next();
+        expect(voidGames(createQuery(world.sqlite), [gameId])).toMatchObject({ kind: `voided`, count: 1 });
+        await world.app.inject({ method: `POST`, url: `/api/games/${gameId}/resign`, cookies: { [sessionCookieName]: player } });
+        expect(await watcher.next()).toMatchObject({ event: `finish`, data: { winner: `x`, reason: `surrender`, voided: true } });
+        const read = await world.app.inject({ method: `GET`, url: `/api/games/${gameId}` });
+        expect(gameSnapshotSchema.parse(read.json())).toMatchObject({ status: `finished`, winner: `x`, voided: true });
     });
 
     it('answers a finished game with its snapshot and closes', async () => {
@@ -193,7 +205,7 @@ describe('the game event stream', () => {
 
     it('refuses the 51st watcher of one game with 429 and Retry-After, but never the seated player', async () => {
         for (let i = 0; i < gameWatcherCap; i += 1) {
-            world.watchers.attach(gameId, new FakeStreamSocket(), false, { event: `finish`, data: { winner: null, reason: `aborted`, clock: { mode: `unlimited` } } });
+            world.watchers.attach(gameId, new FakeStreamSocket(), false, { event: `finish`, data: { winner: null, reason: `aborted`, voided: false, clock: { mode: `unlimited` } } });
         }
         const refused = await world.app.inject({ method: `GET`, url: `/api/games/${gameId}/events` });
         expect(refused.statusCode).toBe(429);
@@ -206,7 +218,7 @@ describe('the game event stream', () => {
         for (let i = 0; i < siteWatcherCap; i += 1) {
             world.watchers.attach(`elsewhere-${String(i % 10)}`, new FakeStreamSocket(), false, {
                 event: `finish`,
-                data: { winner: null, reason: `aborted`, clock: { mode: `unlimited` } },
+                data: { winner: null, reason: `aborted`, voided: false, clock: { mode: `unlimited` } },
             });
         }
         const refused = await world.app.inject({ method: `GET`, url: `/api/games/${gameId}/events` });
@@ -216,7 +228,7 @@ describe('the game event stream', () => {
 
     it('frees a dropped watcher\'s slot at once', async () => {
         for (let i = 0; i < gameWatcherCap - 1; i += 1) {
-            world.watchers.attach(gameId, new FakeStreamSocket(), false, { event: `finish`, data: { winner: null, reason: `aborted`, clock: { mode: `unlimited` } } });
+            world.watchers.attach(gameId, new FakeStreamSocket(), false, { event: `finish`, data: { winner: null, reason: `aborted`, voided: false, clock: { mode: `unlimited` } } });
         }
         const last = await watch(port, gameId);
         expect(last.status).toBe(200);

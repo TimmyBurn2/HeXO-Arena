@@ -47,6 +47,7 @@ function history(player: string): unknown {
         turns: 20,
         finishedAt: new Date(Date.now() - (index + 1) * 3_600_000).toISOString(),
         rated: true,
+        voided: false,
     }));
     return { games, next: null, previous: null, page: 1, record: { games: 12, won: 6, lost: 6, undecided: 0, asX: { games: 12, won: 6, lost: 6 }, asO: { games: 0, won: 0, lost: 0 } } };
 }
@@ -98,6 +99,13 @@ describe('BotScreen', () => {
         expect(reads).toContain(`/api/games/finished?player=sealbot`);
     });
 
+    it('head the page with the bot\'s name while the bot list loads', () => {
+        vi.stubGlobal(`fetch`, vi.fn(() => new Promise<Response>(() => undefined)));
+        render(<BotScreen name="sealbot" />);
+        expect(screen.getByRole(`heading`, { level: 1, name: `sealbot` })).toBeTruthy();
+        expect(document.querySelector(`.skeleton`)).toBeTruthy();
+    });
+
     it('say a bot that has finished no game has none yet', async () => {
         vi.stubGlobal(
             `fetch`,
@@ -118,7 +126,9 @@ describe('BotScreen', () => {
         expect(await screen.findByRole(`heading`, { name: `sealbot` })).toBeTruthy();
         expect(screen.getByText(`A clean-room HeXO engine with a rotation opener.`)).toBeTruthy();
         expect(screen.getByText(`5 to 60 s`)).toBeTruthy();
-        expect(screen.getByText(`By tom`)).toBeTruthy();
+        const owner = screen.getByRole(`link`, { name: `tom` });
+        expect(owner.parentElement?.textContent).toBe(`By tom`);
+        expect(owner.getAttribute(`href`)).toBe(`/players/tom`);
         expect(document.querySelector(`.bot-rating-number`)?.textContent).toBe(`1712`);
         // The repository reads whole and may break only after a slash.
         const repo = document.querySelector(`a[href="https://github.com/tom/sealbot"]`);

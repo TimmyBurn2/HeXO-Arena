@@ -24,7 +24,6 @@ import {
     gameTurnCap,
     healthzPath,
     leaderboardPath,
-    legalDetailsPath,
     mePath,
     serverLineLimitBytes,
     signupPath,
@@ -193,13 +192,9 @@ describe('openapi document', () => {
         expect(document.paths[botTokenPath]?.post).toBeDefined();
     });
 
-    it('documents the legal details read open to anyone, answering the named details', () => {
-        const read = root.paths[legalDetailsPath]?.get;
-        expect(read?.security).toEqual([]);
-        const details = dig(root, `components`, `schemas`, `LegalDetails`);
-        expect(dig(read, `responses`, `200`, `content`, `application/json`, `schema`)).toBe(details);
-        expect(dig(details, `required`)).toEqual([`operator`, `host`, `supervisoryAuthority`]);
-        expect(dig(read, `responses`, `404`)).toBeDefined();
+    it('documents no legal read, the legal documents being files the deployment serves', () => {
+        expect(Object.keys(root.paths).filter((path) => path.includes(`legal`))).toEqual([]);
+        expect(dig(root, `components`, `schemas`, `LegalDetails`)).toBe(undefined);
     });
 
     it('documents the leaderboard route', () => {

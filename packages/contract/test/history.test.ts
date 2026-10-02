@@ -22,6 +22,7 @@ const entry = {
     turns: 31,
     finishedAt: `2026-10-01T08:49:13Z`,
     rated: true,
+    voided: false,
 };
 
 describe('finishedGamesQuerySchema', () => {

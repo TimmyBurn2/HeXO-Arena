@@ -24,8 +24,6 @@ import {
     leaderboardPath,
     leaderboardQuerySchema,
     leaderboardSchema,
-    legalDetailsPath,
-    legalDetailsSchema,
     liveGameEntrySchema,
     type AxialCoord,
     type BotListing,
@@ -35,7 +33,6 @@ import {
     type GameSnapshot,
     type GuestMe,
     type LeaderboardEntry,
-    type LegalDetails,
     type LiveGameEntry,
     type Me,
     type Signup,
@@ -227,11 +224,6 @@ export function fetchFinishedGames(query: FinishedGamesQuery): Promise<FinishedG
 /** Any game; the session only decides whether the caller's side is present. */
 export function fetchGameSnapshot(gameId: string): Promise<GameSnapshot> {
     return getJson(`/api/games/${encodeURIComponent(gameId)}`, gameSnapshotSchema);
-}
-
-/** The operator's details that the legal pages fill in. */
-export function fetchLegalDetails(): Promise<LegalDetails> {
-    return getJson(legalDetailsPath, legalDetailsSchema);
 }
 
 /** Where a game's live events stream from, for EventSource. */

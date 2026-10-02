@@ -163,6 +163,8 @@ export const pairs = [
     [`discord on overlay`, `--c-discord`, `--c-bg-overlay`, 3],
     [`youtube on raised`, `--c-youtube`, `--c-bg-raised`, 3],
     [`youtube play on red`, `--c-on-youtube`, `--c-youtube`, 3],
+    [`github on base`, `--c-github`, `--c-bg`, 3],
+    [`github on raised`, `--c-github`, `--c-bg-raised`, 3],
     [`online on base`, `--c-online`, `--c-bg`, 3],
     [`offline on raised`, `--c-offline`, `--c-bg-raised`, 3],
     [`offline on hover`, `--c-offline`, `--c-bg-hover`, 3],

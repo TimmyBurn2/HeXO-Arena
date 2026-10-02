@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import type { Accepts, Side } from '@hexo-arena/contract';
+import { placeholderNamePattern, type Accepts, type Side } from '@hexo-arena/contract';
 import { Link } from '../router/Link';
 import { text } from '../text';
 import { cellPoints, cellSize, hexPoints } from '../board/geometry';
@@ -61,8 +61,12 @@ export function Rating({ value, provisional }: { value: number; provisional: boo
     );
 }
 
-/** A name leads to its page: a bot's under Bots, a human's under Players. */
+/**
+ * A name leads to its page: a bot's under Bots, a human's under Players.
+ * A deleted player's placeholder has no page, so it stays plain text.
+ */
 export function PlayerName({ name, kind }: { name: string; kind: `bot` | `human` }): ReactNode {
+    if (placeholderNamePattern.test(name)) return <span className="player-name">{name}</span>;
     return (
         <Link to={kind === `bot` ? `/bots/${encodeURIComponent(name)}` : `/players/${encodeURIComponent(name)}`} className="player-name">
             {name}

@@ -7,7 +7,7 @@ import { PlayerHistory } from '../games/PlayerHistory';
 import { PlayerBlocks } from '../players/PlayerBlocks';
 import { LiveGameGrid } from '../live/LiveGameCard';
 import { useLiveReplay } from '../live/use-live-replay';
-import { BotBadge, OpenTag, PresenceDot, Rating } from '../components/player';
+import { BotBadge, OpenTag, PlayerName, PresenceDot, Rating } from '../components/player';
 import { useMe } from '../me';
 import { turnWindowOf } from '../play/accepts';
 import { playBotPath, readinessOf } from '../play/setup';
@@ -30,7 +30,14 @@ export function BotScreen({ name }: { name: string }) {
     const meta = bot !== undefined ? botMeta(bot) : data !== null ? notFoundMeta : undefined;
     useDocumentMeta(route, meta?.title, meta?.description);
 
-    if (loading && data === null) return <SkeletonRows />;
+    if (loading && data === null) {
+        return (
+            <>
+                <h1 className="screen-title">{name}</h1>
+                <SkeletonRows />
+            </>
+        );
+    }
     if (error && data === null) {
         return (
             <>
@@ -91,7 +98,7 @@ function BotProfile({ bot }: { bot: BotListing }) {
                             {bot.online ? text.bot.online : text.bot.offline}
                         </span>
                         <OpenTag open={bot.openForChallenges} />
-                        {bot.ownerName === null ? null : <span>{text.bot.by(bot.ownerName)}</span>}
+                        {bot.ownerName === null ? null : <span>{text.bot.by(<PlayerName name={bot.ownerName} kind="human" />)}</span>}
                     </div>
                 </header>
             </div>

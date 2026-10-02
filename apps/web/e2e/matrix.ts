@@ -666,7 +666,7 @@ export const shots: readonly Shot[] = [
     { name: `legal-privacy`, path: `/legal/privacy`, world: signedOut, ready: `section`, framed: true },
     { name: `legal-terms`, path: `/legal/terms`, world: guest, ready: `section`, framed: true },
     { name: `legal-loading`, path: `/legal/privacy`, world: world({ stall: true }), ready: `.skeleton`, framed: true },
-    { name: `legal-error`, path: `/legal/privacy`, world: world({ legal: null }), ready: `.empty`, framed: true },
+    { name: `legal-missing`, path: `/legal/privacy`, world: world({ legalMissing: [`privacy`] }), ready: `h1`, framed: true },
 ];
 
 /** Seed the look's storage before any app script runs. */

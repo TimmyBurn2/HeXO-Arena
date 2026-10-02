@@ -12,7 +12,7 @@ const dist = new URL(`../dist/`, import.meta.url);
 describe('the production build', () => {
     // A whole build takes a second or two here; the budget leaves a loaded
     // machine room.
-    it('ships the third-party licenses at the root of dist, the font included, as the dev server serves them', async () => {
+    it('ships the third-party licenses at the root of dist, the font and GitHub\'s mark included, as the dev server serves them', async () => {
         await build({ root: webRoot, logLevel: `silent` });
         const file = new URL(licenseFileName, dist);
         expect(existsSync(file)).toBe(true);
@@ -23,6 +23,8 @@ describe('the production build', () => {
         }
         expect(text).toMatch(/^## Chakra Petch \(OFL-1\.1\)$/m);
         expect(text).toContain(`SIL OPEN FONT LICENSE Version 1.1`);
+        expect(text).toMatch(/^## Octicons mark-github \(MIT\)$/m);
+        expect(text).toContain(`Copyright (c) 2026 GitHub Inc.`);
         expect(text).toBe(licenseText());
         expect(thirdPartyLicensesPath).toBe(`/${licenseFileName}`);
     }, 60_000);

@@ -82,6 +82,7 @@ describe('the tournament reads and entries', () => {
                 entrants: 1,
                 maxEntrants: 3,
                 winner: null,
+                round: null,
             },
         ]);
     });
@@ -137,6 +138,8 @@ describe('the tournament reads and entries', () => {
             [`gamma`, `playing`, true, 1500],
         ]);
         expect(read.rounds).toHaveLength(3);
+        const listed = tournamentListSchema.parse((await world.app.inject({ method: `GET`, url: `/api/tournaments` })).json());
+        expect(listed.running).toMatchObject({ id, status: `running`, round: { current: 1, of: 3 } });
         const [round] = read.rounds;
         const [pairing] = round?.pairings ?? [];
         expect(round?.rest).not.toBeNull();

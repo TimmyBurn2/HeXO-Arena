@@ -182,10 +182,11 @@ function recordQuery(query: Query, resolved: Extract<Resolved, { kind: `page` }>
     const arms = seatsOf(player)
         .filter((seat) => vs === null || seat.opponentKind === vs.kind)
         .map((seat) => {
+            // A voided game stays on the page and out of the record.
             const arm = query
                 .select({ side: sql<Side>`${seat.side}`.as(`side`), winner: games.winner })
                 .from(games)
-                .where(and(...common, ...seatConditions(seat, player, vs, filters)));
+                .where(and(...common, isNull(games.voidedAt), ...seatConditions(seat, player, vs, filters)));
             return sql`select side, winner from ${arm}`;
         });
     if (arms.length === 0) return null;
@@ -313,6 +314,7 @@ function entriesOf(query: Query, ids: readonly string[]): FinishedGameEntry[] {
             turns: turnsOnBoard(openingPlies) + row.moves,
             finishedAt: new Date(row.finishedAt * 1000).toISOString().replace(/\.\d{3}Z$/u, `Z`),
             rated: winner !== null && row.voidedAt === null,
+            voided: row.voidedAt !== null,
         };
     });
 }

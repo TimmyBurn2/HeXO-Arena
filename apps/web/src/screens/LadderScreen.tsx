@@ -202,7 +202,7 @@ function Row({ entry, you, found }: { entry: LeaderboardEntry; you: boolean; fou
                     {entry.kind === `bot` ? <PresenceDot online={entry.online} /> : null}
                     <PlayerName name={entry.name} kind={entry.kind} />
                     {entry.kind === `bot` ? <BotBadge /> : null}
-                    {entry.kind === `bot` && entry.ownerName !== null ? <span className="ladder-owner">{text.ladder.byOwner(entry.ownerName)}</span> : null}
+                    {entry.kind === `bot` && entry.ownerName !== null ? <span className="ladder-owner">{text.ladder.byOwner(<PlayerName name={entry.ownerName} kind="human" />)}</span> : null}
                     {you ? <span className="you-tag">{text.ladder.you}</span> : null}
                 </span>
             </td>

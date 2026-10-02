@@ -251,7 +251,7 @@ test.describe(`on a touch screen`, () => {
                     if (stream instanceof EventTarget) stream.dispatchEvent(new MessageEvent(`snapshot`, { data: JSON.stringify(snapshot) }));
                 }
             },
-            { gameId: `live`, players: ordinary, openingPlies: running.openingPlies, board: running.board, timeControl: running.timeControl, status: `finished`, winner: `x`, reason: `six-in-a-row` },
+            { gameId: `live`, players: ordinary, openingPlies: running.openingPlies, board: running.board, timeControl: running.timeControl, status: `finished`, winner: `x`, reason: `six-in-a-row`, voided: false },
         );
         await page.locator(`.hud-bottom-center .hud-result`).waitFor();
         await expect(async () => {

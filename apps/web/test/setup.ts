@@ -1,3 +1,7 @@
+import { legalPages } from '@hexo-arena/contract';
+import { beforeEach } from 'vitest';
+import { onlyLegal } from './legal-deploy';
+
 // jsdom ships the dialog element without its show methods, and its
 // elements without scrollIntoView; rendering needs none of the behavior,
 // only the method surfaces.
@@ -21,3 +25,9 @@ if (typeof Element !== `undefined`) {
     const elementProto = Element.prototype as unknown as Record<string, (() => void) | undefined>;
     elementProto.scrollIntoView ??= function scrollIntoView() {};
 }
+
+// The repository's deployment has every legal document; a test about one
+// missing serves its own.
+beforeEach(() => {
+    onlyLegal(...legalPages);
+});

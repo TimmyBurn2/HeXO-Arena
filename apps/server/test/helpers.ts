@@ -1,4 +1,4 @@
-import { botWithTokenSchema, botsPath, devLoginPath, discordCallbackPath, discordLoginPath, signupPath, type LegalDetails } from '@hexo-arena/contract';
+import { botWithTokenSchema, botsPath, devLoginPath, discordCallbackPath, discordLoginPath, signupPath } from '@hexo-arena/contract';
 import { buildApp, type BuiltApp } from '../src/app';
 import { openDatabase, runMigrations, type Sqlite } from '../src/db';
 import type { DiscordIdentity, DiscordOAuth } from '../src/discord';
@@ -79,7 +79,6 @@ export async function createTestApp(options?: {
     random?: () => number;
     logger?: LogTarget;
     webIndexPath?: string;
-    legalDetails?: LegalDetails;
     trustedProxy?: string;
     now?: () => number;
     limits?: LimitTable;
@@ -98,7 +97,6 @@ export async function createTestApp(options?: {
         watchers,
         adminActor: `operator`,
         publicOrigin: `https://arena.example`,
-        legalDetails: options?.legalDetails ?? null,
         ...(options?.random !== undefined && { random: options.random }),
         ...(options?.logger !== undefined && { logger: options.logger }),
         ...(options?.webIndexPath !== undefined && { webIndexPath: options.webIndexPath }),

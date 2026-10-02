@@ -41,14 +41,8 @@ services:
             - data:/data
             - backup:/backup
             - web:/srv/web:ro
-            # The operator's legal details; a missing file stops compose
-            # here, and the app refuses to boot without real values.
-            - type: bind
-              source: ./legal-details.json
-              target: /etc/hexo-arena/legal-details.json
-              read_only: true
-              bind:
-                  create_host_path: false
+            # Read only to name the legal documents it lacks; Caddy serves it.
+            - ./legal:/srv/legal:ro
         networks: [internal]
         # Covers the 120 s drain plus the close; docker's default of 10 s
         # would cut every live game short.
@@ -105,14 +99,9 @@ services:
             - web:/srv/web:ro
             - caddy-data:/data
             - caddy-config:/config
-            # The same details file, which answers the legal pages while
-            # the app is down.
-            - type: bind
-              source: ./legal-details.json
-              target: /etc/hexo-arena/legal-details.json
-              read_only: true
-              bind:
-                  create_host_path: false
+            # The deployment's legal documents and their details, served
+            # as files.
+            - ./legal:/srv/legal:ro
         networks:
             internal:
                 ipv4_address: 172.29.64.10

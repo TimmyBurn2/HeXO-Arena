@@ -120,7 +120,7 @@ function BotRow({ bot }: { bot: BotListing }) {
                     <BotBadge />
                 </span>
             </td>
-            <td className="col-optional">{bot.ownerName ?? ``}</td>
+            <td className="col-optional">{bot.ownerName === null ? null : <PlayerName name={bot.ownerName} kind="human" />}</td>
             <td className="col-narrow-optional">
                 <OpenTag open={bot.openForChallenges} />
             </td>

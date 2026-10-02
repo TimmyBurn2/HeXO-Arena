@@ -1,4 +1,5 @@
 import {
+    playerRecordMemoMs,
     botAccountPath,
     botsMeta,
     connectMeta,
@@ -225,6 +226,32 @@ describe('the og shell routes', () => {
         expect(human.meta.ogDescription).toBe(`HeXO player, rated 1000 (provisional); 0 games, 0 won`);
         expect((await shell(`/players/sealbot`)).status).toBe(404);
         expect((await shell(`/players/nobody`)).status).toBe(404);
+    });
+
+    it('previews a player through the API\'s own memo, so a read within its seconds, by either, holds for both', async () => {
+        let clock = Date.UTC(2026, 9, 1, 12);
+        const timed = await createTestApp({ webIndexPath: indexPath, now: () => clock });
+        try {
+            await loginAs(timed.app, `mira`);
+            const record = await timed.app.inject({ method: `GET`, url: `/api/players/mira` });
+            expect(record.json()).toMatchObject({ games: 0 });
+            const session = await loginAs(timed.app, `owner`);
+            await mintBot(timed.app, session, `alpha`);
+            timed.sqlite
+                .prepare(
+                    `insert into games (id, user_id, bot_id, user_side, time_control, opening_cells, winner, finish_reason, created_at, finished_at, finish_seq)
+                     select 'g_won', u.id, b.id, 'x', '{"mode":"unlimited"}', '[]', 'x', 'surrender', 1, 2, 1
+                     from users u, bots b where u.name = 'mira' and b.name = 'alpha'`,
+                )
+                .run();
+            const preview = async () => metaOf((await timed.app.inject({ method: `GET`, url: `/players/mira` })).body).ogDescription;
+            expect(await preview()).toBe(`HeXO player, rated 1000 (provisional); 0 games, 0 won`);
+            clock += playerRecordMemoMs;
+            expect(await preview()).toBe(`HeXO player, rated 1000 (provisional); 1 game, 1 won`);
+            expect((await timed.app.inject({ method: `GET`, url: `/api/players/mira` })).json()).toMatchObject({ games: 1, won: 1 });
+        } finally {
+            await timed.app.close();
+        }
     });
 
     it('previews a waiting tournament by its name, start, and entries, and answers 404 for an unknown one', async () => {

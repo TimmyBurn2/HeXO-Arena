@@ -4,9 +4,11 @@ import {
     devAccountSchema,
     gameSnapshotSchema,
     leaderboardActiveDays,
+    legalDetailsPath,
+    legalDocumentPath,
+    legalPages,
     leaderboardQuerySchema,
     leaderboardSchema,
-    legalDetailsSchema,
     finishedGamesPageSchema,
     finishedGamesQuerySchema,
     liveGameEntrySchema,
@@ -20,8 +22,8 @@ import {
     type BotListing,
     type DevAccount,
     type GameSnapshot,
+    type LegalPage,
     type LeaderboardEntry,
-    type LegalDetails,
     type FinishedGameEntry,
     type FinishedGamesPage,
     type LiveGameEntry,
@@ -35,6 +37,7 @@ import {
     type TournamentGame,
     type TournamentSummary,
 } from '@hexo-arena/contract';
+import { legalDetailsSchema, type LegalDetails } from '../src/legal/details';
 
 /**
  * The world one browser test sees; every answer is parsed with the
@@ -58,6 +61,8 @@ export interface World {
     unloadable: string | null;
     // The deployment's legal details; null answers not found.
     legal: LegalDetails | null;
+    // The legal documents the deployment lacks, each answering not found.
+    legalMissing: LegalPage[];
     // The first sign-in waiting for its name; null answers it as expired.
     signup: Signup | null;
     // How Create account answers: the account, or a refusal by its code.
@@ -245,6 +250,7 @@ export const liveGames: LiveGameEntry[] = (
         timeControl,
         toMove: sideOfPly(cells.length),
         rated: x.kind !== `guest` && o.kind !== `guest`,
+        voided: false,
         cells,
         clock: runningClock(timeControl, index),
     };
@@ -387,6 +393,7 @@ function summaryOf(detail: TournamentDetail): TournamentSummary {
         entrants: detail.startedAt === null ? detail.entries.length : detail.standings.length,
         maxEntrants: detail.maxEntrants,
         winner: detail.status === `finished` && top !== undefined ? { name: top.bot, ownerName: top.ownerName } : null,
+        round: detail.status === `running` ? { current: 1 + detail.rounds.findIndex((round) => round.pairings.some((pairing) => pairing.games.some((game) => game.outcome === `pending` || game.outcome === `live`))), of: detail.rounds.length } : null,
     };
 }
 
@@ -506,6 +513,7 @@ export const games: Record<string, GameSnapshot> = {
         status: `finished`,
         winner: `x`,
         reason: `six-in-a-row`,
+        voided: false,
     },
     // The newest result, apart from the finished game the game screen's
     // tests use, so a path never names both.
@@ -518,6 +526,7 @@ export const games: Record<string, GameSnapshot> = {
         status: `finished`,
         winner: `x`,
         reason: `six-in-a-row`,
+        voided: false,
     },
     origin: {
         gameId: `origin`,
@@ -548,6 +557,7 @@ export const games: Record<string, GameSnapshot> = {
         status: `finished`,
         winner: `o`,
         reason: `surrender`,
+        voided: false,
     },
     guest: {
         gameId: `guest`,
@@ -577,6 +587,7 @@ export const games: Record<string, GameSnapshot> = {
         status: `finished`,
         winner: `x`,
         reason: `timeout`,
+        voided: false,
     },
 };
 
@@ -584,9 +595,9 @@ export const games: Record<string, GameSnapshot> = {
 // frozen board can show the newest.
 const finishedAt = (minutesAgo: number) => new Date(Date.now() - minutesAgo * 60_000).toISOString();
 export const recentGames: FinishedGameEntry[] = [
-    { gameId: `won`, players: facing(`hextide`, 1690), winner: `x`, reason: `six-in-a-row`, timeControl: { mode: `turn`, turnTimeMs: 30_000 }, openingPlies: 1, turns: 12, finishedAt: finishedAt(3), rated: true },
-    { gameId: `five-finished`, players: facing(`sealbot`, 1712), winner: `o`, reason: `surrender`, timeControl: { mode: `turn`, turnTimeMs: 30_000 }, openingPlies: 5, turns: 5, finishedAt: finishedAt(41), rated: true },
-    { gameId: `nine-finished`, players: facing(`sealbot`, 1712), winner: `x`, reason: `timeout`, timeControl: { mode: `turn`, turnTimeMs: 30_000 }, openingPlies: 9, turns: 6, finishedAt: finishedAt(95), rated: true },
+    { gameId: `won`, players: facing(`hextide`, 1690), winner: `x`, reason: `six-in-a-row`, timeControl: { mode: `turn`, turnTimeMs: 30_000 }, openingPlies: 1, turns: 12, finishedAt: finishedAt(3), rated: true, voided: false },
+    { gameId: `five-finished`, players: facing(`sealbot`, 1712), winner: `o`, reason: `surrender`, timeControl: { mode: `turn`, turnTimeMs: 30_000 }, openingPlies: 5, turns: 5, finishedAt: finishedAt(41), rated: true, voided: false },
+    { gameId: `nine-finished`, players: facing(`sealbot`, 1712), winner: `x`, reason: `timeout`, timeControl: { mode: `turn`, turnTimeMs: 30_000 }, openingPlies: 9, turns: 6, finishedAt: finishedAt(95), rated: true, voided: false },
     ...(
         [
             [seat.hextide, seat.sealbot, `o`, `six-in-a-row`],
@@ -605,6 +616,7 @@ export const recentGames: FinishedGameEntry[] = [
         turns: 20 + index,
         finishedAt: finishedAt(180 + 600 * index),
         rated: winner !== null,
+        voided: false,
     })),
 ];
 
@@ -626,6 +638,7 @@ export function rivalry(count: number): FinishedGameEntry[] {
             turns: 18 + (index % 23),
             finishedAt: finishedAt(240 + 37 * index),
             rated: winner !== null,
+            voided: false,
         };
     });
 }
@@ -671,15 +684,17 @@ function finishedPage(state: World, params: URLSearchParams): { status: 200; bod
     const body: FinishedGamesPage = { games, next, previous, page };
     if (query.player === undefined) return { status: 200, body };
     const player = query.player;
+    // A voided game stays on the page and out of the record, as the server counts it.
+    const counted = matches.filter((game) => !game.voided);
     const bySide = (side: Side) => {
-        const sat = matches.filter((game) => sideOf(game, player) === side);
+        const sat = counted.filter((game) => sideOf(game, player) === side);
         return { games: sat.length, won: sat.filter((game) => game.winner === side).length, lost: sat.filter((game) => game.winner !== null && game.winner !== side).length };
     };
     const asX = bySide(`x`);
     const asO = bySide(`o`);
     const won = asX.won + asO.won;
     const lost = asX.lost + asO.lost;
-    return { status: 200, body: { ...body, record: { games: matches.length, won, lost, undecided: matches.length - won - lost, asX, asO } } };
+    return { status: 200, body: { ...body, record: { games: counted.length, won, lost, undecided: counted.length - won - lost, asX, asO } } };
 }
 
 export function world(overrides: Partial<World> = {}): World {
@@ -695,6 +710,7 @@ export function world(overrides: Partial<World> = {}): World {
         broken: false,
         unloadable: null,
         legal: legalDetails,
+        legalMissing: [],
         signup: null,
         create: `created`,
         start: `created`,
@@ -844,6 +860,20 @@ export async function serve(page: Page, state: World): Promise<void> {
     await page.route((url) => url.pathname === `/healthz`, (route) =>
         route.fulfill({ status: state.paused ? 503 : 200, contentType: `application/json`, body: `{"ok":true}` }),
     );
+    // The deployment's legal folder: the details as the world holds them,
+    // and each document from the dev server's templates unless it lacks it.
+    await page.route((url) => url.pathname === legalDetailsPath || legalPages.some((page) => url.pathname === legalDocumentPath(page)), async (route) => {
+        const path = new URL(route.request().url()).pathname;
+        if (state.stall) return;
+        if (path === legalDetailsPath) {
+            if (state.legal === null) await route.fulfill({ status: 404 });
+            else await json(route, 200, legalDetailsSchema.parse(state.legal));
+        } else if (state.legalMissing.some((missing) => legalDocumentPath(missing) === path)) {
+            await route.fulfill({ status: 404 });
+        } else {
+            await route.continue();
+        }
+    });
     // A pathname match, not a glob: the app's own src/api modules would
     // match `**/api/**`.
     await page.route((url) => url.pathname.startsWith(`/api/`), async (route) => {
@@ -911,11 +941,6 @@ export async function serve(page: Page, state: World): Promise<void> {
             } else {
                 await json(route, state.create === `name_taken` ? 409 : 410, { error: `no`, code: state.create });
             }
-            return;
-        }
-        if (path === `/api/legal` && method === `GET`) {
-            if (state.legal === null) await json(route, 404, { error: `no legal details on this server`, code: `not_found` });
-            else await json(route, 200, legalDetailsSchema.parse(state.legal));
             return;
         }
         const playerRead = /^\/api\/players\/([^/]+)(\/rating)?$/u.exec(path);
@@ -1028,6 +1053,7 @@ export async function serve(page: Page, state: World): Promise<void> {
                     status: `finished`,
                     winner: seatOf(snapshot, state.me) === `x` ? `o` : `x`,
                     reason: `surrender`,
+                    voided: false,
                 };
             }
             const answered = state.games[id];

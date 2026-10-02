@@ -17,6 +17,8 @@ pnpm monorepo:
   when one exists
 - `scripts/dev-bots`: local opponents and the dev seed, a separate process
   that never ships
+- `legal`: the legal documents as templates and their example details; each
+  deployment serves its own copy
 
 ## Commands
 
@@ -107,6 +109,8 @@ SIGINT stops at once.
 
 `DEPLOY.md` covers the production stack, backups, the admin operations, and
 the operator checklist.
+`legal/README.md` covers the legal documents each deployment publishes: what
+to copy where, what to fill in, and which are required where.
 
 ## Rules
 

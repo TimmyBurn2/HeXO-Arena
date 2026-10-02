@@ -40,6 +40,7 @@ export interface HumanGameRecord {
     readonly opening: readonly OpeningCell[];
     readonly winner: Side | null;
     readonly finishReason: FinishReason | null;
+    readonly voided: boolean;
 }
 
 export interface BotGameRecord {
@@ -54,6 +55,7 @@ export interface BotGameRecord {
     readonly opening: readonly OpeningCell[];
     readonly winner: Side | null;
     readonly finishReason: FinishReason | null;
+    readonly voided: boolean;
 }
 
 export type GameRecord = HumanGameRecord | BotGameRecord;
@@ -132,12 +134,13 @@ export function insertBotGame(
 // a bulk update would hand every row the same number.
 const nextFinishSeq = sql`(select coalesce(max(${games.finishSeq}), 0) + 1 from ${games})`;
 
+/** Writes a game's result and its ratings in one transaction; answers whether the game was voided while live. */
 export function recordFinish(
     query: Query,
     gameId: string,
     finish: { winner: Side | null; reason: FinishReason },
-): void {
-    query.transaction((tx) => {
+): { voided: boolean } {
+    return query.transaction((tx) => {
         const [finished] = tx
             .update(games)
             .set({ winner: finish.winner, finishReason: finish.reason, finishedAt: nowSeconds(), finishSeq: nextFinishSeq })
@@ -146,6 +149,7 @@ export function recordFinish(
             .all();
         // A game voided while live finishes on the record but never rates.
         if (finished?.finishSeq != null) applyFinishedGame(tx, gameId, finished.finishSeq, countedGameOf(finished));
+        return { voided: finished?.voidedAt != null };
     });
 }
 
@@ -179,6 +183,7 @@ export function findGame(query: Query, gameId: string): GameRecord | undefined {
             openingCells: games.openingCells,
             winner: games.winner,
             finishReason: games.finishReason,
+            voidedAt: games.voidedAt,
         })
         .from(games)
         .leftJoin(users, eq(games.userId, users.id))
@@ -188,6 +193,7 @@ export function findGame(query: Query, gameId: string): GameRecord | undefined {
         .where(eq(games.id, gameId))
         .get();
     if (row === undefined) return undefined;
+    const voided = row.voidedAt !== null;
     // Rows are written through the schemas that read them back; a parse
     // failure means the store itself is broken.
     const timeControl = timeControlSchema.parse(JSON.parse(row.timeControl));
@@ -214,6 +220,7 @@ export function findGame(query: Query, gameId: string): GameRecord | undefined {
             opening,
             winner,
             finishReason,
+            voided,
         };
     }
     if (
@@ -236,6 +243,7 @@ export function findGame(query: Query, gameId: string): GameRecord | undefined {
             opening,
             winner,
             finishReason,
+            voided,
         };
     }
     throw new Error(`stored game row seats nobody: ${row.id}`);

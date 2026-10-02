@@ -207,7 +207,6 @@ describe('request limits', () => {
         const classes = Object.fromEntries([...(world?.limits.classes ?? [])].filter(([route]) => !route.startsWith(`HEAD `)));
         expect(classes).toEqual({
             'GET /healthz': `public`,
-            'GET /api/legal': `public`,
             'GET /api/tournaments': `public`,
             'GET /api/players/:name': `public`,
             'GET /api/players/:name/rating': `public`,

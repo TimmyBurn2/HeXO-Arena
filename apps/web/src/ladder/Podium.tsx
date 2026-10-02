@@ -1,4 +1,4 @@
-import { useId, type CSSProperties } from 'react';
+import { useId, type CSSProperties, type ReactNode } from 'react';
 import type { BotListing, LeaderboardEntry } from '@hexo-arena/contract';
 import { ShineDefs, StoneArt } from '../board/Board';
 import { cellPoints } from '../board/geometry';
@@ -23,7 +23,7 @@ export interface PodiumPlace {
     readonly name: string;
     readonly kind: `bot` | `human`;
     readonly figure: string;
-    readonly meta: string;
+    readonly meta: ReactNode;
     readonly play: { readonly to: string; readonly label: string } | null;
     /** The place the plate names when it differs from the tower's, as a shared second does. */
     readonly rank?: number;
@@ -45,7 +45,7 @@ export function Podium({ entries, roster }: { entries: readonly LeaderboardEntry
             name: entry.name,
             kind: entry.kind,
             figure: String(entry.rating),
-            meta: text.ladder.plateMeta(entry.kind === `bot` ? entry.ownerName : null, entry.games),
+            meta: text.ladder.plateMeta(entry.kind === `bot` && entry.ownerName !== null ? <PlayerName name={entry.ownerName} kind="human" /> : null, entry.games),
             play: ready ? { to: playBotPath(entry.name), label: text.ladder.playBot(entry.name) } : null,
         };
     });

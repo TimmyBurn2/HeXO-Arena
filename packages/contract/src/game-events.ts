@@ -36,6 +36,7 @@ export const gameFinishSchema = z
     .object({
         winner: sideSchema.nullable(),
         reason: finishReasonSchema,
+        voided: z.boolean().meta({ description: `True for a game the operator voided while it ran, which counts in no record and no rating.` }),
         clock: gameClockSchema,
     })
     .meta({ id: `GameFinish`, description: `The result, with the clock as it stood at the end.` });

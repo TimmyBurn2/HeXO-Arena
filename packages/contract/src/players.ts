@@ -56,7 +56,7 @@ export const playerRecordSchema = z
             .optional()
             .meta({ description: `A bot's finished tournaments, newest first, with its place in each.` }),
     })
-    .meta({ id: `PlayerRecord`, description: `Every finished game the player sat in counts, aborted games aside.` });
+    .meta({ id: `PlayerRecord`, description: `Every finished game the player sat in counts, aborted and voided games aside.` });
 export type PlayerRecord = z.infer<typeof playerRecordSchema>;
 
 export const ratingPointSchema = z

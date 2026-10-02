@@ -62,18 +62,59 @@ describe('stored ratings', () => {
         return insertGame(query, { userId, botId, userSide, timeControl: unlimited, opening: origin });
     }
 
-    it('rates a human game from the seeds, with the human on either side', () => {
+    it('rates a human game from the seeds, moving the human alone, with the human on either side', () => {
         const [userId = ``] = humans;
         const [botId = ``] = bots;
         recordFinish(query, humanGame(userId, botId, `o`), { winner: `o`, reason: `surrender` });
         const expected = rateGame(
-            { x: { kind: `bot`, id: botId }, o: { kind: `human`, id: userId }, winner: `o`, finishedAt: 0 },
+            { x: { kind: `bot`, id: botId }, o: { kind: `human`, id: userId }, winner: `o`, startedAt: 0, finishedAt: 0 },
             { x: { rating: seedRating(`bot`), ratedAt: null }, o: { rating: seedRating(`human`), ratedAt: null } },
+            seedRating(`bot`),
         );
         expect(readRating(query, { kind: `human`, id: userId })).toEqual(expected.o);
-        expect(readRating(query, { kind: `bot`, id: botId })).toEqual(expected.x);
+        expect(readRating(query, { kind: `bot`, id: botId })).toEqual(seedRating(`bot`));
         expect(expected.o.rating).toBeGreaterThan(1000);
-        expect(expected.x.rating).toBeLessThan(1500);
+    });
+
+    it('moves only the human when a human beats a bot many times, the bot unmoved and its other games unaffected', () => {
+        const [userId = ``] = humans;
+        const [botId = ``, otherId = ``] = bots;
+        const opener = insertBotGame(query, { challengerBotId: botId, destBotId: otherId, challengerSide: `x`, timeControl: unlimited, opening: origin });
+        recordFinish(query, opener, { winner: `o`, reason: `six-in-a-row` });
+        const standing = readRating(query, { kind: `bot`, id: botId });
+        const climb: number[] = [];
+        for (let won = 0; won < 40; won++) {
+            recordFinish(query, humanGame(userId, botId, won % 2 === 0 ? `x` : `o`), { winner: won % 2 === 0 ? `x` : `o`, reason: `six-in-a-row` });
+            climb.push(readRating(query, { kind: `human`, id: userId }).rating);
+        }
+        expect(readRating(query, { kind: `bot`, id: botId })).toEqual(standing);
+        expect(climb.every((value, index) => index === 0 || value >= (climb[index - 1] ?? 0))).toBe(true);
+        expect(climb.at(-1)).toBeGreaterThan(1400);
+        expect(foldRatings(finishedGameLog(query))).toEqual(storedRatings(query));
+    });
+
+    it('rates a human against the bot as it stood at the start, not after a bot game finished during the human game', () => {
+        vi.useFakeTimers({ toFake: [`Date`] });
+        vi.setSystemTime(new Date(`2026-10-01T00:00:00Z`));
+        const [userId = ``] = humans;
+        const [botId = ``, otherId = ``] = bots;
+        const played = humanGame(userId, botId, `x`);
+        vi.setSystemTime(new Date(`2026-10-01T00:00:05Z`));
+        const during = insertBotGame(query, { challengerBotId: otherId, destBotId: botId, challengerSide: `x`, timeControl: unlimited, opening: origin });
+        recordFinish(query, during, { winner: `x`, reason: `six-in-a-row` });
+        const moved = readRating(query, { kind: `bot`, id: botId });
+        expect(moved.rating).toBeLessThan(1500);
+        vi.setSystemTime(new Date(`2026-10-01T00:00:09Z`));
+        recordFinish(query, played, { winner: `x`, reason: `six-in-a-row` });
+        const start = Date.parse(`2026-10-01T00:00:00Z`) / 1000;
+        const expected = rateGame(
+            { x: { kind: `human`, id: userId }, o: { kind: `bot`, id: botId }, winner: `x`, startedAt: start, finishedAt: start + 9 },
+            { x: { rating: seedRating(`human`), ratedAt: null }, o: { rating: moved, ratedAt: start + 5 } },
+            seedRating(`bot`),
+        );
+        expect(readRating(query, { kind: `human`, id: userId })).toEqual(expected.x);
+        expect(readRating(query, { kind: `bot`, id: botId })).toEqual(moved);
+        expect(foldRatings(finishedGameLog(query))).toEqual(storedRatings(query));
     });
 
     it('writes nothing for aborted and wall-time games', () => {
@@ -140,13 +181,14 @@ describe('stored ratings', () => {
         expect(first).toEqual(live);
     }, 30_000);
 
-    it('finds a player\'s previous rated game through the seat indexes, without sorting', () => {
+    it('finds a player\'s previous rated game through the seat indexes, without sorting, a bot\'s among its bot games alone', () => {
         const [userId = ``] = humans;
         const [botId = ``] = bots;
         const human = explainRatedAtBefore(query, { kind: `human`, id: userId }, 10).join(`\n`);
         const bot = explainRatedAtBefore(query, { kind: `bot`, id: botId }, 10).join(`\n`);
         expect(human).toContain(`USING INDEX games_user_finish_idx`);
-        for (const index of [`games_bot_finish_idx`, `games_challenger_finish_idx`, `games_dest_finish_idx`]) expect(bot).toContain(`USING INDEX ${index}`);
+        for (const index of [`games_challenger_finish_idx`, `games_dest_finish_idx`]) expect(bot).toContain(`USING INDEX ${index}`);
+        expect(bot).not.toContain(`games_bot_finish_idx`);
         for (const plan of [human, bot]) {
             expect(plan).not.toMatch(/SCAN games\b/u);
             expect(plan).not.toContain(`TEMP B-TREE`);

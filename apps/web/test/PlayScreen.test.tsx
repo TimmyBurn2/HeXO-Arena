@@ -2,6 +2,7 @@
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import type { BotListing, LiveGameEntry, Me } from '@hexo-arena/contract';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { onlyLegal } from './legal-deploy';
 import { meStore } from '../src/me';
 import { navigate } from '../src/router/use-route';
 import { playStorageKey } from '../src/play/setup';
@@ -80,7 +81,7 @@ function serve(options: { me?: Me; bots?: BotListing[] | (() => BotListing[]); s
                 return Promise.resolve(answer);
             }
             if (url === `/api/tournaments` && options.tournament !== undefined) {
-                const running = { id: `t_autumnrobin1`, name: `Autumn round robin`, status: `running`, startsAt: `2026-10-01T18:00:00Z`, timeControl: { mode: `turn`, turnTimeMs: 10_000 }, openingPlies: 5, entrants: 3, maxEntrants: 12, winner: null };
+                const running = { id: `t_autumnrobin1`, name: `Autumn round robin`, status: `running`, startsAt: `2026-10-01T18:00:00Z`, timeControl: { mode: `turn`, turnTimeMs: 10_000 }, openingPlies: 5, entrants: 3, maxEntrants: 12, winner: null, round: { current: 1, of: 3 } };
                 return Promise.resolve(new Response(JSON.stringify({ running, scheduled: [], past: [] })));
             }
             if (url === `/api/tournaments/t_autumnrobin1` && options.tournament !== undefined) {
@@ -284,6 +285,17 @@ describe('PlayScreen', () => {
         expect(served.posts.map((post) => post.url)).toEqual([`/api/auth/guest`, `/api/games`]);
     });
 
+    it('leave out the terms sentence and the privacy link the deployment has no documents for', async () => {
+        onlyLegal(`imprint`);
+        window.history.replaceState(null, ``, `/play?bot=devbot-c`);
+        serve({ me: null });
+        render(<PlayScreen />);
+        await ready();
+        const notice = document.querySelector(`.start-notice`);
+        expect(notice?.textContent).toBe(`Your email stays with Discord, and a first sign-in asks for your public name.`);
+        expect(notice?.querySelector(`a`)).toBe(null);
+    });
+
     it('say when the guest limit is full, and when a guest session does not start', async () => {
         serve({ me: null, guest: refused(429, `guest_limit`, { 'retry-after': `60` }) });
         render(<PlayScreen />);
@@ -390,12 +402,13 @@ describe('PlayScreen', () => {
         });
     });
 
-    it('list a bot the running tournament holds as busy until it ends, and say so when it is the one picked', async () => {
+    it('list a bot the running tournament holds as busy until it ends, and say so with a link to the tournament when it is the one picked', async () => {
         serve({ tournament: [`hextide`] });
         window.history.replaceState(null, ``, `/play?bot=hextide`);
         render(<PlayScreen />);
         await ready();
-        expect(await screen.findByText(`hextide is in a tournament until it ends; pick another bot`)).toBeTruthy();
+        const line = await screen.findByText((_content, element) => element?.textContent === `hextide is in Autumn round robin until it ends; pick another bot` && element.tagName === `P`);
+        expect(within(line).getByRole(`link`, { name: `Autumn round robin` }).getAttribute(`href`)).toBe(`/tournaments/t_autumnrobin1`);
         const row = screen.getAllByRole(`radio`, { name: /hextide/u })[0]?.closest(`label`);
         expect(row?.textContent).toContain(`In a tournament until it ends`);
     });

@@ -146,6 +146,7 @@ export function TurnChip({ snapshot, you, status, link, replay }: {
             <Chip className="hud-bottom-center hud-replay">
                 {replay === null ? null : <Scrubber replay={replay} live={false} />}
                 <span className="hud-replay-line">
+                    {snapshot.voided ? <span className="tag muted">{text.game.voided}</span> : null}
                     <span className="hud-result" role="status">
                         {resultLine(snapshot)}
                     </span>

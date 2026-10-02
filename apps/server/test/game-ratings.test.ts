@@ -99,20 +99,33 @@ describe('the game ratings cache', () => {
         }
     }
 
-    it('records both sides before and after a rated game in the transaction that finishes it', () => {
+    it('records both sides before and after a rated game in the transaction that finishes it, the bot facing a human unmoved', () => {
         const [userId = ``] = humans;
         const [botId = ``] = bots;
         const gameId = humanGame(userId, botId, `o`);
         recordFinish(query, gameId, { winner: `o`, reason: `surrender` });
         const after = rateGame(
-            { x: { kind: `bot`, id: botId }, o: { kind: `human`, id: userId }, winner: `o`, finishedAt: 0 },
+            { x: { kind: `bot`, id: botId }, o: { kind: `human`, id: userId }, winner: `o`, startedAt: 0, finishedAt: 0 },
             { x: { rating: seedRating(`bot`), ratedAt: null }, o: { rating: seedRating(`human`), ratedAt: null } },
+            seedRating(`bot`),
         );
         expect(rowsOf(gameId)).toEqual([
             { side: `o`, before: seedRating(`human`).rating, after: after.o.rating, deviation: after.o.deviation },
-            { side: `x`, before: seedRating(`bot`).rating, after: after.x.rating, deviation: after.x.deviation },
+            { side: `x`, before: seedRating(`bot`).rating, after: seedRating(`bot`).rating, deviation: seedRating(`bot`).deviation },
         ]);
         expect(readRating(query, { kind: `human`, id: userId }).rating).toBe(after.o.rating);
+    });
+
+    it('records the bot side of every human game with before equal to after, through a log and its recompute', () => {
+        playLog(20261002, 200);
+        recomputeRatings(query);
+        const human = sqlite
+            .prepare(
+                `select r.rating_before as before, r.rating_after as after from game_ratings r join games g on g.id = r.game_id where g.user_id is not null and r.side <> g.user_side`,
+            )
+            .all() as { before: number; after: number }[];
+        expect(human.length).toBeGreaterThan(50);
+        for (const row of human) expect(row.after).toBe(row.before);
     });
 
     it('carries before equal to after for an unrated game and for one voided while live', () => {

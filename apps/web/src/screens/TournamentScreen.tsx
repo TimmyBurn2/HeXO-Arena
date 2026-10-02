@@ -80,6 +80,7 @@ function summaryOf(detail: TournamentDetail): TournamentSummary {
         entrants: detail.startedAt === null ? detail.entries.length : detail.standings.length,
         maxEntrants: detail.maxEntrants,
         winner: detail.status === `finished` && top !== undefined ? { name: top.bot, ownerName: top.ownerName } : null,
+        round: detail.status === `running` && detail.rounds.length > 0 ? { current: currentRound(detail) ?? detail.rounds.length, of: detail.rounds.length } : null,
     };
 }
 
@@ -147,7 +148,7 @@ function StatusSentence({ detail, readAt }: { detail: TournamentDetail; readAt: 
         case `scheduled`: {
             const wait = Math.floor((Date.parse(detail.startsAt) - readAt) / 1000);
             const when = `${localTime(detail.startsAt)} (${utcTime(detail.startsAt)})`;
-            return <>{wait > 0 ? status.scheduled(when, text.time.until(wait)) : status.due(when)}</>;
+            return <>{wait > 0 ? status.scheduled(when, text.time.untilInProse(wait)) : status.due(when)}</>;
         }
         case `running`: {
             const round = currentRound(detail) ?? detail.rounds.length;
@@ -197,7 +198,7 @@ function Running({ detail, readAt }: { detail: TournamentDetail; readAt: number 
 
 function Finished({ detail }: { detail: TournamentDetail }) {
     const top = detail.standings.slice(0, 3);
-    const places = top.map((line) => ({ name: line.bot, kind: `bot` as const, figure: String(line.points), meta: text.tournaments.plateMeta(line.points, line.ownerName), play: null, rank: line.rank }));
+    const places = top.map((line) => ({ name: line.bot, kind: `bot` as const, figure: String(line.points), meta: text.tournaments.plateMeta(line.points, <PlayerName name={line.ownerName} kind="human" />), play: null, rank: line.rank }));
     return (
         <>
             {detail.status === `finished` && top.length > 0 ? (
@@ -233,10 +234,11 @@ function Entries({ detail }: { detail: TournamentDetail }) {
                 <ul className="tournament-entries">
                     {detail.entries.map((entry) => (
                         <li key={entry.bot}>
-                            <PresenceDot online={entry.online} />
+                            {/* Presence is today's, which says nothing of a tournament that is over. */}
+                            {detail.status === `scheduled` || detail.status === `running` ? <PresenceDot online={entry.online} /> : null}
                             <PlayerName name={entry.bot} kind="bot" />
                             <BotBadge />
-                            <span className="tournament-owner">{text.ladder.byOwner(entry.ownerName)}</span>
+                            <span className="tournament-owner">{text.ladder.byOwner(<PlayerName name={entry.ownerName} kind="human" />)}</span>
                             {entry.state === `absent` || entry.state === `left_out` ? (
                                 <span className="tournament-reason">{text.tournaments.reasons[entry.reason ?? `absent`]}</span>
                             ) : null}
@@ -249,19 +251,28 @@ function Entries({ detail }: { detail: TournamentDetail }) {
 }
 
 function Absentees({ detail }: { detail: TournamentDetail }) {
-    const missing = absentees(detail);
-    if (missing.length === 0) return null;
+    const { never, withdrew } = absentees(detail);
     return (
-        <section className="tournament-block" aria-labelledby="tournament-absent-title">
-            <h2 id="tournament-absent-title" className="section-title">
-                {text.tournaments.didNotPlay}
+        <>
+            <Gone entries={never} title={text.tournaments.didNotPlay} id="tournament-absent-title" />
+            <Gone entries={withdrew} title={text.tournaments.withdrew} id="tournament-withdrew-title" />
+        </>
+    );
+}
+
+function Gone({ entries, title, id }: { entries: TournamentDetail[`entries`]; title: string; id: string }) {
+    if (entries.length === 0) return null;
+    return (
+        <section className="tournament-block" aria-labelledby={id}>
+            <h2 id={id} className="section-title">
+                {title}
             </h2>
             <ul className="tournament-entries">
-                {missing.map((entry) => (
+                {entries.map((entry) => (
                     <li key={entry.bot}>
                         <PlayerName name={entry.bot} kind="bot" />
                         <BotBadge />
-                        <span className="tournament-owner">{text.ladder.byOwner(entry.ownerName)}</span>
+                        <span className="tournament-owner">{text.ladder.byOwner(<PlayerName name={entry.ownerName} kind="human" />)}</span>
                         <span className="tournament-reason">{text.tournaments.reasons[entry.reason ?? `absent`]}</span>
                     </li>
                 ))}

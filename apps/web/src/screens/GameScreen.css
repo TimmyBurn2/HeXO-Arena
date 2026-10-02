@@ -744,6 +744,13 @@
             background: transparent;
         }
 
+        /* The panel keeps the moves head and a few lines in view however
+           many links the foot holds; where the sheet is too short for both,
+           the body's scroll carries the foot. */
+        .drawer-panel {
+            min-height: var(--sheet-panel-min-h);
+        }
+
         .moves-head {
             background: var(--c-bg-overlay);
             box-shadow: inset 0 calc(-1 * var(--border-w)) 0 var(--c-border);

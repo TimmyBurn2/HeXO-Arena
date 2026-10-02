@@ -1,6 +1,7 @@
 import { clockText, type TournamentSummary } from '@hexo-arena/contract';
 import { fetchTournaments } from '../api/client';
 import { useAsync } from '../api/use-async';
+import { PlayerName } from '../components/player';
 import { ErrorFrame, SkeletonRows } from '../components/states';
 import { LadderHead } from '../ladder/LadderHead';
 import { Link } from '../router/Link';
@@ -75,6 +76,7 @@ function Facts({ tournament }: { tournament: TournamentSummary }) {
         case `running`:
             return (
                 <>
+                    {tournament.round === null ? null : <>{text.tournaments.roundOf(tournament.round.current, tournament.round.of)}; </>}
                     {text.tournaments.played(tournament.entrants)}; {clock}
                 </>
             );
@@ -82,7 +84,7 @@ function Facts({ tournament }: { tournament: TournamentSummary }) {
             return (
                 <>
                     {when(tournament.startsAt)};{` `}
-                    {tournament.winner === null ? text.tournaments.played(tournament.entrants) : text.tournaments.won(tournament.winner.name, tournament.winner.ownerName)}
+                    {tournament.winner === null ? text.tournaments.played(tournament.entrants) : text.tournaments.won(<PlayerName name={tournament.winner.name} kind="bot" />, <PlayerName name={tournament.winner.ownerName} kind="human" />)}
                 </>
             );
         case `called_off`:

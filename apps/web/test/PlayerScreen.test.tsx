@@ -82,6 +82,18 @@ describe('PlayerScreen', () => {
         expect(screen.getByRole(`button`, { name: `All` }).getAttribute(`aria-pressed`)).toBe(`true`);
     });
 
+    it('scales the chart to every rating and the settled band, cutting the early provisional band at the plot\'s edge', async () => {
+        stubPlayer(record);
+        render(<PlayerScreen name="ana" />);
+        const chart = await screen.findByRole(`group`, { name: /^Rating chart/u });
+        expect([...chart.querySelectorAll(`.rating-chart-tick`)].map((tick) => tick.textContent)).toEqual([`1300`, `1400`, `1500`]);
+        // The band is cut at the plot's edge in its own points, never drawn past it.
+        const [, , , plotHeight = 0] = (chart.querySelector(`svg.rating-chart-plot`)?.getAttribute(`viewBox`) ?? ``).split(` `).map(Number);
+        const ys = (chart.querySelector(`polygon.rating-chart-band`)?.getAttribute(`points`) ?? ``).split(` `).map((pair) => Number(pair.split(`,`)[1]));
+        expect(ys.length).toBe(6);
+        expect(ys.every((value) => value >= 0 && value <= plotHeight)).toBe(true);
+    });
+
     it('walks the chart by keys and opens the game it holds', async () => {
         stubPlayer(record);
         render(<PlayerScreen name="ana" />);

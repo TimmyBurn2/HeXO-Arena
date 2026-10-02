@@ -1,8 +1,9 @@
 import { Fragment, useEffect, useRef, useState, type ReactNode } from 'react';
 import { BoardToggles } from '../board/BoardToggles';
 import { SiteLinks } from '../components/SiteLinks';
+import { useLegalLinks } from '../legal/links';
 import { Link } from '../router/Link';
-import { legalLinks, siteLinks } from '../site-links';
+import { siteLinks } from '../site-links';
 import { text } from '../text';
 import type { Drawer, DrawerTab } from './use-drawer';
 import type { FeedLine } from './snapshot-views';
@@ -38,6 +39,7 @@ export function GameDrawer({ drawer, feed, current, facts, meetings, tournament,
     onResign: (() => Promise<Sent>) | null;
     peek: ReactNode;
 }) {
+    const legalLinks = useLegalLinks();
     const bodyRef = useRef<HTMLDivElement>(null);
     const wasVisible = useRef(drawer.visible);
 

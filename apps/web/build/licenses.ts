@@ -9,11 +9,16 @@ export const licenseFileName = `third-party-licenses.txt`;
 
 const webPackage = new URL(`../package.json`, import.meta.url);
 const fontLicense = new URL(`../public/fonts/chakra-petch-OFL.txt`, import.meta.url);
+const octiconsLicense = new URL(`./octicons-LICENSE.txt`, import.meta.url);
 
-// The font is a static file outside the bundle, so Vite's list of bundled
-// packages lacks it; its license closes the file.
+// The font is a static file outside the bundle, and GitHub's mark a path
+// copied into the code, so Vite's list of bundled packages lacks both;
+// their licenses close the file.
 function fontSection(): string {
-    return `\n## Chakra Petch (OFL-1.1)\n\nThe wordmark font, a subset served from /fonts/.\n\n${readFileSync(fontLicense, `utf8`).trim()}\n`;
+    return (
+        `\n## Chakra Petch (OFL-1.1)\n\nThe wordmark font, a subset served from /fonts/.\n\n${readFileSync(fontLicense, `utf8`).trim()}\n` +
+        `\n## Octicons mark-github (MIT)\n\nGitHub's mark beside the Source link, from @primer/octicons.\n\n${readFileSync(octiconsLicense, `utf8`).trim()}\n`
+    );
 }
 
 interface PackageManifest {

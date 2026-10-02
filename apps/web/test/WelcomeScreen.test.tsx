@@ -2,6 +2,7 @@
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import type { Me, Signup } from '@hexo-arena/contract';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { onlyLegal } from './legal-deploy';
 import { meStore } from '../src/me';
 import { landingOf } from '../src/router/use-route';
 import { WelcomeScreen } from '../src/screens/WelcomeScreen';
@@ -85,6 +86,19 @@ describe('WelcomeScreen', () => {
             `Everyone sees this name on the ladder, in your games, and on your bots' pages; it cannot change later.`,
             `2 to 30 letters, digits, - or _; start with a letter, end with a letter or digit`,
         ]);
+    });
+
+    it('state no terms to accept when the deployment has none, and keep the privacy link', async () => {
+        onlyLegal(`privacy`);
+        serve(ok);
+        meStore.start();
+        render(<WelcomeScreen />);
+        await screen.findByText(`mira-hex is free`);
+        const notice = document.querySelector(`.welcome-notice`);
+        expect(notice?.textContent).toBe(
+            `HeXO Arena keeps your Discord user ID and this name, and your Discord names while you are signed in, never your email; see\u00a0Privacy.`,
+        );
+        expect(notice?.querySelector(`a`)?.getAttribute(`href`)).toBe(`/legal/privacy`);
     });
 
     it('redraw the pattern beside the field as the name is typed', async () => {

@@ -23,6 +23,12 @@
         color: var(--c-accent);
     }
 
+    /* An owner named in a "by" line takes the line's color, so the name
+       it follows stays the one that stands out; the weight marks the link. */
+    :is(.ladder-owner, .rung-owner, .podium-meta, .standings-owner, .tournament-owner) .player-name {
+        color: inherit;
+    }
+
     .player-cell {
         display: flex;
         align-items: center;

@@ -51,6 +51,7 @@ function history(player: string): unknown {
         turns: 20,
         finishedAt: new Date(Date.now() - (index + 1) * 3_600_000).toISOString(),
         rated: true,
+        voided: false,
     }));
     return { games, next: null, previous: null, page: 1, record: { games: 12, won: 6, lost: 6, undecided: 0, asX: { games: 12, won: 6, lost: 6 }, asO: { games: 0, won: 0, lost: 0 } } };
 }

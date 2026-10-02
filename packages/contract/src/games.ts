@@ -99,6 +99,7 @@ export const gameSnapshotSchema = z
             status: z.literal(`finished`),
             winner: sideSchema.nullable(),
             reason: finishReasonSchema,
+            voided: z.boolean().meta({ description: `Taken out by the operator: the game stays readable, and counts in no record and no rating.` }),
             // Absent when the process that ran the clock is gone; the
             // result stands without it.
             clock: gameClockSchema.optional(),

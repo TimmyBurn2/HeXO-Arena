@@ -118,6 +118,10 @@ export const tournamentSummarySchema = z
         entrants: z.number().int().min(0).meta({ description: `Bots entered; once it starts, the bots that played.` }),
         maxEntrants: z.number().int().min(tournamentMinPresent).max(tournamentMaxEntrants),
         winner: tournamentWinnerSchema.nullable().meta({ description: `The bot first in the final standings, once finished.` }),
+        round: z
+            .object({ current: z.number().int().min(1), of: z.number().int().min(1) })
+            .nullable()
+            .meta({ description: `While it runs, the round under way or the next to start, and how many there are; null otherwise.` }),
     })
     .meta({ id: `TournamentSummary` });
 export type TournamentSummary = z.infer<typeof tournamentSummarySchema>;

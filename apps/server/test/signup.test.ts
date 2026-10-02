@@ -232,7 +232,6 @@ describe('the held sign-ups', () => {
             watchers: new GameWatchers(),
             adminActor: `operator`,
             publicOrigin: `https://arena.example`,
-            legalDetails: null,
         });
         expect(query.select({ tokenHash: pendingSignups.tokenHash }).from(pendingSignups).all()).toEqual([{ tokenHash: `live` }]);
         expect(query.select().from(sessions).all()).toHaveLength(0);

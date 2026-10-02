@@ -1,9 +1,10 @@
 import { lazy, Suspense, useEffect, useRef, useState, useSyncExternalStore } from 'react';
-import { legalPagePath, signInFailureParam, signInFailureSchema, siteName, type SignInFailure } from '@hexo-arena/contract';
+import { signInFailureParam, signInFailureSchema, siteName, type SignInFailure } from '@hexo-arena/contract';
 import { Mark } from './components/Mark';
 import { SiteFooter } from './components/SiteFooter';
 import { useFramed } from './frame';
 import { Identity } from './identity/Identity';
+import { useLegalSlots } from './legal/links';
 import { Link } from './router/Link';
 import { loadScreen, RouteBoundary } from './RouteBoundary';
 import { routePath, type Route } from './router/route';
@@ -125,6 +126,7 @@ export function AppShell() {
     const mainRef = useRef<HTMLElement | null>(null);
     const firstRender = useRef(true);
     const [signInFailure, setSignInFailure] = useState<SignInFailure | null>(null);
+    const legal = useLegalSlots();
     useDocumentMeta(route);
 
     useEffect(() => {
@@ -196,7 +198,7 @@ export function AppShell() {
                 {framed && signInFailure !== null ? (
                     <div className="site-banner">
                         <p className="site-banner-inner">
-                            {text.shell.signInFailed[signInFailure]((words) => <Link to={legalPagePath(`imprint`)}>{words}</Link>)}
+                            {text.shell.signInFailed[signInFailure](legal)}
                         </p>
                     </div>
                 ) : null}

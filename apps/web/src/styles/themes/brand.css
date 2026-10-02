@@ -28,6 +28,10 @@
         --c-youtube: #ff0000;
         --c-on-youtube: #ffffff;
 
+        /* GitHub's mark in white, one of the two colors GitHub allows it,
+           and the one that reads on every theme's dark ground. */
+        --c-github: #ffffff;
+
         /* a luminance mask's two ends: what it keeps and what it cuts */
         --mask-keep: #ffffff;
         --mask-cut: #000000;

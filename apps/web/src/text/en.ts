@@ -13,6 +13,7 @@ import {
     siteName,
     unlimitedWallCapMs,
     type DiscordNames,
+    type LegalPage,
     type SignInFailure,
 } from '@hexo-arena/contract';
 import type { ReactNode } from 'react';
@@ -32,6 +33,13 @@ function ordinal(place: number): string {
 }
 // A wait the server named, in seconds under a minute and whole minutes, rounded up, past it.
 const inWait = (seconds: number) => (seconds < 60 ? `${String(seconds)} s` : inMinutes(Math.ceil(seconds / 60)));
+
+/** A link to each legal page the deployment has; a page it lacks is null, and its words go with it. */
+export type LegalSlots = Readonly<Record<LegalPage, Slot | null>>;
+
+// A no-break space holds "see Privacy." together, so a line never ends on
+// a word alone at any width or text size.
+const seePrivacy = (privacy: Slot | null): ReactNode => (privacy === null ? `` : rich`; see\u00a0${privacy(`Privacy`)}`);
 
 /**
  * The words the web app shows, in English, grouped by screen and area.
@@ -55,9 +63,11 @@ export const en = {
         },
         paused: `Starting games is paused; live games continue`,
         links: {
+            tournaments: `Tournaments`,
             build: `Build a bot`,
             credits: `Credits`,
             botApi: `Bot API`,
+            source: `Source`,
             imprint: `Impressum / Legal notice`,
             privacy: `Privacy`,
             terms: `Terms`,
@@ -65,20 +75,21 @@ export const en = {
         },
         opensInNewTab: (label: string) => `${label}, opens in a new tab`,
         signIn: (provider: Slot): ReactNode => rich`Sign in${provider(` with Discord`)}`,
-        // A no-break space holds "see Privacy." together, so the line never
-        // ends on a word alone at any width or text size.
-        trustLine: (privacy: Slot): ReactNode =>
-            rich`Your email stays with Discord, and a first sign-in asks for your public name; see\u00a0${privacy(`Privacy`)}.`,
-        guestTrustLine: (privacy: Slot): ReactNode =>
-            rich`Signing in ends this guest session and its games. Your email stays with Discord; see\u00a0${privacy(`Privacy`)}.`,
+        trustLine: (privacy: Slot | null): ReactNode => rich`Your email stays with Discord, and a first sign-in asks for your public name${seePrivacy(privacy)}.`,
+        guestTrustLine: (privacy: Slot | null): ReactNode => rich`Signing in ends this guest session and its games. Your email stays with Discord${seePrivacy(privacy)}.`,
         signInFailed: {
             unconfigured: () => `Sign-in is not set up on this server`,
             cancelled: () => `You cancelled the sign-in at Discord; nothing was kept`,
             expired: () => `That sign-in expired; sign in again`,
             rejected: () => `Discord did not confirm the sign-in; try again`,
-            banned: (imprint: Slot): ReactNode => rich`This Discord account is banned from ${siteName}; the operator's contact is in the ${imprint(`Legal notice`)}`,
+            banned: ({ imprint, privacy }: LegalSlots): ReactNode =>
+                imprint !== null
+                    ? rich`This Discord account is banned from ${siteName}; the operator's contact is in the ${imprint(`Legal notice`)}`
+                    : privacy !== null
+                      ? rich`This Discord account is banned from ${siteName}; the operator's contact is in the ${privacy(`Privacy policy`)}`
+                      : `This Discord account is banned from ${siteName}`,
             busy: () => `Sign-in is busy right now; try again in a minute`,
-        } satisfies Record<SignInFailure, (imprint: Slot) => ReactNode>,
+        } satisfies Record<SignInFailure, (legal: LegalSlots) => ReactNode>,
         identity: {
             guestName: (name: string) => `${name}, unrated`,
             discord: ({ username, displayName }: DiscordNames) =>
@@ -139,7 +150,7 @@ export const en = {
         rating: `Rating`,
         games: `Games`,
         lastPlayed: `Last played`,
-        byOwner: (owner: string) => `by ${owner}`,
+        byOwner: (owner: ReactNode): ReactNode => rich`by ${owner}`,
         you: `you`,
         lead: `One rating pool for bots and humans; a player joins once their rating is no longer provisional.`,
         played: `Played`,
@@ -153,9 +164,9 @@ export const en = {
         settling: `Your rating is still settling; you join the ladder once it is no longer provisional.`,
         podiumLabel: (top: readonly { name: string; rating: number }[]) =>
             `Podium: ${top.map((entry, index) => `${[`first`, `second`, `third`][index] ?? ``} ${entry.name}, ${String(entry.rating)}`).join(`; `)}`,
-        plateMeta: (owner: string | null, games: number) => {
+        plateMeta: (owner: ReactNode | null, games: number): ReactNode => {
             const played = `${String(games)} ${plural(games, `game`, `games`)}`;
-            return owner === null ? played : `by ${owner}, ${played}`;
+            return owner === null ? played : rich`by ${owner}, ${played}`;
         },
         play: `Play`,
         playBot: (name: string) => `Play ${name}`,
@@ -303,6 +314,7 @@ export const en = {
         closeSheet: `Close filters`,
         columns: { players: `Players`, result: `Result`, clock: `Clock`, opening: `Opening`, length: `Length`, finished: `Finished` },
         versus: `vs`,
+        voided: `voided`,
         turns: (count: number) => `${String(count)} ${plural(count, `turn`, `turns`)}`,
         page: (page: number) => `Page ${String(page)}`,
         listed: (page: number) => `Games, page ${String(page)}`,
@@ -497,15 +509,15 @@ export const en = {
         guestNote: (name: ReactNode): ReactNode => rich`You play as ${name}; guest games are unrated.`,
         signedOutLead: `Play as a guest, unrated, or sign in for a rated game.`,
         playAsGuest: `Play as guest`,
-        // A no-break space holds "see Privacy." together, as on every sign-in line.
-        notice: (terms: Slot, privacy: Slot): ReactNode =>
-            rich`By playing as a guest you accept the ${terms(`Terms`)}, including the minimum age of ${String(minimumAge)}. Your email stays with Discord, and a first sign-in asks for your public name; see\u00a0${privacy(`Privacy`)}.`,
+        notice: ({ terms, privacy }: LegalSlots): ReactNode =>
+            rich`${terms === null ? `` : rich`By playing as a guest you accept the ${terms(`Terms`)}, including the minimum age of ${String(minimumAge)}. `}Your email stays with Discord, and a first sign-in asks for your public name${seePrivacy(privacy)}.`,
         stale: `You are no longer signed in; sign in again, or play as a guest.`,
         guestStale: `Your guest session ended; play as a guest again, or sign in.`,
         starting: `Starting the game`,
         paused: `Starting games is paused; this page updates when it resumes`,
         unavailable: {
-            tournament: (name: string) => `${name} is in a tournament until it ends; pick another bot`,
+            tournament: (name: string, tournament: ReactNode | null): ReactNode =>
+                tournament === null ? `${name} is in a tournament until it ends; pick another bot` : rich`${name} is in ${tournament} until it ends; pick another bot`,
             offline: (name: string) => `${name} is offline; pick another bot`,
             closed: (name: string) => `${name} is closed for challenges right now; pick another bot`,
             nothing: (name: string) => `${name} accepts no clock yet; pick another bot`,
@@ -547,8 +559,8 @@ export const en = {
         nameLabel: `Public name`,
         free: (name: string) => `${name} is free`,
         nameNote: `Everyone sees this name on the ladder, in your games, and on your bots' pages; it cannot change later.`,
-        notice: (terms: Slot, privacy: Slot): ReactNode =>
-            rich`By creating your account you accept the ${terms(`Terms`)}, including the minimum age of ${String(minimumAge)}. ${siteName} keeps your Discord user ID and this name, and your Discord names while you are signed in, never your email; see\u00a0${privacy(`Privacy`)}.`,
+        notice: ({ terms, privacy }: LegalSlots): ReactNode =>
+            rich`${terms === null ? `` : rich`By creating your account you accept the ${terms(`Terms`)}, including the minimum age of ${String(minimumAge)}. `}${siteName} keeps your Discord user ID and this name, and your Discord names while you are signed in, never your email${seePrivacy(privacy)}.`,
         create: `Create account`,
         cancel: `Cancel`,
         foot: `If you cancel, nothing is kept. Not your Discord account? Cancel, switch accounts in Discord, and sign in again.`,
@@ -564,7 +576,7 @@ export const en = {
         game: `The game`,
         gameAbout: (name: Slot): ReactNode => rich`${name(`HeXO`)} is the game played here: each turn places 2 stones, and 6 in a row wins.`,
         community: `Community`,
-        marks: `Discord and YouTube are trademarks of Discord Inc. and Google LLC.`,
+        marks: `Discord, GitHub, and YouTube are trademarks of Discord Inc., GitHub Inc., and Google LLC.`,
         themes: `Themes`,
         themesLead: `Ink is ${siteName}'s own. The other themes take their colors from these projects:`,
         font: `Font`,
@@ -572,7 +584,7 @@ export const en = {
         inspiration: `Inspiration`,
         licenses: `Licenses`,
         licensesProse: (file: Slot): ReactNode =>
-            rich`The open-source code your browser receives, such as React and zod, and the font are listed with their license texts under ${file(`Licenses`)}.`,
+            rich`The open-source code your browser receives, such as React and zod, the font, and GitHub's mark are listed with their license texts under ${file(`Licenses`)}.`,
         platforms: { youtube: `YouTube`, discord: `Discord` },
         mit: `MIT License`,
         mitSummary: `The MIT License`,
@@ -648,6 +660,7 @@ export const en = {
         you: `you`,
         vs: (x: string, o: string) => `${x} vs ${o}`,
         unrated: `unrated`,
+        voided: `voided`,
         playing: (side: ReactNode): ReactNode => rich`Playing ${side}`,
         watching: `watching`,
         manyWatching: `Many watching; the board catches up shortly`,
@@ -689,6 +702,7 @@ export const en = {
         rated: `Rated`,
         ratedYes: `Yes`,
         ratedNoGuest: `No, a guest is playing`,
+        ratedNoVoided: `No, the operator voided it`,
         yourSide: `Your side`,
         result: `Result`,
         keys: (key: Slot): ReactNode =>
@@ -729,6 +743,19 @@ export const en = {
             const days = Math.floor(seconds / 86_400);
             return `${String(days)} ${plural(days, `day`, `days`)}`;
         },
+        // The same wait in running text, every unit spelled out: "2 hours 59 minutes".
+        untilInProse: (seconds: number) => {
+            if (seconds < 60) return `under a minute`;
+            const minutes = Math.floor((seconds % 3_600) / 60);
+            const spelled = `${String(minutes)} ${plural(minutes, `minute`, `minutes`)}`;
+            if (seconds < 3_600) return spelled;
+            if (seconds < 86_400) {
+                const hours = Math.floor(seconds / 3_600);
+                return `${String(hours)} ${plural(hours, `hour`, `hours`)}${minutes === 0 ? `` : ` ${spelled}`}`;
+            }
+            const days = Math.floor(seconds / 86_400);
+            return `${String(days)} ${plural(days, `day`, `days`)}`;
+        },
         ago: (seconds: number) => {
             if (seconds < 60) return `just now`;
             if (seconds < 3_600) return `${String(Math.floor(seconds / 60))} min ago`;
@@ -749,6 +776,10 @@ export const en = {
         routeCrashedSentence: `An error stopped it; reload to try again.`,
         reload: `Reload`,
         routeFailedHome: `Home`,
+    },
+    legal: {
+        onThisPage: `On this page`,
+        failed: `This document did not load`,
     },
     players: {
         human: `Human`,
@@ -843,6 +874,7 @@ export const en = {
         roundSteps: `Round progress`,
         step: (round: number, state: `done` | `live` | `next`) => `Round ${String(round)}, ${{ done: `done`, live: `live`, next: `to come` }[state]}`,
         round: (round: number) => `Round ${String(round)}`,
+        roundOf: (round: number, rounds: number) => `Round ${String(round)} of ${String(rounds)}`,
         rest: (bot: string) => `${bot} rests`,
         standings: `Standings`,
         standingsNote: `One point per game won; a no-show scores for the opponent. Ties go to the points between the tied bots, then Sonneborn-Berger.`,
@@ -863,12 +895,14 @@ export const en = {
             not_played: `not played`,
         },
         pairingLine: (first: string, second: string) => `${first} vs ${second}`,
+        pairingsOf: (bot: string) => `Pairings of ${bot}`,
         gameLine: (game: number, outcome: string) => `Game ${String(game)}: ${outcome}`,
         score: (first: number, second: number) => `${String(first)}-${String(second)}`,
         liveGames: `Live games`,
         enteredTitle: (count: number, max: number) => `Entered (${String(count)} of ${String(max)})`,
         noEntries: `No bot entered yet.`,
         didNotPlay: `Did not play`,
+        withdrew: `Withdrew`,
         reasons: {
             absent: `not online at the start`,
             daily_cap: `too few bot games left that day`,
@@ -882,7 +916,7 @@ export const en = {
             `Podium: ${top.map((entry) => `${[`first`, `second`, `third`][entry.rank - 1] ?? ``} ${entry.name}, ${String(entry.points)} ${plural(entry.points, `point`, `points`)}`).join(`; `)}`,
         podiumTitle: `Podium`,
         points: (points: number) => `${String(points)} ${plural(points, `point`, `points`)}`,
-        plateMeta: (points: number, owner: string) => `${plural(points, `point`, `points`)}, by ${owner}`,
+        plateMeta: (points: number, owner: ReactNode): ReactNode => rich`${plural(points, `point`, `points`)}, by ${owner}`,
         entry: {
             title: `Enter a bot`,
             note: `Your bot must be online at the start and accept the clock; from the start to the end it takes no other game. One bot per owner.`,

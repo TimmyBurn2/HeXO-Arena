@@ -92,3 +92,18 @@ test('the licenses link opens the third-party licenses as plain text, the font i
     expect(text).toContain(`## react - `);
     expect(text).toContain(`## Chakra Petch (OFL-1.1)`);
 });
+
+test('a legal document the deployment lacks leaves no link in the footer or the sign-in line, and its page is not found', async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 800 });
+    const look = looks[0];
+    if (look === undefined) throw new Error(`no look registered`);
+    await wear(page, look);
+    await serve(page, world({ me: null, legalMissing: [`imprint`, `privacy`] }));
+    await page.goto(`/connect`);
+    const legal = page.locator(`footer.site-footer .legal-links`);
+    await expect(legal).toHaveText(`TermsLicenses`);
+    await expect(page.locator(`.discord-sign-in .note`).first()).toHaveText(`Your email stays with Discord, and a first sign-in asks for your public name.`);
+    await page.goto(`/legal/imprint`);
+    await expect(page.getByRole(`heading`, { level: 1, name: `Not found` })).toBeVisible();
+    await expect(page).toHaveTitle(`Not found - HeXO Arena`);
+});

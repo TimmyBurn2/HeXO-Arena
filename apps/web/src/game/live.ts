@@ -45,6 +45,7 @@ export function applyFinish(snapshot: GameSnapshot, finish: GameFinish): GameSna
         status: `finished`,
         winner: finish.winner,
         reason: finish.reason,
+        voided: finish.voided,
         clock: finish.clock,
     };
 }

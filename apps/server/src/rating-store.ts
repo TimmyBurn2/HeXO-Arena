@@ -5,11 +5,13 @@ import type { Query } from './db';
 import { bots, gameRatings, games, ratings, users } from './db/schema';
 import {
     foldRatings,
+    humanSideOf,
     isProvisional,
     playerKey,
     rateGame,
     seedRating,
     type FinishedGame,
+    type Opponent,
     type PlayerRating,
     type PlayerRef,
     type RatedPlayer,
@@ -29,6 +31,7 @@ export const seatColumns = {
     challengerSide: games.challengerSide,
     winner: games.winner,
     finishSeq: games.finishSeq,
+    createdAt: games.createdAt,
     finishedAt: games.finishedAt,
 };
 
@@ -41,6 +44,7 @@ export interface SeatRow {
     challengerSide: string | null;
     winner: string | null;
     finishSeq: number | null;
+    createdAt: number;
     finishedAt: number | null;
 }
 
@@ -52,15 +56,15 @@ function seated(firstSide: Side, first: PlayerRef, second: PlayerRef): Record<Si
 // below sound.
 export function finishedGameOf(row: SeatRow): FinishedGame {
     const winner = row.winner as Side | null;
-    const finishedAt = row.finishedAt;
+    const { createdAt: startedAt, finishedAt } = row;
     if (finishedAt === null) throw new Error(`stored game row has not finished`);
     if (row.userId !== null && row.botId !== null && row.userSide !== null) {
         const human: PlayerRef = { kind: `human`, id: row.userId };
-        return { ...seated(row.userSide as Side, human, { kind: `bot`, id: row.botId }), winner, finishedAt };
+        return { ...seated(row.userSide as Side, human, { kind: `bot`, id: row.botId }), winner, startedAt, finishedAt };
     }
     if (row.challengerBotId !== null && row.destBotId !== null && row.challengerSide !== null) {
         const challenger: PlayerRef = { kind: `bot`, id: row.challengerBotId };
-        return { ...seated(row.challengerSide as Side, challenger, { kind: `bot`, id: row.destBotId }), winner, finishedAt };
+        return { ...seated(row.challengerSide as Side, challenger, { kind: `bot`, id: row.destBotId }), winner, startedAt, finishedAt };
     }
     throw new Error(`stored game row seats nobody`);
 }
@@ -130,18 +134,28 @@ function saveGameRatings(query: Query, gameId: string, step: RatingStep): void {
         .run();
 }
 
+// A bot's rated games are its bot games: a game against a human never
+// moves the bot.
 function seatsOf(player: PlayerRef) {
-    return player.kind === `human` ? [games.userId] : [games.botId, games.challengerBotId, games.destBotId];
+    return player.kind === `human` ? [games.userId] : [games.challengerBotId, games.destBotId];
 }
 
 // A rated game is one with a winner that was never voided, as the fold
 // counts it; each seat column leads an index with the finish order, so
 // the newest such game before a finish is one short walk per column.
-function lastRatedIn(query: Query, seat: ReturnType<typeof seatsOf>[number], playerId: string, finishSeq: number) {
+function lastRatedIn(query: Query, seat: ReturnType<typeof seatsOf>[number], playerId: string, finishSeq: number, by?: number) {
     return query
-        .select({ finishSeq: games.finishSeq, finishedAt: games.finishedAt })
+        .select({ finishSeq: games.finishSeq, finishedAt: games.finishedAt, gameId: games.id, challengerSide: games.challengerSide })
         .from(games)
-        .where(and(eq(seat, playerId), lt(games.finishSeq, finishSeq), isNotNull(games.winner), isNull(games.voidedAt)))
+        .where(
+            and(
+                eq(seat, playerId),
+                lt(games.finishSeq, finishSeq),
+                isNotNull(games.winner),
+                isNull(games.voidedAt),
+                by === undefined ? undefined : lte(games.finishedAt, by),
+            ),
+        )
         .orderBy(desc(games.finishSeq))
         .limit(1);
 }
@@ -163,12 +177,39 @@ export function explainRatedAtBefore(query: Query, player: PlayerRef, finishSeq:
     );
 }
 
+/**
+ * A bot as it stood when a human game began: after its last bot game that
+ * finished by that second and before this game in the log, as the fold
+ * finds it, read from that game's own rating rows.
+ */
+function botAtStart(query: Query, bot: PlayerRef, startedAt: number, finishSeq: number): Opponent {
+    let latest: { finishSeq: number; gameId: string; side: Side } | undefined;
+    for (const seat of seatsOf(bot)) {
+        const row = lastRatedIn(query, seat, bot.id, finishSeq, startedAt).get();
+        if (row?.finishSeq == null || row.challengerSide === null) continue;
+        // The side check admits only x and o.
+        const challengerSide = row.challengerSide as Side;
+        const side: Side = seat === games.challengerBotId ? challengerSide : challengerSide === `x` ? `o` : `x`;
+        if (latest === undefined || row.finishSeq > latest.finishSeq) latest = { finishSeq: row.finishSeq, gameId: row.gameId, side };
+    }
+    if (latest === undefined) return seedRating(bot.kind);
+    const after = query
+        .select({ rating: gameRatings.ratingAfter, deviation: gameRatings.deviationAfter })
+        .from(gameRatings)
+        .where(and(eq(gameRatings.gameId, latest.gameId), eq(gameRatings.side, latest.side)))
+        .get();
+    if (after === undefined) throw new Error(`a rated bot game has no rating rows`);
+    return after;
+}
+
 // Callers run this in the transaction that records the finish, so neither
 // table ever holds a game the log does not.
 export function applyFinishedGame(query: Query, gameId: string, finishSeq: number, game: FinishedGame): void {
     const standing = (player: PlayerRef): Standing => ({ rating: readRating(query, player), ratedAt: ratedAtBefore(query, player, finishSeq) });
     const before = { x: standing(game.x), o: standing(game.o) };
-    const after = rateGame(game, before);
+    const human = humanSideOf(game);
+    const anchor = human === null || game.winner === null ? undefined : botAtStart(query, game[human === `x` ? `o` : `x`], game.startedAt, finishSeq);
+    const after = rateGame(game, before, anchor);
     if (game.winner !== null) {
         saveRating(query, game.x, after.x);
         saveRating(query, game.o, after.o);

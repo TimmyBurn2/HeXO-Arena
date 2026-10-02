@@ -95,15 +95,24 @@ function Plot({ points }: { points: readonly RatingPoint[] }) {
     const first = times[0] ?? 0;
     const last = times.at(-1) ?? first;
     const spanX = Math.max(1, last - first);
-    const low = Math.min(...points.map((point) => point.rating - point.deviation));
-    const high = Math.max(...points.map((point) => point.rating + point.deviation));
+    // A provisional player's first band spans hundreds of points and would
+    // flatten the settled line, so the scale holds every rating and the band
+    // only where it settled; the early band is cut at the frame's edge.
+    const settledPoints = points.filter((point) => !point.provisional);
+    const banded = settledPoints.length > 0 ? settledPoints : points;
+    const low = Math.min(...points.map((point) => point.rating), ...banded.map((point) => point.rating - point.deviation));
+    const high = Math.max(...points.map((point) => point.rating), ...banded.map((point) => point.rating + point.deviation));
     const pad = Math.max(25, (high - low) * 0.08);
     const floor = low - pad;
     const ceiling = high + pad;
     const x = (index: number) => (points.length === 1 ? width / 2 : (((times[index] ?? first) - first) / spanX) * width);
     const y = (value: number) => height - ((value - floor) / (ceiling - floor)) * height;
     const at = (index: number, value: number) => `${x(index).toFixed(1)},${y(value).toFixed(1)}`;
-    const band = [...points.map((point, index) => at(index, point.rating + point.deviation)), ...[...points].reverse().map((point, index) => at(points.length - 1 - index, point.rating - point.deviation))].join(` `);
+    // Cut in the data, not by a clip, so no shape reaches past the plot
+    // over the text around it.
+    const top = (point: RatingPoint) => Math.min(ceiling, point.rating + point.deviation);
+    const bottom = (point: RatingPoint) => Math.max(floor, point.rating - point.deviation);
+    const band = [...points.map((point, index) => at(index, top(point))), ...[...points].reverse().map((point, index) => at(points.length - 1 - index, bottom(point)))].join(` `);
     const line = points.map((point, index) => at(index, point.rating)).join(` `);
     // The settled stretch overdraws the dim line wherever both ends of a step had settled.
     const settled = points
@@ -169,7 +178,7 @@ function Plot({ points }: { points: readonly RatingPoint[] }) {
                             <line key={tick} className="rating-chart-grid" x1={0} x2={width} y1={y(tick)} y2={y(tick)} />
                         ))}
                         {points.length === 1 && latest !== undefined ? (
-                            <rect className="rating-chart-band" x={width / 2 - lonelyBand / 2} width={lonelyBand} y={y(latest.rating + latest.deviation)} height={y(latest.rating - latest.deviation) - y(latest.rating + latest.deviation)} />
+                            <rect className="rating-chart-band" x={width / 2 - lonelyBand / 2} width={lonelyBand} y={y(top(latest))} height={y(bottom(latest)) - y(top(latest))} />
                         ) : (
                             <polygon className="rating-chart-band" points={band} />
                         )}

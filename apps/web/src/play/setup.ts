@@ -36,6 +36,12 @@ export const custom = {
 /** Whether a bot can start a game now, or why not. */
 export type Readiness = `ready` | `busy` | `tournament` | `offline` | `closed` | `nothing`;
 
+/** The running tournament, which holds its bots until it ends. */
+export interface Holder {
+    readonly id: string;
+    readonly name: string;
+}
+
 const unreserved: ReadonlySet<string> = new Set();
 
 /** A bot's readiness; one the running tournament reserves takes no other game until it ends. */

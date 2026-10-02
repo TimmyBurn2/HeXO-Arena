@@ -222,12 +222,67 @@
         }
     }
 
+    /* A standings row opens its bot's pairings only where the crosstable
+       is cramped, on a phone. */
+    .standings-open,
+    .standings-pairings {
+        display: none;
+    }
+
+    .standings-open {
+        align-items: center;
+        justify-content: center;
+        min-width: var(--control-sm);
+        min-height: var(--control-sm);
+        margin-left: auto;
+        padding: 0;
+        border: 0;
+        background: none;
+        color: var(--c-text-dim);
+        cursor: pointer;
+    }
+
+    .standings-open svg {
+        width: var(--text-base);
+        height: var(--text-base);
+        fill: none;
+        stroke: currentColor;
+        stroke-width: 2;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+    }
+
+    .standings-open[aria-expanded='true'] svg {
+        transform: rotate(180deg);
+    }
+
+    .standings-open:hover {
+        color: var(--c-text);
+    }
+
+    .standings-pairings td {
+        padding-top: 0;
+    }
+
+    .round-of {
+        color: var(--c-text-dim);
+        font-size: var(--text-sm);
+    }
+
     /* A phone keeps the rank, the bot, and the points. */
     @media (max-width: 40rem) {
         .standings-rating,
         .standings-sides,
         .standings-owner {
             display: none;
+        }
+
+        .standings-open {
+            display: inline-flex;
+        }
+
+        .standings-pairings {
+            display: table-row;
         }
     }
 }

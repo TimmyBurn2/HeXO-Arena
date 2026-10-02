@@ -34,6 +34,7 @@ function finished(gameId: string): GameSnapshot {
         status: `finished`,
         winner: `x`,
         reason: `surrender`,
+        voided: false,
     };
 }
 
@@ -48,6 +49,7 @@ function latest(gameId: string): FinishedGameEntry {
         turns: 1,
         finishedAt: `2026-10-01T10:00:00.000Z`,
         rated: true,
+        voided: false,
     };
 }
 
