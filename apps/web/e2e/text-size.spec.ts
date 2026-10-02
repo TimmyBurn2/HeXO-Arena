@@ -21,6 +21,8 @@ const screens: readonly { name: string; path: string; world?: Partial<World> }[]
     { name: `games`, path: `/games` },
     { name: `a head-to-head`, path: `/games?player=hextide&vs=quietlake`, world: { finished: rivalry(30) } },
     { name: `live games`, path: `/games/live` },
+    { name: `the analysis board`, path: `/analysis` },
+    { name: `a game on the analysis board`, path: `/analysis?game=long-finished&turn=12` },
     { name: `the ladder`, path: `/ladder` },
     { name: `tournaments`, path: `/tournaments` },
     { name: `a running tournament`, path: `/tournaments/t_autumnrobin1`, world: { tournaments } },
@@ -78,9 +80,13 @@ async function faults(page: Page, width: number, longName: boolean): Promise<str
             if (!longName && label !== null && label !== undefined && label.getBoundingClientRect().width > 1 && label.scrollWidth > label.clientWidth) found.push(`the name is cut`);
             // Each tab's label stays inside its tab, on one line, and apart from the next label,
             // so the labels never read as one word.
+            // Tabs that wrap to a second row stand apart by the row.
             let before: number | null = null;
+            let row: number | null = null;
             for (const tab of [...document.querySelectorAll(`nav.tabbar .tab-link`)].filter(shown)) {
                 const box = tab.getBoundingClientRect();
+                if (row !== null && Math.round(box.top) !== row) before = null;
+                row = Math.round(box.top);
                 const range = document.createRange();
                 range.selectNodeContents(tab);
                 const text = range.getBoundingClientRect();

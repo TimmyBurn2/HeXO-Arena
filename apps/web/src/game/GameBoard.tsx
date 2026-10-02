@@ -1,9 +1,9 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import type { AxialCoord, Side } from '@hexo-arena/contract';
 import { isWithinPlacementRadius, rejection, type Position } from '@hexo-arena/rules';
 import { Board, type BoardStone } from '../board/Board';
 import { useBoardSettings } from '../board/board-settings';
-import { cellSize, frontierCells, viewBoxOf } from '../board/geometry';
+import { useBoardCamera } from '../board/camera';
 import { text } from '../text';
 import { rejectionNote } from './snapshot-views';
 import type { Sent } from './use-game';
@@ -24,34 +24,6 @@ export interface TurnStatus {
     placed: 0 | 1;
     note: string | null;
     wait: Wait | null;
-}
-
-// A cell spans this many svg units edge to edge across its flats.
-const cellWidth = Math.sqrt(3) * cellSize;
-
-// When the frontier is too big to fit, the camera frames the stones and
-// this many cells round them.
-const nearCells = 3;
-
-function nearBox(stones: readonly AxialCoord[]): { x: number; y: number; w: number; h: number } {
-    const box = viewBoxOf(stones);
-    const dx = nearCells * cellWidth;
-    const dy = nearCells * 1.5 * cellSize;
-    return { x: box.x - dx, y: box.y - dy, w: box.w + 2 * dx, h: box.h + 2 * dy };
-}
-
-/**
- * The smallest a cell may render, from the scale sheet, which raises it
- * for coarse pointers so a finger always hits one cell; a finished board
- * takes no taps, so it keeps the reading minimum at any pointer.
- */
-function minCellPx(element: HTMLElement, finished: boolean): number {
-    const style = getComputedStyle(element);
-    const raw = style.getPropertyValue(finished ? `--board-cell-read` : `--board-cell-min`).trim();
-    const rootPx = Number.parseFloat(getComputedStyle(document.documentElement).fontSize) || 16;
-    const value = Number.parseFloat(raw);
-    if (!Number.isFinite(value)) return 0;
-    return raw.endsWith(`rem`) ? value * rootPx : value;
 }
 
 /**
@@ -99,12 +71,8 @@ export function GameBoard({
     const { start: startWait, clear: clearWait } = limited;
     const waiting = limited.wait !== null;
     const [sending, setSending] = useState(false);
-    const cameraRef = useRef<HTMLDivElement>(null);
-    const [size, setSize] = useState<{ w: number; h: number } | null>(null);
-    const [scale, setScale] = useState<number | undefined>(undefined);
-    const centerOn = useRef<{ cx: number; cy: number; scale: number } | null>(null);
-    const framed = frameStones ?? stones;
-    const box = useMemo(() => viewBoxOf(frontierCells(framed)), [framed]);
+    const camera = useBoardCamera(frameStones ?? stones, finished);
+    const cameraRef = camera.ref;
 
     useEffect(() => {
         onStatus?.({ placed: pending === null ? 0 : 1, note, wait: limited.wait });
@@ -118,57 +86,6 @@ export function GameBoard({
             clearWait();
         }
     }, [yourMove, clearWait]);
-
-    useEffect(() => {
-        const camera = cameraRef.current;
-        if (camera === null || typeof ResizeObserver === `undefined`) return;
-        const observer = new ResizeObserver(() => {
-            setSize({ w: camera.clientWidth, h: camera.clientHeight });
-        });
-        observer.observe(camera);
-        return () => {
-            observer.disconnect();
-        };
-    }, []);
-
-    // Refit on a new turn or a new viewport: the whole frontier when it
-    // fits at the minimum cell size, else the stones and three cells round
-    // them, centered once the new size has laid out.
-    // Only the turn count, the viewport, and the finish refit; a pending
-    // mark never moves the camera under the player's hand.
-    useLayoutEffect(() => {
-        const camera = cameraRef.current;
-        if (camera === null || size === null || size.w === 0 || size.h === 0) return;
-        const style = getComputedStyle(camera);
-        const w = size.w - Number.parseFloat(style.paddingLeft) - Number.parseFloat(style.paddingRight);
-        const h = size.h - Number.parseFloat(style.paddingTop) - Number.parseFloat(style.paddingBottom);
-        const least = minCellPx(camera, finished) / cellWidth;
-        const whole = Math.min(w / box.w, h / box.h);
-        if (whole >= least || framed.length === 0) {
-            centerOn.current = null;
-            setScale(whole);
-            return;
-        }
-        const near = nearBox(framed);
-        const next = Math.max(least, Math.min(w / near.w, h / near.h));
-        centerOn.current = { cx: near.x + near.w / 2, cy: near.y + near.h / 2, scale: next };
-        setScale(next);
-    }, [framed.length, size, finished]);
-
-    // The stones center in the room between the paddings, which differ
-    // above and below, once the refit's scale has laid out: in this same
-    // commit when a new viewport kept the scale, else in the next.
-    useLayoutEffect(() => {
-        const camera = cameraRef.current;
-        const target = centerOn.current;
-        if (camera === null || target === null || scale !== target.scale) return;
-        const style = getComputedStyle(camera);
-        const w = camera.clientWidth - Number.parseFloat(style.paddingLeft) - Number.parseFloat(style.paddingRight);
-        const h = camera.clientHeight - Number.parseFloat(style.paddingTop) - Number.parseFloat(style.paddingBottom);
-        camera.scrollLeft = (target.cx - box.x) * scale - w / 2;
-        camera.scrollTop = (target.cy - box.y) * scale - h / 2;
-        centerOn.current = null;
-    }, [scale, box, size]);
 
     const tryMark = useCallback(
         (cell: AxialCoord) => {
@@ -251,8 +168,8 @@ export function GameBoard({
                     stones={stones}
                     settings={settings}
                     label={text.drawer.boardStones(stones.length)}
-                    scale={scale}
-                    frame={frameStones === undefined ? undefined : box}
+                    scale={camera.scale}
+                    frame={frameStones === undefined ? undefined : camera.box}
                     edge
                     overlays={{
                         ...(pending === null || you === null ? {} : { pending, pendingSide: you }),

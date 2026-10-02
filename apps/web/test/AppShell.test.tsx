@@ -91,7 +91,7 @@ describe('AppShell', () => {
         render(<AppShell />);
         expect(topbar().querySelector(`.nav-links .nav-link`)?.textContent).toBe(`Play`);
         expect(topLink(`Play`).getAttribute(`href`)).toBe(`/play`);
-        expect(topbar().querySelectorAll(`.nav-links .nav-link`).length).toBe(5);
+        expect(topbar().querySelectorAll(`.nav-links .nav-link`).length).toBe(6);
         expect(topLink(`Ladder`).getAttribute(`href`)).toBe(`/ladder`);
         expect(topLink(`HeXO Arena`).getAttribute(`href`)).toBe(`/`);
 
@@ -139,8 +139,8 @@ describe('AppShell', () => {
         render(<AppShell />);
         const tabbar = document.querySelector(`nav.tabbar`) as HTMLElement;
         const labels = (root: Element) => [...root.querySelectorAll(`a`)].map((a) => a.textContent);
-        expect(labels(tabbar)).toEqual([`Home`, `Play`, `Games`, `Ladder`, `Bots`]);
-        expect(labels(topbar().querySelector(`nav.nav-links`) as HTMLElement)).toEqual([`Play`, `Games`, `Ladder`, `Bots`, `Build a bot`]);
+        expect(labels(tabbar)).toEqual([`Home`, `Play`, `Games`, `Analysis`, `Ladder`, `Bots`]);
+        expect(labels(topbar().querySelector(`nav.nav-links`) as HTMLElement)).toEqual([`Play`, `Games`, `Analysis`, `Ladder`, `Bots`, `Build a bot`]);
         expect(document.querySelector(`a[href="/profile"]`)).toBe(null);
         await waitFor(() => {
             expect(tabbar.querySelector(`a[aria-current="page"]`)?.textContent).toBe(`Bots`);

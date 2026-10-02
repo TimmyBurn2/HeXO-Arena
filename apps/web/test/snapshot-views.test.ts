@@ -78,33 +78,33 @@ describe('feedOf', () => {
         ];
         const lines = feedOf(snapshot(cells));
         expect(lines).toEqual([
-            { label: `op 0-1`, spoken: `opening, turns 0 to 1`, groups: [`x: (0,0)`, `o: (1,-1) (0,1)`] },
-            { label: `2`, spoken: `2`, groups: [`x: (2,0) (-1,2)`] },
-            { label: `3`, spoken: `3`, groups: [`o: (2,-2) (-2,1)`] },
+            { label: `op 0-1`, spoken: `opening, turns 0 to 1`, groups: [`x: [0,0]`, `o: [0,1] [1,-1]`] },
+            { label: `2`, spoken: `2`, groups: [`x: [2,0] [1,-2]`] },
+            { label: `3`, spoken: `3`, groups: [`o: [0,2] [-1,-1]`] },
         ]);
     });
 
     it('carry a lone trailing stone as its own half line', () => {
         const lines = feedOf(snapshot(originGame.slice(0, 2), { openingPlies: 1 }));
         expect(lines).toEqual([
-            { label: `op 0`, spoken: `opening, turn 0`, groups: [`x: (0,0)`] },
-            { label: `1`, spoken: `1`, groups: [`o: (1,-1)`] },
+            { label: `op 0`, spoken: `opening, turn 0`, groups: [`x: [0,0]`] },
+            { label: `1`, spoken: `1`, groups: [`o: [0,1]`] },
         ]);
     });
 
     it('group a one-ply opening as the origin alone and start the players at turn 1', () => {
         const lines = feedOf(snapshot(originGame, { openingPlies: 1 }));
         expect(lines).toEqual([
-            { label: `op 0`, spoken: `opening, turn 0`, groups: [`x: (0,0)`] },
-            { label: `1`, spoken: `1`, groups: [`o: (1,-1) (0,1)`] },
+            { label: `op 0`, spoken: `opening, turn 0`, groups: [`x: [0,0]`] },
+            { label: `1`, spoken: `1`, groups: [`o: [0,1] [1,-1]`] },
         ]);
     });
 
     it('group a five-ply opening as the origin and two turns and start the players at turn 3', () => {
         const lines = feedOf(snapshot(nineOpening.slice(0, 7), { openingPlies: 5 }));
         expect(lines).toEqual([
-            { label: `op 0-2`, spoken: `opening, turns 0 to 2`, groups: [`x: (0,0)`, `o: (1,-1) (0,1)`, `x: (2,0) (-1,2)`] },
-            { label: `3`, spoken: `3`, groups: [`o: (2,-2) (-2,1)`] },
+            { label: `op 0-2`, spoken: `opening, turns 0 to 2`, groups: [`x: [0,0]`, `o: [0,1] [1,-1]`, `x: [2,0] [1,-2]`] },
+            { label: `3`, spoken: `3`, groups: [`o: [0,2] [-1,-1]`] },
         ]);
     });
 
@@ -114,16 +114,16 @@ describe('feedOf', () => {
             {
                 label: `op 0-4`,
                 spoken: `opening, turns 0 to 4`,
-                groups: [`x: (0,0)`, `o: (1,-1) (0,1)`, `x: (2,0) (-1,2)`, `o: (2,-2) (-2,1)`, `x: (1,1) (-1,0)`],
+                groups: [`x: [0,0]`, `o: [0,1] [1,-1]`, `x: [2,0] [1,-2]`, `o: [0,2] [-1,-1]`, `x: [2,-1] [-1,0]`],
             },
-            { label: `5`, spoken: `5`, groups: [`o: (4,0) (4,1)`] },
+            { label: `5`, spoken: `5`, groups: [`o: [4,0] [5,-1]`] },
         ]);
     });
 
     it('hold every stone on the opening line when no player has moved yet', () => {
         const lines = feedOf(snapshot(nineOpening.slice(0, 7), { openingPlies: 7 }));
         expect(lines).toEqual([
-            { label: `op 0-3`, spoken: `opening, turns 0 to 3`, groups: [`x: (0,0)`, `o: (1,-1) (0,1)`, `x: (2,0) (-1,2)`, `o: (2,-2) (-2,1)`] },
+            { label: `op 0-3`, spoken: `opening, turns 0 to 3`, groups: [`x: [0,0]`, `o: [0,1] [1,-1]`, `x: [2,0] [1,-2]`, `o: [0,2] [-1,-1]`] },
         ]);
     });
 });

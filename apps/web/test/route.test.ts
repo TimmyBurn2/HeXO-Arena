@@ -33,6 +33,13 @@ describe('parseRoute', () => {
         expect(parseRoute(`/games/finished`)).toEqual({ name: `not-found` });
     });
 
+    it('route the analysis board, its query and fragment left to the screen', () => {
+        expect(parseRoute(`/analysis`)).toEqual({ name: `analysis` });
+        expect(parseRoute(`/analysis/`)).toEqual({ name: `analysis` });
+        expect(routePath({ name: `analysis` })).toBe(`/analysis`);
+        expect(parseRoute(`/analysis/x`)).toEqual({ name: `not-found` });
+    });
+
     it('route the first sign-in to its own page', () => {
         expect(parseRoute(`/report`)).toEqual({ name: `report` });
         expect(routePath({ name: `report` })).toBe(`/report`);

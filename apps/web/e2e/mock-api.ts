@@ -694,6 +694,21 @@ export const games: Record<string, GameSnapshot> = {
         reason: `six-in-a-row`,
         voided: false,
     },
+    // A long game over, for the analysis board: o's six on turn 25, two turns drawn.
+    'long-finished': {
+        gameId: `long-finished`,
+        players: {
+            x: { name: `hextide`, rating: 1690, provisional: false, kind: `bot` },
+            o: { name: `quietlake`, rating: 1461, provisional: false, kind: `bot` },
+        },
+        openingPlies: 5,
+        board: { cells: longCells.slice(0, 51) },
+        timeControl: { mode: `turn`, turnTimeMs: 30_000 },
+        status: `finished`,
+        winner: `o`,
+        reason: `six-in-a-row`,
+        voided: false,
+    },
     'nine-finished': {
         gameId: `nine-finished`,
         players: facing(`sealbot`, 1712),

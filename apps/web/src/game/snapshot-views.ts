@@ -2,6 +2,7 @@ import { nameAtLevel, resultSentence, turnsOnBoard, type GameSnapshot, type Side
 import { winner, type Position, type Rejection, type Stone } from '@hexo-arena/rules';
 import type { BoardStone } from '../board/Board';
 import type { AxialCoord } from '@hexo-arena/contract';
+import { cellText } from '../analysis/notation';
 import { text } from '../text';
 
 /**
@@ -94,20 +95,20 @@ export function otherSide(side: Side): Side {
 /**
  * The move feed: one opening line for the server-placed stones, labeled
  * with the turns it spans, then one line per player turn, labeled with its
- * turn number.
+ * turn number; cells read as HTTTX writes them, the way outside tools name them.
  * The first openingPlies cells are the opening: the origin, then pairs.
  */
 export function feedOf(snapshot: GameSnapshot): FeedLine[] {
     const cells = snapshot.board.cells;
     const origin = cells[0];
     if (origin === undefined) return [];
-    const opening = [`x: ${coord(origin)}`];
+    const opening = [`x: ${cellText(origin)}`];
     let index = 1;
     while (index < snapshot.openingPlies) {
         const second = cells[index];
         const third = cells[index + 1];
         if (second === undefined || third === undefined) break;
-        opening.push(`${sideAt(index)}: ${coord(second)} ${coord(third)}`);
+        opening.push(`${sideAt(index)}: ${cellText(second)} ${cellText(third)}`);
         index += 2;
     }
     // Ply 2t-1 opens turn t, so the first player turn after the opening is
@@ -118,7 +119,7 @@ export function feedOf(snapshot: GameSnapshot): FeedLine[] {
         const current = cells[index];
         if (current === undefined) break;
         const next = cells[index + 1];
-        const stones = next === undefined ? coord(current) : `${coord(current)} ${coord(next)}`;
+        const stones = next === undefined ? cellText(current) : `${cellText(current)} ${cellText(next)}`;
         lines.push({ label: String(turn), spoken: String(turn), groups: [`${sideAt(index)}: ${stones}`] });
         index += 2;
         turn += 1;
@@ -137,9 +138,6 @@ function sideAt(index: number): Side {
     return Math.floor((index - 1) / 2) % 2 === 0 ? `o` : `x`;
 }
 
-function coord(cell: AxialCoord): string {
-    return `(${String(cell.x)},${String(cell.y)})`;
-}
 
 /** The local rejection as one plain sentence for the note under the board. */
 export function rejectionNote(rejection: Rejection): string {

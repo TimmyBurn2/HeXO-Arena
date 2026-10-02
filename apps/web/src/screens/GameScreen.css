@@ -16,7 +16,7 @@
 
     /* The camera keeps a fixed allowance under the board for the chips,
        or the result chip's measured reach when that is more. */
-    .board-camera {
+    .stage .board-camera {
         padding-bottom: max(var(--camera-floor), calc(var(--hud-reach) + var(--space-2)));
     }
 
@@ -27,7 +27,6 @@
     .hud-skeleton {
         width: var(--card-min);
         height: var(--control-lg);
-        background: var(--c-bg-active);
     }
 
     .board-host {
@@ -35,12 +34,6 @@
         min-width: 0;
         min-height: 0;
         overflow: hidden;
-    }
-
-    .hud-lift {
-        position: absolute;
-        z-index: var(--z-hud);
-        filter: var(--lift);
     }
 
     .hud-top-left {
@@ -126,113 +119,8 @@
         max-width: 100%;
     }
 
-    .scrubber {
-        display: inline-flex;
-        align-items: center;
-        gap: var(--space-1);
-    }
-
-    .scrub-step {
-        display: grid;
-        place-items: center;
-        flex: none;
-        width: var(--control-md);
-        height: var(--control-md);
-        padding: 0;
-        border: none;
-        background: transparent;
-        color: var(--c-text-dim);
-        cursor: pointer;
-        transition: color var(--dur-fast) var(--ease), background var(--dur-fast) var(--ease);
-    }
-
-    .scrub-step:hover {
-        background: var(--c-bg-hover);
-        color: var(--c-text);
-    }
-
-    .scrub-step[aria-disabled='true'],
-    .scrub-step[aria-disabled='true']:hover {
-        background: transparent;
-        color: var(--c-border-strong);
-        cursor: not-allowed;
-    }
-
-    @media (forced-colors: active) {
-        .scrub-step[aria-disabled='true'],
-        .scrub-step[aria-disabled='true']:hover {
-            color: GrayText;
-        }
-    }
-
-    .scrub-step svg {
-        width: var(--text-xl);
-        height: var(--text-xl);
-        fill: none;
-        stroke: currentColor;
-        stroke-width: 2;
-        stroke-linecap: round;
-        stroke-linejoin: round;
-    }
-
-    /* The count is the slider: its words, and under them the share of the
-       game on the board, in brass as every control's state is. */
-    .scrub-count {
-        display: inline-flex;
-        flex-direction: column;
-        align-items: stretch;
-        gap: var(--space-1);
-        min-width: var(--scrub-count-min);
-        padding: var(--space-1) var(--space-2);
-        cursor: default;
-    }
-
-    .scrub-words {
-        text-align: center;
-        font-variant-numeric: tabular-nums;
-        white-space: nowrap;
-    }
-
-    /* A drag along the track seeks rather than scrolls the page. */
-    .scrub-track {
-        display: block;
-        height: var(--space-1);
-        background: var(--c-border-strong);
-        cursor: pointer;
-        touch-action: none;
-    }
-
-    .scrub-fill {
-        display: block;
-        height: 100%;
-        background: var(--c-accent-solid);
-    }
-
-    /* Off, the switch reads as a control, in brass words, apart from the
-       quiet watching tag beside it; on, it takes the accent tint. */
-    .scrub-live {
-        background: var(--c-bg-hover);
-        color: var(--c-accent);
-    }
-
-    .scrub-live[aria-pressed='true'] {
-        background: var(--c-accent-bg);
-        color: var(--c-accent);
-    }
-
     .stage[data-pinned] .hud-top-right {
         display: none;
-    }
-
-    .hud-chip {
-        display: flex;
-        align-items: center;
-        gap: var(--space-3);
-        padding: var(--space-2) var(--space-3);
-        background: var(--c-bg-overlay);
-        box-shadow: inset 0 var(--border-w) 0 var(--surface-edge-hi);
-        color: var(--c-text);
-        white-space: nowrap;
     }
 
     .hud-exit,
@@ -276,39 +164,18 @@
         stroke-linejoin: round;
     }
 
-    .hud-who {
-        display: flex;
-        flex-direction: column;
-        line-height: var(--leading-tight);
-    }
-
-    .hud-name {
-        display: inline-flex;
-        align-items: center;
-        gap: var(--space-2);
-        font-weight: var(--weight-display);
-    }
-
-    .hud-name .badge-bot {
-        margin-left: 0;
-    }
-
-    .hud-meta {
-        display: inline-flex;
-        gap: var(--space-2);
-        color: var(--c-text-dim);
-        font-size: var(--text-sm);
-    }
-
-    .hud-rating {
-        color: var(--c-text);
-        font-weight: var(--weight-display);
-        font-variant-numeric: tabular-nums;
-    }
-
     .hud-turn,
     .hud-result {
         font-weight: var(--weight-display);
+    }
+
+    /* The way on to the analysis board, beside the result it reads. */
+    .hud-analysis {
+        font-size: var(--text-sm);
+        font-weight: var(--weight-strong);
+        text-decoration: underline;
+        text-underline-offset: var(--underline-offset);
+        white-space: nowrap;
     }
 
     .hud-hint {
@@ -633,6 +500,15 @@
         .stage[data-open] .hud-bottom-center {
             left: var(--space-4);
             transform: none;
+        }
+    }
+
+    /* Beside an open panel a short screen leaves the board the room of a
+       chip or two, so the chip keeps to its result, and the panel's Game
+       tab carries the way to Analysis. */
+    @media (40rem < width < 80rem) and (max-height: 30rem) {
+        .stage[data-open] .hud-analysis {
+            display: none;
         }
     }
 

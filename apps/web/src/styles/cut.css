@@ -87,7 +87,10 @@
     .welcome-card,
     .roster,
     .play-setup,
-    .hud-chip {
+    .hud-chip,
+    .an-intro,
+    .an-check,
+    .an-dialog-body {
         clip-path: var(--cut-md-path);
     }
 
@@ -100,7 +103,9 @@
     .game-row,
     .featured-chip,
     .stepper button,
-    .opening-preview {
+    .opening-preview,
+    .an-mini,
+    .an-row-more {
         clip-path: var(--cut-sm-path);
     }
 
@@ -149,7 +154,8 @@
     /* On the game stage the board is the screen, not a surface on it,
        and a mini is the top of the card that cuts it. */
     .board-camera .board-frame,
-    .mini-board .board-frame {
+    .mini-board .board-frame,
+    .an-mini .board-frame {
         clip-path: none;
     }
 
@@ -163,6 +169,7 @@
     .hud-exit:focus-visible,
     .hud-toggle:focus-visible,
     .scrub-step:focus-visible,
+    .an-row-more:focus-visible,
     .scrub-count:focus-visible,
     .drawer-close:focus-visible,
     .drawer-tab:focus-visible,

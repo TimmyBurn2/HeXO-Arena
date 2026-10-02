@@ -1,4 +1,6 @@
 import {
+    analysisMeta,
+    analysisPagePath,
     botMeta,
     botsMeta,
     connectMeta,
@@ -103,12 +105,15 @@ const fixedPages: readonly (readonly [string, PageMeta])[] = [
     ...legalPages.map((page) => [legalPagePath(page), legalPageMeta[page]] as const),
 ];
 
+// The ids a game takes, so a query never reaches a read with arbitrary text.
+const gameIdPattern = /^[A-Za-z0-9_-]{1,100}$/u;
+
 /**
  * Every route the shell answers, in the order the proxy lists them: every
  * page of the site, so a pasted link to any of them previews with an
  * absolute image.
  */
-export const shellRoutes: readonly string[] = [`/`, `/play`, `/ladder`, `/bots/:name`, `/players/:name`, `/game/:gameId`, `/tournaments/:id`, ...fixedPages.map(([path]) => path)];
+export const shellRoutes: readonly string[] = [`/`, `/play`, analysisPagePath, `/ladder`, `/bots/:name`, `/players/:name`, `/game/:gameId`, `/tournaments/:id`, ...fixedPages.map(([path]) => path)];
 
 /**
  * Serves the SPA shell for every page of the site, with meta from live
@@ -148,6 +153,15 @@ export function registerOgShell(app: FastifyInstance, deps: OgShellDeps): void {
         const key = typeof named === `string` && nameSyntaxSchema.safeParse(named).success ? nameKeyOf(named) : null;
         const bot = key === null ? undefined : listBots(query).find((row) => nameKeyOf(row.name) === key);
         return sendShell(reply, 200, playMeta(bot?.name));
+    });
+
+    // A link to the analysis board with a stored game names that game once
+    // it has finished; a live one previews as the plain board, since the
+    // board opens no live game. The query is read, never logged.
+    app.get<{ Querystring: { game?: unknown } }>(analysisPagePath, { config: { limit: `shell` } }, async (request, reply) => {
+        const named = request.query.game;
+        const headline = typeof named === `string` && gameIdPattern.test(named) ? games.headline(named) : null;
+        return sendShell(reply, 200, headline?.status === `finished` ? analysisMeta(headline) : analysisMeta());
     });
 
     for (const [path, meta] of fixedPages) {

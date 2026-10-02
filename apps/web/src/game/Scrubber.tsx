@@ -1,6 +1,7 @@
 import type { KeyboardEvent, PointerEvent } from 'react';
 import { text } from '../text';
 import { stepStone, stepTurn, turnOf, type Replay } from './replay';
+import './hud.css';
 
 /**
  * The count a replay states: the opening, or the turn of how many, a turn

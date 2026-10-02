@@ -68,6 +68,15 @@ export function useSearch(): string {
     return useSyncExternalStore(subscribe, currentSearch, currentSearch);
 }
 
+function currentHash(): string {
+    return window.location.hash;
+}
+
+/** The fragment, for a screen whose state a link carries there, out of the server's sight. */
+export function useHash(): string {
+    return useSyncExternalStore(subscribe, currentHash, currentHash);
+}
+
 function currentPath(): string {
     return window.location.pathname;
 }

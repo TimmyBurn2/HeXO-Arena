@@ -354,6 +354,71 @@ export const shots: readonly Shot[] = [
             await page.getByRole(`heading`, { name: `Your account is deleted` }).waitFor();
         },
     },
+    { name: `analysis`, path: `/analysis`, world: signedOut, ready: `.an-intro`, framed: true, board: true },
+    {
+        name: `analysis-game`,
+        path: `/analysis?game=long-finished&turn=12`,
+        world: world(),
+        ready: `.an-tree .an-row`,
+        framed: true,
+        board: true,
+        after: async (page) => {
+            for (const [x, y] of [[-3, 0], [-2, -1]] as const) await page.locator(`.board-camera polygon.cell[data-x="${String(x)}"][data-y="${String(y)}"]`).click();
+            await page.locator(`.an-var`).waitFor();
+        },
+    },
+    {
+        name: `analysis-setup`,
+        path: `/analysis?game=long-finished&turn=8`,
+        world: world(),
+        ready: `.an-tree .an-row`,
+        framed: true,
+        board: true,
+        after: async (page) => {
+            await page.getByRole(`button`, { name: `Set up` }).click();
+            await page.locator(`.an-tools`).waitFor();
+        },
+    },
+    {
+        name: `analysis-import`,
+        path: `/analysis`,
+        world: world(),
+        ready: `.an-intro`,
+        framed: true,
+        board: true,
+        after: async (page) => {
+            await page.getByRole(`button`, { name: `Import` }).click();
+            await page.getByRole(`dialog`).getByRole(`textbox`).fill(`version[1];\n1. [1,0][1,-2];\n2. [-1,1][0,2];\n3. [-1,-1][2,1];\n4. [0,1][-1,0];\n`);
+            await page.locator(`.an-preview .board-svg`).waitFor();
+        },
+    },
+    {
+        name: `analysis-import-refused`,
+        path: `/analysis`,
+        world: world(),
+        ready: `.an-intro`,
+        framed: true,
+        after: async (page) => {
+            await page.getByRole(`button`, { name: `Import` }).click();
+            await page.getByRole(`dialog`).getByRole(`textbox`).fill(`version[1];\n1. [1,0][1,-2];\n2. [1,0][0,2];\n`);
+            await page.locator(`.an-dialog .an-error`).waitFor();
+        },
+    },
+    {
+        name: `analysis-export`,
+        path: `/analysis#t=1.[1,0][1,-2];2.[-1,1][0,2];3.[-1,-1][2,1];4.[0,1][-1,0];`,
+        world: world(),
+        ready: `.an-tree .an-row`,
+        framed: true,
+        after: async (page) => {
+            await page.getByRole(`button`, { name: `Export` }).click();
+            await page.locator(`.an-dialog`).waitFor();
+        },
+    },
+    { name: `analysis-live`, path: `/analysis?game=running`, world: world(), ready: `.empty`, framed: true },
+    { name: `analysis-missing`, path: `/analysis?game=nope`, world: world(), ready: `.empty`, framed: true },
+    { name: `analysis-loading`, path: `/analysis?game=long-finished`, world: world({ stall: true }), ready: `.an-message[aria-busy]`, framed: true },
+    { name: `analysis-error`, path: `/analysis?game=long-finished`, world: world({ broken: true }), ready: `.empty`, framed: true },
     { name: `game-your-move`, path: `/game/running`, world: world(), ready: `svg polygon.cell`, framed: false, board: true },
     { name: `game-waiting`, path: `/game/waiting`, world: world(), ready: `svg polygon.cell`, framed: false, board: true },
     { name: `game-rundown`, path: `/game/fresh`, world: world(), ready: `.hud-rundown .rundown-expected`, framed: false, board: true },

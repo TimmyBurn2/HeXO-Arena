@@ -1,4 +1,4 @@
-import { legalPagePath, legalPages, reportPagePath, welcomePath, type LegalPage } from '@hexo-arena/contract';
+import { analysisPagePath, legalPagePath, legalPages, reportPagePath, welcomePath, type LegalPage } from '@hexo-arena/contract';
 
 export type Route =
     | { readonly name: `home` }
@@ -11,6 +11,7 @@ export type Route =
     | { readonly name: `player`; readonly player: string }
     | { readonly name: `games` }
     | { readonly name: `live-games` }
+    | { readonly name: `analysis` }
     | { readonly name: `connect` }
     | { readonly name: `profile` }
     | { readonly name: `credits` }
@@ -37,6 +38,7 @@ export function parseRoute(pathname: string): Route {
     if (head === `players` && segments.length === 2 && second !== undefined) return { name: `player`, player: safeDecode(second) };
     if (head === `games` && segments.length === 1) return { name: `games` };
     if (head === `games` && second === `live` && segments.length === 2) return { name: `live-games` };
+    if (head === `analysis` && segments.length === 1) return { name: `analysis` };
     if (head === `connect` && segments.length === 1) return { name: `connect` };
     if (head === `profile` && segments.length === 1) return { name: `profile` };
     if (head === `credits` && segments.length === 1) return { name: `credits` };
@@ -74,6 +76,8 @@ export function routePath(route: Route): string {
             return `/games`;
         case `live-games`:
             return `/games/live`;
+        case `analysis`:
+            return analysisPagePath;
         case `connect`:
             return `/connect`;
         case `profile`:

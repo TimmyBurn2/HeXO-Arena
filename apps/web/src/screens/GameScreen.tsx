@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type RefObject } from 'react';
 import { clockText, gameMeta, levelFacts, turnsOnBoard, type FinishedGamesRecord, type GameHeadline, type GameSnapshot } from '@hexo-arena/contract';
+import { gameLink } from '../analysis/links';
 import { fetchFinishedGames } from '../api/client';
 import { BotBadge, PlayerName, seatName, seatsRateNobody, Swatch } from '../components/player';
 import { useWait, WaitText } from '../components/wait';
@@ -425,6 +426,7 @@ function GameView({ snapshot, send, link }: { snapshot: GameSnapshot; send: Game
                             {text.drawer.tournamentGame(snapshot.tournament.name, snapshot.tournament.round, snapshot.tournament.game)}
                         </Link>
                     )}
+                    analysis={running ? null : gameLink(snapshot.gameId, turnOf(replay.shown))}
                     running={running}
                     timed={snapshot.clock !== undefined && snapshot.clock.mode !== `unlimited`}
                     onResign={you === null ? null : send.resign}

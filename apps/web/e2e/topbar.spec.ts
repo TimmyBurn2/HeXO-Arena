@@ -14,6 +14,7 @@ const screens: readonly { name: string; path: string }[] = [
     { name: `the root`, path: `/` },
     { name: `play`, path: `/play` },
     { name: `live games`, path: `/games/live` },
+    { name: `analysis`, path: `/analysis` },
     { name: `the ladder`, path: `/ladder` },
     { name: `bots`, path: `/bots` },
     { name: `a bot page`, path: `/bots/sealbot` },
@@ -29,12 +30,13 @@ const screens: readonly { name: string; path: string }[] = [
 // the nav links return beside the gear and who is here, so it is swept
 // closely, from the narrowest phone out to the desktop widths, on every
 // framed screen, with the edges where the mark comes and goes.
-const widths = [320, 352, 353, 360, 480, 481, 560, 600, 640, 656, 657, 700, 740, 768, 769, 800, 848, 849, 1024, 1280];
+const widths = [320, 352, 353, 360, 480, 481, 560, 600, 640, 656, 657, 700, 740, 768, 769, 800, 848, 849, 944, 945, 1024, 1280];
 
 // The nav links sit in the tab bar up to 41rem,
 // and share the bar, drawn tighter, up to 48rem;
-// who is here folds to its monogram up to 53rem.
-const band = { from: 656, to: 768, fold: 848 };
+// who is here folds to its monogram up to 53rem,
+// and Build a bot leaves the bar up to 59rem.
+const band = { from: 656, to: 768, fold: 848, build: 944 };
 
 type Box = { x: number; y: number; width: number; height: number };
 
@@ -89,7 +91,7 @@ async function readBar(page: Page, signedIn: boolean) {
             beside: [...document.querySelectorAll(`.nav-links .nav-link, .nav-right`)].filter(isVisible).map(boxOf),
             gear: boxOf(document.querySelector(`header button[aria-label="Settings"]`)),
             links: links.filter(isVisible).map((link) => ({ box: boxOf(link), lines: lineCount(textRange(link)) })),
-            texts: links.map((link) => {
+            texts: links.filter(isVisible).map((link) => {
                 const box = textRange(link).getBoundingClientRect();
                 return { left: box.left, right: box.right };
             }),
@@ -129,7 +131,7 @@ async function barFits(page: Page, width: number, signedIn: boolean, longName: b
     expect(gear === null ? 0 : Math.round(gear.width)).toBe(gear === null ? -1 : Math.round(gear.height));
     // Each nav label keeps one line and clears the gear, and the labels
     // stand in the bar exactly past the band's narrow end.
-    expect(bar.links.length).toBe(width > band.from ? 5 : 0);
+    expect(bar.links.length).toBe(width > band.from ? (width > band.build ? 6 : 5) : 0);
     for (const link of bar.links) {
         expect(link.box === null ? Infinity : link.box.x + link.box.width).toBeLessThanOrEqual(gear === null ? 0 : gear.x);
         expect(link.lines).toBe(1);
@@ -198,7 +200,7 @@ test('on a phone the tabs are the nav entries and Profile opens from the monogra
     await serve(page, world());
     await page.goto(`/ladder`);
     await page.locator(`h1`).waitFor();
-    await expect(page.locator(`nav.tabbar a`)).toHaveText([`Home`, `Play`, `Games`, `Ladder`, `Bots`]);
+    await expect(page.locator(`nav.tabbar a`)).toHaveText([`Home`, `Play`, `Games`, `Analysis`, `Ladder`, `Bots`]);
     await expect(page.locator(`nav.tabbar a[aria-current="page"]`)).toHaveText(`Ladder`);
     await page.locator(`header button.identity`).click();
     await page.locator(`dialog.identity-panel`).getByRole(`link`, { name: `Profile` }).click();

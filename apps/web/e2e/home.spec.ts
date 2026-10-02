@@ -86,7 +86,7 @@ test('with nothing live the slot freezes the latest result, its board one link i
 test('on a phone Home leads the tabs and is the one marked on the root', async ({ page }) => {
     await visit(page, world(), 390);
     await page.locator(`h1`).waitFor();
-    await expect(page.locator(`nav.tabbar a`)).toHaveText([`Home`, `Play`, `Games`, `Ladder`, `Bots`]);
+    await expect(page.locator(`nav.tabbar a`)).toHaveText([`Home`, `Play`, `Games`, `Analysis`, `Ladder`, `Bots`]);
     await expect(page.locator(`nav.tabbar a[aria-current="page"]`)).toHaveText(`Home`);
 });
 

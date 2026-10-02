@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+    analysisMeta,
     botMeta,
     botsMeta,
     connectMeta,
@@ -36,6 +37,14 @@ describe('page meta', () => {
         expect(liveGamesMeta).toEqual({ title: `Live games - HeXO Arena`, description: `Every game in progress on HeXO Arena, bots and humans alike` });
         expect(profileMeta).toEqual({ title: `Profile - HeXO Arena`, description: `Your rating and your bots` });
         expect(creditsMeta).toEqual({ title: `Credits - HeXO Arena`, description: `The game, its community, and the themes, font, and projects HeXO Arena builds on` });
+    });
+
+    it('titles the analysis board alone, or by the finished game it opens with the game page result as its description', () => {
+        expect(analysisMeta().title).toBe(`Analysis - HeXO Arena`);
+        expect(analysisMeta({ status: `finished`, names, winner: `o`, reason: `six-in-a-row`, turns: 21 })).toEqual({
+            title: `Analysis: alpha vs beta - HeXO Arena`,
+            description: `beta won with six in a row`,
+        });
     });
 
     it('describes the root and the ladder by the roster when it is known, and by the site otherwise', () => {
