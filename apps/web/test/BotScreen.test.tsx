@@ -2,6 +2,7 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { meStore } from '../src/me';
+import { reportForm } from '../src/report-form';
 import { BotScreen } from '../src/screens/BotScreen';
 import { botApiRepository } from '../src/site-links';
 
@@ -267,6 +268,15 @@ describe('BotScreen', () => {
         render(<BotScreen name="sealbot" />);
         const link = await screen.findByRole(`link`, { name: `Report sealbot` });
         expect(link.getAttribute(`href`)).toBe(`/report?subject=%2Fbots%2Fsealbot`);
+    });
+
+    it('lead nowhere to report the bot where the deployment takes no reports through its form', async () => {
+        reportForm.reset(false);
+        stubDirectory([sealbot]);
+        render(<BotScreen name="sealbot" />);
+        await screen.findByRole(`heading`, { level: 1, name: `sealbot` });
+        expect(screen.queryByRole(`link`, { name: `Report sealbot` })).toBe(null);
+        expect(document.querySelector(`.report-line`)).toBe(null);
     });
 
     it('match the name on the case-insensitive fold', async () => {

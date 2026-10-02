@@ -1,4 +1,5 @@
 import { legalPagePath, legalPages, type LegalPage } from '@hexo-arena/contract';
+import { reportForm } from '../report-form';
 import { Link } from '../router/Link';
 import { usePath, useSearch } from '../router/use-route';
 import { legalPageLinks, licensesLink, reportLinkOf, type SiteLink } from '../site-links';
@@ -7,8 +8,8 @@ import { linksLegalPage, useLegal } from './documents';
 
 /**
  * The footer's last group, and the drawer's: the legal pages the
- * deployment has, the licenses, and the report form about the page the
- * group stands on.
+ * deployment has, the licenses, and, where the deployment takes reports
+ * through its form, the form about the page the group stands on.
  * Until the documents are read the group holds the licenses and the form alone.
  */
 export function useLegalLinks(): readonly SiteLink[] {
@@ -16,7 +17,7 @@ export function useLegalLinks(): readonly SiteLink[] {
     const path = usePath();
     const search = useSearch();
     const present = legalPages.filter((page) => linksLegalPage(legal, page));
-    return [...present.map((page) => legalPageLinks[page]), licensesLink, reportLinkOf(`${path}${search}`)];
+    return [...present.map((page) => legalPageLinks[page]), licensesLink, ...(reportForm.on() ? [reportLinkOf(`${path}${search}`)] : [])];
 }
 
 /**

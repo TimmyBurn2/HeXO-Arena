@@ -2,6 +2,7 @@ import type { Page, Route } from '@playwright/test';
 import {
     accountExportSchema,
     deleteAccountRequestSchema,
+    reportFormMetaName,
     reportRequestSchema,
     botListingSchema,
     devAccountSchema,
@@ -86,6 +87,8 @@ export interface World {
     tournaments: TournamentDetail[];
     // The dev server's seeded personas; null answers as every other server does, not found.
     devAccounts: DevAccount[] | null;
+    // Whether the page's shell names the report form, as the server's does where the deployment takes reports.
+    reportForm: boolean;
 }
 
 // Three strengths, weakest first, the middle one rated, as the alpha-beta example declares them.
@@ -861,6 +864,7 @@ export function world(overrides: Partial<World> = {}): World {
         guestLimit: false,
         limited: null,
         devAccounts: null,
+        reportForm: true,
         // A running tournament reserves its bots on Play, so a world takes one only when it asks.
         tournaments: structuredClone(tournaments.filter((entry) => entry.status !== `running`)),
         // A world owns its data, so an entry one test makes stays out of the next.
@@ -1007,6 +1011,19 @@ function unloadable(path: string, screen: string | null): boolean {
 
 export async function serve(page: Page, state: World): Promise<void> {
     await page.addInitScript(installHeldEventSource);
+    // Vite's shell names no report form, as the proxy's static one does
+    // not; the server's names it where the deployment takes reports.
+    if (state.reportForm) {
+        await page.route((url) => !url.pathname.startsWith(`/@`) && !url.pathname.startsWith(`/api/`) && !/\.\w+$/u.test(url.pathname), async (route) => {
+            if (!route.request().isNavigationRequest()) {
+                await route.fallback();
+                return;
+            }
+            const response = await route.fetch();
+            const body = (await response.text()).replace(`</head>`, `<meta name="${reportFormMetaName}" content="on" /></head>`);
+            await route.fulfill({ response, body });
+        });
+    }
     await page.route((url) => unloadable(url.pathname, state.unloadable), (route) => route.abort());
     await page.route((url) => url.pathname === `/healthz`, (route) =>
         route.fulfill({ status: state.paused ? 503 : 200, contentType: `application/json`, body: `{"ok":true}` }),

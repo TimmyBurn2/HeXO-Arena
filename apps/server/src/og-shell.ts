@@ -20,6 +20,7 @@ import {
     playMeta,
     profileMeta,
     playerMeta,
+    reportFormMetaName,
     reportMeta,
     reportPagePath,
     siteMeta,
@@ -50,6 +51,7 @@ export interface OgShellDeps {
     players: PlayerReads;
     indexPath: string;
     publicOrigin: string;
+    reportForm: boolean;
     now: () => number;
 }
 
@@ -74,12 +76,15 @@ function replaceOnce(html: string, pattern: RegExp, replacement: string): string
  * The shell with its title, description, and og tags set from the meta,
  * and its preview image on the public origin, since a preview needs an
  * absolute address and the page's own is a path.
+ * Where the site takes reports through its form, the shell says so in a
+ * meta tag the app reads at start, since the policy allows no inline script.
  */
-export function renderShell(template: string, meta: PageMeta, publicOrigin: string): string {
+export function renderShell(template: string, meta: PageMeta, publicOrigin: string, reportForm: boolean): string {
     const title = escapeHtml(meta.title);
     const description = escapeHtml(meta.description);
+    const reportFormTag = reportForm ? `<meta name="${reportFormMetaName}" content="on" />` : ``;
     let html = replaceOnce(template, /<title>[^<]*<\/title>/, `<title>${title}</title>`);
-    html = replaceOnce(html, /<meta name="description" content="[^"]*"\s*\/?>/, `<meta name="description" content="${description}" />`);
+    html = replaceOnce(html, /<meta name="description" content="[^"]*"\s*\/?>/, `<meta name="description" content="${description}" />${reportFormTag}`);
     html = replaceOnce(html, /<meta property="og:title" content="[^"]*"\s*\/?>/, `<meta property="og:title" content="${title}" />`);
     html = replaceOnce(
         html,
@@ -122,7 +127,7 @@ export const shellRoutes: readonly string[] = [`/`, `/play`, analysisPagePath, `
  * it removed.
  */
 export function registerOgShell(app: FastifyInstance, deps: OgShellDeps): void {
-    const { query, presence, games, ladder, indexPath, publicOrigin, now } = deps;
+    const { query, presence, games, ladder, indexPath, publicOrigin, reportForm, now } = deps;
 
     async function sendShell(reply: FastifyReply, status: 200 | 404, meta: PageMeta): Promise<FastifyReply> {
         const template = await readFile(indexPath, `utf8`);
@@ -130,7 +135,7 @@ export function registerOgShell(app: FastifyInstance, deps: OgShellDeps): void {
             .code(status)
             .header(`content-type`, `text/html; charset=utf-8`)
             .header(`cache-control`, `no-cache`)
-            .send(renderShell(template, meta, publicOrigin));
+            .send(renderShell(template, meta, publicOrigin, reportForm));
     }
 
     function roster(): Roster {
@@ -165,7 +170,10 @@ export function registerOgShell(app: FastifyInstance, deps: OgShellDeps): void {
     });
 
     for (const [path, meta] of fixedPages) {
-        app.get(path, { config: { limit: `shell` } }, async (_request, reply) => sendShell(reply, 200, meta));
+        // The proxy sends the form's path here whatever the setting, so
+        // with the form off it is a missing page, as the app shows it.
+        const missing = path === reportPagePath && !reportForm;
+        app.get(path, { config: { limit: `shell` } }, async (_request, reply) => (missing ? sendShell(reply, 404, notFoundMeta) : sendShell(reply, 200, meta)));
     }
 
     app.get<{ Params: { name: string } }>(`/bots/:name`, { config: { limit: `shell` } }, async (request, reply) => {

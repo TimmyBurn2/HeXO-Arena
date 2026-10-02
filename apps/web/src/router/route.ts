@@ -1,4 +1,5 @@
 import { analysisPagePath, legalPagePath, legalPages, reportPagePath, welcomePath, type LegalPage } from '@hexo-arena/contract';
+import { reportForm } from '../report-form';
 
 export type Route =
     | { readonly name: `home` }
@@ -43,7 +44,7 @@ export function parseRoute(pathname: string): Route {
     if (head === `profile` && segments.length === 1) return { name: `profile` };
     if (head === `credits` && segments.length === 1) return { name: `credits` };
     if (head === `welcome` && segments.length === 1) return { name: `welcome` };
-    if (head === `report` && segments.length === 1) return { name: `report` };
+    if (head === `report` && segments.length === 1 && reportForm.on()) return { name: `report` };
     if (head === `legal` && segments.length === 2) {
         const page = legalPages.find((candidate) => candidate === second);
         if (page !== undefined) return { name: `legal`, page };

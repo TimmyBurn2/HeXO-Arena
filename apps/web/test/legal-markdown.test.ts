@@ -88,6 +88,44 @@ describe('a legal document laid out for its page', () => {
         ]);
     });
 
+    it('keeps a passage only where its name has a value, an inverted one only where the value is left out, and one nobody knows as written', () => {
+        const layout = layoutLegal(
+            [
+                `## Reporting`,
+                ``,
+                `{{#operator.email}}`,
+                `Write to {{operator.email}}.`,
+                `{{/operator.email}}`,
+                `{{^operator.email}}`,
+                `Write to nobody.`,
+                `{{/operator.email}}`,
+                `{{#operator.discord}}`,
+                `Ask on Discord.`,
+                `{{/operator.discord}}`,
+                `{{^operator.discord}}`,
+                `Discord is not watched.`,
+                `{{/operator.discord}}`,
+                `In an emergency, call the police first.`,
+                ``,
+                `{{#mailProvider.name}}`,
+                `## Mail`,
+                ``,
+                `Hosted by {{mailProvider.name}}.`,
+                `{{/mailProvider.name}}`,
+                ``,
+                `## Law`,
+                ``,
+                `{{#site.nothing}}`,
+                `Hidden.`,
+                `{{/site.nothing}}`,
+            ].join(`\n`),
+            fill,
+        );
+        expect(layout.sections.map((section) => plainText(section.heading))).toEqual([`Reporting`, `Law`]);
+        expect(words(layout.sections[0]?.blocks ?? [])).toEqual([`Write to contact@arena.example. Discord is not watched. In an emergency, call the police first.`]);
+        expect(words(layout.sections[1]?.blocks ?? [])).toEqual([`{{#site.nothing}} Hidden. {{/site.nothing}}`]);
+    });
+
     it('shows a placeholder nobody knows as written, so a misspelling is plain on the page', () => {
         const layout = layoutLegal(`## Who\n\nRun by {{operater.name}}.`, fill);
         expect(words(layout.sections[0]?.blocks ?? [])).toEqual([`Run by {{operater.name}}.`]);

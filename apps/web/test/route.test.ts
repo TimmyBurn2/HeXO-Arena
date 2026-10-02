@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { reportForm } from '../src/report-form';
 import { parseRoute, routePath } from '../src/router/route';
 
 describe('parseRoute', () => {
@@ -44,6 +45,8 @@ describe('parseRoute', () => {
         expect(parseRoute(`/report`)).toEqual({ name: `report` });
         expect(routePath({ name: `report` })).toBe(`/report`);
         expect(parseRoute(`/report/x`)).toEqual({ name: `not-found` });
+        reportForm.reset(false);
+        expect(parseRoute(`/report`)).toEqual({ name: `not-found` });
         expect(parseRoute(`/welcome`)).toEqual({ name: `welcome` });
         expect(routePath({ name: `welcome` })).toBe(`/welcome`);
         expect(parseRoute(`/welcome/x`)).toEqual({ name: `not-found` });

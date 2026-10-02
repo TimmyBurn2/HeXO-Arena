@@ -51,7 +51,12 @@ You are told the reason unless that is impossible, and you can contest a decisio
 
 ## Reporting
 
+{{#site.reportForm}}
 Report unlawful content or abuse with the [report form](/report), linked at the foot of every page, or write to [{{operator.email}}](mailto:{{operator.email}}) with the link and what is wrong and why.
+{{/site.reportForm}}
+{{^site.reportForm}}
+Report unlawful content or abuse by writing to [{{operator.email}}](mailto:{{operator.email}}) with the link and what is wrong and why.
+{{/site.reportForm}}
 You get a confirmation, and a decision where you leave an email address.
 In an emergency, call the police first.
 

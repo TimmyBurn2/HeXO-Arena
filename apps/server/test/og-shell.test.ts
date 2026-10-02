@@ -15,7 +15,9 @@ import {
     liveGamesMeta,
     tournamentsMeta,
     logoutPath,
+    notFoundMeta,
     profileMeta,
+    reportFormMetaName,
     reportMeta,
 } from '@hexo-arena/contract';
 import { readFileSync } from 'node:fs';
@@ -50,6 +52,7 @@ describe('renderShell', () => {
                 description: `it's <script>`,
             },
             origin,
+            false,
         );
         expect(metaOf(html)).toEqual({
             title: `a &lt;b&gt; &amp; &quot;c&quot;`,
@@ -62,15 +65,23 @@ describe('renderShell', () => {
 
     it('refuses a template that lost one of its tags', () => {
         const template = readFileSync(indexPath, `utf8`).replace(/<meta property="og:title"[^>]*>/, ``);
-        expect(() => renderShell(template, { title: `t`, description: `d` }, origin)).toThrow(/og:title/);
+        expect(() => renderShell(template, { title: `t`, description: `d` }, origin, false)).toThrow(/og:title/);
         const imageless = readFileSync(indexPath, `utf8`).replace(/<meta property="og:image"[^>]*>/, ``);
-        expect(() => renderShell(imageless, { title: `t`, description: `d` }, origin)).toThrow(/og:image/);
+        expect(() => renderShell(imageless, { title: `t`, description: `d` }, origin, false)).toThrow(/og:image/);
     });
 
     it('points the preview image at the site icon on the public origin, since a preview needs an absolute address', () => {
-        const html = renderShell(readFileSync(indexPath, `utf8`), { title: `t`, description: `d` }, origin);
+        const html = renderShell(readFileSync(indexPath, `utf8`), { title: `t`, description: `d` }, origin, false);
         expect(html).toContain(`<meta property="og:image" content="https://arena.example/icon-512.png" />`);
         expect(html).toContain(`<meta property="og:site_name" content="HeXO Arena" />`);
+    });
+
+    it('names the report form in a meta tag only where the site takes reports through it', () => {
+        const template = readFileSync(indexPath, `utf8`);
+        const tag = `<meta name="${reportFormMetaName}" content="on" />`;
+        expect(renderShell(template, { title: `t`, description: `d` }, origin, true)).toContain(tag);
+        expect(renderShell(template, { title: `t`, description: `d` }, origin, false)).not.toContain(reportFormMetaName);
+        expect(template).not.toContain(reportFormMetaName);
     });
 });
 
@@ -123,6 +134,24 @@ describe('the og shell routes', () => {
             expect(response.body).toContain(`<meta property="og:image:height" content="512" />`);
             expect(response.body).toContain(`<meta property="og:site_name" content="HeXO Arena" />`);
         }
+    });
+
+    it('answers the report form as a missing page, and names the form on no page, while the form is off', async () => {
+        await arena.app.close();
+        arena = await createTestApp({ webIndexPath: indexPath, reportForm: false });
+        const report = await shell(`/report?subject=%2Fbots%2Fsealbot`);
+        expect(report.status).toBe(404);
+        expect(report.meta.title).toBe(notFoundMeta.title);
+        for (const url of [`/`, `/bots`, `/report`, ...legalPages.map(legalPagePath)]) {
+            expect((await arena.app.inject({ method: `GET`, url })).body, url).not.toContain(reportFormMetaName);
+        }
+    });
+
+    it('names the report form on every page while the form is on', async () => {
+        for (const url of [`/`, `/bots`, `/report`, ...legalPages.map(legalPagePath)]) {
+            expect((await arena.app.inject({ method: `GET`, url })).body, url).toContain(`<meta name="${reportFormMetaName}" content="on" />`);
+        }
+        expect((await shell(`/report`)).status).toBe(200);
     });
 
     it('titles the bot list, the pages without data, and the legal pages as the site does', async () => {

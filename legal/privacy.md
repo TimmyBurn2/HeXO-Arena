@@ -143,6 +143,7 @@ If you write, your email address, name, and message are used to answer you or to
 
 Legal basis: Art. 6(1)(b) GDPR, or Art. 6(1)(f) GDPR, legitimate interest: answering messages and handling reports.
 
+{{#site.reportForm}}
 ## Reports
 
 Anyone may report a name, a bot, a game, or anything else on the site with the [report form](/report), linked at the foot of every page.
@@ -151,6 +152,7 @@ It is not linked to your account, even when you are signed in.
 Only the operator reads reports, to act on them and to write back to you; a report is deleted {{site.reportMonths}} months after the operator closes it.
 
 Legal basis: Art. 6(1)(f) GDPR; legitimate interest: acting on unlawful content and abuse, and keeping the service safe.
+{{/site.reportForm}}
 
 ## Who receives data
 

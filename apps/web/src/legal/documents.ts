@@ -12,6 +12,7 @@ import {
     minimumAge,
     moderationRecordYears,
     oauthCookieName,
+    reportPagePath,
     oauthMaxAgeSeconds,
     secureSessionCookieName,
     sessionMaxAgeSeconds,
@@ -24,6 +25,7 @@ import { analysisStorageKey } from '../analysis/storage-key';
 import { boardSettingsStorageKey } from '../board/board-settings';
 import { drawerPinnedStorageKey } from '../game/use-drawer';
 import { playStorageKey } from '../play/setup';
+import { reportForm } from '../report-form';
 import { botApiRepository } from '../site-links';
 import { themeStorageKey } from '../theme/themes';
 import { legalDetailNames, legalDetailValues } from './details';
@@ -60,6 +62,12 @@ export const siteFacts: ReadonlyMap<string, string> = new Map([
     [`site.moderationYears`, String(moderationRecordYears)],
     [`site.reportMonths`, String(closedReportMonths)],
 ]);
+
+/**
+ * The site fact the passages about the report form hang on: its page
+ * where the deployment takes reports through it, left out where not.
+ */
+export const reportFormFact = `site.reportForm`;
 
 /** What a placeholder stands for in one deployment. */
 export type Filling =
@@ -149,6 +157,7 @@ async function readDocument(page: LegalPage): Promise<Read<string>> {
 export function legalState(texts: ReadonlyMap<LegalPage, Read<string>>, details: Read<ReadonlyMap<string, string>>): LegalState {
     const values = details.kind === `found` ? details.value : null;
     const fill = (name: string): Filling => {
+        if (name === reportFormFact) return reportForm.on() ? { kind: `value`, text: reportPagePath } : { kind: `absent` };
         const value = siteFacts.get(name) ?? values?.get(name);
         if (value !== undefined) return { kind: `value`, text: value };
         return legalDetailNames.has(name) ? { kind: `absent` } : { kind: `unknown` };
