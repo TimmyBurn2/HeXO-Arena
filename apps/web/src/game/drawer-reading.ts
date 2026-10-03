@@ -1,4 +1,4 @@
-import type { AxialCoord, JudgmentSeverity } from '@hexo-arena/contract';
+import type { AxialCoord, JudgmentSeverity, ValueText } from '@hexo-arena/contract';
 import type { BoardLines } from '../board/Board';
 import { explain, explainRun, explanationSentence, turnReading } from '../analysis/explain';
 import { turnCells, turnLines, type GameLine, type GameReading, type TurnRead } from '../analysis/game-readings';
@@ -6,7 +6,7 @@ import { turnCells, turnLines, type GameLine, type GameReading, type TurnRead } 
 /** What a feed line adds from a reading: the turn's mark, its value after, and, on a judged turn, what the analyzer preferred. */
 export interface FeedNote {
     readonly severity: JudgmentSeverity | null;
-    readonly value: string | null;
+    readonly value: ValueText | null;
     readonly note: string | null;
     /** Whether the reading holds lines past the first, which the board shows while the line is pointed at. */
     readonly more: boolean;

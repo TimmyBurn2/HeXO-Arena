@@ -2,6 +2,7 @@ import {
     accountDeclarationSchema,
     botAccountPath,
     botAccountSchema,
+    botClientOf,
     botDirectoryQuerySchema,
     botListingSchema,
     botsPath,
@@ -15,8 +16,8 @@ import type { BotPrincipal } from './bot-auth';
 import { authenticateBot } from './bot-auth';
 import type { AnalysisService } from './analysis-service';
 import type { AnalyzerSessions } from './analyzers';
-import { listBots, readBotDeclaration, updateBotDeclaration, type BotDeclaration, type StoredAnalyzer } from './bots';
-import { type Query } from './db';
+import { listBots, readBotDeclaration, recordClient, updateBotDeclaration, type BotDeclaration, type StoredAnalyzer } from './bots';
+import { nowSeconds, type Query } from './db';
 import type { GameRegistry } from './game-registry';
 import type { PresenceRegistry } from './presence';
 import type { CredentialLimits } from './request-limits';
@@ -67,6 +68,8 @@ export function registerBotApi(app: FastifyInstance, deps: BotApiDeps): void {
         // A pause starts nothing new, but a bot coming back to a live game or
         // a running tournament keeps what it holds instead of forfeiting it.
         if (games.activeGameCount(bot.id) === 0 && !reservations.isReserved(bot.id) && gate.refuse(reply)) return reply;
+        // The census of clients keeps what the header parses to, never the header.
+        recordClient(query, bot.id, botClientOf(request.headers[`user-agent`]), nowSeconds());
         // Writing on reply.raw bypasses serialization and anything that
         // buffers; hijack keeps the framework from answering on its own.
         // Headers flush eagerly: a bot with no replay lines must not wait

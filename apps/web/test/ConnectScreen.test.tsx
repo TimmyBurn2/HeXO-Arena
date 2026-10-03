@@ -44,9 +44,9 @@ describe('ConnectScreen', () => {
         expect(screen.getByText((_content, element) => element?.matches(`.discord-sign-in .note`) === true && element.textContent === `Your email stays with Discord, and a first sign-in asks for your public name; see\u00a0Privacy.`)).toBeTruthy();
     });
 
-    it('install the bridge from its repository and link its examples, the Bot API, and the example without it', () => {
+    it('install the bridge at its latest tag and link its examples, the Bot API, and the example without it', () => {
         render(<ConnectScreen />);
-        expect(sample(`Install command`)).toBe(`pip install git+https://github.com/TimmyBurn2/hexo-bridge`);
+        expect(sample(`Install command`)).toBe(`pip install git+https://github.com/TimmyBurn2/hexo-bridge@v0.3.0`);
         expect(screen.getByRole(`link`, { name: `hexo-bridge` }).getAttribute(`href`)).toBe(`https://github.com/TimmyBurn2/hexo-bridge`);
         expect(screen.getByRole(`link`, { name: `random_engine.py` }).getAttribute(`href`)).toBe(`https://github.com/TimmyBurn2/hexo-bridge/blob/main/examples/random_engine.py`);
         expect(screen.getByRole(`link`, { name: `the bridge's readme` }).getAttribute(`href`)).toBe(`https://github.com/TimmyBurn2/hexo-bridge#readme`);
@@ -70,19 +70,22 @@ describe('ConnectScreen', () => {
         expect(document.body.textContent).not.toContain(`<domain>`);
     });
 
-    it('list each field of the declaration with its limits', () => {
+    it('list each field of the declaration with its limits, the analyzer\'s values under it', () => {
         render(<ConnectScreen />);
-        const fields = [...document.querySelectorAll(`.declaration-fields dt`)].map((term) => term.textContent);
-        expect(fields).toEqual([`accepts`, `about`, `version`, `repoUrl`, `levels`, `analyzer`]);
-        const says = [...document.querySelectorAll(`.declaration-fields dd`)].map((detail) => detail.textContent);
+        const rows = [...document.querySelectorAll(`.declaration-fields > div`)];
+        expect(rows.map((row) => row.querySelector(`dt`)?.textContent)).toEqual([`accepts`, `version`, `levels`, `analyzer`, `values`]);
+        // A field's own words, without the fields nested under it.
+        const says = rows.map((row) =>
+            [...(row.querySelector(`:scope > dd`)?.childNodes ?? [])].filter((node) => !(node instanceof Element && node.matches(`dl`))).map((node) => node.textContent).join(``),
+        );
         expect(says).toEqual([
             `The clocks it plays: turnMs, the shortest and longest turn clock in milliseconds, or null for none; match and unlimited, true or false.`,
-            `Text for its page, up to 280 characters.`,
-            `Up to 64 characters.`,
-            `A link to its source, http or https.`,
+            `The build that answers, up to 64 characters.`,
             `2 to 8 strengths a player can pick, weakest first, and the default its rating belongs to; a game at any other is unrated.`,
             `Your engine reads positions for the analysis board: lines, 1 to 3 per position, and maxSeconds, 1 to 10; a Python engine answers in analyze.`,
+            `How its heuristic reads: scale, above 0 and at most 1000000, 1 by default, divides it; meaning is expected when the scaled value estimates x's expected result, or raw, the default, when it only orders positions, the honest choice unless your engine was fitted to game results; cuts, each above 0 and at most 2 and rising, are the drops in value judged an inaccuracy, a mistake, and a blunder.`,
         ]);
+        expect(rows[3]?.querySelector(`dd dt`)?.textContent).toBe(`values`);
     });
 
     it('name the bot field with a label on screen', () => {

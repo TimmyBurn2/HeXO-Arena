@@ -1,5 +1,5 @@
 import { Fragment, memo, useEffect, useRef, useState, type MouseEvent, type PointerEvent, type ReactNode } from 'react';
-import type { Judgment, Side } from '@hexo-arena/contract';
+import type { Judgment, Side, ValueText } from '@hexo-arena/contract';
 import type { TurnCells } from '@hexo-arena/rules';
 import { Swatch } from '../components/player';
 import { text } from '../text';
@@ -8,6 +8,7 @@ import { JudgmentChip } from './Judgment';
 import { bandOf, type BandToken } from './move-list';
 import { cellText } from './notation';
 import type { RowFact } from './row-facts';
+import { SpokenText } from './SpokenText';
 import { deletable, floorOf } from './state';
 import { isMainLine, mainLine, nodeAt, openingTurns, pathTo, rootId, type MoveTree as Tree, type NodeId } from './tree';
 
@@ -322,7 +323,7 @@ const Row = memo(function Row({ id, turn, side, cells, judgment, value, current,
     side: Side;
     cells: string;
     judgment: Judgment | null;
-    value: string | null;
+    value: ValueText | null;
     current: boolean;
     menuOpen: boolean;
     onGo: (id: NodeId) => void;
@@ -341,7 +342,7 @@ const Row = memo(function Row({ id, turn, side, cells, judgment, value, current,
                         <span className="sr-only">{`${verdict ?? ``};`}</span>
                     </span>
                 )}
-                {value === null ? null : <span className="an-row-value">{value}</span>}
+                {value === null ? null : <SpokenText words={value} className="an-row-value" />}
             </button>
             {current || menuOpen ? <MoreButton turn={turn} open={menuOpen} onToggle={() => { onMenu(menuOpen ? null : id); }} /> : null}
         </li>

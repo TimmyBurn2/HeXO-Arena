@@ -188,6 +188,41 @@
         --stepper-value-w: 5.5rem;
         --chevron-size: 0.75rem;
         --welcome-w: 34rem;
+        /* a duel's setup, page, and lists: an empty slot's cell, the vs
+           cell between the slots, the score's framed cell and its phone
+           size with how far it overlaps the plates, the scoreboard's
+           cells at three sizes, the picker, and the side column of the
+           duels place and a duel's page */
+        --socket-w: 2.75rem;
+        --socket-w-sm: 1.75rem;
+        --vs-hex-w: 2.25rem;
+        --score-hex-w: 8.5rem;
+        --score-hex-w-sm: 6.5rem;
+        --score-hex-overlap: 1.25rem;
+        --sb-hex-w: 1.75rem;
+        --sb-hex-w-sm: 1.125rem;
+        --sb-hex-w-xs: 0.875rem;
+        --sb-name-w: 9rem;
+        --picker-w: 42rem;
+        --picker-list-h: 26rem;
+        --picker-search-min: 12rem;
+        --duel-side-w: 22rem;
+        --duel-seats-w: 14rem;
+        --slot-min-h: 4.75rem;
+        --pair-note-min: 12rem;
+        /* the estimate's axis: the band, the zero line, the cell marking
+           the estimate, and the ticks under the line, by their offsets */
+        --est-axis-h: 4.5rem;
+        --est-line-top: 2.75rem;
+        --est-band-top: 1.5rem;
+        --est-band-h: 1rem;
+        --est-zero-top: 0.75rem;
+        --est-zero-h: 2rem;
+        --est-mark-top: 2rem;
+        --est-mark-w: 1.5rem;
+        --est-mark-inset: 0.2rem;
+        --est-tick-top: 3.25rem;
+        --est-facts-min: 12rem;
         --z-sticky: 1;
         --z-hud: 2;
         --z-drawer: 3;

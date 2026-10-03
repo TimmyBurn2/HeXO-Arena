@@ -10,8 +10,9 @@ import { serve } from './mock-api';
 // table headers, links told from their text by more than hue, and
 // sideways scroll.
 for (const look of looks) {
-    for (const shot of shots.filter((entry) => entry.board === true || look.name === defaultTheme)) {
-        for (const viewport of shot.viewports ?? viewports) {
+    for (const shot of shots.filter((entry) => entry.board !== undefined || look.name === defaultTheme)) {
+        const widths = look.name === defaultTheme || shot.board === undefined || shot.board === true ? (shot.viewports ?? viewports) : shot.board;
+        for (const viewport of widths) {
             test(`${shot.name} holds its axe gates and layout in ${look.name} at ${viewport.name}`, async ({ page }) => {
                 await page.setViewportSize({ width: viewport.width, height: viewport.height });
                 await wear(page, { name: look.name, storage: { ...look.storage, ...shot.storage } });

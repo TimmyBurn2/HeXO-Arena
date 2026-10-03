@@ -6,7 +6,15 @@ import {
     analysisLinesMax,
     analysisWinInLimit,
     analyzerMaxSecondsCap,
+    botAboutMaxLength,
+    botRepoUrlMaxLength,
+    botVersionMaxLength,
     discordNameMaxLength,
+    duelCutReasons,
+    duelGameCounts,
+    duelGamesMax,
+    duelGamesOptions,
+    duelStopReasons,
     nextPathMaxLength,
     requestBodyLimitBytes,
     reportDetailsMaxLength,
@@ -200,12 +208,40 @@ export const bots = sqliteTable(
         // Set when a bot with rated games is deleted: the row stays so the
         // game log stays whole, under a deleted-<n> placeholder name.
         deletedAt: integer(`deleted_at`),
+        // The owner's switch, on the site alone: 0 keeps duels between
+        // this bot and another to those its owner starts.
+        duelsByOthers: integer(`duels_by_others`).notNull().default(1),
+        // The owner's text and source link, set on the site, each shown in
+        // place of what the bot declares.
+        ownerAbout: text(`owner_about`),
+        ownerRepoUrl: text(`owner_repo_url`),
+        // The client the bot's stream last opened with, read from its
+        // User-Agent, and when: hexo-bridge with its release, or other.
+        // The header itself is never kept.
+        clientKind: text(`client_kind`),
+        clientVersion: text(`client_version`),
+        clientAt: integer(`client_at`),
     },
     (table) => [
         index(`bots_owner_id_idx`).on(table.ownerId),
         // A tournament entry names the bot with its owner, held to this pair.
         uniqueIndex(`bots_id_owner_idx`).on(table.id, table.ownerId),
         check(`bots_scope_check`, sql`${table.scope} in ('bot:play')`),
+        check(`bots_duels_by_others_check`, sql`${table.duelsByOthers} in (0, 1)`),
+        check(`bots_owner_about_check`, sql`${table.ownerAbout} is null or length(${table.ownerAbout}) between 1 and ${sql.raw(String(botAboutMaxLength))}`),
+        check(
+            `bots_owner_repo_url_check`,
+            sql`${table.ownerRepoUrl} is null or (length(${table.ownerRepoUrl}) <= ${sql.raw(String(botRepoUrlMaxLength))} and (lower(substr(${table.ownerRepoUrl}, 1, 7)) = 'http://' or lower(substr(${table.ownerRepoUrl}, 1, 8)) = 'https://'))`,
+        ),
+        // Three dot-separated runs of digits, as a hexo-bridge release reads.
+        check(
+            `bots_client_version_check`,
+            sql`${table.clientVersion} is null or (length(${table.clientVersion}) <= 14 and ${table.clientVersion} glob '[0-9]*.[0-9]*.[0-9]*' and ${table.clientVersion} glob '*[0-9]' and ${table.clientVersion} not glob '*[^0-9.]*' and ${table.clientVersion} not glob '*..*' and ${table.clientVersion} not glob '*.*.*.*')`,
+        ),
+        check(
+            `bots_client_check`,
+            sql`(${table.clientKind} is null or ${table.clientKind} in ('hexo-bridge', 'other')) and (${table.clientKind} is null) = (${table.clientAt} is null) and (coalesce(${table.clientKind}, '') = 'hexo-bridge') = (${table.clientVersion} is not null)`,
+        ),
         check(`bots_levels_check`, jsonObject(table.levels, levelsMax)),
         check(`bots_analyzer_max_seconds_check`, sql`${table.analyzerMaxSeconds} is null or ${table.analyzerMaxSeconds} between 1 and ${analyzerSecondsMax}`),
         check(`bots_analyzer_lines_check`, sql`${table.analyzerLines} is null or ${table.analyzerLines} between 1 and ${linesMax}`),
@@ -234,9 +270,13 @@ export const bots = sqliteTable(
 // The seats constraint pins exactly one of the three groups.
 // A bot seat played at a level other than its bot's default keeps that
 // level as declared at creation, by side; no person's seat has one.
-// unrated_by_choice is 1 on a signed-in person's game they started unrated;
-// a guest's game and practice at another level are unrated by their seats,
-// so the mark names one reason only.
+// unrated_by_choice is 1 on a game unrated by how it started rather than
+// by its seats: a signed-in person's game started unrated or against their
+// own bot, every game of an unrated duel, and a challenge's game between
+// two bots of one owner. A guest's game and practice at another level are
+// unrated by their seats, and outside a duel never carry the mark.
+// test is 1 on a game one person holds on both sides, as it began: their
+// own bot against them, or two of their bots; such a game is never rated.
 export const games = sqliteTable(
     `games`,
     {
@@ -253,6 +293,7 @@ export const games = sqliteTable(
         xLevel: text(`x_level`),
         oLevel: text(`o_level`),
         unratedByChoice: integer(`unrated_by_choice`).notNull().default(0),
+        test: integer(`test`).notNull().default(0),
         timeControl: text(`time_control`).notNull(),
         openingCells: text(`opening_cells`).notNull(),
         winner: text(`winner`),
@@ -266,6 +307,10 @@ export const games = sqliteTable(
         // games it is; a game the drain cut replays under the same pair.
         pairingId: text(`pairing_id`).references((): AnySQLiteColumn => tournamentPairings.id, { onDelete: `cascade` }),
         pairingGame: integer(`pairing_game`),
+        // A duel game names its duel and its number in it; a game the
+        // drain cut replays under the same number.
+        duelId: text(`duel_id`).references((): AnySQLiteColumn => duels.id, { onDelete: `cascade` }),
+        duelGame: integer(`duel_game`),
     },
     (table) => [
         uniqueIndex(`games_finish_seq_idx`).on(table.finishSeq),
@@ -279,17 +324,25 @@ export const games = sqliteTable(
         index(`games_human_finish_idx`).on(table.finishSeq).where(sql`${table.userId} is not null`),
         index(`games_guests_finish_idx`).on(table.finishSeq).where(sql`${table.guestName} is not null`),
         index(`games_bots_finish_idx`).on(table.finishSeq).where(sql`${table.challengerBotId} is not null`),
+        // Lists leave tests out unless asked, so the unfiltered list reads its own index.
+        index(`games_shown_finish_idx`).on(table.finishSeq).where(sql`${table.test} = 0`),
         index(`games_undecided_finish_idx`).on(table.finishSeq).where(sql`${table.winner} is null`),
         index(`games_reason_finish_idx`).on(table.finishReason, table.finishSeq),
         index(`games_clock_finish_idx`).on(sql`${table.timeControl} ->> '$.mode'`, table.finishSeq),
         index(`games_opening_finish_idx`).on(sql`json_array_length(${table.openingCells})`, table.finishSeq),
         index(`games_finished_at_idx`).on(table.finishedAt),
         index(`games_pairing_idx`).on(table.pairingId, table.pairingGame),
+        index(`games_duel_idx`).on(table.duelId, table.duelGame),
         // A null makes an in-list unknown, which a check lets pass, so the
         // nullable values these checks pin are coalesced first.
         check(
             `games_pairing_check`,
             sql`(${table.pairingId} is null and ${table.pairingGame} is null) or (${table.pairingId} is not null and coalesce(${table.pairingGame}, 0) in (1, 2) and ${table.challengerBotId} is not null)`,
+        ),
+        // A duel game seats two bots and belongs to no tournament.
+        check(
+            `games_duel_check`,
+            sql`(${table.duelId} is null and ${table.duelGame} is null) or (${table.duelId} is not null and coalesce(${table.duelGame}, 0) between 1 and ${sql.raw(String(duelGamesMax))} and ${table.challengerBotId} is not null and ${table.pairingId} is null)`,
         ),
         // The label a guest session is minted with, and nothing that could find the guest again.
         check(`games_guest_name_check`, sql`${table.guestName} is null or ${table.guestName} glob 'Guest [a-z0-9][a-z0-9][a-z0-9][a-z0-9]'`),
@@ -303,9 +356,14 @@ export const games = sqliteTable(
             `games_level_seat_check`,
             sql`${table.userSide} is null or (case ${table.userSide} when 'x' then ${table.xLevel} else ${table.oLevel} end) is null`,
         ),
+        // A tournament seats one bot per owner, and a guest owns no bot.
+        check(
+            `games_test_check`,
+            sql`${table.test} in (0, 1) and (${table.test} = 0 or (${table.guestName} is null and ${table.pairingId} is null and (${table.unratedByChoice} = 1 or ${table.xLevel} is not null or ${table.oLevel} is not null)))`,
+        ),
         check(
             `games_unrated_by_choice_check`,
-            sql`${table.unratedByChoice} in (0, 1) and (${table.unratedByChoice} = 0 or (${table.userId} is not null and ${table.xLevel} is null and ${table.oLevel} is null))`,
+            sql`${table.unratedByChoice} in (0, 1) and (${table.unratedByChoice} = 0 or ${table.duelId} is not null or (${table.xLevel} is null and ${table.oLevel} is null and (${table.userId} is not null or (${table.challengerBotId} is not null and ${table.pairingId} is null))))`,
         ),
         check(
             `games_challenger_side_check`,
@@ -432,6 +490,8 @@ export const analyses = sqliteTable(
         analyzerCutMistake: real(`analyzer_cut_mistake`),
         analyzerCutBlunder: real(`analyzer_cut_blunder`),
         analyzerMeaning: text(`analyzer_meaning`),
+        // Whether the analyzer's owner sat in the game, as it was when the analyzer took it.
+        involved: integer(`involved`).notNull().default(0),
         // The analyzer the requester named, if any; only it may take the request.
         namedBotId: text(`named_bot_id`).references(() => bots.id, { onDelete: `cascade` }),
         requestedBy: text(`requested_by`).references(() => users.id, { onDelete: `set null` }),
@@ -460,6 +520,7 @@ export const analyses = sqliteTable(
         // A request no analyzer took ends as expired, with none.
         check(`analyses_analyzer_check`, sql`((${table.status} = 'queued') = (${table.analyzerBotId} is null)) or (${table.status} = 'failed' and ${table.analyzerBotId} is null)`),
         check(`analyses_version_check`, sql`${table.analyzerVersion} is null or length(${table.analyzerVersion}) <= 64`),
+        check(`analyses_involved_check`, sql`${table.involved} in (0, 1) and (${table.involved} = 0 or ${table.analyzerBotId} is not null)`),
         check(`analyses_seconds_check`, sql`${table.seconds} between 1 and ${analyzerSecondsMax}`),
         check(`analyses_finished_check`, sql`(${table.status} in ('done', 'failed')) = (${table.finishedAt} is not null)`),
         ...valuesChecks(
@@ -620,7 +681,7 @@ export const adminActions = sqliteTable(
     (table) => [
         check(
             `admin_actions_action_check`,
-            sql`${table.action} in ('pause', 'resume', 'ban-user', 'unban-user', 'delete-user', 'delist-bot', 'relist-bot', 'revoke-bot', 'abort-game', 'recompute-ratings', 'tournament-create', 'tournament-cancel', 'tournament-schedule-add', 'tournament-schedule-remove', 'report-close', 'delete-analysis')`,
+            sql`${table.action} in ('pause', 'resume', 'ban-user', 'unban-user', 'delete-user', 'delist-bot', 'relist-bot', 'revoke-bot', 'abort-game', 'recompute-ratings', 'tournament-create', 'tournament-cancel', 'tournament-schedule-add', 'tournament-schedule-remove', 'report-close', 'delete-analysis', 'duel-stop')`,
         ),
         check(`admin_actions_reason_check`, sql`length(${table.reason}) > 0`),
     ],
@@ -772,7 +833,90 @@ export const tournamentPairings = sqliteTable(
     ],
 );
 
-const reasons = sql.raw(reportReasons.map((reason) => `'${reason}'`).join(`, `));
+const quoted = (values: readonly string[]) => sql.raw(values.map((value) => `'${value}'`).join(`, `));
+
+// Bots meet in a duel one game at a time: a single game, or pairs of one
+// opening played twice with the sides swapped. The pair is stored in one
+// fixed order, a below b, so one unique index over the two columns holds
+// a pair to one running duel; a_first keeps the order its starter named
+// them in. a_x is the lot: a plays x in game 1, and the sides alternate.
+// test is 1 when one person owns both bots: never rated, and alone in
+// taking more than ten games.
+// A level is a bot's declared level as it stood at the start, null at its
+// default; a rated duel has none.
+// The ratings and versions are each bot's at the start, for display; a
+// version is null for a bot that declared none.
+// A duel runs until every game is played, it is stopped, or a game cannot
+// start; end_reason says why it ended early, and end_bot which bot that names.
+export const duels = sqliteTable(
+    `duels`,
+    {
+        id: text(`id`).primaryKey(),
+        startedBy: text(`started_by`).references(() => users.id, { onDelete: `set null` }),
+        botAId: text(`bot_a_id`)
+            .notNull()
+            .references(() => bots.id, { onDelete: `cascade` }),
+        botBId: text(`bot_b_id`)
+            .notNull()
+            .references(() => bots.id, { onDelete: `cascade` }),
+        aFirst: integer(`a_first`).notNull(),
+        aX: integer(`a_x`).notNull(),
+        test: integer(`test`).notNull(),
+        games: integer(`games`).notNull(),
+        timeControl: text(`time_control`).notNull(),
+        openingPlies: integer(`opening_plies`).notNull(),
+        aLevel: text(`a_level`),
+        bLevel: text(`b_level`),
+        aRating: real(`a_rating`).notNull(),
+        bRating: real(`b_rating`).notNull(),
+        aVersion: text(`a_version`),
+        bVersion: text(`b_version`),
+        rated: integer(`rated`).notNull(),
+        status: text(`status`).notNull().default(`running`),
+        endReason: text(`end_reason`),
+        endBot: text(`end_bot`),
+        createdAt: integer(`created_at`).notNull(),
+        endedAt: integer(`ended_at`),
+    },
+    (table) => [
+        uniqueIndex(`duels_live_pair_idx`).on(table.botAId, table.botBId).where(sql`${table.status} = 'running'`),
+        // Leads with the foreign key, and serves the count of a person's duels a day.
+        index(`duels_started_by_created_idx`).on(table.startedBy, table.createdAt),
+        index(`duels_bot_a_idx`).on(table.botAId),
+        index(`duels_bot_b_idx`).on(table.botBId),
+        check(`duels_pair_check`, sql`${table.botAId} < ${table.botBId}`),
+        check(`duels_a_first_check`, sql`${table.aFirst} in (0, 1)`),
+        check(`duels_a_x_check`, sql`${table.aX} in (0, 1)`),
+        check(`duels_test_check`, sql`${table.test} in (0, 1)`),
+        check(
+            `duels_games_check`,
+            sql`${table.games} in (${sql.raw(duelGamesOptions.join(`, `))}) and (${table.test} = 1 or ${table.games} in (${sql.raw(duelGameCounts.join(`, `))}))`,
+        ),
+        check(`duels_time_control_check`, sql`json_valid(${table.timeControl})`),
+        check(`duels_opening_check`, sql`${table.openingPlies} in (1, 3, 5, 7, 9) and (${table.openingPlies} > 1 or ${table.games} <= 2)`),
+        check(`duels_a_level_check`, jsonObject(table.aLevel, seatLevelMax)),
+        check(`duels_b_level_check`, jsonObject(table.bLevel, seatLevelMax)),
+        check(`duels_rating_check`, sql`${table.aRating} >= 400 and ${table.bRating} >= 400`),
+        check(
+            `duels_version_check`,
+            sql`(${table.aVersion} is null or length(${table.aVersion}) between 1 and ${sql.raw(String(botVersionMaxLength))}) and (${table.bVersion} is null or length(${table.bVersion}) between 1 and ${sql.raw(String(botVersionMaxLength))})`,
+        ),
+        // Nothing one person holds on both sides is rated.
+        check(
+            `duels_rated_check`,
+            sql`${table.rated} in (0, 1) and (${table.rated} = 0 or (${table.test} = 0 and ${table.aLevel} is null and ${table.bLevel} is null))`,
+        ),
+        check(`duels_status_check`, sql`${table.status} in ('running', 'finished', 'cut_short', 'stopped')`),
+        check(
+            `duels_end_check`,
+            sql`(${table.status} = 'cut_short' and coalesce(${table.endReason}, '') in (${quoted(duelCutReasons)})) or (${table.status} = 'stopped' and coalesce(${table.endReason}, '') in (${quoted(duelStopReasons)})) or (${table.status} in ('running', 'finished') and ${table.endReason} is null)`,
+        ),
+        check(`duels_end_bot_check`, sql`${table.endBot} is null or (${table.endBot} in ('a', 'b') and ${table.status} in ('cut_short', 'stopped'))`),
+        check(`duels_ended_check`, sql`(${table.status} = 'running') = (${table.endedAt} is null)`),
+    ],
+);
+
+const reasons = quoted(reportReasons);
 
 // A report someone sent from the form, open until the operator closes it
 // with a note.

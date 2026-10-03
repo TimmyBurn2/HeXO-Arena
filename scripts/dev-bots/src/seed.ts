@@ -4,8 +4,9 @@ import { setTimeout as sleep } from 'node:timers/promises';
 import { ApiError, ArenaClient } from './client';
 import { hostBots, message, type HostedBot, type HostedFinish } from './host';
 import { playHumanGame } from './human';
-import { personaBots, type BotSeries, type PersonaName, type SeedPlan } from './personas';
+import { personaBots, type BotRun, type PersonaName, type SeedPlan } from './personas';
 import { NotADevServer, saveTokens } from './runner';
+import { seedDevDuels, type DevDuels, type DevDuelPlans } from './duels';
 import { devWeeklyRule, seedDevTournament, type Candidate, type DevTournament, type DevWeeklyRule } from './tournament';
 
 /** How the seed reaches its target, what it plays, and how it bans. */
@@ -30,6 +31,8 @@ export interface SeedOptions {
     // resolves when the rule stands, newly or already.
     // Without it the seed adds none.
     addWeeklyRule?: (rule: DevWeeklyRule) => Promise<void>;
+    // The duels to leave: one played out, one running, and a test played out; without them the seed starts none.
+    duels?: DevDuelPlans;
     now?: () => number;
 }
 
@@ -38,12 +41,13 @@ export interface SeedReport {
     readonly accounts: readonly DevAccount[];
     readonly ranked: readonly string[];
     readonly played: number;
-    // Series a daily cap stopped short, with the cap's code.
+    // Runs a daily cap stopped short, with the cap's code.
     readonly capped: readonly string[];
     readonly tournament: DevTournament | null;
+    readonly duels: DevDuels | null;
 }
 
-// A challenge waits on these and tries again; a daily cap ends its series.
+// A challenge waits on these and tries again; a daily cap ends its run.
 const transient = new Set([`challenge_pending`, `bot_busy`, `inbox_full`, `not_open`]);
 const dailyCaps = new Set([`daily_pair_cap`, `daily_bot_cap`, `daily_challenge_cap`]);
 
@@ -151,28 +155,28 @@ export async function seedDevData(options: SeedOptions): Promise<SeedReport> {
         }
     }
 
-    // One challenge at a time per series, so each finish belongs to the
+    // One challenge at a time per run, so each finish belongs to the
     // challenge before it.
-    async function playSeries(series: BotSeries): Promise<void> {
-        const from = online.find((bot) => bot.name === series.from);
+    async function playRun(run: BotRun): Promise<void> {
+        const from = online.find((bot) => bot.name === run.from);
         if (from === undefined) return;
-        const done = before.flatMap((account) => account.bots).find((bot) => bot.name === series.from)?.vsBots ?? 0;
-        for (const game of series.games.slice(done)) {
+        const done = before.flatMap((account) => account.bots).find((bot) => bot.name === run.from)?.vsBots ?? 0;
+        for (const game of run.games.slice(done)) {
             const finished = new Promise<HostedFinish>((resolve, reject) => {
-                const waiter = { from: series.from, to: series.to, done: resolve };
+                const waiter = { from: run.from, to: run.to, done: resolve };
                 waiters.add(waiter);
                 setTimeout(() => {
-                    if (waiters.delete(waiter)) reject(new Error(`${series.from} against ${series.to} did not finish in time`));
+                    if (waiters.delete(waiter)) reject(new Error(`${run.from} against ${run.to} did not finish in time`));
                 }, gameDeadlineMs).unref();
             });
             for (;;) {
                 try {
-                    await client.challenge(from.token, series.to, game.timeControl, randomUUID(), game.openingPlies);
+                    await client.challenge(from.token, run.to, game.timeControl, randomUUID(), game.openingPlies);
                     break;
                 } catch (error) {
                     if (error instanceof ApiError && error.code !== null && dailyCaps.has(error.code)) {
-                        capped.push(`${series.from} against ${series.to}: ${error.code}`);
-                        log(`${series.from} against ${series.to} stops at a daily cap: ${error.code}`);
+                        capped.push(`${run.from} against ${run.to}: ${error.code}`);
+                        log(`${run.from} against ${run.to} stops at a daily cap: ${error.code}`);
                         return;
                     }
                     if (error instanceof ApiError && error.status === 429 && error.retryAfter !== null) {
@@ -189,9 +193,19 @@ export async function seedDevData(options: SeedOptions): Promise<SeedReport> {
         }
     }
 
+    let duels: DevDuels | null = null;
     try {
         await opened;
-        await Promise.all([...personas.map(playHumans), ...plan.series.map(playSeries)]);
+        await Promise.all([...personas.map(playHumans), ...plan.runs.map(playRun)]);
+        // While the personas' bots are still held online, so the played-out duels can finish.
+        if (options.duels !== undefined) {
+            duels = await seedDevDuels({
+                client,
+                plans: options.duels,
+                cookieOf: async (person) => cookies.get(person) ?? (await client.devLogin(person)),
+                log,
+            });
+        }
     } catch (error) {
         log(`the seed stopped: ${message(error)}`);
         throw error;
@@ -202,10 +216,13 @@ export async function seedDevData(options: SeedOptions): Promise<SeedReport> {
         saveTokens(options.tokenFile, new Map(online.map((bot) => [bot.name, bot.token])));
     }
 
-    // The personas' online bots first, one per owner, then the others offered.
+    // The personas' online bots first, one per owner, then the others offered;
+    // a bot playing the live duel stays out, as the tournament's start would cut the duel short.
+    const live = duels?.live == null ? undefined : options.duels?.live;
+    const busy = new Set(live === undefined ? [] : [live.first, live.second]);
     const candidates: Candidate[] = [];
     for (const bot of personaBots) {
-        if (bot.online && cookies.has(bot.owner) && !candidates.some((candidate) => candidate.owner === bot.owner)) {
+        if (bot.online && cookies.has(bot.owner) && !busy.has(bot.name) && !candidates.some((candidate) => candidate.owner === bot.owner)) {
             candidates.push({ owner: bot.owner, bot: bot.name });
         }
     }
@@ -215,7 +232,7 @@ export async function seedDevData(options: SeedOptions): Promise<SeedReport> {
             : await seedDevTournament({
                   client,
                   schedule: options.scheduleTournament,
-                  candidates: [...candidates, ...(options.tournamentCandidates ?? [])],
+                  candidates: [...candidates, ...(options.tournamentCandidates ?? []).filter((candidate) => !busy.has(candidate.bot))],
                   now: options.now ?? Date.now,
                   log,
               });
@@ -227,5 +244,5 @@ export async function seedDevData(options: SeedOptions): Promise<SeedReport> {
 
     const accounts = await client.devAccounts();
     const ranked = accounts.flatMap((account) => account.bots).filter((bot) => !bot.provisional).map((bot) => bot.name);
-    return { accounts, ranked, played, capped, tournament };
+    return { accounts, ranked, played, capped, tournament, duels };
 }

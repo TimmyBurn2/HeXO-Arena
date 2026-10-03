@@ -133,6 +133,8 @@ export interface AnalysisRow {
     readonly analyzerVersion: string | null;
     /** How the analyzer's heuristic read, as it declared when it took the reading. */
     readonly analyzerValues: AnalyzerValues;
+    /** Whether the analyzer's owner sat in the game when the analyzer took it. */
+    readonly involved: boolean;
     readonly ownerName: string | null;
     readonly namedBotId: string | null;
     readonly requestedBy: string | null;
@@ -158,6 +160,7 @@ function rowsWhere(query: Query, condition: ReturnType<typeof and>): AnalysisRow
             analyzerCutMistake: analyses.analyzerCutMistake,
             analyzerCutBlunder: analyses.analyzerCutBlunder,
             analyzerMeaning: analyses.analyzerMeaning,
+            involved: analyses.involved,
             ownerName: owners.name,
             ownerDeletedAt: owners.deletedAt,
             namedBotId: analyses.namedBotId,
@@ -188,6 +191,7 @@ function rowsWhere(query: Query, condition: ReturnType<typeof and>): AnalysisRow
                 blunder: row.analyzerCutBlunder,
                 meaning: row.analyzerMeaning,
             }),
+            involved: row.involved === 1,
             ownerName: row.ownerName === null || row.ownerDeletedAt !== null ? null : shownUser(row.ownerName, row.ownerDeletedAt).name,
             namedBotId: row.namedBotId,
             requestedBy: row.requestedBy,
@@ -218,11 +222,24 @@ export function insertAnalysis(query: Query, row: { id: string; gameId: string; 
 // Each write answers whether the reading is still there: the operator, an
 // opt-out, or a deleted analyzer may have removed it meanwhile.
 
-export function startAnalysis(query: Query, id: string, analyzer: { botId: string; version: string | null; values: AnalyzerValues; seconds: number }, at: number): boolean {
+export function startAnalysis(
+    query: Query,
+    id: string,
+    analyzer: { botId: string; version: string | null; values: AnalyzerValues; involved: boolean; seconds: number },
+    at: number,
+): boolean {
     return (
         query
             .update(analyses)
-            .set({ status: `running`, analyzerBotId: analyzer.botId, analyzerVersion: analyzer.version, ...analysisValueColumns(analyzer.values), seconds: analyzer.seconds, startedAt: at })
+            .set({
+                status: `running`,
+                analyzerBotId: analyzer.botId,
+                analyzerVersion: analyzer.version,
+                ...analysisValueColumns(analyzer.values),
+                involved: analyzer.involved ? 1 : 0,
+                seconds: analyzer.seconds,
+                startedAt: at,
+            })
             .where(eq(analyses.id, id))
             .run().changes > 0
     );
@@ -232,7 +249,7 @@ export function requeueAnalysis(query: Query, id: string): boolean {
     return (
         query
             .update(analyses)
-            .set({ status: `queued`, analyzerBotId: null, analyzerVersion: null, ...analysisValueColumns(null), startedAt: null })
+            .set({ status: `queued`, analyzerBotId: null, analyzerVersion: null, ...analysisValueColumns(null), involved: 0, startedAt: null })
             .where(eq(analyses.id, id))
             .run().changes > 0
     );
@@ -247,7 +264,7 @@ export function failAnalysis(query: Query, id: string, failure: AnalysisFailure,
                 failure,
                 failedTurn,
                 finishedAt: at,
-                ...(failure === `expired` ? { analyzerBotId: null, analyzerVersion: null, ...analysisValueColumns(null) } : {}),
+                ...(failure === `expired` ? { analyzerBotId: null, analyzerVersion: null, ...analysisValueColumns(null), involved: 0 } : {}),
             })
             .where(eq(analyses.id, id))
             .run().changes > 0

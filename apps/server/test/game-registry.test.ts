@@ -994,6 +994,7 @@ describe('bot-vs-bot games', () => {
             timeControl: unlimitedControl,
             openingPlies,
             firstPlayer,
+            sameOwner: false,
         }).gameId;
     }
 
@@ -1058,6 +1059,38 @@ describe('bot-vs-bot games', () => {
         const stored = world.games.snapshotFor(gameId, user);
         expect(stored).toMatchObject({ status: `finished`, winner: null, reason: `aborted`, players: live?.players });
         expect(stored?.you).toBeUndefined();
+    });
+
+    it('tells both bots a scheduled game started unrated is unrated, and one started rated is rated', () => {
+        const [a, b] = [challenger.id, bot.id].sort();
+        world.sqlite
+            .prepare(
+                `insert into duels (id, bot_a_id, bot_b_id, a_first, a_x, test, games, time_control, opening_plies, a_rating, b_rating, rated, created_at) values ('d_abcdefghjkmn', ?, ?, 1, 1, 0, 2, '{"mode":"turn","turnTimeMs":10000}', 5, 1500, 1500, 0, 1)`,
+            )
+            .run(a, b);
+        const play = (game: number, unratedByChoice: boolean) =>
+            world.games.createScheduledGame({
+                x: challenger,
+                o: { id: bot.id, name: bot.name },
+                unratedByChoice,
+                timeControl: turnControl,
+                openingPlies: 1,
+                opening: null,
+                tag: { kind: `duel`, id: `d_abcdefghjkmn`, game },
+            }).gameId;
+        const unrated = play(1, true);
+        const rated = play(2, false);
+        const startOf = (gameId: string, botId: string) => world.games.replayForBot(botId).find((event) => event.type === `gameStart` && event.gameId === gameId);
+        for (const botId of [challenger.id, bot.id]) {
+            expect(startOf(unrated, botId)).toMatchObject({ type: `gameStart`, rated: false });
+            expect(startOf(rated, botId)).toMatchObject({ type: `gameStart`, rated: true });
+        }
+        expect(world.games.liveEntriesOf([unrated, rated]).map((entry) => [entry.rated, entry.duel])).toEqual([
+            [false, { id: `d_abcdefghjkmn`, game: 1, of: 2 }],
+            [true, { id: `d_abcdefghjkmn`, game: 2, of: 2 }],
+        ]);
+        world.games.abort(unrated);
+        expect(world.games.snapshotFor(unrated, null)).toMatchObject({ duel: { id: `d_abcdefghjkmn`, game: 1, of: 2 }, unratedByChoice: true });
     });
 
     it('publishes each turn to watchers, a first-stone win as that stone alone, then the finish', () => {

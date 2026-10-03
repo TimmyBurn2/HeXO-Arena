@@ -5,6 +5,7 @@ import {
     botsMeta,
     connectMeta,
     creditsMeta,
+    duelsMeta,
     gamesMeta,
     gamesPath,
     gameSnapshotSchema,
@@ -127,7 +128,7 @@ describe('the og shell routes', () => {
     });
 
     it('carries the site icon at its size and the site name on every shell route, found or not', async () => {
-        for (const url of [`/`, `/play`, `/play?bot=nobody`, `/analysis`, `/analysis?game=g_nothing`, `/ladder`, `/bots`, `/bots/nobody`, `/game/g_nothing`, `/games`, `/games/live`, `/tournaments`, `/tournaments/t_aaaaaaaaaaaa`, `/connect`, `/profile`, `/credits`, `/welcome`, ...legalPages.map(legalPagePath)]) {
+        for (const url of [`/`, `/play`, `/play?bot=nobody`, `/analysis`, `/analysis?game=g_nothing`, `/ladder`, `/bots`, `/bots/nobody`, `/game/g_nothing`, `/games`, `/games/live`, `/tournaments`, `/tournaments/t_aaaaaaaaaaaa`, `/play/duels`, `/play/duels/d_aaaaaaaaaaaa`, `/connect`, `/profile`, `/credits`, `/welcome`, ...legalPages.map(legalPagePath)]) {
             const response = await arena.app.inject({ method: `GET`, url });
             expect(response.body).toContain(`<meta property="og:image" content="https://arena.example/icon-512.png" />`);
             expect(response.body).toContain(`<meta property="og:image:width" content="512" />`);
@@ -159,6 +160,7 @@ describe('the og shell routes', () => {
             [`/bots`, botsMeta],
             [`/games`, gamesMeta],
             [`/games/live`, liveGamesMeta],
+            [`/play/duels`, duelsMeta],
             [`/tournaments`, tournamentsMeta],
             [`/connect`, connectMeta],
             [`/profile`, profileMeta],
@@ -352,6 +354,23 @@ describe('the og shell routes', () => {
         expect(waiting.meta.ogDescription).toBe(`Bot round robin; starts 2026-10-01 18:00 UTC; 0 of 8 bots entered; turn clock 10 s`);
         expect((await shell(`/tournaments/t_bbbbbbbbbbbb`)).status).toBe(404);
         expect((await shell(`/tournaments/nope`)).status).toBe(404);
+    });
+
+    it('previews a duel by its bots, kind, length, clock, and how it stands, and answers 404 for an unknown one', async () => {
+        await openBot(`sealbot`);
+        await openBot(`otterbot`);
+        const ids = [`sealbot`, `otterbot`].map((name) => (arena.sqlite.prepare(`select id from bots where name = ?`).get(name) as { id: string }).id).sort();
+        arena.sqlite
+            .prepare(
+                `insert into duels (id, bot_a_id, bot_b_id, a_first, a_x, test, games, time_control, opening_plies, a_rating, b_rating, rated, status, created_at) values ('d_aaaaaaaaaaaa', ?, ?, 1, 1, 0, 4, '{"mode":"turn","turnTimeMs":10000}', 5, 1500, 1500, 0, 'running', 1)`,
+            )
+            .run(...ids);
+        const running = await shell(`/play/duels/d_aaaaaaaaaaaa`);
+        expect(running.status).toBe(200);
+        expect(running.meta.ogTitle).toMatch(/^(sealbot vs otterbot|otterbot vs sealbot) - HeXO Arena$/u);
+        expect(running.meta.ogDescription).toBe(`Duel of 4 games between two bots, turn clock 10 s; running, level at 0-0`);
+        expect((await shell(`/play/duels/d_bbbbbbbbbbbb`)).status).toBe(404);
+        expect((await shell(`/play/duels/nope`)).status).toBe(404);
     });
 });
 

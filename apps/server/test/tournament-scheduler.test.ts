@@ -1,4 +1,4 @@
-import { tournamentPresenceGraceMs, tournamentRoundGapMs } from '@hexo-arena/contract';
+import { presenceGraceMs, tournamentRoundGapMs } from '@hexo-arena/contract';
 import http from 'node:http';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { findBot } from '../src/bots';
@@ -227,12 +227,12 @@ describe('the tournament scheduler', () => {
         if (first === undefined || second === undefined) throw new Error(`no pairings`);
         offline(first.second as BotName);
         tick(start() + 1_000);
-        tick(start() + 1_000 + tournamentPresenceGraceMs - 1);
+        tick(start() + 1_000 + presenceGraceMs - 1);
         expect(pairings()[0]?.game1).toBe(`pending`);
-        tick(start() + 1_000 + tournamentPresenceGraceMs);
+        tick(start() + 1_000 + presenceGraceMs);
         expect(pairings()[0]).toMatchObject({ game1: `no_show`, game1_seat: `second`, game2: `pending` });
         offline(first.first as BotName);
-        tick(start() + 2_000 + 2 * tournamentPresenceGraceMs);
+        tick(start() + 2_000 + 2 * presenceGraceMs);
         expect(pairings()[0]).toMatchObject({ game2: `no_show`, game2_seat: `both` });
     });
 
@@ -243,7 +243,7 @@ describe('the tournament scheduler', () => {
         offline(`gamma`);
         let at = start();
         for (let step = 0; step < 12; step++) {
-            at += tournamentPresenceGraceMs + tournamentRoundGapMs;
+            at += presenceGraceMs + tournamentRoundGapMs;
             tick(at);
             await finishLive();
             tick(at + 1);

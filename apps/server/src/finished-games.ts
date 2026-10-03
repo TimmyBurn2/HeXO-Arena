@@ -27,7 +27,7 @@ import { and, desc, eq, inArray, isNotNull, isNull, lt, lte, sql, type SQL, type
 import { alias } from 'drizzle-orm/sqlite-core';
 import type { FastifyInstance } from 'fastify';
 import type { Query } from './db';
-import { bots, gameRatings, games, moves, users } from './db/schema';
+import { bots, duels, gameRatings, games, moves, users } from './db/schema';
 import { seatLevelsOf } from './game-store';
 import type { PlayerRef } from './rating';
 import { ratesSomebody } from './rating-store';
@@ -101,9 +101,19 @@ function kindFilter(kind: Filters[`kind`]): SQL | undefined {
     }
 }
 
+// Tests are left out unless asked. With nothing else to narrow the list,
+// the term is written as the partial index of the games shown writes it,
+// a literal the planner can match; beside a filter with an index of its own,
+// the unary plus keeps the term from matching, so that filter's index is read.
+function testsLeftOut(filters: Filters, named: boolean): SQL | undefined {
+    if (filters.tests !== undefined) return undefined;
+    const narrowed = named || [filters.kind, filters.result, filters.reason, filters.clock, filters.opening, filters.before, filters.analyzed].some((value) => value !== undefined);
+    return narrowed ? sql`+${games.test} = 0` : sql`${games.test} = 0`;
+}
+
 // The conditions every arm shares; the clock and opening expressions are
 // written as their indexes are, or the planner would not match them.
-function shared(filters: Filters, before: Bound | null): (SQL | undefined)[] {
+function shared(filters: Filters, before: Bound | null, named: boolean): (SQL | undefined)[] {
     return [
         isNotNull(games.finishSeq),
         before === null ? undefined : and(lte(games.finishSeq, before.seq), lt(games.finishedAt, before.at)),
@@ -113,6 +123,7 @@ function shared(filters: Filters, before: Bound | null): (SQL | undefined)[] {
         filters.clock === undefined ? undefined : sql`${games.timeControl} ->> '$.mode' = ${filters.clock}`,
         filters.opening === undefined ? undefined : sql`json_array_length(${games.openingCells}) = ${Number(filters.opening)}`,
         filters.analyzed === undefined ? undefined : analyzedGame,
+        testsLeftOut(filters, named),
     ];
 }
 
@@ -142,7 +153,7 @@ function seatArms(resolved: Extract<Resolved, { kind: `page` }>, player: PlayerR
  */
 function pageQuery(query: Query, resolved: Extract<Resolved, { kind: `page` }>, before: Bound | null): SQL | null {
     const { player, vs, filters, page } = resolved;
-    const common = shared(filters, before);
+    const common = shared(filters, before, player !== null);
     const skipped = (page - 1) * finishedGamesPageSize;
     const arm = (conditions: (SQL | undefined)[], limit: number) =>
         query
@@ -164,7 +175,7 @@ function pageQuery(query: Query, resolved: Extract<Resolved, { kind: `page` }>, 
  * A named player's total is their record's games and voided ones.
  */
 function totalQuery(query: Query, resolved: Extract<Resolved, { kind: `page` }>, before: Bound | null): SQL {
-    return sql`select count(*) as total from ${query.select({ id: games.id }).from(games).where(and(...shared(resolved.filters, before)))}`;
+    return sql`select count(*) as total from ${query.select({ id: games.id }).from(games).where(and(...shared(resolved.filters, before, false)))}`;
 }
 
 const noRecord: FinishedGamesRecord = {
@@ -185,7 +196,7 @@ const noRecord: FinishedGamesRecord = {
  */
 function recordQuery(query: Query, resolved: Extract<Resolved, { kind: `page` }>, player: PlayerRef, before: Bound | null): SQL | null {
     const { vs, filters } = resolved;
-    const common = shared(filters, before);
+    const common = shared(filters, before, true);
     const arms = seatArms(resolved, player)
         .map((seat) => {
             const arm = query
@@ -283,6 +294,10 @@ function entriesOf(query: Query, ids: readonly string[]): FinishedGameEntry[] {
             finishedAt: games.finishedAt,
             finishSeq: games.finishSeq,
             voidedAt: games.voidedAt,
+            duelId: games.duelId,
+            duelGame: games.duelGame,
+            duelGames: duels.games,
+            test: games.test,
             moves: sql<number>`(select count(*) from ${moves} where ${moves.gameId} = ${games.id})`,
             xBefore: xRatings.ratingBefore,
             xDeviation: xRatings.deviationAfter,
@@ -294,6 +309,7 @@ function entriesOf(query: Query, ids: readonly string[]): FinishedGameEntry[] {
         .leftJoin(bots, eq(games.botId, bots.id))
         .leftJoin(challengerBots, eq(games.challengerBotId, challengerBots.id))
         .leftJoin(destBots, eq(games.destBotId, destBots.id))
+        .leftJoin(duels, eq(duels.id, games.duelId))
         .leftJoin(xRatings, and(eq(xRatings.gameId, games.id), eq(xRatings.side, `x`)))
         .leftJoin(oRatings, and(eq(oRatings.gameId, games.id), eq(oRatings.side, `o`)))
         .where(inArray(games.id, [...ids]))
@@ -343,6 +359,8 @@ function entriesOf(query: Query, ids: readonly string[]): FinishedGameEntry[] {
             rated: winner !== null && row.voidedAt === null && ratesSomebody(row),
             voided: row.voidedAt !== null,
             ...(row.unratedByChoice === 1 ? { unratedByChoice: true } : {}),
+            ...(row.test === 1 ? { test: true as const } : {}),
+            ...(row.duelId === null || row.duelGame === null || row.duelGames === null ? {} : { duel: { id: row.duelId, game: row.duelGame, of: row.duelGames } }),
             analyses: analyzed.get(row.id) ?? 0,
         };
     });

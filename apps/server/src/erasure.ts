@@ -9,27 +9,31 @@ import { users } from './db/schema';
 import type { GameRegistry } from './game-registry';
 import { deleteUser, liveBotIdsOf, type UserDeletion } from './moderation';
 import type { PresenceRegistry } from './presence';
+import type { DuelRunner } from './duel-runner';
 import type { TournamentScheduler } from './tournament-scheduler';
 
-/** The registries a deletion ends live play on, and the scheduler it withdraws entries from. */
+/** The registries a deletion ends live play on, the scheduler it withdraws entries from, and the runner whose duels it ends. */
 export interface ErasureDeps {
     games: Pick<GameRegistry, `abortForPerson` | `abortForBot`>;
     presence: Pick<PresenceRegistry, `close`>;
     challenges: Pick<ChallengeRegistry, `withdrawFor`>;
     tournaments: Pick<TournamentScheduler, `withdraw`>;
+    duels: Pick<DuelRunner, `endForBot`>;
     analysis: { withdraw: (botId: string) => void };
 }
 
 /**
  * Deletes a user inside the caller's transaction: their own and their
  * bots' live games end unrated, their bots leave the streams, challenges,
- * and tournaments, and the account goes under the deletion policy.
+ * tournaments, and duels, and the account goes under the deletion policy.
  * An operator's or a person's own deletion is no one's fault at the board,
  * and a clean delete would take the game rows away from under the registry.
  */
 export function eraseUser(deps: ErasureDeps, tx: Query, userId: string): UserDeletion & { aborted: number } {
     let aborted = deps.games.abortForPerson({ kind: `user`, id: userId });
     for (const botId of liveBotIdsOf(tx, userId)) {
+        // Ended before the abort, so the duel names the deletion rather than the abort.
+        deps.duels.endForBot(botId, `deleted`);
         aborted += deps.games.abortForBot(botId);
         deps.presence.close(botId);
         deps.analysis.withdraw(botId);

@@ -23,6 +23,14 @@ const PlayScreen = lazy(async () => {
     const module = await loadScreen(async () => import(`./screens/PlayScreen`));
     return { default: module.PlayScreen };
 });
+const DuelsScreen = lazy(async () => {
+    const module = await loadScreen(async () => import(`./screens/DuelsScreen`));
+    return { default: module.DuelsScreen };
+});
+const DuelScreen = lazy(async () => {
+    const module = await loadScreen(async () => import(`./screens/DuelScreen`));
+    return { default: module.DuelScreen };
+});
 const LadderScreen = lazy(async () => {
     const module = await loadScreen(async () => import(`./screens/LadderScreen`));
     return { default: module.LadderScreen };
@@ -106,7 +114,7 @@ interface NavEntry {
 // wordmark is the way home, so Home is a phone tab alone.
 const nav: readonly NavEntry[] = [
     { route: { name: `home` }, label: text.shell.nav.home, screens: [`home`], bar: false, phoneTab: true },
-    { route: { name: `play` }, label: text.shell.nav.play, screens: [`play`], bar: true, phoneTab: true },
+    { route: { name: `play` }, label: text.shell.nav.play, screens: [`play`, `duels`, `duel`], bar: true, phoneTab: true },
     { route: { name: `games` }, label: text.shell.nav.games, screens: [`games`, `live-games`], bar: true, phoneTab: true },
     { route: { name: `analysis` }, label: text.shell.nav.analysis, screens: [`analysis`], bar: true, phoneTab: true },
     { route: { name: `ladder` }, label: text.shell.nav.ladder, screens: [`ladder`, `tournaments`, `tournament`], bar: true, phoneTab: true },
@@ -239,6 +247,10 @@ function RouteView({ route }: { route: Route }) {
             return <HomeScreen />;
         case `play`:
             return <PlayScreen />;
+        case `duels`:
+            return <DuelsScreen />;
+        case `duel`:
+            return <DuelScreen id={route.id} />;
         case `ladder`:
             return <LadderScreen />;
         case `tournaments`:

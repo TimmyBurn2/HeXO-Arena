@@ -13,7 +13,7 @@ import { createTestApp, type TestApp } from './helpers';
 import { createQuery, type Query } from '../src/db';
 import { findBot } from '../src/bots';
 import { findChallenge } from '../src/challenge-store';
-import { insertBotGame } from '../src/game-store';
+import { countBotBotGamesSince, countPairBotGamesSince, insertBotGame } from '../src/game-store';
 
 const turnControl = { mode: `turn` as const, turnTimeMs: 30_000 };
 const unlimitedControl = { mode: `unlimited` as const };
@@ -482,22 +482,47 @@ describe('the bot-vs-bot challenge inbox', () => {
         expect(offers()).toHaveLength(2);
     });
 
-    it('refuses a target the challenger owner also owns', async () => {
-        const firstCookie = await arena.login(`firstowner`);
-        // The login resumes the owner, so the new bot shares it.
-        const sibling = await arena.createBot(firstCookie, `siblingbot`);
-        const own = await arena.challenge(first.token, `siblingbot`, {
-            timeControl: turnControl,
-            requestId: `req-1`,
-        });
-        expect(own.status).toBe(403);
-        expect(json(own)).toMatchObject({ code: `own_bot` });
-        const self = await arena.challenge(sibling, `siblingbot`, {
-            timeControl: turnControl,
-            requestId: `req-2`,
-        });
-        expect(self.status).toBe(403);
-        expect(json(self)).toMatchObject({ code: `own_bot` });
+    it('plays a challenge between two bots of one owner as an unrated test, telling both rated false, outside the daily game caps', async () => {
+        const sibling = await arena.bot(await arena.createBot(await arena.login(`firstowner`), `siblingbot`));
+        for (let i = 0; i < 20; i += 1) arena.seedBotGame(`firstbot`, `siblingbot`);
+        const created = await arena.challenge(first.token, `siblingbot`, { timeControl: turnControl, requestId: `req-own` });
+        expect(created.status).toBe(201);
+        const accepted = await arena.accept(sibling.token, challengeSchema.parse(json(created)).challengeId);
+        expect(accepted.status).toBe(200);
+        const starts = [await eventOn(first.stream, `gameStart`), await eventOn(sibling.stream, `gameStart`)];
+        expect(starts.map((start) => [start.opponent.name, start.rated])).toEqual([
+            [`siblingbot`, false],
+            [`firstbot`, false],
+        ]);
+        const gameId = starts[0]?.gameId ?? ``;
+        expect(arena.sqlite.prepare(`select unrated_by_choice as unrated, test from games where id = ?`).get(gameId)).toEqual({ unrated: 1, test: 1 });
+        const ids = [`firstbot`, `siblingbot`].map((name) => findBot(arena.query, nameKeyOf(name))?.id ?? ``);
+        expect(countPairBotGamesSince(arena.query, { one: ids[0] ?? ``, two: ids[1] ?? `` }, 0)).toBe(20);
+        expect(countBotBotGamesSince(arena.query, ids[1] ?? ``, 0)).toBe(20);
+        sibling.stream.close();
+    });
+
+    it('counts a challenge between two bots of one owner toward the challenger\'s daily challenges', async () => {
+        const sibling = await arena.bot(await arena.createBot(await arena.login(`firstowner`), `siblingbot`));
+        const firstBotId = findBot(arena.query, nameKeyOf(`firstbot`))?.id ?? ``;
+        const secondBotId = findBot(arena.query, nameKeyOf(`secondbot`))?.id ?? ``;
+        const now = Math.floor(Date.now() / 1000);
+        const seed = arena.sqlite.prepare(
+            `insert into challenges (id, challenger_bot_id, dest_bot_id, request_key, time_control, opening_plies, first_player, status, created_at, decided_at)
+             values (?, ?, ?, ?, '{"mode":"unlimited"}', 5, 'random', 'declined', ?, ?)`,
+        );
+        for (let sent = 0; sent < challengeDailyCap - 1; sent += 1) seed.run(`c_seed_${String(sent)}`, firstBotId, secondBotId, `seed-${String(sent)}`, now, now);
+        expect((await arena.challenge(first.token, `siblingbot`, { timeControl: turnControl, requestId: `req-own` })).status).toBe(201);
+        const capped = await arena.challenge(first.token, `secondbot`, { timeControl: turnControl, requestId: `req-over` });
+        expect(capped.status).toBe(429);
+        expect(json(capped)).toMatchObject({ code: `daily_challenge_cap` });
+        sibling.stream.close();
+    });
+
+    it('refuses a bot challenging itself as a bad request', async () => {
+        const self = await arena.challenge(first.token, `firstbot`, { timeControl: turnControl, requestId: `req-self` });
+        expect(self.status).toBe(400);
+        expect(json(self)).toMatchObject({ code: `bad_request` });
     });
 
     it('refuses a target that is not online and open and one outside its accepts', async () => {

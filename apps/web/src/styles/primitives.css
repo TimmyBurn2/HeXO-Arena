@@ -401,6 +401,7 @@
        column when large text leaves less. */
     input[type='text'],
     input[type='email'],
+    input[type='search'],
     input[type='date'],
     select,
     textarea {

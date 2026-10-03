@@ -33,6 +33,15 @@ export const liveGameListCap = 12;
 // so a crowd of pollers costs one serialization a window.
 export const liveGameListMemoMs = 1_000;
 
+// Not strict: the list answered any query before it read one.
+export const liveGamesQuerySchema = z.object({
+    tests: z
+        .literal(`1`)
+        .optional()
+        .meta({ param: { description: `Present as 1, tests are listed beside the other games; else they are left out.` } }),
+});
+export type LiveGamesQuery = z.infer<typeof liveGamesQuerySchema>;
+
 /** A person's game opens on the origin alone unless the request asks for more; bot challenges and tournaments keep five. */
 export const defaultHumanOpeningPlies = 1;
 
@@ -50,15 +59,27 @@ export const createGameRequestSchema = z.object({
         .optional()
         .meta({
             default: true,
-            description: `False starts a signed-in caller's game unrated for both seats, and it counts toward no daily cap; a guest's game, or one at a level other than the bot's default, is unrated either way.`,
+            description: `False starts a signed-in caller's game unrated for both seats, and it counts toward no daily cap; a guest's game, one against the caller's own bot, or one at a level other than the bot's default, is unrated either way.`,
         }),
 });
 export type CreateGameRequest = z.infer<typeof createGameRequestSchema>;
 
-/** The mark on a game its signed-in player started unrated; a guest's game and practice at another level are unrated by their seats and never carry it. */
-export const unratedByChoiceSchema = z
-    .literal(true)
-    .meta({ id: `UnratedByChoice`, description: `Present when the person who started the game chose to play it unrated: it moves no rating and counts toward no daily cap.` });
+/**
+ * The mark on a game unrated by how it started: a signed-in person's game
+ * started unrated or against their own bot, a game of an unrated duel,
+ * and a challenge's game between two bots of one owner; a guest's game and
+ * practice at another level are unrated by their seats and never carry it.
+ */
+export const unratedByChoiceSchema = z.literal(true).meta({
+    id: `UnratedByChoice`,
+    description: `Present when the game was started unrated, alone or in a duel, or one owner holds both seats, a person facing their own bot or two bots of one owner: it moves no rating and counts toward no daily cap.`,
+});
+
+/** The mark on a test: a game one person holds on both sides, which is never rated. */
+export const testMarkSchema = z.literal(true).meta({
+    id: `TestMark`,
+    description: `Present when one person holds both seats: their own bot against them, or two bots they own, alone or in a test. Never rated; lists leave it out unless asked.`,
+});
 
 // The clock at the moment of the read, mirroring the time-control modes.
 // Match clocks are keyed by side; remaining values never go below zero.
@@ -101,6 +122,14 @@ export const gameTournamentSchema = z
     .meta({ id: `GameTournament`, description: `The tournament a game belongs to: its round, and which of the pairing's two games it is.` });
 export type GameTournament = z.infer<typeof gameTournamentSchema>;
 
+/** The most games a duel plays, a test's most. */
+export const duelGamesMax = 50;
+
+export const gameDuelSchema = z
+    .object({ id: z.string(), game: z.number().int().min(1).max(duelGamesMax), of: z.number().int().min(1).max(duelGamesMax) })
+    .meta({ id: `GameDuel`, description: `The duel a game belongs to: which of its games this is, and how many it plays.` });
+export type GameDuel = z.infer<typeof gameDuelSchema>;
+
 const snapshotBase = {
     gameId: z.string(),
     players: gamePlayersSchema,
@@ -109,7 +138,9 @@ const snapshotBase = {
     board: gameBoardSchema,
     timeControl: timeControlSchema,
     tournament: gameTournamentSchema.optional(),
+    duel: gameDuelSchema.optional(),
     unratedByChoice: unratedByChoiceSchema.optional(),
+    test: testMarkSchema.optional(),
 };
 
 export const gameSnapshotSchema = z
@@ -149,12 +180,37 @@ export const liveGameEntrySchema = z
         rated: z.boolean(),
         cells: z.array(gameCellSchema).min(1).meta({ description: `Every stone in ply order, the opening included.` }),
         clock: gameClockSchema,
+        duel: gameDuelSchema.optional(),
+        test: testMarkSchema.optional(),
     })
     .meta({
         id: `LiveGameEntry`,
-        description: `A game in progress, its board and clock as its snapshot states them; a game with a guest seat, a bot at a level other than its default, or its player's choice to play unrated, is unrated.`,
+        description: `A game in progress, its board and clock as its snapshot states them; a game with a guest seat, a bot at a level other than its default, one started unrated, alone or in a duel, or one whose seats one owner holds, is unrated.`,
     });
 export type LiveGameEntry = z.infer<typeof liveGameEntrySchema>;
+
+/** The turn clock a game the server schedules between bots takes, a tournament's or a duel's, and its default. */
+export const scheduledTurnMs = { min: 5_000, max: 60_000, default: 10_000 } as const;
+
+/** The match clock a scheduled game takes: main time and increment. */
+export const scheduledMainMs = { min: 60_000, max: 600_000 } as const;
+export const scheduledIncrementMs = { min: 0, max: 10_000 } as const;
+
+/**
+ * A scheduled game's clock: a turn or match clock in the bounds, never
+ * unlimited, which could hold two bots a whole day a game.
+ */
+export const scheduledClockSchema = timeControlSchema.refine(
+    (clock: TimeControl) =>
+        clock.mode === `turn`
+            ? clock.turnTimeMs >= scheduledTurnMs.min && clock.turnTimeMs <= scheduledTurnMs.max
+            : clock.mode === `match` &&
+              clock.mainTimeMs >= scheduledMainMs.min &&
+              clock.mainTimeMs <= scheduledMainMs.max &&
+              clock.incrementMs >= scheduledIncrementMs.min &&
+              clock.incrementMs <= scheduledIncrementMs.max,
+    { message: `a turn clock of 5 to 60 s, or a match clock of 1 to 10 min plus 0 to 10 s` },
+);
 
 // Exactly two placements per turn, always; the first stone ever placed is
 // the origin and the server places it.
@@ -170,8 +226,9 @@ export const gameCreateErrorCodes = [`human_busy`, `not_open`, `clock_not_accept
 // the daily pair cap one human and one bot share; waiting lifts either,
 // so both answer 429.
 export const gameLimitErrorCodes = [`game_cooldown`, `daily_pair_cap`] as const;
-// A delisted bot takes no new games from humans either, and no bot takes
-// one from its own owner.
+// A delisted bot takes no new games from humans either. own_bot is never
+// sent, since an owner's game against their own bot plays unrated, and
+// stays listed so the code a client knows keeps its place.
 export const gameCreateForbiddenErrorCodes = [`own_bot`, `delisted`] as const;
 export const gameMoveErrorCodes = [
     `not_your_turn`,

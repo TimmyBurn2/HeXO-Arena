@@ -20,9 +20,20 @@ const glyphBox = `${String(-halfWidth)} ${String(-cellSize)} ${String(2 * halfWi
  * rating belongs to its default; nor does a game its player started
  * unrated, which says so.
  */
-export function Rundown({ players, unratedByChoice, data, meetings, onHide }: {
+/** How a game was started unrated: a person's choice, a duel's, or a test, where one person holds both sides. */
+export type UnratedBy = `choice` | `duel` | `test`;
+
+/** The mark a snapshot carries, as the rundown says it. */
+export function unratedByOf(snapshot: { readonly unratedByChoice?: true | undefined; readonly test?: true | undefined; readonly duel?: unknown }): UnratedBy | null {
+    if (snapshot.test === true) return `test`;
+    if (snapshot.unratedByChoice !== true) return null;
+    return snapshot.duel === undefined ? `choice` : `duel`;
+}
+
+export function Rundown({ players, unratedBy, data, meetings, onHide }: {
     players: GamePlayers;
-    unratedByChoice: boolean;
+    // How the game was started unrated, if it was: by a person's choice, as a duel, or as a test.
+    unratedBy: UnratedBy | null;
     // Null while the records load; the names and the seats' ratings stand meanwhile.
     data: RundownSides | null;
     // The two players' meetings, or null where another line already says them.
@@ -31,9 +42,9 @@ export function Rundown({ players, unratedByChoice, data, meetings, onHide }: {
     onHide?: () => void;
 }) {
     const titleId = useId();
-    const rated = !seatsRateNobody(players) && !unratedByChoice;
+    const rated = !seatsRateNobody(players) && unratedBy === null;
     const practice = [players.x, players.o].some((player) => player.level !== undefined);
-    const unrated = practice ? text.rundown.practice : unratedByChoice ? text.rundown.unratedByChoice : null;
+    const unrated = practice ? text.rundown.practice : unratedBy === null ? null : text.rundown.unratedBy[unratedBy];
     return (
         <section className="rundown" aria-labelledby={titleId}>
             <div className="rundown-head">

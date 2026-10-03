@@ -61,6 +61,17 @@ describe('readinessOf', () => {
         ]);
         expect(readinessOf(bot(`blank`, 1500, { accepts: undefined }))).toBe(`nothing`);
     });
+
+    it('reads its owner\'s own bot as ready while online, open to others or not, and as anyone else reads it otherwise', () => {
+        const closed = bot(`pebble`, 1388, { openForChallenges: false, ownerName: `quinn` });
+        expect(readinessOf(closed, undefined, `quinn`)).toBe(`ready`);
+        expect(readinessOf(closed, undefined, `ana`)).toBe(`closed`);
+        expect(readinessOf(closed)).toBe(`closed`);
+        expect(readinessOf({ ...closed, online: false }, undefined, `quinn`)).toBe(`offline`);
+        expect(readinessOf({ ...closed, accepts: undefined }, undefined, `quinn`)).toBe(`nothing`);
+        expect(readinessOf({ ...closed, liveGames: 4 }, undefined, `quinn`)).toBe(`busy`);
+        expect(readinessOf(closed, new Set([`pebble`]), `quinn`)).toBe(`tournament`);
+    });
 });
 
 describe('rosterOf', () => {
@@ -98,6 +109,14 @@ describe('preselect', () => {
         expect(preselect(bots, null, null, 1500)?.name).toBe(`devbot-c`);
         expect(preselect(bots, null, null, null)?.name).toBe(`quietlake`);
         expect(preselect([bot(`low`, 1400), bot(`high`, 1600)], null, null, 1500)?.name).toBe(`high`);
+    });
+
+    it('opens on another\'s ready bot before the viewer\'s own, and on the own one when no other is ready', () => {
+        const own = [bot(`mine`, 1500, { ownerName: `quinn`, openForChallenges: false }), bot(`theirs`, 1300)];
+        expect(preselect(own, null, null, 1500, undefined, `quinn`)?.name).toBe(`theirs`);
+        expect(preselect(own, null, `mine`, 1500, undefined, `quinn`)?.name).toBe(`mine`);
+        expect(preselect(own.slice(0, 1), null, null, 1500, undefined, `quinn`)?.name).toBe(`mine`);
+        expect(rosterOf(own, [], undefined, `quinn`).ready.map((entry) => entry.name)).toEqual([`mine`, `theirs`]);
     });
 
     it('falls back to a busy bot, and to nothing when none is ready or busy', () => {

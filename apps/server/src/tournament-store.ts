@@ -9,15 +9,8 @@ import {
 import { and, asc, count, eq, inArray, isNull, sql } from 'drizzle-orm';
 import type { Query } from './db';
 import { tournamentEntries, tournaments } from './db/schema';
-import { randomIndex } from './random';
+import { shortId } from './random';
 
-// Lowercase letters and digits without the look-alikes, as a tournament's
-// address carries them.
-const idAlphabet = `abcdefghijkmnopqrstuvwxyz0123456789`;
-
-function tournamentId(): string {
-    return `t_${Array.from({ length: 12 }, () => idAlphabet[randomIndex(idAlphabet.length)] ?? `a`).join(``)}`;
-}
 
 export interface NewTournament {
     readonly name: string;
@@ -43,7 +36,7 @@ export function createTournament(query: Query, tournament: NewTournament, now: n
     if (tournament.startsAt * 1000 > now * 1000 + tournamentHorizonMs) return { kind: `too_far` };
     const waiting = query.select({ n: count() }).from(tournaments).where(eq(tournaments.status, `scheduled`)).get()?.n ?? 0;
     if (waiting >= tournamentWaitingCap) return { kind: `waiting_full` };
-    const id = tournamentId();
+    const id = shortId(`t_`);
     query
         .insert(tournaments)
         .values({

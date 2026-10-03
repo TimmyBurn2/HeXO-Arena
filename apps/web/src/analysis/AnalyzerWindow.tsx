@@ -28,19 +28,22 @@ export interface WindowReading {
 
 /**
  * The analyzer window over the move list: its head names the analyzer and where its reading stands,
+ * and says so when the analyzer's owner played in the stored game whose reading it shows,
  * beside the Analyze switch and the settings gear; then the readings to pick from,
  * a stored game's course as a graph or where a reading of it stands, each side's marks,
  * the explanation of the turn shown, and line A with the others folded.
  * On a phone it folds into a strip of the graph, the switch, and the gear, the explanation one paragraph under it.
  * Signed out, stored readings still show; only asking needs a sign-in.
  */
-export function AnalyzerWindow({ signedIn, analyzing, onAnalyzing, settings, shown, pills, activePill, onPill, graph, card, counts, explanation, onPreview, onPlay, onPreferred, onPlayPreferred, onAsk, wait }: {
+export function AnalyzerWindow({ signedIn, analyzing, onAnalyzing, settings, shown, involved, pills, activePill, onPill, graph, card, counts, explanation, onPreview, onPlay, onPreferred, onPlayPreferred, onAsk, wait }: {
     // Null until the page knows who the person is.
     signedIn: boolean | null;
     analyzing: boolean;
     onAnalyzing: (on: boolean) => void;
     settings: ReactNode;
     shown: WindowReading;
+    // What the head and the explanation say of a reading by an analyzer whose owner played, where each shows that reading.
+    involved: { readonly head: string | null; readonly explanation: string | null };
     pills: readonly ReadingPill[];
     activePill: string | null;
     onPill: (pill: ReadingPill) => void;
@@ -65,7 +68,14 @@ export function AnalyzerWindow({ signedIn, analyzing, onAnalyzing, settings, sho
     let who: ReactNode = null;
     if (unreadable !== null) who = <p className="an-win-quiet">{unreadableText(unreadable)}</p>;
     else if (silent && signedIn !== null) who = <p className="an-win-quiet">{signedIn ? reading.off : reading.signedOut}</p>;
-    else if (signedIn !== null) who = <AnalyzerHead analyzer={analyzer} entry={entry} analyzing={analyzing} toMove={toMove} />;
+    else if (signedIn !== null) {
+        who = (
+            <>
+                <AnalyzerHead analyzer={analyzer} entry={entry} analyzing={analyzing} toMove={toMove} />
+                {involved.head === null ? null : <p className="an-win-quiet an-involved">{involved.head}</p>}
+            </>
+        );
+    }
     const troubled = trouble === null || unreadable !== null ? null : <Trouble state={trouble} analyzer={analyzer} onAsk={onAsk} wait={wait} />;
     // A reading in hand stays, whatever became of a later ask.
     const lineRow = lines.length > 0 ? <Lines lines={lines} toMove={toMove} onPreview={onPreview} onPlay={onPlay} /> : held ? <HeldLine toMove={toMove} note={heldNote(analyzer, entry, analyzing)} /> : null;
@@ -116,7 +126,7 @@ export function AnalyzerWindow({ signedIn, analyzing, onAnalyzing, settings, sho
             {graph === null ? null : <div className="an-win-graph">{graph}</div>}
             {card === null ? null : <div className="an-win-card">{card}</div>}
             {counts === null ? null : <div className="an-win-counts">{counts}</div>}
-            {explanation === null ? null : <Bubble explanation={explanation} onPreferred={onPreferred} onPlay={onPlayPreferred} />}
+            {explanation === null ? null : <Bubble explanation={explanation} involved={involved.explanation} onPreferred={onPreferred} onPlay={onPlayPreferred} />}
             {troubled}
             {lineRow}
             {signIn}
@@ -125,8 +135,14 @@ export function AnalyzerWindow({ signedIn, analyzing, onAnalyzing, settings, sho
 }
 
 // The explanation of the turn shown, edged in its severity's color: a head and the text under it,
-// or on a phone one paragraph, the verdict or the turn's name joined to the text.
-function Bubble({ explanation, onPreferred, onPlay }: { explanation: Explanation; onPreferred: (line: PreferredLine | null) => void; onPlay: (line: PreferredLine) => void }) {
+// or on a phone one paragraph, the verdict or the turn's name joined to the text;
+// under either, whether the analyzer's owner played.
+function Bubble({ explanation, involved, onPreferred, onPlay }: {
+    explanation: Explanation;
+    involved: string | null;
+    onPreferred: (line: PreferredLine | null) => void;
+    onPlay: (line: PreferredLine) => void;
+}) {
     const { severity, verdict, title, head, joiner, text: said, inline, line, tail } = explanation;
     if (title === null && said === ``) return null;
     // The text as it stands alone under the head, or as it runs on after the verdict on a phone.
@@ -197,6 +213,7 @@ function Bubble({ explanation, onPreferred, onPlay }: { explanation: Explanation
                     )}
                 </span>
             </p>
+            {involved === null ? null : <p className="an-bubble-involved">{involved}</p>}
         </div>
     );
 }

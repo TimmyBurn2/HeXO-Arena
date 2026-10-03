@@ -420,6 +420,12 @@
         background: var(--c-border-strong);
     }
 
+    /* Why the switch stands off sits under it, read with it. */
+    .rated-row .rated-line {
+        margin: var(--space-1) 0 0;
+        max-width: var(--measure);
+    }
+
     /* The opening: one quiet row, shut until asked. */
     .opening {
         padding-top: var(--space-3);

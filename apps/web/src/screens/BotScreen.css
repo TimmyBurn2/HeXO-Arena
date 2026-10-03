@@ -98,6 +98,13 @@
         font-size: var(--text-base);
     }
 
+    /* The group naming the clocks stands where their list would. */
+    .accepts-group {
+        display: flex;
+        align-self: stretch;
+        min-width: 0;
+    }
+
     /* A hairline parts the clocks from the action and its reason. */
     .accepts-line {
         display: flex;

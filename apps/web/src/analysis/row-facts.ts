@@ -1,4 +1,4 @@
-import { valueWords, type AxialCoord, type Judgment, type Side } from '@hexo-arena/contract';
+import { valueWords, type AxialCoord, type Judgment, type Side, type ValueText } from '@hexo-arena/contract';
 import { afterWords } from './reading-view';
 import type { Reading } from './sources';
 import { nodeAt, type MoveTree, type NodeId, type TurnNode } from './tree';
@@ -6,7 +6,7 @@ import { nodeAt, type MoveTree, type NodeId, type TurnNode } from './tree';
 /** What a move tree row says beside its turn: a reading's verdict on it, and the value after it. */
 export interface RowFact {
     readonly judgment: Judgment | null;
-    readonly value: string | null;
+    readonly value: ValueText | null;
 }
 
 /**
@@ -26,10 +26,10 @@ export function rowFacts(tree: MoveTree, read: (key: string, sourceId: string) =
     return facts;
 }
 
-function valueAfter(node: TurnNode, parentKey: string, read: (key: string, sourceId: string) => Reading | null, sourceFor: (side: Side) => string): string | null {
+function valueAfter(node: TurnNode, parentKey: string, read: (key: string, sourceId: string) => Reading | null, sourceFor: (side: Side) => string): ValueText | null {
     const before = read(parentKey, sourceFor(node.side));
     // A six is won whatever the reading, but says so only where the source read the position it was played from.
-    if (node.win !== null) return before === null ? null : valueWords({}, { kind: `line`, mover: node.side, completesSix: true });
+    if (node.win !== null) return before === null ? null : valueWords({}, { kind: `line`, mover: node.side, completesSix: true }, before.values);
     const listed = before?.lines.find((line) => sameCells(line.cells, node.cells));
     if (listed !== undefined && before !== null) return afterWords({ kind: `played`, evaluation: listed.evaluation }, before.values);
     const next: Side = node.side === `x` ? `o` : `x`;

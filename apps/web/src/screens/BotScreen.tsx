@@ -1,6 +1,9 @@
-import { Fragment, useCallback } from 'react';
+import { Fragment, useCallback, useId } from 'react';
 import { analysisPagePath, botMeta, levelFacts, nameKeyOf, notFoundMeta, type Accepts, type Analyzer, type BotListing, type Levels, type LiveGameEntry } from '@hexo-arena/contract';
 import { fetchBots } from '../api/client';
+import { BotDuels } from '../duels/BotDuels';
+import { duelsPath, pickReason } from '../duels/setup';
+import { useDuelStates } from '../duels/use-duels';
 import { useAsync } from '../api/use-async';
 import { OwnerPanel } from '../components/OwnerPanel';
 import { ReportLine } from '../components/ReportLine';
@@ -12,7 +15,7 @@ import { useLiveReplay } from '../live/use-live-replay';
 import { BotBadge, OpenTag, PlayerName, PresenceDot, Rating } from '../components/player';
 import { useMe } from '../me';
 import { turnWindowOf } from '../play/accepts';
-import { playBotPath, readinessOf, type Readiness } from '../play/setup';
+import { ownedBy, playBotPath, readinessOf, type Readiness } from '../play/setup';
 import { ErrorFrame, SkeletonRows } from '../components/states';
 import { Link } from '../router/Link';
 import { botApiRepository } from '../site-links';
@@ -51,7 +54,7 @@ export function BotScreen({ name }: { name: string }) {
     if (data !== null && bot === undefined) return <MissingBot name={name} />;
     if (bot === undefined) return null;
 
-    return <BotProfile bot={bot} />;
+    return <BotProfile bot={bot} onChanged={reload} />;
 }
 
 function MissingBot({ name }: { name: string }) {
@@ -67,10 +70,15 @@ function MissingBot({ name }: { name: string }) {
     );
 }
 
-function BotProfile({ bot }: { bot: BotListing }) {
+function BotProfile({ bot, onChanged }: { bot: BotListing; onChanged: () => void }) {
     const me = useMe();
-    const owned = me.status === `ready` && me.me?.kind === `user` && me.me.name === bot.ownerName;
-    const readiness = readinessOf(bot);
+    const ids = useId();
+    const duelStates = useDuelStates();
+    const duelState = duelStates.states.find((state) => nameKeyOf(state.name) === nameKeyOf(bot.name)) ?? null;
+    const viewer = me.status === `ready` && me.me?.kind === `user` ? me.me.name : null;
+    const owned = ownedBy(bot, viewer);
+    // The owner plays their own bot while it is online, open to others or not.
+    const readiness = readinessOf(bot, duelStates.reserved, viewer);
     const blockedReasons = {
         busy: text.play.busy,
         tournament: text.play.inTournament,
@@ -78,6 +86,11 @@ function BotProfile({ bot }: { bot: BotListing }) {
         closed: text.bot.closedReason,
         nothing: text.bot.noClockReason,
     };
+    // Start a duel opens a setup only for a bot the picker would add, and says why not as the picker does;
+    // beside no other bot, no reason is a pair's.
+    const duelWhy = pickReason(bot, null, { reserved: duelStates.reserved, states: duelStates.states, viewer });
+    const duelReason = duelWhy === null || duelWhy === `pair` || duelWhy === `clock` ? null : text.duels.picker.reasons[duelWhy];
+    const reason = readiness !== `ready` ? blockedReasons[readiness] : duelReason;
 
     return (
         <>
@@ -109,15 +122,26 @@ function BotProfile({ bot }: { bot: BotListing }) {
                                     {text.bot.play(bot.name)}
                                 </Link>
                             ) : (
-                                <>
-                                    <button type="button" className="btn btn-primary" disabled>
-                                        {text.bot.play(bot.name)}
-                                    </button>
-                                    <span className="note play-reason">{blockedReasons[readiness]}</span>
-                                </>
+                                <button type="button" className="btn btn-primary" disabled aria-describedby={`${ids}-why`}>
+                                    {text.bot.play(bot.name)}
+                                </button>
+                            )}
+                            {duelReason === null ? (
+                                <Link to={duelsPath(bot.name)} className="btn btn-ghost">
+                                    {text.duels.bot.start}
+                                </Link>
+                            ) : (
+                                <button type="button" className="btn btn-ghost" disabled aria-describedby={`${ids}-why`}>
+                                    {text.duels.bot.start}
+                                </button>
+                            )}
+                            {reason === null ? null : (
+                                <span className="note play-reason" id={`${ids}-why`}>
+                                    {reason}
+                                </span>
                             )}
                         </div>
-                        <AcceptsLine accepts={bot.accepts} owned={owned} />
+                        <AcceptsLine accepts={bot.accepts} owned={owned} byOthers={duelState?.duelsByOthers ?? null} />
                     </div>
                 </header>
             </div>
@@ -126,54 +150,65 @@ function BotProfile({ bot }: { bot: BotListing }) {
             {bot.levels === null ? null : <StrengthRows bot={bot.name} levels={bot.levels} readiness={readiness} />}
             <BotDetails bot={bot} />
             <PlayingNow bot={bot.name} />
+            <BotDuels bot={bot.name} owner={bot.ownerName} />
             <PlayerBlocks name={bot.name} />
             <PlayerHistory player={bot.name} title={text.games.recent} />
-            {owned ? <OwnerPanel bot={bot.name} /> : null}
+            {owned ? <OwnerPanel bot={bot.name} onChanged={onChanged} /> : null}
             <ReportLine subject={`/bots/${encodeURIComponent(bot.name)}`} name={bot.name} />
         </>
     );
 }
 
-// The pairs carry no visible heading beside Play, so the group names them.
-function AcceptsLine({ accepts, owned }: { accepts: Accepts | undefined; owned: boolean }) {
-    if (accepts === undefined) {
-        return (
-            <dl className="accepts-line" role="group" aria-label={text.bot.accepts}>
-                <div>
-                    <dt>{text.bot.accepts}</dt>
-                    {owned ? (
-                        <dd>
-                            <p className="accepts-help">
-                                {text.bot.acceptsNothingOwner((words) => (
-                                    <a href={botApiRepository} rel="noreferrer" target="_blank">
-                                        {words}
-                                    </a>
-                                ))}
-                            </p>
-                        </dd>
-                    ) : (
-                        <dd>{text.bot.acceptsNothing}</dd>
-                    )}
-                </div>
-            </dl>
+// The pairs carry no visible heading beside Play, so a group around the
+// list names them; the list keeps its own role, so its pairs stay its items.
+function AcceptsLine({ accepts, owned, byOthers }: { accepts: Accepts | undefined; owned: boolean; byOthers: boolean | null }) {
+    const duels =
+        byOthers === null ? null : (
+            <div>
+                <dt>{text.duels.bot.byOthers}</dt>
+                <dd>{byOthers ? text.duels.bot.on : text.duels.bot.off}</dd>
+            </div>
         );
-    }
-    const window = turnWindowOf(accepts);
+    const window = accepts === undefined ? null : turnWindowOf(accepts);
     return (
-        <dl className="accepts-line" role="group" aria-label={text.bot.accepts}>
-            <div>
-                <dt>{text.bot.turnClock}</dt>
-                <dd>{window === null ? text.bot.no : text.bot.turnWindow(window[0] / 1000, window[1] / 1000)}</dd>
-            </div>
-            <div>
-                <dt>{text.bot.matchClock}</dt>
-                <dd>{accepts.match ? text.bot.yes : text.bot.no}</dd>
-            </div>
-            <div>
-                <dt>{text.bot.unlimited}</dt>
-                <dd>{accepts.unlimited ? text.bot.yes : text.bot.no}</dd>
-            </div>
-        </dl>
+        <div className="accepts-group" role="group" aria-label={text.bot.accepts}>
+            <dl className="accepts-line">
+                {accepts === undefined ? (
+                    <div>
+                        <dt>{text.bot.accepts}</dt>
+                        {owned ? (
+                            <dd>
+                                <p className="accepts-help">
+                                    {text.bot.acceptsNothingOwner((words) => (
+                                        <a href={botApiRepository} rel="noreferrer" target="_blank">
+                                            {words}
+                                        </a>
+                                    ))}
+                                </p>
+                            </dd>
+                        ) : (
+                            <dd>{text.bot.acceptsNothing}</dd>
+                        )}
+                    </div>
+                ) : (
+                    <>
+                        <div>
+                            <dt>{text.bot.turnClock}</dt>
+                            <dd>{window === null ? text.bot.no : text.bot.turnWindow(window[0] / 1000, window[1] / 1000)}</dd>
+                        </div>
+                        <div>
+                            <dt>{text.bot.matchClock}</dt>
+                            <dd>{accepts.match ? text.bot.yes : text.bot.no}</dd>
+                        </div>
+                        <div>
+                            <dt>{text.bot.unlimited}</dt>
+                            <dd>{accepts.unlimited ? text.bot.yes : text.bot.no}</dd>
+                        </div>
+                    </>
+                )}
+                {duels}
+            </dl>
+        </div>
     );
 }
 

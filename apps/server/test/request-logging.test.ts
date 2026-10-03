@@ -289,6 +289,28 @@ describe('request logging', () => {
         expect(logs).not.toContain(`hxo_`);
     });
 
+    it('keeps a stream\'s User-Agent out of the logs while logging its route', async () => {
+        const login = await request(port, `POST`, `/api/dev/login`, { 'content-type': `application/json` }, JSON.stringify({ name: `botowner` }));
+        const owner = login.setCookie[0]?.split(`;`)[0] ?? ``;
+        const created = await request(port, `POST`, `/api/bots`, { cookie: owner, 'content-type': `application/json` }, `{"name":"agentbot"}`);
+        const token = botWithTokenSchema.parse(JSON.parse(created.text)).token;
+        const opened = await new Promise<http.ClientRequest>((resolve, reject) => {
+            const stream = http.get(
+                { host: `127.0.0.1`, port, path: `/api/bot/stream`, headers: { authorization: `Bearer ${token}`, 'user-agent': `hexo-bridge/0.3.0 agentmarker` } },
+                (response) => {
+                    expect(response.statusCode).toBe(200);
+                    resolve(stream);
+                },
+            );
+            stream.on(`error`, reject);
+        });
+        opened.destroy();
+
+        expect(sink.records()).toContainEqual(expect.objectContaining({ req: { method: `GET`, route: `/api/bot/stream` } }));
+        expect(sink.text()).not.toContain(`agentmarker`);
+        expect(sink.text()).not.toContain(`hexo-bridge`);
+    });
+
     it('refuses an upgrade to an ordinary route without logging its path, while the engine socket opens', async () => {
         const shell = await upgradeStatus(`ws://127.0.0.1:${String(port)}/bots/upgrademarker`);
         const api = await upgradeStatus(`ws://127.0.0.1:${String(port)}/api/leaderboard?kind=upgradequerymarker`);

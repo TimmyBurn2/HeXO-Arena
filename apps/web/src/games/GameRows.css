@@ -102,6 +102,14 @@
         margin-left: var(--space-2);
     }
 
+    /* A game's place in its duel or test, under the result. */
+    .game-row-cap {
+        display: block;
+        color: var(--c-text-dim);
+        font-size: var(--text-xs);
+        font-weight: var(--weight-regular);
+    }
+
     .game-row-facts {
         grid-area: facts;
         display: flex;

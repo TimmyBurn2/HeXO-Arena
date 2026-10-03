@@ -138,7 +138,7 @@ export function forcedWin(evaluation: HtttxPositionEvaluation, view: ValueView):
 }
 
 /**
- * An evaluation from `side`'s view, rounded to hundredths as it is shown:
+ * An evaluation from `side`'s view, rounded to hundredths as judging compares it:
  * 1 or -1 for a forced win or loss, else the heuristic divided by `scale` and held to -1 to 1;
  * null when the evaluation holds neither.
  */
@@ -216,15 +216,24 @@ export function judgmentRuns(turns: Iterable<{ readonly turn: number; readonly j
     return runs;
 }
 
+/** A value in words: as it shows, and as a screen reader says it. */
+export interface ValueText {
+    readonly shown: string;
+    readonly spoken: string;
+}
+
 /**
- * An evaluation in words: `x 0.52`, `even` when it rounds to zero, `o wins in 3`,
- * or `x wins` for a line that completes six; null when it holds no value.
- * A heuristic beyond 1 prints as it is.
- * A forced win counts the winner's own turns from the position shown,
- * the line itself when the winner plays it.
+ * An evaluation in words, as `values` declare its heuristic reads; null when it holds no value.
+ * A forced win counts the winner's own turns from the position shown, the line itself when the winner plays it:
+ * `o wins in 3`, or `x wins` for a line that completes six.
+ * A heuristic is divided by its scale and held to -1 to 1.
+ * An expected one shows the leading side's win chance, (1 + v) / 2, in whole percent: `x 67%`,
+ * spoken `x's win chance 67 percent`; never 100, which only a forced win is.
+ * A raw one shows the side it favors and its size in hundredths: `o 0.33`.
+ * Either reads `even` where it rounds to no lead.
  */
-export function valueWords(evaluation: HtttxPositionEvaluation, view: ValueView): string | null {
-    if (view.kind === `line` && view.completesSix) return `${view.mover} wins`;
+export function valueWords(evaluation: HtttxPositionEvaluation, view: ValueView, values: AnalyzerValues): ValueText | null {
+    if (view.kind === `line` && view.completesSix) return said(`${view.mover} wins`);
     const winner = forcedWinner(evaluation);
     if (winner !== null) {
         // The board after a line has the other side to move; from either
@@ -232,13 +241,69 @@ export function valueWords(evaluation: HtttxPositionEvaluation, view: ValueView)
         // rounded up, is its own, plus the line when it is the winner's.
         const n = Math.abs(evaluation.win_in ?? 0);
         const own = Math.ceil(n / 2) + (view.kind === `line` && view.mover === winner ? 1 : 0);
-        return `${winner} wins in ${String(own)}`;
+        return said(`${winner} wins in ${String(own)}`);
     }
+    const value = scaledHeuristic(evaluation, values.scale);
+    if (value === null) return null;
+    if (values.meaning === `expected`) {
+        const chance = leadingChance(value);
+        if (chance === null) return said(`even`);
+        return { shown: `${chance.side} ${String(chance.percent)}%`, spoken: `${chance.side}'s win chance ${String(chance.percent)} percent` };
+    }
+    const shown = rounded(value);
+    if (shown === 0) return said(`even`);
+    return said(`${shown > 0 ? `x` : `o`} ${(Math.abs(shown) / 100).toFixed(2)}`);
+}
+
+/**
+ * How far `side`'s value fell from `best` to `after`, in words, as `valueWords` shows the two:
+ * points of the side's win chance between its whole percents, `6 points`, where the values are expected;
+ * hundredths of the scaled value, `0.12`, where they are raw.
+ * Null when either holds no value.
+ */
+export function valueDropWords(best: HtttxPositionEvaluation, after: HtttxPositionEvaluation, side: Side, values: AnalyzerValues): string | null {
+    if (values.meaning === `raw`) {
+        const before = sideHundredths(best, side, values.scale);
+        const now = sideHundredths(after, side, values.scale);
+        return before === null || now === null ? null : ((before - now) / 100).toFixed(2);
+    }
+    const before = sideChance(best, side, values.scale);
+    const now = sideChance(after, side, values.scale);
+    if (before === null || now === null) return null;
+    const points = before - now;
+    return `${String(points)} ${Math.abs(points) === 1 ? `point` : `points`}`;
+}
+
+function said(words: string): ValueText {
+    return { shown: words, spoken: words };
+}
+
+// The heuristic divided by its scale and held to -1 to 1, where its analyzer calls a position decided.
+function scaledHeuristic(evaluation: HtttxPositionEvaluation, scale: number): number | null {
     const heuristic = evaluation.heuristic;
     if (heuristic === undefined || !Number.isFinite(heuristic)) return null;
-    const shown = rounded(heuristic);
-    if (shown === 0) return `even`;
-    return `${shown > 0 ? `x` : `o`} ${(Math.abs(shown) / 100).toFixed(2)}`;
+    return Math.max(-1, Math.min(1, heuristic / scale));
+}
+
+// The highest win chance a heuristic shows, as only a forced win is certain.
+const winChanceShownMax = 99;
+
+// The leading side's win chance for an expected value, in whole percent, half a percent rounding away from 50;
+// null where it rounds to 50, which is no lead.
+function leadingChance(value: number): { readonly side: Side; readonly percent: number } | null {
+    const percent = Math.min(winChanceShownMax, Math.round(50 + 50 * Math.abs(value)));
+    return percent === 50 ? null : { side: value > 0 ? `x` : `o`, percent };
+}
+
+// `side`'s win chance in whole percent, as the leader's shows it: a forced win is certain.
+function sideChance(evaluation: HtttxPositionEvaluation, side: Side, scale: number): number | null {
+    const winner = forcedWinner(evaluation);
+    if (winner !== null) return winner === side ? 100 : 0;
+    const value = scaledHeuristic(evaluation, scale);
+    if (value === null) return null;
+    const chance = leadingChance(value);
+    if (chance === null) return 50;
+    return chance.side === side ? chance.percent : 100 - chance.percent;
 }
 
 const severestFirst: readonly JudgmentSeverity[] = [`blunder`, `mistake`, `inaccuracy`];
@@ -288,15 +353,14 @@ function valueDrop(best: HtttxPositionEvaluation, after: HtttxPositionEvaluation
     return severity === undefined ? null : { severity, reason: `value-drop`, turns: null };
 }
 
-// Values compare in whole hundredths, the precision they are shown at, so a
+// Values compare in whole hundredths, the precision a raw value shows, so a
 // cut never falls between what a reader sees and what was judged.
 function sideHundredths(evaluation: HtttxPositionEvaluation, side: Side, scale: number): number | null {
     const sign = side === `x` ? 1 : -1;
     const winner = forcedWinner(evaluation);
     if (winner !== null) return (winner === `x` ? 100 : -100) * sign;
-    const heuristic = evaluation.heuristic;
-    if (heuristic === undefined || !Number.isFinite(heuristic)) return null;
-    return rounded(Math.max(-1, Math.min(1, heuristic / scale))) * sign;
+    const value = scaledHeuristic(evaluation, scale);
+    return value === null ? null : rounded(value) * sign;
 }
 
 // Half a hundredth rounds away from zero, so x and o values mirror exactly.

@@ -16,6 +16,8 @@ import { BotBadge, PlayerName } from '../components/player';
 import { ErrorFrame, SkeletonRows } from '../components/states';
 import { TopbarPanel, usePanel } from '../components/TopbarPanel';
 import { activeKeys, gamesPathOf, pagePathOf, searchOf, viewOf, withFilter, type FilterKey, type GameFilters, type GamesView } from '../games/filters';
+import { useShowTests } from '../games/show-tests';
+import { ShowTests } from '../games/ShowTests';
 import { GameRows } from '../games/GameRows';
 import { GamesHead } from '../games/GamesHead';
 import { Link } from '../router/Link';
@@ -54,9 +56,9 @@ async function unknownName(filters: GameFilters): Promise<Extract<Load, { kind: 
     }
 }
 
-async function loadOf(view: GamesView): Promise<Load> {
+async function loadOf(view: GamesView, tests: boolean): Promise<Load> {
     try {
-        const page = await fetchFinishedGames(queryOf(view));
+        const page = await fetchFinishedGames({ ...queryOf(view), ...(tests ? { tests: `1` as const } : {}) });
         return { kind: `ready`, page, view, at: Date.now() };
     } catch (cause) {
         if (cause instanceof ApiError && cause.status === 404) return unknownName(view.filters);
@@ -65,14 +67,14 @@ async function loadOf(view: GamesView): Promise<Load> {
 }
 
 /** The page an address names; the last one stays on screen while the next loads. */
-function useGamesPage(search: string): { load: Load; busy: boolean; retry: () => void } {
+function useGamesPage(search: string, tests: boolean): { load: Load; busy: boolean; retry: () => void } {
     const [load, setLoad] = useState<Load>({ kind: `loading` });
     const [busy, setBusy] = useState(true);
     const [attempt, setAttempt] = useState(0);
     useEffect(() => {
         let cancelled = false;
         setBusy(true);
-        void loadOf(viewOf(search)).then((next) => {
+        void loadOf(viewOf(search), tests).then((next) => {
             if (cancelled) return;
             setLoad(next);
             setBusy(false);
@@ -80,7 +82,7 @@ function useGamesPage(search: string): { load: Load; busy: boolean; retry: () =>
         return () => {
             cancelled = true;
         };
-    }, [search, attempt]);
+    }, [search, tests, attempt]);
     const retry = useCallback(() => {
         setAttempt((count) => count + 1);
     }, []);
@@ -96,7 +98,8 @@ const keepHere = (event: SyntheticEvent) => {
 export function GamesScreen() {
     const search = useSearch();
     const view = useMemo(() => viewOf(search), [search]);
-    const { load, busy, retry } = useGamesPage(search);
+    const [tests, setTests] = useShowTests();
+    const { load, busy, retry } = useGamesPage(search, tests);
     const panel = usePanel(`games-filters`);
     const [seekBefore, setSeekBefore] = useState(false);
     const [turned, setTurned] = useState(false);
@@ -161,6 +164,7 @@ export function GamesScreen() {
                         {text.games.filters(counted)}
                     </button>
                 </form>
+                <ShowTests on={tests} onChange={setTests} />
                 <TopbarPanel
                     id="games-filters-panel"
                     className="games-panel"
@@ -195,7 +199,9 @@ export function GamesScreen() {
                 </TopbarPanel>
             </div>
             <Chips filters={filters} />
-            <p className="note games-note">{text.games.note}</p>
+            <p className="note games-note">
+                {text.games.note} {text.games.testsNote}
+            </p>
             <div aria-busy={busy}>
                 <Body
                     load={load}

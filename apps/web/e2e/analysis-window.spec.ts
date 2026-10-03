@@ -6,7 +6,7 @@ import { longReadings, serve, world, type World } from './mock-api';
 
 // The analyzer window over the move list: each state it passes through, the
 // explanation of the turn shown, and the strip it folds into on a phone.
-const review: AnalysisList = { analyses: [longReadings.kestrel, ...longReadings.own], optedOut: false };
+const review: AnalysisList = { analyses: [longReadings.kestrel, ...longReadings.own], optedOut: false, independentOnline: false };
 
 // Opens a page on a world the test keeps, so it can read the requests the page sent.
 async function open(page: Page, path: string, overrides: Partial<World> = {}, width = 1280, height = 800): Promise<World> {
@@ -48,6 +48,10 @@ test('with Analyze off and nothing read, the window is its head alone: how to ha
 
 test('a judged turn is explained as its analyzer\'s opinion, and the line it preferred shows on the board the turn was played from and plays as a variation', async ({ page }) => {
     const state = await open(page, `/analysis?game=long-finished&turn=22`, { analyses: { 'long-finished': review } });
+    // Turn 22 leaves o a six, so kestrel's line A, which leaves it and claims a win in 2, reads as the board's win in 1, as the row does.
+    await expect(page.locator(`.an-tree [aria-current="step"] .an-row-value`)).toHaveText(`o wins in 1`);
+    await expect(page.locator(`.an-line .an-value`).first()).toHaveText(`o wins in 1`);
+    await expect(page.locator(`.an-evalbar-chip`)).toHaveText(`o wins in 1`);
     await expect(page.locator(`.an-bubble`)).toHaveClass(/an-bubble-blunder/u);
     await expect(bubble(page).locator(`.an-bubble-head .jd-blunder`)).toHaveText(`??`);
     await expect(bubble(page).locator(`.an-bubble-title`)).toHaveText(`Blunder: left a six`);
@@ -80,11 +84,53 @@ test('a judged turn is explained as its analyzer\'s opinion, and the line it pre
     expect(axe.violations.map((violation) => violation.id)).toEqual([]);
 });
 
+test('a reading by an analyzer that played in the game says so in the head and under the explanation, and on a phone under the explanation alone', async ({ page }) => {
+    await open(page, `/analysis?game=long-finished&turn=22`, { analyses: { 'long-finished': { analyses: [longReadings.hextide, ...longReadings.own], optedOut: false, independentOnline: false } } });
+    await expect(win(page).locator(`.an-by`)).toHaveText(`hextideBOT`);
+    await expect(win(page).locator(`.an-involved`)).toHaveText(`hextide played in this game`);
+    await expect(bubble(page).locator(`.an-bubble-title`)).toHaveText(`Blunder: left a six`);
+    await expect(win(page).locator(`.an-bubble-involved`)).toHaveText(`hextide played in this game`);
+    // No independent analyzer is online, so nothing offers a second reading.
+    await expect(win(page).locator(`.an-win-card`)).toHaveCount(0);
+    await page.screenshot({ path: `e2e/shots/analysis-window-involved--ink--1280.png` });
+    const axe = await new AxeBuilder({ page }).include(`.an-window`).analyze();
+    expect(axe.violations.map((violation) => violation.id)).toEqual([]);
+    // The opening and the six speak for themselves, whoever read the game.
+    await page.keyboard.press(`End`);
+    await expect(win(page).locator(`.an-bubble-involved`)).toHaveCount(0);
+    await page.keyboard.press(`ArrowLeft`);
+    await expect(win(page).locator(`.an-bubble-involved`)).toHaveText(`hextide played in this game`);
+    await page.getByRole(`group`, { name: `Readings` }).getByRole(`button`, { name: `Own view` }).click();
+    await expect(win(page).locator(`.an-involved, .an-bubble-involved`)).toHaveCount(0);
+
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.getByRole(`group`, { name: `Readings` }).getByRole(`button`, { name: `hextide` }).click();
+    await expect(page.locator(`.an-win-who`)).toBeHidden();
+    await expect(page.locator(`.an-bubble-involved`)).toBeVisible();
+    await expect(page.locator(`.an-bubble-involved`)).toHaveText(`hextide played in this game`);
+    await page.screenshot({ path: `e2e/shots/analysis-window-involved--ink--390.png` });
+});
+
+test('a game read only by an analyzer whose owner played offers a reading by an independent analyzer, asked for by no name', async ({ page }) => {
+    const involved = { ...longReadings.kestrel, involved: true };
+    const state = await open(page, `/analysis?game=long-finished&turn=12`, { analyses: { 'long-finished': { analyses: [involved, ...longReadings.own], optedOut: false, independentOnline: true } } });
+    await expect(win(page).locator(`.an-involved`)).toHaveText(`Read by an analyzer of a player in this game`);
+    const card = win(page).locator(`.an-win-card`);
+    await expect(card.locator(`.dr-card-title`)).toHaveText(`An independent analyzer is online`);
+    await expect(card).toContainText(`10 of 10 requests left today.`);
+    await page.screenshot({ path: `e2e/shots/analysis-window-independent--ink--1280.png` });
+    const axe = await new AxeBuilder({ page }).include(`.an-window`).analyze();
+    expect(axe.violations.map((violation) => violation.id)).toEqual([]);
+    await card.getByRole(`button`, { name: `Ask an independent analyzer` }).click();
+    await expect(card).toHaveText(`Waiting for an analyzer; this game is next`);
+    expect(state.requested).toEqual([{ gameId: `long-finished`, request: {} }]);
+});
+
 test('an unjudged turn of a game read whole names the values before and after it and the line preferred, a lost side is not blamed, and the opening and the six say what they are', async ({ page }) => {
     await open(page, `/analysis?game=long-finished&turn=8`, { analyses: { 'long-finished': review } });
     await expect(bubble(page).locator(`.an-bubble-title`)).toHaveText(`Turn 8, hextide`);
     await expect(bubble(page).locator(`.an-bubble-meta`)).toHaveCount(0);
-    await expect(bubble(page).locator(`.an-bubble-text`)).toHaveText(new RegExp(`^${value(`x 0.10`)} before, ${value(`x 0.12`)} after; kestrel preferred x: \\[-?\\d+,-?\\d+\\] \\[-?\\d+,-?\\d+\\]\\.$`, `u`));
+    await expect(bubble(page).locator(`.an-bubble-text`)).toHaveText(new RegExp(`^${value(`x 55%`)} before, ${value(`x 56%`)} after; kestrel preferred x: \\[-?\\d+,-?\\d+\\] \\[-?\\d+,-?\\d+\\]\\.$`, `u`));
     // From turn 10 o holds sixes x cannot all block: x is lost, and never blamed for it.
     for (let turn = 8; turn < 12; turn += 1) await page.keyboard.press(`ArrowRight`);
     await expect(navWords(page)).toHaveText(`Turn 12 of 25`);
@@ -119,7 +165,7 @@ test('on a phone, line A\'s held place says who reads the position, which the st
 });
 
 test('a game nobody has read whole offers a request in the graph\'s place, says its turns are not judged yet, and waits for the analyzer the settings name', async ({ page }) => {
-    const state = await open(page, `/analysis?game=long-finished&turn=14`, { analyses: { 'long-finished': { analyses: [], optedOut: false } } });
+    const state = await open(page, `/analysis?game=long-finished&turn=14`, { analyses: { 'long-finished': { analyses: [], optedOut: false, independentOnline: false } } });
     const card = win(page).locator(`.an-win-card`);
     await expect(card.locator(`.an-request-text`)).toHaveText(`No reading of this game yet10 of 10 requests left today`);
     await expect(win(page).locator(`.an-win-graph, .an-win-counts`)).toHaveCount(0);
@@ -142,7 +188,7 @@ test('a game nobody has read whole offers a request in the graph\'s place, says 
 });
 
 test('a bot game nobody has read whole draws each bot\'s own view in the graph\'s place, the request under it', async ({ page }) => {
-    await open(page, `/analysis?game=long-finished&turn=14`, { analyses: { 'long-finished': { analyses: [...longReadings.own], optedOut: false } } });
+    await open(page, `/analysis?game=long-finished&turn=14`, { analyses: { 'long-finished': { analyses: [...longReadings.own], optedOut: false, independentOnline: false } } });
     await expect(win(page).locator(`.an-win-graph .graph-trace-x`)).toHaveCount(1);
     await expect(win(page).locator(`.an-win-graph .graph-trace-o`)).toHaveCount(1);
     await expect(win(page).getByRole(`button`, { name: `Request analysis` })).toBeVisible();
@@ -192,19 +238,21 @@ test('the keys walk a variation band turn by turn, into an alternative and back 
 });
 
 test('the graph pins forced wins to their edges apart from the trace, shades the turns that held one, brackets the run, and draws each analyzer\'s values as it declared them', async ({ page }) => {
-    await open(page, `/analysis?game=long-finished&turn=12`, { analyses: { 'long-finished': { analyses: [longReadings.kestrel, longReadings.driftwood, ...longReadings.own], optedOut: false } } });
+    await open(page, `/analysis?game=long-finished&turn=12`, { analyses: { 'long-finished': { analyses: [longReadings.kestrel, longReadings.driftwood, ...longReadings.own], optedOut: false, independentOnline: false } } });
     const graph = win(page).locator(`.an-win-graph`);
     await expect(graph.locator(`.graph-forced-o`)).not.toHaveCount(0);
     await expect(graph.locator(`.graph-hold-o`)).toHaveCount(8);
     await expect(graph.locator(`.graph-run`)).toHaveCount(1);
-    // kestrel declares its values x's expected result: drawn as win chances, the eval bar split at x's chance.
+    // kestrel declares its values x's expected result: drawn and worded as win chances, the eval bar split at x's chance.
     await expect(graph.locator(`.an-graph-meaning`)).toHaveText(`Win chances`);
-    await expect(page.locator(`.an-evalbar-chip`)).toHaveText(`x 0.28`);
+    await expect(page.locator(`.an-evalbar-chip`)).toHaveText(`x 64%`);
+    await expect(page.locator(`.an-line`).first()).toHaveAccessibleName(/^Play line A: x's win chance 64 percent, o: /u);
     await expect(page.locator(`.an-evalbar`)).toHaveAttribute(`style`, /--x-share: 64\.0%/u);
     // driftwood declares nothing: raw values, drawn within the inner band, so only a forced win reaches an edge.
     await page.getByRole(`group`, { name: `Readings` }).getByRole(`button`, { name: `driftwood` }).click();
     await expect(graph.locator(`.an-graph-meaning`)).toHaveText(`Raw values`);
     await expect(page.locator(`.an-evalbar-chip`)).toHaveText(`x 0.22`);
+    await expect(page.locator(`.an-line`).first()).toHaveAccessibleName(/^Play line A: x 0\.22, o: /u);
     await expect(page.locator(`.an-evalbar`)).toHaveAttribute(`style`, /--x-share: 58\.3%/u);
 });
 

@@ -166,7 +166,11 @@ export const gameStartEventSchema = z
         timeControl: timeControlSchema,
         openingPlies: openingPliesSchema,
         rated: z.boolean().meta({
-            description: `Whether this game moves the bot's own rating: true only against another bot. A game against a player moves only the player's rating, and one against a guest moves none.`,
+            description: [
+                `Whether this game moves the bot's own rating: true only in a rated game between two bots.`,
+                `A game against a player moves only the player's rating, and one against a guest moves none.`,
+                `A game between two bots is unrated at a level other than a bot's default, in a series a player on the website started unrated, and between two bots of one owner.`,
+            ].join(` `),
         }),
         level: levelIdSchema.nullable().meta({
             description: `The declared level the bot plays this game at, by id; null at its default. A bot that no longer declares the level plays its default.`,
@@ -187,7 +191,8 @@ export const moveRequestEventSchema = z
     })
     .meta({
         id: `MoveRequestEvent`,
-        description: `Follows a replayed gameStart when the bot is to move, for information; it needs no answer, since the engine session sends its own move_request.`,
+        deprecated: true,
+        description: `Deprecated, and sent until the API's 1.0.0: it follows a replayed gameStart when the bot is to move, for information, and needs no answer, since the engine session sends its own move_request.`,
     });
 export type MoveRequestEvent = z.infer<typeof moveRequestEventSchema>;
 

@@ -6,6 +6,7 @@ import { Link } from '../router/Link';
 import { siteLinks } from '../site-links';
 import { text } from '../text';
 import { JudgmentChip } from '../analysis/Judgment';
+import { SpokenText } from '../analysis/SpokenText';
 import type { Drawer, DrawerTab } from './use-drawer';
 import type { FeedFold, FeedNote } from './drawer-reading';
 import type { FeedLine } from './snapshot-views';
@@ -24,7 +25,7 @@ const tabs: readonly { id: DrawerTab; label: string }[] = [
  * A right-hand drawer on wide screens, a bottom sheet on phones whose peek
  * keeps the player's own chip in reach.
  */
-export function GameDrawer({ drawer, feed, current, notes, folds, onLine, onPoint, head, facts, meetings, rundown, tournament, analysis, running, timed, onResign, peek }: {
+export function GameDrawer({ drawer, feed, current, notes, folds, onLine, onPoint, head, facts, meetings, rundown, tournament, duel, analysis, running, timed, onResign, peek }: {
     drawer: Drawer;
     feed: readonly FeedLine[];
     // The feed line the board shows; a replay may stand before the newest.
@@ -46,6 +47,8 @@ export function GameDrawer({ drawer, feed, current, notes, folds, onLine, onPoin
     rundown: ReactNode;
     // The tournament game's place, leading to its tournament; null for any other game.
     tournament: ReactNode;
+    // A duel's or a test's game: the row's term and its place, leading to the duel; null for any other game.
+    duel: { readonly term: string; readonly place: ReactNode } | null;
     // Where a finished game opens on the analysis board, at the turn on screen; null while it runs.
     analysis: string | null;
     running: boolean;
@@ -175,7 +178,7 @@ export function GameDrawer({ drawer, feed, current, notes, folds, onLine, onPoin
                     {drawer.tab === `game` ? (
                         <>
                             {rundown}
-                            <GameFacts facts={facts} meetings={meetings} tournament={tournament} analysis={analysis} running={running} timed={timed} onResign={onResign} />
+                            <GameFacts facts={facts} meetings={meetings} tournament={tournament} duel={duel} analysis={analysis} running={running} timed={timed} onResign={onResign} />
                         </>
                     ) : null}
                 </div>
@@ -312,7 +315,11 @@ function MoveFeed({ feed, current, visible, notes, folds, onLine, onPoint }: {
                             {notes === null || index === 0 ? null : (
                                 <>
                                     <span className="feed-mark">{note === null || note.severity === null ? null : <JudgmentChip severity={note.severity} />}</span>
-                                    <span className="feed-value">{note === null || note.value === null ? null : text.drawer.reading.value(note.value)}</span>
+                                    {note === null || note.value === null ? (
+                                        <span className="feed-value" />
+                                    ) : (
+                                        <SpokenText words={note.value} className="feed-value" write={text.drawer.reading.value} />
+                                    )}
                                 </>
                             )}
                         </li>
@@ -364,10 +371,11 @@ function key(name: string) {
     return <kbd>{name}</kbd>;
 }
 
-function GameFacts({ facts, meetings, tournament, analysis, running, timed, onResign }: {
+function GameFacts({ facts, meetings, tournament, duel, analysis, running, timed, onResign }: {
     facts: readonly (readonly [string, string])[];
     meetings: ReactNode;
     tournament: ReactNode;
+    duel: { readonly term: string; readonly place: ReactNode } | null;
     analysis: string | null;
     running: boolean;
     timed: boolean;
@@ -407,6 +415,12 @@ function GameFacts({ facts, meetings, tournament, analysis, running, timed, onRe
                     <div className="facts-row">
                         <dt>{text.drawer.tournament}</dt>
                         <dd>{tournament}</dd>
+                    </div>
+                )}
+                {duel === null ? null : (
+                    <div className="facts-row">
+                        <dt>{duel.term}</dt>
+                        <dd>{duel.place}</dd>
                     </div>
                 )}
                 {facts.map(([term, value]) => (

@@ -158,6 +158,30 @@ import {
     ratingHistoryPath,
     ratingHistoryQuerySchema,
     ratingHistorySchema,
+    botSettingsPath,
+    botSettingsSchema,
+    botSettingsUpdateSchema,
+    createDuelRequestSchema,
+    duelCreateErrorCodes,
+    duelDailyCap,
+    duelDetailMemoMs,
+    duelDetailSchema,
+    duelForbiddenErrorCodes,
+    duelListCap,
+    duelListPath,
+    duelListQuerySchema,
+    duelListSchema,
+    duelLiveCap,
+    duelPath,
+    duelPerBotCap,
+    duelQuotaErrorCodes,
+    duelStopConflictErrorCodes,
+    duelStopForbiddenErrorCodes,
+    duelStopPath,
+    duelBotsPath,
+    duelBotStatesSchema,
+    duelGameCounts,
+    liveGamesQuerySchema,
     tournamentDetailMemoMs,
     tournamentDetailSchema,
     tournamentEntryPath,
@@ -166,7 +190,7 @@ import {
     tournamentListPastCap,
     tournamentListSchema,
     tournamentPath,
-    tournamentPresenceGraceMs,
+    presenceGraceMs,
     tournamentsPath,
     tournamentWaitingCap,
     liveGameEntrySchema,
@@ -291,7 +315,7 @@ function registerSharedComponents(registry: OpenAPIRegistry, surface: `site` | `
             `The bot's owner is banned; after the ban lifts, the owner must rotate the token.`,
             bannedError,
         ),
-        gameCreateForbidden: response(`GameCreateForbidden`, `The bot is the caller's own (own_bot), or it is delisted and takes no new games (delisted).`, gameCreateForbiddenError),
+        gameCreateForbidden: response(`GameCreateForbidden`, `The bot is delisted and takes no new games (delisted). own_bot is no longer sent: a game against the caller's own bot is played unrated.`, gameCreateForbiddenError),
         notFound: response(
             `NotFound`,
             `The target does not exist or is not the caller's to act on.`,
@@ -717,13 +741,53 @@ function registerSiteSurface(registry: OpenAPIRegistry, shared: SharedComponents
     });
 
     registry.registerPath({
+        method: 'get',
+        path: botSettingsPath,
+        summary: `Read a bot's settings, as its owner.`,
+        operationId: 'getBotSettings',
+        tags: ['Bots'],
+        security: [{ sessionCookie: [] }],
+        description: `The choices the owner makes for the bot on the website, beside what the bot declares, and the client it last connected with. Another person's bot answers not_found.`,
+        parameters: [shared.botName],
+        responses: {
+            200: { description: `The bot's settings.`, content: { 'application/json': { schema: botSettingsSchema } } },
+            401: shared.unauthorized,
+            404: shared.notFound,
+        },
+    });
+
+    registry.registerPath({
+        method: 'patch',
+        path: botSettingsPath,
+        summary: `Change a bot's settings, as its owner.`,
+        operationId: 'updateBotSettings',
+        tags: ['Bots'],
+        security: [{ sessionCookie: [] }],
+        description: `Each present field replaces the stored one; an empty about or repoUrl clears the owner's, and the declared one shows again. With duels by others off, no game of a duel someone else started begins: one already running waits out its grace for its next game and is cut short.`,
+        parameters: [shared.botName],
+        request: {
+            body: { required: true, content: { 'application/json': { schema: botSettingsUpdateSchema } } },
+        },
+        responses: {
+            200: { description: `The bot's settings after the change.`, content: { 'application/json': { schema: botSettingsSchema } } },
+            400: shared.badRequest,
+            401: shared.unauthorized,
+            404: shared.notFound,
+        },
+    });
+
+    registry.registerPath({
         method: 'post',
         path: gamesPath,
         summary: 'Start a game against a bot.',
         operationId: 'createGame',
         tags: ['Games'],
         security: [{ sessionCookie: [] }],
-        description: `The bot must hold its stream open with open=1, have fewer than ${String(botConcurrentGameCap)} live games, and accept the clock. The caller, a user or guest, may hold ${String(humanConcurrentGameCap)} live games and create one every ${String(humanGameCooldownSeconds)} s. The server draws sides and places the opening; the bot receives gameStart. A game against a guest is unrated.`,
+        description: [
+            `The bot must hold its stream open with open=1, or at all if it is the caller's own, have fewer than ${String(botConcurrentGameCap)} live games, and accept the clock.`,
+            `The caller may hold ${String(humanConcurrentGameCap)} live games and create one every ${String(humanGameCooldownSeconds)} s.`,
+            `The bot receives gameStart. A guest's game, or one against the caller's own bot, is unrated.`,
+        ].join(` `),
         request: {
             body: { required: true, content: { 'application/json': { schema: createGameRequestSchema } } },
         },
@@ -758,12 +822,14 @@ function registerSiteSurface(registry: OpenAPIRegistry, shared: SharedComponents
         operationId: 'listLiveGames',
         tags: ['Games'],
         security: [],
-        description: `Games in progress, newest first, at most ${String(liveGameListCap)}, without pagination. Guest games are listed; finished games never are. The list is read at most once every ${seconds(liveGameListMemoMs)} s, and every caller in that time gets the same body.`,
+        description: `Games in progress, newest first, at most ${String(liveGameListCap)}, without pagination. Guest games are listed, tests only when asked; finished games never are. The list is read at most once every ${seconds(liveGameListMemoMs)} s, and every caller in that time gets the same body.`,
+        request: { query: liveGamesQuerySchema },
         responses: {
             200: {
                 description: `The live games.`,
                 content: { 'application/json': { schema: liveGameEntrySchema.array() } },
             },
+            400: shared.badRequest,
         },
     });
 
@@ -884,6 +950,7 @@ function registerSiteSurface(registry: OpenAPIRegistry, shared: SharedComponents
     });
 
     registerTournamentPaths(registry, shared);
+    registerDuelPaths(registry, shared);
     registerPlayerPaths(registry, shared);
     registerAnalysisPaths(registry, shared);
 
@@ -1096,7 +1163,7 @@ function registerTournamentPaths(registry: OpenAPIRegistry, shared: SharedCompon
         operationId: 'getTournament',
         tags: ['Tournaments'],
         security: [],
-        description: `Its entries, rounds, standings, and live games. Each pairing plays one opening twice, sides swapped, one game after the other; a game waits ${String(tournamentPresenceGraceMs / 1000)} s for a bot that is not connected. A tournament is read at most once every ${String(tournamentDetailMemoMs / 1000)} s, every caller in that time getting the same body.`,
+        description: `Its entries, rounds, standings, and live games. Each pairing plays one opening twice, sides swapped, one game after the other; a game waits ${String(presenceGraceMs / 1000)} s for a bot that is not connected. A tournament is read at most once every ${String(tournamentDetailMemoMs / 1000)} s, every caller in that time getting the same body.`,
         parameters: [tournamentId],
         responses: {
             200: { description: `The tournament.`, content: { 'application/json': { schema: tournamentDetailSchema } } },
@@ -1138,6 +1205,127 @@ function registerTournamentPaths(registry: OpenAPIRegistry, shared: SharedCompon
             401: shared.unauthorized,
             404: shared.notFound,
             409: { description: `The tournament no longer waits (closed).`, content: { 'application/json': { schema: tournamentClosedError } } },
+        },
+    });
+}
+
+const duelCreateError = errorBodySchema([...badRequestErrorCodes, ...duelCreateErrorCodes]).meta({ id: `DuelCreateError` });
+const duelForbiddenError = errorBodySchema(duelForbiddenErrorCodes).meta({ id: `DuelForbiddenError` });
+const duelQuotaError = errorBodySchema([...duelQuotaErrorCodes, ...rateLimitedErrorCodes]).meta({ id: `DuelQuotaError` });
+const duelStopForbiddenError = errorBodySchema(duelStopForbiddenErrorCodes).meta({ id: `DuelStopForbiddenError` });
+const duelStopConflictError = errorBodySchema(duelStopConflictErrorCodes).meta({ id: `DuelStopConflictError` });
+
+function registerDuelPaths(registry: OpenAPIRegistry, shared: SharedComponents) {
+    const duelId = registry.registerComponent('parameters', 'DuelId', {
+        name: 'id',
+        in: 'path',
+        required: true,
+        description: `The duel's id.`,
+        schema: { type: 'string' },
+    }).ref;
+
+    registry.registerPath({
+        method: 'post',
+        path: duelListPath,
+        summary: 'Start a duel between two bots.',
+        operationId: 'createDuel',
+        tags: ['Duels'],
+        security: [{ sessionCookie: [] }],
+        description: [
+            `Two ready bots play one game at a time, each a gameStart with no challenge.`,
+            `Rated only when the caller owns exactly one bot, both at their default level, within the daily caps.`,
+            `Two bots of one owner play a test, never rated.`,
+            `A person runs ${String(duelLiveCap)} at once and ${String(duelDailyCap)} a UTC day; a bot ${String(duelPerBotCap)}, a pair one.`,
+        ].join(` `),
+        request: {
+            body: { required: true, content: { 'application/json': { schema: createDuelRequestSchema } } },
+        },
+        responses: {
+            201: { description: `The new duel.`, content: { 'application/json': { schema: duelDetailSchema } } },
+            400: {
+                description: `Validation failed (bad_request); a bot is not open (not_open), though the caller's own bot need not be, takes no duels from others (duel_refused), excludes the clock (clock_not_accepted), declares no such level (unknown_level), or is busy (bot_busy); the pair runs a duel (duel_live); the caller runs its most (duel_busy), asked rated where it may not (unrated_only), or asked more than ${String(Math.max(...duelGameCounts))} games outside a test (test_only).`,
+                content: { 'application/json': { schema: duelCreateError } },
+            },
+            401: shared.signedInUser,
+            403: {
+                description: `A bot is delisted (delisted), or its owner is banned (banned).`,
+                content: { 'application/json': { schema: duelForbiddenError } },
+            },
+            404: shared.notFound,
+            429: {
+                description: `The caller started ${String(duelDailyCap)} duels and tests this UTC day (daily_duel_cap); a rated duel would pass the pair's or a bot's daily cap (daily_pair_cap, daily_bot_cap), until 00:00 UTC, which Retry-After names; or too many requests (rate_limited).`,
+                headers: { 'Retry-After': shared.retryAfter },
+                content: { 'application/json': { schema: duelQuotaError } },
+            },
+            503: shared.paused,
+        },
+    });
+
+    registry.registerPath({
+        method: 'get',
+        path: duelListPath,
+        summary: 'List duels.',
+        operationId: 'listDuels',
+        tags: ['Duels'],
+        security: [],
+        description: `Running duels and the latest over, ${String(duelListCap)} of each at most, across the site, for one bot, for the caller, or of one kind. An unknown bot answers not_found.`,
+        request: { query: duelListQuerySchema },
+        responses: {
+            200: { description: `The running and recent duels.`, content: { 'application/json': { schema: duelListSchema } } },
+            400: shared.badRequest,
+            404: shared.notFound,
+        },
+    });
+
+    registry.registerPath({
+        method: 'get',
+        path: duelBotsPath,
+        summary: `Read the bots' duel states.`,
+        operationId: 'listDuelBots',
+        tags: ['Duels'],
+        security: [],
+        description: `Every listed bot, as the bot list orders it, with its owner's switch for duels by others and the bots it plays a running duel with. Read at most once every ${String(duelDetailMemoMs / 1000)} s, every caller in that time getting the same body.`,
+        responses: {
+            200: { description: `The listed bots' duel states.`, content: { 'application/json': { schema: duelBotStatesSchema } } },
+        },
+    });
+
+    registry.registerPath({
+        method: 'get',
+        path: duelPath,
+        summary: 'Read a duel.',
+        operationId: 'getDuel',
+        tags: ['Duels'],
+        security: [],
+        description: `Its bots, terms, score, every game, the live game, the bot the next game waits for, and a test's estimate. A duel is read at most once every ${String(duelDetailMemoMs / 1000)} s, every caller in that time getting the same body.`,
+        parameters: [duelId],
+        responses: {
+            200: { description: `The duel.`, content: { 'application/json': { schema: duelDetailSchema } } },
+            404: shared.notFound,
+        },
+    });
+
+    registry.registerPath({
+        method: 'post',
+        path: duelStopPath,
+        summary: 'Stop a duel.',
+        operationId: 'stopDuel',
+        tags: ['Duels'],
+        security: [{ sessionCookie: [] }],
+        description: `The starter or either bot's owner stops a running duel: no further game starts, and the live one plays on to its result.`,
+        parameters: [duelId],
+        responses: {
+            200: { description: `The duel, stopped.`, content: { 'application/json': { schema: duelDetailSchema } } },
+            401: shared.signedInUser,
+            403: {
+                description: `The caller neither started the duel nor owns one of its bots (not_yours).`,
+                content: { 'application/json': { schema: duelStopForbiddenError } },
+            },
+            404: shared.notFound,
+            409: {
+                description: `The duel is already over (over).`,
+                content: { 'application/json': { schema: duelStopConflictError } },
+            },
         },
     });
 }
@@ -1192,13 +1380,13 @@ function registerBotSurface(registry: OpenAPIRegistry, shared: SharedComponents)
         operationId: 'openStream',
         tags: ['Stream'],
         security: [{ bearerAuth: [] }],
-        description: `One StreamEvent per line, with a bare newline as keepalive every ${seconds(streamKeepaliveMs)} s. Opening a stream closes the bot's previous one. The bot is online while its stream is open. On open, each active game replays as gameStart, followed by moveRequest on the bot's turn. Play runs on the engine session that gameStart hands out.`,
+        description: `One StreamEvent per line, with a bare newline as keepalive every ${seconds(streamKeepaliveMs)} s. Opening a stream closes the bot's previous one. The bot is online while its stream is open. On open, each active game replays as gameStart, followed on the bot's turn by moveRequest, which is deprecated. Play runs on the engine session that gameStart hands out.`,
         parameters: [
             {
                 name: 'open',
                 in: 'query',
                 required: false,
-                description: `Present as 1, the bot is open while the stream is: other bots may challenge it, and players on the website may start games against it, which arrive as gameStart with no challenge.`,
+                description: `Present as 1, the bot is open while the stream is: other bots may challenge it, and players on the website may start games against it, which arrive as gameStart with no challenge. Its owner's games against it, and its tournament games, reach it without open=1.`,
                 schema: { type: 'string', enum: ['1'] },
             },
         ],
@@ -1228,7 +1416,7 @@ function registerBotSurface(registry: OpenAPIRegistry, shared: SharedComponents)
         operationId: 'getAccount',
         tags: ['Account'],
         security: [{ bearerAuth: [] }],
-        description: `The bot's name, rating, and stored declaration.`,
+        description: `The bot's name, rating, and stored declaration; about and repoUrl read as the bot's pages show them.`,
         responses: {
             200: {
                 description: `The account.`,
@@ -1242,7 +1430,7 @@ function registerBotSurface(registry: OpenAPIRegistry, shared: SharedComponents)
     registry.registerPath({
         method: 'patch',
         path: botAccountPath,
-        summary: `Declare the bot's about, version, repo, what it accepts, its levels, and its analyzer.`,
+        summary: `Declare what the bot accepts, its version, its levels, and its analyzer.`,
         operationId: 'updateAccount',
         tags: ['Account'],
         security: [{ bearerAuth: [] }],
@@ -1401,7 +1589,11 @@ function registerBotSurface(registry: OpenAPIRegistry, shared: SharedComponents)
         operationId: 'createChallenge',
         tags: ['Challenge'],
         security: [{ bearerAuth: [] }],
-        description: `The target must hold its stream open with open=1 and accept the clock. A bot plays at most ${String(botConcurrentGameCap)} games at once. The target holds at most ${String(challengeInboxCap)} pending challenges, ${String(challengePairPendingCap)} from each challenger. A challenge expires after ${seconds(challengeTtlMs)} s. Resending a requestId answers 200 with the stored challenge.`,
+        description: [
+            `The target must hold its stream open with open=1 and accept the clock. A bot plays at most ${String(botConcurrentGameCap)} games at once.`,
+            `The target holds at most ${String(challengeInboxCap)} pending challenges, ${String(challengePairPendingCap)} from each challenger. A challenge expires after ${seconds(challengeTtlMs)} s. Resending a requestId answers 200 with the stored challenge.`,
+            `Two bots of one owner play each other unrated.`,
+        ].join(` `),
         parameters: [
             {
                 name: 'name',
@@ -1424,7 +1616,7 @@ function registerBotSurface(registry: OpenAPIRegistry, shared: SharedComponents)
                 content: { 'application/json': { schema: challengeSchema } },
             },
             400: {
-                description: `Validation failed (bad_request), the target is not open (not_open) or excludes the clock (clock_not_accepted), a side is at its game cap or playing a tournament (bot_busy), the target's inbox is full (inbox_full), or the challenger already has a challenge pending with the target (challenge_pending).`,
+                description: `Validation failed or the bot challenged itself (bad_request), the target is not open (not_open) or excludes the clock (clock_not_accepted), a side is at its game cap or playing a tournament (bot_busy), the target's inbox is full (inbox_full), or the challenger already has a challenge pending with the target (challenge_pending).`,
                 content: {
                     'application/json': {
                         schema: challengeCreateError,
@@ -1432,13 +1624,13 @@ function registerBotSurface(registry: OpenAPIRegistry, shared: SharedComponents)
                 },
             },
             429: {
-                description: `Per UTC day a bot sends at most ${String(challengeDailyCap)} challenges (daily_challenge_cap) and plays at most ${String(botDailyCap)} bot-vs-bot games (daily_bot_cap), and a pair ${String(pairDailyCap)} (daily_pair_cap), with Retry-After running to 00:00 UTC; or too many requests (rate_limited).`,
+                description: `Per UTC day a bot sends at most ${String(challengeDailyCap)} challenges (daily_challenge_cap) and plays at most ${String(botDailyCap)} rated bot-vs-bot games (daily_bot_cap), and a pair ${String(pairDailyCap)} (daily_pair_cap), with Retry-After running to 00:00 UTC; or too many requests (rate_limited).`,
                 headers: { 'Retry-After': shared.retryAfter },
                 content: { 'application/json': { schema: challengeQuotaError } },
             },
             401: shared.botUnauthorized,
             403: {
-                description: `The challenger's owner owns the target (own_bot), either bot is delisted (delisted), or the challenger's owner is banned (banned).`,
+                description: `Either bot is delisted (delisted), or the challenger's owner is banned (banned). own_bot is no longer sent: a challenge between two bots of one owner is played unrated.`,
                 content: {
                     'application/json': {
                         schema: challengeForbiddenError,

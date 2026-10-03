@@ -63,7 +63,7 @@ function sideAfter(cells: readonly GameCell[]): Side {
  * for reduced motion.
  * A game seen for the first time shows whole.
  */
-export function useLiveReplay(): LiveReplay {
+export function useLiveReplay(tests = false): LiveReplay {
     const [entries, setEntries] = useState<LiveGameEntry[] | null>(null);
     const [failed, setFailed] = useState(false);
     const [limited, setLimited] = useState<number | null>(null);
@@ -75,7 +75,7 @@ export function useLiveReplay(): LiveReplay {
     const read = useCallback(async () => {
         let list: LiveGameEntry[];
         try {
-            list = await fetchLiveGames();
+            list = await fetchLiveGames(tests);
         } catch (cause) {
             setFailed(true);
             setLimited(limitedFor(cause));
@@ -98,7 +98,7 @@ export function useLiveReplay(): LiveReplay {
         setFailed(false);
         setReadAt(at);
         setNow(at);
-    }, []);
+    }, [tests]);
 
     useEffect(() => {
         void read();

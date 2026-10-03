@@ -1,4 +1,4 @@
-import type { AxialCoord, ForcedWinsAround, Judgment, JudgmentRun, JudgmentSeverity, Side } from '@hexo-arena/contract';
+import type { AxialCoord, ForcedWinsAround, Judgment, JudgmentRun, JudgmentSeverity, Side, ValueText } from '@hexo-arena/contract';
 import { text } from '../text';
 import { turnLines, type GameLine, type TurnRead } from './game-readings';
 import type { ShownLine } from './reading-view';
@@ -35,16 +35,16 @@ export type ExplainedReading =
           readonly name: string;
           /** Its line A at the position the turn was played from. */
           readonly best: ShownLine | null;
-          readonly after: string | null;
+          readonly after: ValueText | null;
           readonly judgment: Judgment | null;
           /** Whether the reading covers the whole game and judged it, as a running or missing one has not. */
           readonly whole: boolean;
           /** The forced wins before and after the turn, as the board and the reading hold them; null where unknown. */
           readonly forced: ForcedWinsAround | null;
-          /** On a value drop, how far the mover's value fell, on the analyzer's scale. */
-          readonly drop: number | null;
+          /** On a value drop, how far the mover's value fell, in words, as the analyzer's values show. */
+          readonly drop: string | null;
       }
-    | { readonly kind: `own`; readonly name: string; readonly after: string | null };
+    | { readonly kind: `own`; readonly name: string; readonly after: ValueText | null };
 
 /** What a reading of a whole game, by `analyzer`, says of one of its turns; `whole` once the reading is done and judged. */
 export function turnReading(line: GameLine, read: TurnRead, analyzer: string, whole: boolean): ExplainedReading {
@@ -134,7 +134,7 @@ function judgedText(
     mover: Side,
     opponent: Side,
     forced: ForcedWinsAround | null,
-    drop: number | null,
+    drop: string | null,
     before: string | null,
     after: string,
 ): { readonly text: string; readonly preferred: string; readonly common: boolean } {
@@ -203,8 +203,8 @@ function preferredLine(side: Side, best: ShownLine): PreferredLine {
 }
 
 // A value's side stays with its number, so "x 0.12" never breaks between them.
-function valueText(value: string): string {
-    return text.drawer.reading.value(value);
+function valueText(value: ValueText): string {
+    return text.drawer.reading.value(value.shown);
 }
 
 function sameCells(a: readonly AxialCoord[], b: readonly AxialCoord[]): boolean {

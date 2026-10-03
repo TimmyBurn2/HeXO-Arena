@@ -162,6 +162,48 @@
       "when": 1790982265016,
       "tag": "0022_analyzer_values",
       "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "6",
+      "when": 1791034384949,
+      "tag": "0023_involved_analyzers",
+      "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "6",
+      "when": 1791036092077,
+      "tag": "0024_series",
+      "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "6",
+      "when": 1791038863281,
+      "tag": "0025_own_bot_games",
+      "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "6",
+      "when": 1791039230394,
+      "tag": "0026_owner_text",
+      "breakpoints": true
+    },
+    {
+      "idx": 27,
+      "version": "6",
+      "when": 1791039255062,
+      "tag": "0027_bot_clients",
+      "breakpoints": true
+    },
+    {
+      "idx": 28,
+      "version": "6",
+      "when": 1791041940322,
+      "tag": "0028_duels",
+      "breakpoints": true
     }
   ]
 }

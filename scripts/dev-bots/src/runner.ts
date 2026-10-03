@@ -20,8 +20,8 @@ const challengeClock: TimeControl = { mode: `turn`, turnTimeMs: 20_000 };
 // The one dev bot that also reads positions, so the analysis board has a reader.
 const analyzerBot = `devbot-a`;
 
-// An owner's bots may not challenge each other, so every bot gets an owner
-// of its own.
+// An owner's bots play each other unrated, so every bot gets an owner of
+// its own and their games move the ladder.
 /** The dev bots' seats: devbot-a, owned by devowner-a, and on. */
 export const seats = [`a`, `b`, `c`] as const;
 

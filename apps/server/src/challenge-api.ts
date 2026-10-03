@@ -64,11 +64,8 @@ export function registerChallengeApi(app: FastifyInstance, deps: ChallengeApiDep
         if (target === undefined) {
             return reply.code(404).send({ error: `no such bot`, code: `not_found` });
         }
-        // A self-challenge is the degenerate case of a shared owner.
-        if (target.ownerId === challenger.ownerId) {
-            return reply
-                .code(403)
-                .send({ error: `the challenger's owner also owns the target`, code: `own_bot` });
+        if (target.id === challenger.id) {
+            return reply.code(400).send({ error: `a bot cannot challenge itself`, code: `bad_request` });
         }
         if (target.delisted || challenger.delisted) {
             return reply.code(403).send({ error: `a delisted bot takes part in no challenge`, code: `delisted` });
@@ -106,7 +103,10 @@ export function registerChallengeApi(app: FastifyInstance, deps: ChallengeApiDep
         const dayStart = utcDayStartSeconds(now);
         // The daily caps lift when the UTC day turns, so they answer with the wait until then.
         const untilTomorrow = String(dayStart + 86_400 - now);
+        // Two bots of one owner play unrated, and an unrated game spends no daily game cap.
+        const sameOwner = target.ownerId === challenger.ownerId;
         if (
+            !sameOwner &&
             countPairBotGamesSince(
                 query,
                 { one: challenger.id, two: target.id },
@@ -119,8 +119,8 @@ export function registerChallengeApi(app: FastifyInstance, deps: ChallengeApiDep
             });
         }
         if (
-            countBotBotGamesSince(query, challenger.id, dayStart) >= botDailyCap ||
-            countBotBotGamesSince(query, target.id, dayStart) >= botDailyCap
+            !sameOwner &&
+            (countBotBotGamesSince(query, challenger.id, dayStart) >= botDailyCap || countBotBotGamesSince(query, target.id, dayStart) >= botDailyCap)
         ) {
             return reply.code(429).header(`retry-after`, untilTomorrow).send({
                 error: `a side reached its daily bot-vs-bot cap`,

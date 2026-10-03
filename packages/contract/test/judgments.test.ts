@@ -15,6 +15,7 @@ import {
     sideValue,
     type TurnReadings,
     undeclaredValues,
+    valueDropWords,
     valueWords,
     winChanceCuts,
 } from '../src';
@@ -248,36 +249,88 @@ describe('sideValue and forcedWinner', () => {
 
 describe('valueWords', () => {
     const board = { kind: `board` } as const;
+    const raw = undeclaredValues;
+    const expected: AnalyzerValues = { scale: 1, cuts: null, meaning: `expected` };
+    const shown = (evaluation: EvaluatedLine[`evaluation`], values: AnalyzerValues) => valueWords(evaluation, board, values)?.shown;
 
-    it('reads a heuristic as the side it favors and its size in hundredths', () => {
-        expect(valueWords({ heuristic: 0.52 }, board)).toBe(`x 0.52`);
-        expect(valueWords({ heuristic: -0.12 }, board)).toBe(`o 0.12`);
-        expect(valueWords({ heuristic: 2.5 }, board)).toBe(`x 2.50`);
+    it('reads a raw heuristic as the side it favors and its size in hundredths, spoken as shown', () => {
+        expect(valueWords({ heuristic: 0.52 }, board, raw)).toEqual({ shown: `x 0.52`, spoken: `x 0.52` });
+        expect(shown({ heuristic: -0.12 }, raw)).toBe(`o 0.12`);
+        expect(shown({ heuristic: 0.33 }, { scale: 1, cuts: winChanceCuts, meaning: `raw` })).toBe(`x 0.33`);
     });
 
-    it('reads a heuristic that rounds to zero as even', () => {
-        expect(valueWords({ heuristic: 0.004 }, board)).toBe(`even`);
-        expect(valueWords({ heuristic: -0.004 }, board)).toBe(`even`);
-        expect(valueWords({ heuristic: 0.005 }, board)).toBe(`x 0.01`);
+    it('reads a raw heuristic that rounds to zero as even', () => {
+        expect(shown({ heuristic: 0.004 }, raw)).toBe(`even`);
+        expect(shown({ heuristic: -0.004 }, raw)).toBe(`even`);
+        expect(shown({ heuristic: 0.005 }, raw)).toBe(`x 0.01`);
     });
 
-    it('counts a forced win in the winner\'s own turns from the board shown', () => {
-        expect(valueWords({ win_in: 1 }, board)).toBe(`x wins in 1`);
-        expect(valueWords({ win_in: -2 }, board)).toBe(`o wins in 1`);
-        expect(valueWords({ win_in: 3 }, board)).toBe(`x wins in 2`);
+    it('reads an expected heuristic as the leading side\'s win chance in whole percent, spoken as one', () => {
+        expect(valueWords({ heuristic: 0.34 }, board, expected)).toEqual({ shown: `x 67%`, spoken: `x's win chance 67 percent` });
+        expect(valueWords({ heuristic: -0.16 }, board, expected)).toEqual({ shown: `o 58%`, spoken: `o's win chance 58 percent` });
+    });
+
+    it('divides a heuristic by its declared scale and holds it to -1 to 1, whatever it means', () => {
+        expect(shown({ heuristic: 34 }, { scale: 100, cuts: null, meaning: `expected` })).toBe(`x 67%`);
+        expect(shown({ heuristic: -250 }, { scale: 1000, cuts: null, meaning: `raw` })).toBe(`o 0.25`);
+        expect(shown({ heuristic: 2.5 }, raw)).toBe(`x 1.00`);
+        expect(shown({ heuristic: -2.5 }, expected)).toBe(`o 99%`);
+    });
+
+    it('reads a win chance that rounds to 50 percent as even, and half a percent past it as the leader\'s 51', () => {
+        expect(valueWords({ heuristic: 0 }, board, expected)).toEqual({ shown: `even`, spoken: `even` });
+        expect(shown({ heuristic: 0.009 }, expected)).toBe(`even`);
+        expect(shown({ heuristic: -0.009 }, expected)).toBe(`even`);
+        expect(shown({ heuristic: 0.01 }, expected)).toBe(`x 51%`);
+        expect(shown({ heuristic: -0.01 }, expected)).toBe(`o 51%`);
+    });
+
+    it('never reads a heuristic as a certain win, which only a forced win is', () => {
+        expect(shown({ heuristic: 0.97 }, expected)).toBe(`x 99%`);
+        expect(shown({ heuristic: 0.99 }, expected)).toBe(`x 99%`);
+        expect(shown({ heuristic: 1 }, expected)).toBe(`x 99%`);
+        expect(shown({ heuristic: -1 }, expected)).toBe(`o 99%`);
+    });
+
+    it('counts a forced win in the winner\'s own turns from the board shown, whatever its values mean', () => {
+        expect(valueWords({ win_in: 1 }, board, raw)).toEqual({ shown: `x wins in 1`, spoken: `x wins in 1` });
+        expect(shown({ win_in: -2 }, raw)).toBe(`o wins in 1`);
+        expect(shown({ win_in: 3, heuristic: 0.2 }, expected)).toBe(`x wins in 2`);
     });
 
     it('counts a line\'s own turn when its mover is the winner', () => {
-        expect(valueWords({ win_in: -5 }, { kind: `line`, mover: `x`, completesSix: false })).toBe(`o wins in 3`);
-        expect(valueWords({ win_in: 2 }, { kind: `line`, mover: `x`, completesSix: false })).toBe(`x wins in 2`);
+        expect(valueWords({ win_in: -5 }, { kind: `line`, mover: `x`, completesSix: false }, raw)?.shown).toBe(`o wins in 3`);
+        expect(valueWords({ win_in: 2 }, { kind: `line`, mover: `x`, completesSix: false }, expected)?.shown).toBe(`x wins in 2`);
     });
 
     it('reads a line that completes six as a win outright', () => {
-        expect(valueWords({ win_in: 1 }, { kind: `line`, mover: `o`, completesSix: true })).toBe(`o wins`);
+        expect(valueWords({ win_in: 1 }, { kind: `line`, mover: `o`, completesSix: true }, expected)).toEqual({ shown: `o wins`, spoken: `o wins` });
     });
 
     it('has no words for an evaluation without a value', () => {
-        expect(valueWords({}, board)).toBeNull();
-        expect(valueWords({ heuristic: Number.NaN }, board)).toBeNull();
+        expect(valueWords({}, board, raw)).toBeNull();
+        expect(valueWords({ heuristic: Number.NaN }, board, expected)).toBeNull();
+    });
+});
+
+describe('valueDropWords', () => {
+    const expected: AnalyzerValues = { scale: 1, cuts: winChanceCuts, meaning: `expected` };
+
+    it('words a raw drop in hundredths of the scaled value, from the side\'s own view', () => {
+        expect(valueDropWords({ heuristic: 0.3 }, { heuristic: 0.06 }, `x`, undeclaredValues)).toBe(`0.24`);
+        expect(valueDropWords({ heuristic: -30 }, { heuristic: 15 }, `o`, { scale: 100, cuts: winChanceCuts, meaning: `raw` })).toBe(`0.45`);
+    });
+
+    it('words an expected drop in points of the side\'s win chance, between the whole percents shown', () => {
+        expect(valueDropWords({ heuristic: 0.34 }, { heuristic: 0.22 }, `x`, expected)).toBe(`6 points`);
+        expect(valueDropWords({ heuristic: -0.16 }, { heuristic: 0.2 }, `o`, expected)).toBe(`18 points`);
+        // 67.3 and 57.2 percent show as 67 and 57, though the value fell 0.202.
+        expect(valueDropWords({ heuristic: 0.346 }, { heuristic: 0.144 }, `x`, expected)).toBe(`10 points`);
+        expect(valueDropWords({ heuristic: 0.04 }, { heuristic: 0.02 }, `x`, expected)).toBe(`1 point`);
+    });
+
+    it('has no words when either evaluation holds no value', () => {
+        expect(valueDropWords({}, { heuristic: 0.2 }, `x`, expected)).toBeNull();
+        expect(valueDropWords({ heuristic: 0.2 }, {}, `x`, undeclaredValues)).toBeNull();
     });
 });

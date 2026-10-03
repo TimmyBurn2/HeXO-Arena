@@ -10,7 +10,7 @@ import { Link } from '../router/Link';
 import { navigate } from '../router/use-route';
 import { siteStatusStore } from '../site-status';
 import { text } from '../text';
-import { readinessOf, writePlayed, type Holder } from './setup';
+import { ownedBy, readinessOf, writePlayed, type Holder } from './setup';
 
 // What the start area last heard back:
 // nothing yet, a request in flight,
@@ -100,7 +100,11 @@ export function StartArea({
     useEffect(() => {
         readsNow.current = reads;
     });
-    const state = readinessOf(bot, reserved);
+    const visitor = me.status === `loading` ? null : me.me;
+    const viewer = visitor?.kind === `user` ? visitor.name : null;
+    // The person's own bot plays them unrated, open to others or not.
+    const own = ownedBy(bot, viewer);
+    const state = readinessOf(bot, reserved, viewer);
 
     useEffect(() => {
         if (outcome.kind !== `wait`) return;
@@ -126,9 +130,8 @@ export function StartArea({
     // skipping the read the refusal asks for, which may lag the server's own count.
     const refused = outcome.kind === `line` ? outcome.refused : null;
     const moved = refused !== null && refused.setup !== setupOf(bot, clock, level);
-    if (refused !== null && !moved && reads > refused.reads + 1 && readinessOf(bot, reserved) === `ready`) setOutcome({ kind: `idle` });
+    if (refused !== null && !moved && reads > refused.reads + 1 && state === `ready`) setOutcome({ kind: `idle` });
 
-    const visitor = me.status === `loading` ? null : me.me;
     const stale = outcome.kind === `stale`;
     const warned = stale && visitor === null;
 
@@ -210,7 +213,7 @@ export function StartArea({
                     ? errors[code]()
                     : code === `bot_busy` && reserved.has(bot.name)
                       ? text.play.unavailable.tournament(bot.name, held)
-                      : code === `bot_busy` || code === `clock_not_accepted` || code === `unknown_level` || code === `not_open` || code === `delisted` || code === `not_found` || code === `own_bot`
+                      : code === `bot_busy` || code === `clock_not_accepted` || code === `unknown_level` || code === `not_open` || code === `delisted` || code === `not_found`
                       ? errors[code](bot.name)
                       : text.play.failed;
             setOutcome({
@@ -221,15 +224,8 @@ export function StartArea({
         }
     }
 
-    // No owner may play their own bot, rated or not; the server refuses it too.
-    const own = me.status === `ready` && me.me?.kind === `user` && bot.ownerName === me.me.name;
-    const unavailable = own
-        ? text.play.unavailable.own(bot.name)
-        : state === `ready`
-          ? null
-          : state === `tournament`
-            ? text.play.unavailable.tournament(bot.name, held)
-            : text.play.unavailable[state](bot.name);
+    const unavailable =
+        state === `ready` ? null : state === `tournament` ? text.play.unavailable.tournament(bot.name, held) : text.play.unavailable[state](bot.name);
     const cooling = outcome.kind === `wait` ? Math.max(1, Math.ceil((outcome.until - now) / 1000)) : null;
     const blocked = paused || unavailable !== null || cooling !== null || moved || outcome.kind === `sending` || (stale && visitor !== null);
     // Where the list kept the bot and moved its clock, the line says so, whatever the refusal was;
@@ -314,9 +310,11 @@ export function StartArea({
                               ? text.play.guestNote(visitor.name)
                               : level !== null
                                 ? text.play.practice
-                                : rated
-                                  ? text.play.rated
-                                  : text.play.unrated}
+                                : own
+                                  ? text.play.ownUnrated
+                                  : rated
+                                    ? text.play.rated
+                                    : text.play.unrated}
                     </p>
                 </>
             )}

@@ -362,13 +362,106 @@ describe('whole-game readings', () => {
         expect(world.service.list(gameId)).toMatchObject({ list: { analyses: [{ status: `failed`, failure: `inconsistent`, failedTurn: 1, analyzer: { name: `driftwood` } }] } });
     });
 
-    it('takes no game an analyzer\'s owner or the owner\'s bots played, and refuses a game twice pending', () => {
+    it('lets an analyzer read a game its owner played, marks the reading involved as it takes it, and keeps that mark whatever changes after', async () => {
+        const kestrel = dial(`kestrel`);
+        const own = playedGame(world.query, { user: `owner-c`, bot: `alpha` });
+        expect(world.service.requestGame(`asker`, own, null)).toMatchObject({ kind: `queued`, analysis: { analyzer: null, involved: false } });
+        expect(world.service.requestGame(`player`, own, null)).toEqual({ kind: `refused`, code: `analysis_pending` });
+        await settled();
+        expect(kestrel.count(`move_request`)).toBe(1);
+        expect(world.service.list(own)).toMatchObject({ list: { analyses: [{ status: `running`, analyzer: { name: `kestrel` }, involved: true }], independentOnline: false } });
+        await readAll(`kestrel`);
+        expect(world.sqlite.prepare(`select status, involved from analyses where game_id = ?`).get(own)).toEqual({ status: `done`, involved: 1 });
+        world.sqlite.exec(`update bots set owner_id = 'owner-d' where id = 'kestrel'`);
+        now += 1_000;
+        expect(world.service.list(own)).toMatchObject({ list: { analyses: [{ status: `done`, analyzer: { name: `kestrel`, ownerName: `owner-d` }, involved: true }] } });
+        const seated = playedGame(world.query, { challenger: `kestrel`, dest: `beta` });
+        world.service.requestGame(`asker`, seated, null);
+        await readAll(`kestrel`);
+        now += 1_000;
+        expect(world.service.list(seated)).toMatchObject({ list: { analyses: [{ status: `done`, analyzer: { name: `kestrel` }, involved: true }] } });
+    });
+
+    it('gives a game asked for by no name to an analyzer whose owner sat in neither seat while one is available, even busy, over an idle one whose owner played', async () => {
+        const kestrel = dial(`kestrel`);
+        const driftwood = dial(`driftwood`);
+        void world.service.requestPosition(`player`, { setup: board, analyzer: `driftwood`, lines: 1, seconds: 2 }, never);
+        const gameId = playedGame(world.query, { challenger: `kestrel`, dest: `beta` });
+        expect(world.service.requestGame(`asker`, gameId, null).kind).toBe(`queued`);
+        await settled();
+        expect(kestrel.count(`move_request`)).toBe(0);
+        expect(world.service.list(gameId)).toMatchObject({ list: { analyses: [{ status: `queued` }], independentOnline: true } });
+        answer(`driftwood`);
+        await settled();
+        expect(driftwood.count(`move_request`)).toBe(2);
+        now += 1_000;
+        expect(world.service.list(gameId)).toMatchObject({ list: { analyses: [{ status: `running`, analyzer: { name: `driftwood` }, involved: false }] } });
+    });
+
+    it('falls back to an analyzer whose owner played once no other may read the game now', async () => {
+        const kestrel = dial(`kestrel`);
+        dial(`driftwood`);
+        void world.service.requestPosition(`player`, { setup: board, analyzer: `driftwood`, lines: 1, seconds: 2 }, never);
+        const gameId = playedGame(world.query, { challenger: `kestrel`, dest: `beta` });
+        world.service.requestGame(`asker`, gameId, null);
+        await settled();
+        expect(kestrel.count(`move_request`)).toBe(0);
+        world.sockets.get(`driftwood`)?.close();
+        await settled();
+        expect(kestrel.count(`move_request`)).toBe(1);
+        now += 1_000;
+        expect(world.service.list(gameId)).toMatchObject({ list: { analyses: [{ status: `running`, analyzer: { name: `kestrel` }, involved: true }], independentOnline: false } });
+        world.sqlite.exec(`update bots set analyzer_while_playing = 0 where id = 'driftwood'`);
+        world.live.add(`driftwood`);
+        dial(`driftwood`);
+        await readAll(`kestrel`);
+        const other = playedGame(world.query, { challenger: `beta`, dest: `kestrel` });
+        world.service.requestGame(`asker`, other, null);
+        await settled();
+        expect(kestrel.count(`move_request`)).toBe(6);
+    });
+
+    it('lets a named analyzer whose owner played read the game while another is idle', async () => {
+        const kestrel = dial(`kestrel`);
+        const driftwood = dial(`driftwood`);
+        const gameId = playedGame(world.query, { challenger: `kestrel`, dest: `beta` });
+        expect(world.service.requestGame(`asker`, gameId, `kestrel`)).toMatchObject({ kind: `queued`, analysis: { involved: false } });
+        await settled();
+        expect(kestrel.count(`move_request`)).toBe(1);
+        expect(driftwood.count(`move_request`)).toBe(0);
+        now += 1_000;
+        expect(world.service.list(gameId)).toMatchObject({ list: { analyses: [{ status: `running`, analyzer: { name: `kestrel` }, involved: true }] } });
+    });
+
+    it('reads a game once per analyzer and once per owner, whether or not the owner played', async () => {
+        world.sqlite.exec(`
+            insert into name_reservations (name_key) values ('merlin');
+            insert into bots (id, owner_id, name, name_key, token_hash, scope, created_at, version, analyzer_max_seconds, analyzer_lines, analyzer_while_playing)
+                values ('merlin', 'owner-c', 'merlin', 'merlin', 'h5', 'bot:play', 1, null, 2, 1, 0);
+        `);
         dial(`kestrel`);
-        const own = playedGame(world.query, { challenger: `kestrel`, dest: `beta` });
-        expect(world.service.requestGame(`asker`, own, null)).toEqual({ kind: `refused`, code: `no_analyzer` });
-        const other = playedGame(world.query, { challenger: `alpha`, dest: `beta` });
-        expect(world.service.requestGame(`asker`, other, null).kind).toBe(`queued`);
-        expect(world.service.requestGame(`player`, other, null)).toEqual({ kind: `refused`, code: `analysis_pending` });
+        const gameId = playedGame(world.query, { challenger: `kestrel`, dest: `beta` });
+        world.service.requestGame(`asker`, gameId, null);
+        await readAll(`kestrel`);
+        expect(world.service.requestGame(`asker`, gameId, `kestrel`)).toEqual({ kind: `refused`, code: `no_analyzer` });
+        dial(`merlin`);
+        expect(world.service.requestGame(`asker`, gameId, null)).toEqual({ kind: `refused`, code: `no_analyzer` });
+        expect(world.service.requestGame(`asker`, gameId, `merlin`)).toEqual({ kind: `refused`, code: `no_analyzer` });
+        now += 1_000;
+        expect(world.service.list(gameId)).toMatchObject({ list: { independentOnline: false } });
+        dial(`driftwood`);
+        now += 1_000;
+        expect(world.service.list(gameId)).toMatchObject({ list: { independentOnline: true } });
+        expect(world.service.requestGame(`asker`, gameId, null).kind).toBe(`queued`);
+        await readAll(`driftwood`);
+        now += 1_000;
+        const listed = world.service.list(gameId);
+        if (listed.kind !== `list`) throw new Error(`no list`);
+        expect(listed.list.analyses.map((reading) => (reading.kind === `community` ? [reading.analyzer?.name, reading.involved] : null))).toEqual([
+            [`kestrel`, true],
+            [`driftwood`, false],
+        ]);
+        expect(world.service.requestGame(`player`, gameId, null)).toEqual({ kind: `refused`, code: `analysis_full` });
     });
 
     it('fails a request no analyzer took within the hour, and requeues one a stopped process left running', async () => {
@@ -400,7 +493,7 @@ describe('whole-game readings', () => {
         world.service.requestGame(`asker`, gameId, null);
         await readAll(`kestrel`);
         world.service.setOptOut(`player`, true);
-        expect(world.service.list(gameId)).toEqual({ kind: `list`, list: { analyses: [], optedOut: true } });
+        expect(world.service.list(gameId)).toEqual({ kind: `list`, list: { analyses: [], optedOut: true, independentOnline: false } });
         expect(world.sqlite.prepare(`select count(*) as n from analyses`).get()).toEqual({ n: 0 });
         expect(world.service.requestGame(`asker`, gameId, null)).toEqual({ kind: `refused`, code: `opted_out` });
         world.service.setOptOut(`player`, false);
@@ -418,6 +511,6 @@ describe('whole-game readings', () => {
         await settled();
         expect(world.service.delete(requested.analysis.analysisId)).toBe(false);
         now += 1_000;
-        expect(world.service.list(gameId)).toEqual({ kind: `list`, list: { analyses: [], optedOut: false } });
+        expect(world.service.list(gameId)).toEqual({ kind: `list`, list: { analyses: [], optedOut: false, independentOnline: true } });
     });
 });

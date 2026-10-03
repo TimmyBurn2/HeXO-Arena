@@ -466,6 +466,49 @@ describe('BotScreen', () => {
         expect(await screen.findByRole(`heading`, { name: `Owner tools` })).toBeTruthy();
     });
 
+    it('let the owner set the page text and link, say while the declared ones show, and name the client last seen', async () => {
+        const patches: unknown[] = [];
+        let listed = { ...sealbot, about: `Declared about.` };
+        let settings: Record<string, unknown> = { name: `sealbot`, duelsByOthers: true, declaredAbout: `Declared about.`, declaredRepoUrl: `https://github.com/quinn/sealbot`, client: { kind: `hexo-bridge`, version: `0.3.0` } };
+        vi.stubGlobal(
+            `fetch`,
+            vi.fn((url: string, init?: RequestInit) => {
+                if (url === `/api/bots/sealbot/settings` && init?.method === `PATCH`) {
+                    const body = JSON.parse(typeof init.body === `string` ? init.body : ``) as { about: string; repoUrl: string };
+                    patches.push(body);
+                    settings = { ...settings, about: body.about };
+                    listed = { ...listed, about: body.about };
+                    return Promise.resolve(new Response(JSON.stringify(settings)));
+                }
+                const body =
+                    url === `/api/me`
+                        ? { kind: `user`, name: `quinn`, rating: 1503, provisional: false, discord: null, liveGames: [], analysisOptOut: false, analysisLeft: { positions: 300, games: 10 } }
+                        : url === `/api/bots/sealbot/settings`
+                          ? settings
+                          : [listed];
+                return Promise.resolve(new Response(JSON.stringify(body)));
+            }),
+        );
+        meStore.reset();
+        meStore.start();
+        render(<BotScreen name="sealbot" />);
+        const about = await screen.findByRole(`textbox`, { name: `About` });
+        expect(about).toHaveProperty(`value`, ``);
+        expect(screen.getByText(`Empty here, so the page shows the text your bot declares.`)).toBeTruthy();
+        expect(screen.getByText(`Empty here, so the page shows the link your bot declares.`)).toBeTruthy();
+        expect(screen.getByText(`hexo-bridge 0.3.0, as your bot last connected.`)).toBeTruthy();
+        const save = screen.getByRole(`button`, { name: `Save` });
+        expect(save.hasAttribute(`disabled`)).toBe(true);
+        fireEvent.change(about, { target: { value: `The owner's words.` } });
+        fireEvent.click(save);
+        expect(await screen.findByText(`Saved`)).toBeTruthy();
+        expect(patches).toEqual([{ about: `The owner's words.`, repoUrl: `` }]);
+        expect(screen.queryByText(`Empty here, so the page shows the text your bot declares.`)).toBe(null);
+        await waitFor(() => {
+            expect(document.querySelector(`.about`)?.textContent).toBe(`The owner's words.`);
+        });
+    });
+
     it('rotate the token only on the second click and show the new one once', async () => {
         const writes: { method: string; url: string }[] = [];
         serveAs(`quinn`, writes);

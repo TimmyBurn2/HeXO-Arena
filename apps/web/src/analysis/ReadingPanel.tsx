@@ -197,7 +197,7 @@ export function Lines({ lines, toMove, onPreview, onPlay }: {
                         <button
                             type="button"
                             className="an-line"
-                            aria-label={words.play(line.letter, line.value, cells)}
+                            aria-label={words.play(line.letter, line.value.spoken, cells)}
                             onPointerEnter={() => {
                                 onPreview(line);
                             }}
@@ -218,7 +218,7 @@ export function Lines({ lines, toMove, onPreview, onPlay }: {
                             <span className={`an-letter an-letter-${toMove}`} aria-hidden="true">
                                 {line.letter}
                             </span>
-                            <span className="an-value">{line.value}</span>
+                            <span className="an-value">{line.value.shown}</span>
                             <span className="an-cells">{cells}</span>
                             <svg className="an-play" viewBox="0 0 24 24" aria-hidden="true">
                                 <path d="M9 5l7 7-7 7" />
@@ -316,7 +316,7 @@ export function EvalBar({ line, held }: { line: ShownLine | null; held: boolean 
     return (
         <div className={line === null ? `an-evalbar an-evalbar-held` : `an-evalbar`} style={style} aria-hidden="true">
             <span className="an-evalbar-x" />
-            {line === null ? null : <span className="an-evalbar-chip">{line.value}</span>}
+            {line === null ? null : <span className="an-evalbar-chip">{line.value.shown}</span>}
         </div>
     );
 }

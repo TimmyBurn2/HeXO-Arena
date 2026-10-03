@@ -1,10 +1,10 @@
 // The API version is spec semver, decoupled from package versions on
 // purpose.
-export const apiVersion = `0.41.0`;
+export const apiVersion = `0.45.0`;
 
 // The bot surface's own document, which other servers may implement,
 // versions apart from the whole site's.
-export const botApiVersion = `0.11.0`;
+export const botApiVersion = `0.12.0`;
 
 export const healthzPath = `/healthz`;
 
@@ -16,6 +16,8 @@ export * from './axial';
 export * from './board';
 export * from './challenge';
 export * from './dev';
+export * from './duel-estimate';
+export * from './duels';
 export * from './game-events';
 export * from './games';
 export * from './history';

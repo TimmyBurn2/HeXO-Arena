@@ -3,7 +3,7 @@ import { nameKeyOf, type BotListing } from '@hexo-arena/contract';
 import { BotBadge, Rating, summarizeAccepts } from '../components/player';
 import { Link } from '../router/Link';
 import { text } from '../text';
-import { readinessOf, type Readiness, type Roster } from './setup';
+import { ownedBy, readinessOf, type Readiness, type Roster } from './setup';
 
 /** How a bot was picked: by a pointer, or by keys still moving through the list. */
 export type PickedBy = `pointer` | `keys`;
@@ -19,10 +19,13 @@ export function RosterList({
     labelledBy,
     onChoose,
     reserved,
+    viewer,
 }: {
     roster: Roster;
     // The bots the running tournament holds, listed busy with their own reason.
     reserved: ReadonlySet<string>;
+    // The name of the person signed in, whose own bots read as theirs.
+    viewer: string | null;
     chosen: BotListing;
     name: string;
     labelledBy: string;
@@ -33,7 +36,7 @@ export function RosterList({
     // or from a pointer, which is done.
     const from = useRef<PickedBy>(`pointer`);
     const rows: { bot: BotListing; state: Readiness }[] = [
-        ...roster.named.map((bot) => ({ bot, state: readinessOf(bot) })),
+        ...roster.named.map((bot) => ({ bot, state: readinessOf(bot, reserved, viewer) })),
         ...roster.ready.map((bot) => ({ bot, state: `ready` as const })),
         ...roster.busy.map((bot) => ({ bot, state: reserved.has(bot.name) ? (`tournament` as const) : (`busy` as const) })),
     ];
@@ -81,7 +84,7 @@ export function RosterList({
                             <span className="roster-meta">
                                 {state === `ready` ? (
                                     <>
-                                        {bot.ownerName === null ? null : <span>{text.play.by(bot.ownerName)}</span>}
+                                        {ownedBy(bot, viewer) ? <span>{text.play.yours}</span> : bot.ownerName === null ? null : <span>{text.play.by(bot.ownerName)}</span>}
                                         <span>{summarizeAccepts(bot.accepts)}</span>
                                     </>
                                 ) : (

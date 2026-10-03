@@ -226,9 +226,11 @@ function CustomClock({
     );
 }
 
-// The value is a spin button too, so the arrow keys, Home and End reach it without the buttons;
-// a button at its end stays focusable, so pressing it there never drops focus.
-function Stepper({
+/**
+ * A number set by steps: the value is a spin button too, so the arrow keys, Home and End reach it without the buttons;
+ * a button at its end stays focusable, so pressing it there never drops focus.
+ */
+export function Stepper({
     label,
     value,
     min,

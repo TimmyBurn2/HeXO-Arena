@@ -2,6 +2,7 @@ import { resultSentence, type BotListing, type FinishedGameEntry, type LiveGameE
 import { Rating, seatName } from '../components/player';
 import { rosterOf } from '../play/setup';
 import { Link } from '../router/Link';
+import { HomeDuel } from './HomeDuel';
 import { text } from '../text';
 
 /** How many ready bots the panel offers by name. */
@@ -54,7 +55,7 @@ export function PlayPanel({ me, roster, yours, latest }: {
                     ))}
                 </ul>
             )}
-            {quiet ? <p className="note">{text.home.noBots}</p> : null}
+            {quiet ? <p className="note">{text.home.noBots}</p> : <HomeDuel bots={roster} me={me} />}
             {latest === null ? null : (
                 <p className="play-panel-last">
                     {text.home.lastGame(

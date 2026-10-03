@@ -25,6 +25,7 @@ import {
     type GameClock,
     type GameHeadline,
     type GamePlayer,
+    type GameDuel,
     type GamePlayers,
     type GameSnapshot,
     type LiveGameEntry,
@@ -53,10 +54,13 @@ import {
     insertGame,
     insertMove,
     recordFinish,
+    findGameDuel,
     findGameTournament,
     replayPosition,
+    type BotGameTag,
     type GameRecord,
     type OpeningCell,
+    type SeatLevels,
 } from './game-store';
 import type { PresenceRegistry } from './presence';
 import { randomFloat, randomIndex } from './random';
@@ -161,6 +165,8 @@ export interface LiveGame {
     readonly id: string;
     readonly seats: { readonly x: Seat; readonly o: Seat };
     readonly unratedByChoice: boolean;
+    // One person holds both seats: their own bot against them, or two of their bots.
+    readonly test: boolean;
     readonly timeControl: TimeControl;
     readonly openingPlies: OpeningPlies;
     position: Position;
@@ -171,6 +177,7 @@ export interface LiveGame {
     clock: Clock;
     wallTimer: Timer | null;
     tournament?: GameTournament;
+    duel?: GameDuel;
 }
 
 export type MoveErrorCode = `not_your_turn` | `cell_occupied` | `out_of_range` | `game_over`;
@@ -466,22 +473,25 @@ export class GameRegistry {
 
     /**
      * A person's game against a bot, at the bot's `level`, absent for its
-     * default; `unratedByChoice` holds only for a user at the default.
+     * default; `unratedByChoice` holds only for a user at the default, and
+     * `test` only for a user playing their own bot.
      */
     createGame(input: {
         person: Person;
         bot: { id: string; name: string };
         level?: SeatLevel;
         unratedByChoice?: boolean;
+        test?: boolean;
         timeControl: TimeControl;
         openingPlies: OpeningPlies;
     }): { gameId: string; snapshot: GameSnapshot } {
         const level = input.level ?? null;
         const unratedByChoice = input.unratedByChoice === true;
+        const test = input.test === true;
         const userSide: Side = this.#random() < 0.5 ? `x` : `o`;
         const { position, turns } = this.#placeOpening(input.openingPlies);
         const gameId = insertGame(this.#query, {
-            ...(input.person.kind === `guest` ? { guestName: input.person.name } : { userId: input.person.id, unratedByChoice }),
+            ...(input.person.kind === `guest` ? { guestName: input.person.name } : { userId: input.person.id, unratedByChoice, test }),
             botId: input.bot.id,
             userSide,
             timeControl: input.timeControl,
@@ -499,6 +509,7 @@ export class GameRegistry {
                     ? { x: humanSeat(input.person), o: botSeat(input.bot, level) }
                     : { x: botSeat(input.bot, level), o: humanSeat(input.person) },
             unratedByChoice,
+            test,
             timeControl: input.timeControl,
             openingPlies: input.openingPlies,
             position,
@@ -519,12 +530,14 @@ export class GameRegistry {
         return { gameId, snapshot: this.#liveSnapshot(game, input.person) };
     }
 
+    /** A challenge's game, an unrated test when its two bots belong to one owner. */
     createBotGame(input: {
         challenger: { id: string; name: string };
         dest: { id: string; name: string };
         timeControl: TimeControl;
         openingPlies: OpeningPlies;
         firstPlayer: FirstPlayer;
+        sameOwner: boolean;
     }): { gameId: string } {
         const { position, turns } = this.#placeOpening(input.openingPlies);
         // firstPlayer names who takes the first player turn; the placed
@@ -548,6 +561,8 @@ export class GameRegistry {
                 y: stone.y,
                 player: stone.player,
             })),
+            unratedByChoice: input.sameOwner,
+            test: input.sameOwner,
         });
         const game: LiveGame = {
             id: gameId,
@@ -555,7 +570,8 @@ export class GameRegistry {
                 challengerSide === `x`
                     ? { x: botSeat(input.challenger), o: botSeat(input.dest) }
                     : { x: botSeat(input.dest), o: botSeat(input.challenger) },
-            unratedByChoice: false,
+            unratedByChoice: input.sameOwner,
+            test: input.sameOwner,
             timeControl: input.timeControl,
             openingPlies: input.openingPlies,
             position,
@@ -577,33 +593,44 @@ export class GameRegistry {
     }
 
     /**
-     * A tournament game between two bots on their stated sides, from a
-     * stored opening, or a fresh one drawn to the given length when none is
-     * stored yet; answers the opening so the pairing's second game reuses it.
+     * A game the server schedules between two bots, a tournament's or a
+     * duel's, on their stated sides and levels, from a stored opening, or a
+     * fresh one drawn to the given length when none is stored yet; answers
+     * the opening so a pair's second game reuses it.
      */
-    createTournamentGame(input: {
+    createScheduledGame(input: {
         x: { id: string; name: string };
         o: { id: string; name: string };
+        levels?: SeatLevels;
+        unratedByChoice?: boolean;
+        test?: boolean;
         timeControl: TimeControl;
         openingPlies: OpeningPlies;
         opening: readonly OpeningCell[] | null;
-        pairing: { id: string; game: 1 | 2 };
+        tag: BotGameTag;
     }): { gameId: string; opening: OpeningCell[] } {
         const { position, turns } =
             input.opening === null ? this.#placeOpening(input.openingPlies) : openingTurns({ stones: input.opening.map((cell) => ({ ...cell })) });
         const opening = position.stones.map((stone) => ({ x: stone.x, y: stone.y, player: stone.player }));
+        const levels = input.levels ?? { x: null, o: null };
+        const unratedByChoice = input.unratedByChoice === true;
+        const test = input.test === true;
         const gameId = insertBotGame(this.#query, {
             challengerBotId: input.x.id,
             destBotId: input.o.id,
             challengerSide: `x`,
             timeControl: input.timeControl,
             opening,
-            pairing: input.pairing,
+            tag: input.tag,
+            levels,
+            unratedByChoice,
+            test,
         });
         const game: LiveGame = {
             id: gameId,
-            seats: { x: botSeat(input.x), o: botSeat(input.o) },
-            unratedByChoice: false,
+            seats: { x: botSeat(input.x, levels.x), o: botSeat(input.o, levels.o) },
+            unratedByChoice,
+            test,
             timeControl: input.timeControl,
             openingPlies: input.openingPlies,
             position,
@@ -614,8 +641,10 @@ export class GameRegistry {
             clock: { mode: `unlimited` },
             wallTimer: null,
         };
-        const tournament = findGameTournament(this.#query, gameId);
+        const tournament = input.tag.kind === `pairing` ? findGameTournament(this.#query, gameId) : undefined;
         if (tournament !== undefined) game.tournament = tournament;
+        const duel = input.tag.kind === `duel` ? findGameDuel(this.#query, gameId) : undefined;
+        if (duel !== undefined) game.duel = duel;
         this.#games.set(gameId, game);
         this.#started(game);
         this.#armClock(game, initialClock(game.timeControl));
@@ -663,10 +692,11 @@ export class GameRegistry {
         return this.#games.has(gameId);
     }
 
-    /** Live games, newest first: the map keeps creation order. */
-    liveGames(limit: number): LiveGameEntry[] {
+    /** Live games, newest first: the map keeps creation order; tests only when asked. */
+    liveGames(limit: number, tests = false): LiveGameEntry[] {
         return [...this.#games.values()]
             .reverse()
+            .filter((game) => tests || !game.test)
             .slice(0, limit)
             .map((game) => this.#liveEntry(game));
     }
@@ -699,6 +729,8 @@ export class GameRegistry {
             rated: !ratesNobody(game),
             cells: boardCells(game.position),
             clock: liveClockView(game),
+            ...(game.duel === undefined ? {} : { duel: game.duel }),
+            ...(game.test ? { test: true as const } : {}),
         };
     }
 
@@ -715,6 +747,7 @@ export class GameRegistry {
         if (record?.finishReason === undefined || record.finishReason === null) return null;
         const you = viewer === null ? undefined : storedSeatOf(record, viewer);
         const tournament = record.kind === `bots` ? findGameTournament(this.#query, gameId) : undefined;
+        const duel = record.kind === `bots` ? findGameDuel(this.#query, gameId) : undefined;
         return {
             gameId: record.id,
             status: `finished`,
@@ -728,7 +761,9 @@ export class GameRegistry {
             reason: record.finishReason,
             voided: record.voided,
             ...(tournament === undefined ? {} : { tournament }),
-            ...(record.kind === `human` && record.unratedByChoice ? { unratedByChoice: true } : {}),
+            ...(duel === undefined ? {} : { duel }),
+            ...(record.kind !== `guest` && record.unratedByChoice ? { unratedByChoice: true } : {}),
+            ...(record.kind !== `guest` && record.test ? { test: true as const } : {}),
         };
     }
 
@@ -1145,8 +1180,9 @@ export class GameRegistry {
             timeControl: game.timeControl,
             openingPlies: game.openingPlies,
             // Bots anchor humans: a game against a person moves the bot's
-            // rating never, only the person's.
-            rated: humanSide(game) === null,
+            // rating never, only the person's; and a bot game started
+            // unrated, as a duel may be, moves neither.
+            rated: humanSide(game) === null && !ratesNobody(game),
             level: seat.level?.id ?? null,
             engine: {
                 socketUrl: botGameSocketPath.replace(`{gameId}`, game.id),
@@ -1248,7 +1284,9 @@ export class GameRegistry {
             board: { cells: boardCells(game.position) },
             timeControl: game.timeControl,
             ...(game.tournament === undefined ? {} : { tournament: game.tournament }),
+            ...(game.duel === undefined ? {} : { duel: game.duel }),
             ...(game.unratedByChoice ? { unratedByChoice: true as const } : {}),
+            ...(game.test ? { test: true as const } : {}),
         };
     }
 

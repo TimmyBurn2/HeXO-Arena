@@ -26,6 +26,8 @@ export interface ChallengeRecord {
     readonly status: ChallengeStatus;
     readonly gameId: string | null;
     readonly createdAt: number;
+    /** Both bots belong to one owner, so the game the challenge starts is unrated. */
+    readonly sameOwner: boolean;
 }
 
 export interface NewChallenge {
@@ -53,6 +55,7 @@ const recordColumns = {
     status: challenges.status,
     gameId: challenges.gameId,
     createdAt: challenges.createdAt,
+    sameOwner: sql<number>`${challengerBots.ownerId} = ${destBots.ownerId}`,
 };
 
 function toRecord(row: {
@@ -68,6 +71,7 @@ function toRecord(row: {
     status: string;
     gameId: string | null;
     createdAt: number;
+    sameOwner: number;
 }): ChallengeRecord {
     // Rows are written through the schemas that read them back; a parse
     // failure means the store itself is broken.
@@ -84,6 +88,7 @@ function toRecord(row: {
         status: row.status as ChallengeStatus,
         gameId: row.gameId,
         createdAt: row.createdAt,
+        sameOwner: row.sameOwner === 1,
     };
 }
 

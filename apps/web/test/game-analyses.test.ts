@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { analysisTurnCap, undeclaredValues, type AnalysisList, type GameCell } from '@hexo-arena/contract';
+import { analysisTurnCap, undeclaredValues, type AnalysisList, type GameCell, type GamePlayers } from '@hexo-arena/contract';
 import { gameLineOf } from '../src/analysis/game-readings';
-import { analysesStep, headOf, initialAnalyses, ownChoiceId, refusalOf, underWay, type AnalysesState } from '../src/game/game-analyses';
+import { analysesStep, headOf, initialAnalyses, involvedNote, ownChoiceId, refusalOf, underWay, type AnalysesState } from '../src/game/game-analyses';
 import { community, judgedCells, ownViews } from './judged-game';
 
 const line = gameLineOf(judgedCells, 1);
-const list = (analyses: AnalysisList[`analyses`], optedOut = false): AnalysisList => ({ analyses, optedOut });
+const list = (analyses: AnalysisList[`analyses`], optedOut = false, independentOnline = false): AnalysisList => ({ analyses, optedOut, independentOnline });
 const queued = community({ analysisId: `a_2`, analyzer: null, status: `queued`, finishedAt: null, queuePosition: 3, progress: { done: 0, of: 5 }, turns: [] });
 const running = community({ analysisId: `a_2`, status: `running`, finishedAt: null, progress: { done: 2, of: 5 } });
 const failed = community({ analysisId: `a_3`, status: `failed`, failure: `timeout`, failedTurn: 4, progress: { done: 3, of: 5 }, turns: [] });
@@ -50,6 +50,17 @@ describe('the head a game\'s readings make', () => {
         expect(head.card).toBe(null);
     });
 
+    it('with one reading done by an analyzer whose owner played, offer one by an independent analyzer while one is online', () => {
+        const involved = community({ involved: true });
+        expect(headOf(list([involved, ...ownViews], false, true), line)).toMatchObject({ card: { kind: `independent` } });
+        expect(headOf(list([involved, failed], false, true), line).card).toEqual({ kind: `independent` });
+        expect(headOf(list([involved], false, false), line).card).toBe(null);
+        expect(headOf(list([community()], false, true), line).card).toBe(null);
+        const second = community({ analysisId: `a_4`, analyzer: { name: `driftwood`, version: null, ownerName: `mika`, values: undeclaredValues } });
+        expect(headOf(list([involved, second], false, true), line).card).toBe(null);
+        expect(headOf(list([involved, running], false, true), line).card).toMatchObject({ kind: `running` });
+    });
+
     it('keep a reading under way beside the done ones', () => {
         expect(headOf(list([community(), { ...running, analyzer: { name: `driftwood`, version: null, ownerName: null, values: undeclaredValues } }]), line).card).toMatchObject({ kind: `running` });
     });
@@ -62,6 +73,23 @@ describe('the head a game\'s readings make', () => {
         expect(headOf(list([]), longLine(analysisTurnCap + 1)).card).toEqual({ kind: `unreadable`, why: `too-long` });
         expect(headOf(list([]), longLine(analysisTurnCap)).card).toEqual({ kind: `none` });
         expect(headOf(list([]), gameLineOf(judgedCells.slice(0, 5), 5)).card).toEqual({ kind: `unreadable`, why: `unplayed` });
+    });
+});
+
+describe('what a reading says of an analyzer whose owner played', () => {
+    const players: GamePlayers = {
+        x: { name: `hextide`, rating: 1690, provisional: false, kind: `bot` },
+        o: { name: `mika`, rating: 1500, provisional: false, kind: `user` },
+    };
+    const by = (name: string) => ({ name, version: null, ownerName: `ana`, values: undeclaredValues });
+
+    it('name the analyzer when it played itself, and a player\'s analyzer otherwise', () => {
+        expect(involvedNote(community({ involved: true, analyzer: by(`hextide`) }), players)).toBe(`hextide played in this game`);
+        expect(involvedNote(community({ involved: true, analyzer: by(`pebble`) }), players)).toBe(`Read by an analyzer of a player in this game`);
+    });
+
+    it('say nothing of an independent reading', () => {
+        expect(involvedNote(community({ analyzer: by(`hextide`) }), players)).toBe(null);
     });
 });
 

@@ -1,5 +1,5 @@
-import { forcedWinner, valueWords, type AnalyzerValues, type AxialCoord, type HtttxPositionEvaluation, type Side } from '@hexo-arena/contract';
-import { playTurn, type Setup } from '@hexo-arena/rules';
+import { forcedWinner, playerOf, valueWords, type AnalyzerValues, type AxialCoord, type HtttxPositionEvaluation, type Side, type ValueText } from '@hexo-arena/contract';
+import { playTurn, winsThisTurn, type Setup } from '@hexo-arena/rules';
 import { cellText } from './notation';
 import type { Reading, ReadingLine } from './sources';
 
@@ -13,7 +13,7 @@ export interface ShownLine {
     readonly cells: readonly [AxialCoord] | readonly [AxialCoord, AxialCoord];
     readonly evaluation: HtttxPositionEvaluation;
     readonly completesSix: boolean;
-    readonly value: string;
+    readonly value: ValueText;
     /** Where its value draws, x-positive, on -1 to 1, as `drawnValue` places it. */
     readonly drawn: number;
     readonly cellsText: string;
@@ -33,8 +33,10 @@ export function shownLines(reading: Reading, position: Setup, mover: Side, count
 /**
  * Lines as they show at a position, at most `count` of them, best first, whoever read them, on `values`.
  * A line completes six with its first stone, which ends the turn, or with both.
+ * Where the mover holds a six on the board, a line names the mover's forced win as the board's win in 1, never a longer one, as judging reads the board.
  */
 export function shownLinesOf(lines: readonly ReadingLine[], position: Setup, mover: Side, count: number, values: AnalyzerValues): ShownLine[] {
+    const sixHeld = winsThisTurn(position.stones, playerOf(mover));
     return lines.slice(0, Math.min(count, lineLetters.length)).map((line, index) => {
         const [first, second] = line.cells;
         const firstWins = playTurn(position, [first]).ok;
@@ -46,7 +48,7 @@ export function shownLinesOf(lines: readonly ReadingLine[], position: Setup, mov
             cells,
             evaluation: line.evaluation,
             completesSix,
-            value: lineWords(line.evaluation, mover, completesSix, values) ?? ``,
+            value: lineWords(line.evaluation, mover, completesSix, values, sixHeld) ?? { shown: ``, spoken: `` },
             drawn: completesSix ? (mover === `x` ? 1 : -1) : drawnValue(line.evaluation, values),
             cellsText: cells.map(cellText).join(` `),
         };
@@ -84,20 +86,22 @@ export type AfterReading =
     | { readonly kind: `next`; readonly evaluation: HtttxPositionEvaluation; readonly mover: Side };
 
 /**
- * The value of the board after a turn in words, on the scale its analyzer declared,
+ * The value of the board after a turn in words, as its analyzer declared its values read,
  * a forced win counting its winner's own turns from that board:
  * a win the next mover's best line finds for that mover counts the line's own turn too.
  */
-export function afterWords(after: AfterReading, values: AnalyzerValues): string | null {
-    return after.kind === `played` ? valueWords(scaledEvaluation(after.evaluation, values), { kind: `board` }) : lineWords(after.evaluation, after.mover, false, values);
+export function afterWords(after: AfterReading, values: AnalyzerValues): ValueText | null {
+    return after.kind === `played` ? valueWords(after.evaluation, { kind: `board` }, values) : lineWords(after.evaluation, after.mover, false, values);
 }
 
 // A line's value for its mover, from the position it is played from;
-// a win in 1 for its own mover is a six it completes this very turn, whatever the board check found.
-function lineWords(evaluation: HtttxPositionEvaluation, mover: Side, completesSix: boolean, values: AnalyzerValues): string | null {
-    const scaled = scaledEvaluation(evaluation, values);
-    if (!completesSix && forcedWinner(evaluation) === mover && Math.abs(evaluation.win_in ?? 0) === 1) return valueWords(scaled, { kind: `board` });
-    return valueWords(scaled, { kind: `line`, mover, completesSix });
+// a win in 1 for its own mover is a six it completes this very turn, whatever the board check found,
+// and a six the mover holds on the board makes any forced win of its own a win in 1, however long the line claims.
+function lineWords(evaluation: HtttxPositionEvaluation, mover: Side, completesSix: boolean, values: AnalyzerValues, sixHeld = false): ValueText | null {
+    if (!completesSix && forcedWinner(evaluation) === mover && (sixHeld || Math.abs(evaluation.win_in ?? 0) === 1)) {
+        return valueWords({ win_in: mover === `x` ? 1 : -1 }, { kind: `board` }, values);
+    }
+    return valueWords(evaluation, { kind: `line`, mover, completesSix }, values);
 }
 
 /**

@@ -16,24 +16,24 @@ interface Width {
 }
 
 const lists = {
-    review: { analyses: [longReadings.kestrel, longReadings.driftwood, ...longReadings.own], optedOut: false },
-    none: { analyses: [...longReadings.own], optedOut: false },
-    queued: { analyses: [longReadings.queued, ...longReadings.own], optedOut: false },
-    running: { analyses: [longReadings.running, ...longReadings.own], optedOut: false },
-    failed: { analyses: [longReadings.failed, ...longReadings.own], optedOut: false },
-    'opted-out': { analyses: [], optedOut: true },
+    review: { analyses: [longReadings.kestrel, longReadings.driftwood, ...longReadings.own], optedOut: false, independentOnline: false },
+    none: { analyses: [...longReadings.own], optedOut: false, independentOnline: false },
+    queued: { analyses: [longReadings.queued, ...longReadings.own], optedOut: false, independentOnline: false },
+    running: { analyses: [longReadings.running, ...longReadings.own], optedOut: false, independentOnline: false },
+    failed: { analyses: [longReadings.failed, ...longReadings.own], optedOut: false, independentOnline: false },
+    'opted-out': { analyses: [], optedOut: true, independentOnline: false },
 } satisfies Record<string, AnalysisList>;
 type Named = keyof typeof lists;
 
-// Opens the finished game in Ink at turn 22, x's blunder, on a world the test keeps.
-async function open(page: Page, width: Width, list: AnalysisList, overrides: Partial<World> = {}): Promise<World> {
+// Opens the finished game in Ink at `turn`, by default 22, x's blunder, on a world the test keeps.
+async function open(page: Page, width: Width, list: AnalysisList, overrides: Partial<World> = {}, turn = 22): Promise<World> {
     await page.setViewportSize({ width: width.width, height: width.height });
     const ink = looks[0];
     if (ink === undefined) throw new Error(`no look registered`);
     await wear(page, ink);
     const state = world({ analyses: { 'long-finished': list }, ...overrides });
     await serve(page, state);
-    await page.goto(`${game}?turn=22`);
+    await page.goto(`${game}?turn=${String(turn)}`);
     await page.locator(`svg polygon.cell`).first().waitFor();
     return state;
 }
@@ -77,8 +77,9 @@ for (const width of [laptop, phone]) {
         // x's turn 22 leaves o a six on the board, o's win in 1 under every analyzer.
         await expect(row(page, 22).locator(`.feed-value`)).toHaveText(`o wins in 1`);
         await expect(row(page, 25).locator(`.feed-value`)).toHaveText(`o wins`);
-        // A value's side and number never break apart.
-        expect(await row(page, 21).locator(`.feed-value`).textContent()).toBe(`o\u00a00.12`);
+        // A value's side and number never break apart; kestrel's values are x's expected result, so a win chance is said in full.
+        expect(await row(page, 21).locator(`.feed-value`).textContent()).toBe(`o\u00a056%`);
+        await expect(row(page, 21).locator(`.feed-value + .sr-only`)).toHaveText(`o's win chance 56 percent`);
         await expect(page.locator(`.feed-note`)).toHaveText(/^Blunder: left a six; this turn leaves o a six to complete; kestrel preferred x: \[-?\d+,-?\d+\] \[-?\d+,-?\d+\]\.$/u);
         await expect(page.locator(`.feed-note`)).toBeInViewport();
         // The board: line A on its empty cells in x's color, the mark beside the played stones.
@@ -110,6 +111,9 @@ test(`the graph and the marks follow the reading picked, and the own view judges
     await expect(page.locator(`.dr-graph-label`).first()).toHaveText(`x ahead above the lineop 0-2 to turn 25`);
     await head(page).getByRole(`button`, { name: `driftwood` }).click();
     await expect(page.locator(`.dr-by`)).toHaveText(`driftwoodBOTby mika; 2 s a position`);
+    // driftwood declares nothing, so its values stay raw, in hundredths.
+    await expect(row(page, 21).locator(`.feed-value`)).toHaveText(/^[xo]\u00a00\.\d\d$/u);
+    await expect(row(page, 21).locator(`.feed-value + .sr-only`)).toHaveCount(0);
     await expect(page.getByRole(`img`, { name: `Graph of driftwood's reading, from the opening to turn 25` })).toBeVisible();
     await head(page).getByRole(`button`, { name: `Own view` }).click();
     await expect(page.locator(`.dr-by-note`)).toHaveText(`Each bot's view of its own turns, published once the game ended`);
@@ -143,7 +147,7 @@ test(`a press on a line of the feed or on the graph shows that turn`, async ({ p
     await row(page, 6).click();
     await expect(scrubWords(page)).toHaveText(`Turn 6 of 25`);
     await expect(row(page, 6).locator(`.feed-mark`)).toHaveText(`?!inaccuracy`);
-    await expect(page.locator(`.feed-note`)).toHaveText(/^Inaccuracy: kestrel rates this turn 0\.12 below its choice, x\u00a00\.17 before and x\u00a00\.05 after; it preferred x: /u);
+    await expect(page.locator(`.feed-note`)).toHaveText(/^Inaccuracy: kestrel rates this turn 6 points below its choice, x\u00a059% before and x\u00a053% after; it preferred x: /u);
     await expect(page.locator(`.board-tag.jd-inaccuracy`)).toHaveCount(1);
     const graph = await page.locator(`.dr-graph .graph-svg`).boundingBox();
     if (graph === null) throw new Error(`no graph`);
@@ -211,6 +215,34 @@ for (const width of [laptop, phone]) {
     });
 }
 
+for (const width of [laptop, phone]) {
+    test(`a reading by the analyzer that played says so under its name, and with no independent analyzer online nothing offers another at ${width.name}`, async ({ page }) => {
+        await open(page, width, { analyses: [longReadings.hextide, ...longReadings.own], optedOut: false, independentOnline: false });
+        await openPanel(page, width);
+        await expect(head(page).getByRole(`group`, { name: `Readings` }).getByRole(`button`)).toHaveText([`hextide`, `Own view`]);
+        await expect(head(page).locator(`.dr-by`)).toHaveText(`hextideBOT2.1, by ana; 2 s a position`);
+        await expect(head(page).locator(`.dr-involved`)).toHaveText(`hextide played in this game`);
+        await expect(card(page)).toHaveCount(0);
+        await capture(page, `involved--ink--${width.name}`);
+        await head(page).getByRole(`button`, { name: `Own view` }).click();
+        await expect(head(page).locator(`.dr-involved`)).toHaveCount(0);
+    });
+
+    test(`a game read only by a player's analyzer offers a reading by an independent analyzer, asked for by no name at ${width.name}`, async ({ page }) => {
+        const involved = { ...longReadings.kestrel, involved: true };
+        const state = await open(page, width, { analyses: [involved, ...longReadings.own], optedOut: false, independentOnline: true });
+        await openPanel(page, width);
+        await expect(head(page).locator(`.dr-involved`)).toHaveText(`Read by an analyzer of a player in this game`);
+        await expect(card(page).locator(`.dr-card-title`)).toHaveText(`An independent analyzer is online`);
+        await expect(card(page)).toContainText(`10 of 10 requests left today.`);
+        await capture(page, `independent--ink--${width.name}`);
+        await page.getByRole(`button`, { name: `Ask an independent analyzer` }).click();
+        await expect(card(page)).toHaveText(`Waiting for an analyzer; this game is next`);
+        await expect(page.locator(`.dr-status`)).toBeFocused();
+        expect(state.requested).toEqual([{ gameId: `long-finished`, request: {} }]);
+    });
+}
+
 test(`a requested reading is polled while it waits and runs: the graph fills, then the marks appear`, async ({ page }) => {
     const state = await open(page, laptop, lists.none);
     await openPanel(page, laptop);
@@ -220,7 +252,7 @@ test(`a requested reading is polled while it waits and runs: the graph fills, th
     await expect(card(page)).toContainText(`kestrel is reading turn 13 of 25`, { timeout: 8_000 });
     await expect(head(page).getByRole(`button`, { name: `kestrel` })).toHaveAttribute(`aria-pressed`, `true`);
     await expect(page.locator(`.dr-marks, .graph-mark`)).toHaveCount(0);
-    state.analyses[`long-finished`] = { analyses: [longReadings.kestrel, ...longReadings.own], optedOut: false };
+    state.analyses[`long-finished`] = { analyses: [longReadings.kestrel, ...longReadings.own], optedOut: false, independentOnline: false };
     await expect(page.locator(`.dr-marks-row`)).toHaveCount(2, { timeout: 8_000 });
     await expect(card(page)).toHaveCount(0);
     // Done, nothing is under way, so the page reads no more.
@@ -385,6 +417,12 @@ for (const peek of peeks) {
         await expect(page.locator(`.peek-readout, .peek-graph`).first()).toBeHidden();
     });
 }
+
+test(`a phone's closed sheet reads an unjudged turn's win chance in its peek, and says it in full`, async ({ page }) => {
+    await open(page, phone, lists.review, {}, 8);
+    await expect(page.locator(`.peek-readout-words`)).toHaveText(`hextide: x 56%; kestrel`);
+    await expect(page.locator(`.peek-readout .sr-only`)).toHaveText(`hextide: x's win chance 56 percent; kestrel`);
+});
 
 test(`the feed folds a run of marked turns after its first line, opens it to its lines, and keeps it open while the turn shown lies in it`, async ({ page }) => {
     await open(page, laptop, lists.review);

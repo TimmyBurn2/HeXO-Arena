@@ -75,7 +75,11 @@ export function SeatChip({ snapshot, side, corner }: { snapshot: GameSnapshot; s
                             <Rating value={player.rating} provisional={player.provisional} />
                         </span>
                     )}
-                    {player.rating === null || choseUnrated ? <span className="tag muted">{text.game.unrated}</span> : null}
+                    {snapshot.test === true && player.kind === `user` ? (
+                        <span className="tag muted">{text.game.test}</span>
+                    ) : player.rating === null || choseUnrated ? (
+                        <span className="tag muted">{text.game.unrated}</span>
+                    ) : null}
                     {top && snapshot.status === `in-progress` ? <span className="hud-mode">{clockText(snapshot.clock.mode)}</span> : null}
                 </span>
             </span>
@@ -97,7 +101,11 @@ export function YouChip({ snapshot, you, me }: { snapshot: GameSnapshot; you: Si
                             <Rating value={self.rating} provisional={self.provisional} />
                         </span>
                     ) : null}
-                    {self?.kind === `guest` || snapshot.unratedByChoice === true ? <span className="tag muted">{text.game.unrated}</span> : null}
+                    {snapshot.test === true ? (
+                        <span className="tag muted">{text.game.test}</span>
+                    ) : self?.kind === `guest` || snapshot.unratedByChoice === true ? (
+                        <span className="tag muted">{text.game.unrated}</span>
+                    ) : null}
                     <span>{text.game.playing(you)}</span>
                 </span>
             </span>

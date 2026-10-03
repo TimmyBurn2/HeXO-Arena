@@ -71,6 +71,7 @@ export interface TestApp {
     drain: BuiltApp[`drain`];
     limits: BuiltApp[`limits`];
     tournaments: BuiltApp[`tournaments`];
+    duels: BuiltApp[`duels`];
     presence: PresenceRegistry;
     watchers: GameWatchers;
 }
@@ -102,7 +103,7 @@ export async function createTestApp(options?: {
     runMigrations(sqlite);
     const presence = options?.presence ?? new PresenceRegistry();
     const watchers = new GameWatchers();
-    const { app, admin, drain, limits, tournaments } = await buildApp({
+    const { app, admin, drain, limits, tournaments, duels } = await buildApp({
         sqlite,
         discord,
         secureCookies: options?.secureCookies ?? false,
@@ -121,10 +122,10 @@ export async function createTestApp(options?: {
         ...(options?.limits !== undefined && { limits: options.limits }),
         ...(options?.backup !== undefined && { backup: options.backup }),
         ...(options?.erasures !== undefined && { erasures: options.erasures }),
-        // Tests move the scheduler with their own ticks.
+        // Tests move the scheduler and the duel runner with their own ticks.
         tournamentTickMs: 0,
     });
-    return { sqlite, app, admin, drain, limits, presence, watchers, tournaments };
+    return { sqlite, app, admin, drain, limits, presence, watchers, tournaments, duels };
 }
 
 /** A Discord sign-in started in one browser: the state Discord echoes, and the cookies that browser then holds. */

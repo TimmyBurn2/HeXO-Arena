@@ -46,9 +46,9 @@ export const challengeCreateErrorCodes = [
 // The daily caps, which the UTC day's turn lifts, so they answer 429 with the wait.
 export const challengeQuotaErrorCodes = [`daily_challenge_cap`, `daily_pair_cap`, `daily_bot_cap`] as const;
 
-// The challenger's owner also owns the target: an owner cannot farm their
-// own bots against each other. A delisted bot neither challenges nor is
-// challenged, whichever side it sits on.
+// A delisted bot neither challenges nor is challenged, whichever side it
+// sits on. own_bot is never sent, since two bots of one owner play unrated,
+// and stays listed until a major version may drop it.
 export const challengeForbiddenErrorCodes = [`own_bot`, `delisted`] as const;
 
 // Acceptance re-checks the one gate that can have moved since creation.

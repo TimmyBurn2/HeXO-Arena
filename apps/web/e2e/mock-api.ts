@@ -1,10 +1,23 @@
 import type { Page, Route } from '@playwright/test';
 import {
+    acceptsCovers,
+    botConcurrentGameCap,
+    duelDailyCap,
+    duelGameCounts,
+    duelLiveCap,
+    duelPerBotCap,
+    seatLevelOf,
     analysesPerGame,
     analysisListSchema,
     analysisRequestSchema,
     communityAnalysisSchema,
     createGameRequestSchema,
+    createDuelRequestSchema,
+    duelBotStatesSchema,
+    duelDetailSchema,
+    duelListQuerySchema,
+    duelListSchema,
+    estimateOf,
     meUpdateRequestSchema,
     positionCheckRequestSchema,
     positionReadingRequestSchema,
@@ -26,6 +39,8 @@ import {
     reportFormMetaName,
     reportRequestSchema,
     botListingSchema,
+    botSettingsSchema,
+    botSettingsUpdateSchema,
     devAccountSchema,
     gameSnapshotSchema,
     leaderboardActiveDays,
@@ -47,6 +62,13 @@ import {
     tournamentEntryRequestSchema,
     tournamentListSchema,
     type BotListing,
+    type BotSettings,
+    type DuelBotState,
+    type DuelDetail,
+    type DuelGame,
+    type DuelSide,
+    type DuelSummary,
+    type EstimateUnit,
     type DevAccount,
     type GameSnapshot,
     type LegalDetails,
@@ -120,6 +142,14 @@ export interface World {
     analyses: Record<string, AnalysisList>;
     // Every whole-game request so far, by game, in order.
     requested: { gameId: string; request: AnalysisRequest }[];
+    // The settings of bots the signed-in person owns, by name; one not named reads as never set, its declared text as listed.
+    settings: Record<string, BotSettings>;
+    // Every duel and test by id, which the lists read too.
+    duels: DuelDetail[];
+    // Each listed bot's duel state; null derives it from the bots and the running duels, every switch on.
+    duelStates: DuelBotState[] | null;
+    // How a duel's start answers: the duel, as the request asks, or a refusal.
+    duelStart: `created` | { status: number; code: string; retryAfter?: number };
 }
 
 /**
@@ -400,6 +430,379 @@ export const liveGames: LiveGameEntry[] = (
         clock: runningClock(timeControl, index),
     };
 });
+
+// The bots the duel screens pick from, as the duel mockups name them:
+// ana's three, one closed to others, one offline; bruno's with four
+// strengths; three dev bots in a duel; dmitri's, whose owner keeps duels
+// to himself.
+const steadyLevels: Levels = {
+    default: `steady`,
+    list: [
+        { id: `easy`, label: `easy`, budget: { timeMs: 100 } },
+        { id: `steady`, label: `steady`, budget: { nodes: 20_000 } },
+        { id: `sharp`, label: `sharp`, budget: { timeMs: 1_000 } },
+    ],
+};
+const pistolLevels: Levels = {
+    default: `strong`,
+    list: [
+        { id: `beginner`, label: `beginner`, budget: { depthTurns: 1 } },
+        { id: `casual`, label: `casual`, budget: { nodes: 5_000 } },
+        { id: `club`, label: `club`, budget: { nodes: 50_000 } },
+        { id: `strong`, label: `strong`, budget: { timeMs: 1_000 }, about: `Searches as deep as one second allows, usually four turns.` },
+    ],
+};
+const wide = { turnMs: [5_000, 300_000], match: true, unlimited: true };
+export const duelBots: BotListing[] = [
+    { name: `hextide`, ownerName: `ana`, online: true, openForChallenges: true, rating: 2117, provisional: true, liveGames: 0, levels: null, analyzer: null, version: `1.4.0`, accepts: { turnMs: [5_000, 120_000], match: true, unlimited: false } },
+    { name: `pebble`, ownerName: `ana`, online: true, openForChallenges: false, rating: 1182, provisional: true, liveGames: 0, levels: null, analyzer: null, version: `0.3.1`, accepts: wide },
+    { name: `cinder`, ownerName: `ana`, online: true, openForChallenges: true, rating: 1500, provisional: true, liveGames: 0, levels: steadyLevels, analyzer: null, version: `0.2.0`, accepts: { turnMs: [5_000, 60_000], match: false, unlimited: true } },
+    { name: `lantern`, ownerName: `ana`, online: false, openForChallenges: false, rating: 1500, provisional: true, liveGames: 0, levels: null, analyzer: null },
+    {
+        name: `Pistol1`,
+        ownerName: `bruno`,
+        online: true,
+        openForChallenges: true,
+        rating: 1956,
+        provisional: true,
+        liveGames: 1,
+        levels: pistolLevels,
+        analyzer: null,
+        about: `Classical alpha-beta search with threat-first move generation.`,
+        accepts: wide,
+    },
+    { name: `devbot-b`, ownerName: `devowner-b`, online: true, openForChallenges: true, rating: 1519, provisional: false, liveGames: 1, levels: steadyLevels, analyzer: null, accepts: wide },
+    { name: `devbot-c`, ownerName: `devowner-c`, online: true, openForChallenges: true, rating: 1500, provisional: false, liveGames: 1, levels: steadyLevels, analyzer: null, accepts: wide },
+    { name: `devbot-a`, ownerName: `devowner-a`, online: true, openForChallenges: true, rating: 1498, provisional: false, liveGames: 0, levels: steadyLevels, analyzer: null, accepts: wide },
+    { name: `quietlake`, ownerName: `dmitri`, online: true, openForChallenges: true, rating: 1460, provisional: true, liveGames: 0, levels: null, analyzer: null, accepts: { turnMs: [5_000, 300_000], match: false, unlimited: true } },
+    { name: `driftwood`, ownerName: `bruno`, online: false, openForChallenges: false, rating: 1388, provisional: false, liveGames: 0, levels: null, analyzer: null, accepts: wide },
+];
+
+/** A bot as a duel names it, at its rating now and then. */
+export function duelBotOf(bot: BotListing, extra: Partial<DuelDetail[`first`]> = {}): DuelDetail[`first`] {
+    return {
+        name: bot.name,
+        ownerName: bot.ownerName ?? `nobody`,
+        ratingAtStart: bot.rating,
+        ...(bot.version === undefined ? {} : { version: bot.version }),
+        now: { rating: bot.rating, provisional: bot.provisional },
+        ...extra,
+    };
+}
+
+const named = (name: string) => duelBots.find((bot) => bot.name === name) ?? duelBots[0] ?? (() => { throw new Error(`no duel bot`); })();
+
+/** How one game of a fixture duel went: who won, no winner, live, or not played. */
+type Outcome = DuelSide | `none` | `live` | `not_played`;
+
+interface DuelPlan {
+    id: string;
+    first: DuelDetail[`first`];
+    second: DuelDetail[`second`];
+    kind: DuelDetail[`kind`];
+    startedBy: string;
+    games: DuelDetail[`terms`][`games`];
+    rated: boolean;
+    timeControl?: DuelDetail[`terms`][`timeControl`];
+    openingPlies?: DuelDetail[`terms`][`openingPlies`];
+    // Each game's outcome in order; the games past them are still to play.
+    outcomes: readonly Outcome[];
+    live: boolean;
+    status: DuelDetail[`status`];
+    end?: DuelDetail[`end`];
+    // When it began and ended, in hours before now.
+    began?: number;
+    ended?: number;
+}
+
+const hoursAgo = (hours: number) => new Date(Date.now() - hours * 3_600_000).toISOString().replace(/\.\d{3}Z$/u, `Z`);
+
+/** A duel as its page reads it, its score, games, openings, and a test's estimate drawn from the plan. */
+export function duelFixture(plan: DuelPlan): DuelDetail {
+    const timeControl = plan.timeControl ?? { mode: `turn`, turnTimeMs: 10_000 };
+    const openingPlies = plan.openingPlies ?? 5;
+    const games: DuelGame[] = Array.from({ length: plan.games }, (_, index) => {
+        const number = index + 1;
+        const outcome = plan.outcomes[index];
+        const pair = Math.ceil(number / 2);
+        const x: DuelSide = number % 2 === 1 ? `first` : `second`;
+        const drawn = outcome !== undefined && outcome !== `not_played`;
+        const opening = drawn || (number % 2 === 0 && plan.outcomes[index - 1] !== undefined) ? playedCells(openingPlies, pair + plan.id.length).slice(0, openingPlies) : null;
+        return {
+            game: number,
+            x,
+            gameId: drawn ? `${plan.id}-${String(number)}` : null,
+            state: outcome === undefined ? (plan.status === `running` ? `pending` : `not_played`) : outcome === `live` ? `live` : outcome === `not_played` ? `not_played` : `played`,
+            winner: outcome === `first` || outcome === `second` ? outcome : null,
+            reason: outcome === `first` || outcome === `second` ? `six-in-a-row` : outcome === `none` ? `terminated` : null,
+            turns: outcome === `first` || outcome === `second` || outcome === `none` ? 20 + ((number * 7) % 23) : null,
+            opening,
+        };
+    });
+    const score = { first: games.filter((game) => game.winner === `first`).length, second: games.filter((game) => game.winner === `second`).length };
+    const units: EstimateUnit[] = [];
+    for (let at = 0; at < games.length; at += 2) {
+        const unit = { games: 0, points: 0 };
+        for (const game of games.slice(at, at + 2)) {
+            if (game.state !== `played`) continue;
+            unit.games += 1;
+            unit.points += game.winner === null ? 0.5 : game.winner === `first` ? 1 : 0;
+        }
+        units.push(unit);
+    }
+    const estimate = plan.kind === `test` ? estimateOf(units) : null;
+    const liveGame = games.find((game) => game.state === `live`);
+    const players = (side: DuelSide) => ({ name: plan[side].name, rating: plan[side].ratingAtStart, provisional: plan[side].now?.provisional ?? false, kind: `bot` as const });
+    const cells = playedCells(37, plan.id.length);
+    const live: LiveGameEntry[] =
+        liveGame === undefined || liveGame.gameId === null
+            ? []
+            : [
+                  {
+                      gameId: liveGame.gameId,
+                      players: liveGame.x === `first` ? { x: players(`first`), o: players(`second`) } : { x: players(`second`), o: players(`first`) },
+                      timeControl,
+                      toMove: sideOfPly(cells.length),
+                      rated: plan.rated,
+                      cells,
+                      clock: { mode: `turn`, remainingTurnMs: 6_000 },
+                      duel: { id: plan.id, game: liveGame.game, of: plan.games },
+                      ...(plan.kind === `test` ? { test: true as const } : {}),
+                  },
+              ];
+    return {
+        id: plan.id,
+        kind: plan.kind,
+        status: plan.status,
+        startedBy: plan.startedBy,
+        first: plan.first,
+        second: plan.second,
+        terms: { games: plan.games, openingPlies, timeControl, rated: plan.rated },
+        score,
+        ...(estimate === null ? {} : { estimate }),
+        ...(plan.end === undefined ? {} : { end: plan.end }),
+        createdAt: hoursAgo(plan.began ?? 1),
+        endedAt: plan.status === `running` ? null : hoursAgo(plan.ended ?? 0.2),
+        games,
+        live,
+    };
+}
+
+/** A duel as a list names it. */
+export function summaryOfDuel(duel: DuelDetail): DuelSummary {
+    const { games, live: _live, waiting: _waiting, ...fields } = duel;
+    return { ...fields, played: games.filter((game) => game.state === `played`).length, results: games.map(({ game, x, gameId, state, winner }) => ({ game, x, gameId, state, winner })) };
+}
+
+// What the server refuses a duel's start for, in the order it checks:
+// each bot's gates, being open and its owner's switch binding only bots the
+// starter does not own, then the pair, the starter's running duels, a rated
+// duel the starter may not have, a length only a test takes, and the day's cap.
+function duelRefusal(state: World, viewer: string, pair: readonly [BotListing, BotListing], asked: { games: number; timeControl: DuelDetail[`terms`][`timeControl`]; rated: boolean; levels?: { first?: string | undefined; second?: string | undefined } | undefined }): { status: number; code: string } | null {
+    const states = state.duelStates ?? statesOf(state);
+    const stateOf = (bot: BotListing) => states.find((each) => each.name === bot.name);
+    const own = (bot: BotListing) => bot.ownerName === viewer;
+    if (pair.some((bot) => !bot.online || (!bot.openForChallenges && !own(bot)))) return { status: 400, code: `not_open` };
+    if (pair.some((bot) => stateOf(bot)?.duelsByOthers === false && !own(bot))) return { status: 400, code: `duel_refused` };
+    if (pair.some((bot) => !acceptsCovers(bot.accepts, asked.timeControl))) return { status: 400, code: `clock_not_accepted` };
+    const [first, second] = pair;
+    const declares = (bot: BotListing, id: string | undefined) => id === undefined || bot.levels?.list.some((level) => level.id === id) === true;
+    if (!declares(first, asked.levels?.first) || !declares(second, asked.levels?.second)) return { status: 400, code: `unknown_level` };
+    if (pair.some((bot) => bot.liveGames >= botConcurrentGameCap || (stateOf(bot)?.dueling.length ?? 0) >= duelPerBotCap)) return { status: 400, code: `bot_busy` };
+    const running = state.duels.filter((duel) => duel.status === `running`);
+    if (running.some((duel) => [duel.first.name, duel.second.name].every((name) => name === first.name || name === second.name))) return { status: 400, code: `duel_live` };
+    if (running.filter((duel) => duel.startedBy === viewer).length >= duelLiveCap) return { status: 400, code: `duel_busy` };
+    const test = first.ownerName !== null && first.ownerName === second.ownerName;
+    const atDefault = [asked.levels?.first, asked.levels?.second].every((id, index) => id === undefined || id === pair[index]?.levels?.default);
+    if (asked.rated && !(own(first) !== own(second) && atDefault && !test)) return { status: 400, code: `unrated_only` };
+    if (!test && !duelGameCounts.some((count) => count === asked.games)) return { status: 400, code: `test_only` };
+    if (state.duels.filter((duel) => duel.startedBy === viewer).length >= duelDailyCap) return { status: 429, code: `daily_duel_cap` };
+    return null;
+}
+
+// Each listed bot's switch on, and the bots it plays a running duel with.
+function statesOf(state: World): DuelBotState[] {
+    return state.bots.map((bot) => ({
+        name: bot.name,
+        duelsByOthers: state.settings[bot.name]?.duelsByOthers ?? true,
+        dueling: state.duels
+            .filter((duel) => duel.status === `running` && [duel.first.name, duel.second.name].includes(bot.name))
+            .map((duel) => (duel.first.name === bot.name ? duel.second.name : duel.first.name)),
+    }));
+}
+
+const won = (side: DuelSide, count: number): Outcome[] => Array.from({ length: count }, () => side);
+
+/** The duels and tests the mockups show. */
+export const duelFixtures = {
+    live: duelFixture({
+        id: `d_devbotbclive`,
+        first: duelBotOf(named(`devbot-b`), { now: { rating: 1519, provisional: false } }),
+        second: duelBotOf(named(`devbot-c`)),
+        kind: `duel`,
+        startedBy: `bruno`,
+        games: 10,
+        rated: false,
+        outcomes: [`first`, `first`, `first`, `live`],
+        live: true,
+        status: `running`,
+    }),
+    rated: duelFixture({
+        id: `d_hextideqlake`,
+        first: duelBotOf(named(`hextide`), { ratingAtStart: 2110, now: { rating: 2117, provisional: true } }),
+        second: duelBotOf(named(`quietlake`), { ratingAtStart: 1427, now: { rating: 1420, provisional: true } }),
+        kind: `duel`,
+        startedBy: `ana`,
+        games: 2,
+        rated: true,
+        outcomes: [`first`, `first`],
+        live: false,
+        status: `finished`,
+        began: 0.4,
+        ended: 0.2,
+    }),
+    test: duelFixture({
+        id: `d_cinderpebble`,
+        first: duelBotOf(named(`cinder`)),
+        second: duelBotOf(named(`pebble`)),
+        kind: `test`,
+        startedBy: `ana`,
+        games: 50,
+        rated: false,
+        // 31 to 19 by pairs: six pairs won whole, nineteen split.
+        outcomes: [...won(`first`, 12), ...Array.from({ length: 19 }, (): Outcome[] => [`first`, `second`]).flat()],
+        live: false,
+        status: `finished`,
+        began: 1.8,
+        ended: 1,
+    }),
+    testLive: duelFixture({
+        id: `d_cinderpblliv`,
+        first: duelBotOf(named(`cinder`)),
+        second: duelBotOf(named(`pebble`)),
+        kind: `test`,
+        startedBy: `ana`,
+        games: 50,
+        rated: false,
+        outcomes: [...Array.from({ length: 9 }, (): Outcome[] => [`first`, `second`]).flat(), `first`, `first`, `none`, `first`, `live`],
+        live: true,
+        status: `running`,
+        began: 0.3,
+    }),
+    cutShort: duelFixture({
+        id: `d_pistoldevaa1`,
+        first: duelBotOf(named(`Pistol1`)),
+        second: duelBotOf(named(`devbot-a`)),
+        kind: `duel`,
+        startedBy: `ana`,
+        games: 4,
+        rated: false,
+        outcomes: [`first`, `first`],
+        live: false,
+        status: `cut_short`,
+        end: { reason: `offline`, bot: `second` },
+        began: 3.5,
+        ended: 3,
+    }),
+    sweep: duelFixture({
+        id: `d_hextidepbl20`,
+        first: duelBotOf(named(`hextide`)),
+        second: duelBotOf(named(`pebble`)),
+        kind: `test`,
+        startedBy: `ana`,
+        games: 20,
+        rated: false,
+        outcomes: won(`first`, 20),
+        live: false,
+        status: `finished`,
+        began: 26,
+        ended: 25,
+    }),
+};
+
+/** Games of the duels as the history lists them: a duel's, unrated, and a test's, which shows only with tests asked. */
+export const duelGameRows: FinishedGameEntry[] = [
+    {
+        gameId: `${duelFixtures.live.id}-3`,
+        players: { x: { name: `devbot-b`, rating: 1519, provisional: false, kind: `bot` }, o: { name: `devbot-c`, rating: 1500, provisional: false, kind: `bot` } },
+        winner: `x`,
+        reason: `six-in-a-row`,
+        timeControl: { mode: `turn`, turnTimeMs: 10_000 },
+        openingPlies: 5,
+        turns: 52,
+        finishedAt: hoursAgo(0.02),
+        rated: false,
+        voided: false,
+        unratedByChoice: true,
+        duel: { id: duelFixtures.live.id, game: 3, of: 10 },
+        analyses: 0,
+    },
+    {
+        gameId: `${duelFixtures.testLive.id}-22`,
+        players: { x: { name: `pebble`, rating: 1182, provisional: true, kind: `bot` }, o: { name: `cinder`, rating: 1500, provisional: true, kind: `bot` } },
+        winner: `o`,
+        reason: `six-in-a-row`,
+        timeControl: { mode: `turn`, turnTimeMs: 10_000 },
+        openingPlies: 5,
+        turns: 33,
+        finishedAt: hoursAgo(0.03),
+        rated: false,
+        voided: false,
+        unratedByChoice: true,
+        test: true,
+        duel: { id: duelFixtures.testLive.id, game: 22, of: 50 },
+        analyses: 0,
+    },
+    {
+        gameId: `${duelFixtures.rated.id}-2`,
+        players: { x: { name: `hextide`, rating: 2114, provisional: true, kind: `bot` }, o: { name: `quietlake`, rating: 1425, provisional: true, kind: `bot` } },
+        winner: `x`,
+        reason: `six-in-a-row`,
+        timeControl: { mode: `turn`, turnTimeMs: 10_000 },
+        openingPlies: 5,
+        turns: 6,
+        finishedAt: hoursAgo(0.07),
+        rated: true,
+        voided: false,
+        duel: { id: duelFixtures.rated.id, game: 2, of: 2 },
+        analyses: 0,
+    },
+];
+
+/** A duel's live game and a test's, as their pages read them. */
+export const duelGameSnapshots: Record<string, GameSnapshot> = {
+    'duel-game': {
+        gameId: `duel-game`,
+        players: { x: { name: `devbot-c`, rating: 1500, provisional: false, kind: `bot` }, o: { name: `devbot-b`, rating: 1519, provisional: false, kind: `bot` } },
+        openingPlies: 5,
+        board: { cells: playedCells(37, 4) },
+        timeControl: { mode: `turn`, turnTimeMs: 10_000 },
+        duel: { id: duelFixtures.live.id, game: 4, of: 10 },
+        unratedByChoice: true,
+        status: `in-progress`,
+        toMove: `o`,
+        clock: { mode: `turn`, remainingTurnMs: 6_000 },
+    },
+    'test-game': {
+        gameId: `test-game`,
+        players: { x: { name: `cinder`, rating: 1500, provisional: true, kind: `bot` }, o: { name: `pebble`, rating: 1182, provisional: true, kind: `bot` } },
+        openingPlies: 5,
+        board: { cells: playedCells(29, 5) },
+        timeControl: { mode: `turn`, turnTimeMs: 10_000 },
+        duel: { id: duelFixtures.testLive.id, game: 23, of: 50 },
+        unratedByChoice: true,
+        test: true,
+        status: `in-progress`,
+        toMove: `x`,
+        clock: { mode: `turn`, remainingTurnMs: 4_000 },
+    },
+};
+
+/** ana, signed in, who owns three of the duel bots. */
+export const anaMe: Me = { kind: `user`, name: `ana`, rating: 1402, provisional: false, discord: null, liveGames: [], analysisOptOut: false, analysisLeft: { positions: 300, games: 10 } };
+
+/** bruno, signed in, who started the live duel. */
+export const brunoMe: Me = { kind: `user`, name: `bruno`, rating: 1460, provisional: false, discord: null, liveGames: [], analysisOptOut: false, analysisLeft: { positions: 300, games: 10 } };
 
 // Fixtures name the bots; a detail keys them by their place among its
 // entries, as the server does, and its pairings carry the names.
@@ -929,20 +1332,25 @@ function ownWinIn(next: number, nextMover: Side): number {
 const kestrelRef = { name: `kestrel`, version: `0.9`, ownerName: `tom`, values: winChanceValues };
 const readAt = new Date(Date.UTC(2026, 9, 1, 12)).toISOString();
 
-/** long-finished's readings in each state a community reading passes through, and both bots' own views. */
+/**
+ * long-finished's readings in each state a community reading passes through, and both bots' own views;
+ * and one by hextide, an analyzer as well as x's seat, which played in the game it read.
+ */
 export const longReadings: {
     kestrel: CommunityAnalysis;
     driftwood: CommunityAnalysis;
+    hextide: CommunityAnalysis;
     running: CommunityAnalysis;
     queued: CommunityAnalysis;
     failed: CommunityAnalysis;
     own: OwnAnalysis[];
 } = {
-    kestrel: { kind: `community`, analysisId: `a_6b1f0c3e-2d4a-4e5b-8c6d-7e8f9a0b1c2d`, analyzer: kestrelRef, status: `done`, requestedAt: readAt, finishedAt: readAt, progress: { done: longPositions, of: longPositions }, seconds: 2, turns: longTurns(longLastTurn, 3) },
+    kestrel: { kind: `community`, analysisId: `a_6b1f0c3e-2d4a-4e5b-8c6d-7e8f9a0b1c2d`, analyzer: kestrelRef, involved: false, status: `done`, requestedAt: readAt, finishedAt: readAt, progress: { done: longPositions, of: longPositions }, seconds: 2, turns: longTurns(longLastTurn, 3) },
     driftwood: {
         kind: `community`,
         analysisId: `a_7c2a1d4f-3e5b-4f6c-9d7e-8f9a0b1c2d3e`,
         analyzer: { name: `driftwood`, version: null, ownerName: `mika`, values: undeclaredValues },
+        involved: false,
         status: `done`,
         requestedAt: readAt,
         finishedAt: readAt,
@@ -950,12 +1358,25 @@ export const longReadings: {
         seconds: 2,
         turns: longTurns(longLastTurn, 2, 0.8),
     },
-    running: { kind: `community`, analysisId: `a_8d3b2e5a-4f6c-4a7d-8e8f-9a0b1c2d3e4f`, analyzer: kestrelRef, status: `running`, requestedAt: readAt, finishedAt: null, progress: { done: 10, of: longPositions }, seconds: 2, turns: longTurns(12, 3) },
-    queued: { kind: `community`, analysisId: `a_8d3b2e5a-4f6c-4a7d-8e8f-9a0b1c2d3e4f`, analyzer: null, status: `queued`, requestedAt: readAt, finishedAt: null, queuePosition: 3, progress: { done: 0, of: longPositions }, seconds: 2, turns: [] },
+    hextide: {
+        kind: `community`,
+        analysisId: `a_5a0e9b2d-1c3f-4d4a-9b5c-6d7e8f9a0b1c`,
+        analyzer: { name: `hextide`, version: `2.1`, ownerName: `ana`, values: winChanceValues },
+        involved: true,
+        status: `done`,
+        requestedAt: readAt,
+        finishedAt: readAt,
+        progress: { done: longPositions, of: longPositions },
+        seconds: 2,
+        turns: longTurns(longLastTurn, 3),
+    },
+    running: { kind: `community`, analysisId: `a_8d3b2e5a-4f6c-4a7d-8e8f-9a0b1c2d3e4f`, analyzer: kestrelRef, involved: false, status: `running`, requestedAt: readAt, finishedAt: null, progress: { done: 10, of: longPositions }, seconds: 2, turns: longTurns(12, 3) },
+    queued: { kind: `community`, analysisId: `a_8d3b2e5a-4f6c-4a7d-8e8f-9a0b1c2d3e4f`, analyzer: null, involved: false, status: `queued`, requestedAt: readAt, finishedAt: null, queuePosition: 3, progress: { done: 0, of: longPositions }, seconds: 2, turns: [] },
     failed: {
         kind: `community`,
         analysisId: `a_9e4c3f6b-5a7d-4b8e-9f0a-0b1c2d3e4f5a`,
         analyzer: kestrelRef,
+        involved: false,
         status: `failed`,
         failure: `timeout`,
         failedTurn: 14,
@@ -1071,6 +1492,7 @@ function finishedPage(state: World, params: URLSearchParams): { status: 200; bod
         if (query.clock !== undefined && game.timeControl.mode !== query.clock) return false;
         if (query.opening !== undefined && String(game.openingPlies) !== query.opening) return false;
         if (query.analyzed === `1` && game.analyses === 0) return false;
+        if (query.tests === undefined && game.test === true) return false;
         return query.before === undefined || Date.parse(game.finishedAt) < Date.parse(`${query.before}T00:00:00Z`);
     });
     const page = query.page === undefined ? 1 : Number(query.page);
@@ -1090,6 +1512,32 @@ function finishedPage(state: World, params: URLSearchParams): { status: 200; bod
     const won = asX.won + asO.won;
     const lost = asX.lost + asO.lost;
     return { status: 200, body: { ...body, record: { games: counted.length, won, lost, undecided: counted.length - won - lost, voided: matches.length - counted.length, asX, asO } } };
+}
+
+// A bot's settings before its owner set any: its listed text as declared, the duel switch on.
+function settingsOf(bot: BotListing): BotSettings {
+    return {
+        name: bot.name,
+        duelsByOthers: true,
+        ...(bot.about === undefined ? {} : { declaredAbout: bot.about }),
+        ...(bot.repoUrl === undefined ? {} : { declaredRepoUrl: bot.repoUrl }),
+    };
+}
+
+// The owner's text replaces the stored one, an empty one clearing it.
+function withOwnerText(held: BotSettings, changes: { about?: string | undefined; repoUrl?: string | undefined; duelsByOthers?: boolean | undefined }): BotSettings {
+    const { about: _about, repoUrl: _repoUrl, ...rest } = held;
+    const about = changes.about ?? held.about ?? ``;
+    const repoUrl = changes.repoUrl ?? held.repoUrl ?? ``;
+    return { ...rest, duelsByOthers: changes.duelsByOthers ?? held.duelsByOthers, ...(about === `` ? {} : { about }), ...(repoUrl === `` ? {} : { repoUrl }) };
+}
+
+// The listing shows the owner's text, else the declared one, as the server does.
+function shownWith(bot: BotListing, settings: BotSettings): BotListing {
+    const { about: _about, repoUrl: _repoUrl, ...rest } = bot;
+    const about = settings.about ?? settings.declaredAbout;
+    const repoUrl = settings.repoUrl ?? settings.declaredRepoUrl;
+    return { ...rest, ...(about === undefined ? {} : { about }), ...(repoUrl === undefined ? {} : { repoUrl }) };
 }
 
 export function world(overrides: Partial<World> = {}): World {
@@ -1120,6 +1568,10 @@ export function world(overrides: Partial<World> = {}): World {
         asked: [],
         analyses: {},
         requested: [],
+        settings: {},
+        duels: [],
+        duelStates: null,
+        duelStart: `created`,
         // A world owns its data, so an entry one test makes stays out of the next.
         ...structuredClone(overrides),
     };
@@ -1418,13 +1870,13 @@ export async function serve(page: Page, state: World): Promise<void> {
             } else if (snapshot?.status === `in-progress`) {
                 await json(route, 409, { error: `the game is live`, code: `game_live` });
             } else if (method === `GET`) {
-                await json(route, 200, analysisListSchema.parse(state.analyses[id] ?? { analyses: [], optedOut: false }));
+                await json(route, 200, analysisListSchema.parse(state.analyses[id] ?? { analyses: [], optedOut: false, independentOnline: false }));
             } else if (state.me?.kind !== `user`) {
                 await json(route, 401, { error: `no session`, code: `unauthorized` });
             } else {
                 const body = analysisRequestSchema.parse(request.postDataJSON() ?? {});
                 state.requested.push({ gameId: id, request: body });
-                const listed = state.analyses[id] ?? { analyses: [], optedOut: false };
+                const listed = state.analyses[id] ?? { analyses: [], optedOut: false, independentOnline: false };
                 const community = listed.analyses.filter((analysis) => analysis.kind === `community`);
                 const named = body.analyzer === undefined ? null : state.analyzers.find((bot) => bot.name === body.analyzer);
                 const refusal = listed.optedOut
@@ -1455,6 +1907,7 @@ export async function serve(page: Page, state: World): Promise<void> {
                         kind: `community`,
                         analysisId: `a_0f8d2c4e-1b3a-4c5d-8e9f-0a1b2c3d4e5f`,
                         analyzer: null,
+                        involved: false,
                         status: `queued`,
                         requestedAt: finishedAt(0),
                         finishedAt: null,
@@ -1463,7 +1916,7 @@ export async function serve(page: Page, state: World): Promise<void> {
                         seconds: 2,
                         turns: [],
                     });
-                    state.analyses[id] = { analyses: [...listed.analyses, queued], optedOut: false };
+                    state.analyses[id] = { ...listed, analyses: [...listed.analyses, queued] };
                     state.me = { ...state.me, analysisLeft: { ...state.me.analysisLeft, games: state.me.analysisLeft.games - 1 } };
                     await json(route, 202, queued);
                 }
@@ -1666,7 +2119,106 @@ export async function serve(page: Page, state: World): Promise<void> {
             return;
         }
         if (path === `/api/games` && method === `GET`) {
-            await json(route, 200, liveGameEntrySchema.array().parse(state.live));
+            const tests = url.searchParams.get(`tests`) === `1`;
+            await json(route, 200, liveGameEntrySchema.array().parse(state.live.filter((entry) => tests || entry.test !== true)));
+            return;
+        }
+        if (path === `/api/duels/bots` && method === `GET`) {
+            await json(route, 200, duelBotStatesSchema.parse(state.duelStates ?? statesOf(state)));
+            return;
+        }
+        if (path === `/api/duels` && method === `GET`) {
+            const query = duelListQuerySchema.safeParse(Object.fromEntries(url.searchParams));
+            if (!query.success) {
+                await json(route, 400, { error: `refused`, code: `bad_request` });
+                return;
+            }
+            const { bot, mine, kind } = query.data;
+            const viewer = state.me?.kind === `user` ? state.me.name : null;
+            const owners = new Map(state.bots.map((entry) => [entry.name, entry.ownerName]));
+            const listed = state.duels
+                .filter((duel) => bot === undefined || [duel.first.name, duel.second.name].includes(bot))
+                .filter((duel) => mine === undefined || (viewer !== null && (duel.startedBy === viewer || [duel.first.name, duel.second.name].some((name) => owners.get(name) === viewer))))
+                .filter((duel) => kind === undefined || duel.kind === kind)
+                .map(summaryOfDuel);
+            const mineStarted = state.duels.filter((duel) => viewer !== null && duel.startedBy === viewer);
+            await json(
+                route,
+                200,
+                duelListSchema.parse({
+                    running: listed.filter((duel) => duel.status === `running`),
+                    past: listed.filter((duel) => duel.status !== `running`),
+                    ...(mine === undefined || viewer === null ? {} : { quota: { live: mineStarted.filter((duel) => duel.status === `running`).length, today: mineStarted.length } }),
+                }),
+            );
+            return;
+        }
+        const duelRead = /^\/api\/duels\/([^/]+)(\/stop)?$/u.exec(path);
+        if (duelRead !== null) {
+            const id = decodeURIComponent(duelRead[1] ?? ``);
+            const duel = state.duels.find((entry) => entry.id === id);
+            if (duel === undefined) {
+                await json(route, 404, { error: `no such duel`, code: `not_found` });
+                return;
+            }
+            if (duelRead[2] === `/stop` && method === `POST`) {
+                duel.status = `stopped`;
+                duel.end = { reason: `starter`, bot: null };
+                duel.endedAt = new Date().toISOString().replace(/\.\d{3}Z$/u, `Z`);
+                duel.games = duel.games.map((game) => (game.state === `pending` ? { ...game, state: `not_played` } : game));
+            }
+            await json(route, 200, duelDetailSchema.parse(duel));
+            return;
+        }
+        if (path === `/api/duels` && method === `POST`) {
+            const start = state.duelStart;
+            if (start !== `created`) {
+                await route.fulfill({
+                    status: start.status,
+                    contentType: `application/json`,
+                    headers: start.retryAfter === undefined ? {} : { 'retry-after': String(start.retryAfter) },
+                    body: JSON.stringify({ error: `refused`, code: start.code }),
+                });
+                return;
+            }
+            const viewer = state.me?.kind === `user` ? state.me.name : null;
+            if (viewer === null) {
+                await json(route, 401, { error: `no signed-in user`, code: `unauthorized` });
+                return;
+            }
+            const asked = createDuelRequestSchema.parse(request.postDataJSON());
+            const find = (name: string) => state.bots.find((entry) => entry.name === name);
+            const first = find(asked.first);
+            const second = find(asked.second);
+            if (first === undefined || second === undefined) {
+                await json(route, 404, { error: `no such bot`, code: `not_found` });
+                return;
+            }
+            const refused = duelRefusal(state, viewer, [first, second], asked);
+            if (refused !== null) {
+                await json(route, refused.status, { error: `refused`, code: refused.code });
+                return;
+            }
+            const levelOf = (bot: BotListing, id: string | undefined) => {
+                const level = bot.levels?.list.find((entry) => entry.id === id && entry.id !== bot.levels?.default);
+                return level === undefined ? {} : { level: seatLevelOf(level), ratingAtStart: null };
+            };
+            const duel = duelFixture({
+                id: `d_started${String(state.duels.length).padStart(5, `0`)}`,
+                first: duelBotOf(first, levelOf(first, asked.levels?.first)),
+                second: duelBotOf(second, levelOf(second, asked.levels?.second)),
+                kind: first.ownerName === second.ownerName ? `test` : `duel`,
+                startedBy: state.me?.kind === `user` ? state.me.name : `quinn`,
+                games: asked.games,
+                rated: asked.rated,
+                timeControl: asked.timeControl,
+                openingPlies: asked.openingPlies,
+                outcomes: [],
+                live: false,
+                status: `running`,
+            });
+            state.duels.push(duel);
+            await json(route, 201, duelDetailSchema.parse(duel));
             return;
         }
         if (path === `/api/games` && method === `POST`) {
@@ -1682,15 +2234,40 @@ export async function serve(page: Page, state: World): Promise<void> {
                 });
                 return;
             }
-            // As the server does, the mark goes on a signed-in person's game at the bot's default level alone.
+            // As the server does, the mark goes on a signed-in person's game at the bot's default level alone, asked unrated or against their own bot.
             const asked = createGameRequestSchema.parse(request.postDataJSON());
             const running = state.games.running;
             if (running !== undefined) {
                 const { unratedByChoice: _mark, ...unmarked } = running;
-                const chose = state.me?.kind === `user` && asked.level === undefined && asked.rated === false;
+                const own = state.me?.kind === `user` && state.bots.some((entry) => entry.name === asked.bot && entry.ownerName === state.me?.name);
+                const chose = state.me?.kind === `user` && asked.level === undefined && (asked.rated === false || own);
                 state.games.running = chose ? { ...unmarked, unratedByChoice: true } : unmarked;
                 await json(route, 201, viewOf(state.games.running, state.me));
             }
+            return;
+        }
+        const owned = /^\/api\/bots\/([^/]+)\/settings$/.exec(path);
+        if (owned !== null) {
+            const name = decodeURIComponent(owned[1] ?? ``);
+            const listed = state.bots.find((entry) => entry.name === name);
+            if (state.me?.kind !== `user` || listed === undefined || listed.ownerName !== state.me.name) {
+                await json(route, 404, { error: `no such bot of yours`, code: `not_found` });
+                return;
+            }
+            const held = state.settings[name] ?? settingsOf(listed);
+            if (method !== `PATCH`) {
+                await json(route, 200, botSettingsSchema.parse(held));
+                return;
+            }
+            const asked = botSettingsUpdateSchema.safeParse(request.postDataJSON());
+            if (!asked.success) {
+                await json(route, 400, { error: `the request fails validation`, code: `bad_request` });
+                return;
+            }
+            const next = withOwnerText(held, asked.data);
+            state.settings[name] = next;
+            state.bots = state.bots.map((entry) => (entry.name === name ? shownWith(entry, next) : entry));
+            await json(route, 200, botSettingsSchema.parse(next));
             return;
         }
         const token = /^\/api\/bots\/([^/]+)\/token$/.exec(path);

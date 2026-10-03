@@ -28,6 +28,9 @@ export const engineStrayFrameCap = 10;
 /** The largest frame a bot may send on its engine session. */
 export const engineFrameLimitBytes = 16 * 1024;
 
+/** How long a scheduled game, a tournament's or a duel's, waits for a bot that is not ready to play. */
+export const presenceGraceMs = 60_000;
+
 /** How long a bot's live games wait for its stream to return before it forfeits them. */
 export const orphanForfeitMs = 30_000;
 
