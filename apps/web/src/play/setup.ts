@@ -207,37 +207,51 @@ export function playPath(bot: string | null, clock: TimeControl | null, opening:
     return query === `` ? `/play` : `/play?${query}`;
 }
 
-/** The Play page opened on a bot, as the bot page and the Bots rows link to it. */
-export function playBotPath(bot: string): string {
-    return playPath(bot, null, defaultHumanOpeningPlies);
+/** The Play page opened on a bot, as the bot page and the Bots rows link to it; at a level when given one, null standing for its default. */
+export function playBotPath(bot: string, level: Level | null = null): string {
+    return playPath(bot, null, defaultHumanOpeningPlies, level);
 }
 
-/** Where this browser keeps the last opponent and clock a game started with. */
+/** Where this browser keeps the last opponent and clock a game started with, and the Rated switch. */
 export const playStorageKey = `hexo-arena.play.v1`;
 
 export interface Played {
     opponent: string | null;
     clock: TimeControl | null;
+    // Off until the person turns it on here.
+    rated: boolean;
 }
+
+const nothingPlayed: Played = { opponent: null, clock: null, rated: false };
 
 export function readPlayed(): Played {
     const raw = readStored(playStorageKey);
-    if (raw === null) return { opponent: null, clock: null };
+    if (raw === null) return nothingPlayed;
     try {
         const value: unknown = JSON.parse(raw);
-        if (typeof value !== `object` || value === null) return { opponent: null, clock: null };
+        if (typeof value !== `object` || value === null) return nothingPlayed;
         const opponent: unknown = Reflect.get(value, `opponent`);
         const clock: unknown = Reflect.get(value, `clock`);
         return {
             opponent: typeof opponent === `string` ? opponent : null,
             clock: typeof clock === `string` ? clockFromParam(clock) : null,
+            rated: Reflect.get(value, `rated`) === true,
         };
     } catch {
-        return { opponent: null, clock: null };
+        return nothingPlayed;
     }
+}
+
+function storePlayed(played: Played): void {
+    writeStored(playStorageKey, JSON.stringify({ opponent: played.opponent, clock: played.clock === null ? null : clockParam(played.clock), rated: played.rated }));
 }
 
 /** Remember a started game's opponent and clock; the opening is left out, so a one-off never follows a player. */
 export function writePlayed(opponent: string, clock: TimeControl): void {
-    writeStored(playStorageKey, JSON.stringify({ opponent, clock: clockParam(clock) }));
+    storePlayed({ ...readPlayed(), opponent, clock });
+}
+
+/** Remember the Rated switch as the person sets it, with or without a game started. */
+export function writeRated(rated: boolean): void {
+    storePlayed({ ...readPlayed(), rated });
 }

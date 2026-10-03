@@ -39,9 +39,38 @@ test('someone signed in starts a game with the bot, clock, and opening picked, a
     await pickOpening(page, 7);
     const sent = page.waitForRequest((request) => new URL(request.url()).pathname === `/api/games` && request.method() === `POST`);
     await page.getByRole(`button`, { name: `Start game` }).click();
-    expect((await sent).postDataJSON()).toEqual({ bot: `devbot-c`, timeControl: { mode: `turn`, turnTimeMs: 20_000 }, openingPlies: 7 });
+    expect((await sent).postDataJSON()).toEqual({ bot: `devbot-c`, timeControl: { mode: `turn`, turnTimeMs: 20_000 }, openingPlies: 7, rated: false });
     await expect(page).toHaveURL(/\/game\/running$/u);
     await page.locator(`svg polygon.cell`).first().waitFor();
+});
+
+test('Rated starts off for someone signed in, stays on once turned on, and stands off and disabled at another strength', async ({ page }) => {
+    await open(page, `/play?bot=hextide`);
+    const rated = page.getByRole(`switch`, { name: `Rated` });
+    const note = page.locator(`.start-area > .note`);
+    await expect(rated).not.toBeChecked();
+    await expect(note).toHaveText(`Unrated; sides are drawn at random`);
+    await expect(page.locator(`.setup-expected`)).toHaveText(`No expected score; Rated is off`);
+    await page.locator(`.rated-row label`).click();
+    await expect(rated).toBeChecked();
+    await expect(note).toHaveText(`Rated; sides are drawn at random`);
+    await expect(page.locator(`.setup-expected`)).toHaveText(/^Your expected score against hextide: /u);
+    await page.reload();
+    await page.locator(`.play-setup`).waitFor();
+    await expect(rated).toBeChecked();
+    await page.locator(`label.strength-chip`, { hasText: `deep` }).click();
+    await expect(rated).not.toBeChecked();
+    await expect(rated).toBeDisabled();
+    await expect(note).toHaveText(`Practice, unrated; sides are drawn at random`);
+    await page.locator(`label.strength-chip`, { hasText: `standard` }).click();
+    await expect(rated).toBeChecked();
+});
+
+test('a guest and a signed-out visitor see no Rated switch, their games being unrated', async ({ page }) => {
+    await open(page, `/play?bot=devbot-c`, { me: guest });
+    await expect(page.getByRole(`switch`)).toHaveCount(0);
+    await open(page, `/play?bot=devbot-c`, { me: null });
+    await expect(page.getByRole(`switch`)).toHaveCount(0);
 });
 
 test('a signed-out visitor plays as a guest from the keyboard, and the guest session comes first', async ({ page }) => {
@@ -85,6 +114,31 @@ test('Play on a bot page and on a Bots row opens the Play page on that bot', asy
     await page.getByRole(`link`, { name: `Play quietlake` }).click();
     await expect(card(page)).toHaveText(`Play quietlake`);
     await expect(page.getByRole(`link`, { name: `Play sealbot` })).toHaveCount(0);
+});
+
+test('a strength\'s Play on a bot page opens the Play page on that bot at that strength', async ({ page }) => {
+    await serve(page, world({ bots: playBots }));
+    await page.goto(`/bots/hextide`);
+    await page.getByRole(`link`, { name: `Play hextide at deep` }).click();
+    await expect(page).toHaveURL(`/play?bot=hextide&clock=t10&level=deep`);
+    await expect(page.locator(`.strength-chips`).getByRole(`radio`, { name: `deep` })).toBeChecked();
+});
+
+test('a strength\'s Play on a bot page holds Rated off and disabled, though it was left on, and starts the game unrated', async ({ page }) => {
+    await page.addInitScript(() => {
+        window.localStorage.setItem(`hexo-arena.play.v1`, JSON.stringify({ rated: true }));
+    });
+    await serve(page, world({ bots: playBots }));
+    await page.goto(`/bots/hextide`);
+    await page.getByRole(`link`, { name: `Play hextide at deep` }).click();
+    await expect(page).toHaveURL(`/play?bot=hextide&clock=t10&level=deep`);
+    const rated = page.getByRole(`switch`, { name: `Rated` });
+    await expect(rated).not.toBeChecked();
+    await expect(rated).toBeDisabled();
+    await expect(page.locator(`.start-area > .note`)).toHaveText(`Practice, unrated; sides are drawn at random`);
+    const sent = page.waitForRequest((request) => new URL(request.url()).pathname === `/api/games` && request.method() === `POST`);
+    await page.getByRole(`button`, { name: `Start game` }).click();
+    expect((await sent).postDataJSON()).toMatchObject({ bot: `hextide`, level: `deep`, rated: false });
 });
 
 test('a guest sees Start game, and a note that the game is unrated under the guest name', async ({ page }) => {

@@ -275,6 +275,7 @@ function entriesOf(query: Query, ids: readonly string[]): FinishedGameEntry[] {
             challengerSide: games.challengerSide,
             xLevel: games.xLevel,
             oLevel: games.oLevel,
+            unratedByChoice: games.unratedByChoice,
             timeControl: games.timeControl,
             openingCells: games.openingCells,
             winner: games.winner,
@@ -341,6 +342,7 @@ function entriesOf(query: Query, ids: readonly string[]): FinishedGameEntry[] {
             finishedAt: new Date(row.finishedAt * 1000).toISOString().replace(/\.\d{3}Z$/u, `Z`),
             rated: winner !== null && row.voidedAt === null && ratesSomebody(row),
             voided: row.voidedAt !== null,
+            ...(row.unratedByChoice === 1 ? { unratedByChoice: true } : {}),
             analyses: analyzed.get(row.id) ?? 0,
         };
     });

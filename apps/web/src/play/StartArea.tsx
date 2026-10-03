@@ -59,6 +59,7 @@ export function StartArea({
     bot,
     clock,
     level,
+    rated,
     opening,
     path,
     paused,
@@ -76,6 +77,8 @@ export function StartArea({
     clock: TimeControl;
     // The bot's level picked, null at its default.
     level: Level | null;
+    // Whether the game asked for is rated: someone signed in, at the default level, with Rated on.
+    rated: boolean;
     opening: OpeningPlies;
     path: string;
     paused: boolean;
@@ -158,7 +161,7 @@ export function StartArea({
             }
         }
         try {
-            const snapshot = await createGame({ bot: bot.name, timeControl: clock, openingPlies: opening, ...(level === null ? {} : { level: level.id }) });
+            const snapshot = await createGame({ bot: bot.name, timeControl: clock, openingPlies: opening, ...(level === null ? {} : { level: level.id }), rated });
             writePlayed(bot.name, clock);
             navigate(`/game/${encodeURIComponent(snapshot.gameId)}`);
         } catch (cause) {
@@ -305,7 +308,15 @@ export function StartArea({
                 <>
                     <div className="start-actions">{primary(text.play.start, false)}</div>
                     <p className="note">
-                        {paused ? text.play.paused : visitor.kind === `guest` ? text.play.guestNote(visitor.name) : level === null ? text.play.rated : text.play.practice}
+                        {paused
+                            ? text.play.paused
+                            : visitor.kind === `guest`
+                              ? text.play.guestNote(visitor.name)
+                              : level !== null
+                                ? text.play.practice
+                                : rated
+                                  ? text.play.rated
+                                  : text.play.unrated}
                     </p>
                 </>
             )}

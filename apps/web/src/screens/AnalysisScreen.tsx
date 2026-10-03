@@ -7,6 +7,7 @@ import {
     resultSentence,
     sideOf,
     turnsOnBoard,
+    undeclaredValues,
     type AxialCoord,
     type GameSnapshot,
     type Side,
@@ -14,17 +15,21 @@ import {
 import type { Setup, TurnCells } from '@hexo-arena/rules';
 import { ApiError, fetchGameSnapshot, limitedFor } from '../api/client';
 import { AnalysisBoard } from '../analysis/AnalysisBoard';
+import { AnalyzerWindow, CourseGraph, GameRequest } from '../analysis/AnalyzerWindow';
 import { effectiveSeconds, useAnalysisSettings } from '../analysis/analysis-settings';
 import { ExportDialog, ImportDialog, type ExportView } from '../analysis/dialogs';
 import { draftOf, draftSetup, type SetupDraft, clickCell } from '../analysis/draft';
+import { explain, explainRun, turnReading, type ExplainedTurn, type Explanation, type PreferredLine } from '../analysis/explain';
 import type { Imported } from '../analysis/import-text';
 import { gameLink, lineLink, readAddress, setupLink } from '../analysis/links';
-import { MoveTree, type RowActions } from '../analysis/MoveTree';
+import { MoveList, type ListFold, type RowActions } from '../analysis/MoveList';
 import { writeGame } from '../analysis/notation';
-import { nextUtcDay, readings, useReadingsAt, type ReadingEntry, type ReadingTarget } from '../analysis/readings';
-import { AnalysisHead, AnalysisSettingsPanel, EvalBar, ReadingBlock, type AnalyzerShown, type ReadingPill, type Unreadable } from '../analysis/ReadingPanel';
+import { communityReading, gameLineOf, ownReading, ownSourceId, storedReadings, turnCells } from '../analysis/game-readings';
+import { rowFacts } from '../analysis/row-facts';
+import { nextUtcDay, readings, useReadingsAt, useReadingsSnapshot, type ReadingEntry, type ReadingTarget } from '../analysis/readings';
+import { AnalysisSettingsPanel, EvalBar, type AnalyzerShown, type ReadingPill, type Unreadable } from '../analysis/ReadingPanel';
 import { shownLines, type ShownLine } from '../analysis/reading-view';
-import { authorSourceId, botSource, botSourceId, type AnalysisPosition } from '../analysis/sources';
+import { authorSourceId, botSource, botSourceId, type AnalysisPosition, type ReadingAuthor } from '../analysis/sources';
 import { useAnalyzers } from '../analysis/use-analyzers';
 import { SetupTools } from '../analysis/SetupTools';
 import { analysisStorageKey } from '../analysis/storage-key';
@@ -34,6 +39,7 @@ import {
     deleteFrom,
     floorOf,
     forward,
+    gameLine,
     gameTree,
     goTo,
     holdsOwnTurns,
@@ -54,10 +60,12 @@ import {
     type AnalysisState,
     type StoredBoard,
 } from '../analysis/state';
-import { isMainLine, lineEnd, lineTo, mainLine, newTree, nodeAt, openingTurns, positionAt, rootId, type MoveTree as Tree, type NodeId } from '../analysis/tree';
+import { isMainLine, lineEnd, lineTo, mainLine, newTree, nodeAt, openingTurns, pathTo, positionAt, rootId, type MoveTree as Tree, type NodeId } from '../analysis/tree';
 import { notationErrorText, positionWords, refusalText } from '../analysis/words';
 import type { BoardStone } from '../board/Board';
-import { BotBadge, PlayerName, Swatch } from '../components/player';
+import { BotBadge, PlayerName, seatName, Swatch } from '../components/player';
+import { Marks, type Asker } from '../game/DrawerAnalysis';
+import { headOf, useGameAnalyses, type ReadingChoice } from '../game/game-analyses';
 import { useWait, WaitText } from '../components/wait';
 import { meStore, useMe } from '../me';
 import { Link } from '../router/Link';
@@ -137,6 +145,32 @@ function unreadableOf(position: Setup, won: boolean): Unreadable | null {
 }
 
 const noEntry: ReadingEntry = { read: null, state: { kind: `idle` } };
+
+// The pill of the bots' own views, which no analyzer setting names.
+const ownPill = `own`;
+
+// The panel's line for a reading in hand, by whose opinion it is.
+function authorShown(by: ReadingAuthor, seconds: number): AnalyzerShown {
+    switch (by.kind) {
+        case `bot`:
+            return { kind: `named`, name: by.name, version: by.version, ownerName: by.ownerName, seconds };
+        case `own`:
+            return { kind: `own`, name: by.name, side: by.side };
+        case `worker`:
+            return { kind: `engine`, name: by.engine, version: by.version, seconds };
+    }
+}
+
+// The name a reading goes by in an explanation: the analyzer's, the bot's for its own view, the engine's.
+function authorName(by: ReadingAuthor): string {
+    switch (by.kind) {
+        case `bot`:
+        case `own`:
+            return by.name;
+        case `worker`:
+            return by.engine;
+    }
+}
 
 // The wait a refusal names, or the rest of the UTC day for one that names none.
 function waitWords(seconds: number | null): string {
@@ -346,6 +380,8 @@ function Workspace({ board, game, notice, onBoard, onReplace, onNewBoard }: {
     // Off on every visit: positions are read on their own only once the person turns it on here.
     const [analyzing, setAnalyzing] = useState(false);
     const [preview, setPreview] = useState<ShownLine | null>(null);
+    // The line an explanation names, previewed on the board the turn was played from.
+    const [preferred, setPreferred] = useState<PreferredLine | null>(null);
     const setupButton = useRef<HTMLButtonElement>(null);
     const wasEditing = useRef(false);
     const gameTurns = game?.turns ?? noTurns;
@@ -370,6 +406,7 @@ function Workspace({ board, game, notice, onBoard, onReplace, onNewBoard }: {
             setStatus(null);
             setArmed(false);
             setPreview(null);
+            setPreferred(null);
             onBoard(move);
         },
         [onBoard],
@@ -423,40 +460,142 @@ function Workspace({ board, game, notice, onBoard, onReplace, onNewBoard }: {
         [],
     );
     const positionsLeft = user?.analysisLeft.positions ?? null;
+    const asker: Asker = me.status === `loading` ? { kind: `unknown` } : user === null ? { kind: `signed-out` } : { kind: `user`, left: user.analysisLeft.games };
     useEffect(() => {
         if (positionsLeft !== null) readings.spend(positionsLeft === 0 ? nextUtcDay(Date.now()) : null);
     }, [positionsLeft]);
 
+    // The bots' own views show while their pill is picked, for the game they belong to.
+    const [ownFor, setOwnFor] = useState<string | null>(null);
+    const ownView = ownFor !== null && ownFor === gameId;
+
     const askNow = useCallback(() => {
+        setOwnFor(null);
         if (target !== null) readings.ask(target);
     }, [target]);
 
+    // A stored game's readings, filed by position so a transposition finds them too.
+    const finished = game?.snapshot.status === `finished` ? game.snapshot : null;
+    const record = useMemo(() => (finished === null ? null : gameLineOf(finished.board.cells, finished.openingPlies)), [finished]);
+    const analyses = useGameAnalyses(finished?.gameId ?? ``, finished !== null);
+    const list = analyses.state.load.kind === `ready` ? analyses.state.load.list : null;
+    useEffect(() => {
+        if (list !== null && record !== null && gameId !== null) readings.keep(storedReadings(list, gameId, record));
+    }, [list, record, gameId]);
+    const head = useMemo(() => (list === null || record === null ? null : headOf(list, record)), [list, record]);
+    const ownChoice = head?.choices.find((choice) => choice.kind === `own`) ?? null;
+    const storedNames = head?.choices.flatMap((choice) => (choice.kind === `community` ? [choice.name] : [])) ?? [];
+    const gameNodes = useMemo(() => gameLine(tree, gameTurns), [tree, gameTurns]);
+    const lineDepth = useMemo(() => new Map(gameNodes.map((node) => [node.id, node.turn])), [gameNodes]);
+
     const entries = useReadingsAt(readings, atKey);
     const entry = entries.get(analyzerSource.id) ?? noEntry;
-    const read = entry.read;
+    const ownEntry = gameId === null ? undefined : entries.get(ownSourceId(gameId, toMove));
+    const shown = ownView ? (ownEntry ?? noEntry) : entry;
+    const read = shown.read;
     const lines = useMemo(() => (read === null ? [] : shownLines(read.reading, position, toMove, settings.lines)), [read, position, toMove, settings.lines]);
     const shownPreview = preview !== null && lines.includes(preview) ? preview : null;
     // A reading on its way, asked or about to be, keeps the lines' rows and the bar in place.
-    const waiting = read === null && (entry.state.kind === `thinking` || entry.state.kind === `queued` || (entry.state.kind === `idle` && analyzing));
+    const waiting = !ownView && read === null && (entry.state.kind === `thinking` || entry.state.kind === `queued` || (entry.state.kind === `idle` && analyzing));
     const anyId = botSourceId(null);
-    const activePill = analyzerSource.id === anyId ? (read === null ? null : authorSourceId(read.reading)) : analyzerSource.id;
+    const analyzerPill = analyzerSource.id === anyId ? (entry.read === null ? null : authorSourceId(entry.read.reading)) : analyzerSource.id;
+    const activePill = ownView ? ownPill : analyzerPill;
     const pills: ReadingPill[] = [];
+    const addPill = (pill: ReadingPill) => {
+        if (!pills.some((each) => each.id === pill.id)) pills.push(pill);
+    };
     for (const [id, held] of entries) {
         const by = held.read?.reading.by;
-        if (id !== anyId && by?.kind === `bot`) pills.push({ id, name: by.name });
+        if (id !== anyId && by?.kind === `bot`) addPill({ id, name: by.name });
     }
-    if (activePill !== null && settings.analyzer !== null && !pills.some((pill) => pill.id === activePill)) pills.push({ id: activePill, name: settings.analyzer });
-    // By name, so a pill stays put as readings arrive.
+    // A stored game's readers keep their pills on every turn, so the row holds still as the board steps.
+    for (const name of storedNames) addPill({ id: botSourceId(name), name });
+    if (analyzerPill !== null && settings.analyzer !== null) addPill({ id: analyzerPill, name: settings.analyzer });
+    // By name, so a pill stays put as readings arrive; the own views last.
     pills.sort((a, b) => a.name.localeCompare(b.name));
-    const by = read?.reading.by;
+    if (ownChoice !== null) pills.push({ id: ownPill, name: text.analysis.reading.ownView });
+    const ownSeat = game?.snapshot.players[toMove];
     const analyzerShown: AnalyzerShown =
-        by?.kind === `bot` && read !== null
-            ? { kind: `named`, name: by.name, version: by.version, ownerName: by.ownerName, seconds: read.reading.seconds }
-            : settings.analyzer === null
-              ? { kind: `any`, seconds: ask.seconds }
-              : analyzers.kind === `ready` && listing?.analyzer?.ready !== true
-                ? { kind: `offline`, name: settings.analyzer }
-                : { kind: `named`, name: settings.analyzer, version: listing?.version ?? null, ownerName: listing?.ownerName ?? null, seconds: ask.seconds };
+        read !== null
+            ? authorShown(read.reading.by, read.reading.seconds)
+            : ownView
+              ? { kind: `own`, name: ownSeat?.kind === `bot` ? ownSeat.name : null, side: toMove }
+              : settings.analyzer === null
+                ? { kind: `any`, seconds: ask.seconds }
+                : analyzers.kind === `ready` && listing?.analyzer?.ready !== true
+                  ? { kind: `offline`, name: settings.analyzer }
+                  : { kind: `named`, name: settings.analyzer, version: listing?.version ?? null, ownerName: listing?.ownerName ?? null, seconds: ask.seconds };
+
+    // The game's reading the graph, the marks, and its rows come from, as the drawer shows it:
+    // the own views while their pill is picked, else the pill's analyzer's reading of the whole game, else the first.
+    const shownAnalyzer = ownView ? null : read?.reading.by.kind === `bot` ? read.reading.by.name : settings.analyzer;
+    const active: ReadingChoice | null =
+        head === null
+            ? null
+            : ownView && ownChoice !== null
+              ? ownChoice
+              : (head.choices.find((choice) => choice.kind === `community` && choice.name === shownAnalyzer) ?? head.choices[0] ?? null);
+    const view = useMemo(() => {
+        if (active === null || record === null) return null;
+        return active.kind === `community` ? communityReading(record, active.analysis.turns, active.analysis.status === `done`, active.analysis.analyzer?.values ?? undeclaredValues) : ownReading(record, active.views);
+    }, [active, record]);
+    const snapshot = useReadingsSnapshot(readings);
+    // Rows away from the game's own turns read what the source of the game's reading holds, or the analyzer the panel asks.
+    const analyzerId = analyzerSource.id;
+    const sourceFor = useCallback(
+        (side: Side) => (active === null || gameId === null ? analyzerId : active.kind === `community` ? botSourceId(active.name) : ownSourceId(gameId, side)),
+        [active, gameId, analyzerId],
+    );
+    const facts = useMemo(() => {
+        const all = rowFacts(tree, (key, id) => snapshot.get(key)?.get(id)?.read?.reading ?? null, sourceFor);
+        if (view === null) return all;
+        for (const node of gameNodes) {
+            const turn = view.turns.get(node.turn);
+            if (turn === undefined || (turn.value === null && turn.judgment === null)) all.delete(node.id);
+            else all.set(node.id, { judgment: turn.judgment, value: turn.value });
+        }
+        return all;
+    }, [tree, snapshot, sourceFor, view, gameNodes]);
+
+    // A community reading's runs of marked turns fold in the list after their first turn.
+    const folds = useMemo((): ListFold[] => {
+        if (view === null || active?.kind !== `community`) return [];
+        const idOf = new Map(gameNodes.map((node) => [node.turn, node.id]));
+        return view.runs.flatMap((run) => {
+            const first = idOf.get(run.from);
+            if (first === undefined) return [];
+            const hidden = Array.from({ length: run.to - run.from }, (_, index) => idOf.get(run.from + 1 + index)).filter((id) => id !== undefined);
+            return [{ first, hidden, ...explainRun(run, active.name) }];
+        });
+    }, [view, active, gameNodes]);
+
+    // The turn shown explained from the reading its row's value comes from:
+    // a game's own turn from the game's reading picked, any other from what the same source read around it.
+    const explanation = useMemo((): Explanation | null => {
+        if (game !== null && at === floor && openingTurns(tree.root) > 0) return explain({ kind: `opening` }, { kind: `none` });
+        if (node?.kind !== `turn`) return null;
+        const onGame = lineDepth.has(node.id);
+        // A game no reading may judge whole, opted out or out of an analyzer's reach, waits for none.
+        const judgeable = head?.card?.kind !== `opted-out` && head?.card?.kind !== `unreadable`;
+        const place = gameId === null ? `board` : !onGame ? `variation` : judgeable ? `game` : `board`;
+        const player = onGame && game !== null ? seatName(game.snapshot.players[node.side]) : null;
+        const turn: ExplainedTurn = { kind: `turn`, turn: node.turn, side: node.side, cells: node.cells, completesSix: node.win !== null, place, player };
+        if (onGame && view !== null && active !== null && record !== null) {
+            const read = view.turns.get(node.turn);
+            if (active.kind === `own`) return explain(turn, { kind: `own`, name: player ?? ``, after: read?.value ?? null });
+            if (read === undefined) return explain(turn, { kind: `none` });
+            return explain(turn, turnReading(record, read, active.name, active.analysis.status === `done`));
+        }
+        const parent = nodeAt(tree, node.parent);
+        const readAt = (key: string, side: Side) => snapshot.get(key)?.get(sourceFor(side))?.read?.reading ?? null;
+        const before = parent === undefined ? null : readAt(parent.key, node.side);
+        const after = facts.get(node.id)?.value ?? null;
+        const by = before?.by ?? readAt(node.key, node.side === `x` ? `o` : `x`)?.by ?? null;
+        if (by === null || (before === null && after === null)) return explain(turn, { kind: `none` });
+        if (by.kind === `own`) return explain(turn, { kind: `own`, name: by.name, after });
+        const best = before === null ? null : (shownLines(before, positionAt(tree, node.parent), node.side, 1)[0] ?? null);
+        return explain(turn, { kind: `analyzer`, name: authorName(by), best, after, judgment: null, whole: false, forced: null, drop: null });
+    }, [game, at, floor, tree, node, lineDepth, gameId, head, view, active, record, snapshot, sourceFor, facts]);
 
     const openSetup = useCallback(() => {
         setRefusal(null);
@@ -553,6 +692,25 @@ function Workspace({ board, game, notice, onBoard, onReplace, onNewBoard }: {
         [step],
     );
 
+    // The graph's cursor stands at the game's turn on the board, or for a variation at the turn it leaves from.
+    const graphCursor = useMemo(() => {
+        for (const id of pathTo(tree, at).reverse()) {
+            const turn = lineDepth.get(id);
+            if (turn !== undefined) return turn;
+        }
+        return 0;
+    }, [tree, at, lineDepth]);
+    const goToTurn = useCallback(
+        (turn: number) => {
+            const id = turn <= 0 ? rootId : gameNodes[turn - 1]?.id;
+            if (id !== undefined) goToNode(id);
+        },
+        [gameNodes, goToNode],
+    );
+    // A judged turn of the game wears its mark on the board beside its last stone.
+    const judged = node?.kind === `turn` && lineDepth.has(node.id) ? view?.turns.get(node.turn)?.judgment : undefined;
+    const judgedCell = judged === undefined || judged === null || record === null || node?.kind !== `turn` ? undefined : turnCells(record, node.turn).at(-1);
+
     function onCell(cell: AxialCoord) {
         if (editing !== null) {
             setEditing(clickCell(editing, cell));
@@ -572,6 +730,17 @@ function Workspace({ board, game, notice, onBoard, onReplace, onNewBoard }: {
         const played = playCells(board, line.cells);
         setRefusal(played.refusal === null ? null : refusalText(played.refusal));
         if (played.state !== board) onBoard(() => played.state);
+    }
+
+    // A line an explanation names plays as a variation from the position its turn was played from.
+    function playPreferred(line: PreferredLine) {
+        if (node?.kind !== `turn`) return;
+        setArmed(false);
+        setStatus(null);
+        setPreferred(null);
+        const played = playCells({ tree, at: node.parent, mark: null }, line.cells);
+        setRefusal(played.refusal === null ? null : refusalText(played.refusal));
+        if (played.refusal === null) onBoard(() => played.state);
     }
 
     function load(imported: Imported) {
@@ -659,6 +828,9 @@ function Workspace({ board, game, notice, onBoard, onReplace, onNewBoard }: {
 
     const replaces = gameId !== null && game !== null ? text.analysis.setup.gameTree(game.snapshot.players.x.name, game.snapshot.players.o.name) : text.analysis.setup.thisTree;
     const draftStones = editing === null ? null : editing.stones.map((stone) => ({ x: stone.x, y: stone.y, side: sideOf(stone.player), number: null }));
+    // A preferred line shows on the board its turn was played from, in that turn's place.
+    const preferredFrom = preferred !== null && explanation?.line === preferred && node?.kind === `turn` ? node.parent : null;
+    const preferredStones = useMemo(() => (preferredFrom === null ? null : numberedStones(tree, preferredFrom)), [tree, preferredFrom]);
     const draftField = editing === null ? undefined : [{ x: 0, y: 0 }, ...editing.stones];
 
     return (
@@ -666,22 +838,33 @@ function Workspace({ board, game, notice, onBoard, onReplace, onNewBoard }: {
             <h1 className="sr-only">{text.analysis.title}</h1>
             <section className="an-stage" aria-label={text.analysis.workspace}>
                 <AnalysisBoard
-                    stones={draftStones ?? stones}
+                    stones={draftStones ?? preferredStones ?? stones}
                     frame={draftField ?? frame}
                     field={draftField}
-                    mark={editing === null ? mark : null}
+                    mark={editing === null && preferredStones === null ? mark : null}
                     toMove={toMove}
-                    lastMove={editing === null && node?.kind === `turn` && node.win === null ? node.cells : []}
-                    winLine={editing === null && node?.kind === `turn` && node.win !== null ? node.win.cells : []}
+                    lastMove={editing === null && preferredStones === null && node?.kind === `turn` && node.win === null ? node.cells : []}
+                    winLine={editing === null && preferredStones === null && node?.kind === `turn` && node.win !== null ? node.win.cells : []}
                     label={text.analysis.board(stateWords)}
-                    lines={settings.boardLines && editing === null && lines.length > 0 ? { side: toMove, lines } : undefined}
-                    preview={shownPreview === null || editing !== null ? undefined : { side: toMove, cells: shownPreview.cells }}
+                    lines={settings.boardLines && editing === null && preferredStones === null && lines.length > 0 ? { side: toMove, lines } : undefined}
+                    preview={
+                        editing !== null
+                            ? undefined
+                            : preferredStones !== null && preferred !== null
+                              ? { side: preferred.side, cells: preferred.cells }
+                              : shownPreview === null
+                                ? undefined
+                                : { side: toMove, cells: shownPreview.cells }
+                    }
+                    judgment={
+                        editing !== null || preferredStones !== null || judgedCell === undefined || judged === undefined || judged === null ? undefined : { cell: judgedCell, severity: judged.severity }
+                    }
                     onCell={onCell}
                     onPaste={(pasted) => {
                         if (editing === null) setDialog({ kind: `import`, text: pasted });
                     }}
                 />
-                {target === null ? null : <EvalBar line={lines[0] ?? null} mover={toMove} held={waiting} />}
+                {editing === null && unreadable === null ? <EvalBar line={lines[0] ?? null} held={waiting} /> : null}
                 <div className="hud-lift an-chip-source">
                     <div className="hud-chip">{source}</div>
                 </div>
@@ -719,8 +902,8 @@ function Workspace({ board, game, notice, onBoard, onReplace, onNewBoard }: {
                 ) : (
                     <>
                         {fresh ? null : <div className="an-phone-source">{source}</div>}
-                        <AnalysisHead
-                            signedIn={signedIn}
+                        <AnalyzerWindow
+                            signedIn={me.status === `loading` ? null : signedIn}
                             analyzing={analyzing}
                             onAnalyzing={(on) => {
                                 setAnalyzing(on);
@@ -736,6 +919,38 @@ function Workspace({ board, game, notice, onBoard, onReplace, onNewBoard }: {
                                     left={positionsLeft}
                                 />
                             }
+                            shown={{ analyzer: analyzerShown, entry: shown, lines, held: waiting, toMove, unreadable }}
+                            pills={pills}
+                            activePill={activePill}
+                            onPill={(pill) => {
+                                if (pill.id === ownPill) {
+                                    setOwnFor(gameId);
+                                    return;
+                                }
+                                setOwnFor(null);
+                                updateSettings({ analyzer: pill.name });
+                            }}
+                            graph={game !== null && record !== null && view !== null && active !== null ? <CourseGraph view={view} choice={active} line={record} cursor={graphCursor} onTurn={goToTurn} /> : null}
+                            card={
+                                analyses.state.load.kind === `failed` ? (
+                                    <p className="dr-failed">
+                                        <span className="field-error">{text.drawer.reading.loadFailed}</span>
+                                        <button type="button" className="btn btn-ghost btn-sm" onClick={analyses.retry}>
+                                            {text.states.tryAgain}
+                                        </button>
+                                    </p>
+                                ) : head?.card === undefined || head.card === null ? null : (
+                                    <GameRequest card={head.card} state={analyses.state} asker={asker} analyzer={settings.analyzer} onRequest={analyses.request} />
+                                )
+                            }
+                            counts={game !== null && view !== null && active?.kind === `community` && active.analysis.status === `done` ? <Marks view={view} players={game.snapshot.players} grid /> : null}
+                            explanation={explanation}
+                            onPreview={setPreview}
+                            onPlay={playLine}
+                            onPreferred={setPreferred}
+                            onPlayPreferred={playPreferred}
+                            onAsk={askNow}
+                            wait={waitWords}
                         />
                         <div className="an-panel-scroll">
                             {notice === null ? null : (
@@ -750,29 +965,11 @@ function Workspace({ board, game, notice, onBoard, onReplace, onNewBoard }: {
                                     <p className="note">{text.analysis.intro.body((games) => <Link to="/games">{games}</Link>)}</p>
                                 </div>
                             ) : null}
-                            <ReadingBlock
-                                signedIn={me.status === `loading` ? null : signedIn}
-                                unreadable={unreadable}
-                                analyzing={analyzing}
-                                pills={pills}
-                                activePill={activePill}
-                                onPill={(pill) => {
-                                    updateSettings({ analyzer: pill.name });
-                                }}
-                                analyzer={analyzerShown}
-                                entry={entry}
-                                lines={lines}
-                                held={waiting ? Math.min(settings.lines, listing?.analyzer?.lines ?? settings.lines) : 0}
-                                toMove={toMove}
-                                onPreview={setPreview}
-                                onPlay={playLine}
-                                onAsk={askNow}
-                                wait={waitWords}
-                            />
+                            {/* The keys scroll with the tree, which keeps the panel's room for its rows. */}
                             <div className="an-tree-host">
-                                <MoveTree tree={tree} gameTurns={gameTurns} at={at} onGo={goToNode} actions={actions} />
+                                <MoveList tree={tree} gameTurns={gameTurns} at={at} onGo={goToNode} actions={actions} facts={facts} folds={folds} />
+                                <p className="note an-keys">{text.analysis.keys(key)}</p>
                             </div>
-                            <p className="note an-keys">{text.analysis.keys(key)}</p>
                             <p className="note an-status" role="status">
                                 {status}
                             </p>

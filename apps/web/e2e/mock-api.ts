@@ -1,8 +1,10 @@
 import type { Page, Route } from '@playwright/test';
 import {
+    analysesPerGame,
     analysisListSchema,
     analysisRequestSchema,
     communityAnalysisSchema,
+    createGameRequestSchema,
     meUpdateRequestSchema,
     positionCheckRequestSchema,
     positionReadingRequestSchema,
@@ -11,7 +13,14 @@ import {
     type AnalysisFailure,
     type AnalysisLine,
     type AnalysisList,
+    type AnalysisRequest,
+    type AnalysisTurn,
+    type AnalyzerValues,
+    type CommunityAnalysis,
+    type OwnAnalysis,
     type PositionReadingRequest,
+    undeclaredValues,
+    winChanceCuts,
     accountExportSchema,
     deleteAccountRequestSchema,
     reportFormMetaName,
@@ -89,7 +98,7 @@ export interface World {
     signup: Signup | null;
     // How Create account answers: the account, or a refusal by its code.
     create: `created` | `name_taken` | `signup_limit` | `failed`;
-    // How a game start answers: the running game, or a refusal.
+    // How a game start answers: the running game, marked as the request asks, or a refusal.
     start: `created` | { status: number; code: string; retryAfter?: number };
     // Whether minting a guest session finds the guest limit full.
     guestLimit: boolean;
@@ -109,6 +118,8 @@ export interface World {
     asked: PositionReadingRequest[];
     // Each finished game's readings by id; a game not named has none.
     analyses: Record<string, AnalysisList>;
+    // Every whole-game request so far, by game, in order.
+    requested: { gameId: string; request: AnalysisRequest }[];
 }
 
 /**
@@ -123,23 +134,26 @@ export type PositionAnswer =
     | { kind: `failed`; failure: AnalysisFailure }
     | { kind: `refused`; status: number; code: string; retryAfter?: number };
 
+// kestrel declares its values expected, x's expected result, so its readings mark drops of value by lichess's cuts.
+const winChanceValues: AnalyzerValues = { scale: 1, cuts: winChanceCuts, meaning: `expected` };
+
 /** Two analyzers online, one reading up to 5 s and three lines, one up to 2 s and two, and one offline. */
 export const analyzerBots: BotListing[] = [
-    { name: `kestrel`, ownerName: `tom`, online: true, openForChallenges: false, rating: 1500, provisional: true, liveGames: 0, levels: null, version: `0.9`, analyzer: { maxSeconds: 5, lines: 3, whilePlaying: false, ready: true } },
-    { name: `driftwood`, ownerName: `mika`, online: true, openForChallenges: false, rating: 1500, provisional: true, liveGames: 0, levels: null, analyzer: { maxSeconds: 2, lines: 2, whilePlaying: false, ready: true } },
-    { name: `slowpoke`, ownerName: `ana`, online: false, openForChallenges: false, rating: 1500, provisional: true, liveGames: 0, levels: null, analyzer: { maxSeconds: 10, lines: 1, whilePlaying: false, ready: false } },
+    { name: `kestrel`, ownerName: `tom`, online: true, openForChallenges: false, rating: 1500, provisional: true, liveGames: 0, levels: null, version: `0.9`, analyzer: { maxSeconds: 5, lines: 3, whilePlaying: false, values: winChanceValues, ready: true } },
+    { name: `driftwood`, ownerName: `mika`, online: true, openForChallenges: false, rating: 1500, provisional: true, liveGames: 0, levels: null, analyzer: { maxSeconds: 2, lines: 2, whilePlaying: false, values: undeclaredValues, ready: true } },
+    { name: `slowpoke`, ownerName: `ana`, online: false, openForChallenges: false, rating: 1500, provisional: true, liveGames: 0, levels: null, analyzer: { maxSeconds: 10, lines: 1, whilePlaying: false, values: undeclaredValues, ready: false } },
 ];
 
 // Each line's heuristic for the side to move, x-positive as the wire has it.
 const mockHeuristics: Record<Side, readonly number[]> = { x: [0.31, 0.18, -0.05], o: [-0.12, -0.07, 0.02] };
 
-// Lines the mock analyzer reads: empty cells next to the stones, nearest
-// the newest first, paired in order, so every line is legal.
-function mockLines(request: PositionReadingRequest, count: number): AnalysisLine[] {
-    const taken = new Set(request.cells.map((cell) => `${String(cell.x)},${String(cell.y)}`));
+// Empty cells next to the stones, nearest the newest first, so a line
+// paired from them in order is legal.
+function freeCells(cells: readonly { x: number; y: number }[]): { x: number; y: number }[] {
+    const taken = new Set(cells.map((cell) => `${String(cell.x)},${String(cell.y)}`));
     const steps = [[1, 0], [0, 1], [-1, 1], [-1, 0], [0, -1], [1, -1]] as const;
     const free: { x: number; y: number }[] = [];
-    for (const stone of [...request.cells].reverse()) {
+    for (const stone of [...cells].reverse()) {
         for (const [dx, dy] of steps) {
             const cell = { x: stone.x + dx, y: stone.y + dy };
             const key = `${String(cell.x)},${String(cell.y)}`;
@@ -148,6 +162,12 @@ function mockLines(request: PositionReadingRequest, count: number): AnalysisLine
             free.push(cell);
         }
     }
+    return free;
+}
+
+// Lines the mock analyzer reads, paired from the free cells in order.
+function mockLines(request: PositionReadingRequest, count: number): AnalysisLine[] {
+    const free = freeCells(request.cells);
     return Array.from({ length: count }, (_, index) => {
         const first = free[index * 2] ?? { x: 0, y: 0 };
         const second = free[index * 2 + 1] ?? { x: 0, y: 0 };
@@ -211,6 +231,8 @@ export const leaderboard: LeaderboardEntry[] = [
     { rank: 6, name: `driftwood`, kind: `bot`, rating: 1388, games: 71, lastPlayedAt: playedAgo(24 * 45), ownerName: `bruno`, online: false },
 ];
 
+// One bot of each kind its page shows: sealbot declares everything, hextide
+// only its source, and quietlake nothing while offline.
 export const bots: BotListing[] = [
     {
         name: `sealbot`,
@@ -221,7 +243,7 @@ export const bots: BotListing[] = [
         provisional: false,
         liveGames: 0,
         levels: strengths,
-        analyzer: null,
+        analyzer: { maxSeconds: 10, lines: 1, whilePlaying: true, values: undeclaredValues, ready: true },
         about: `A clean-room HeXO engine with a rotation opener.`,
         version: `0.3.1`,
         repoUrl: `https://github.com/quinn/sealbot`,
@@ -231,13 +253,14 @@ export const bots: BotListing[] = [
         name: `hextide`,
         ownerName: `ana`,
         online: true,
-        openForChallenges: false,
+        openForChallenges: true,
         rating: 1690,
         provisional: false,
         liveGames: 0,
         levels: null,
         analyzer: null,
         version: `2.0.0`,
+        repoUrl: `https://example.com/ana/hextide`,
         accepts: { turnMs: null, match: true, unlimited: true },
     },
     {
@@ -250,6 +273,30 @@ export const bots: BotListing[] = [
         liveGames: 0,
         levels: null,
         analyzer: null,
+    },
+];
+
+/**
+ * As many bots as an account holds, all quinn's, in the server's name
+ * order: one never connected, one reading positions and closed for
+ * challenges, the two of `bots`, and one under a long name that reads
+ * positions and plays at three strengths.
+ */
+export const heldBots: BotListing[] = [
+    { name: `alder`, ownerName: `quinn`, online: false, openForChallenges: false, rating: 1500, provisional: true, liveGames: 0, levels: null, analyzer: null },
+    { name: `marsh`, ownerName: `quinn`, online: true, openForChallenges: false, rating: 1588, provisional: false, liveGames: 0, levels: null, version: `0.4.0`, analyzer: { maxSeconds: 5, lines: 3, whilePlaying: false, values: undeclaredValues, ready: true } },
+    ...bots.filter((bot) => bot.ownerName === `quinn`),
+    {
+        name: `tidewater-alphabeta-v2`,
+        ownerName: `quinn`,
+        online: true,
+        openForChallenges: true,
+        rating: 1634,
+        provisional: false,
+        liveGames: 1,
+        levels: strengths,
+        analyzer: { maxSeconds: 2, lines: 2, whilePlaying: true, values: undeclaredValues, ready: true },
+        accepts: { turnMs: [5000, 120000], match: true, unlimited: false },
     },
 ];
 
@@ -643,6 +690,18 @@ export const games: Record<string, GameSnapshot> = {
         toMove: `o`,
         clock: { mode: `turn`, remainingTurnMs: 28_000 },
     },
+    // quinn against sealbot at its default, started with Rated off, before the first turn.
+    unrated: {
+        gameId: `unrated`,
+        players: facing(`sealbot`, 1712),
+        openingPlies: 5,
+        board: { cells: midCells.slice(0, 5) },
+        timeControl: { mode: `turn`, turnTimeMs: 30_000 },
+        status: `in-progress`,
+        toMove: `o`,
+        clock: { mode: `turn`, remainingTurnMs: 28_000 },
+        unratedByChoice: true,
+    },
     // A long label and name, the top chip's hardest case.
     'practice-long': {
         gameId: `practice-long`,
@@ -798,6 +857,125 @@ export const games: Record<string, GameSnapshot> = {
     },
 };
 
+// long-finished read whole: the best line's value at the position before
+// each turn, x-positive, a forced win as winIn, counted in turns from the
+// board after the line, its side to move first; a line completing six
+// carries 1 for its mover. x slips on turn 6; from turn 10 the board holds
+// o sixes that o leaves untaken, a blunder on each of its turns, and x, lost
+// until it could block again, leaves o a six on 20 and 22 and gives away its
+// own on 24; o completes six on 25.
+const longStones = longCells.slice(0, 51);
+const longBest: Readonly<Record<number, number | { winIn: number }>> = {
+    3: 0.02, 4: 0.05, 5: 0.08, 6: 0.17, 7: 0.05, 8: 0.1, 9: 0.12, 10: 0.15, 11: 0.2, 12: 0.24, 13: 0.28, 14: 0.33,
+    15: 0.12, 16: 0.1, 17: 0.08, 18: 0.45, 19: 0.4, 20: 0.22, 21: 0.15, 22: -0.12, 23: { winIn: -2 }, 24: { winIn: -1 }, 25: { winIn: -1 },
+};
+const longFirstTurn = 3;
+const longLastTurn = 25;
+const longPositions = longLastTurn - longFirstTurn + 1;
+
+function longPlayed(turn: number): { x: number; y: number }[] {
+    return longStones.slice(2 * turn - 1, 2 * turn + 1).map((cell) => ({ x: cell.x, y: cell.y }));
+}
+
+// Lines best first, each worse for the mover by a step: on turn 22 the
+// third is the turn x played, which hands o the win, and on turn 25 the
+// first is o's six.
+function longTurn(turn: number, count: number, scale: number): AnalysisTurn {
+    const toMove: Side = turn % 2 === 1 ? `o` : `x`;
+    const sign = toMove === `x` ? 1 : -1;
+    const best = longBest[turn] ?? 0;
+    const free = freeCells(longStones.slice(0, 2 * turn - 1));
+    const lines = Array.from({ length: count }, (_, rank): AnalysisLine => {
+        const cells = [free[rank * 2] ?? { x: 0, y: 0 }, free[rank * 2 + 1] ?? { x: 0, y: 0 }];
+        if (turn === 22 && rank === 2) return { cells: longPlayed(22), winIn: -3 };
+        if (turn === longLastTurn && rank === 0) return { cells: longPlayed(turn), winIn: -1 };
+        if (typeof best !== `number`) return rank === 0 ? { cells, winIn: best.winIn } : { cells, heuristic: -0.4 - 0.1 * rank };
+        return { cells, heuristic: Math.round((best * scale - sign * 0.07 * rank) * 100) / 100 };
+    });
+    return { turn, toMove, lines };
+}
+
+function longTurns(upTo: number, count: number, scale = 1): AnalysisTurn[] {
+    return Array.from({ length: upTo - longFirstTurn + 1 }, (_, index) => longTurn(longFirstTurn + index, count, scale));
+}
+
+// Each bot's view of its own turns: its played turn first, a little
+// kinder to itself than kestrel, then two turns it considered.
+function longOwn(side: Side, player: string): OwnAnalysis {
+    const turns: AnalysisTurn[] = [];
+    for (let turn = side === `o` ? 3 : 4; turn <= longLastTurn; turn += 2) {
+        const next = longBest[turn + 1] ?? { winIn: side === `o` ? -1 : 1 };
+        const free = freeCells(longStones.slice(0, 2 * turn - 1));
+        const own: AnalysisLine =
+            typeof next === `number`
+                ? { cells: longPlayed(turn), heuristic: Math.round((next + (side === `x` ? 0.1 : -0.05)) * 100) / 100 }
+                : { cells: longPlayed(turn), winIn: turn === longLastTurn ? next.winIn : ownWinIn(next.winIn, side === `x` ? `o` : `x`) };
+        turns.push({
+            turn,
+            toMove: side,
+            lines: [own, { cells: [free[0] ?? { x: 0, y: 0 }, free[1] ?? { x: 0, y: 0 }], heuristic: 0.05 }, { cells: [free[2] ?? { x: 0, y: 0 }, free[3] ?? { x: 0, y: 0 }], heuristic: -0.05 }],
+        });
+    }
+    return { kind: `own`, side, player, values: undeclaredValues, turns };
+}
+
+// A forced win the next mover's best line finds counts from the board after that line,
+// a turn after the one a played turn describes: one turn more, unless the line is that mover's six.
+function ownWinIn(next: number, nextMover: Side): number {
+    const nextWins = next > 0 === (nextMover === `x`);
+    return nextWins && Math.abs(next) === 1 ? next : next + Math.sign(next);
+}
+
+const kestrelRef = { name: `kestrel`, version: `0.9`, ownerName: `tom`, values: winChanceValues };
+const readAt = new Date(Date.UTC(2026, 9, 1, 12)).toISOString();
+
+/** long-finished's readings in each state a community reading passes through, and both bots' own views. */
+export const longReadings: {
+    kestrel: CommunityAnalysis;
+    driftwood: CommunityAnalysis;
+    running: CommunityAnalysis;
+    queued: CommunityAnalysis;
+    failed: CommunityAnalysis;
+    own: OwnAnalysis[];
+} = {
+    kestrel: { kind: `community`, analysisId: `a_6b1f0c3e-2d4a-4e5b-8c6d-7e8f9a0b1c2d`, analyzer: kestrelRef, status: `done`, requestedAt: readAt, finishedAt: readAt, progress: { done: longPositions, of: longPositions }, seconds: 2, turns: longTurns(longLastTurn, 3) },
+    driftwood: {
+        kind: `community`,
+        analysisId: `a_7c2a1d4f-3e5b-4f6c-9d7e-8f9a0b1c2d3e`,
+        analyzer: { name: `driftwood`, version: null, ownerName: `mika`, values: undeclaredValues },
+        status: `done`,
+        requestedAt: readAt,
+        finishedAt: readAt,
+        progress: { done: longPositions, of: longPositions },
+        seconds: 2,
+        turns: longTurns(longLastTurn, 2, 0.8),
+    },
+    running: { kind: `community`, analysisId: `a_8d3b2e5a-4f6c-4a7d-8e8f-9a0b1c2d3e4f`, analyzer: kestrelRef, status: `running`, requestedAt: readAt, finishedAt: null, progress: { done: 10, of: longPositions }, seconds: 2, turns: longTurns(12, 3) },
+    queued: { kind: `community`, analysisId: `a_8d3b2e5a-4f6c-4a7d-8e8f-9a0b1c2d3e4f`, analyzer: null, status: `queued`, requestedAt: readAt, finishedAt: null, queuePosition: 3, progress: { done: 0, of: longPositions }, seconds: 2, turns: [] },
+    failed: {
+        kind: `community`,
+        analysisId: `a_9e4c3f6b-5a7d-4b8e-9f0a-0b1c2d3e4f5a`,
+        analyzer: kestrelRef,
+        status: `failed`,
+        failure: `timeout`,
+        failedTurn: 14,
+        requestedAt: readAt,
+        finishedAt: readAt,
+        progress: { done: 11, of: longPositions },
+        seconds: 2,
+        turns: [],
+    },
+    own: [longOwn(`x`, `hextide`), longOwn(`o`, `quietlake`)],
+};
+
+/** The positions a whole-game reading of a finished game reads: from the first turn after the opening, and the final board unless a six ended it. */
+function positionsOf(snapshot: GameSnapshot): number {
+    const firstTurn = (snapshot.openingPlies + 1) / 2;
+    const lastTurn = Math.ceil((snapshot.board.cells.length - 1) / 2);
+    const six = snapshot.status === `finished` && snapshot.reason === `six-in-a-row`;
+    return Math.max(0, lastTurn - firstTurn + (six ? 1 : 2));
+}
+
 // The latest results, newest first; the first three have snapshots, so a
 // frozen board can show the newest.
 const finishedAt = (minutesAgo: number) => new Date(Date.now() - minutesAgo * 60_000).toISOString();
@@ -941,6 +1119,7 @@ export function world(overrides: Partial<World> = {}): World {
         positions: { kind: `done` },
         asked: [],
         analyses: {},
+        requested: [],
         // A world owns its data, so an entry one test makes stays out of the next.
         ...structuredClone(overrides),
     };
@@ -1090,7 +1269,7 @@ async function answerPosition(route: Route, state: World, request: PositionReadi
     const answer = state.positions;
     const left = me.analysisLeft.positions;
     const analyzer = analyzerBots.find((bot) => bot.name === request.analyzer) ?? analyzerBots[0];
-    const ref = { name: analyzer?.name ?? `kestrel`, version: analyzer?.version ?? null, ownerName: analyzer?.ownerName ?? null };
+    const ref = { name: analyzer?.name ?? `kestrel`, version: analyzer?.version ?? null, ownerName: analyzer?.ownerName ?? null, values: analyzer?.analyzer?.values ?? undeclaredValues };
     switch (answer.kind) {
         case `held`:
             return;
@@ -1243,21 +1422,51 @@ export async function serve(page: Page, state: World): Promise<void> {
             } else if (state.me?.kind !== `user`) {
                 await json(route, 401, { error: `no session`, code: `unauthorized` });
             } else {
-                analysisRequestSchema.parse(request.postDataJSON() ?? {});
-                const queued = communityAnalysisSchema.parse({
-                    kind: `community`,
-                    analysisId: `a_0f8d2c4e-1b3a-4c5d-8e9f-0a1b2c3d4e5f`,
-                    analyzer: null,
-                    status: `queued`,
-                    requestedAt: finishedAt(0),
-                    finishedAt: null,
-                    queuePosition: 1,
-                    progress: { done: 0, of: 40 },
-                    seconds: 2,
-                    turns: [],
-                });
-                state.analyses[id] = { analyses: [...(state.analyses[id]?.analyses ?? []), queued], optedOut: false };
-                await json(route, 202, queued);
+                const body = analysisRequestSchema.parse(request.postDataJSON() ?? {});
+                state.requested.push({ gameId: id, request: body });
+                const listed = state.analyses[id] ?? { analyses: [], optedOut: false };
+                const community = listed.analyses.filter((analysis) => analysis.kind === `community`);
+                const named = body.analyzer === undefined ? null : state.analyzers.find((bot) => bot.name === body.analyzer);
+                const refusal = listed.optedOut
+                    ? { status: 409, code: `opted_out` }
+                    : community.filter((analysis) => analysis.status === `done`).length >= analysesPerGame.done
+                      ? { status: 409, code: `analysis_full` }
+                      : community.some((analysis) => analysis.status === `queued` || analysis.status === `running`)
+                        ? { status: 409, code: `analysis_pending` }
+                        : state.me.analysisLeft.games === 0
+                          ? { status: 429, code: `analysis_limit`, retryAfter: 3_600 }
+                          : named === null
+                            ? state.analyzers.some((bot) => bot.analyzer?.ready === true)
+                                ? null
+                                : { status: 409, code: `no_analyzer` }
+                            : named?.analyzer?.ready === true
+                              ? null
+                              : { status: 409, code: `no_analyzer` };
+                if (refusal !== null) {
+                    await route.fulfill({
+                        status: refusal.status,
+                        contentType: `application/json`,
+                        headers: refusal.retryAfter === undefined ? {} : { 'retry-after': String(refusal.retryAfter) },
+                        body: JSON.stringify({ error: `refused`, code: refusal.code }),
+                    });
+                } else {
+                    const of = snapshot === undefined ? 0 : positionsOf(snapshot);
+                    const queued = communityAnalysisSchema.parse({
+                        kind: `community`,
+                        analysisId: `a_0f8d2c4e-1b3a-4c5d-8e9f-0a1b2c3d4e5f`,
+                        analyzer: null,
+                        status: `queued`,
+                        requestedAt: finishedAt(0),
+                        finishedAt: null,
+                        queuePosition: 1,
+                        progress: { done: 0, of },
+                        seconds: 2,
+                        turns: [],
+                    });
+                    state.analyses[id] = { analyses: [...listed.analyses, queued], optedOut: false };
+                    state.me = { ...state.me, analysisLeft: { ...state.me.analysisLeft, games: state.me.analysisLeft.games - 1 } };
+                    await json(route, 202, queued);
+                }
             }
             return;
         }
@@ -1473,7 +1682,15 @@ export async function serve(page: Page, state: World): Promise<void> {
                 });
                 return;
             }
-            if (state.games.running !== undefined) await json(route, 201, viewOf(state.games.running, state.me));
+            // As the server does, the mark goes on a signed-in person's game at the bot's default level alone.
+            const asked = createGameRequestSchema.parse(request.postDataJSON());
+            const running = state.games.running;
+            if (running !== undefined) {
+                const { unratedByChoice: _mark, ...unmarked } = running;
+                const chose = state.me?.kind === `user` && asked.level === undefined && asked.rated === false;
+                state.games.running = chose ? { ...unmarked, unratedByChoice: true } : unmarked;
+                await json(route, 201, viewOf(state.games.running, state.me));
+            }
             return;
         }
         const token = /^\/api\/bots\/([^/]+)\/token$/.exec(path);

@@ -1,4 +1,10 @@
 import {
+    analysisListSchema,
+    analysisRequestSchema,
+    communityAnalysisSchema,
+    gameAnalysesPath,
+    type AnalysisList,
+    type CommunityAnalysis,
     deleteAccountRequestSchema,
     meExportPath,
     reportReceiptSchema,
@@ -243,19 +249,20 @@ export function fetchLeaderboard(kind: LeaderboardKind, active: LeaderboardActiv
 }
 
 /**
- * Every listed bot, optionally narrowed to online ones; the default is the
- * whole roster so day one does not filter itself to zero rows.
+ * Every listed bot, optionally narrowed to online ones, to analyzers, or to both;
+ * the default is the whole roster so day one does not filter itself to zero rows.
  */
-export function fetchBots(onlineOnly: boolean): Promise<BotListing[]> {
-    const query = botDirectoryQuerySchema.parse(onlineOnly ? { online: `1` } : {});
-    const search = query.online === `1` ? `?online=1` : ``;
-    return getJson(`${botsPath}${search}`, botListingSchema.array());
+export function fetchBots(onlineOnly: boolean, analyzersOnly = false): Promise<BotListing[]> {
+    const query = botDirectoryQuerySchema.parse({ ...(onlineOnly ? { online: `1` } : {}), ...(analyzersOnly ? { analyzer: `1` } : {}) });
+    const search = new URLSearchParams();
+    if (query.online !== undefined) search.set(`online`, query.online);
+    if (query.analyzer !== undefined) search.set(`analyzer`, query.analyzer);
+    return getJson(`${botsPath}${search.size === 0 ? `` : `?${search.toString()}`}`, botListingSchema.array());
 }
 
 /** The bots that declare an analyzer, online or not; each says whether it can read now. */
 export function fetchAnalyzers(): Promise<BotListing[]> {
-    const query = botDirectoryQuerySchema.parse({ analyzer: `1` });
-    return getJson(`${botsPath}?analyzer=${String(query.analyzer)}`, botListingSchema.array());
+    return fetchBots(false, true);
 }
 
 /** Register a bot under the signed-in account; the token shows once. */
@@ -303,6 +310,17 @@ export function playHumanMove(gameId: string, cells: readonly AxialCoord[]): Pro
         humanMoveRequestSchema.parse({ cells }),
         gameSnapshotSchema,
     );
+}
+
+/** A finished game's readings: community ones and each bot seat's own. */
+export function fetchAnalyses(gameId: string): Promise<AnalysisList> {
+    return getJson(gameAnalysesPath.replace(`{gameId}`, encodeURIComponent(gameId)), analysisListSchema);
+}
+
+/** Ask for a finished game to be read whole, by the analyzer named or by any; the answer is the request, queued. */
+export function requestAnalysis(gameId: string, analyzer: string | null): Promise<CommunityAnalysis> {
+    const body = analysisRequestSchema.parse(analyzer === null ? {} : { analyzer });
+    return sendJson(gameAnalysesPath.replace(`{gameId}`, encodeURIComponent(gameId)), `POST`, body, communityAnalysisSchema);
 }
 
 /** Resign; the answer is the finished snapshot. */

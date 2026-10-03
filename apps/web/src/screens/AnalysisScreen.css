@@ -124,7 +124,7 @@
         display: flex;
         flex-direction: column;
         gap: var(--space-3);
-        padding: var(--space-4);
+        padding: var(--space-2) var(--space-3) var(--space-3);
         overflow: hidden;
     }
 
@@ -147,16 +147,219 @@
         margin: 0;
     }
 
-    /* The panel's head holds the Analyze switch and the settings gear,
-       whose panel hangs under it. */
-    .an-head {
+    /* The analyzer window heads the panel on the page's ground: who reads
+       the position beside the switch and the gear, then what it says, each
+       part a row of its own.
+       Its cut is a plate behind it, so the settings popover hanging from the
+       gear is never clipped. */
+    .an-window {
         position: relative;
         flex: none;
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        align-items: center;
+        gap: var(--space-2) var(--space-3);
+        margin: var(--space-3) var(--space-3) 0;
+        padding: var(--space-3);
+        font-size: var(--text-sm);
+    }
+
+    .an-window::before {
+        content: '';
+        position: absolute;
+        inset: 0;
+        background: var(--c-bg);
+    }
+
+    .an-window > * {
+        position: relative;
+        grid-column: 1 / -1;
+        min-width: 0;
+    }
+
+    .an-window p {
+        margin: 0;
+    }
+
+    .an-window > .an-win-who {
+        grid-row: 1;
+        grid-column: 1;
         display: flex;
+        flex-direction: column;
+        gap: var(--space-half);
+    }
+
+    .an-window > .an-win-end {
+        grid-row: 1;
+        grid-column: 2;
+        display: inline-flex;
+        align-items: center;
+        gap: var(--space-3);
+    }
+
+    .an-win-quiet {
+        color: var(--c-text-dim);
+        font-size: var(--text-xs);
+    }
+
+    .an-graph-key {
+        position: absolute;
+        left: var(--space-1);
+        display: flex;
+        pointer-events: none;
+    }
+
+    .an-graph-key .swatch {
+        width: var(--graph-key-size);
+        height: var(--graph-key-size);
+    }
+
+    .an-graph-key-x {
+        top: var(--space-1);
+    }
+
+    .an-graph-key-o {
+        bottom: var(--space-1);
+    }
+
+    /* What the graph's values mean, on a plate of its own beside x's key,
+       where the game's first turns, still near even, leave the plot clear. */
+    .an-graph-meaning {
+        position: absolute;
+        top: var(--space-1);
+        left: calc(2 * var(--space-1) + var(--graph-key-size));
+        padding: 0 var(--space-1);
+        background: var(--c-bg-overlay);
+        color: var(--c-text-dim);
+        font-size: var(--text-xs);
+        line-height: var(--leading-tight);
+        pointer-events: none;
+    }
+
+    .an-window > .an-pills {
+        justify-self: start;
+    }
+
+    /* No reading of a game yet: what is left of the day's requests, and the request. */
+    .an-request {
+        display: flex;
+        flex-wrap: wrap;
         align-items: center;
         justify-content: space-between;
-        gap: var(--space-3);
-        padding: var(--space-3) var(--space-4) 0;
+        gap: var(--space-2);
+        padding: var(--space-2) var(--space-3);
+        background: var(--c-bg-overlay);
+    }
+
+    .an-request .field-error {
+        flex-basis: 100%;
+    }
+
+    .an-request-text {
+        display: flex;
+        flex-direction: column;
+        min-width: 0;
+        color: var(--c-text-dim);
+        font-size: var(--text-xs);
+    }
+
+    .an-request-title {
+        color: var(--c-text);
+    }
+
+    /* The turn shown explained, edged in its severity's color, the severity
+       word in its glyph's. */
+    .an-bubble {
+        padding: var(--space-2) var(--space-3);
+        background: var(--c-bg-raised);
+        box-shadow: inset var(--focus-w) 0 0 var(--c-border-strong);
+        font-size: var(--text-xs);
+    }
+
+    .an-bubble-inaccuracy {
+        box-shadow: inset var(--focus-w) 0 0 var(--c-warn);
+    }
+
+    .an-bubble-mistake {
+        box-shadow: inset var(--focus-w) 0 0 var(--c-bad);
+    }
+
+    .an-bubble-blunder {
+        box-shadow: inset var(--focus-w) 0 0 var(--c-bad-solid);
+    }
+
+    .an-bubble-full {
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-1);
+    }
+
+    .an-bubble-head {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: var(--space-1) var(--space-2);
+    }
+
+    .an-bubble-title {
+        font-size: var(--text-sm);
+        font-weight: var(--weight-display);
+    }
+
+    .an-bubble-inaccuracy .an-bubble-severity {
+        color: var(--c-warn);
+    }
+
+    .an-bubble-mistake .an-bubble-severity,
+    .an-bubble-blunder .an-bubble-severity {
+        color: var(--c-bad);
+    }
+
+    .an-bubble-meta {
+        margin-left: auto;
+        color: var(--c-text-dim);
+    }
+
+    .an-bubble-text {
+        min-height: var(--analysis-bubble-text-h);
+    }
+
+    .an-bubble-flat {
+        display: none;
+    }
+
+    /* The line the analyzer preferred, a button in the sentence: pointed at
+       or focused it shows on the board, pressed it plays.
+       It stays whole unless it alone is wider than the line. */
+    .an-pref {
+        display: inline-block;
+        max-width: 100%;
+        padding: 0;
+        border: none;
+        background: transparent;
+        color: inherit;
+        font: inherit;
+        font-family: var(--font-mono);
+        text-align: left;
+        text-decoration: underline;
+        text-decoration-color: var(--c-text-dim);
+        text-underline-offset: var(--underline-offset);
+        cursor: pointer;
+    }
+
+    .an-pref:hover {
+        text-decoration-color: var(--c-text);
+    }
+
+    .an-win-sign-in {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: var(--space-2);
+    }
+
+    .an-win-sign-in-words {
+        display: none;
     }
 
     .an-switch {
@@ -197,7 +400,7 @@
 
     .an-settings[data-mode='popover'] {
         top: calc(100% + var(--space-2));
-        right: var(--space-4);
+        right: 0;
         width: var(--settings-w);
     }
 
@@ -330,28 +533,8 @@
         box-shadow: inset 0 var(--border-w) 0 var(--c-border);
     }
 
-    /* What the panel says of the position: who reads it, where the ask
-       stands, and the analyzer's lines. */
-    .an-reading {
-        flex: none;
-        display: flex;
-        flex-direction: column;
-        gap: var(--space-2);
-        padding-bottom: var(--space-3);
-        box-shadow: inset 0 calc(-1 * var(--border-w)) 0 var(--c-border);
-    }
-
-    .an-reading .note,
     .an-quiet {
         margin: 0;
-    }
-
-    .an-signed-out {
-        align-items: flex-start;
-    }
-
-    .an-pills {
-        align-self: flex-start;
     }
 
     .an-by {
@@ -468,12 +651,78 @@
     /* A line still being read keeps its place, so the panel holds still
        as the board steps; only its letter shows, dimmed. */
     .an-line-held {
+        grid-template-columns: auto minmax(0, 1fr);
         cursor: default;
-        opacity: var(--analysis-held-opacity);
     }
 
     .an-line-held:hover {
         background: var(--c-bg-overlay);
+    }
+
+    .an-line-held .an-letter {
+        opacity: var(--analysis-held-opacity);
+    }
+
+    .an-held-note {
+        color: var(--c-text-dim);
+        font-size: var(--text-xs);
+    }
+
+    .an-held-reading {
+        display: none;
+    }
+
+    /* Line A, the others folded behind the toggle beside it. */
+    .an-line-row {
+        display: flex;
+        gap: var(--space-1);
+    }
+
+    /* Line A's value takes its own width, leaving its cells the rest. */
+    .an-line-row .an-line {
+        flex: 1;
+        min-width: 0;
+        grid-template-columns: auto minmax(0, auto) minmax(0, 1fr) auto;
+    }
+
+    .an-line-row .an-cells {
+        text-align: right;
+    }
+
+    .an-fold {
+        display: inline-flex;
+        flex: none;
+        align-items: center;
+        gap: var(--space-1);
+        padding: 0 var(--space-2);
+        border: none;
+        background: var(--c-bg-overlay);
+        color: var(--c-text-dim);
+        font: inherit;
+        font-size: var(--text-xs);
+        font-weight: var(--weight-strong);
+        cursor: pointer;
+        transition: background var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease);
+    }
+
+    .an-fold:hover,
+    .an-fold[aria-expanded='true'] {
+        background: var(--c-bg-hover);
+        color: var(--c-text);
+    }
+
+    .an-fold svg {
+        width: var(--text-base);
+        height: var(--text-base);
+        fill: none;
+        stroke: currentColor;
+        stroke-width: 2;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+    }
+
+    .an-fold[aria-expanded='true'] svg {
+        transform: rotate(180deg);
     }
 
     .an-cells {
@@ -570,29 +819,31 @@
         overscroll-behavior: contain;
     }
 
-    .an-tree,
-    .an-line {
+    .an-tree {
         list-style: none;
         margin: 0;
         padding: 0;
+        font-size: var(--text-sm);
     }
 
     .an-row {
         display: flex;
         align-items: center;
         gap: var(--space-1);
-        font-size: var(--text-sm);
     }
 
+    /* A row's columns: the turn's number, its mark once a reading judges
+       any turn, its side and cells, and the value after it, right-aligned;
+       every part keeps the first grid row, whatever order it comes in. */
     .an-row-go {
         flex: 1;
         min-width: 0;
         display: grid;
-        grid-template-columns: var(--analysis-turn-w) minmax(0, 1fr);
+        grid-template-columns: var(--analysis-turn-w) minmax(0, 1fr) auto;
         align-items: center;
-        gap: var(--space-2);
+        column-gap: var(--space-2);
         min-height: var(--control-sm);
-        padding: var(--space-1) var(--space-2);
+        padding: var(--space-half) var(--space-2);
         border: none;
         background: transparent;
         color: inherit;
@@ -602,6 +853,14 @@
         -webkit-touch-callout: none;
         user-select: none;
         transition: background var(--dur-fast) var(--ease);
+    }
+
+    .an-tree[data-marks] .an-row-go {
+        grid-template-columns: var(--analysis-turn-w) var(--judgment-w) minmax(0, 1fr) auto;
+    }
+
+    .an-row-go > * {
+        grid-row: 1;
     }
 
     .an-row-go:hover {
@@ -617,36 +876,237 @@
         box-shadow: inset var(--focus-w) 0 0 var(--c-accent);
     }
 
-    .an-row .feed-n {
+    .an-row-n {
+        grid-column: 1;
         color: var(--c-text-dim);
         font-size: var(--text-xs);
         font-variant-numeric: tabular-nums;
         text-align: right;
     }
 
-    /* Dim text on the accent tint falls under AA in some themes, so the
-       current row's number takes the full text color. */
-    .an-row.current .feed-n {
-        color: var(--c-text);
+    .an-row-go > .an-move {
+        grid-column: -3 / -2;
     }
 
-    .an-move {
-        display: flex;
-        flex-wrap: wrap;
-        column-gap: var(--space-3);
-        font-family: var(--font-mono);
+    .an-row-mark {
+        grid-column: 2;
+        display: inline-flex;
+    }
+
+    .an-row-value {
+        grid-column: -2 / -1;
+        color: var(--c-text-dim);
         font-size: var(--text-xs);
-        overflow-wrap: anywhere;
-    }
-
-    .an-move .feed-group {
+        font-variant-numeric: tabular-nums;
+        text-align: right;
         white-space: nowrap;
     }
 
-    /* Large text on a phone leaves an opening group no row of its own, so
-       it breaks between its cells rather than push the page sideways. */
+    /* Dim text on the accent tint falls under AA in some themes, so the
+       current row's number and value take the full text color. */
+    .an-row.current .an-row-n,
+    .an-row.current .an-row-value {
+        color: var(--c-text);
+    }
+
+    /* A turn's side and cells, held together; only cells wider than the
+       whole column break, between the two. */
+    .an-move {
+        display: inline-flex;
+        align-items: center;
+        gap: var(--space-2);
+        min-width: 0;
+        max-width: 100%;
+        font-family: var(--font-mono);
+        font-size: var(--text-xs);
+    }
+
+    /* The opening's groups take every column after its mark, each whole,
+       the row breaking only between them. */
+    .an-opening .an-groups {
+        grid-column: 2 / -1;
+        display: flex;
+        flex-wrap: wrap;
+        gap: var(--space-half) var(--space-3);
+        min-width: 0;
+    }
+
+    .an-opening .an-move {
+        gap: var(--space-1);
+    }
+
+    /* A run of marked turns folded after its first: one note a step in,
+       the run's span and who marks it, a press showing its turns. */
+    .an-run-go {
+        display: flex;
+        align-items: center;
+        gap: var(--space-2);
+        width: calc(100% - var(--analysis-turn-w) - var(--space-2));
+        margin: var(--space-half) 0 var(--space-half) calc(var(--analysis-turn-w) + var(--space-2));
+        padding: var(--space-1) var(--space-2);
+        border: none;
+        background: var(--c-bg);
+        box-shadow: inset var(--focus-w) 0 0 var(--c-bad);
+        color: inherit;
+        font: inherit;
+        text-align: left;
+        cursor: pointer;
+        transition: background var(--dur-fast) var(--ease);
+    }
+
+    .an-run-go:hover {
+        background: var(--c-bg-hover);
+    }
+
+    .an-run-go:focus-visible {
+        outline-offset: calc(-1 * var(--focus-w));
+    }
+
+    .an-run-words {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        min-width: 0;
+    }
+
+    .an-run-title {
+        font-size: var(--text-xs);
+        font-weight: var(--weight-strong);
+    }
+
+    .an-run-text {
+        color: var(--c-text-dim);
+        font-size: var(--text-xs);
+    }
+
+    .an-run-go svg {
+        flex: none;
+        width: var(--text-base);
+        height: var(--text-base);
+        fill: none;
+        stroke: var(--c-text-dim);
+        stroke-width: 2;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+    }
+
+    .an-run-go[aria-expanded='true'] svg {
+        transform: rotate(180deg);
+    }
+
+    /* A main-line turn's variations: one band a step in, under the turn
+       they replace, on the page's ground with an edge at its side. */
+    .an-band {
+        margin: var(--space-half) 0 var(--space-half) calc(var(--analysis-turn-w) + var(--space-2));
+        padding: var(--space-1) var(--space-2);
+        background: var(--c-bg);
+        box-shadow: inset var(--focus-w) 0 0 var(--c-border-strong);
+    }
+
+    /* A paragraph breaks only between its turns, each line starting at the
+       band's edge. */
+    .an-band-line {
+        margin: 0;
+        font-size: var(--text-xs);
+        line-height: var(--leading-loose);
+    }
+
+    .an-band-line + .an-band-line {
+        margin-top: var(--space-1);
+    }
+
+    .an-tok-hold {
+        display: inline-flex;
+        align-items: center;
+        gap: var(--space-1);
+        max-width: 100%;
+        vertical-align: middle;
+    }
+
+    /* A token's parts stand a step apart, its parentheses against them. */
+    .an-tok {
+        display: inline-flex;
+        flex-wrap: wrap;
+        align-items: center;
+        max-width: 100%;
+        min-height: var(--analysis-token-h);
+        padding: 0 var(--space-1);
+        border: none;
+        background: transparent;
+        color: inherit;
+        font: inherit;
+        text-align: left;
+        cursor: pointer;
+        -webkit-touch-callout: none;
+        user-select: none;
+        transition: background var(--dur-fast) var(--ease);
+    }
+
+    .an-tok > * + * {
+        margin-left: var(--space-1);
+    }
+
+    .an-tok > .an-paren + *,
+    .an-tok > * + .an-paren {
+        margin-left: 0;
+    }
+
+    .an-tok .an-move {
+        gap: var(--space-1);
+    }
+
+    .an-tok:hover {
+        background: var(--c-bg-hover);
+    }
+
+    .an-tok:focus-visible {
+        outline-offset: calc(-1 * var(--focus-w));
+    }
+
+    .an-tok.current {
+        background: var(--c-accent-bg);
+        box-shadow: inset 0 calc(-1 * var(--focus-w)) 0 var(--c-accent);
+    }
+
+    .an-tok-n {
+        color: var(--c-text-dim);
+        font-variant-numeric: tabular-nums;
+    }
+
+    .an-tok.nested .an-turn-cells,
+    .an-paren {
+        color: var(--c-text-dim);
+    }
+
+    /* Dim text on the accent tint falls under AA in some themes. */
+    .an-tok.current .an-tok-n,
+    .an-tok.current .an-turn-cells,
+    .an-tok.current .an-paren {
+        color: var(--c-text);
+    }
+
+    .an-band .an-row-menu {
+        padding: var(--space-1) 0;
+    }
+
+    /* Large text on a phone leaves a row no room beside its cells, so its
+       mark and value go under them. */
     @media (max-width: 15rem) {
-        .an-move .feed-group {
+        .an-row-go,
+        .an-tree[data-marks] .an-row-go {
+            grid-template-columns: var(--analysis-turn-w) minmax(0, 1fr);
+        }
+
+        .an-row-go > * {
+            grid-row: auto;
+        }
+
+        .an-row-go > .an-move,
+        .an-row-mark,
+        .an-row-value {
+            grid-column: 2;
+            justify-self: start;
+            text-align: left;
             white-space: normal;
         }
     }
@@ -683,16 +1143,6 @@
         flex-wrap: wrap;
         gap: var(--space-1);
         padding: var(--space-1) var(--space-2) var(--space-2) calc(var(--analysis-turn-w) + var(--space-4));
-    }
-
-    /* A variation stands indented under the turn it leaves, a hairline at its side. */
-    .an-var {
-        display: flex;
-        flex-direction: column;
-        gap: var(--space-1);
-        margin: var(--space-1) 0 var(--space-1) var(--space-4);
-        padding-left: var(--space-2);
-        box-shadow: inset var(--border-w) 0 0 var(--c-border-strong);
     }
 
     .an-keys {
@@ -877,6 +1327,11 @@
         .an-screen {
             grid-template-columns: minmax(0, 1fr) var(--analysis-panel-narrow-w);
         }
+
+        /* The narrow panel gives the turn's cells the room; the mark and the value keep only their own. */
+        .an-tree[data-facts] .an-row-go {
+            grid-template-columns: var(--analysis-turn-w) minmax(0, 1fr) auto auto;
+        }
     }
 
     /* Phones: the board on top, a row of steps under it, then the panel, the
@@ -975,6 +1430,65 @@
             box-shadow: none;
         }
 
+        /* The window folds into a strip: the graph, or who reads, beside
+           the switch and the gear on the page's ground; under it the
+           explanation as one paragraph and line A, on the panel's. */
+        .an-window {
+            margin: var(--space-3) var(--space-4) 0;
+            padding: 0;
+            row-gap: var(--space-3);
+        }
+
+        .an-window::before {
+            position: static;
+            grid-row: 1;
+            grid-column: 1 / -1;
+            align-self: stretch;
+        }
+
+        .an-window > .an-win-who {
+            padding: var(--space-2) 0 var(--space-2) var(--space-3);
+        }
+
+        .an-window > .an-win-end {
+            padding: var(--space-2) var(--space-2) var(--space-2) 0;
+        }
+
+        .an-window[data-graph] > .an-win-who {
+            display: none;
+        }
+
+        .an-window[data-graph] .an-win-sign-in-words {
+            display: block;
+        }
+
+        .an-window[data-graph] .an-held-reading {
+            display: inline;
+        }
+
+        .an-window > .an-win-graph {
+            grid-row: 1;
+            grid-column: 1;
+            padding: var(--space-2) 0 var(--space-2) var(--space-2);
+        }
+
+        .an-window .graph {
+            height: var(--graph-strip-h);
+        }
+
+        .an-graph-key,
+        .an-graph-meaning,
+        .an-win-counts,
+        .an-bubble-full {
+            display: none;
+        }
+
+        .an-bubble-flat {
+            display: flex;
+            align-items: flex-start;
+            gap: var(--space-2);
+        }
+
         .an-panel-scroll,
         .an-screen[data-editing] .an-panel-scroll,
         .an-tree-host {
@@ -990,6 +1504,22 @@
         @media (max-width: 15rem) {
             .an-phone-nav {
                 flex-wrap: wrap;
+            }
+
+            /* The strip's graph takes a row of its own under the switch and the gear, which wrap. */
+            .an-window[data-graph]::before {
+                grid-row: 1 / span 2;
+            }
+
+            .an-window[data-graph] > .an-win-graph {
+                grid-row: 2;
+                grid-column: 1 / -1;
+                padding: 0 var(--space-2) var(--space-2);
+            }
+
+            .an-window > .an-win-end {
+                flex-wrap: wrap;
+                justify-content: flex-end;
             }
 
             .an-phone-words {

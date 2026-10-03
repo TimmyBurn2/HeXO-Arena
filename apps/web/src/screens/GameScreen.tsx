@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type RefObject } from 'react';
 import { clockText, gameMeta, levelFacts, turnsOnBoard, type FinishedGamesRecord, type GameHeadline, type GameSnapshot } from '@hexo-arena/contract';
+import { useSeatBroadcast } from '../analysis/seat-channel';
 import { gameLink } from '../analysis/links';
 import { fetchFinishedGames } from '../api/client';
 import { BotBadge, PlayerName, seatName, seatsRateNobody, Swatch } from '../components/player';
@@ -14,12 +15,14 @@ import { useDocumentMeta } from '../use-document-meta';
 import { GameBoard, type TurnStatus } from '../game/GameBoard';
 import { FeedLabel, GameDrawer } from '../game/GameDrawer';
 import { clockOf, Pips, SeatChip, TurnChip, YouChip } from '../game/GameHud';
+import { PeekGraph, PeekReadout, ReadingHead, type Asker } from '../game/DrawerAnalysis';
 import { lastTurnOf, turnOf, useReplay, type Replay } from '../game/replay';
 import { Scrubber } from '../game/Scrubber';
 import { Rundown } from '../game/Rundown';
 import { useRundown } from '../game/rundown';
 import { useDrawer } from '../game/use-drawer';
-import { selfName, useMe } from '../me';
+import { useGameReading } from '../game/use-game-reading';
+import { selfName, useMe, type MeState } from '../me';
 import { useGame, type GameLink, type GameSend, type Refusal } from '../game/use-game';
 import { feedOf, matchName, otherSide, positionOf, resultLine, seatNames, stonesOf, winLineOf } from '../game/snapshot-views';
 import { NotFoundScreen } from './NotFoundScreen';
@@ -186,15 +189,16 @@ function GameView({ snapshot, send, link }: { snapshot: GameSnapshot; send: Game
     const you = snapshot.you ?? null;
     const bottom = you ?? `x`;
     const running = snapshot.status === `in-progress`;
+    useSeatBroadcast(running && you !== null ? snapshot.gameId : null);
     const yourMove = running && snapshot.toMove === you;
-    const stones = stonesOf(snapshot);
+    const stones = useMemo(() => stonesOf(snapshot), [snapshot]);
     const feed = feedOf(snapshot);
     const replaying = !running || you === null;
     const opening = snapshot.openingPlies;
     const total = snapshot.board.cells.length;
     const range = useMemo(() => ({ opening, total }), [opening, total]);
     const replay = useReplay(range, replaying);
-    const shownStones = replaying ? stones.slice(0, replay.shown) : stones;
+    const shownStones = useMemo(() => (replaying ? stones.slice(0, replay.shown) : stones), [replaying, stones, replay.shown]);
     const frameStones = useHeldFrame(stones, replay);
     const atEnd = replay.shown >= total;
     const winLine = atEnd ? (winLineOf(snapshot) ?? []) : [];
@@ -228,6 +232,13 @@ function GameView({ snapshot, send, link }: { snapshot: GameSnapshot; send: Game
                 {meetings.record.voided === 0 ? null : `; ${text.games.voidedLeftOut(meetings.record.voided)}`}
             </>
         );
+
+    const reading = useGameReading({ snapshot, replay, shownStones, feedLines: feed.length, currentLine });
+    const { line, head, active, view } = reading;
+    const peekReading =
+        line !== null && (view !== null || head?.card?.kind === `queued` || head?.card?.kind === `running`) ? (
+            <PeekReadout card={head?.card ?? null} view={view} choice={active} turn={reading.turn} players={snapshot.players} />
+        ) : null;
 
     const meta = gameMeta(headlineOf(snapshot));
     useDocumentMeta(route, meta.title, meta.description);
@@ -339,8 +350,15 @@ function GameView({ snapshot, send, link }: { snapshot: GameSnapshot; send: Game
             {clockOf(snapshot, bottom)}
             {yourMove ? <Pips placed={status.placed} /> : null}
             {peekLine}
+            {peekReading}
         </div>
     );
+    const peekGraph =
+        line !== null && view !== null && active !== null ? (
+            <div className="peek-graph">
+                <PeekGraph view={view} choice={active} line={line} cursor={reading.turn} />
+            </div>
+        ) : null;
 
     return (
         <div
@@ -348,6 +366,7 @@ function GameView({ snapshot, send, link }: { snapshot: GameSnapshot; send: Game
             data-pinned={drawer.pinned ? `` : undefined}
             data-open={drawer.visible && !drawer.pinned ? `` : undefined}
             data-replay={replaying ? `` : undefined}
+            data-peek-reading={peekReading === null ? undefined : view === null ? `line` : `graph`}
         >
             <h1 className="sr-only">{headingOf(snapshot)}</h1>
             <div className="board-host" ref={host} data-rundown={rundownShown ? `` : undefined}>
@@ -361,6 +380,8 @@ function GameView({ snapshot, send, link }: { snapshot: GameSnapshot; send: Game
                     yourMove={yourMove}
                     finished={!running}
                     idleLabel={idleLabelOf(snapshot)}
+                    lines={reading.board?.lines}
+                    judgment={reading.board?.judgment}
                     onCommit={send.playMove}
                     onStatus={onStatus}
                 />
@@ -391,6 +412,7 @@ function GameView({ snapshot, send, link }: { snapshot: GameSnapshot; send: Game
                         <div className="hud-chip">
                             <Rundown
                                 players={snapshot.players}
+                                unratedByChoice={snapshot.unratedByChoice === true}
                                 data={rundown}
                                 meetings={
                                     meetings === null ? null : meetings.record.games === 0 ? (
@@ -418,9 +440,31 @@ function GameView({ snapshot, send, link }: { snapshot: GameSnapshot; send: Game
                     drawer={drawer}
                     feed={feed}
                     current={replaying ? currentLine : feed.length - 1}
+                    notes={reading.notes}
+                    folds={reading.folds}
+                    onLine={line === null ? null : reading.goToLine}
+                    onPoint={reading.point}
+                    head={
+                        line === null ? null : (
+                            <ReadingHead
+                                state={reading.state}
+                                head={head}
+                                active={active}
+                                onChoose={reading.choose}
+                                view={view}
+                                line={line}
+                                players={snapshot.players}
+                                cursor={reading.turn}
+                                asker={askerOf(me)}
+                                onRequest={reading.request}
+                                onRetry={reading.retry}
+                                onTurn={reading.goToTurn}
+                            />
+                        )
+                    }
                     facts={factsOf(snapshot)}
                     meetings={meetingsLine}
-                    rundown={running && !rundownShown ? <Rundown players={snapshot.players} data={rundown} meetings={null} /> : null}
+                    rundown={running && !rundownShown ? <Rundown players={snapshot.players} unratedByChoice={snapshot.unratedByChoice === true} data={rundown} meetings={null} /> : null}
                     tournament={snapshot.tournament === undefined ? null : (
                         <Link to={`/tournaments/${encodeURIComponent(snapshot.tournament.id)}`}>
                             {text.drawer.tournamentGame(snapshot.tournament.name, snapshot.tournament.round, snapshot.tournament.game)}
@@ -430,11 +474,22 @@ function GameView({ snapshot, send, link }: { snapshot: GameSnapshot; send: Game
                     running={running}
                     timed={snapshot.clock !== undefined && snapshot.clock.mode !== `unlimited`}
                     onResign={you === null ? null : send.resign}
-                    peek={peek}
+                    peek={
+                        <>
+                            {peek}
+                            {peekGraph}
+                        </>
+                    }
                 />
             </div>
         </div>
     );
+}
+
+// Who may ask for a reading: a signed-in user, with the day's requests left; anyone else signs in first.
+function askerOf(me: MeState): Asker {
+    if (me.status === `loading`) return { kind: `unknown` };
+    return me.me?.kind === `user` ? { kind: `user`, left: me.me.analysisLeft.games } : { kind: `signed-out` };
 }
 
 /** Two players' record against each other, as x's. */
@@ -481,14 +536,16 @@ function factsOf(snapshot: GameSnapshot): (readonly [string, string])[] {
     const voided = snapshot.status === `finished` && snapshot.voided;
     const guest = snapshot.players.x.kind === `guest` || snapshot.players.o.kind === `guest`;
     const practice = !guest && seatsRateNobody(snapshot.players);
+    // Only one reason holds at a time: a guest's game and practice never carry the choice.
+    const unrated = practice ? text.drawer.ratedNoPractice : snapshot.unratedByChoice === true ? text.drawer.ratedNoChoice : null;
     if (snapshot.you === undefined) {
         const unratedGuest = snapshot.status === `finished` ? text.drawer.ratedNoGuestPlayed : text.drawer.ratedNoGuest;
-        facts.push([text.drawer.rated, guest ? unratedGuest : practice ? text.drawer.ratedNoPractice : voided ? text.drawer.ratedNoVoided : text.drawer.ratedYes]);
+        facts.push([text.drawer.rated, guest ? unratedGuest : (unrated ?? (voided ? text.drawer.ratedNoVoided : text.drawer.ratedYes))]);
     } else {
         facts.push([text.drawer.yourSide, snapshot.you]);
         // A seated player's own game needs no Rated row until the operator
-        // voids it, unless a bot level made it practice.
-        if (practice) facts.push([text.drawer.rated, text.drawer.ratedNoPractice]);
+        // voids it, unless a bot level or the player's choice made it unrated.
+        if (unrated !== null) facts.push([text.drawer.rated, unrated]);
         else if (voided) facts.push([text.drawer.rated, text.drawer.ratedNoVoided]);
     }
     if (snapshot.status === `finished`) facts.push([text.drawer.result, resultLine(snapshot)]);

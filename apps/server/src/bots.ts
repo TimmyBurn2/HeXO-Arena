@@ -6,8 +6,11 @@ import {
     type Accepts,
     type AccountDeclaration,
     type Analyzer,
+    type AnalyzerValues,
     type BotAccount,
+    type JudgmentCuts,
     type Levels,
+    type ValueMeaning,
 } from '@hexo-arena/contract';
 import { and, count, eq, isNull } from 'drizzle-orm';
 import { randomUUID } from 'node:crypto';
@@ -49,7 +52,24 @@ interface DeclarationColumns {
     analyzerMaxSeconds: number | null;
     analyzerLines: number | null;
     analyzerWhilePlaying: number | null;
+    analyzerScale: number | null;
+    analyzerCutInaccuracy: number | null;
+    analyzerCutMistake: number | null;
+    analyzerCutBlunder: number | null;
+    analyzerMeaning: string | null;
 }
+
+/** The columns `storedAnalyzer` reads, to select beside others. */
+export const analyzerColumns = {
+    analyzerMaxSeconds: bots.analyzerMaxSeconds,
+    analyzerLines: bots.analyzerLines,
+    analyzerWhilePlaying: bots.analyzerWhilePlaying,
+    analyzerScale: bots.analyzerScale,
+    analyzerCutInaccuracy: bots.analyzerCutInaccuracy,
+    analyzerCutMistake: bots.analyzerCutMistake,
+    analyzerCutBlunder: bots.analyzerCutBlunder,
+    analyzerMeaning: bots.analyzerMeaning,
+};
 
 const declarationColumns = {
     about: bots.about,
@@ -57,17 +77,54 @@ const declarationColumns = {
     repoUrl: bots.repoUrl,
     accepts: bots.accepts,
     levels: bots.levels,
-    analyzerMaxSeconds: bots.analyzerMaxSeconds,
-    analyzerLines: bots.analyzerLines,
-    analyzerWhilePlaying: bots.analyzerWhilePlaying,
+    ...analyzerColumns,
 };
 
 type DeclarationView = Pick<BotRow, `about` | `version` | `repoUrl` | `accepts` | `levels` | `analyzer`>;
 
-/** The analyzer the columns hold, which the schema keeps all set or all null. */
-export function storedAnalyzer(row: Pick<DeclarationColumns, `analyzerMaxSeconds` | `analyzerLines` | `analyzerWhilePlaying`>): StoredAnalyzer | null {
+/** Values as a table stores them: a scale and a meaning, null where none was declared, and three cuts, set together or not at all. */
+export interface ValueColumns {
+    readonly scale: number | null;
+    readonly inaccuracy: number | null;
+    readonly mistake: number | null;
+    readonly blunder: number | null;
+    readonly meaning: string | null;
+}
+
+/** How a heuristic reads by its stored columns: scale 1 and raw where none was declared, and no cuts unless all three are set. */
+export function storedValues(columns: ValueColumns): AnalyzerValues {
+    const { inaccuracy, mistake, blunder } = columns;
+    return {
+        scale: columns.scale ?? 1,
+        cuts: inaccuracy === null || mistake === null || blunder === null ? null : { inaccuracy, mistake, blunder },
+        meaning: columns.meaning === `expected` ? `expected` : `raw`,
+    };
+}
+
+/** The columns that store values, all null for none. */
+export function valueColumns(
+    values: { readonly scale: number; readonly cuts?: JudgmentCuts | null | undefined; readonly meaning: ValueMeaning } | null | undefined,
+): ValueColumns {
+    const cuts = values?.cuts ?? null;
+    return { scale: values?.scale ?? null, inaccuracy: cuts?.inaccuracy ?? null, mistake: cuts?.mistake ?? null, blunder: cuts?.blunder ?? null, meaning: values?.meaning ?? null };
+}
+
+type AnalyzerColumns = Pick<
+    DeclarationColumns,
+    `analyzerMaxSeconds` | `analyzerLines` | `analyzerWhilePlaying` | `analyzerScale` | `analyzerCutInaccuracy` | `analyzerCutMistake` | `analyzerCutBlunder` | `analyzerMeaning`
+>;
+
+/** The analyzer the columns hold, which the schema keeps all set or all null, with how its heuristic reads. */
+export function storedAnalyzer(row: AnalyzerColumns): StoredAnalyzer | null {
     if (row.analyzerMaxSeconds === null || row.analyzerLines === null || row.analyzerWhilePlaying === null) return null;
-    return { maxSeconds: row.analyzerMaxSeconds, lines: row.analyzerLines, whilePlaying: row.analyzerWhilePlaying === 1 };
+    const values = storedValues({
+        scale: row.analyzerScale,
+        inaccuracy: row.analyzerCutInaccuracy,
+        mistake: row.analyzerCutMistake,
+        blunder: row.analyzerCutBlunder,
+        meaning: row.analyzerMeaning,
+    });
+    return { maxSeconds: row.analyzerMaxSeconds, lines: row.analyzerLines, whilePlaying: row.analyzerWhilePlaying === 1, values };
 }
 
 // Absent, not null: the wire shape omits a text field or accepts the bot
@@ -212,6 +269,12 @@ export function updateBotDeclaration(query: Query, botId: string, changes: Accou
             set.analyzerMaxSeconds = changes.analyzer?.maxSeconds ?? null;
             set.analyzerLines = changes.analyzer?.lines ?? null;
             set.analyzerWhilePlaying = changes.analyzer === null ? null : Number(changes.analyzer.whilePlaying);
+            const values = valueColumns(changes.analyzer?.values);
+            set.analyzerScale = values.scale;
+            set.analyzerCutInaccuracy = values.inaccuracy;
+            set.analyzerCutMistake = values.mistake;
+            set.analyzerCutBlunder = values.blunder;
+            set.analyzerMeaning = values.meaning;
         }
         const [row] =
             Object.keys(set).length === 0

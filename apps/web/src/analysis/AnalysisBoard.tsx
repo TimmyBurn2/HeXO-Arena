@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ClipboardEvent, type KeyboardEvent } from 'react';
-import type { AxialCoord, Side } from '@hexo-arena/contract';
+import type { AxialCoord, JudgmentSeverity, Side } from '@hexo-arena/contract';
 import { hexDistance, placementRadius } from '@hexo-arena/rules';
 import { Board, type BoardLines, type BoardStone } from '../board/Board';
 import { useBoardSettings } from '../board/board-settings';
@@ -25,7 +25,7 @@ const sixKeys: Readonly<Record<string, AxialCoord>> = {
  * through the turns otherwise, as the screen reads them.
  * A paste on the board hands its text to `onPaste`.
  */
-export function AnalysisBoard({ stones, frame, field, mark, toMove, lastMove, winLine, lines, preview, label, onCell, onPaste }: {
+export function AnalysisBoard({ stones, frame, field, mark, toMove, lastMove, winLine, lines, preview, judgment, label, onCell, onPaste }: {
     stones: readonly BoardStone[];
     // The position the camera frames, which holds `stones`.
     frame: readonly AxialCoord[];
@@ -38,6 +38,8 @@ export function AnalysisBoard({ stones, frame, field, mark, toMove, lastMove, wi
     // An analyzer's lines, and the one pointed at, shown as the stones it would place.
     lines?: BoardLines | undefined;
     preview?: { readonly side: Side; readonly cells: readonly AxialCoord[] } | undefined;
+    // A judged turn's mark beside its last stone.
+    judgment?: { readonly cell: AxialCoord; readonly severity: JudgmentSeverity } | undefined;
     label: string;
     onCell: (cell: AxialCoord) => void;
     onPaste: (pasted: string) => void;
@@ -119,6 +121,7 @@ export function AnalysisBoard({ stones, frame, field, mark, toMove, lastMove, wi
                         lastMove,
                         lines,
                         preview,
+                        judgment,
                     }}
                     onCellClick={onCell}
                 />

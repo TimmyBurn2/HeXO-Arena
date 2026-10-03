@@ -107,7 +107,7 @@ Legal basis: Art. 6(1)(f) GDPR, legitimate interest: letting players and bot aut
   It lasts {{site.oauthMinutes}} minutes, or until Discord sends you back.
 - The cookie {{site.signupCookie}}, set when a first sign-in returns from Discord: a random reference to the unfinished sign-up, first-party and not readable by scripts.
   It lasts {{site.signupMinutes}} minutes, or until you create the account or cancel.
-- Browser storage (localStorage) under {{site.themeKey}}, {{site.boardKey}}, {{site.drawerKey}}, {{site.playKey}}, and {{site.analysisSettingsKey}}: your theme, your board settings, whether the game panel stays pinned, the opponent and clock of your last game, and the analyzer, lines, and time you ask positions read with.
+- Browser storage (localStorage) under {{site.themeKey}}, {{site.boardKey}}, {{site.drawerKey}}, {{site.playKey}}, and {{site.analysisSettingsKey}}: your theme, your board settings, whether the game panel stays pinned, the opponent and clock of your last game and whether you play rated, and the analyzer, lines, and time you ask positions read with.
   It is written only when you change a setting or start a game, and never sent to the server.
 - Session storage (sessionStorage) under {{site.analysisKey}}: the turns and variations on the analysis board, a stored game by its id.
   It lasts until the tab closes, and is never sent to the server.

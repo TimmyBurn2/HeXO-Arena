@@ -1,18 +1,32 @@
-import { useEffect, useRef, useState, type Ref } from 'react';
-import { namePattern, isReservedName } from '@hexo-arena/contract';
+import { useEffect, useRef, useState, type ReactNode, type Ref } from 'react';
+import { namePattern, isReservedName, type AccountDeclaration } from '@hexo-arena/contract';
 import { ApiError, createBot, limitedFor } from '../api/client';
 import { useWait, WaitText } from '../components/wait';
+import { CodeBlock } from '../components/CodeBlock';
 import { Link } from '../router/Link';
 import { landed, landingOf, useRoute } from '../router/use-route';
 import { DiscordSignIn } from '../components/DiscordButton';
 import { TokenBox } from '../components/TokenBox';
 import { useMe } from '../me';
-import { botApiRepository } from '../site-links';
+import { botApiRepository, bridgeInstall, bridgeRepository } from '../site-links';
 import { text } from '../text';
+import type { Slot } from '../text/rich';
 import { useDocumentMeta } from '../use-document-meta';
 import './ConnectScreen.css';
 
 const exampleBot = `${botApiRepository}/blob/main/examples/simple_bot.py`;
+const exampleEngine = `${bridgeRepository}/blob/main/examples/random_engine.py`;
+const bridgeReadme = `${bridgeRepository}#readme`;
+
+const code: Slot = (words) => <code>{words}</code>;
+
+function outTo(href: string): Slot {
+    return (words) => (
+        <a href={href} rel="noreferrer" target="_blank">
+            {words}
+        </a>
+    );
+}
 
 interface Created {
     name: string;
@@ -27,6 +41,11 @@ export function ConnectScreen() {
     const me = state.status === `ready` ? state.me : null;
     const botName = useRef<HTMLInputElement>(null);
     const signedIn = me?.kind === `user`;
+    // A bot connects to the site that served this page, so the samples
+    // name its origin rather than any deployment's domain.
+    const origin = window.location.origin;
+    const words = text.build;
+    const samples = words.samples;
 
     // An account made on the way here goes straight to its bot's name.
     useEffect(() => {
@@ -35,106 +54,112 @@ export function ConnectScreen() {
         landed();
     }, [signedIn]);
 
+    // Keyed by the contract's own fields, so one it adds cannot go undescribed.
+    const declared: Record<keyof AccountDeclaration, ReactNode> = {
+        accepts: words.declaration.accepts(code),
+        about: words.declaration.about,
+        version: words.declaration.version,
+        repoUrl: words.declaration.repoUrl,
+        levels: words.declaration.levels,
+        analyzer: words.declaration.analyzer(code),
+    };
+
     return (
-        <>
-            <h1 className="screen-title">{text.build.title}</h1>
-            <p className="note">{text.build.lead}</p>
-            <ol className="steps">
-                <li className={me?.kind === `user` ? `done` : `active`}>
-                    <span className="step-n" aria-hidden="true">
-                        1
-                    </span>
-                    <div className="step-body">
-                        {me?.kind === `user` ? (
-                            <>
-                                <h2 className="step-title">{text.build.signedInAs(me.name)}</h2>
-                                <p>{text.build.profileNote((words) => <Link to="/profile">{words}</Link>)}</p>
-                            </>
-                        ) : (
-                            <>
-                                <h2 className="step-title">{text.build.signIn}</h2>
-                                {me?.kind === `guest` ? <p>{text.build.guestNote(me.name)}</p> : null}
-                                <DiscordSignIn guest={me?.kind === `guest`} />
-                            </>
-                        )}
-                    </div>
-                </li>
-                <li className={me?.kind !== `user` ? `` : created === null ? `active` : `done`}>
-                    <span className="step-n" aria-hidden="true">
-                        2
-                    </span>
-                    <div className="step-body">
-                        <h2 className="step-title">{text.build.create}</h2>
-                        <CreateBotForm ref={botName} onCreated={setCreated} />
-                    </div>
-                </li>
-                <li className={created === null ? `` : `active`}>
-                    <span className="step-n" aria-hidden="true">
-                        3
-                    </span>
-                    <div className="step-body">
-                        <h2 className="step-title">{text.build.copyToken}</h2>
-                        {created === null ? (
-                            <p>{text.build.tokenLater}</p>
-                        ) : (
-                            <TokenBox token={created.token} />
-                        )}
-                    </div>
-                </li>
-                <li>
-                    <span className="step-n" aria-hidden="true">
-                        4
-                    </span>
-                    <div className="step-body">
-                        <h2 className="step-title">{text.build.runExample}</h2>
-                        <p>
-                            {text.build.example(
-                                (words) => (
-                                    <a href={exampleBot} rel="noreferrer" target="_blank">
-                                        {words}
-                                    </a>
-                                ),
-                                (words) => (
-                                    <a href={botApiRepository} rel="noreferrer" target="_blank">
-                                        {words}
-                                    </a>
-                                ),
+        <div className="build-guide">
+            <h1 className="screen-title">{words.title}</h1>
+            <p className="note">{words.lead}</p>
+            <section className="build-part">
+                <h2 className="section-title">{words.bridge.title}</h2>
+                <p>{words.bridge.lead(outTo(bridgeRepository))}</p>
+                <h3>{words.bridge.install}</h3>
+                <p className="note">{words.bridge.installNote}</p>
+                <CodeBlock {...samples.install} code={bridgeInstall} />
+                <h3>{words.bridge.python}</h3>
+                <p className="note">{words.bridge.pythonNote(code)}</p>
+                <CodeBlock {...samples.python} code={samples.python.code(origin)} />
+                <p className="note">{words.bridge.start}</p>
+                <CodeBlock {...samples.startPython} />
+                <h3>{words.bridge.process}</h3>
+                <p className="note">{words.bridge.processNote(outTo(exampleEngine), outTo(bridgeReadme), code)}</p>
+                <CodeBlock {...samples.toml} code={samples.toml.code(origin)} />
+                <p className="note">{words.bridge.startBridge}</p>
+                <CodeBlock {...samples.startBridge} />
+            </section>
+            <section className="build-part">
+                <h2 className="section-title">{words.steps}</h2>
+                <ol className="steps">
+                    <li className={me?.kind === `user` ? `done` : `active`}>
+                        <span className="step-n" aria-hidden="true">
+                            1
+                        </span>
+                        <div className="step-body">
+                            {me?.kind === `user` ? (
+                                <>
+                                    <h3 className="step-title">{words.signedInAs(me.name)}</h3>
+                                    <p>{words.profileNote((profile) => <Link to="/profile">{profile}</Link>)}</p>
+                                </>
+                            ) : (
+                                <>
+                                    <h3 className="step-title">{words.signIn}</h3>
+                                    {me?.kind === `guest` ? <p>{words.guestNote(me.name)}</p> : null}
+                                    <DiscordSignIn guest={me?.kind === `guest`} />
+                                </>
                             )}
-                        </p>
-                    </div>
-                </li>
-                <li>
-                    <span className="step-n" aria-hidden="true">
-                        5
-                    </span>
-                    <div className="step-body">
-                        <h2 className="step-title">{text.build.watch}</h2>
-                        {created === null ? (
-                            <p>{text.build.watchLater((words) => <Link to="/bots">{words}</Link>)}</p>
-                        ) : (
-                            <p>
-                                {text.build.botPage(<Link to={`/bots/${encodeURIComponent(created.name)}`}>{created.name}</Link>)}
-                            </p>
-                        )}
-                    </div>
-                </li>
-                <li>
-                    <span className="step-n" aria-hidden="true">
-                        6
-                    </span>
-                    <div className="step-body">
-                        <h2 className="step-title">{text.build.readApi}</h2>
-                        <p>
-                            {text.build.api((words) => (
-                                <a href={botApiRepository} rel="noreferrer" target="_blank">
-                                    {words}
-                                </a>
-                            ))}
-                        </p>
-                    </div>
-                </li>
-            </ol>
-        </>
+                        </div>
+                    </li>
+                    <li className={me?.kind !== `user` ? `` : created === null ? `active` : `done`}>
+                        <span className="step-n" aria-hidden="true">
+                            2
+                        </span>
+                        <div className="step-body">
+                            <h3 className="step-title">{words.create}</h3>
+                            <CreateBotForm ref={botName} onCreated={setCreated} />
+                        </div>
+                    </li>
+                    <li className={created === null ? `` : `active`}>
+                        <span className="step-n" aria-hidden="true">
+                            3
+                        </span>
+                        <div className="step-body">
+                            <h3 className="step-title">{words.copyToken}</h3>
+                            {created === null ? <p>{words.tokenLater}</p> : <TokenBox token={created.token} />}
+                        </div>
+                    </li>
+                    <li>
+                        <span className="step-n" aria-hidden="true">
+                            4
+                        </span>
+                        <div className="step-body">
+                            <h3 className="step-title">{words.watch}</h3>
+                            {created === null ? (
+                                <p>{words.watchLater((bots) => <Link to="/bots">{bots}</Link>)}</p>
+                            ) : (
+                                <p>{words.botPage(<Link to={`/bots/${encodeURIComponent(created.name)}`}>{created.name}</Link>)}</p>
+                            )}
+                        </div>
+                    </li>
+                </ol>
+            </section>
+            <section className="build-part">
+                <h2 className="section-title">{words.declaration.title}</h2>
+                <p>{words.declaration.lead(code)}</p>
+                <dl className="declaration-fields">
+                    {Object.entries(declared).map(([field, says]) => (
+                        <div key={field}>
+                            <dt>
+                                <code>{field}</code>
+                            </dt>
+                            <dd>{says}</dd>
+                        </div>
+                    ))}
+                </dl>
+            </section>
+            <section className="build-part">
+                <h2 className="section-title">{words.api.title}</h2>
+                <p>{words.api.lead(outTo(botApiRepository))}</p>
+                <p>{words.api.example(outTo(exampleBot), outTo(botApiRepository))}</p>
+            </section>
+        </div>
     );
 }
 

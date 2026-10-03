@@ -16,6 +16,7 @@ import {
     rosterOf,
     turnBounds,
     writePlayed,
+    writeRated,
 } from '../src/play/setup';
 
 const full = { turnMs: [5000, 300000], match: true, unlimited: true };
@@ -157,12 +158,23 @@ describe('the address', () => {
 
 describe('what this browser remembers', () => {
     it('keeps the last opponent and clock a game started with, and never the opening', () => {
-        expect(readPlayed()).toEqual({ opponent: null, clock: null });
+        expect(readPlayed()).toEqual({ opponent: null, clock: null, rated: false });
         writePlayed(`hextide`, { mode: `turn`, turnTimeMs: 20_000 });
-        expect(JSON.parse(window.localStorage.getItem(playStorageKey) ?? ``)).toEqual({ opponent: `hextide`, clock: `t20` });
-        expect(readPlayed()).toEqual({ opponent: `hextide`, clock: { mode: `turn`, turnTimeMs: 20_000 } });
+        expect(JSON.parse(window.localStorage.getItem(playStorageKey) ?? ``)).toEqual({ opponent: `hextide`, clock: `t20`, rated: false });
+        expect(readPlayed()).toEqual({ opponent: `hextide`, clock: { mode: `turn`, turnTimeMs: 20_000 }, rated: false });
         window.localStorage.setItem(playStorageKey, `{not json`);
-        expect(readPlayed()).toEqual({ opponent: null, clock: null });
+        expect(readPlayed()).toEqual({ opponent: null, clock: null, rated: false });
+    });
+
+    it('keeps the Rated switch as last set, off until set, beside the last game\'s opponent and clock', () => {
+        writeRated(true);
+        expect(readPlayed()).toEqual({ opponent: null, clock: null, rated: true });
+        writePlayed(`hextide`, { mode: `unlimited` });
+        expect(readPlayed()).toEqual({ opponent: `hextide`, clock: { mode: `unlimited` }, rated: true });
+        writeRated(false);
+        expect(JSON.parse(window.localStorage.getItem(playStorageKey) ?? ``)).toEqual({ opponent: `hextide`, clock: `u`, rated: false });
+        window.localStorage.setItem(playStorageKey, JSON.stringify({ opponent: `hextide`, clock: `u`, rated: `yes` }));
+        expect(readPlayed().rated).toBe(false);
     });
 });
 

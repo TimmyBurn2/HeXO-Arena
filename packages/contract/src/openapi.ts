@@ -30,6 +30,8 @@ import {
     meUpdateRequestSchema,
     positionBusyRetryAfterSeconds,
     positionCheckErrorCodes,
+    positionCheckLimit,
+    positionCheckPrefixLimit,
     positionCheckRequestSchema,
     positionHoldMs,
     positionReadingConflictErrorCodes,
@@ -741,7 +743,7 @@ function registerSiteSurface(registry: OpenAPIRegistry, shared: SharedComponents
             401: shared.unauthorized,
             403: shared.gameCreateForbidden,
             429: {
-                description: `The caller is inside the creation cooldown (game_cooldown); or a signed-in caller has played this bot at its default level ${String(pairDailyCap)} times this UTC day (daily_pair_cap), until 00:00 UTC; Retry-After says how long either has left; or too many requests (rate_limited).`,
+                description: `The caller is inside the creation cooldown (game_cooldown); or a signed-in caller has played this bot rated ${String(pairDailyCap)} times this UTC day (daily_pair_cap), until 00:00 UTC; Retry-After says how long either has left; or too many requests (rate_limited).`,
                 headers: { 'Retry-After': shared.retryAfter },
                 content: { 'application/json': { schema: gameLimitError } },
             },
@@ -993,7 +995,7 @@ function registerAnalysisPaths(registry: OpenAPIRegistry, shared: SharedComponen
         operationId: 'checkPosition',
         tags: ['Analysis'],
         security: [{ sessionCookie: [] }, {}],
-        description: `For an engine the browser runs itself: the same refusal a position request meets, without asking any analyzer. A caller without a session meets only the position's.`,
+        description: `For an engine the browser runs itself: the same refusal a position request meets, without asking any analyzer. A caller without a session meets only the position's. One client clears ${rateText(positionCheckLimit)}, and one IPv6 /48 ${rateText(positionCheckPrefixLimit)}.`,
         request: {
             body: { required: true, content: { 'application/json': { schema: positionCheckRequestSchema } } },
         },
@@ -1003,6 +1005,11 @@ function registerAnalysisPaths(registry: OpenAPIRegistry, shared: SharedComponen
             409: {
                 description: `The position is a live game's, or leads on from one (live_position); or the caller sits in a live game (seated).`,
                 content: { 'application/json': { schema: positionCheckError } },
+            },
+            429: {
+                description: `The client cleared more than ${rateText(positionCheckLimit)}, or its IPv6 /48 more than ${rateText(positionCheckPrefixLimit)} (rate_limited); or too many requests. Retry after Retry-After.`,
+                headers: { 'Retry-After': shared.retryAfter },
+                content: { 'application/json': { schema: rateLimitedError } },
             },
         },
     });
@@ -1342,6 +1349,7 @@ function registerBotSurface(registry: OpenAPIRegistry, shared: SharedComponents)
                 description: [
                     `Switching protocols; the analysis session is open, and a new connection replaces the previous one.`,
                     `A bot with a live game is sent nothing unless it declared whilePlaying, and a game's move request never waits on a reading.`,
+                    `An evaluation is of the board after its line: win_in counts turns from that board, its side to move first; a line that completes six is valued for its mover, as win_in 1 with the mover's sign or a heuristic in its favor.`,
                     `A reading fails when the answer comes more than ${seconds(analysisGraceMs)} s past move_time_limit, a line is no legal turn from the position or repeats one, the move carries no evaluation, or an evaluation contradicts the board or passes a win_in of ${String(analysisWinInLimit)} or a heuristic of ${String(analysisHeuristicLimit)} either way.`,
                     `${String(analyzerStrikeLimit)} failures within ${String(analyzerStrikeWindowMs / 60_000)} minutes bench the analyzer for ${String(analyzerBenchMs / 60_000)} minutes.`,
                     `heartbeat, frame sizes, stray frames, and closes are as on the engine session; withdrawing the declaration closes the session.`,

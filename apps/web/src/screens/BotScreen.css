@@ -72,43 +72,146 @@
         margin: 0 0 var(--space-5);
     }
 
-    .bot-columns {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(min(100%, var(--card-min)), 1fr));
-        gap: var(--space-3);
+    /* The plate's foot answers whether the bot can be played now, and on
+       which clocks. */
+    .play-strip {
+        grid-column: 1 / -1;
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: var(--space-3) var(--space-6);
+        margin-top: var(--space-3);
+        padding-top: var(--space-4);
+        box-shadow: inset 0 var(--border-w) 0 var(--c-border);
     }
 
-    .strength-list {
+    .play-strip-go {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: var(--space-2) var(--space-3);
+    }
+
+    .play-strip-go .btn {
+        height: var(--control-lg);
+        padding: 0 var(--space-5);
+        font-size: var(--text-base);
+    }
+
+    /* A hairline parts the clocks from the action and its reason. */
+    .accepts-line {
+        display: flex;
+        flex-wrap: wrap;
+        align-self: stretch;
+        align-content: center;
+        gap: var(--space-1) var(--space-5);
+        margin: 0;
+        padding-left: var(--space-6);
+        box-shadow: inset var(--border-w) 0 0 var(--c-border);
+        font-size: var(--text-sm);
+    }
+
+    .accepts-line div {
+        display: flex;
+        gap: var(--space-2);
+    }
+
+    .accepts-line dt {
+        color: var(--c-text-dim);
+    }
+
+    .accepts-line dd {
+        margin: 0;
+        font-weight: var(--weight-strong);
+    }
+
+    /* The owner's sentence is running text, its link underlined as in
+       any paragraph. */
+    .accepts-help {
+        margin: 0;
+        font-weight: var(--weight-regular);
+    }
+
+    .levels,
+    .bot-details {
+        margin: 0 0 var(--space-6);
+    }
+
+    .detail-title {
+        margin: 0 0 var(--space-3);
+        font-size: var(--text-lg);
+        font-weight: var(--weight-display);
+    }
+
+    /* One grid for every row, so budgets and words line up down the list
+       whatever each label's length; a long budget wraps before it crowds
+       out the words. */
+    .level-rows {
         display: grid;
-        gap: var(--space-3);
+        grid-template-columns: max-content fit-content(var(--level-facts-w)) minmax(0, 1fr) auto;
+        gap: var(--space-1) var(--space-5);
         margin: 0 0 var(--space-3);
         padding: 0;
         list-style: none;
     }
 
-    .strength-list p {
-        margin: 0;
+    .level-row {
+        display: grid;
+        grid-column: 1 / -1;
+        grid-template-columns: subgrid;
+        align-items: center;
+        padding: var(--space-2) var(--space-2) var(--space-2) var(--space-4);
+        background: var(--c-bg-raised);
+        box-shadow: inset 0 var(--border-w) 0 var(--surface-edge-hi);
     }
 
-    .strength-list + .note {
-        margin: 0;
-    }
-
-    .strength-name {
+    /* A level may state no budget or no words, so each cell keeps its own
+       column. */
+    .level-name {
+        grid-column: 1;
         display: flex;
-        flex-wrap: wrap;
         align-items: center;
         gap: var(--space-2);
+        min-width: 0;
         font-weight: var(--weight-strong);
         overflow-wrap: anywhere;
     }
 
-    .play-row {
-        margin-top: var(--space-5);
+    .level-facts {
+        grid-column: 2;
+        font-size: var(--text-sm);
+        font-variant-numeric: tabular-nums;
     }
 
-    .play-row .play-reason {
-        margin-left: var(--space-3);
+    .level-about {
+        grid-column: 3;
+        color: var(--c-text-dim);
+        font-size: var(--text-sm);
+    }
+
+    .level-go {
+        grid-column: 4;
+    }
+
+    .levels > .note {
+        margin: 0;
+    }
+
+    /* Unboxed and sized to their words, so a short group leaves no empty
+       surface beside a long one. */
+    .bot-details {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: flex-start;
+        gap: var(--space-5) var(--space-8);
+    }
+
+    .detail {
+        max-width: 100%;
+    }
+
+    .detail .note {
+        margin: var(--space-3) 0 0;
     }
 
     @media (max-width: 40rem) {
@@ -123,6 +226,56 @@
 
         .bot-rating-pending {
             height: calc(var(--text-xl) * var(--leading-tight));
+        }
+
+        .about {
+            font-size: var(--text-base);
+        }
+
+        /* Play spans the plate, so it is on the first screen for every
+           bot, and the clocks wrap under it. */
+        .play-strip-go,
+        .play-strip-go .btn {
+            width: 100%;
+        }
+
+        .accepts-line {
+            padding-left: 0;
+            box-shadow: none;
+        }
+
+        .level-rows {
+            grid-template-columns: minmax(0, 1fr);
+        }
+
+        /* A narrow row stacks its words under the name and keeps Play
+           beside the name. */
+        .level-row {
+            grid-template-columns: minmax(0, 1fr) auto;
+            grid-template-areas:
+                'name go'
+                'facts go'
+                'about about';
+            gap: 0 var(--space-3);
+            align-items: start;
+            padding: var(--space-3);
+        }
+
+        .level-name {
+            grid-area: name;
+        }
+
+        .level-facts {
+            grid-area: facts;
+        }
+
+        .level-about {
+            grid-area: about;
+            margin-top: var(--space-1);
+        }
+
+        .level-go {
+            grid-area: go;
         }
     }
 

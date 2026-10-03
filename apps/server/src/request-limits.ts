@@ -3,6 +3,8 @@ import {
     archiveReadLimit,
     accountExportLimit,
     botManagementLimit,
+    positionCheckLimit,
+    positionCheckPrefixLimit,
     positionRequestLimit,
     clientRequestLimit,
     discordExchangeLimit,
@@ -64,6 +66,8 @@ export interface LimitTable {
     reportGlobal: RateLimit;
     accountExport: RateLimit;
     positionRequest: RateLimit;
+    positionCheck: RateLimit;
+    positionCheckPrefix: RateLimit;
 }
 
 export const defaultLimits: LimitTable = {
@@ -85,10 +89,12 @@ export const defaultLimits: LimitTable = {
     reportGlobal: reportGlobalLimit,
     accountExport: accountExportLimit,
     positionRequest: positionRequestLimit,
+    positionCheck: positionCheckLimit,
+    positionCheckPrefix: positionCheckPrefixLimit,
 };
 
-/** The limits a client is held to for one kind of anonymous act. */
-export type ClientLimit = `guestMint` | `signInStart` | `report`;
+/** The limits a client is held to for one kind of act anyone may try. */
+export type ClientLimit = `guestMint` | `signInStart` | `report` | `positionCheck`;
 
 /** The limits a credential is held to, each spent once the credential is known. */
 export type CredentialLimit = `principal` | `botManagement` | `streamOpen` | `engineDial` | `accountExport` | `positionRequest`;
@@ -148,12 +154,14 @@ export class RequestLimits {
             guestMint: new RateBuckets(deps.table.guestMint, deps.now, clientKeyCap),
             signInStart: new RateBuckets(deps.table.signInStart, deps.now, clientKeyCap),
             report: new RateBuckets(deps.table.report, deps.now, clientKeyCap),
+            positionCheck: new RateBuckets(deps.table.positionCheck, deps.now, clientKeyCap),
             archiveRead: new RateBuckets(deps.table.archiveRead, deps.now, clientKeyCap),
         };
         this.#perPrefix = {
             guestMint: new RateBuckets(deps.table.guestMintPrefix, deps.now, clientKeyCap),
             signInStart: new RateBuckets(deps.table.signInStartPrefix, deps.now, clientKeyCap),
             report: new RateBuckets(deps.table.reportPrefix, deps.now, clientKeyCap),
+            positionCheck: new RateBuckets(deps.table.positionCheckPrefix, deps.now, clientKeyCap),
         };
         this.#archive = new RateBuckets(deps.table.archiveReadGlobal, deps.now);
         this.#discordExchange = new RateBuckets(deps.table.discordExchange, deps.now);

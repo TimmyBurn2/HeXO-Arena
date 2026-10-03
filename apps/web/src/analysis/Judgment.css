@@ -1,0 +1,30 @@
+@layer components {
+    /* An inaccuracy and a mistake read in their color on the overlay; a
+       blunder fills its chip. */
+    .jd {
+        display: inline-grid;
+        flex: none;
+        place-items: center;
+        min-width: var(--judgment-w);
+        height: var(--judgment-h);
+        padding: 0 var(--space-1);
+        background: var(--c-bg-overlay);
+        font-family: var(--font-mono);
+        font-size: var(--text-xs);
+        font-weight: var(--weight-display);
+        line-height: 1;
+    }
+
+    .jd-inaccuracy {
+        color: var(--c-warn);
+    }
+
+    .jd-mistake {
+        color: var(--c-bad);
+    }
+
+    .jd-blunder {
+        background: var(--c-bad-solid);
+        color: var(--c-text-on-accent);
+    }
+}

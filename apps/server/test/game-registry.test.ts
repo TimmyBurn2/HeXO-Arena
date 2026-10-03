@@ -1307,12 +1307,31 @@ describe('a bot\'s own view', () => {
         ]);
     });
 
+    it('keeps how the bot\'s heuristic read at its first evaluation of the game, whatever it declares after', () => {
+        const declare = world.sqlite.prepare(`update bots set analyzer_max_seconds = 2, analyzer_lines = 1, analyzer_while_playing = 0, analyzer_scale = ?, analyzer_cut_inaccuracy = ?, analyzer_cut_mistake = ?, analyzer_cut_blunder = ?, analyzer_meaning = ? where id = ?`);
+        declare.run(1000, 0.1, 0.2, 0.3, `expected`, bot.id);
+        answerBot({ pieces: crossTurn(0).pieces, evaluation: { heuristic: 250 } });
+        declare.run(1, null, null, null, `raw`, bot.id);
+        world.games.humanMove(gameId, user, [wireToInternal(circleTurn(0).pieces[0]), wireToInternal(circleTurn(0).pieces[1])]);
+        answerBot({ pieces: crossTurn(1).pieces, evaluation: { heuristic: 300 } });
+        expect(ownRows()).toHaveLength(2);
+        expect(world.sqlite.prepare(`select game_id as gameId, side, scale, cut_inaccuracy as i, cut_mistake as m, cut_blunder as b, meaning from own_values`).all()).toEqual([
+            { gameId, side: `x`, scale: 1000, i: 0.1, m: 0.2, b: 0.3, meaning: `expected` },
+        ]);
+    });
+
+    it('notes a bot that declared nothing as declaring nothing, so a later declaration never rereads the game', () => {
+        answerBot({ pieces: crossTurn(0).pieces, evaluation: { heuristic: 0.25 } });
+        expect(world.sqlite.prepare(`select side, scale, cut_blunder as b, meaning from own_values`).all()).toEqual([{ side: `x`, scale: null, b: null, meaning: null }]);
+    });
+
     it('drops a view whose move has no evaluation or a false one, and never forfeits for it', () => {
         answerBot({ pieces: crossTurn(0).pieces }, [{ pieces: crossTurn(1).pieces, evaluation: { heuristic: 0.2 } }]);
         expect(ownRows()).toEqual([]);
         world.games.humanMove(gameId, user, [wireToInternal(circleTurn(0).pieces[0]), wireToInternal(circleTurn(0).pieces[1])]);
         answerBot({ pieces: crossTurn(1).pieces, evaluation: { win_in: 0 } });
         expect(ownRows()).toEqual([]);
+        expect(world.sqlite.prepare(`select count(*) as n from own_values`).get()).toEqual({ n: 0 });
         expect(world.games.isLive(gameId)).toBe(true);
     });
 

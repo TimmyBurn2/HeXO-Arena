@@ -21,8 +21,11 @@ for (const look of looks) {
                 if (shot.after !== undefined) await shot.after(page);
                 await settle(page);
 
+                // Captured whole, a fixed bar would stand where the window's foot was, over the page,
+                // so the phone's tab bar is put back in the flow after the footer.
                 await page.screenshot({
                     path: `e2e/shots/${shot.name}--${look.name}--${viewport.name}.png`,
+                    ...(shot.fullPage === true ? { fullPage: true, style: `.tabbar { position: static !important; } body { padding-bottom: 0 !important; }` } : {}),
                 });
 
                 const axe = await new AxeBuilder({ page }).withRules([`color-contrast`, `empty-table-header`, `heading-order`, `link-in-text-block`]).analyze();

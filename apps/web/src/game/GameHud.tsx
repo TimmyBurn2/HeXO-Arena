@@ -41,11 +41,13 @@ function Chip({ className, children }: { className: string; children: ReactNode 
  * One seat as a chip: swatch, name with its BOT badge, then any level, whose
  * budget is its title, and the rating or the unrated tag of a guest or a
  * bot at a level, and its clock.
+ * A person who started the game unrated keeps their rating with the tag beside it.
  * The top chip also carries the exit and, while running, the clock mode.
  */
 export function SeatChip({ snapshot, side, corner }: { snapshot: GameSnapshot; side: Side; corner: `top` | `bottom` }) {
     const player = snapshot.players[side];
     const top = corner === `top`;
+    const choseUnrated = snapshot.unratedByChoice === true && player.kind === `user`;
     return (
         <Chip className={top ? `hud-top-left` : `hud-bottom-left`}>
             {top ? (
@@ -68,13 +70,12 @@ export function SeatChip({ snapshot, side, corner }: { snapshot: GameSnapshot; s
                             {atLevel(player.level)}
                         </span>
                     )}
-                    {player.rating === null ? (
-                        <span className="tag muted">{text.game.unrated}</span>
-                    ) : (
+                    {player.rating === null ? null : (
                         <span className="hud-rating">
                             <Rating value={player.rating} provisional={player.provisional} />
                         </span>
                     )}
+                    {player.rating === null || choseUnrated ? <span className="tag muted">{text.game.unrated}</span> : null}
                     {top && snapshot.status === `in-progress` ? <span className="hud-mode">{clockText(snapshot.clock.mode)}</span> : null}
                 </span>
             </span>
@@ -96,7 +97,7 @@ export function YouChip({ snapshot, you, me }: { snapshot: GameSnapshot; you: Si
                             <Rating value={self.rating} provisional={self.provisional} />
                         </span>
                     ) : null}
-                    {self?.kind === `guest` ? <span className="tag muted">{text.game.unrated}</span> : null}
+                    {self?.kind === `guest` || snapshot.unratedByChoice === true ? <span className="tag muted">{text.game.unrated}</span> : null}
                     <span>{text.game.playing(you)}</span>
                 </span>
             </span>

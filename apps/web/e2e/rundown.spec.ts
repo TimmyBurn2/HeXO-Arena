@@ -1,6 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 import { looks, wear } from './matrix';
-import { serve, world } from './mock-api';
+import { games, playBots, serve, world } from './mock-api';
 
 async function open(page: Page, path: string, width: number, height: number): Promise<void> {
     await page.setViewportSize({ width, height });
@@ -101,3 +101,22 @@ for (const [size, width, height] of [
     });
 }
 
+test('a game started with Rated off says so in its rundown, both ratings standing and no expected score', async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 900 });
+    const look = looks[0];
+    if (look === undefined) throw new Error(`no look registered`);
+    await wear(page, look);
+    const fresh = games[`fresh`];
+    if (fresh === undefined) throw new Error(`no fresh game`);
+    await serve(page, world({ bots: playBots, games: { ...games, running: { ...fresh, gameId: `running` } } }));
+    await page.goto(`/play?bot=devbot-c`);
+    const sent = page.waitForRequest((request) => new URL(request.url()).pathname === `/api/games` && request.method() === `POST`);
+    await page.getByRole(`button`, { name: `Start game` }).click();
+    expect((await sent).postDataJSON()).toMatchObject({ rated: false });
+    await expect(page).toHaveURL(/\/game\/running$/u);
+    const card = page.locator(`.hud-rundown`);
+    await card.locator(`.rundown-form`).first().waitFor();
+    await expect(card.locator(`.rundown-unrated`)).toHaveText(`unrated by choice`);
+    await expect(card.locator(`.rundown-rating`)).toHaveCount(2);
+    await expect(card.locator(`.rundown-expected`)).toHaveCount(0);
+});

@@ -1,4 +1,4 @@
-import { analysisPositionsPath, botAccountPath, botListingSchema, botsPath, gamesPath, positionReadingSchema } from '@hexo-arena/contract';
+import { analysisPositionsPath, botAccountPath, botListingSchema, botsPath, gamesPath, positionReadingSchema, undeclaredValues } from '@hexo-arena/contract';
 import { existsSync, mkdtempSync, readFileSync, rmSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -188,7 +188,7 @@ describe('the dev bot runner', () => {
             await new Promise((resolve) => setTimeout(resolve, 20));
             analyzers = await ready();
         }
-        expect(analyzers.map((bot) => [bot.name, bot.analyzer])).toEqual([[`devbot-a`, { ...devAnalyzer, ready: true }]]);
+        expect(analyzers.map((bot) => [bot.name, bot.analyzer])).toEqual([[`devbot-a`, { ...devAnalyzer, values: undeclaredValues, ready: true }]]);
         const quinn = await loginAs(booted.app, `quinn`);
         const cells = [
             { x: 0, y: 0, side: `x` },

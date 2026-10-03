@@ -92,6 +92,26 @@ describe('a bot\'s guest games', () => {
     });
 });
 
+describe('a bot\'s games started unrated', () => {
+    it('keep no bot on the record: a bot whose only decided game a person started unrated is deleted outright, its games with it', () => {
+        const sqlite = openDatabase(`:memory:`);
+        runMigrations(sqlite);
+        const query = createQuery(sqlite);
+        const owner = createUserWithExactName(query, `dev:owner`, `owner`);
+        const player = createUserWithExactName(query, `dev:player`, `player`);
+        if (owner === `name_taken` || player === `name_taken`) throw new Error(`seed name taken`);
+        createBot(query, owner.id, `alpha`);
+        const botId = findBot(query, `alpha`)?.id ?? ``;
+        const gameId = insertGame(query, { userId: player.id, unratedByChoice: true, botId, userSide: `o`, timeControl: unlimited, opening: origin });
+        recordFinish(query, gameId, { winner: `o`, reason: `six-in-a-row` });
+        expect(findGame(query, gameId)).toMatchObject({ kind: `human`, unratedByChoice: true });
+        expect(sqlite.prepare(`select count(*) as n from game_ratings`).get()).toEqual({ n: 0 });
+        expect(deleteBotByPolicy(query, botId)).toEqual({ kind: `deleted` });
+        expect(sqlite.prepare(`select count(*) as n from games`).get()).toEqual({ n: 0 });
+        sqlite.close();
+    });
+});
+
 describe('replay', () => {
     let sqlite: Sqlite;
     let query: Query;

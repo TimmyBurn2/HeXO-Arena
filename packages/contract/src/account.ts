@@ -1,8 +1,8 @@
 import { z } from 'zod';
-import { analysisStatusSchema } from './analysis';
+import { analysisStatusSchema, analyzerValuesSchema } from './analysis';
 import { acceptsSchema } from './api';
 import { axialCoordSchema } from './board';
-import { gameCellSchema } from './games';
+import { gameCellSchema, unratedByChoiceSchema } from './games';
 import { levelsSchema, seatLevelSchema } from './levels';
 import { nameMaxLength } from './names';
 import { finishReasonSchema, firstPlayerSchema, openingPliesSchema, sideSchema, timeControlSchema, challengeStatusSchema } from './stream';
@@ -78,7 +78,7 @@ export const accountExportSchema = z
                 repoUrl: z.string().nullable(),
                 accepts: acceptsSchema.nullable(),
                 levels: levelsSchema.nullable(),
-                analyzer: z.object({ maxSeconds: z.number().int(), lines: z.number().int(), whilePlaying: z.boolean() }).nullable(),
+                analyzer: z.object({ maxSeconds: z.number().int(), lines: z.number().int(), whilePlaying: z.boolean(), values: analyzerValuesSchema }).nullable(),
                 delistedAt: time.nullable(),
                 deletedAt: time.nullable(),
                 rating: exportedRatingSchema.nullable(),
@@ -97,6 +97,7 @@ export const accountExportSchema = z
                 createdAt: time,
                 finishedAt: time.nullable(),
                 voided: z.boolean(),
+                unratedByChoice: unratedByChoiceSchema.optional(),
                 ratings: z.array(z.object({ side: sideSchema, before: z.number(), after: z.number(), deviationAfter: z.number() })),
             }),
         ),

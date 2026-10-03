@@ -4,6 +4,14 @@ import { text } from './text';
 /** The Hexo-Bot-Api repository: the bot API's spec, its examples, and the readme. */
 export const botApiRepository = `https://github.com/TimmyBurn2/Hexo-Bot-Api`;
 
+/** The hexo-bridge repository: the runner that plays a bot author's engine through the bot API. */
+export const bridgeRepository = `https://github.com/TimmyBurn2/hexo-bridge`;
+
+/** The command that installs hexo-bridge. */
+// The bridge tags no releases yet, so this installs its default branch;
+// it moves to a tagged install once the bridge tags one.
+export const bridgeInstall = `pip install git+${bridgeRepository}`;
+
 /** The site's own repository: its code, the legal templates, and how to run it. */
 export const siteRepository = `https://github.com/TimmyBurn2/HeXO-Arena`;
 

@@ -112,12 +112,18 @@ export class ArenaClient {
      * rerun keeps its bots and their ratings, and created otherwise.
      */
     async claimBot(cookie: string, name: string): Promise<string> {
-        const rotated = await fetch(this.#url(botTokenPath.replace(`{name}`, name)), {
-            method: `POST`,
-            headers: { cookie },
-        });
-        if (rotated.status === 200) return botWithTokenSchema.parse(await rotated.json()).token;
-        if (rotated.status !== 404) throw await refusal(rotated, `token rotation for ${name}`);
+        return (await this.#rotate(cookie, name)) ?? this.createBot(cookie, name);
+    }
+
+    /** A fresh token for a bot the owner already holds. */
+    async rotateToken(cookie: string, name: string): Promise<string> {
+        const token = await this.#rotate(cookie, name);
+        if (token === null) throw new Error(`no bot named ${name} to rotate`);
+        return token;
+    }
+
+    /** A new bot of the owner's and its first token. */
+    async createBot(cookie: string, name: string): Promise<string> {
         const created = await fetch(this.#url(botsPath), {
             method: `POST`,
             headers: { cookie, ...json },
@@ -125,6 +131,17 @@ export class ArenaClient {
         });
         if (created.status !== 201) throw await refusal(created, `creating ${name}`);
         return botWithTokenSchema.parse(await created.json()).token;
+    }
+
+    // Null when the owner holds no such bot.
+    async #rotate(cookie: string, name: string): Promise<string | null> {
+        const rotated = await fetch(this.#url(botTokenPath.replace(`{name}`, name)), {
+            method: `POST`,
+            headers: { cookie },
+        });
+        if (rotated.status === 200) return botWithTokenSchema.parse(await rotated.json()).token;
+        if (rotated.status !== 404) throw await refusal(rotated, `token rotation for ${name}`);
+        return null;
     }
 
     async declare(token: string, declaration: AccountDeclaration): Promise<void> {

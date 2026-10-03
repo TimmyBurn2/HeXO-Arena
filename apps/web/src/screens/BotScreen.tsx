@@ -1,5 +1,5 @@
 import { Fragment, useCallback } from 'react';
-import { botMeta, levelFacts, nameKeyOf, notFoundMeta, type BotListing, type Levels, type LiveGameEntry } from '@hexo-arena/contract';
+import { analysisPagePath, botMeta, levelFacts, nameKeyOf, notFoundMeta, type Accepts, type Analyzer, type BotListing, type Levels, type LiveGameEntry } from '@hexo-arena/contract';
 import { fetchBots } from '../api/client';
 import { useAsync } from '../api/use-async';
 import { OwnerPanel } from '../components/OwnerPanel';
@@ -12,7 +12,7 @@ import { useLiveReplay } from '../live/use-live-replay';
 import { BotBadge, OpenTag, PlayerName, PresenceDot, Rating } from '../components/player';
 import { useMe } from '../me';
 import { turnWindowOf } from '../play/accepts';
-import { playBotPath, readinessOf } from '../play/setup';
+import { playBotPath, readinessOf, type Readiness } from '../play/setup';
 import { ErrorFrame, SkeletonRows } from '../components/states';
 import { Link } from '../router/Link';
 import { botApiRepository } from '../site-links';
@@ -102,84 +102,29 @@ function BotProfile({ bot }: { bot: BotListing }) {
                         <OpenTag open={bot.openForChallenges} />
                         {bot.ownerName === null ? null : <span>{text.bot.by(<PlayerName name={bot.ownerName} kind="human" />)}</span>}
                     </div>
+                    <div className="play-strip">
+                        <div className="play-strip-go">
+                            {readiness === `ready` ? (
+                                <Link to={playBotPath(bot.name)} className="btn btn-primary">
+                                    {text.bot.play(bot.name)}
+                                </Link>
+                            ) : (
+                                <>
+                                    <button type="button" className="btn btn-primary" disabled>
+                                        {text.bot.play(bot.name)}
+                                    </button>
+                                    <span className="note play-reason">{blockedReasons[readiness]}</span>
+                                </>
+                            )}
+                        </div>
+                        <AcceptsLine accepts={bot.accepts} owned={owned} />
+                    </div>
                 </header>
             </div>
 
             {bot.about !== undefined ? <p className="about">{bot.about}</p> : null}
-
-            <div className="bot-columns">
-                <section className="card" aria-labelledby="accepts-title">
-                    <h2 id="accepts-title" className="card-title">
-                        {text.bot.accepts}
-                    </h2>
-                    {bot.accepts === undefined ? (
-                        <p className="note">
-                            {owned
-                                ? text.bot.acceptsNothingOwner((words) => (
-                                      <a href={botApiRepository} rel="noreferrer" target="_blank">
-                                          {words}
-                                      </a>
-                                  ))
-                                : text.bot.acceptsNothing}
-                        </p>
-                    ) : (
-                        <dl className="kv">
-                            <dt>{text.bot.turnClock}</dt>
-                            <dd>
-                                {(() => {
-                                    const window = turnWindowOf(bot.accepts);
-                                    return window === null ? text.bot.no : text.bot.turnWindow(window[0] / 1000, window[1] / 1000);
-                                })()}
-                            </dd>
-                            <dt>{text.bot.matchClock}</dt>
-                            <dd>{bot.accepts.match ? text.bot.yes : text.bot.no}</dd>
-                            <dt>{text.bot.unlimited}</dt>
-                            <dd>{bot.accepts.unlimited ? text.bot.yes : text.bot.no}</dd>
-                        </dl>
-                    )}
-                </section>
-                {bot.levels === null ? null : <StrengthCard levels={bot.levels} />}
-                {bot.version !== undefined || (bot.repoUrl !== undefined && bot.repoUrl !== ``) ? (
-                    <section className="card" aria-labelledby="build-title">
-                        <h2 id="build-title" className="card-title">
-                            {text.bot.source}
-                        </h2>
-                        <dl className="kv">
-                            {bot.version !== undefined ? (
-                                <>
-                                    <dt>{text.bot.version}</dt>
-                                    <dd>{bot.version}</dd>
-                                </>
-                            ) : null}
-                            {bot.repoUrl !== undefined && bot.repoUrl !== `` ? (
-                                <>
-                                    <dt>{text.bot.repository}</dt>
-                                    <dd>
-                                        <a href={bot.repoUrl} rel="noreferrer" target="_blank">
-                                            <ShortRepo url={bot.repoUrl} />
-                                        </a>
-                                    </dd>
-                                </>
-                            ) : null}
-                        </dl>
-                    </section>
-                ) : null}
-            </div>
-
-            <p className="play-row">
-                {readiness === `ready` ? (
-                    <Link to={playBotPath(bot.name)} className="btn btn-primary">
-                        {text.bot.play(bot.name)}
-                    </Link>
-                ) : (
-                    <>
-                        <button type="button" className="btn btn-primary" disabled>
-                            {text.bot.play(bot.name)}
-                        </button>
-                        <span className="note play-reason">{blockedReasons[readiness]}</span>
-                    </>
-                )}
-            </p>
+            {bot.levels === null ? null : <StrengthRows bot={bot.name} levels={bot.levels} readiness={readiness} />}
+            <BotDetails bot={bot} />
             <PlayingNow bot={bot.name} />
             <PlayerBlocks name={bot.name} />
             <PlayerHistory player={bot.name} title={text.games.recent} />
@@ -189,29 +134,139 @@ function BotProfile({ bot }: { bot: BotListing }) {
     );
 }
 
-/** The strengths a person may pick, weakest first, the rated one tagged, each with what it spends a turn as the bot states it. */
-function StrengthCard({ levels }: { levels: Levels }) {
+// The pairs carry no visible heading beside Play, so the group names them.
+function AcceptsLine({ accepts, owned }: { accepts: Accepts | undefined; owned: boolean }) {
+    if (accepts === undefined) {
+        return (
+            <dl className="accepts-line" role="group" aria-label={text.bot.accepts}>
+                <div>
+                    <dt>{text.bot.accepts}</dt>
+                    {owned ? (
+                        <dd>
+                            <p className="accepts-help">
+                                {text.bot.acceptsNothingOwner((words) => (
+                                    <a href={botApiRepository} rel="noreferrer" target="_blank">
+                                        {words}
+                                    </a>
+                                ))}
+                            </p>
+                        </dd>
+                    ) : (
+                        <dd>{text.bot.acceptsNothing}</dd>
+                    )}
+                </div>
+            </dl>
+        );
+    }
+    const window = turnWindowOf(accepts);
     return (
-        <section className="card" aria-labelledby="strength-title">
-            <h2 id="strength-title" className="card-title">
+        <dl className="accepts-line" role="group" aria-label={text.bot.accepts}>
+            <div>
+                <dt>{text.bot.turnClock}</dt>
+                <dd>{window === null ? text.bot.no : text.bot.turnWindow(window[0] / 1000, window[1] / 1000)}</dd>
+            </div>
+            <div>
+                <dt>{text.bot.matchClock}</dt>
+                <dd>{accepts.match ? text.bot.yes : text.bot.no}</dd>
+            </div>
+            <div>
+                <dt>{text.bot.unlimited}</dt>
+                <dd>{accepts.unlimited ? text.bot.yes : text.bot.no}</dd>
+            </div>
+        </dl>
+    );
+}
+
+// Each strength starts its own game, the rated one the plain game Play
+// starts; a bot that cannot start one keeps its rows to read.
+function StrengthRows({ bot, levels, readiness }: { bot: string; levels: Levels; readiness: Readiness }) {
+    return (
+        <section className="levels" aria-labelledby="strength-title">
+            <h2 id="strength-title" className="detail-title">
                 {text.bot.strength}
             </h2>
-            <ol className="strength-list">
+            <ol className="level-rows">
                 {levels.list.map((level) => {
+                    const rated = level.id === levels.default;
                     const facts = levelFacts(level);
                     return (
-                        <li key={level.id}>
-                            <p className="strength-name">
-                                <span>{level.label}</span>
-                                {level.id === levels.default ? <span className="tag">{text.bot.strengthRated}</span> : null}
-                            </p>
-                            {facts === `` ? null : <p className="note">{facts}</p>}
-                            {level.about === undefined ? null : <p className="note">{level.about}</p>}
+                        <li key={level.id} className="level-row">
+                            <span className="level-name">
+                                {level.label}
+                                {rated ? <span className="tag">{text.bot.strengthRated}</span> : null}
+                            </span>
+                            {facts === `` ? null : <span className="level-facts">{facts}</span>}
+                            {level.about === undefined ? null : <span className="level-about">{level.about}</span>}
+                            {readiness === `ready` ? (
+                                <Link to={playBotPath(bot, rated ? null : level)} className="btn btn-ghost btn-sm level-go" ariaLabel={text.bot.playAt(bot, level.label)}>
+                                    {text.bots.play}
+                                </Link>
+                            ) : null}
                         </li>
                     );
                 })}
             </ol>
             <p className="note">{text.bot.strengthNote}</p>
+        </section>
+    );
+}
+
+// Analyzer and Source stand unboxed, so a group the bot does not declare
+// leaves no hole and a short one no empty surface.
+function BotDetails({ bot }: { bot: BotListing }) {
+    const repoUrl = bot.repoUrl === `` ? undefined : bot.repoUrl;
+    const source = bot.version !== undefined || repoUrl !== undefined;
+    if (bot.analyzer === null && !source) return null;
+    return (
+        <div className="bot-details">
+            {bot.analyzer === null ? null : <AnalyzerDetail analyzer={bot.analyzer} />}
+            {source ? (
+                <section className="detail" aria-labelledby="source-title">
+                    <h2 id="source-title" className="detail-title">
+                        {text.bot.source}
+                    </h2>
+                    <dl className="kv">
+                        {bot.version !== undefined ? (
+                            <>
+                                <dt>{text.bot.version}</dt>
+                                <dd>{bot.version}</dd>
+                            </>
+                        ) : null}
+                        {repoUrl !== undefined ? (
+                            <>
+                                <dt>{text.bot.repository}</dt>
+                                <dd>
+                                    <a href={repoUrl} rel="noreferrer" target="_blank">
+                                        <ShortRepo url={repoUrl} />
+                                    </a>
+                                </dd>
+                            </>
+                        ) : null}
+                    </dl>
+                </section>
+            ) : null}
+        </div>
+    );
+}
+
+function AnalyzerDetail({ analyzer }: { analyzer: Analyzer }) {
+    const words = text.bot.analyzer;
+    return (
+        <section className="detail" aria-labelledby="analyzer-title">
+            <h2 id="analyzer-title" className="detail-title">
+                {words.title}
+            </h2>
+            <dl className="kv">
+                <dt>{words.time}</dt>
+                <dd>{words.timeValue(analyzer.maxSeconds)}</dd>
+                <dt>{words.lines}</dt>
+                <dd>{words.linesValue(analyzer.lines)}</dd>
+                <dt>{words.when}</dt>
+                <dd>{analyzer.whilePlaying ? words.whilePlaying : words.betweenGames}</dd>
+                <dt>{words.now}</dt>
+                <dd>{analyzer.ready ? words.ready : words.notReady}</dd>
+            </dl>
+            <p className="note">{words.note((board) => <Link to={analysisPagePath}>{board}</Link>)}</p>
         </section>
     );
 }
@@ -237,7 +292,7 @@ function PlayingNow({ bot }: { bot: string }) {
     );
 }
 
-// A narrow card breaks the path after a slash, never inside a name.
+// A narrow column breaks the path after a slash, never inside a name.
 function ShortRepo({ url }: { url: string }) {
     return url
         .replace(/^https?:\/\//, ``)

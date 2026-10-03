@@ -8,6 +8,7 @@ import { useMe } from '../me';
 import { ClockPicker } from '../play/ClockPicker';
 import { useExpectedScore } from '../play/expected';
 import { OpeningRow } from '../play/OpeningRow';
+import { RatedRow } from '../play/RatedRow';
 import { OpponentSheet, RosterList, type PickedBy } from '../play/Roster';
 import { StartArea } from '../play/StartArea';
 import { StrengthRow } from '../play/StrengthRow';
@@ -21,6 +22,7 @@ import {
     readinessOf,
     readPlayed,
     rosterOf,
+    writeRated,
     type Holder,
     type PickedLevel,
 } from '../play/setup';
@@ -130,6 +132,8 @@ export function PlayScreen() {
     const [picks, setPicks] = useState<TimeControl | null>(asked.clock);
     const [opening, setOpening] = useState<OpeningPlies>(asked.opening);
     const [strength, setStrength] = useState<PickedLevel | null>(asked.level);
+    // The Rated switch as this browser last left it, off until turned on.
+    const [ratedPick, setRatedPick] = useState(played.rated);
     const [sheet, setSheet] = useState(false);
     const [visit, setVisit] = useState(0);
 
@@ -166,6 +170,8 @@ export function PlayScreen() {
     // and its name stays in a line;
     // listed again before the person picks, it takes the card back.
     const rating = me.status === `ready` && me.me?.kind === `user` ? me.me.rating : null;
+    // Only someone signed in has a rating to stake, so only they see the switch.
+    const signedIn = me.status === `ready` && me.me?.kind === `user`;
     const fallback =
         ready && pickedBot === null && openedBot === null ? preselect(bots, picked === null && lost === null ? asked.bot : null, played.opponent, rating, list.reserved) : null;
     const bot = pickedBot ?? openedBot ?? fallback;
@@ -248,6 +254,7 @@ export function PlayScreen() {
                     bot={bot}
                     clock={clock}
                     level={level}
+                    switchOn={signedIn ? ratedPick : null}
                     last={played.clock}
                     opening={opening}
                     path={playPath(bot.name, clock, opening, level)}
@@ -264,6 +271,11 @@ export function PlayScreen() {
                     onAdjust={setPicks}
                     onLevel={(id) => {
                         setStrength({ bot: bot.name, id });
+                        setChoices((count) => count + 1);
+                    }}
+                    onRated={(next) => {
+                        setRatedPick(next);
+                        writeRated(next);
                         setChoices((count) => count + 1);
                     }}
                     onOpening={(next) => {
@@ -325,6 +337,7 @@ function SetupCard({
     bot,
     clock,
     level,
+    switchOn,
     last,
     opening,
     path,
@@ -337,6 +350,7 @@ function SetupCard({
     onClock,
     onAdjust,
     onLevel,
+    onRated,
     onOpening,
     onChange,
     onRefused,
@@ -345,6 +359,8 @@ function SetupCard({
     clock: TimeControl;
     // The bot's level picked, null at its default.
     level: Level | null;
+    // The Rated switch, null for anyone not signed in, who has no switch.
+    switchOn: boolean | null;
     last: TimeControl | null;
     opening: OpeningPlies;
     // The setup's own address, where a sign-in from the card returns.
@@ -358,13 +374,14 @@ function SetupCard({
     onClock: (clock: TimeControl) => void;
     onAdjust: (clock: TimeControl) => void;
     onLevel: (id: string) => void;
+    onRated: (rated: boolean) => void;
     onOpening: (opening: OpeningPlies) => void;
     onChange: () => void;
     onRefused: () => void;
 }) {
-    // The expected score is the rated one's; practice at another level has none.
+    // The expected score is a rated game's; practice at another level, and a game with Rated off, have none.
     const expected = useExpectedScore(bot.name);
-    const rated = level === null;
+    const rated = switchOn === true && level === null;
     return (
         <div className="play-setup-lift">
             <section className="play-setup" aria-label={text.play.setup}>
@@ -398,12 +415,28 @@ function SetupCard({
                         {text.play.expected(bot.name, text.rundown.score(0))}
                     </p>
                 ) : null}
-                {/* practice keeps the line's place, saying why the score is gone, so a pick never moves the row under the pointer */}
+                {/* practice and Rated off keep the line's place, saying why the score is gone, so a pick never moves the row under the pointer */}
                 {level !== null && expected.kind !== `none` ? <p className="note setup-expected">{text.play.practiceScore(level.label)}</p> : null}
+                {level === null && switchOn === false && expected.kind !== `none` ? <p className="note setup-expected">{text.play.unratedScore}</p> : null}
                 <ClockPicker bot={bot} clock={clock} last={last} onClock={onClock} onAdjust={onAdjust} />
                 <StrengthRow bot={bot} level={level} onLevel={onLevel} />
+                {switchOn === null ? null : <RatedRow rated={switchOn} practice={level !== null} onRated={onRated} />}
                 <OpeningRow opening={opening} onOpening={onOpening} />
-                <StartArea bot={bot} clock={clock} level={level} opening={opening} path={path} paused={paused} notice={notice} choices={choices} reads={reads} onRefused={onRefused} reserved={reserved} holder={holder} />
+                <StartArea
+                    bot={bot}
+                    clock={clock}
+                    level={level}
+                    rated={rated}
+                    opening={opening}
+                    path={path}
+                    paused={paused}
+                    notice={notice}
+                    choices={choices}
+                    reads={reads}
+                    onRefused={onRefused}
+                    reserved={reserved}
+                    holder={holder}
+                />
             </section>
         </div>
     );

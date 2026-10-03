@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
-import type { AxialCoord, Side } from '@hexo-arena/contract';
+import type { AxialCoord, JudgmentSeverity, Side } from '@hexo-arena/contract';
 import { isWithinPlacementRadius, rejection, type Position } from '@hexo-arena/rules';
-import { Board, type BoardStone } from '../board/Board';
+import { Board, type BoardLines, type BoardStone } from '../board/Board';
 import { useBoardSettings } from '../board/board-settings';
 import { useBoardCamera } from '../board/camera';
 import { text } from '../text';
@@ -46,6 +46,8 @@ export function GameBoard({
     yourMove,
     finished,
     idleLabel,
+    lines,
+    judgment,
     onCommit,
     onStatus,
 }: {
@@ -60,6 +62,9 @@ export function GameBoard({
     finished: boolean;
     // What the board's accessible name says whenever it is not your move.
     idleLabel: string;
+    // A finished game's reading of the turn shown: the mover's other choices, and the turn's mark.
+    lines?: BoardLines | undefined;
+    judgment?: { readonly cell: AxialCoord; readonly severity: JudgmentSeverity } | undefined;
     onCommit: (cells: readonly [AxialCoord, AxialCoord]) => Promise<Sent>;
     onStatus?: ((status: TurnStatus) => void) | undefined;
 }) {
@@ -176,6 +181,8 @@ export function GameBoard({
                         ...(yourMove ? { focus } : {}),
                         ...(winLine.length === 0 ? {} : { winLine }),
                         lastMove,
+                        lines,
+                        judgment,
                     }}
                     onCellClick={
                         yourMove

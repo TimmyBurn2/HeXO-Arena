@@ -103,17 +103,35 @@ describe('BotsScreen', () => {
         stubDirectory(directory);
         render(<BotsScreen />);
         await screen.findByRole(`table`);
-        fireEvent.click(screen.getByRole(`checkbox`));
+        fireEvent.click(screen.getByRole(`checkbox`, { name: `Online only` }));
         await waitFor(() => {
             expect(urls.at(-1)).toBe(`/api/bots?online=1`);
         });
+    });
+
+    it('narrow to analyzers, alone or online, tagging each and saying so when none is left', async () => {
+        const kestrel = { ...directory[0], name: `kestrel`, analyzer: { maxSeconds: 5, lines: 3, whilePlaying: false, values: { scale: 1, cuts: null, meaning: `raw` }, ready: true } };
+        stubDirectory([kestrel, ...directory], 200, []);
+        render(<BotsScreen />);
+        const row = (await screen.findByText(`kestrel`)).closest(`tr`);
+        expect(row?.querySelector(`.tag-analyzer`)?.textContent).toBe(`analyzer`);
+        expect(screen.getByText(`sealbot`).closest(`tr`)?.querySelector(`.tag-analyzer`)).toBe(null);
+        expect(screen.getByText(`analyzer: reads positions on the analysis board`)).toBeTruthy();
+        fireEvent.click(screen.getByRole(`checkbox`, { name: `Analyzers only` }));
+        await waitFor(() => {
+            expect(urls.at(-1)).toBe(`/api/bots?analyzer=1`);
+        });
+        fireEvent.click(screen.getByRole(`checkbox`, { name: `Online only` }));
+        expect(await screen.findByText(`No analyzer is online right now; clear Online only to see every analyzer.`)).toBeTruthy();
+        expect(urls.at(-1)).toBe(`/api/bots?online=1&analyzer=1`);
+        expect(screen.queryByText(`No bots yet`)).toBe(null);
     });
 
     it('keep the table with a note when the filter empties it', async () => {
         stubDirectory(directory, 200, []);
         render(<BotsScreen />);
         await screen.findByText(`sealbot`);
-        fireEvent.click(screen.getByRole(`checkbox`));
+        fireEvent.click(screen.getByRole(`checkbox`, { name: `Online only` }));
         expect(await screen.findByText(/No bots online right now/)).toBeTruthy();
         expect(screen.getByRole(`table`)).toBeTruthy();
     });

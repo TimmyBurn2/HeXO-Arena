@@ -69,14 +69,17 @@ export function finishedGameOf(row: SeatRow): FinishedGame {
     throw new Error(`stored game row seats nobody`);
 }
 
-// A guest's game, and one against a bot at a level other than its
-// default, rate nobody: the level has no rating of its own to count
-// against, and the bot's would flatter a win over a weakened bot.
-const ratable = sql`${games.guestName} is null and ${games.xLevel} is null and ${games.oLevel} is null`;
+/**
+ * The games of the log that can move a rating, as a condition on the games table.
+ * A guest's game, one started unrated, and one against a bot at a level other
+ * than its default rate nobody; a level has no rating of its own to count
+ * against, and the bot's would flatter a win over a weakened bot.
+ */
+export const ratable = sql`${games.guestName} is null and ${games.xLevel} is null and ${games.oLevel} is null and ${games.unratedByChoice} = 0`;
 
-/** Whether a game of the log can move a rating: no guest seat, and every bot at its default level. */
-export function ratesSomebody(row: { guestName: string | null; xLevel: string | null; oLevel: string | null }): boolean {
-    return row.guestName === null && row.xLevel === null && row.oLevel === null;
+/** Whether a game of the log can move a rating: no guest seat, every bot at its default level, and not started unrated. */
+export function ratesSomebody(row: { guestName: string | null; xLevel: string | null; oLevel: string | null; unratedByChoice: number }): boolean {
+    return row.guestName === null && row.xLevel === null && row.oLevel === null && row.unratedByChoice === 0;
 }
 
 /** The game as the fold counts it: a voided one stays on the record and rates nobody, as a game without a winner. */

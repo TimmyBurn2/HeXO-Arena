@@ -29,7 +29,9 @@
     input[type='email'],
     input[type='date'],
     select,
-    textarea {
+    textarea,
+    .jd,
+    .graph-svg {
         clip-path: var(--cut-sm-path);
     }
 
@@ -40,8 +42,10 @@
     .table-wrap,
     .empty,
     .token-box,
+    .code-block,
     .credit-rows,
-    .skip {
+    .skip,
+    .dr-card {
         clip-path: var(--cut-md-path);
     }
 
@@ -84,12 +88,12 @@
     .featured-skeleton,
     .build-band,
     .bot-plate,
-    .bot-card,
     .identity-plate,
     .welcome-card,
     .roster,
     .play-setup,
     .hud-chip,
+    .an-window::before,
     .an-intro,
     .an-check,
     .an-trouble,
@@ -100,10 +104,12 @@
     .clock-tile,
     .strength-chip,
     .roster-row,
+    .level-row,
     .play-ready-bot,
     .your-game,
     .recent-game,
     .game-row,
+    .bot-row,
     .featured-chip,
     .stepper button,
     .opening-preview,
@@ -111,6 +117,8 @@
     .an-row-more,
     .an-gear,
     .an-line,
+    .an-fold,
+    .an-request,
     .an-analyzer,
     .an-evalbar-chip {
         clip-path: var(--cut-sm-path);
@@ -180,6 +188,7 @@
     .an-row-more:focus-visible,
     .an-gear:focus-visible,
     .an-line:focus-visible,
+    .an-fold:focus-visible,
     .scrub-count:focus-visible,
     .drawer-close:focus-visible,
     .drawer-tab:focus-visible,
@@ -197,6 +206,7 @@
     .your-game:focus-visible,
     .recent-game:focus-visible,
     .game-row:focus-visible,
+    .bot-row:focus-visible,
     .chip:focus-visible,
     .featured-link:focus-visible,
     .skip:focus-visible,

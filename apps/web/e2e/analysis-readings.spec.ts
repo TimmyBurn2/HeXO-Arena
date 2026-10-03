@@ -19,6 +19,10 @@ async function open(page: Page, path: string, overrides: Partial<World> = {}, wi
 const game = `/analysis?game=long-finished&turn=12`;
 const analyze = (page: Page) => page.getByRole(`switch`, { name: `Analyze` });
 const lines = (page: Page) => page.locator(`.an-line:not(.an-line-held)`);
+// Lines past A fold behind a toggle that names them.
+const unfold = async (page: Page, letters = `B, C`) => {
+    await page.getByRole(`button`, { name: `Lines ${letters}` }).click();
+};
 const stateLine = (page: Page) => page.locator(`.an-state`);
 const trouble = (page: Page) => page.locator(`.an-trouble`);
 const navWords = (page: Page) => page.locator(`.an-chip-nav .scrub-words`);
@@ -26,16 +30,18 @@ const navWords = (page: Page) => page.locator(`.an-chip-nav .scrub-words`);
 test('Analyze is off on every visit; on, it reads the position into lines A to C, on the board, and in the eval bar', async ({ page }) => {
     const state = await open(page, game);
     await expect(analyze(page)).not.toBeChecked();
-    await expect(page.locator(`.an-reading`)).toContainText(`Turn on Analyze to have each position you visit read.`);
+    await expect(page.locator(`.an-window`)).toContainText(`Turn on Analyze to have each position you visit read.`);
     await page.waitForTimeout(800);
     expect(state.asked).toHaveLength(0);
 
     await analyze(page).check();
+    await expect(lines(page)).toHaveCount(1);
+    await unfold(page);
     await expect(lines(page)).toHaveCount(3);
     await expect(page.locator(`.an-line .an-value`)).toHaveText([`o 0.12`, `o 0.07`, `x 0.02`]);
     await expect(page.locator(`.an-line .an-cells`).first()).toHaveText(/^o: \[-?\d+,-?\d+\] \[-?\d+,-?\d+\]$/u);
     await expect(lines(page).first()).toHaveAccessibleName(/^Play line A: o 0\.12, o: /u);
-    await expect(page.locator(`.an-by`)).toHaveText(`kestrelBOT0.9, by tom; 2 s a position`);
+    await expect(page.locator(`.an-by`)).toHaveText(`kestrelBOT`);
     await expect(stateLine(page)).toHaveText(`Read in 1.8 s; o to move`);
     await expect(page.locator(`.line-mark`)).toHaveCount(6);
     await expect(page.locator(`.line-mark.best`)).toHaveCount(2);
@@ -53,12 +59,12 @@ test('Analyze is off on every visit; on, it reads the position into lines A to C
 test('while Analyze is on each position the board rests on is read, and a asks for one while it is off', async ({ page }) => {
     const state = await open(page, game);
     await analyze(page).check();
-    await expect(lines(page)).toHaveCount(3);
+    await expect(lines(page)).toHaveCount(1);
     const tree = await page.locator(`.an-tree-host`).boundingBox();
     await page.keyboard.press(`ArrowRight`);
     await expect(navWords(page)).toHaveText(`Turn 13 of 25`);
-    // Through the rest before the ask the rows and the bar hold still.
-    await expect(page.locator(`.an-line-held`)).toHaveCount(3);
+    // Through the rest before the ask line A's row, the bar, and the move list hold still.
+    await expect(page.locator(`.an-line-held`)).toHaveCount(1);
     await expect(page.locator(`.an-evalbar`)).toHaveCount(1);
     expect((await page.locator(`.an-tree-host`).boundingBox())?.y).toBe(tree?.y);
     await expect(stateLine(page)).toHaveText(`Read in 1.8 s; x to move`);
@@ -78,12 +84,12 @@ test('while Analyze is on each position the board rests on is read, and a asks f
     expect(state.asked).toHaveLength(3);
     await expect(lines(page)).toHaveCount(0);
     await page.keyboard.press(`a`);
-    await expect(lines(page)).toHaveCount(3);
+    await expect(lines(page)).toHaveCount(1);
     expect(state.asked).toHaveLength(4);
 
     // A position read before shows at once, and turning Analyze on asks nothing more for it.
     await page.keyboard.press(`ArrowRight`);
-    await expect(lines(page)).toHaveCount(3);
+    await expect(lines(page)).toHaveCount(1);
     await analyze(page).check();
     await page.waitForTimeout(800);
     expect(state.asked).toHaveLength(4);
@@ -92,7 +98,8 @@ test('while Analyze is on each position the board rests on is read, and a asks f
 test('a line previews its stones on the board while pointed at or focused, and plays when pressed', async ({ page }) => {
     await open(page, game);
     await analyze(page).check();
-    await expect(lines(page)).toHaveCount(3);
+    await expect(lines(page)).toHaveCount(1);
+    await unfold(page);
     await lines(page).nth(1).hover();
     await expect(page.locator(`.ghost.preview`)).toHaveCount(2);
     await page.locator(`.an-by`).hover();
@@ -102,7 +109,7 @@ test('a line previews its stones on the board while pointed at or focused, and p
     const cells = await page.locator(`.an-line .an-cells`).first().textContent();
     await page.keyboard.press(`Enter`);
     await expect(navWords(page)).toHaveText(`Turn 13, a variation`);
-    await expect(page.locator(`.an-var .an-move`)).toHaveText([cells?.replace(/^o: /u, `o: `) ?? ``]);
+    await expect(page.locator(`.an-band .an-tok .an-move .sr-only`)).toHaveText([cells ?? ``]);
     await expect(page.locator(`.ghost.preview`)).toHaveCount(0);
 });
 
@@ -110,25 +117,27 @@ test('a position waiting its turn says how many wait ahead of it, then reads', a
     await open(page, game, { positions: { kind: `done`, queued: { ahead: 2, times: 1 } } });
     await analyze(page).check();
     await expect(stateLine(page)).toHaveText(`Waiting for an analyzer; 2 positions ahead of yours; o to move`);
-    await expect(page.locator(`.an-reading`)).toContainText(`It goes to an analyzer when it is free, in about 6 s.`);
-    await expect(lines(page)).toHaveCount(3);
+    await expect(page.locator(`.an-line-held`)).toContainText(`It goes to an analyzer when it is free, in about 6 s.`);
+    await expect(lines(page)).toHaveCount(1);
 });
 
 test('a position waiting its turn names the analyzer it waits for once the site has chosen one', async ({ page }) => {
     await open(page, game, { positions: { kind: `done`, queued: { ahead: 1, times: 1, chosen: true } } });
     await analyze(page).check();
     await expect(stateLine(page)).toHaveText(`Waiting for kestrel; 1 position ahead of yours; o to move`);
-    await expect(page.locator(`.an-reading`)).toContainText(`It goes to kestrel when it is free, in about 4 s.`);
-    await expect(lines(page)).toHaveCount(3);
+    await expect(page.locator(`.an-line-held`)).toContainText(`It goes to kestrel when it is free, in about 4 s.`);
+    await expect(lines(page)).toHaveCount(1);
 });
 
 test('a position held for its reading says who reads it, its lines\' rows and the eval bar kept in place', async ({ page }) => {
     await open(page, game, { positions: { kind: `held` } });
     await analyze(page).check();
     await expect(stateLine(page)).toHaveText(`An analyzer is reading; o to move`);
-    await expect(page.locator(`.an-by`)).toHaveText(`Any online analyzer2 s a position`);
-    await expect(page.locator(`.an-line-held`)).toHaveText([`A`, `B`, `C`]);
-    await expect(page.locator(`.an-lines`)).toHaveAttribute(`aria-hidden`, `true`);
+    await expect(page.locator(`.an-by`)).toHaveText(`Any online analyzer`);
+    await expect(page.locator(`.an-line-held .an-letter`)).toHaveText([`A`]);
+    // The head says who reads it, so line A's place leaves it unsaid.
+    await expect(page.locator(`.an-held-reading`)).toBeHidden();
+    await expect(page.locator(`.an-line-held .an-letter`)).toHaveAttribute(`aria-hidden`, `true`);
     await expect(page.locator(`.an-evalbar-held`)).toHaveCount(1);
     await expect(page.locator(`.an-evalbar-chip`)).toHaveCount(0);
     const axe = await new AxeBuilder({ page }).include(`.an-panel`).withRules([`color-contrast`, `aria-hidden-focus`, `list`]).analyze();
@@ -214,7 +223,7 @@ for (const refusal of refusals) {
         if (!refusal.again) return;
         state.positions = { kind: `done` };
         await again.click();
-        await expect(lines(page)).toHaveCount(3);
+        await expect(lines(page)).toHaveCount(1);
     });
 }
 
@@ -223,8 +232,8 @@ test('a named analyzer that is not reading says so and points to the settings', 
         window.localStorage.setItem(`hexo-arena.analysis-settings.v1`, JSON.stringify({ analyzer: `slowpoke`, lines: 3, seconds: 2, boardLines: true }));
     });
     await open(page, game, { positions: { kind: `refused`, status: 409, code: `no_analyzer` } });
-    await expect(page.locator(`.an-by`)).toHaveText(`slowpokeBOTnot reading now`);
     await analyze(page).check();
+    await expect(page.locator(`.an-by`)).toHaveText(`slowpokeBOT`);
     await expect(trouble(page)).toContainText(`slowpoke is not reading now`);
     await expect(trouble(page)).toContainText(`Pick another analyzer in Analysis settings, or ask again later.`);
 });
@@ -247,8 +256,8 @@ test('once the day is spent, positions read as spent without asking until a read
 test('signed out, the panel asks for a sign-in and nothing is asked', async ({ page }) => {
     const state = await open(page, game, { me: null });
     await expect(analyze(page)).toHaveCount(0);
-    await expect(page.locator(`.an-reading`)).toContainText(`Sign in to ask analyzers; the board works without it.`);
-    await expect(page.locator(`.an-reading .discord-button`)).toBeVisible();
+    await expect(page.locator(`.an-window`)).toContainText(`Sign in to ask analyzers; the board works without it.`);
+    await expect(page.locator(`.an-window .discord-button`)).toBeVisible();
     await page.keyboard.press(`a`);
     await page.waitForTimeout(800);
     expect(state.asked).toHaveLength(0);
@@ -289,7 +298,7 @@ test('the settings pick the analyzer, the lines, and the time the analyzer allow
     await analyze(page).check();
     await expect(lines(page)).toHaveCount(1);
     expect(state.asked[0]).toMatchObject({ analyzer: `driftwood`, lines: 1, seconds: 2 });
-    await expect(page.locator(`.an-by`)).toHaveText(`driftwoodBOTby mika; 2 s a position`);
+    await expect(page.locator(`.an-by`)).toHaveText(`driftwoodBOT`);
     await expect(page.locator(`.line-mark`)).toHaveCount(2);
 
     await gear.click();
@@ -308,18 +317,18 @@ test('the settings pick the analyzer, the lines, and the time the analyzer allow
 test('readings of one position by two analyzers sit under pills that switch between them', async ({ page }) => {
     const state = await open(page, game);
     await analyze(page).check();
-    await expect(lines(page)).toHaveCount(3);
+    await expect(lines(page)).toHaveCount(1);
     await expect(page.locator(`.an-pills`)).toHaveCount(0);
     await page.getByRole(`button`, { name: `Analysis settings` }).click();
     await page.getByRole(`dialog`, { name: `Analysis settings` }).locator(`.an-analyzer`, { hasText: `driftwood` }).click();
     await page.keyboard.press(`Escape`);
-    await expect(lines(page)).toHaveCount(2);
+    await expect(page.getByRole(`button`, { name: `Line B` })).toBeVisible();
     expect(state.asked.map((asked) => asked.analyzer)).toEqual([null, `driftwood`]);
     const pills = page.getByRole(`group`, { name: `Readings` });
     await expect(pills.getByRole(`button`)).toHaveText([`driftwood`, `kestrel`]);
     await expect(pills.getByRole(`button`, { name: `driftwood` })).toHaveAttribute(`aria-pressed`, `true`);
     await pills.getByRole(`button`, { name: `kestrel` }).click();
-    await expect(lines(page)).toHaveCount(3);
+    await expect(page.getByRole(`button`, { name: `Lines B, C` })).toBeVisible();
     await expect(page.locator(`.an-by`)).toContainText(`kestrel`);
     expect(state.asked).toHaveLength(2);
 });
@@ -327,7 +336,7 @@ test('readings of one position by two analyzers sit under pills that switch betw
 test('on a phone the eval bar runs under the board and the settings open in a sheet', async ({ page }) => {
     await open(page, game, {}, 390, 844);
     await analyze(page).check();
-    await expect(lines(page)).toHaveCount(3);
+    await expect(lines(page)).toHaveCount(1);
     const [bar, stage] = await Promise.all([page.locator(`.an-evalbar`).boundingBox(), page.locator(`.an-stage`).boundingBox()]);
     expect(bar?.width).toBe(stage?.width);
     expect(Math.round((bar?.y ?? 0) + (bar?.height ?? 0))).toBe(Math.round((stage?.y ?? 0) + (stage?.height ?? 0)));

@@ -1,13 +1,22 @@
 import { describe, expect, it } from 'vitest';
 import {
     analysisTurnCap,
+    type AnalyzerValues,
+    type BoardFacts,
     type EvaluatedLine,
+    forcedWin,
     forcedWinner,
+    forcedWinsAround,
     judgeTurn,
     judgmentGlyphs,
+    judgmentRuns,
+    type Judgment,
     type PlayedTurn,
     sideValue,
+    type TurnReadings,
+    undeclaredValues,
     valueWords,
+    winChanceCuts,
 } from '../src';
 
 type Pair = readonly [readonly [number, number], readonly [number, number]];
@@ -20,113 +29,156 @@ function turn(number: number, side: PlayedTurn[`side`], [[ax, ay], [bx, by]]: Pa
     return { turn: number, side, cells: [{ x: ax, y: ay }, { x: bx, y: by }], opening: false, completesSix: false };
 }
 
-// A mock game's readings, one analyzer's lines best first, and the turns played.
-const turn6 = turn(6, `x`, [[5, -2], [-1, -1]]);
-const before6 = [
-    line([[5, -2], [-2, 0]], { heuristic: 0.17 }),
-    line([[5, -2], [-1, 2]], { heuristic: 0.12 }),
-    line([[5, -2], [-1, -1]], { heuristic: 0.05 }),
+const quiet: BoardFacts = { sixOnBoard: false, sixLeft: false, sixesUnblockable: false };
+const declared: AnalyzerValues = { scale: 1, cuts: winChanceCuts, meaning: `expected` };
+
+function readings(before: readonly EvaluatedLine[], nextBest: TurnReadings[`nextBest`], board: Partial<BoardFacts> = {}, values = undeclaredValues): TurnReadings {
+    return { before, nextBest, board: { ...quiet, ...board }, values };
+}
+
+const elsewhere: Pair = [
+    [9, 9],
+    [9, 10],
 ];
-const turn14 = turn(14, `x`, [[2, 2], [-3, -1]]);
-const before14 = [
-    line([[2, -1], [-3, -1]], { heuristic: 0.33 }),
-    line([[2, -1], [3, -1]], { heuristic: 0.28 }),
-    line([[-3, -1], [0, -4]], { heuristic: 0.22 }),
-];
-const turn17 = turn(17, `o`, [[-1, -3], [3, -8]]);
-const before17 = [
-    line([[-1, -3], [-4, -1]], { heuristic: 0.08 }),
-    line([[-4, -1], [-4, 0]], { heuristic: 0.13 }),
-];
-const turn38 = turn(38, `x`, [[-1, -6], [5, -6]]);
-const before38 = [
-    line([[-1, -6], [-2, -6]], { heuristic: -0.12 }),
-    line([[-1, -6], [6, -6]], { heuristic: -0.18 }),
-    line([[-1, -6], [5, -6]], { win_in: -5 }),
+const best: Pair = [
+    [1, 0],
+    [3, 0],
 ];
 
-describe('judgeTurn', () => {
-    it('marks a listed turn worth 0.12 less than the best an inaccuracy', () => {
-        expect(judgeTurn(turn6, { before: before6, nextBest: null })).toEqual({ severity: `inaccuracy`, reason: `value-drop` });
+describe('judgeTurn on a game where each side keeps a six it never takes', () => {
+    it('leaves a swing of the analyzer\'s heuristic unmarked when it declared no cuts', () => {
+        const turn3 = readings([line(best, { heuristic: 0.15 })], { heuristic: 0.75 });
+        expect(judgeTurn(turn(3, `o`, elsewhere), turn3)).toBeNull();
+        expect(judgeTurn(turn(3, `o`, elsewhere), { ...turn3, values: declared })).toEqual({ severity: `blunder`, reason: `value-drop`, turns: null });
     });
 
-    it('finds the played turn among the lines in either stone order', () => {
-        const swapped: PlayedTurn = { ...turn6, cells: [...turn6.cells].reverse() };
-        expect(judgeTurn(swapped, { before: before6, nextBest: { heuristic: 0.9 } })).toEqual({ severity: `inaccuracy`, reason: `value-drop` });
+    it('marks leaving the opponent a six a blunder, whatever the heuristic before', () => {
+        const left = { sixLeft: true };
+        expect(judgeTurn(turn(5, `o`, elsewhere), readings([line(best, { heuristic: -0.8 })], { win_in: 1 }, left))).toEqual({ severity: `blunder`, reason: `allowed-win`, turns: 1 });
+        expect(judgeTurn(turn(7, `o`, elsewhere), readings([line(best, { heuristic: 0.92 })], { win_in: 1 }, left))).toEqual({ severity: `blunder`, reason: `allowed-win`, turns: 1 });
     });
 
-    it('reads an unlisted turn by the best line after it and marks a drop of 0.21 a mistake', () => {
-        expect(judgeTurn(turn14, { before: before14, nextBest: { heuristic: 0.12 } })).toEqual({ severity: `mistake`, reason: `value-drop` });
+    it('marks missing a six a blunder, whatever the heuristic after', () => {
+        const missed = readings([line(best, { win_in: 1 })], { heuristic: 0.92 }, { sixOnBoard: true });
+        expect(judgeTurn(turn(6, `x`, elsewhere), missed)).toEqual({ severity: `blunder`, reason: `missed-win`, turns: 1 });
     });
 
-    it('judges o from its own side and marks a drop of 0.37 a blunder', () => {
-        expect(sideValue({ heuristic: 0.08 }, `o`)).toBe(-0.08);
-        expect(judgeTurn(turn17, { before: before17, nextBest: { heuristic: 0.45 } })).toEqual({ severity: `blunder`, reason: `value-drop` });
+    it('marks missing a six and leaving one a blunder that gave away the win', () => {
+        const both = readings([line(best, { win_in: 1 })], { win_in: -1 }, { sixOnBoard: true, sixLeft: true });
+        expect(judgeTurn(turn(8, `x`, elsewhere), both)).toEqual({ severity: `blunder`, reason: `gave-away-win`, turns: 1 });
     });
 
-    it('marks handing over a forced win from a near-even board a blunder', () => {
-        expect(judgeTurn(turn38, { before: before38, nextBest: { heuristic: 0.5 } })).toEqual({ severity: `blunder`, reason: `allowed-win` });
+    it('takes a six on the board as a win in 1 for an analyzer that sent only heuristics', () => {
+        const heuristicOnly = readings([line(best, { heuristic: 0.4 })], { heuristic: 0.3 }, { sixOnBoard: true, sixLeft: true });
+        expect(judgeTurn(turn(8, `x`, elsewhere), heuristicOnly)).toEqual({ severity: `blunder`, reason: `gave-away-win`, turns: 1 });
+    });
+});
+
+describe('judgeTurn grading a forced win by its length', () => {
+    it('marks allowing a win in 2 a blunder and a longer one a mistake', () => {
+        const allowed = (winIn: number) => judgeTurn(turn(9, `o`, elsewhere), readings([line(best, { heuristic: -0.37 })], { win_in: winIn }));
+        expect(allowed(2)).toEqual({ severity: `blunder`, reason: `allowed-win`, turns: 2 });
+        expect(allowed(4)).toEqual({ severity: `mistake`, reason: `allowed-win`, turns: 3 });
     });
 
-    it('leaves turns unmarked while the same side wins by force before and after', () => {
-        const forcedFor = (winIn: number) => [line([[0, 9], [0, 10]], { win_in: winIn })];
-        const t39 = turn(39, `o`, [[0, 9], [0, 10]]);
-        const t40 = turn(40, `x`, [[0, 9], [0, 10]]);
-        expect(judgeTurn(t39, { before: forcedFor(-4), nextBest: null })).toBeNull();
-        expect(judgeTurn(t40, { before: forcedFor(-3), nextBest: null })).toBeNull();
+    it('marks missing a win in 2 a mistake and a longer one an inaccuracy', () => {
+        const missed = (winIn: number) => judgeTurn(turn(10, `x`, elsewhere), readings([line(best, { win_in: winIn })], { heuristic: 0.62 }));
+        expect(missed(2)).toEqual({ severity: `mistake`, reason: `missed-win`, turns: 2 });
+        expect(missed(4)).toEqual({ severity: `inaccuracy`, reason: `missed-win`, turns: 3 });
     });
 
-    it('never judges the turn that completes six', () => {
-        const won: PlayedTurn = { ...turn(43, `o`, [[1, -7], [-1, -5]]), completesSix: true };
-        expect(judgeTurn(won, { before: [line([[1, -7], [-1, -5]], { win_in: -1 })], nextBest: null })).toBeNull();
+    it('marks letting a win go and handing one over a blunder, however long either win', () => {
+        const gave = judgeTurn(turn(12, `x`, elsewhere), readings([line(best, { win_in: 6 })], { win_in: -4 }));
+        expect(gave).toEqual({ severity: `blunder`, reason: `gave-away-win`, turns: 3 });
     });
 
-    it('marks a missed forced win by how much value the mover kept', () => {
-        const played = turn(20, `x`, [[1, 1], [2, 2]]);
-        const before = (after: number) => [line([[3, 3], [4, 4]], { win_in: 2 }), line([[1, 1], [2, 2]], { heuristic: after })];
-        const judged = (after: number) => judgeTurn(played, { before: before(after), nextBest: null });
-        expect(judged(0.4)).toEqual({ severity: `blunder`, reason: `missed-win` });
-        expect(judged(0.97)).toEqual({ severity: `inaccuracy`, reason: `missed-win` });
-        expect(judged(0.95)?.severity).toBe(`inaccuracy`);
-        expect(judged(0.9)?.severity).toBe(`mistake`);
-        expect(judged(0.86)?.severity).toBe(`mistake`);
-        expect(judged(0.85)?.severity).toBe(`blunder`);
+    it('gives no mark to a turn that keeps a forced win, however slow', () => {
+        const kept = readings([line(best, { win_in: 1 })], { win_in: 5 }, { sixOnBoard: true });
+        expect(judgeTurn(turn(16, `x`, elsewhere), kept)).toBeNull();
+        expect(forcedWinsAround(turn(16, `x`, elsewhere), kept)).toEqual({ before: { winner: `x`, turns: 1 }, after: { winner: `x`, turns: 3 } });
     });
 
-    it('marks an allowed forced win by how lost the mover already was', () => {
-        const played = turn(20, `o`, [[1, 1], [2, 2]]);
-        const judged = (best: number) =>
-            judgeTurn(played, { before: [line([[3, 3], [4, 4]], { heuristic: best }), line([[1, 1], [2, 2]], { win_in: 3 })], nextBest: null });
-        expect(judged(0.96)).toEqual({ severity: `inaccuracy`, reason: `allowed-win` });
-        expect(judged(0.9)?.severity).toBe(`mistake`);
-        expect(judged(0.5)?.severity).toBe(`blunder`);
+    it('never blames a side already lost by force, nor marks finding a win', () => {
+        const lost = readings([line(best, { win_in: 5 })], { win_in: 1 }, { sixLeft: true });
+        expect(judgeTurn(turn(17, `o`, elsewhere), lost)).toBeNull();
+        expect(judgeTurn(turn(10, `x`, elsewhere), readings([line(best, { win_in: -3 })], { heuristic: -0.5 }))).toBeNull();
+        expect(judgeTurn(turn(10, `x`, elsewhere), readings([line(best, { heuristic: 0.2 })], { win_in: 3 }))).toBeNull();
+    });
+
+    it('counts sixes no two stones block as the opponent\'s win before the turn, so the mover is already lost', () => {
+        const unblockable = readings([line(best, { heuristic: 0.1 })], { win_in: -1 }, { sixesUnblockable: true, sixLeft: true });
+        expect(judgeTurn(turn(20, `x`, elsewhere), unblockable)).toBeNull();
+        expect(forcedWinsAround(turn(20, `x`, elsewhere), unblockable)?.before).toEqual({ winner: `o`, turns: 1 });
+        const facing = readings([line(best, { heuristic: 0.1 })], { win_in: -1 }, { sixesUnblockable: true, sixOnBoard: true, sixLeft: true });
+        expect(judgeTurn(turn(20, `x`, elsewhere), facing)?.reason).toBe(`gave-away-win`);
+    });
+
+    it('reads the played turn by its own line where the analyzer listed it, in either stone order, from the board after it', () => {
+        const played = turn(21, `o`, [
+            [4, 4],
+            [3, 3],
+        ]);
+        const listed = readings([line(best, { heuristic: -0.2 }), line([[3, 3], [4, 4]], { win_in: 3 })], { heuristic: -0.9 });
+        expect(judgeTurn(played, listed)).toEqual({ severity: `blunder`, reason: `allowed-win`, turns: 2 });
+        const kept = readings([line(best, { win_in: -4 }), line([[3, 3], [4, 4]], { win_in: -2 })], null);
+        expect(forcedWinsAround(played, kept)).toEqual({ before: { winner: `o`, turns: 3 }, after: { winner: `o`, turns: 1 } });
+    });
+});
+
+describe('judgeTurn on value drops', () => {
+    const played = turn(10, `x`, [
+        [1, 1],
+        [2, 2],
+    ]);
+    const judged = (bestValue: number, after: number, values: TurnReadings[`values`] = declared) =>
+        judgeTurn(played, readings([line([[3, 3], [4, 4]], { heuristic: bestValue })], { heuristic: after }, {}, values));
+
+    it('judges drops by lichess\'s cuts only when the analyzer declared them', () => {
+        expect(judged(0.17, 0.05)?.severity).toBe(`inaccuracy`);
+        expect(judged(0.33, 0.12)?.severity).toBe(`mistake`);
+        expect(judged(0.08, -0.29)?.severity).toBe(`blunder`);
+        expect(judged(0.08, -0.29, undeclaredValues)).toBeNull();
+    });
+
+    it('judges o from its own side', () => {
+        const o = judgeTurn(turn(17, `o`, elsewhere), readings([line(best, { heuristic: 0.08 })], { heuristic: 0.45 }, {}, declared));
+        expect(o).toEqual({ severity: `blunder`, reason: `value-drop`, turns: null });
+    });
+
+    it('divides by the declared scale and uses the declared cuts', () => {
+        const scaled: AnalyzerValues = { scale: 1000, cuts: { inaccuracy: 0.3, mistake: 0.6, blunder: 0.9 }, meaning: `raw` };
+        expect(judged(150, 750, scaled)).toBeNull();
+        expect(judged(750, 150, scaled)?.severity).toBe(`mistake`);
+        expect(judged(900, -100, scaled)?.severity).toBe(`blunder`);
     });
 
     it('compares values in the hundredths they are shown in, so a drop of exactly a cut earns it', () => {
-        const played = turn(10, `x`, [[1, 1], [2, 2]]);
-        const judged = (best: number, after: number) =>
-            judgeTurn(played, { before: [line([[3, 3], [4, 4]], { heuristic: best })], nextBest: { heuristic: after } });
         expect(judged(0.3, 0.2)?.severity).toBe(`inaccuracy`);
         expect(judged(0.7, 0.5)?.severity).toBe(`mistake`);
         expect(judged(0.304, 0.206)).toBeNull();
         expect(judged(3, 0.7)?.severity).toBe(`blunder`);
         expect(judged(3, 0.85)?.severity).toBe(`inaccuracy`);
     });
+});
 
-    it('gives no mark for escaping a forced loss', () => {
-        const played = turn(10, `x`, [[1, 1], [2, 2]]);
-        expect(judgeTurn(played, { before: [line([[3, 3], [4, 4]], { win_in: -2 })], nextBest: { heuristic: -0.5 } })).toBeNull();
+describe('judgeTurn on what it never judges', () => {
+    it('never judges opening turns, the turn that completes six, turns past the cap, or turns missing a reading', () => {
+        const played = turn(analysisTurnCap, `x`, [
+            [1, 1],
+            [2, 2],
+        ]);
+        const read = readings([line([[3, 3], [4, 4]], { heuristic: 0.5 })], { heuristic: 0 }, { sixOnBoard: true });
+        expect(judgeTurn(played, read)?.reason).toBe(`missed-win`);
+        expect(judgeTurn({ ...played, opening: true }, read)).toBeNull();
+        expect(judgeTurn({ ...played, completesSix: true }, read)).toBeNull();
+        expect(judgeTurn({ ...played, turn: analysisTurnCap + 1 }, read)).toBeNull();
+        expect(judgeTurn(played, { ...read, before: [] })).toBeNull();
+        expect(judgeTurn(played, { ...read, nextBest: null })).toBeNull();
+        expect(forcedWinsAround(played, { ...read, nextBest: null })).toBeNull();
     });
 
-    it('never judges opening turns, turns past the cap, or turns missing a reading', () => {
-        const played = turn(analysisTurnCap, `x`, [[1, 1], [2, 2]]);
-        const readings = { before: [line([[3, 3], [4, 4]], { heuristic: 0.5 })], nextBest: { heuristic: 0 } };
-        expect(judgeTurn(played, readings)?.severity).toBe(`blunder`);
-        expect(judgeTurn({ ...played, opening: true }, readings)).toBeNull();
-        expect(judgeTurn({ ...played, turn: analysisTurnCap + 1 }, readings)).toBeNull();
-        expect(judgeTurn(played, { before: [], nextBest: { heuristic: 0 } })).toBeNull();
-        expect(judgeTurn(played, { ...readings, nextBest: null })).toBeNull();
-        expect(judgeTurn(played, { ...readings, nextBest: {} })).toBeNull();
+    it('marks no value drop when either value is missing', () => {
+        expect(judgeTurn(turn(10, `x`, elsewhere), readings([line(best, { heuristic: 0.5 })], {}, {}, declared))).toBeNull();
     });
 
     it('prints a glyph for every severity', () => {
@@ -134,10 +186,55 @@ describe('judgeTurn', () => {
     });
 });
 
+describe('forcedWin', () => {
+    it('counts a forced win in its winner\'s own turns from the board shown', () => {
+        expect(forcedWin({ win_in: 1 }, { kind: `board` })).toEqual({ winner: `x`, turns: 1 });
+        expect(forcedWin({ win_in: -2 }, { kind: `board` })).toEqual({ winner: `o`, turns: 1 });
+        expect(forcedWin({ win_in: 5 }, { kind: `board` })).toEqual({ winner: `x`, turns: 3 });
+    });
+
+    it('adds a line\'s own turn when its mover wins, and makes a line that completes six a win in 1', () => {
+        expect(forcedWin({ win_in: 2 }, { kind: `line`, mover: `x`, completesSix: false })).toEqual({ winner: `x`, turns: 2 });
+        expect(forcedWin({ win_in: 1 }, { kind: `line`, mover: `x`, completesSix: false })).toEqual({ winner: `x`, turns: 1 });
+        expect(forcedWin({ win_in: -5 }, { kind: `line`, mover: `x`, completesSix: false })).toEqual({ winner: `o`, turns: 3 });
+        expect(forcedWin({ heuristic: 0.9 }, { kind: `line`, mover: `o`, completesSix: true })).toEqual({ winner: `o`, turns: 1 });
+    });
+
+    it('names none for a heuristic alone', () => {
+        expect(forcedWin({ heuristic: 1 }, { kind: `board` })).toBeNull();
+        expect(forcedWin({ win_in: 0 }, { kind: `board` })).toBeNull();
+    });
+});
+
+describe('judgmentRuns', () => {
+    const forced = (turnNumber: number): { turn: number; judgment: Judgment | null } => ({ turn: turnNumber, judgment: { severity: `blunder`, reason: `gave-away-win`, turns: 1 } });
+    const none = (turnNumber: number) => ({ turn: turnNumber, judgment: null });
+
+    it('finds three or more consecutive turns with a forced mark, both sides\'', () => {
+        const turns = [none(4), ...Array.from({ length: 16 }, (_, index) => forced(5 + index)), none(21)];
+        expect(judgmentRuns(turns)).toEqual([{ from: 5, to: 20 }]);
+    });
+
+    it('finds none in two marked turns, and breaks a run at an unmarked turn or a value drop', () => {
+        const drop: { turn: number; judgment: Judgment } = { turn: 12, judgment: { severity: `blunder`, reason: `value-drop`, turns: null } };
+        expect(judgmentRuns([forced(1), forced(2), none(3), forced(4), forced(5)])).toEqual([]);
+        expect(judgmentRuns([forced(9), forced(10), forced(11), drop, forced(13), forced(14), forced(15), forced(16)])).toEqual([
+            { from: 9, to: 11 },
+            { from: 13, to: 16 },
+        ]);
+    });
+
+    it('reads turns in any order', () => {
+        expect(judgmentRuns([forced(8), forced(6), forced(7)])).toEqual([{ from: 6, to: 8 }]);
+    });
+});
+
 describe('sideValue and forcedWinner', () => {
-    it('clamps a heuristic to the -1 to 1 scale and pins a forced win to its end', () => {
+    it('divides by the scale, holds a heuristic to -1 to 1, and pins a forced win to its end', () => {
+        expect(sideValue({ heuristic: 0.08 }, `o`)).toBe(-0.08);
         expect(sideValue({ heuristic: 1.7 }, `x`)).toBe(1);
         expect(sideValue({ heuristic: 1.7 }, `o`)).toBe(-1);
+        expect(sideValue({ heuristic: 250 }, `x`, 1000)).toBe(0.25);
         expect(sideValue({ win_in: -3, heuristic: 0.9 }, `x`)).toBe(-1);
         expect(sideValue({}, `x`)).toBeNull();
     });

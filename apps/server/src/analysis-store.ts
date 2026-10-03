@@ -1,10 +1,10 @@
-import { analysisTurnCap, type AnalysisFailure, type AnalysisLine, type AnalysisStatus, type AnalysisTurn, type Side } from '@hexo-arena/contract';
+import { analysisTurnCap, type AnalysisFailure, type AnalysisLine, type AnalysisStatus, type AnalysisTurn, type AnalyzerValues, type Side } from '@hexo-arena/contract';
 import type { Player, Setup, Stone } from '@hexo-arena/rules';
 import { and, asc, count, desc, eq, gte, inArray, isNull, ne, or, sql } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/sqlite-core';
-import { storedAnalyzer, type StoredAnalyzer } from './bots';
+import { analyzerColumns, storedAnalyzer, storedValues, valueColumns, type StoredAnalyzer } from './bots';
 import type { Query } from './db';
-import { analyses, analysisLines, bots, games, moves, ownLines, users } from './db/schema';
+import { analyses, analysisLines, bots, games, moves, ownLines, ownValues, users } from './db/schema';
 import { findGame, findMoves, type GameRecord } from './game-store';
 import { shownBot, shownUser } from './shown-names';
 
@@ -30,9 +30,7 @@ export function analyzersAmong(query: Query, botIds: readonly string[]): Analyze
             version: bots.version,
             ownerId: bots.ownerId,
             ownerName: owners.name,
-            analyzerMaxSeconds: bots.analyzerMaxSeconds,
-            analyzerLines: bots.analyzerLines,
-            analyzerWhilePlaying: bots.analyzerWhilePlaying,
+            ...analyzerColumns,
         })
         .from(bots)
         .innerJoin(owners, eq(bots.ownerId, owners.id))
@@ -133,6 +131,8 @@ export interface AnalysisRow {
     readonly analyzerBotId: string | null;
     readonly analyzerName: string | null;
     readonly analyzerVersion: string | null;
+    /** How the analyzer's heuristic read, as it declared when it took the reading. */
+    readonly analyzerValues: AnalyzerValues;
     readonly ownerName: string | null;
     readonly namedBotId: string | null;
     readonly requestedBy: string | null;
@@ -153,6 +153,11 @@ function rowsWhere(query: Query, condition: ReturnType<typeof and>): AnalysisRow
             botName: bots.name,
             botDeletedAt: bots.deletedAt,
             analyzerVersion: analyses.analyzerVersion,
+            analyzerScale: analyses.analyzerScale,
+            analyzerCutInaccuracy: analyses.analyzerCutInaccuracy,
+            analyzerCutMistake: analyses.analyzerCutMistake,
+            analyzerCutBlunder: analyses.analyzerCutBlunder,
+            analyzerMeaning: analyses.analyzerMeaning,
             ownerName: owners.name,
             ownerDeletedAt: owners.deletedAt,
             namedBotId: analyses.namedBotId,
@@ -176,6 +181,13 @@ function rowsWhere(query: Query, condition: ReturnType<typeof and>): AnalysisRow
             analyzerBotId: row.analyzerBotId,
             analyzerName: row.botName === null ? null : shownBot(row.botName, row.botDeletedAt).name,
             analyzerVersion: row.analyzerVersion,
+            analyzerValues: storedValues({
+                scale: row.analyzerScale,
+                inaccuracy: row.analyzerCutInaccuracy,
+                mistake: row.analyzerCutMistake,
+                blunder: row.analyzerCutBlunder,
+                meaning: row.analyzerMeaning,
+            }),
             ownerName: row.ownerName === null || row.ownerDeletedAt !== null ? null : shownUser(row.ownerName, row.ownerDeletedAt).name,
             namedBotId: row.namedBotId,
             requestedBy: row.requestedBy,
@@ -206,18 +218,24 @@ export function insertAnalysis(query: Query, row: { id: string; gameId: string; 
 // Each write answers whether the reading is still there: the operator, an
 // opt-out, or a deleted analyzer may have removed it meanwhile.
 
-export function startAnalysis(query: Query, id: string, analyzer: { botId: string; version: string | null; seconds: number }, at: number): boolean {
+export function startAnalysis(query: Query, id: string, analyzer: { botId: string; version: string | null; values: AnalyzerValues; seconds: number }, at: number): boolean {
     return (
         query
             .update(analyses)
-            .set({ status: `running`, analyzerBotId: analyzer.botId, analyzerVersion: analyzer.version, seconds: analyzer.seconds, startedAt: at })
+            .set({ status: `running`, analyzerBotId: analyzer.botId, analyzerVersion: analyzer.version, ...analysisValueColumns(analyzer.values), seconds: analyzer.seconds, startedAt: at })
             .where(eq(analyses.id, id))
             .run().changes > 0
     );
 }
 
 export function requeueAnalysis(query: Query, id: string): boolean {
-    return query.update(analyses).set({ status: `queued`, analyzerBotId: null, analyzerVersion: null, startedAt: null }).where(eq(analyses.id, id)).run().changes > 0;
+    return (
+        query
+            .update(analyses)
+            .set({ status: `queued`, analyzerBotId: null, analyzerVersion: null, ...analysisValueColumns(null), startedAt: null })
+            .where(eq(analyses.id, id))
+            .run().changes > 0
+    );
 }
 
 export function failAnalysis(query: Query, id: string, failure: AnalysisFailure, failedTurn: number | null, at: number): boolean {
@@ -229,7 +247,7 @@ export function failAnalysis(query: Query, id: string, failure: AnalysisFailure,
                 failure,
                 failedTurn,
                 finishedAt: at,
-                ...(failure === `expired` ? { analyzerBotId: null, analyzerVersion: null } : {}),
+                ...(failure === `expired` ? { analyzerBotId: null, analyzerVersion: null, ...analysisValueColumns(null) } : {}),
             })
             .where(eq(analyses.id, id))
             .run().changes > 0
@@ -296,12 +314,34 @@ export function ownLinesOf(query: Query, gameId: string, openingPlies: number): 
     return views;
 }
 
-export function insertOwnLines(query: Query, gameId: string, seq: number, lines: readonly AnalysisLine[]): void {
+/** Each bot seat's values for a game, by side: scale 1 and no cuts where it published no evaluation or declared none. */
+export function ownValuesOf(query: Query, gameId: string): Record<Side, AnalyzerValues> {
+    const rows = query.select().from(ownValues).where(eq(ownValues.gameId, gameId)).all();
+    const of = (side: Side) => {
+        const row = rows.find((each) => each.side === side);
+        return storedValues({ scale: row?.scale ?? null, inaccuracy: row?.cutInaccuracy ?? null, mistake: row?.cutMistake ?? null, blunder: row?.cutBlunder ?? null, meaning: row?.meaning ?? null });
+    };
+    return { x: of(`x`), o: of(`o`) };
+}
+
+/**
+ * Stores a bot's own lines for the turn it played as `seq`, and, at its first, how its heuristic reads
+ * as its analyzer declaration stands, so a later declaration never rereads the game.
+ */
+export function insertOwnLines(query: Query, turn: { gameId: string; seq: number; side: Side; botId: string }, lines: readonly AnalysisLine[]): void {
     if (lines.length === 0) return;
-    query
-        .insert(ownLines)
-        .values(lines.map((line, rank) => ({ gameId, seq, rank, ...lineColumns(line) })))
-        .run();
+    query.transaction((tx) => {
+        tx.insert(ownLines)
+            .values(lines.map((line, rank) => ({ gameId: turn.gameId, seq: turn.seq, rank, ...lineColumns(line) })))
+            .run();
+        const declared = tx.select(analyzerColumns).from(bots).where(eq(bots.id, turn.botId)).get();
+        const values = declared === undefined ? null : storedAnalyzer(declared)?.values;
+        const columns = valueColumns(values);
+        tx.insert(ownValues)
+            .values({ gameId: turn.gameId, side: turn.side, scale: columns.scale, cutInaccuracy: columns.inaccuracy, cutMistake: columns.mistake, cutBlunder: columns.blunder, meaning: columns.meaning })
+            .onConflictDoNothing()
+            .run();
+    });
 }
 
 /** The number of finished readings of each game among `gameIds`. */
@@ -356,6 +396,17 @@ export function requestsOf(query: Query, userId: string): { id: string; gameId: 
         .all()
         // The status check admits only these values.
         .map((row) => ({ ...row, status: row.status as AnalysisStatus }));
+}
+
+function analysisValueColumns(values: AnalyzerValues | null) {
+    const columns = valueColumns(values);
+    return {
+        analyzerScale: columns.scale,
+        analyzerCutInaccuracy: columns.inaccuracy,
+        analyzerCutMistake: columns.mistake,
+        analyzerCutBlunder: columns.blunder,
+        analyzerMeaning: columns.meaning,
+    };
 }
 
 function sideToMove(turn: number): Side {

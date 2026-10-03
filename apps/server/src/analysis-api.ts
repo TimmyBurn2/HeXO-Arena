@@ -1,10 +1,12 @@
 import {
+    analysisCheckPath,
     analysisListSchema,
     analysisPositionsPath,
     analysisRequestSchema,
     analysisStoneCap,
     communityAnalysisSchema,
     playerOf,
+    positionCheckRequestSchema,
     positionReadingRequestSchema,
     positionReadingSchema,
 } from '@hexo-arena/contract';
@@ -15,8 +17,10 @@ import type { AnalysisService } from './analysis-service';
 import type { AnalyzerSessions } from './analyzers';
 import type { Query } from './db';
 import type { EngineSocket, GameRegistry } from './game-registry';
+import type { GuestSessions } from './guests';
 import type { LiveGuard } from './live-guard';
-import { refuseRate, type CredentialLimits } from './request-limits';
+import { refuseRate, type ClientLimits, type CredentialLimits } from './request-limits';
+import { sessionPerson } from './session-api';
 import { sessionUser } from './sessions';
 import type { StartGate } from './site-state';
 
@@ -29,8 +33,9 @@ export interface AnalysisApiDeps {
     analyzers: AnalyzerSessions;
     guard: Pick<LiveGuard, `holds`>;
     games: Pick<GameRegistry, `liveGamesOf`>;
+    guests: GuestSessions;
     gate: StartGate;
-    limits: CredentialLimits;
+    limits: CredentialLimits & ClientLimits;
 }
 
 interface GameParams {
@@ -70,6 +75,23 @@ export function registerAnalysisApi(app: FastifyInstance, deps: AnalysisApiDeps)
         const answer = await analysis.requestPosition(user.id, { setup, analyzer: parsed.data.analyzer, lines: parsed.data.lines, seconds: parsed.data.seconds }, hungUp.signal);
         if (answer.kind === `refused`) return refuse(reply, answer.code, answer.retryAfter);
         return reply.code(200).send(positionReadingSchema.parse(answer.reading));
+    });
+
+    // An engine the browser runs is cleared the way a position request is,
+    // seat lock then live guard, for anyone: signed out, a guest, or a user.
+    app.post(analysisCheckPath, { config: { limit: `public` } }, async (request, reply) => {
+        const wait = limits.wait(`positionCheck`, request);
+        if (wait !== null) return refuseRate(reply, wait);
+        const parsed = positionCheckRequestSchema.safeParse(request.body);
+        if (!parsed.success) return reply.code(400).send({ error: `the request fails validation`, code: `bad_request` });
+        const setup: Setup = { stones: parsed.data.cells.map((cell) => ({ x: cell.x, y: cell.y, player: playerOf(cell.side) })), toMove: playerOf(parsed.data.toMove) };
+        if (setupProblem(setup, analysisStoneCap) !== null) return reply.code(400).send({ error: `the position cannot be played from`, code: `bad_request` });
+        const person = sessionPerson(query, deps.guests, request);
+        if (person !== null && deps.games.liveGamesOf(person).length > 0) {
+            return reply.code(409).send({ error: `no position is cleared while you sit in a live game`, code: `seated` });
+        }
+        if (deps.guard.holds(setup.stones)) return reply.code(409).send({ error: `a live game holds this position`, code: `live_position` });
+        return reply.code(204).send();
     });
 
     app.post(`/api/games/:gameId/analyses`, { config: { limit: `principal` } }, async (request, reply) => {

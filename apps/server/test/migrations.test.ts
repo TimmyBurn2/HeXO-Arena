@@ -445,3 +445,122 @@ describe('the analyzers migration', () => {
         expect(() => sqlite.prepare(`insert into admin_actions (actor, action, target, reason, at) values ('operator', 'delete-analysis', 'a1', 'lied', 2)`).run()).not.toThrow();
     });
 });
+
+describe('the unrated by choice migration', () => {
+    let sqlite: Sqlite;
+    let folder: string;
+
+    afterEach(() => {
+        sqlite.close();
+        rmSync(folder, { recursive: true, force: true });
+    });
+
+    it('keeps every game and its ratings as they were, and holds the mark to a signed-in person\'s game at the bot\'s default level', () => {
+        sqlite = openDatabase(`:memory:`);
+        folder = migrationsUpTo(21);
+        migrate(drizzle(sqlite), { migrationsFolder: folder });
+        sqlite.exec(`
+            insert into name_reservations (name_key) values ('owner'), ('alpha'), ('beta');
+            insert into users (id, discord_id, name, name_key, created_at) values ('u1', 'd1', 'owner', 'owner', 1);
+            insert into bots (id, owner_id, name, name_key, token_hash, scope, created_at)
+                values ('b1', 'u1', 'alpha', 'alpha', 'h1', 'bot:play', 1), ('b2', 'u1', 'beta', 'beta', 'h2', 'bot:play', 1);
+            insert into games (id, user_id, bot_id, user_side, time_control, opening_cells, winner, finish_reason, created_at, finished_at, finish_seq)
+                values ('human', 'u1', 'b1', 'x', '{"mode":"unlimited"}', '[]', 'x', 'surrender', 1, 2, 1);
+            insert into game_ratings (game_id, side, rating_before, rating_after, deviation_after) values ('human', 'x', 1000, 1100, 300), ('human', 'o', 1500, 1500, 500);
+        `);
+        runMigrations(sqlite);
+        expect(sqlite.prepare(`select id, unrated_by_choice as unrated from games`).all()).toEqual([{ id: `human`, unrated: 0 }]);
+        expect(sqlite.prepare(`select count(*) as n from game_ratings`).get()).toEqual({ n: 2 });
+        expect(sqlite.pragma(`foreign_key_check`)).toEqual([]);
+
+        const level = `{"id":"quick","label":"quick"}`;
+        const human = sqlite.prepare(`insert into games (id, user_id, bot_id, user_side, o_level, unrated_by_choice, time_control, opening_cells, created_at) values (?, 'u1', 'b1', 'x', ?, ?, '{}', '[]', 5)`);
+        expect(() => human.run(`g1`, null, 1)).not.toThrow();
+        expect(() => human.run(`g2`, null, 0)).not.toThrow();
+        expect(() => human.run(`g3`, level, 1)).toThrow(/CHECK/);
+        expect(() => human.run(`g4`, null, 2)).toThrow(/CHECK/);
+        const guest = sqlite.prepare(`insert into games (id, guest_name, bot_id, user_side, unrated_by_choice, time_control, opening_cells, created_at) values (?, 'Guest k3f9', 'b1', 'o', ?, '{}', '[]', 5)`);
+        expect(() => guest.run(`g5`, 0)).not.toThrow();
+        expect(() => guest.run(`g6`, 1)).toThrow(/CHECK/);
+        const bots = sqlite.prepare(`insert into games (id, challenger_bot_id, dest_bot_id, challenger_side, unrated_by_choice, time_control, opening_cells, created_at) values (?, 'b1', 'b2', 'x', ?, '{}', '[]', 5)`);
+        expect(() => bots.run(`g7`, 0)).not.toThrow();
+        expect(() => bots.run(`g8`, 1)).toThrow(/CHECK/);
+    });
+});
+
+describe('the analyzer values migration', () => {
+    let sqlite: Sqlite;
+    let folder: string;
+
+    afterEach(() => {
+        sqlite.close();
+        rmSync(folder, { recursive: true, force: true });
+    });
+
+    it('keeps every bot, reading, and own line as declaring no values, and holds values to a scale and a meaning together, and rising cuts, beside what declared them', () => {
+        sqlite = openDatabase(`:memory:`);
+        folder = migrationsUpTo(22);
+        migrate(drizzle(sqlite), { migrationsFolder: folder });
+        sqlite.exec(`
+            insert into name_reservations (name_key) values ('owner'), ('alpha'), ('beta');
+            insert into users (id, discord_id, name, name_key, created_at) values ('u1', 'd1', 'owner', 'owner', 1);
+            insert into bots (id, owner_id, name, name_key, token_hash, scope, created_at, analyzer_max_seconds, analyzer_lines, analyzer_while_playing)
+                values ('b1', 'u1', 'alpha', 'alpha', 'h1', 'bot:play', 1, null, null, null), ('b2', 'u1', 'beta', 'beta', 'h2', 'bot:play', 1, 2, 3, 0);
+            insert into games (id, challenger_bot_id, dest_bot_id, challenger_side, time_control, opening_cells, winner, finish_reason, created_at, finished_at, finish_seq)
+                values ('g1', 'b1', 'b2', 'x', '{"mode":"unlimited"}', '[]', 'x', 'surrender', 1, 2, 1);
+            insert into moves (game_id, seq, side, first_x, first_y, second_x, second_y, created_at) values ('g1', 1, 'o', 1, 0, 2, 0, 1);
+            insert into own_lines (game_id, seq, rank, first_x, first_y, second_x, second_y, heuristic) values ('g1', 1, 0, 1, 0, 2, 0, 0.3);
+            insert into analyses (id, game_id, analyzer_bot_id, analyzer_version, status, seconds, created_at, started_at, finished_at) values ('a1', 'g1', 'b2', '0.9', 'done', 2, 1, 1, 2);
+        `);
+        runMigrations(sqlite);
+        expect(sqlite.prepare(`select id, analyzer_scale as scale, analyzer_cut_inaccuracy as i, analyzer_cut_mistake as m, analyzer_cut_blunder as b, analyzer_meaning as meaning from bots order by id`).all()).toEqual([
+            { id: `b1`, scale: null, i: null, m: null, b: null, meaning: null },
+            { id: `b2`, scale: null, i: null, m: null, b: null, meaning: null },
+        ]);
+        expect(sqlite.prepare(`select id, analyzer_bot_id as bot, analyzer_scale as scale, analyzer_cut_blunder as b, analyzer_meaning as meaning from analyses`).all()).toEqual([
+            { id: `a1`, bot: `b2`, scale: null, b: null, meaning: null },
+        ]);
+        expect(sqlite.prepare(`select count(*) as n from own_lines`).get()).toEqual({ n: 1 });
+        expect(sqlite.prepare(`select count(*) as n from own_values`).get()).toEqual({ n: 0 });
+        expect(sqlite.pragma(`foreign_key_check`)).toEqual([]);
+
+        const declare = sqlite.prepare(`update bots set analyzer_scale = ?, analyzer_cut_inaccuracy = ?, analyzer_cut_mistake = ?, analyzer_cut_blunder = ?, analyzer_meaning = ? where id = ?`);
+        expect(() => declare.run(1000, null, null, null, `raw`, `b2`)).not.toThrow();
+        expect(() => declare.run(1, 0.1, 0.2, 0.3, `expected`, `b2`)).not.toThrow();
+        expect(() => declare.run(null, null, null, null, null, `b2`)).not.toThrow();
+        for (const values of [
+            [1, null, null, null, `raw`, `b1`],
+            [0, null, null, null, `raw`, `b2`],
+            [2_000_000, null, null, null, `raw`, `b2`],
+            [null, 0.1, 0.2, 0.3, null, `b2`],
+            [1, 0.1, null, 0.3, `raw`, `b2`],
+            [1, 0.2, 0.2, 0.3, `raw`, `b2`],
+            [1, 0, 0.2, 0.3, `raw`, `b2`],
+            [1, 0.1, 0.2, 2.5, `raw`, `b2`],
+            [1, null, null, null, null, `b2`],
+            [null, null, null, null, `raw`, `b2`],
+            [1, null, null, null, `winning`, `b2`],
+        ] as const) {
+            expect(() => declare.run(...values), JSON.stringify(values)).toThrow(/CHECK/);
+        }
+
+        const snapshot = sqlite.prepare(`update analyses set analyzer_bot_id = ?, status = ?, analyzer_scale = ?, analyzer_cut_inaccuracy = ?, analyzer_cut_mistake = ?, analyzer_cut_blunder = ?, analyzer_meaning = ?, finished_at = ? where id = 'a1'`);
+        expect(() => snapshot.run(`b2`, `done`, 1000, 0.1, 0.2, 0.3, `expected`, 2)).not.toThrow();
+        expect(() => snapshot.run(null, `queued`, 1, null, null, null, `raw`, null)).toThrow(/CHECK/);
+        expect(() => snapshot.run(`b2`, `done`, 1, 0.3, 0.2, 0.1, `raw`, 2)).toThrow(/CHECK/);
+        expect(() => snapshot.run(`b2`, `done`, 1, null, null, null, null, 2)).toThrow(/CHECK/);
+
+        const own = sqlite.prepare(`insert into own_values (game_id, side, scale, cut_inaccuracy, cut_mistake, cut_blunder, meaning) values (?, ?, ?, ?, ?, ?, ?)`);
+        expect(() => own.run(`g1`, `o`, null, null, null, null, null)).not.toThrow();
+        expect(() => own.run(`g1`, `x`, 1000, 0.1, 0.2, 0.3, `expected`)).not.toThrow();
+        expect(() => own.run(`g1`, `x`, 1, null, null, null, `raw`)).toThrow(/UNIQUE|PRIMARY/);
+        expect(() => own.run(`g1`, `z`, null, null, null, null, null)).toThrow(/CHECK/);
+        expect(() => own.run(`gone`, `o`, null, null, null, null, null)).toThrow(/FOREIGN KEY/);
+        sqlite.prepare(`delete from own_values`).run();
+        expect(() => own.run(`g1`, `x`, 1, null, null, null, `calibrated`)).toThrow(/CHECK/);
+        expect(() => own.run(`g1`, `x`, null, null, null, null, `raw`)).toThrow(/CHECK/);
+        own.run(`g1`, `o`, null, null, null, null, null);
+        sqlite.prepare(`delete from games where id = 'g1'`).run();
+        expect(sqlite.prepare(`select count(*) as n from own_values`).get()).toEqual({ n: 0 });
+    });
+});

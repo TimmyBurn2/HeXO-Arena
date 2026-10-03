@@ -1,6 +1,6 @@
 import type { Page } from '@playwright/test';
 import { themes } from '../src/theme/themes';
-import { keptNames, leaderboard, liveGames, playBots, rivalry, signup, tournaments, world, type World } from './mock-api';
+import { analyzerBots, bots, heldBots, keptNames, leaderboard, liveGames, longReadings, playBots, rivalry, signup, tournaments, world, type World } from './mock-api';
 
 /** A named look the whole site can wear. */
 export interface Look {
@@ -55,9 +55,12 @@ export interface Shot {
     board?: true;
     // Widths other than the matrix's own.
     viewports?: readonly Viewport[];
+    // A page read top to bottom is captured whole, so one shot shows every part.
+    fullPage?: true;
 }
 
 const signedOut = world({ me: null });
+const analysedLong = world({ analyses: { 'long-finished': { analyses: [longReadings.kestrel, longReadings.driftwood, ...longReadings.own], optedOut: false } } });
 const playing = (overrides: Partial<World> = {}) => world({ bots: playBots, ...overrides });
 // The top chip carries a level beside the clock, down to the narrowest phone.
 const levelChipViewports: readonly Viewport[] = [
@@ -107,6 +110,41 @@ async function createAccount(page: Page): Promise<void> {
     await page.getByRole(`button`, { name: `Create account` }).click();
 }
 const guest = world({ me: { kind: `guest`, name: `Guest k3f9`, liveGames: [] } });
+// Signed in, but not as sealbot's owner.
+const visitingAna: World[`me`] = { kind: `user`, name: `ana`, rating: 1402, provisional: false, discord: null, liveGames: [], analysisOptOut: false, analysisLeft: { positions: 300, games: 10 } };
+// The bot page's head for each kind of bot, as a laptop and a phone show it.
+const botPageViewports: readonly Viewport[] = [
+    { name: `laptop`, width: 1280, height: 900 },
+    { name: `phone`, width: 390, height: 844 },
+];
+
+// The guide reads down one column, so a laptop and a phone show it.
+const guideViewports: readonly Viewport[] = [
+    { name: `laptop`, width: 1280, height: 900 },
+    { name: `phone`, width: 390, height: 844 },
+];
+
+// Quinn, signed in by default, holding the named bots of `heldBots` beside everyone else's.
+const holding = (names: readonly string[]) =>
+    world({ bots: [...bots.filter((bot) => bot.ownerName !== `quinn`), ...heldBots.filter((bot) => names.includes(bot.name))] });
+
+// The bot list at each width its rows change between.
+const botListViewports: readonly Viewport[] = [
+    { name: `laptop`, width: 1280, height: 900 },
+    { name: `phone`, width: 390, height: 844 },
+];
+
+// The bot list whole: where the window or a phone's tab bar cuts it off,
+// the page scrolls the list to the top.
+async function showBots(page: Page): Promise<void> {
+    const section = page.locator(`.your-bots`);
+    await section.locator(`.bot-rows-foot`).waitFor();
+    await section.evaluate((element) => {
+        const bar = document.querySelector(`nav.tabbar`);
+        const floor = bar === null || bar.getClientRects().length === 0 ? window.innerHeight : bar.getBoundingClientRect().top;
+        if (element.getBoundingClientRect().bottom > floor) element.scrollIntoView({ block: `start` });
+    });
+}
 
 async function openSettings(page: Page): Promise<void> {
     await page.getByRole(`button`, { name: `Settings`, exact: true }).click();
@@ -265,7 +303,7 @@ export const shots: readonly Shot[] = [
     {
         name: `bot-visitor`,
         path: `/bots/sealbot`,
-        world: world({ me: { kind: `user`, name: `ana`, rating: 1402, provisional: false, discord: null, liveGames: [], analysisOptOut: false, analysisLeft: { positions: 300, games: 10 } } }),
+        world: world({ me: visitingAna }),
         ready: `h1`,
         framed: true,
     },
@@ -277,8 +315,22 @@ export const shots: readonly Shot[] = [
         framed: true,
     },
     { name: `bots-play`, path: `/bots`, world: playing(), ready: `tbody tr`, framed: true },
-    { name: `build`, path: `/connect`, world: world(), ready: `h1`, framed: true },
-    { name: `build-signed-out`, path: `/connect`, world: signedOut, ready: `h1`, framed: true },
+    { name: `build`, path: `/connect`, world: world(), ready: `h1`, framed: true, viewports: guideViewports, fullPage: true },
+    { name: `build-signed-out`, path: `/connect`, world: signedOut, ready: `h1`, framed: true, viewports: guideViewports, fullPage: true },
+    {
+        name: `build-created`,
+        path: `/connect`,
+        world: world(),
+        ready: `h1`,
+        framed: true,
+        viewports: guideViewports,
+        after: async (page) => {
+            await page.getByRole(`textbox`, { name: `Bot name` }).fill(`sealbot-two`);
+            await page.getByRole(`button`, { name: `Create bot` }).click();
+            await page.locator(`.token-box`).waitFor();
+            await page.locator(`.steps`).scrollIntoViewIfNeeded();
+        },
+    },
     {
         name: `build-rate-limited`,
         path: `/connect`,
@@ -311,6 +363,18 @@ export const shots: readonly Shot[] = [
     { name: `player-loading`, path: `/players/ana`, world: world({ stall: true }), ready: `.skeleton`, framed: true },
     { name: `player-error`, path: `/players/ana`, world: world({ broken: true }), ready: `.empty`, framed: true },
     { name: `profile-guest`, path: `/profile`, world: guest, ready: `h1`, framed: true },
+    { name: `profile-bots-0`, path: `/profile`, world: holding([]), ready: `.rating-chart-plot`, framed: true, after: showBots, viewports: botListViewports },
+    { name: `profile-bots-1`, path: `/profile`, world: holding([`sealbot`]), ready: `.rating-chart-plot`, framed: true, after: showBots, viewports: botListViewports },
+    {
+        name: `profile-bots-4`,
+        path: `/profile`,
+        world: holding([`marsh`, `quietlake`, `sealbot`, `tidewater-alphabeta-v2`]),
+        ready: `.rating-chart-plot`,
+        framed: true,
+        after: showBots,
+        viewports: botListViewports,
+    },
+    { name: `profile-bots-5`, path: `/profile`, world: holding(heldBots.map((bot) => bot.name)), ready: `.rating-chart-plot`, framed: true, after: showBots, viewports: botListViewports },
     {
         name: `profile-long-names`,
         path: `/profile`,
@@ -366,7 +430,7 @@ export const shots: readonly Shot[] = [
         board: true,
         after: async (page) => {
             for (const [x, y] of [[-3, 0], [-2, -1]] as const) await page.locator(`.board-camera polygon.cell[data-x="${String(x)}"][data-y="${String(y)}"]`).click();
-            await page.locator(`.an-var`).waitFor();
+            await page.locator(`.an-band`).waitFor();
         },
     },
     {
@@ -419,6 +483,64 @@ export const shots: readonly Shot[] = [
     },
     { name: `analysis-live`, path: `/analysis?game=running`, world: world(), ready: `.empty`, framed: true },
     {
+        name: `analysis-game-reading`,
+        path: `/analysis?game=long-finished&turn=17`,
+        world: analysedLong,
+        ready: `.an-win-graph .graph`,
+        framed: true,
+        board: true,
+    },
+    // A game read whole at quietlake's blunder on turn 13, a six left untaken, with a three-turn variation from turn 6 that holds a one-turn alternative at turn 7.
+    {
+        name: `analysis-review`,
+        path: `/analysis?game=long-finished&turn=5`,
+        world: analysedLong,
+        ready: `.an-win-graph .graph`,
+        framed: true,
+        board: true,
+        viewports: panelViewports,
+        after: async (page) => {
+            const cell = (x: number, y: number) => page.locator(`.board-camera polygon.cell[data-x="${String(x)}"][data-y="${String(y)}"]`);
+            for (const [x, y] of [[3, 3], [3, 4], [4, 3], [4, 4], [5, 3], [5, 4]] as const) await cell(x, y).click({ force: true });
+            await page.keyboard.press(`ArrowLeft`);
+            await page.keyboard.press(`ArrowLeft`);
+            for (const [x, y] of [[-3, 5], [-3, 6]] as const) await cell(x, y).click({ force: true });
+            await page.keyboard.press(`ArrowUp`);
+            await page.keyboard.press(`ArrowLeft`);
+            await page.keyboard.press(`ArrowUp`);
+            for (let turn = 6; turn < 13; turn += 1) await page.keyboard.press(`ArrowRight`);
+            await page.locator(`.an-bubble-blunder`).waitFor();
+        },
+    },
+    {
+        name: `analysis-own-view`,
+        path: `/analysis?game=long-finished&turn=17`,
+        world: analysedLong,
+        ready: `.an-win-graph .graph`,
+        framed: true,
+        after: async (page) => {
+            await page.getByRole(`group`, { name: `Readings` }).getByRole(`button`, { name: `Own view` }).click();
+            await page.locator(`.an-win-graph .graph-trace-x`).waitFor();
+        },
+    },
+    {
+        name: `bots-analyzers`,
+        path: `/bots`,
+        world: world({ bots: [...bots, ...analyzerBots] }),
+        ready: `table`,
+        framed: true,
+        after: async (page) => {
+            await page.getByRole(`checkbox`, { name: `Analyzers only` }).check();
+            await page.locator(`.tag-analyzer`).first().waitFor();
+        },
+    },
+    { name: `bot-analyzer`, path: `/bots/kestrel`, world: world({ bots: [...bots, ...analyzerBots] }), ready: `#analyzer-title`, framed: true },
+    { name: `bot-page-full`, path: `/bots/sealbot`, world: world({ me: visitingAna }), ready: `.level-go`, framed: true, viewports: botPageViewports },
+    { name: `bot-page-plain`, path: `/bots/hextide`, world: world(), ready: `#source-title`, framed: true, viewports: botPageViewports },
+    { name: `bot-page-analyzer`, path: `/bots/driftwood`, world: world({ bots: [...bots, ...analyzerBots] }), ready: `#analyzer-title`, framed: true, viewports: botPageViewports },
+    { name: `bot-page-offline`, path: `/bots/slowpoke`, world: world({ bots: [...bots, ...analyzerBots] }), ready: `.play-reason`, framed: true, viewports: botPageViewports },
+    { name: `bot-page-owner`, path: `/bots/quietlake`, world: world(), ready: `.owner-panel`, framed: true, viewports: botPageViewports },
+    {
         name: `analysis-reading`,
         path: `/analysis?game=long-finished&turn=12`,
         world: world(),
@@ -427,6 +549,7 @@ export const shots: readonly Shot[] = [
         board: true,
         after: async (page) => {
             await page.getByRole(`switch`, { name: `Analyze` }).check();
+            await page.getByRole(`button`, { name: `Lines B, C` }).click();
             await page.locator(`button.an-line`).nth(2).waitFor();
             await page.locator(`button.an-line`).nth(1).hover();
         },
@@ -469,6 +592,7 @@ export const shots: readonly Shot[] = [
             viewports: levelChipViewports,
         }),
     ),
+    { name: `game-unrated`, path: `/game/unrated`, world: world(), ready: `.hud-rundown .rundown-form`, framed: false },
     {
         name: `game-rundown-drawer`,
         path: `/game/waiting`,
@@ -647,6 +771,22 @@ export const shots: readonly Shot[] = [
     },
     { name: `watch-deleted`, path: `/game/gone`, world: signedOut, ready: `.hud-result`, framed: false, board: true },
     { name: `watch-finished`, path: `/game/finished`, world: signedOut, ready: `svg polygon.cell`, framed: false, board: true },
+    // A finished game read by two analyzers, at x's blunder: its line A and mark on the board, the head and the feed open.
+    {
+        name: `game-analysis`,
+        path: `/game/long-finished?turn=22`,
+        world: analysedLong,
+        ready: `svg polygon.cell`,
+        framed: false,
+        board: true,
+        viewports: panelViewports,
+        after: async (page) => {
+            if ((page.viewportSize()?.width ?? 0) > 640) await page.keyboard.press(`m`);
+            else await page.getByRole(`button`, { name: `Open the game panel` }).click();
+            await page.locator(`.dr-marks`).waitFor();
+        },
+    },
+    { name: `game-analysis-peek`, path: `/game/long-finished?turn=22`, world: analysedLong, ready: `.peek-graph .graph`, framed: false, board: true, viewports: phones },
     ...(
         [
             [`watch-drawer`, `/game/running`],

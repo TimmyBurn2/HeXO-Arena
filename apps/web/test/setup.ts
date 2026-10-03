@@ -31,7 +31,13 @@ if (typeof Element !== `undefined`) {
 // missing serves its own.
 // It takes reports through the site's form too; a test about one that
 // does not turns the form off.
+// The document outlives a test file's tests, so a title or an embed tag one
+// test set would otherwise answer the next test's question about its own.
 beforeEach(() => {
     onlyLegal(...legalPages);
     reportForm.reset(true);
+    if (typeof document !== `undefined`) {
+        document.title = ``;
+        for (const tag of document.head.querySelectorAll(`meta[property^="og:"], meta[name="description"]`)) tag.remove();
+    }
 });

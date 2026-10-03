@@ -17,6 +17,7 @@ import {
     type GameSnapshot,
     type StreamEvent,
 } from '@hexo-arena/contract';
+import { sql } from 'drizzle-orm';
 import http from 'node:http';
 import WebSocket, { type RawData } from 'ws';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -1091,6 +1092,93 @@ describe('a person picks a bot level', () => {
         expect((await arena.createGame(bot.cookie, { bot: `opponentbot`, timeControl: unlimitedControl, level: `deep` })).status).toBe(201);
         await vi.advanceTimersByTimeAsync(60_000);
         const fourth = await arena.createGame(bot.cookie, { bot: `opponentbot`, timeControl: unlimitedControl, level: `quick` });
+        expect(fourth.status).toBe(400);
+        expect(json(fourth)).toMatchObject({ code: `human_busy` });
+    });
+});
+
+describe('a signed-in person plays unrated', () => {
+    let arena: Arena;
+    let bot: Fixture;
+
+    beforeEach(async () => {
+        vi.useFakeTimers(timerFakes);
+        arena = await startArena();
+        bot = await standardBot(arena);
+        await arena.declareLevels(bot.token, botLevels);
+    });
+
+    afterEach(async () => {
+        bot.dispose();
+        await arena.close();
+        vi.useRealTimers();
+    });
+
+    it('marks a game started with rated false on every read, seats keep their ratings, the bot hears it as ever, and nobody is rated', async () => {
+        const created = await arena.createGame(bot.cookie, { bot: `opponentbot`, timeControl: turnControl, rated: false });
+        expect(created.status).toBe(201);
+        const { gameId, unratedByChoice, players } = snapshotOf(created);
+        expect(unratedByChoice).toBe(true);
+        expect(players).toEqual({
+            x: { name: `opponentbot`, rating: 1500, provisional: true, kind: `bot` },
+            o: { name: `humanplayer`, rating: 1000, provisional: true, kind: `user` },
+        });
+        expect((await gameStartOn(bot.stream)).rated).toBe(false);
+        const [live] = liveGameEntrySchema.array().parse(json(await arena.liveGames()));
+        expect(live).toMatchObject({ gameId, rated: false });
+        expect((await arena.snapshot(``, gameId)).unratedByChoice).toBe(true);
+        expect((await arena.humanResign(bot.cookie, gameId)).status).toBe(200);
+        expect(await finishOn(bot.stream)).toMatchObject({ gameId, winner: `x`, reason: `surrender` });
+        expect(arena.count(`ratings`)).toBe(0);
+        expect(arena.count(`game_ratings`)).toBe(0);
+        expect(recomputeRatings(arena.query)).toBe(0);
+        expect(arena.count(`ratings`)).toBe(0);
+        expect(finished(await arena.snapshot(bot.cookie, gameId))).toMatchObject({ you: `o`, unratedByChoice: true });
+        expect(finished(await arena.snapshot(``, gameId)).unratedByChoice).toBe(true);
+        const [entry] = finishedGamesPageSchema.parse(json(await arena.finishedGames())).games;
+        expect(entry).toMatchObject({ gameId, rated: false, unratedByChoice: true });
+    });
+
+    it('starts a rated game, unmarked, when the request leaves rated out or says true', async () => {
+        for (const asked of [{}, { rated: true }]) {
+            const created = await arena.createGame(bot.cookie, { bot: `opponentbot`, timeControl: turnControl, ...asked });
+            expect(created.status).toBe(201);
+            const { gameId, unratedByChoice } = snapshotOf(created);
+            expect(unratedByChoice).toBeUndefined();
+            await arena.humanResign(bot.cookie, gameId);
+            await vi.advanceTimersByTimeAsync(60_000);
+        }
+        expect(arena.count(`game_ratings`)).toBe(4);
+        const entries = finishedGamesPageSchema.parse(json(await arena.finishedGames())).games;
+        expect(entries.map((entry) => [entry.rated, entry.unratedByChoice])).toEqual([
+            [true, undefined],
+            [true, undefined],
+        ]);
+    });
+
+    it('leaves the mark off a guest\'s game and practice at another level, unrated by their seats whatever the request says', async () => {
+        const guest = await arena.guest();
+        const guestGame = await arena.createGame(guest, { bot: `opponentbot`, timeControl: turnControl, rated: false });
+        expect(guestGame.status).toBe(201);
+        expect(snapshotOf(guestGame).unratedByChoice).toBeUndefined();
+        const practice = await arena.createGame(bot.cookie, { bot: `opponentbot`, timeControl: turnControl, level: `quick`, rated: false });
+        expect(practice.status).toBe(201);
+        expect(snapshotOf(practice)).toMatchObject({ players: { x: { level: quickSeat } } });
+        expect(snapshotOf(practice).unratedByChoice).toBeUndefined();
+        expect(arena.query.get(sql`select count(*) as n from games where unrated_by_choice = 1`)).toEqual({ n: 0 });
+    });
+
+    it('counts unrated games toward no daily pair cap, and toward the live-game cap', async () => {
+        const now = Math.floor(Date.now() / 1000);
+        arena.seedPairGames(`humanplayer`, `opponentbot`, pairDailyCap - 1, now - (now % 86_400));
+        expect((await arena.createGame(bot.cookie, { bot: `opponentbot`, timeControl: unlimitedControl, rated: false })).status).toBe(201);
+        await vi.advanceTimersByTimeAsync(60_000);
+        expect((await arena.createGame(bot.cookie, { bot: `opponentbot`, timeControl: unlimitedControl })).status).toBe(201);
+        await vi.advanceTimersByTimeAsync(60_000);
+        expect(json(await arena.createGame(bot.cookie, { bot: `opponentbot`, timeControl: unlimitedControl }))).toMatchObject({ code: `daily_pair_cap` });
+        expect((await arena.createGame(bot.cookie, { bot: `opponentbot`, timeControl: unlimitedControl, rated: false })).status).toBe(201);
+        await vi.advanceTimersByTimeAsync(60_000);
+        const fourth = await arena.createGame(bot.cookie, { bot: `opponentbot`, timeControl: unlimitedControl, rated: false });
         expect(fourth.status).toBe(400);
         expect(json(fourth)).toMatchObject({ code: `human_busy` });
     });

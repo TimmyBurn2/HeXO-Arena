@@ -19,8 +19,8 @@
         font-weight: var(--weight-strong);
     }
 
-    /* The practice tag follows the title; the hide button keeps the far edge. */
-    .rundown-practice {
+    /* The unrated tag follows the title; the hide button keeps the far edge. */
+    .rundown-unrated {
         margin-right: auto;
     }
 

@@ -37,6 +37,7 @@ import {
     isAnalysable,
     linesOf,
     ownLinesOf,
+    ownValuesOf,
     pendingAnalyses,
     requeueAnalysis,
     setOptOut,
@@ -389,7 +390,7 @@ export class AnalysisService {
         job.attempt = { analyzer: info, seconds, turns: [], index: 0, timeoutRetried: false, inFlight: false };
         this.#lastAssigned.set(info.id, this.#now());
         this.#memo.delete(job.game.gameId);
-        if (!startAnalysis(this.#query, job.analysisId, { botId: info.id, version: info.version, seconds }, Math.floor(this.#now() / 1000))) {
+        if (!startAnalysis(this.#query, job.analysisId, { botId: info.id, version: info.version, values: info.analyzer.values, seconds }, Math.floor(this.#now() / 1000))) {
             job.attempt = null;
             return;
         }
@@ -630,6 +631,7 @@ export class AnalysisService {
             ...failed.map((row) => this.#rowView(row, game, [], firstTurn)),
         ];
         const own = ownLinesOf(this.#query, gameId, record.opening.length);
+        const values = ownValuesOf(this.#query, gameId);
         const seats: Record<Side, string | null> =
             record.kind === `bots`
                 ? record.challengerSide === `x`
@@ -640,7 +642,7 @@ export class AnalysisService {
                   : { x: record.guestSide === `x` ? null : record.bot.name, o: record.guestSide === `o` ? null : record.bot.name };
         const views: OwnAnalysis[] = ([`x`, `o`] as const).flatMap((side) => {
             const player = seats[side];
-            return player === null || own[side].length === 0 ? [] : [{ kind: `own` as const, side, player, turns: own[side] }];
+            return player === null || own[side].length === 0 ? [] : [{ kind: `own` as const, side, player, values: values[side], turns: own[side] }];
         });
         return { kind: `list`, list: { analyses: [...community, ...views], optedOut: false } };
     }
@@ -651,7 +653,7 @@ export class AnalysisService {
         return {
             kind: `community`,
             analysisId: row.id,
-            analyzer: row.analyzerName === null ? null : { name: row.analyzerName, version: row.analyzerVersion, ownerName: row.ownerName },
+            analyzer: row.analyzerName === null ? null : { name: row.analyzerName, version: row.analyzerVersion, ownerName: row.ownerName, values: row.analyzerValues },
             status: row.status,
             ...(row.failure === null ? {} : { failure: row.failure }),
             ...(row.failedTurn === null ? {} : { failedTurn: row.failedTurn }),
@@ -682,7 +684,7 @@ export class AnalysisService {
 }
 
 function refOf(info: AnalyzerInfo): AnalyzerRef {
-    return { name: info.name, version: info.version, ownerName: info.ownerName };
+    return { name: info.name, version: info.version, ownerName: info.ownerName, values: info.analyzer.values };
 }
 
 function isoOf(seconds: number): string {

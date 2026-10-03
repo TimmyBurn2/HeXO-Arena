@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+// @vitest-environment-options {"url": "https://hexo.invalid/"}
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { meStore } from '../src/me';
@@ -14,29 +15,74 @@ function type(value: string): void {
     fireEvent.change(screen.getByRole(`textbox`, { name: `Bot name` }), { target: { value } });
 }
 
+function sample(name: string): string | null | undefined {
+    return screen.getByRole(`figure`, { name }).querySelector(`pre code`)?.textContent;
+}
+
 describe('ConnectScreen', () => {
-    it('walk the six numbered steps with their links', () => {
+    it('lead with hexo-bridge, then the steps from sign-in, the declaration, and the Bot API, in that order', () => {
         window.history.replaceState(null, ``, `/connect`);
         render(<ConnectScreen />);
-        const headings = screen.getAllByRole(`heading`).map((heading) => heading.textContent);
-        for (const expected of [
-            `Build a bot`,
-            `Sign in`,
-            `Create your bot`,
-            `Copy the token`,
-            `Run the example`,
-            `Watch it play`,
-            `Read the Bot API`,
-        ]) {
-            expect(headings).toContain(expected);
-        }
+        const headings = screen.getAllByRole(`heading`).map((heading) => `${heading.tagName} ${heading.textContent}`);
+        expect(headings).toEqual([
+            `H1 Build a bot`,
+            `H2 Run your engine with hexo-bridge`,
+            `H3 Install`,
+            `H3 A Python engine`,
+            `H3 An engine in any language`,
+            `H2 From sign-in to its first game`,
+            `H3 Sign in`,
+            `H3 Create your bot`,
+            `H3 Copy the token`,
+            `H3 Watch it play`,
+            `H2 What the declaration says`,
+            `H2 Speak the Bot API yourself`,
+        ]);
         const signIn = screen.getByRole(`link`, { name: `Sign in with Discord` });
         expect(signIn.getAttribute(`href`)).toBe(`/api/auth/discord/login?next=%2Fconnect`);
         expect(signIn.classList.contains(`discord-button`)).toBe(true);
         expect(screen.getByText((_content, element) => element?.matches(`.discord-sign-in .note`) === true && element.textContent === `Your email stays with Discord, and a first sign-in asks for your public name; see\u00a0Privacy.`)).toBeTruthy();
-        expect(screen.getByRole(`link`, { name: /simple_bot\.py/ }).getAttribute(`href`)).toContain(
-            `github.com/TimmyBurn2/Hexo-Bot-Api`,
-        );
+    });
+
+    it('install the bridge from its repository and link its examples, the Bot API, and the example without it', () => {
+        render(<ConnectScreen />);
+        expect(sample(`Install command`)).toBe(`pip install git+https://github.com/TimmyBurn2/hexo-bridge`);
+        expect(screen.getByRole(`link`, { name: `hexo-bridge` }).getAttribute(`href`)).toBe(`https://github.com/TimmyBurn2/hexo-bridge`);
+        expect(screen.getByRole(`link`, { name: `random_engine.py` }).getAttribute(`href`)).toBe(`https://github.com/TimmyBurn2/hexo-bridge/blob/main/examples/random_engine.py`);
+        expect(screen.getByRole(`link`, { name: `the bridge's readme` }).getAttribute(`href`)).toBe(`https://github.com/TimmyBurn2/hexo-bridge#readme`);
+        expect(screen.getByRole(`link`, { name: `Bot API` }).getAttribute(`href`)).toBe(`https://github.com/TimmyBurn2/Hexo-Bot-Api`);
+        expect(screen.getByRole(`link`, { name: `simple_bot.py` }).getAttribute(`href`)).toBe(`https://github.com/TimmyBurn2/Hexo-Bot-Api/blob/main/examples/simple_bot.py`);
+        expect(screen.getByRole(`link`, { name: `Bot API readme` }).getAttribute(`href`)).toBe(`https://github.com/TimmyBurn2/Hexo-Bot-Api`);
+    });
+
+    it('point the samples at the origin the page is served from', () => {
+        render(<ConnectScreen />);
+        // The file is served from an origin no source names, so the samples can only take it from the page.
+        const origin = `https://hexo.invalid`;
+        expect(window.location.origin).toBe(origin);
+        const python = sample(`bot.py, a whole bot in Python`) ?? ``;
+        expect(python).toContain(`    url="${origin}",\n`);
+        expect(python).toContain(`    token=os.environ["HEXO_BOT_TOKEN"],\n`);
+        expect(python).toContain(`class MyEngine(Engine):\n    def move(self, position, request):\n`);
+        expect(sample(`bot.toml, the bridge's settings`)).toContain(`[server]\nurl = "${origin}"\n`);
+        expect(sample(`Command that starts bot.py`)).toBe(`HEXO_BOT_TOKEN=hxo_... python bot.py`);
+        expect(sample(`Command that starts the bridge`)).toBe(`HEXO_BOT_TOKEN=hxo_... hexo-bridge bot.toml`);
+        expect(document.body.textContent).not.toContain(`<domain>`);
+    });
+
+    it('list each field of the declaration with its limits', () => {
+        render(<ConnectScreen />);
+        const fields = [...document.querySelectorAll(`.declaration-fields dt`)].map((term) => term.textContent);
+        expect(fields).toEqual([`accepts`, `about`, `version`, `repoUrl`, `levels`, `analyzer`]);
+        const says = [...document.querySelectorAll(`.declaration-fields dd`)].map((detail) => detail.textContent);
+        expect(says).toEqual([
+            `The clocks it plays: turnMs, the shortest and longest turn clock in milliseconds, or null for none; match and unlimited, true or false.`,
+            `Text for its page, up to 280 characters.`,
+            `Up to 64 characters.`,
+            `A link to its source, http or https.`,
+            `2 to 8 strengths a player can pick, weakest first, and the default its rating belongs to; a game at any other is unrated.`,
+            `Your engine reads positions for the analysis board: lines, 1 to 3 per position, and maxSeconds, 1 to 10; a Python engine answers in analyze.`,
+        ]);
     });
 
     it('name the bot field with a label on screen', () => {
@@ -79,7 +125,7 @@ describe('ConnectScreen', () => {
         render(<ConnectScreen />);
         type(`sealbot`);
         fireEvent.click(screen.getByRole(`button`, { name: `Create bot` }));
-        expect(await screen.findByText(/hxo_/)).toBeTruthy();
+        expect(await screen.findByText(`hxo_${`a`.repeat(43)}`)).toBeTruthy();
         expect(screen.getByRole(`button`, { name: `Copy` })).toBeTruthy();
         expect(screen.getByText(/shows only once/)).toBeTruthy();
         await waitFor(() => {

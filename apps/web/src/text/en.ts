@@ -1,5 +1,15 @@
 import {
+    analysesPerGame,
+    analysisLinesMax,
+    analyzerMaxSecondsCap,
+    botAboutMaxLength,
+    botVersionMaxLength,
+    levelCountMax,
+    levelCountMin,
+    analysisPendingPerUser,
+    analysisRequestsPerUserDay,
     analysisStoneCap,
+    analysisTurnCap,
     analysisTreeNodeCap,
     positionReadingsPerUserDay,
     botCapPerUser,
@@ -17,7 +27,11 @@ import {
     plural,
     siteName,
     unlimitedWallCapMs,
+    type AnalysisFailure,
     type DiscordNames,
+    type Judgment,
+    type JudgmentSeverity,
+    type ValueMeaning,
     type LegalPage,
     type ReportReason,
     type SignInFailure,
@@ -37,6 +51,21 @@ function ordinal(place: number): string {
     const suffix = tens >= 11 && tens <= 13 ? `th` : ones === 1 ? `st` : ones === 2 ? `nd` : ones === 3 ? `rd` : `th`;
     return `${String(place)}${suffix}`;
 }
+// A verdict's severity word, which heads it, and its reason after it: a forced win let go or handed over, a win in 1 being a six.
+const severityWord = (severity: JudgmentSeverity) => `${severity.charAt(0).toUpperCase()}${severity.slice(1)}`;
+function reasonWords(judgment: Judgment): string {
+    switch (judgment.reason) {
+        case `gave-away-win`:
+            return `gave away the win`;
+        case `missed-win`:
+            return judgment.turns === 1 ? `missed a six` : `missed a win`;
+        case `allowed-win`:
+            return judgment.turns === 1 ? `left a six` : `allowed a win`;
+        case `value-drop`:
+            return ``;
+    }
+}
+const reasonAfter = (judgment: Judgment) => (judgment.reason === `value-drop` ? `` : `: ${reasonWords(judgment)}`);
 // A count in the catalog's language, its thousands grouped: 1,234.
 const countFormat = new Intl.NumberFormat(`en-US`);
 const counted = (count: number) => countFormat.format(count);
@@ -219,6 +248,7 @@ export const en = {
         title: `Bots`,
         build: `Build a bot`,
         onlineOnly: `Online only`,
+        analyzersOnly: `Analyzers only`,
         failed: `The bot list did not load`,
         bot: `Bot`,
         owner: `Owner`,
@@ -228,6 +258,10 @@ export const en = {
         version: `Version`,
         playColumn: `Play`,
         noneOnline: `No bots online right now; clear Online only to see every bot.`,
+        noAnalyzer: `No bot reads positions yet; clear Analyzers only to see every bot.`,
+        noAnalyzerOnline: `No analyzer is online right now; clear Online only to see every analyzer.`,
+        analyzerTag: `analyzer`,
+        analyzerKey: `analyzer: reads positions on the analysis board`,
         online: `Online`,
         offline: `Offline`,
         openKey: `open: takes challenges now`,
@@ -404,6 +438,20 @@ export const en = {
         unlimited: `Unlimited`,
         yes: `Yes`,
         no: `No`,
+        analyzer: {
+            title: `Analyzer`,
+            time: `Time`,
+            timeValue: (seconds: number) => `Up to ${String(seconds)} s a position`,
+            lines: `Lines`,
+            linesValue: (lines: number) => `Up to ${String(lines)}`,
+            when: `When`,
+            whilePlaying: `Also during its games`,
+            betweenGames: `Between its games only`,
+            now: `Now`,
+            ready: `Ready to read`,
+            notReady: `Not reading`,
+            note: (board: Slot): ReactNode => rich`Pick it in Analysis settings on the ${board(`analysis board`)}.`,
+        },
         strength: `Strength`,
         strengthRated: `rated`,
         strengthNote: `Weakest first; any strength but the rated one plays unrated practice.`,
@@ -411,6 +459,7 @@ export const en = {
         version: `Version`,
         repository: `Repository`,
         play: (name: ReactNode): ReactNode => rich`Play ${name}`,
+        playAt: (name: string, label: string) => `Play ${name} at ${label}`,
         offlineReason: `Offline`,
         closedReason: `Closed for challenges`,
         noClockReason: `Accepts nothing yet`,
@@ -436,7 +485,71 @@ export const en = {
     },
     build: {
         title: `Build a bot`,
-        lead: `Get your own bot playing, from sign-in to its first game. An account holds up to ${String(botCapPerUser)} ${plural(botCapPerUser, `bot`, `bots`)}.`,
+        lead: `Write an engine, run it with hexo-bridge, and your bot plays everyone here. An account holds up to ${String(botCapPerUser)} ${plural(botCapPerUser, `bot`, `bots`)}.`,
+        bridge: {
+            title: `Run your engine with hexo-bridge`,
+            lead: (bridge: Slot): ReactNode =>
+                rich`${bridge(`hexo-bridge`)} plays your engine on HeXO Arena: it holds the connection, takes challenges, and plays each game on its clock. Write the engine as a Python class, or as a program in any language that speaks JSON lines on stdin and stdout.`,
+            install: `Install`,
+            installNote: `With Python 3.11 or newer:`,
+            python: `A Python engine`,
+            pythonNote: (code: Slot): ReactNode =>
+                rich`${code(`move`)} gets the position and returns two ${code(`(q, r)`)} cells; ${code(`fallback_turn()`)} wins, blocks, or plays close until your own search takes over.`,
+            start: `Start it with your bot's token, which shows once you create the bot:`,
+            process: `An engine in any language`,
+            processNote: (engine: Slot, readme: Slot, code: Slot): ReactNode =>
+                rich`The bridge starts your program for each game, writes one JSON request per line to its stdin, and reads one answer per line from its stdout. ${engine(`random_engine.py`)} is a whole engine; ${readme(`the bridge's readme`)} has the format. Name your program in ${code(`bot.toml`)}:`,
+            startBridge: `Start the bridge with your bot's token:`,
+        },
+        samples: {
+            install: { title: `Terminal`, name: `Install command`, copyLabel: `Copy the install command` },
+            python: {
+                title: `bot.py`,
+                name: `bot.py, a whole bot in Python`,
+                copyLabel: `Copy bot.py`,
+                code: (origin: string) =>
+                    [
+                        `import os`,
+                        ``,
+                        `from hexo_bridge import Engine, run`,
+                        ``,
+                        ``,
+                        `class MyEngine(Engine):`,
+                        `    def move(self, position, request):`,
+                        `        # Your search goes here.`,
+                        `        return position.fallback_turn()`,
+                        ``,
+                        ``,
+                        `run(`,
+                        `    MyEngine,`,
+                        `    url="${origin}",`,
+                        `    token=os.environ["HEXO_BOT_TOKEN"],`,
+                        `    declaration={`,
+                        `        "accepts": {"turnMs": [5000, 300000], "match": True, "unlimited": True},`,
+                        `    },`,
+                        `)`,
+                    ].join(`\n`),
+            },
+            startPython: { title: `Terminal`, name: `Command that starts bot.py`, copyLabel: `Copy the command that starts bot.py`, code: `HEXO_BOT_TOKEN=hxo_... python bot.py` },
+            toml: {
+                title: `bot.toml`,
+                name: `bot.toml, the bridge's settings`,
+                copyLabel: `Copy bot.toml`,
+                code: (origin: string) =>
+                    [
+                        `[server]`,
+                        `url = "${origin}"`,
+                        ``,
+                        `[engine]`,
+                        `command = ["./my-engine"]`,
+                        ``,
+                        `[declaration]`,
+                        `accepts = { turnMs = [5000, 300000], match = true, unlimited = true }`,
+                    ].join(`\n`),
+            },
+            startBridge: { title: `Terminal`, name: `Command that starts the bridge`, copyLabel: `Copy the command that starts the bridge`, code: `HEXO_BOT_TOKEN=hxo_... hexo-bridge bot.toml` },
+        },
+        steps: `From sign-in to its first game`,
         signedInAs: (name: ReactNode): ReactNode => rich`Signed in as ${name}`,
         profileNote: (profile: Slot): ReactNode => rich`Your bots are listed on your ${profile(`Profile`)}.`,
         signIn: `Sign in`,
@@ -446,20 +559,39 @@ export const en = {
         createBot: `Create bot`,
         copyToken: `Copy the token`,
         tokenLater: `The token shows here once, right after you create the bot.`,
-        runExample: `Run the example`,
-        example: (script: Slot, readme: Slot): ReactNode =>
-            rich`A complete bot in Python: ${script(`simple_bot.py`)}, explained in the ${readme(`Bot API readme`)}.`,
         watch: `Watch it play`,
         watchLater: (bots: Slot): ReactNode => rich`Your bot shows as online in ${bots(`Bots`)} once it connects.`,
         botPage: (page: ReactNode): ReactNode => rich`Your bot's page: ${page}`,
-        readApi: `Read the Bot API`,
-        api: (botApi: Slot): ReactNode => rich`Every endpoint and event, with examples: ${botApi(`Bot API`)}.`,
+        declaration: {
+            title: `What the declaration says`,
+            lead: (code: Slot): ReactNode =>
+                rich`The bridge sends the ${code(`declaration`)} each time your bot connects: what it plays, and what its page shows. Only ${code(`accepts`)} is required.`,
+            accepts: (code: Slot): ReactNode =>
+                rich`The clocks it plays: ${code(`turnMs`)}, the shortest and longest turn clock in milliseconds, or null for none; ${code(`match`)} and ${code(`unlimited`)}, true or false.`,
+            about: `Text for its page, up to ${String(botAboutMaxLength)} characters.`,
+            version: `Up to ${String(botVersionMaxLength)} characters.`,
+            repoUrl: `A link to its source, http or https.`,
+            levels: `${String(levelCountMin)} to ${String(levelCountMax)} strengths a player can pick, weakest first, and the default its rating belongs to; a game at any other is unrated.`,
+            analyzer: (code: Slot): ReactNode =>
+                rich`Your engine reads positions for the analysis board: ${code(`lines`)}, 1 to ${String(analysisLinesMax)} per position, and ${code(`maxSeconds`)}, 1 to ${String(analyzerMaxSecondsCap)}; a Python engine answers in ${code(`analyze`)}.`,
+        },
+        api: {
+            title: `Speak the Bot API yourself`,
+            lead: (botApi: Slot): ReactNode => rich`hexo-bridge speaks the Bot API for you. Every endpoint and event, with examples: ${botApi(`Bot API`)}.`,
+            example: (script: Slot, readme: Slot): ReactNode =>
+                rich`A complete bot in Python without the bridge: ${script(`simple_bot.py`)}, explained in the ${readme(`Bot API readme`)}.`,
+        },
         nameRule: `${String(nameMinLength)} to ${String(nameMaxLength)} letters, digits, - or _; start with a letter, end with a letter or digit`,
         reserved: `That name is reserved`,
         taken: `That name is taken`,
         atCap: `You already have ${String(botCapPerUser)} ${plural(botCapPerUser, `bot`, `bots`)}; delete one first`,
         signInFirst: `Sign in first (step 1)`,
         failed: `The bot was not created; try again`,
+    },
+    code: {
+        copy: `Copy`,
+        copied: `Copied`,
+        selected: `Selected; press Ctrl+C or Cmd+C`,
     },
     profile: {
         title: `Profile`,
@@ -475,8 +607,14 @@ export const en = {
         endGuestFailed: `The guest session did not end; try again`,
         botsFailed: `Your bots did not load`,
         yourBots: `Your bots`,
-        botCount: (count: number): ReactNode => rich`${String(count)} of ${String(botCapPerUser)}`,
+        botCount: (count: number) => `${String(count)} of ${String(botCapPerUser)} ${plural(botCapPerUser, `bot`, `bots`)}`,
+        noBots: `No bots yet; your account holds up to ${String(botCapPerUser)}.`,
+        atCap: `Your account holds ${String(botCapPerUser)} ${plural(botCapPerUser, `bot`, `bots`)}, its limit; delete one on its page to build another.`,
         delistedNote: `Delisted bots are hidden here but still count toward your limit of ${String(botCapPerUser)} ${plural(botCapPerUser, `bot`, `bots`)}.`,
+        online: `online`,
+        offline: `offline`,
+        analyzer: `analyzer`,
+        strengths: (count: number) => `${String(count)} ${plural(count, `strength`, `strengths`)}`,
         account: {
             title: `Your account`,
             data: `Your data`,
@@ -564,8 +702,25 @@ export const en = {
         start: `Start game`,
         expected: (bot: string, score: string) => `Your expected score against ${bot}: ${score}`,
         practiceScore: (label: string) => `No expected score at ${label}; practice is unrated`,
+        unratedScore: `No expected score; Rated is off`,
         rated: `Rated; sides are drawn at random`,
+        unrated: `Unrated; sides are drawn at random`,
         practice: `Practice, unrated; sides are drawn at random`,
+        ratedSwitch: `Rated`,
+        analyzer: {
+            title: `Analyzer`,
+            time: `Time`,
+            timeValue: (seconds: number) => `Up to ${String(seconds)} s a position`,
+            lines: `Lines`,
+            linesValue: (lines: number) => `Up to ${String(lines)}`,
+            when: `When`,
+            whilePlaying: `Also during its games`,
+            betweenGames: `Between its games only`,
+            now: `Now`,
+            ready: `Ready to read`,
+            notReady: `Not reading`,
+            note: (board: Slot): ReactNode => rich`Pick it in Analysis settings on the ${board(`analysis board`)}.`,
+        },
         strength: `Strength`,
         strengthRated: `rated`,
         guestNote: (name: ReactNode): ReactNode => rich`You play as ${name}; guest games are unrated, and public under that label.`,
@@ -598,7 +753,7 @@ export const en = {
             not_found: (name: string) => `${name} is no longer listed; pick another bot`,
             own_bot: (name: string) => `${name} is your own bot; pick another bot`,
             daily_pair_cap: (name: string) =>
-                `You have played ${name} ${String(pairDailyCap)} times today, the most one day allows; pick another bot, or play it again after 00:00 UTC`,
+                `You have played ${name} rated ${String(pairDailyCap)} times today, the most one day allows; turn off Rated, pick another bot, or wait until 00:00 UTC`,
             paused: () => `Starting games is paused; live games continue`,
         },
         cooldown: (seconds: number) => `1 new game ${perMinutes(humanGameCooldownSeconds / 60)}; try again in ${String(seconds)} s`,
@@ -805,6 +960,12 @@ export const en = {
                 return [...(who.length === 0 ? [] : [who.join(`, `)]), `${String(seconds)} s a position`].join(`; `);
             },
             notReading: `not reading now`,
+            ownView: `Own view`,
+            ownSeat: (side: string) => `${side}'s own view`,
+            ownRead: `Said while it played`,
+            ownNone: `No own view of this position; a bot's own view shows at the turns it played.`,
+            // "0.3, in this browser; 2 s a position", leaving out a version the engine does not give.
+            engineBy: (version: string, seconds: number) => `${version === `` ? `` : `${version}, `}in this browser; ${String(seconds)} s a position`,
             toMove: (state: string, side: string) => `${state}; ${side} to move`,
             readIn: (ms: number) => `Read in ${(ms / 1000).toFixed(1)} s`,
             readBefore: `Read before`,
@@ -815,6 +976,9 @@ export const en = {
             waitingNote: (name: string, seconds: number) => `It goes to ${name} when it is free, in about ${String(seconds)} s.`,
             cells: (side: string, cells: readonly string[]) => `${side}: ${cells.join(` `)}`,
             play: (letter: string, value: string, cells: string) => `Play line ${letter}: ${value}, ${cells}`,
+            // The lines past A, folded behind a toggle that names them: "B, C".
+            foldLetters: (letters: readonly string[]) => letters.join(`, `),
+            fold: (letters: readonly string[]) => `${letters.length === 1 ? `Line` : `Lines`} ${letters.join(`, `)}`,
             askAgain: `Ask again`,
             // A wait a refusal names: seconds under a minute, every unit spelled out past it.
             wait: (seconds: number) => (seconds < 60 ? `${String(seconds)} s` : spelledWait(seconds)),
@@ -865,7 +1029,7 @@ export const en = {
         },
         tree: {
             label: `Moves`,
-            opening: (last: number) => (last === 0 ? `op 0` : `op 0-${String(last)}`),
+            openingMark: `op`,
             openingSpoken: (last: number) => (last === 0 ? `opening, turn 0` : `opening, turns 0 to ${String(last)}`),
             variations: `Variations`,
             more: (turn: number) => `More for turn ${String(turn)}`,
@@ -982,6 +1146,69 @@ export const en = {
             failed: `The game did not load`,
             newBoard: `New board`,
         },
+        judged: {
+            severities: { inaccuracy: `inaccuracy`, mistake: `mistake`, blunder: `blunder` } satisfies Record<JudgmentSeverity, string>,
+            count: (count: number, severity: JudgmentSeverity) =>
+                `${String(count)} ${count === 1 ? severity : ({ inaccuracy: `inaccuracies`, mistake: `mistakes`, blunder: `blunders` } satisfies Record<JudgmentSeverity, string>)[severity]}`,
+            above: `x ahead above the line`,
+            below: `o ahead below`,
+            noMarks: `No marks`,
+        },
+        window: {
+            label: `Analyzer`,
+            noReading: `No reading of this game yet`,
+            requestsLeft: (left: number) =>
+                left === 0 ? `No requests left today` : `${String(left)} of ${String(analysisRequestsPerUserDay)} requests left today`,
+            playPreferred: (line: string) => `Play ${line} as a variation`,
+            // What a reading's values mean, which decides how its graph draws them.
+            meaning: { expected: `Win chances`, raw: `Raw values` } satisfies Record<ValueMeaning, string>,
+        },
+        // A turn explained as a named analyzer's opinion; values keep their side and number together.
+        // A sentence comes without its preferred line and its end, which explain adds,
+        // and as it runs on after a verdict, which explain capitalizes where it stands alone.
+        explain: {
+            // "Mistake", or "Blunder: left a six" for a forced win let go or handed over.
+            title: (judgment: Judgment) => `${severityWord(judgment.severity)}${reasonAfter(judgment)}`,
+            severity: severityWord,
+            reason: reasonAfter,
+            // The verdict as a line runs on: "mistake", "left a six".
+            inLine: (judgment: Judgment) => (judgment.reason === `value-drop` ? judgment.severity : reasonWords(judgment)),
+            // A title that names its reason takes a semicolon before the text, a bare severity a colon.
+            joiner: (namesReason: boolean) => (namesReason ? `; ` : `: `),
+            gaveAway: (analyzer: string, mover: string, held: number, opponent: string, handed: number) =>
+                `${analyzer} found a win in ${String(held)} for ${mover} here, and after this turn finds one in ${String(handed)} for ${opponent}`,
+            missedSix: (mover: string) => `${mover} could complete six here`,
+            missedWin: (analyzer: string, turns: number, mover: string) => `${analyzer} found a win in ${String(turns)} for ${mover} here and none after this turn`,
+            leftSix: (opponent: string) => `this turn leaves ${opponent} a six to complete`,
+            allowedWin: (analyzer: string, turns: number, opponent: string) => `after this turn ${analyzer} finds a win in ${String(turns)} for ${opponent}`,
+            valueDrop: (analyzer: string, drop: number, before: string, after: string) =>
+                `${analyzer} rates this turn ${drop.toFixed(2)} below its choice, ${before} before and ${after} after`,
+            stillWinning: (analyzer: string, turns: number, mover: string) => `${analyzer} still finds a win in ${String(turns)} for ${mover} after this turn`,
+            alreadyLost: (analyzer: string, opponent: string) => `${analyzer} found a win for ${opponent} before this turn`,
+            foundWin: (analyzer: string, turns: number, mover: string) => `after this turn ${analyzer} finds a win in ${String(turns)} for ${mover}`,
+            // The preferred line follows a sentence that named its analyzer as "it", or names it there.
+            itPreferred: `; it preferred`,
+            namedPreferred: (analyzer: string) => `; ${analyzer} preferred`,
+            values: (before: string, after: string) => `${before} before, ${after} after`,
+            firstChoice: (after: string, analyzer: string) => `${after} after; ${analyzer}'s first choice`,
+            afterOnly: (after: string) => `${after} after`,
+            six: (side: string) => `${side} wins with six in a row`,
+            opening: `placed by the opening; not judged`,
+            variation: (after: string) => `${after} after; variations are not judged`,
+            variationUnread: `variations are not judged`,
+            unjudged: `; not judged until the game is read whole`,
+            unread: `not read yet; not judged until the game is read whole`,
+            own: (name: string, after: string) => `${name}'s own view: ${after} after this turn`,
+            end: `.`,
+            openingHead: `The opening`,
+            gameHead: (turn: number, player: string) => `Turn ${String(turn)}, ${player}`,
+            variationHead: (turn: number) => `Turn ${String(turn)}, a variation`,
+            boardHead: (turn: number) => `Turn ${String(turn)}`,
+            // A run of turns, each letting a win go or handing one over, folded under one note.
+            run: (from: number, to: number) => `Turns ${String(from)} to ${String(to)}: wins let go`,
+            runText: (analyzer: string, count: number) => `Each turn here let a win go or handed one over; ${analyzer} marks all ${String(count)}.`,
+            inRuns: (count: number) => `${String(count)} in runs`,
+        },
     },
     rundown: {
         title: `Rundown`,
@@ -994,6 +1221,7 @@ export const en = {
         results: { won: `won`, lost: `lost`, none: `no winner` },
         noGames: `No games yet`,
         practice: `practice, unrated`,
+        unratedByChoice: `unrated by choice`,
         firstMeeting: (x: ReactNode, o: ReactNode): ReactNode => rich`${x} and ${o} have not met yet`,
     },
     replay: {
@@ -1030,6 +1258,7 @@ export const en = {
         ratedNoGuestPlayed: `No, a guest played`,
         ratedNoVoided: `No, the operator voided it`,
         ratedNoPractice: `No, practice`,
+        ratedNoChoice: `No, by choice`,
         strength: `Strength`,
         strengthValue: (label: string, facts: string) => (facts === `` ? label : `${label}: ${facts}`),
         yourSide: `Your side`,
@@ -1062,6 +1291,66 @@ export const en = {
         cellTaken: `That cell is taken`,
         firstAtOrigin: `The first stone belongs at the origin`,
         tooFar: `Too far; play within ${String(placementRadius)} cells of a stone`,
+        reading: {
+            readings: `Readings`,
+            own: `Own view`,
+            ownBy: `own view`,
+            ownNote: `Each bot's view of its own turns, published once the game ended`,
+            // "hextide: allowed a forced win; kestrel"
+            readout: (who: string, what: string, by: string) => `${who}: ${what}; ${by}`,
+            // A value's side stays with its number, so "x 0.12" never breaks between them.
+            value: (words: string) => words.replace(/^([xo]) (?=\d)/u, `$1\u00a0`),
+            // "op 0-2 to turn 25", the graph's span as the feed names its turns.
+            span: (opening: string, last: number) => `${opening} to turn ${String(last)}`,
+            graph: (by: string, last: number) => `Graph of ${by}'s reading, from the opening to turn ${String(last)}`,
+            ownGraph: (last: number) => `Graph of each bot's own view, from the opening to turn ${String(last)}`,
+            loading: `Loading the readings`,
+            loadFailed: `The readings did not load`,
+            none: `No community reading yet`,
+            noneNote: `Community bots read finished games turn by turn; each reading is signed by its bot, and bots can disagree.`,
+            analyzer: `Analyzer`,
+            any: (online: number | null) => (online === null ? `Any analyzer` : `Any analyzer (${String(online)} online)`),
+            named: (name: string, owner: string | null) => (owner === null ? name : `${name}, by ${owner}`),
+            request: `Request analysis`,
+            again: `Request again`,
+            left: (left: number) =>
+                left === 0
+                    ? `No requests left today; the count starts again at 00:00 UTC.`
+                    : `${String(left)} of ${String(analysisRequestsPerUserDay)} requests left today.`,
+            signIn: `Sign in to ask an analyzer to read this game.`,
+            queued: (ahead: number) => (ahead === 0 ? `Waiting for an analyzer; this game is next` : `Waiting for an analyzer; ${String(ahead)} ${plural(ahead, `game`, `games`)} ahead`),
+            running: (name: string | null, turn: number, last: number) => `${name ?? `An analyzer`} is reading turn ${String(turn)} of ${String(last)}`,
+            runningNote: `Marks appear when the reading is done; the graph fills as turns arrive.`,
+            failed: (name: string | null, why: string, turn: number | null) => `${name ?? `The analyzer`} did not finish: ${why}${turn === null ? `` : ` on turn ${String(turn)}`}`,
+            expired: `No analyzer took this game in time`,
+            failures: {
+                timeout: `timed out`,
+                illegal: `named a turn the rules refuse`,
+                no_evaluation: `sent no evaluation`,
+                inconsistent: `contradicted the board`,
+                disconnect: `disconnected`,
+                protocol: `answered in a way the site cannot read`,
+                expired: `no analyzer took it in time`,
+            } satisfies Record<AnalysisFailure, string>,
+            optedOut: `A player in this game asked that their games not be analyzed`,
+            tooLong: `This game runs past turn ${String(analysisTurnCap)}, longer than an analyzer reads whole`,
+            unplayed: `No turn was played after the opening, so there is nothing to read`,
+            refusals: {
+                analysis_limit: (wait: string) => `Today's requests are spent; more in ${wait}`,
+                analysis_queue_full: (wait: string) => `Every analyzer's queue is full; request again in ${wait}`,
+                pending_limit: `You have ${String(analysisPendingPerUser)} readings waiting already; request again once one is done`,
+                no_analyzer: (name: string | null) =>
+                    name === null ? `No analyzer is free to read this game; request again later` : `${name} cannot read this game now; pick another analyzer`,
+                analysis_full: `This game holds ${String(analysesPerGame.done)} readings already`,
+                analysis_pending: `A reading of this game was asked for a moment ago`,
+                not_analysable: `This game cannot be read whole`,
+                opted_out: `A player in this game asked that their games not be analyzed`,
+                rate_limited: (wait: string) => `Too many requests at once; request again in ${wait}`,
+                paused: `Analysis is paused on this server; request again later`,
+                signed_out: `Your sign-in ended; sign in again to request a reading`,
+                unavailable: `The request did not go through; request again`,
+            },
+        },
     },
     time: {
         // A wait ahead, to the minute: "3 h 20 min", "45 min", "under a minute", or days and hours past a day.

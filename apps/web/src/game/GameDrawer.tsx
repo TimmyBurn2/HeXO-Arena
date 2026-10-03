@@ -5,7 +5,9 @@ import { useLegalLinks } from '../legal/links';
 import { Link } from '../router/Link';
 import { siteLinks } from '../site-links';
 import { text } from '../text';
+import { JudgmentChip } from '../analysis/Judgment';
 import type { Drawer, DrawerTab } from './use-drawer';
+import type { FeedFold, FeedNote } from './drawer-reading';
 import type { FeedLine } from './snapshot-views';
 import type { Sent } from './use-game';
 import { useWait, WaitText } from '../components/wait';
@@ -22,11 +24,21 @@ const tabs: readonly { id: DrawerTab; label: string }[] = [
  * A right-hand drawer on wide screens, a bottom sheet on phones whose peek
  * keeps the player's own chip in reach.
  */
-export function GameDrawer({ drawer, feed, current, facts, meetings, rundown, tournament, analysis, running, timed, onResign, peek }: {
+export function GameDrawer({ drawer, feed, current, notes, folds, onLine, onPoint, head, facts, meetings, rundown, tournament, analysis, running, timed, onResign, peek }: {
     drawer: Drawer;
     feed: readonly FeedLine[];
     // The feed line the board shows; a replay may stand before the newest.
     current: number;
+    // A finished game's reading of each feed line, null where it has none, or null for no reading.
+    notes: readonly (FeedNote | null)[] | null;
+    // A reading's runs of marked turns, each folded after its first line.
+    folds: readonly FeedFold[];
+    // Shows the board at a feed line's turn; null while the game runs.
+    onLine: ((index: number) => void) | null;
+    // The feed line pointed at, or the line shown while focused; null once none is.
+    onPoint: (index: number | null) => void;
+    // A finished game's analysis head, which takes the board switches' place; null while it runs.
+    head: ReactNode;
     facts: readonly (readonly [string, string])[];
     // The two players' record against each other, leading to their games; null before it is known or when they have none.
     meetings: ReactNode;
@@ -156,10 +168,8 @@ export function GameDrawer({ drawer, feed, current, facts, meetings, rundown, to
                         <>
                             {/* the aids read the record, so they head it and
                                 stay in view as the feed scrolls under them */}
-                            <div className="moves-head">
-                                <BoardToggles />
-                            </div>
-                            <MoveFeed feed={feed} current={current} visible={drawer.visible} />
+                            <div className={head === null ? `moves-head` : `moves-head dr-head`}>{head ?? <BoardToggles />}</div>
+                            <MoveFeed feed={feed} current={current} visible={drawer.visible} notes={notes} folds={folds} onLine={onLine} onPoint={onPoint} />
                         </>
                     ) : null}
                     {drawer.tab === `game` ? (
@@ -201,44 +211,153 @@ export function FeedLabel({ line }: { line: FeedLine }) {
 // The panel around the list is what scrolls, and a hidden panel has no
 // height, so it follows the newest line, or the line shown in a replay,
 // on every turn, every step, and every open.
-function MoveFeed({ feed, current, visible }: { feed: readonly FeedLine[]; current: number; visible: boolean }) {
+// With a reading each line adds its mark and its value after the turn; a
+// press on a line shows its turn, and the line shown, while pointed at or
+// focused, shows the analyzer's other lines on the board.
+function MoveFeed({ feed, current, visible, notes, folds, onLine, onPoint }: {
+    feed: readonly FeedLine[];
+    current: number;
+    visible: boolean;
+    notes: readonly (FeedNote | null)[] | null;
+    folds: readonly FeedFold[];
+    onLine: ((index: number) => void) | null;
+    onPoint: (index: number | null) => void;
+}) {
     const listRef = useRef<HTMLOListElement>(null);
+    const [opened, setOpened] = useState<ReadonlySet<number>>(new Set());
+    // A fold stays open while the line shown lies inside it.
+    const foldAt = new Map(folds.map((fold) => [fold.first, { fold, open: opened.has(fold.first) || (current > fold.first && current <= fold.last) }]));
+    const shut = (index: number) => folds.some((fold) => index > fold.first && index <= fold.last && foldAt.get(fold.first)?.open !== true);
     const settled = useRef(feed.length);
     const newest = current >= feed.length - 1;
+    // A reading lands after the feed, growing the head and adding the note.
+    const annotated = notes !== null;
+    const noted = notes?.[current]?.note ?? null;
 
     useEffect(() => {
         const panel = listRef.current?.closest(`.drawer-panel`);
         if (!visible || !(panel instanceof HTMLElement)) return;
-        if (newest) {
+        const note = listRef.current?.querySelector(`.feed-note`) ?? null;
+        if (newest && note === null) {
             panel.scrollTop = panel.scrollHeight;
             return;
         }
-        listRef.current?.querySelector(`[aria-current="step"]`)?.scrollIntoView({ block: `nearest` });
-    }, [feed.length, visible, current, newest]);
+        const shown = listRef.current?.querySelector(`[aria-current="step"]`) ?? null;
+        if (shown !== null) reveal(panel, shown, note ?? shown);
+    }, [feed.length, visible, current, newest, annotated, noted]);
 
     return (
-        <ol className="feed" ref={listRef}>
-            {feed.map((line, index) => (
-                <li
-                    key={`${line.label}-${line.groups.join(` `)}`}
-                    className={`feed-line${index === current ? ` latest` : ``}${index > current ? ` ahead` : ``}${index >= settled.current ? ` fresh` : ``}`}
-                    aria-current={index === current ? `step` : undefined}
-                >
-                    <span className="feed-n">
-                        <FeedLabel line={line} />
-                    </span>
-                    <span>
-                        {line.groups.map((group, index) => (
-                            <Fragment key={group}>
-                                {index > 0 ? ` ` : null}
-                                <span className="feed-group">{group}</span>
-                            </Fragment>
-                        ))}
-                    </span>
-                </li>
-            ))}
+        <ol className="feed" ref={listRef} data-notes={notes === null ? undefined : ``}>
+            {feed.map((line, index) => {
+                if (shut(index)) return null;
+                const note = notes?.[index] ?? null;
+                const shown = index === current;
+                const folded = foldAt.get(index);
+                // Only the line shown has more to show, so only it takes the keyboard.
+                const focusable = shown && note?.more === true;
+                return (
+                    <Fragment key={`${line.label}-${line.groups.join(` `)}`}>
+                        <li
+                            className={`feed-line${index === 0 ? ` feed-opening` : ``}${shown ? ` latest` : ``}${index > current ? ` ahead` : ``}${index >= settled.current ? ` fresh` : ``}`}
+                            aria-current={shown ? `step` : undefined}
+                            tabIndex={focusable ? 0 : undefined}
+                            onClick={
+                                onLine === null
+                                    ? undefined
+                                    : () => {
+                                          onLine(index);
+                                      }
+                            }
+                            onPointerEnter={
+                                notes === null
+                                    ? undefined
+                                    : () => {
+                                          onPoint(index);
+                                      }
+                            }
+                            onPointerLeave={
+                                notes === null
+                                    ? undefined
+                                    : () => {
+                                          onPoint(null);
+                                      }
+                            }
+                            onFocus={
+                                focusable
+                                    ? () => {
+                                          onPoint(index);
+                                      }
+                                    : undefined
+                            }
+                            onBlur={
+                                focusable
+                                    ? () => {
+                                          onPoint(null);
+                                      }
+                                    : undefined
+                            }
+                        >
+                            <span className="feed-n">
+                                <FeedLabel line={line} />
+                            </span>
+                            <span className="feed-groups">
+                                {line.groups.map((group, index) => (
+                                    <Fragment key={group}>
+                                        {index > 0 ? ` ` : null}
+                                        <span className="feed-group">{group}</span>
+                                    </Fragment>
+                                ))}
+                            </span>
+                            {/* The opening is never read or judged, so its stones take the mark's and the value's room. */}
+                            {notes === null || index === 0 ? null : (
+                                <>
+                                    <span className="feed-mark">{note === null || note.severity === null ? null : <JudgmentChip severity={note.severity} />}</span>
+                                    <span className="feed-value">{note === null || note.value === null ? null : text.drawer.reading.value(note.value)}</span>
+                                </>
+                            )}
+                        </li>
+                        {shown && note !== null && note.note !== null ? (
+                            <li className="feed-note">
+                                <span className="feed-note-text">{note.note}</span>
+                            </li>
+                        ) : null}
+                        {folded === undefined ? null : (
+                            <li className="feed-fold">
+                                <button
+                                    type="button"
+                                    className="feed-fold-go"
+                                    aria-expanded={folded.open}
+                                    onClick={() => {
+                                        setOpened((was) => {
+                                            const next = new Set(was);
+                                            if (next.has(index)) next.delete(index);
+                                            else next.add(index);
+                                            return next;
+                                        });
+                                    }}
+                                >
+                                    <span className="feed-fold-title">{folded.fold.title}</span>
+                                    <span className="feed-fold-text">{folded.fold.text}</span>
+                                </button>
+                            </li>
+                        )}
+                    </Fragment>
+                );
+            })}
         </ol>
     );
+}
+
+// Brings a run of lines into the part of the panel its sticky head leaves
+// clear, the first line winning where the run is taller than that part.
+function reveal(panel: HTMLElement, first: Element, last: Element): void {
+    const head = panel.querySelector(`.moves-head`);
+    const area = panel.getBoundingClientRect();
+    const top = head !== null && getComputedStyle(head).position === `sticky` ? head.getBoundingClientRect().bottom : area.top;
+    const below = last.getBoundingClientRect().bottom - area.bottom;
+    if (below > 0) panel.scrollTop += below;
+    const above = top - first.getBoundingClientRect().top;
+    if (above > 0) panel.scrollTop -= above;
 }
 
 function key(name: string) {

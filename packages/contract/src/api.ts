@@ -104,7 +104,7 @@ export const guestRetryAfterSeconds = 60;
 export const guestIdleSeconds = 24 * 60 * 60;
 
 // Bots one account may hold at once; creating past it answers bot_limit.
-export const botCapPerUser = 3;
+export const botCapPerUser = 5;
 
 export const createBotRequestSchema = z.object({ name: nameSyntaxSchema });
 
@@ -131,10 +131,16 @@ export const botWithTokenSchema = z
     })
     .meta({ id: `BotToken` });
 
-export const botAboutSchema = z.string().max(280);
+/** The most characters a bot's about text holds. */
+export const botAboutMaxLength = 280;
+
+/** The most characters a bot's version holds. */
+export const botVersionMaxLength = 64;
+
+export const botAboutSchema = z.string().max(botAboutMaxLength);
 
 // Capped explicitly instead of leaning on the request body limit.
-export const botVersionSchema = z.string().max(64);
+export const botVersionSchema = z.string().max(botVersionMaxLength);
 
 // Link to the bot's source, http(s) only; the empty string clears it.
 export const botRepoUrlSchema = z
@@ -209,8 +215,8 @@ const cleanedTo = (capped: z.ZodString) => z.string().transform(cleanText).pipe(
 // typo'd key answers 400 instead of silently declaring nothing.
 export const accountDeclarationSchema = z
     .strictObject({
-        about: cleanedTo(botAboutSchema).optional().meta({ description: `At most 280 characters once cleaned; empty clears it.` }),
-        version: cleanedTo(botVersionSchema).optional().meta({ description: `At most 64 characters once cleaned; empty clears it.` }),
+        about: cleanedTo(botAboutSchema).optional().meta({ description: `At most ${String(botAboutMaxLength)} characters once cleaned; empty clears it.` }),
+        version: cleanedTo(botVersionSchema).optional().meta({ description: `At most ${String(botVersionMaxLength)} characters once cleaned; empty clears it.` }),
         repoUrl: botRepoUrlSchema.optional(),
         accepts: acceptsSchema.optional(),
         levels: levelsSchema.nullable().optional(),

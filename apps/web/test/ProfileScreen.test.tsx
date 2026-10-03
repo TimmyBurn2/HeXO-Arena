@@ -1,17 +1,36 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { Me } from '@hexo-arena/contract';
+import { undeclaredValues, type BotListing, type Levels, type Me } from '@hexo-arena/contract';
 import { ProfileScreen } from '../src/screens/ProfileScreen';
 import { meStore } from '../src/me';
 
-const roster = [
+const roster: BotListing[] = [
     { name: `sealbot`, ownerName: `quinn`, online: true, openForChallenges: true, rating: 1712, provisional: false, liveGames: 0, levels: null, analyzer: null },
     { name: `quietlake`, ownerName: `quinn`, online: false, openForChallenges: false, rating: 1461, provisional: true, liveGames: 0, levels: null, analyzer: null },
     { name: `hextide`, ownerName: `ana`, online: true, openForChallenges: false, rating: 1690, provisional: false, liveGames: 0, levels: null, analyzer: null },
 ];
 
-function serve(me: Me, posts: string[] = []): void {
+const threeStrengths: Levels = {
+    default: `standard`,
+    list: [
+        { id: `quick`, label: `quick` },
+        { id: `standard`, label: `standard` },
+        { id: `deep`, label: `deep` },
+    ],
+};
+
+// Quinn's two, then three more: one reading positions at three strengths, one closed, one never connected.
+const fullRoster: BotListing[] = [
+    ...roster,
+    { name: `tidewater`, ownerName: `quinn`, online: true, openForChallenges: true, rating: 1634, provisional: false, liveGames: 0, levels: threeStrengths, analyzer: { maxSeconds: 5, lines: 3, whilePlaying: false, values: undeclaredValues, ready: true } },
+    { name: `marsh`, ownerName: `quinn`, online: true, openForChallenges: false, rating: 1588, provisional: false, liveGames: 0, levels: null, analyzer: null },
+    { name: `alder`, ownerName: `quinn`, online: false, openForChallenges: false, rating: 1500, provisional: true, liveGames: 0, levels: null, analyzer: null },
+];
+
+const quinnMe: Me = { kind: `user`, name: `quinn`, rating: 1503, provisional: false, discord: null, liveGames: [], analysisOptOut: false, analysisLeft: { positions: 300, games: 10 } };
+
+function serve(me: Me, posts: string[] = [], listed: readonly BotListing[] = roster): void {
     let session = me;
     vi.stubGlobal(
         `fetch`,
@@ -21,12 +40,23 @@ function serve(me: Me, posts: string[] = []): void {
                 if (url === `/api/auth/logout`) session = null;
                 return Promise.resolve(new Response(null, { status: 204 }));
             }
-            const body = url === `/api/me` ? session : url.startsWith(`/api/games/finished`) ? history(`quinn`) : roster;
+            const body = url === `/api/me` ? session : url.startsWith(`/api/games/finished`) ? history(`quinn`) : listed;
             return Promise.resolve(new Response(JSON.stringify(body), { status: 200 }));
         }),
     );
     meStore.reset();
     meStore.start();
+}
+
+// The rows of the bot list, each as its words read in order.
+async function botRows(): Promise<string[]> {
+    const section = (await screen.findByRole(`heading`, { name: `Your bots` })).closest(`section`) as HTMLElement;
+    await waitFor(() => {
+        expect(section.querySelector(`.skeleton`)).toBe(null);
+    });
+    return within(section)
+        .queryAllByRole(`listitem`)
+        .map((row) => [...row.querySelectorAll(`.bot-row-name, .bot-row-presence, .bot-row-open, .bot-row-facts, .bot-row-rating`)].map((cell) => cell.textContent).filter((words) => words !== ``).join(` | `));
 }
 
 afterEach(() => {
@@ -96,17 +126,43 @@ describe('ProfileScreen', () => {
     });
 
     it('show a user their name, rating, and only their own bots with room for another', async () => {
-        serve({ kind: `user`, name: `quinn`, rating: 1503, provisional: false, discord: null, liveGames: [], analysisOptOut: false, analysisLeft: { positions: 300, games: 10 } });
+        serve(quinnMe);
         render(<ProfileScreen />);
         expect(await screen.findByText(`quinn`, { selector: `.identity-name` })).toBeTruthy();
         expect(document.querySelector(`.identity-number`)?.textContent).toBe(`1503`);
-        await waitFor(() => {
-            expect(document.querySelectorAll(`.bot-card:not(.bot-card-new)`)).toHaveLength(2);
-        });
-        expect(screen.getByText(`2 of 3`)).toBeTruthy();
-        expect(screen.getByText(`Delisted bots are hidden here but still count toward your limit of 3 bots.`)).toBeTruthy();
+        expect(await botRows()).toEqual([`sealbotBOT | online | open | 1712`, `quietlakeBOT | offline | closed | 1461?`]);
+        expect(screen.getByText(`2 of 5 bots`)).toBeTruthy();
+        expect(screen.getByText(`Delisted bots are hidden here but still count toward your limit of 5 bots.`)).toBeTruthy();
         expect(screen.getByRole(`link`, { name: `Build a bot` }).getAttribute(`href`)).toBe(`/connect`);
+        expect(screen.getByRole(`link`, { name: /^sealbot/u }).getAttribute(`href`)).toBe(`/bots/sealbot`);
         expect(document.querySelector(`a[href="/bots/hextide"]`)).toBe(null);
+    });
+
+    it('list five bots with their strengths and analyzer, and say the account holds no more instead of offering another', async () => {
+        serve(quinnMe, [], fullRoster);
+        render(<ProfileScreen />);
+        expect(await botRows()).toEqual([
+            `sealbotBOT | online | open | 1712`,
+            `quietlakeBOT | offline | closed | 1461?`,
+            `tidewaterBOT | online | open | analyzer3 strengths | 1634`,
+            `marshBOT | online | closed | 1588`,
+            `alderBOT | offline | closed | 1500?`,
+        ]);
+        expect(screen.getByText(`5 of 5 bots`)).toBeTruthy();
+        expect(screen.getByText(`Your account holds 5 bots, its limit; delete one on its page to build another.`)).toBeTruthy();
+        expect(screen.queryByRole(`link`, { name: `Build a bot` })).toBe(null);
+        expect(screen.queryByRole(`button`, { name: `Build a bot` })).toBe(null);
+        // Five listed leaves none delisted, so the note has nothing to explain.
+        expect(screen.queryByText(/^Delisted bots/u)).toBe(null);
+    });
+
+    it('tell a user without bots how many an account holds, and offer to build one', async () => {
+        serve(quinnMe, [], roster.filter((bot) => bot.ownerName !== `quinn`));
+        render(<ProfileScreen />);
+        expect(await botRows()).toEqual([]);
+        expect(screen.getByText(`No bots yet; your account holds up to 5.`)).toBeTruthy();
+        expect(screen.queryByText(/ of 5 bots$/u)).toBe(null);
+        expect(screen.getByRole(`link`, { name: `Build a bot` }).getAttribute(`href`)).toBe(`/connect`);
     });
 
     it('hold the retry of rate-limited bots for their wait', async () => {

@@ -17,7 +17,7 @@ import { replay, type Coord, type Position } from '@hexo-arena/rules';
 import { nowSeconds, type Query } from './db';
 import { alias } from 'drizzle-orm/sqlite-core';
 import { bots, games, moves, tournamentPairings, tournaments, users } from './db/schema';
-import { applyFinishedGame, countedGameOf, ratesSomebody, seatColumns } from './rating-store';
+import { applyFinishedGame, countedGameOf, ratable, ratesSomebody, seatColumns } from './rating-store';
 import { shownBot, shownUser, type ShownName } from './shown-names';
 
 // The position a game starts from: the origin stone plus the server-placed
@@ -46,6 +46,7 @@ export interface HumanGameRecord {
     readonly timeControl: TimeControl;
     readonly opening: readonly OpeningCell[];
     readonly levels: SeatLevels;
+    readonly unratedByChoice: boolean;
     readonly winner: Side | null;
     readonly finishReason: FinishReason | null;
     readonly voided: boolean;
@@ -87,12 +88,12 @@ export interface BotGameRecord {
 export type GameRecord = HumanGameRecord | GuestGameRecord | BotGameRecord;
 
 /**
- * A game a person plays against a bot: a user by id, a guest by its label
- * alone; `level` is the bot's, absent at its default.
+ * A game a person plays against a bot: a user by id, who may start it
+ * unrated, a guest by its label alone; `level` is the bot's, absent at its default.
  */
 export function insertGame(
     query: Query,
-    game: ({ userId: string } | { guestName: string }) & {
+    game: ({ userId: string; unratedByChoice?: boolean } | { guestName: string }) & {
         botId: string;
         userSide: Side;
         timeControl: TimeControl;
@@ -105,7 +106,7 @@ export function insertGame(
     query.insert(games)
         .values({
             id,
-            ...(`userId` in game ? { userId: game.userId } : { guestName: game.guestName }),
+            ...(`userId` in game ? { userId: game.userId, unratedByChoice: game.unratedByChoice === true ? 1 : 0 } : { guestName: game.guestName }),
             botId: game.botId,
             userSide: game.userSide,
             ...(game.userSide === `x` ? { oLevel: level } : { xLevel: level }),
@@ -177,11 +178,11 @@ export function recordFinish(
             .update(games)
             .set({ winner: finish.winner, finishReason: finish.reason, finishedAt: nowSeconds(), finishSeq: nextFinishSeq })
             .where(and(eq(games.id, gameId), isNull(games.finishedAt)))
-            .returning({ ...seatColumns, voidedAt: games.voidedAt, guestName: games.guestName, xLevel: games.xLevel, oLevel: games.oLevel })
+            .returning({ ...seatColumns, voidedAt: games.voidedAt, guestName: games.guestName, xLevel: games.xLevel, oLevel: games.oLevel, unratedByChoice: games.unratedByChoice })
             .all();
         // A game voided while live finishes on the record but never rates,
-        // and a guest's game, or one against a bot at a level other than its
-        // default, rates nobody.
+        // and a guest's game, one against a bot at a level other than its
+        // default, or one started unrated, rates nobody.
         if (finished?.finishSeq != null && ratesSomebody(finished)) applyFinishedGame(tx, gameId, finished.finishSeq, countedGameOf(finished));
         return { voided: finished?.voidedAt != null };
     });
@@ -227,6 +228,7 @@ export function findGame(query: Query, gameId: string): GameRecord | undefined {
             challengerSide: games.challengerSide,
             xLevel: games.xLevel,
             oLevel: games.oLevel,
+            unratedByChoice: games.unratedByChoice,
             timeControl: games.timeControl,
             openingCells: games.openingCells,
             winner: games.winner,
@@ -268,6 +270,7 @@ export function findGame(query: Query, gameId: string): GameRecord | undefined {
             timeControl,
             opening,
             levels,
+            unratedByChoice: row.unratedByChoice === 1,
             winner,
             finishReason,
             voided,
@@ -389,12 +392,13 @@ export function lastHumanGameCreatedAt(query: Query, userId: string): number | n
 
 // A signed-in human's games against one bot since an epoch second, which
 // the daily pair cap counts as it counts two bots'; a game at a level
-// other than the bot's default rates nobody, so it counts toward no cap.
+// other than the bot's default, or one started unrated, rates nobody, so
+// it counts toward no cap.
 export function countHumanPairGamesSince(query: Query, pair: { userId: string; botId: string }, sinceSeconds: number): number {
     const [row] = query
         .select({ n: count() })
         .from(games)
-        .where(and(eq(games.userId, pair.userId), eq(games.botId, pair.botId), gte(games.createdAt, sinceSeconds), isNull(games.xLevel), isNull(games.oLevel)))
+        .where(and(eq(games.userId, pair.userId), eq(games.botId, pair.botId), gte(games.createdAt, sinceSeconds), ratable))
         .all();
     return row?.n ?? 0;
 }
