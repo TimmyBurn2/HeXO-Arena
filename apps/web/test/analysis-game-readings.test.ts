@@ -1,7 +1,10 @@
-import { undeclaredValues, winChanceCuts } from '@hexo-arena/contract';
+import { analysisTurnSchema, gameCellSchema, undeclaredValues, winChanceCuts } from '@hexo-arena/contract';
+import { z } from 'zod';
 import { describe, expect, it } from 'vitest';
-import { communityReading, gameLineOf, moverOf, ownReading, plotValue, setupBefore, turnCells } from '../src/analysis/game-readings';
-import { graphX, graphY, seriesOf, tracePoints, turnAt, washPoints, type GraphFrame } from '../src/analysis/graph';
+import { readFileSync } from 'node:fs';
+import { communityReading, gameLineOf, moverOf, ownReading, setupBefore, turnCells } from '../src/analysis/game-readings';
+import { graphX, graphY, holdColumn, runBracket, seriesOf, tracePoints, traceSegments, turnAt, washPoints, type GraphFrame } from '../src/analysis/graph';
+import { rawBand } from '../src/analysis/reading-view';
 import { feedNotes } from '../src/game/drawer-reading';
 import { judgedCells, judgedTurns, nextWinTurns, ownViews } from './judged-game';
 
@@ -35,7 +38,8 @@ describe('a community reading of a whole game', () => {
     const reading = communityReading(line, judgedTurns, true, { scale: 1, cuts: winChanceCuts, meaning: `expected` });
 
     it('value each turn by its own line where the reading lists it, else by the best line after it, and a six as its winner', () => {
-        expect([1, 2, 3, 4, 5].map((turn) => reading.turns.get(turn)?.value)).toEqual([`x 0.17`, `x 0.05`, `x 0.45`, `o wins in 2`, `o wins`]);
+        // x's turn 4 leaves o a six, which the board says is o's win in 1, whatever the reading's longer count.
+        expect([1, 2, 3, 4, 5].map((turn) => reading.turns.get(turn)?.value)).toEqual([`x 0.17`, `x 0.05`, `x 0.45`, `o wins in 1`, `o wins`]);
     });
 
     it('count a win the next mover\'s best line finds from the board after a turn, that line\'s own turn included, in the rows and the feed', () => {
@@ -88,11 +92,27 @@ describe('a community reading of a whole game', () => {
         expect([...partial.turns.values()].every((read) => read.judgment === null)).toBe(true);
     });
 
-    it('hold a heuristic past the scale to its edge and a forced win to its winner\'s', () => {
-        expect(plotValue({ heuristic: 3.2 })).toBe(1);
-        expect(plotValue({ heuristic: -0.4 })).toBe(-0.4);
-        expect(plotValue({ win_in: 4 })).toBe(1);
-        expect(plotValue({ win_in: -1, heuristic: 0.9 })).toBe(-1);
+    it('keep the forced wins around each turn, how far a value drop fell, and the turns that held a forced win for their mover', () => {
+        expect(reading.turns.get(4)?.forced).toEqual({ before: null, after: { winner: `o`, turns: 1 } });
+        expect([2, 3].map((turn) => reading.turns.get(turn)?.drop)).toEqual([0.12, 0.37]);
+        expect(reading.turns.get(1)?.drop).toBe(null);
+        expect(reading.holds).toEqual([{ turn: 5, side: `o` }]);
+        expect(reading.runs).toEqual([]);
+        expect(reading.meaning).toBe(`expected`);
+    });
+
+    it('fold three or more consecutive forced marks into a run, every turn keeping its mark', () => {
+        // A game between two dev bots read whole by an alpha-beta analyzer: from turn 5 each turn lets a win go or hands one over.
+        const sample = z
+            .object({ games: z.array(z.object({ id: z.string(), cells: z.array(gameCellSchema), openingPlies: z.number(), turns: z.array(analysisTurnSchema) })) })
+            .parse(JSON.parse(readFileSync(new URL(`judged-readings.json`, import.meta.url), `utf8`)));
+        const game = sample.games.find((each) => each.id === `analyzed-2`);
+        if (game === undefined) throw new Error(`the sample holds the game`);
+        const scramble = communityReading(gameLineOf(game.cells, game.openingPlies), game.turns, true, undeclaredValues);
+        expect(scramble.runs).toEqual([{ from: 5, to: 20 }]);
+        expect(scramble.marks.filter((mark) => mark.turn >= 5 && mark.turn <= 20)).toHaveLength(16);
+        expect(scramble.holds.length).toBeGreaterThan(0);
+        expect(scramble.meaning).toBe(`raw`);
     });
 });
 
@@ -101,15 +121,17 @@ describe('the bots\' own views of a game', () => {
 
     it('plot each side as its own series from its own evaluation, and judge nothing', () => {
         const series = seriesOf(reading.points);
+        // The views declare nothing, so their values are raw and draw within the inner band.
         expect(series.get(`x`)?.map((point) => [point.turn, point.value])).toEqual([
-            [2, 0.3],
-            [4, 0.1],
+            [2, 0.3 * rawBand],
+            [4, 0.1 * rawBand],
         ]);
         expect(series.get(`o`)?.map((point) => [point.turn, point.value])).toEqual([
-            [1, -0.05],
-            [3, -0.2],
+            [1, -0.05 * rawBand],
+            [3, -0.2 * rawBand],
             [5, -1],
         ]);
+        expect(reading.meaning).toBe(`raw`);
         expect(reading.marks).toEqual([]);
         expect(reading.turns.get(5)?.value).toBe(`o wins`);
         expect(reading.turns.get(2)?.options).toHaveLength(2);
@@ -142,5 +164,20 @@ describe('the graph\'s geometry', () => {
         expect(tracePoints(frame, points)).toBe(`6.0,16.0 106.0,36.0`);
         expect(washPoints(frame, points)).toBe(`6.0,26.0 6.0,16.0 106.0,36.0 106.0,26.0`);
         expect(washPoints(frame, [])).toBe(``);
+    });
+
+    it('break a trace around each forced win, which stands apart as a pin', () => {
+        const at = (turn: number, forced: `x` | `o` | null) => ({ turn, value: forced === null ? 0.1 : forced === `x` ? 1 : -1, forced, series: null });
+        expect(traceSegments([at(1, null), at(2, null), at(3, `o`), at(4, null), at(5, `x`), at(6, `o`)]).map((segment) => segment.map((point) => point.turn))).toEqual([[1, 2], [4]]);
+    });
+
+    it('shade a turn that held a forced win from the board before it to the board after it, on its holder\'s half', () => {
+        expect(holdColumn(frame, 5, `x`)).toEqual({ x: 46, y: 0, width: 10, height: 26 });
+        expect(holdColumn(frame, 5, `o`)).toEqual({ x: 46, y: 26, width: 10, height: 26 });
+        expect(holdColumn(frame, 0, `o`).width).toBe(0);
+    });
+
+    it('bracket a run from its first turn to its last', () => {
+        expect(runBracket(frame, 2, 5, 8)).toBe(`M26.0,2.0V6.0H56.0V2.0`);
     });
 });

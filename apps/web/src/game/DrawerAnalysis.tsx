@@ -181,7 +181,9 @@ export function ReadingGraph({ view, choice, line, cursor, onTurn }: {
                             </span>
                         ))}
                     </span>
-                ) : null}
+                ) : (
+                    <span>{text.analysis.window.meaning[view.meaning]}</span>
+                )}
             </p>
         </div>
     );
@@ -216,39 +218,44 @@ function graphLabel(choice: ReadingChoice, last: number): string {
 /**
  * Per side, its marks by severity: per game only, never a share or a rate.
  * As a `grid`, every severity keeps its column, each count a number beside its mark and a zero dimmed.
+ * Every turn of a run keeps its mark and counts; a note says how many of them runs hold.
  */
 export function Marks({ view, players, grid = false }: { view: GameReading; players: GamePlayers; grid?: boolean }) {
+    const inRuns = view.runs.reduce((count, run) => count + run.to - run.from + 1, 0);
     return (
-        <dl className={grid ? `dr-marks dr-marks-grid` : `dr-marks`}>
-            {sides.map((side) => {
-                const counts = view.counts[side];
-                const shown = grid ? severities : severities.filter((severity) => counts[severity] > 0);
-                return (
-                    <div key={side} className="dr-marks-row">
-                        <dt>
-                            <Swatch side={side} />
-                            <span className="dr-marks-name">{seatName(players[side])}</span>
-                        </dt>
-                        <dd>
-                            {shown.length === 0 ? <span>{judged.noMarks}</span> : null}
-                            {shown.map((severity) => (
-                                <span key={severity} className={counts[severity] === 0 ? `dr-mark-count dr-mark-none` : `dr-mark-count`}>
-                                    <JudgmentChip severity={severity} spoken={false} />
-                                    {grid ? (
-                                        <>
-                                            <span aria-hidden="true">{String(counts[severity])}</span>
-                                            <span className="sr-only">{judged.count(counts[severity], severity)}</span>
-                                        </>
-                                    ) : (
-                                        <span>{judged.count(counts[severity], severity)}</span>
-                                    )}
-                                </span>
-                            ))}
-                        </dd>
-                    </div>
-                );
-            })}
-        </dl>
+        <>
+            <dl className={grid ? `dr-marks dr-marks-grid` : `dr-marks`}>
+                {sides.map((side) => {
+                    const counts = view.counts[side];
+                    const shown = grid ? severities : severities.filter((severity) => counts[severity] > 0);
+                    return (
+                        <div key={side} className="dr-marks-row">
+                            <dt>
+                                <Swatch side={side} />
+                                <span className="dr-marks-name">{seatName(players[side])}</span>
+                            </dt>
+                            <dd>
+                                {shown.length === 0 ? <span>{judged.noMarks}</span> : null}
+                                {shown.map((severity) => (
+                                    <span key={severity} className={counts[severity] === 0 ? `dr-mark-count dr-mark-none` : `dr-mark-count`}>
+                                        <JudgmentChip severity={severity} spoken={false} />
+                                        {grid ? (
+                                            <>
+                                                <span aria-hidden="true">{String(counts[severity])}</span>
+                                                <span className="sr-only">{judged.count(counts[severity], severity)}</span>
+                                            </>
+                                        ) : (
+                                            <span>{judged.count(counts[severity], severity)}</span>
+                                        )}
+                                    </span>
+                                ))}
+                            </dd>
+                        </div>
+                    );
+                })}
+            </dl>
+            {inRuns === 0 ? null : <p className="note dr-marks-runs">{text.analysis.explain.inRuns(inRuns)}</p>}
+        </>
     );
 }
 

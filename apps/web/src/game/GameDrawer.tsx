@@ -7,7 +7,7 @@ import { siteLinks } from '../site-links';
 import { text } from '../text';
 import { JudgmentChip } from '../analysis/Judgment';
 import type { Drawer, DrawerTab } from './use-drawer';
-import type { FeedNote } from './drawer-reading';
+import type { FeedFold, FeedNote } from './drawer-reading';
 import type { FeedLine } from './snapshot-views';
 import type { Sent } from './use-game';
 import { useWait, WaitText } from '../components/wait';
@@ -24,13 +24,15 @@ const tabs: readonly { id: DrawerTab; label: string }[] = [
  * A right-hand drawer on wide screens, a bottom sheet on phones whose peek
  * keeps the player's own chip in reach.
  */
-export function GameDrawer({ drawer, feed, current, notes, onLine, onPoint, head, facts, meetings, rundown, tournament, analysis, running, timed, onResign, peek }: {
+export function GameDrawer({ drawer, feed, current, notes, folds, onLine, onPoint, head, facts, meetings, rundown, tournament, analysis, running, timed, onResign, peek }: {
     drawer: Drawer;
     feed: readonly FeedLine[];
     // The feed line the board shows; a replay may stand before the newest.
     current: number;
     // A finished game's reading of each feed line, null where it has none, or null for no reading.
     notes: readonly (FeedNote | null)[] | null;
+    // A reading's runs of marked turns, each folded after its first line.
+    folds: readonly FeedFold[];
     // Shows the board at a feed line's turn; null while the game runs.
     onLine: ((index: number) => void) | null;
     // The feed line pointed at, or the line shown while focused; null once none is.
@@ -167,7 +169,7 @@ export function GameDrawer({ drawer, feed, current, notes, onLine, onPoint, head
                             {/* the aids read the record, so they head it and
                                 stay in view as the feed scrolls under them */}
                             <div className={head === null ? `moves-head` : `moves-head dr-head`}>{head ?? <BoardToggles />}</div>
-                            <MoveFeed feed={feed} current={current} visible={drawer.visible} notes={notes} onLine={onLine} onPoint={onPoint} />
+                            <MoveFeed feed={feed} current={current} visible={drawer.visible} notes={notes} folds={folds} onLine={onLine} onPoint={onPoint} />
                         </>
                     ) : null}
                     {drawer.tab === `game` ? (
@@ -212,15 +214,20 @@ export function FeedLabel({ line }: { line: FeedLine }) {
 // With a reading each line adds its mark and its value after the turn; a
 // press on a line shows its turn, and the line shown, while pointed at or
 // focused, shows the analyzer's other lines on the board.
-function MoveFeed({ feed, current, visible, notes, onLine, onPoint }: {
+function MoveFeed({ feed, current, visible, notes, folds, onLine, onPoint }: {
     feed: readonly FeedLine[];
     current: number;
     visible: boolean;
     notes: readonly (FeedNote | null)[] | null;
+    folds: readonly FeedFold[];
     onLine: ((index: number) => void) | null;
     onPoint: (index: number | null) => void;
 }) {
     const listRef = useRef<HTMLOListElement>(null);
+    const [opened, setOpened] = useState<ReadonlySet<number>>(new Set());
+    // A fold stays open while the line shown lies inside it.
+    const foldAt = new Map(folds.map((fold) => [fold.first, { fold, open: opened.has(fold.first) || (current > fold.first && current <= fold.last) }]));
+    const shut = (index: number) => folds.some((fold) => index > fold.first && index <= fold.last && foldAt.get(fold.first)?.open !== true);
     const settled = useRef(feed.length);
     const newest = current >= feed.length - 1;
     // A reading lands after the feed, growing the head and adding the note.
@@ -242,8 +249,10 @@ function MoveFeed({ feed, current, visible, notes, onLine, onPoint }: {
     return (
         <ol className="feed" ref={listRef} data-notes={notes === null ? undefined : ``}>
             {feed.map((line, index) => {
+                if (shut(index)) return null;
                 const note = notes?.[index] ?? null;
                 const shown = index === current;
+                const folded = foldAt.get(index);
                 // Only the line shown has more to show, so only it takes the keyboard.
                 const focusable = shown && note?.more === true;
                 return (
@@ -312,6 +321,26 @@ function MoveFeed({ feed, current, visible, notes, onLine, onPoint }: {
                                 <span className="feed-note-text">{note.note}</span>
                             </li>
                         ) : null}
+                        {folded === undefined ? null : (
+                            <li className="feed-fold">
+                                <button
+                                    type="button"
+                                    className="feed-fold-go"
+                                    aria-expanded={folded.open}
+                                    onClick={() => {
+                                        setOpened((was) => {
+                                            const next = new Set(was);
+                                            if (next.has(index)) next.delete(index);
+                                            else next.add(index);
+                                            return next;
+                                        });
+                                    }}
+                                >
+                                    <span className="feed-fold-title">{folded.fold.title}</span>
+                                    <span className="feed-fold-text">{folded.fold.text}</span>
+                                </button>
+                            </li>
+                        )}
                     </Fragment>
                 );
             })}

@@ -1,8 +1,7 @@
 import type { AxialCoord, JudgmentSeverity } from '@hexo-arena/contract';
 import type { BoardLines } from '../board/Board';
-import { explain, explanationSentence } from '../analysis/explain';
-import { setupBefore, turnCells, type GameLine, type GameReading, type TurnRead } from '../analysis/game-readings';
-import { shownLinesOf, type ShownLine } from '../analysis/reading-view';
+import { explain, explainRun, explanationSentence, turnReading } from '../analysis/explain';
+import { turnCells, turnLines, type GameLine, type GameReading, type TurnRead } from '../analysis/game-readings';
 
 /** What a feed line adds from a reading: the turn's mark, its value after, and, on a judged turn, what the analyzer preferred. */
 export interface FeedNote {
@@ -11,11 +10,6 @@ export interface FeedNote {
     readonly note: string | null;
     /** Whether the reading holds lines past the first, which the board shows while the line is pointed at. */
     readonly more: boolean;
-}
-
-/** The lines of a turn's reading as the board and the note name them, A first. */
-export function turnLines(line: GameLine, read: TurnRead): ShownLine[] {
-    return shownLinesOf(read.options, setupBefore(line, read.turn), read.side, read.options.length);
 }
 
 /**
@@ -31,11 +25,25 @@ export function feedNotes(line: GameLine, view: GameReading, lines: number, anal
     });
 }
 
-// A judged turn's explanation on one line: "Blunder: allowed a forced win; x 0.45 before, o wins in 2 after; kestrel preferred x: [0,-1] [1,-2]".
+// A judged turn's explanation on one line: "Blunder: left a six; This turn leaves o a six to complete; kestrel preferred x: [0,-1] [1,-2]."
 function noteOf(line: GameLine, read: TurnRead, analyzer: string): string | null {
     if (read.judgment === null) return null;
     const turn = { kind: `turn`, turn: read.turn, side: read.side, cells: turnCells(line, read.turn), completesSix: read.completesSix, place: `game`, player: null } as const;
-    return explanationSentence(explain(turn, { kind: `analyzer`, name: analyzer, best: turnLines(line, read)[0] ?? null, after: read.value, judgment: read.judgment, whole: true }));
+    return explanationSentence(explain(turn, turnReading(line, read, analyzer, true)));
+}
+
+/** A run of marked turns as the feed folds it after its first line: the feed lines it spans, and its note. */
+export interface FeedFold {
+    readonly first: number;
+    readonly last: number;
+    readonly title: string;
+    readonly text: string;
+}
+
+/** The feed's folds: each run of a community reading's marked turns, by the feed lines it spans. */
+export function feedFolds(line: GameLine, view: GameReading, analyzer: string | null): FeedFold[] {
+    if (analyzer === null) return [];
+    return view.runs.map((run) => ({ first: run.from - line.firstTurn + 1, last: run.to - line.firstTurn + 1, ...explainRun(run, analyzer) }));
 }
 
 /** The board's marks for the turn shown: the mover's lines on the cells still empty, and the turn's judgment. */

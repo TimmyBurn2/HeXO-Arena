@@ -1,6 +1,9 @@
 @layer components {
     /* The graph sits on the board's own plate, so its colors are the stones'. */
+    /* The plot takes the graph's height but the run strip's, which stands under it. */
     .graph {
+        display: flex;
+        flex-direction: column;
         height: var(--graph-h);
     }
 
@@ -8,10 +11,42 @@
         height: var(--graph-mini-h);
     }
 
+    .graph-plot {
+        flex: 1 1 auto;
+        min-height: 0;
+    }
+
     .graph-svg {
         display: block;
         width: 100%;
         height: 100%;
+    }
+
+    .graph-runs {
+        flex: none;
+        display: block;
+        width: 100%;
+        height: var(--graph-run-h);
+    }
+
+    .graph-run {
+        fill: none;
+        stroke: var(--c-text-dim);
+        stroke-width: var(--graph-line-w);
+        vector-effect: non-scaling-stroke;
+    }
+
+    /* A turn that held a forced win for its mover, shaded on that side's half. */
+    .graph-hold {
+        opacity: var(--graph-hold-opacity);
+    }
+
+    .graph-hold-x {
+        fill: var(--board-stone-x);
+    }
+
+    .graph-hold-o {
+        fill: var(--board-stone-o);
     }
 
     .graph-svg[data-turns] {
@@ -49,6 +84,19 @@
         stroke: var(--board-focus);
         stroke-width: var(--graph-trace-w);
         stroke-linejoin: round;
+    }
+
+    .graph-dot {
+        fill: var(--board-focus);
+        stroke: none;
+    }
+
+    .graph-dot.graph-trace-x {
+        fill: var(--board-stone-x);
+    }
+
+    .graph-dot.graph-trace-o {
+        fill: var(--board-stone-o);
     }
 
     .graph-trace-x {

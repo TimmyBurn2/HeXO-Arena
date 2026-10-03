@@ -222,6 +222,20 @@
         bottom: var(--space-1);
     }
 
+    /* What the graph's values mean, on a plate of its own beside x's key,
+       where the game's first turns, still near even, leave the plot clear. */
+    .an-graph-meaning {
+        position: absolute;
+        top: var(--space-1);
+        left: calc(2 * var(--space-1) + var(--graph-key-size));
+        padding: 0 var(--space-1);
+        background: var(--c-bg-overlay);
+        color: var(--c-text-dim);
+        font-size: var(--text-xs);
+        line-height: var(--leading-tight);
+        pointer-events: none;
+    }
+
     .an-window > .an-pills {
         justify-self: start;
     }
@@ -921,6 +935,65 @@
         gap: var(--space-1);
     }
 
+    /* A run of marked turns folded after its first: one note a step in,
+       the run's span and who marks it, a press showing its turns. */
+    .an-run-go {
+        display: flex;
+        align-items: center;
+        gap: var(--space-2);
+        width: calc(100% - var(--analysis-turn-w) - var(--space-2));
+        margin: var(--space-half) 0 var(--space-half) calc(var(--analysis-turn-w) + var(--space-2));
+        padding: var(--space-1) var(--space-2);
+        border: none;
+        background: var(--c-bg);
+        box-shadow: inset var(--focus-w) 0 0 var(--c-bad);
+        color: inherit;
+        font: inherit;
+        text-align: left;
+        cursor: pointer;
+        transition: background var(--dur-fast) var(--ease);
+    }
+
+    .an-run-go:hover {
+        background: var(--c-bg-hover);
+    }
+
+    .an-run-go:focus-visible {
+        outline-offset: calc(-1 * var(--focus-w));
+    }
+
+    .an-run-words {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        min-width: 0;
+    }
+
+    .an-run-title {
+        font-size: var(--text-xs);
+        font-weight: var(--weight-strong);
+    }
+
+    .an-run-text {
+        color: var(--c-text-dim);
+        font-size: var(--text-xs);
+    }
+
+    .an-run-go svg {
+        flex: none;
+        width: var(--text-base);
+        height: var(--text-base);
+        fill: none;
+        stroke: var(--c-text-dim);
+        stroke-width: 2;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+    }
+
+    .an-run-go[aria-expanded='true'] svg {
+        transform: rotate(180deg);
+    }
+
     /* A main-line turn's variations: one band a step in, under the turn
        they replace, on the page's ground with an edge at its side. */
     .an-band {
@@ -1404,6 +1477,7 @@
         }
 
         .an-graph-key,
+        .an-graph-meaning,
         .an-win-counts,
         .an-bubble-full {
             display: none;

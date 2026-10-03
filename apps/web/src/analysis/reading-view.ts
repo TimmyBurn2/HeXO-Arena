@@ -1,4 +1,4 @@
-import { forcedWinner, valueWords, type AxialCoord, type HtttxPositionEvaluation, type Side } from '@hexo-arena/contract';
+import { forcedWinner, valueWords, type AnalyzerValues, type AxialCoord, type HtttxPositionEvaluation, type Side } from '@hexo-arena/contract';
 import { playTurn, type Setup } from '@hexo-arena/rules';
 import { cellText } from './notation';
 import type { Reading, ReadingLine } from './sources';
@@ -6,7 +6,7 @@ import type { Reading, ReadingLine } from './sources';
 /** The letters lines go by, best first. */
 export const lineLetters = [`A`, `B`, `C`] as const;
 
-/** A line as the panel and the board show it: its letter, the cells it plays, and its value in words. */
+/** A line as the panel and the board show it: its letter, the cells it plays, and its value in words and as it draws. */
 export interface ShownLine {
     readonly letter: string;
     /** One cell when the first completes six, which ends the turn; else both. */
@@ -14,22 +14,27 @@ export interface ShownLine {
     readonly evaluation: HtttxPositionEvaluation;
     readonly completesSix: boolean;
     readonly value: string;
+    /** Where its value draws, x-positive, on -1 to 1, as `drawnValue` places it. */
+    readonly drawn: number;
     readonly cellsText: string;
 }
 
+/** The share of each half a raw heuristic draws within, so that only a forced win reaches an edge. */
+export const rawBand = 0.75;
+
 /**
  * A reading's lines as they show at a position, at most `count` of them, best first:
- * each value read for the side to move, who plays the line.
+ * each value read for the side to move, who plays the line, on the scale its analyzer declared.
  */
 export function shownLines(reading: Reading, position: Setup, mover: Side, count: number): ShownLine[] {
-    return shownLinesOf(reading.lines, position, mover, count);
+    return shownLinesOf(reading.lines, position, mover, count, reading.values);
 }
 
 /**
- * Lines as they show at a position, at most `count` of them, best first, whoever read them.
+ * Lines as they show at a position, at most `count` of them, best first, whoever read them, on `values`.
  * A line completes six with its first stone, which ends the turn, or with both.
  */
-export function shownLinesOf(lines: readonly ReadingLine[], position: Setup, mover: Side, count: number): ShownLine[] {
+export function shownLinesOf(lines: readonly ReadingLine[], position: Setup, mover: Side, count: number, values: AnalyzerValues): ShownLine[] {
     return lines.slice(0, Math.min(count, lineLetters.length)).map((line, index) => {
         const [first, second] = line.cells;
         const firstWins = playTurn(position, [first]).ok;
@@ -41,10 +46,33 @@ export function shownLinesOf(lines: readonly ReadingLine[], position: Setup, mov
             cells,
             evaluation: line.evaluation,
             completesSix,
-            value: lineWords(line.evaluation, mover, completesSix) ?? ``,
+            value: lineWords(line.evaluation, mover, completesSix, values) ?? ``,
+            drawn: completesSix ? (mover === `x` ? 1 : -1) : drawnValue(line.evaluation, values),
             cellsText: cells.map(cellText).join(` `),
         };
     });
+}
+
+/**
+ * An evaluation as its analyzer means it: the heuristic divided by the scale it declared and held to -1 to 1,
+ * where its values call a position decided; a forced win as it is.
+ */
+export function scaledEvaluation(evaluation: HtttxPositionEvaluation, values: AnalyzerValues): HtttxPositionEvaluation {
+    const heuristic = evaluation.heuristic;
+    if (heuristic === undefined || !Number.isFinite(heuristic)) return evaluation;
+    return { ...evaluation, heuristic: Math.max(-1, Math.min(1, heuristic / values.scale)) };
+}
+
+/**
+ * Where an evaluation draws, x-positive, on -1 to 1: a forced win at its winner's edge;
+ * a heuristic on its analyzer's scale, an expected one as it is, the analyzer's win chance for x,
+ * and a raw one, which only ranks, within the inner band.
+ */
+export function drawnValue(evaluation: HtttxPositionEvaluation, values: AnalyzerValues): number {
+    const winner = forcedWinner(evaluation);
+    if (winner !== null) return winner === `x` ? 1 : -1;
+    const value = scaledEvaluation(evaluation, values).heuristic ?? 0;
+    return values.meaning === `expected` ? value : value * rawBand;
 }
 
 /**
@@ -56,29 +84,26 @@ export type AfterReading =
     | { readonly kind: `next`; readonly evaluation: HtttxPositionEvaluation; readonly mover: Side };
 
 /**
- * The value of the board after a turn in words, a forced win counting its winner's own turns from that board:
+ * The value of the board after a turn in words, on the scale its analyzer declared,
+ * a forced win counting its winner's own turns from that board:
  * a win the next mover's best line finds for that mover counts the line's own turn too.
  */
-export function afterWords(after: AfterReading): string | null {
-    return after.kind === `played` ? valueWords(after.evaluation, { kind: `board` }) : lineWords(after.evaluation, after.mover, false);
+export function afterWords(after: AfterReading, values: AnalyzerValues): string | null {
+    return after.kind === `played` ? valueWords(scaledEvaluation(after.evaluation, values), { kind: `board` }) : lineWords(after.evaluation, after.mover, false, values);
 }
 
 // A line's value for its mover, from the position it is played from;
 // a win in 1 for its own mover is a six it completes this very turn, whatever the board check found.
-function lineWords(evaluation: HtttxPositionEvaluation, mover: Side, completesSix: boolean): string | null {
-    if (!completesSix && forcedWinner(evaluation) === mover && Math.abs(evaluation.win_in ?? 0) === 1) return valueWords(evaluation, { kind: `board` });
-    return valueWords(evaluation, { kind: `line`, mover, completesSix });
+function lineWords(evaluation: HtttxPositionEvaluation, mover: Side, completesSix: boolean, values: AnalyzerValues): string | null {
+    const scaled = scaledEvaluation(evaluation, values);
+    if (!completesSix && forcedWinner(evaluation) === mover && Math.abs(evaluation.win_in ?? 0) === 1) return valueWords(scaled, { kind: `board` });
+    return valueWords(scaled, { kind: `line`, mover, completesSix });
 }
 
 /**
- * Where the eval bar splits for a line, as x's share from 0 to 1:
- * a forced win, or a line that completes six, fills it for the winner;
- * a heuristic past 1 either way fills it as 1 does.
+ * Where the eval bar splits for a line, as x's share from 0 to 1, as the graph draws the value:
+ * a forced win, or a line that completes six, fills it for the winner; a heuristic splits it where its drawn value stands.
  */
-export function xShare(line: ShownLine, mover: Side): number {
-    const winner = line.completesSix ? mover : forcedWinner(line.evaluation);
-    if (winner !== null) return winner === `x` ? 1 : 0;
-    const heuristic = line.evaluation.heuristic ?? 0;
-    const value = Number.isFinite(heuristic) ? Math.max(-1, Math.min(1, heuristic)) : 0;
-    return (value + 1) / 2;
+export function xShare(line: ShownLine): number {
+    return (line.drawn + 1) / 2;
 }

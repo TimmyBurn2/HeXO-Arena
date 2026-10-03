@@ -305,6 +305,50 @@
         grid-column: 2 / -1;
     }
 
+    /* A run of marked turns folded after its first line: its span and who
+       marks it, a press showing its lines. */
+    .feed-fold {
+        display: grid;
+        grid-column: 1 / -1;
+        grid-template-columns: subgrid;
+    }
+
+    .feed-fold-go {
+        grid-column: 2 / -1;
+        display: flex;
+        flex-direction: column;
+        margin: var(--space-half) 0;
+        padding: var(--space-1) var(--space-2);
+        border: none;
+        background: var(--c-bg-overlay);
+        box-shadow: inset var(--focus-w) 0 0 var(--c-bad);
+        color: var(--c-text);
+        font-family: var(--font-sans);
+        font-size: var(--text-xs);
+        text-align: left;
+        cursor: pointer;
+    }
+
+    .feed-fold-go:hover {
+        background: var(--c-bg-hover);
+    }
+
+    .feed-fold-go:focus-visible {
+        outline-offset: calc(-1 * var(--focus-w));
+    }
+
+    .feed-fold-title {
+        font-weight: var(--weight-strong);
+    }
+
+    .feed-fold-text {
+        color: var(--c-text-dim);
+    }
+
+    .dr-marks-runs {
+        margin: 0;
+    }
+
     .peek-readout,
     .peek-graph {
         display: none;

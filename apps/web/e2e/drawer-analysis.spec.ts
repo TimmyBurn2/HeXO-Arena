@@ -74,11 +74,12 @@ for (const width of [laptop, phone]) {
         await expect(page.getByRole(`switch`, { name: `Stone numbers` })).toBeVisible();
         await expect(page.locator(`.dr-marks-row`)).toHaveText([`hextide?!1 inaccuracy??3 blunders`, `quietlake??7 blunders`]);
         await expect(row(page, 22).locator(`.feed-mark`)).toHaveText(`??blunder`);
-        await expect(row(page, 22).locator(`.feed-value`)).toHaveText(`o wins in 2`);
+        // x's turn 22 leaves o a six on the board, o's win in 1 under every analyzer.
+        await expect(row(page, 22).locator(`.feed-value`)).toHaveText(`o wins in 1`);
         await expect(row(page, 25).locator(`.feed-value`)).toHaveText(`o wins`);
         // A value's side and number never break apart.
         expect(await row(page, 21).locator(`.feed-value`).textContent()).toBe(`o\u00a00.12`);
-        await expect(page.locator(`.feed-note`)).toHaveText(/^Blunder: allowed a forced win; o\u00a00\.12 before, o wins in 2 after; kestrel preferred x: \[-?\d+,-?\d+\] \[-?\d+,-?\d+\]$/u);
+        await expect(page.locator(`.feed-note`)).toHaveText(/^Blunder: left a six; this turn leaves o a six to complete; kestrel preferred x: \[-?\d+,-?\d+\] \[-?\d+,-?\d+\]\.$/u);
         await expect(page.locator(`.feed-note`)).toBeInViewport();
         // The board: line A on its empty cells in x's color, the mark beside the played stones.
         await expect(page.locator(`.board-tag.jd-blunder`)).toHaveText(`??`);
@@ -95,8 +96,14 @@ test(`the graph and the marks follow the reading picked, and the own view judges
     const graph = page.locator(`.dr-graph`);
     await expect(graph.locator(`.graph-mark`)).toHaveCount(11);
     await expect(graph.locator(`.graph-mark.jd-blunder`)).toHaveCount(10);
-    await expect(graph.locator(`.graph-trace`)).toHaveCount(1);
-    await expect(graph.locator(`.graph-wash`)).toHaveCount(2);
+    // From turn 10 each of x's turns leaves o a six: pins on o's edge, the trace broken around them, the turns o held a win shaded.
+    const pins = await graph.locator(`.graph-forced-o`).count();
+    expect(pins).toBeGreaterThan(4);
+    await expect(graph.locator(`.graph-trace:not(.graph-trace-x):not(.graph-trace-o)`)).toHaveCount(7);
+    await expect(graph.locator(`.graph-wash`)).toHaveCount(14);
+    await expect(graph.locator(`.graph-hold-o`)).toHaveCount(8);
+    await expect(graph.locator(`.graph-hold-x`)).toHaveCount(1);
+    await expect(graph.locator(`.graph-run`)).toHaveCount(1);
     await expect(graph.locator(`.graph-cursor`)).toHaveCount(1);
     await expect(page.getByRole(`img`, { name: `Graph of kestrel's reading, from the opening to turn 25` })).toBeVisible();
     // The span names the turns as the feed does, from the opening's line.
@@ -136,7 +143,7 @@ test(`a press on a line of the feed or on the graph shows that turn`, async ({ p
     await row(page, 6).click();
     await expect(scrubWords(page)).toHaveText(`Turn 6 of 25`);
     await expect(row(page, 6).locator(`.feed-mark`)).toHaveText(`?!inaccuracy`);
-    await expect(page.locator(`.feed-note`)).toHaveText(/^Inaccuracy: [xo]\u00a00\.\d\d before, [xo]\u00a00\.\d\d after; kestrel preferred x: /u);
+    await expect(page.locator(`.feed-note`)).toHaveText(/^Inaccuracy: kestrel rates this turn 0\.12 below its choice, x\u00a00\.17 before and x\u00a00\.05 after; it preferred x: /u);
     await expect(page.locator(`.board-tag.jd-inaccuracy`)).toHaveCount(1);
     const graph = await page.locator(`.dr-graph .graph-svg`).boundingBox();
     if (graph === null) throw new Error(`no graph`);
@@ -352,7 +359,7 @@ test(`a refused request says why in plain words`, async ({ page }) => {
 });
 
 const peeks: readonly { name: Named; readout: RegExp | null; graph: boolean }[] = [
-    { name: `review`, readout: /^\?\?blunderhextide: allowed a forced win; kestrel$/u, graph: true },
+    { name: `review`, readout: /^\?\?blunderhextide: left a six; kestrel$/u, graph: true },
     { name: `none`, readout: /^hextide: o wins in 2; own view$/u, graph: true },
     { name: `queued`, readout: /^Waiting for an analyzer; 2 games ahead$/u, graph: true },
     { name: `running`, readout: /^kestrel is reading turn 13 of 25$/u, graph: true },
@@ -378,3 +385,20 @@ for (const peek of peeks) {
         await expect(page.locator(`.peek-readout, .peek-graph`).first()).toBeHidden();
     });
 }
+
+test(`the feed folds a run of marked turns after its first line, opens it to its lines, and keeps it open while the turn shown lies in it`, async ({ page }) => {
+    await open(page, laptop, lists.review);
+    await openPanel(page, laptop);
+    const fold = page.locator(`.feed-fold-go`);
+    // Turn 22, shown, lies in the run of turns 19 to 24, so its lines stand open.
+    await expect(fold).toHaveText(`Turns 19 to 24: wins let goEach turn here let a win go or handed one over; kestrel marks all 6.`);
+    await expect(fold).toHaveAttribute(`aria-expanded`, `true`);
+    await expect(row(page, 22)).toHaveCount(1);
+    await row(page, 12).click();
+    await expect(scrubWords(page)).toHaveText(`Turn 12 of 25`);
+    await expect(fold).toHaveAttribute(`aria-expanded`, `false`);
+    await expect(row(page, 22)).toHaveCount(0);
+    await expect(page.locator(`.dr-marks-runs`)).toHaveText(`6 in runs`);
+    await fold.click();
+    await expect(row(page, 22).locator(`.feed-mark`)).toHaveText(`??blunder`);
+});

@@ -37,9 +37,16 @@ test('a game read whole shows its graph, each side\'s marks, and every turn\'s v
     await expect(counts(page).locator(`.dr-mark-none`)).toHaveCount(3);
 
     await expect(row(page, 17).locator(`.jd-blunder`)).toHaveText(`??`);
-    await expect(row(page, 22).getByRole(`button`).first()).toHaveAccessibleName(/^22 x: \[-?\d+,-?\d+\] \[-?\d+,-?\d+\] Blunder: allowed a forced win; o wins in 2$/u);
+    // Turns 19 to 24 let wins go in turn: the list folds them after turn 19 under one note, and a press shows them.
+    await expect(counts(page).locator(`.dr-marks-runs`)).toHaveText(`6 in runs`);
+    const run = page.getByRole(`button`, { name: /^Turns 19 to 24: wins let go/u });
+    await expect(run).toHaveAttribute(`aria-expanded`, `false`);
+    await expect(row(page, 22)).toHaveCount(0);
+    await run.click();
+    await expect(run).toHaveAttribute(`aria-expanded`, `true`);
+    await expect(row(page, 22).getByRole(`button`).first()).toHaveAccessibleName(/^22 x: \[-?\d+,-?\d+\] \[-?\d+,-?\d+\] Blunder: left a six; o wins in 1$/u);
     await expect(row(page, 6).locator(`.an-row-mark`)).toHaveAttribute(`title`, `Inaccuracy`);
-    await expect(row(page, 22).locator(`.an-row-value`)).toHaveText(`o wins in 2`);
+    await expect(row(page, 22).locator(`.an-row-value`)).toHaveText(`o wins in 1`);
     await expect(row(page, 25).locator(`.an-row-value`)).toHaveText(`o wins`);
     await expect(row(page, 12).locator(`.jd`)).toHaveCount(0);
 
@@ -102,7 +109,7 @@ test('the bots\' own views sit under their own pill, each seat\'s trace in its c
     await expect(graph(page).getByRole(`img`)).toHaveAccessibleName(`Graph of each bot's own view, from the opening to turn 25`);
     await expect(graph(page).locator(`.graph-trace-x`)).toHaveCount(1);
     await expect(graph(page).locator(`.graph-trace-o`)).toHaveCount(1);
-    await expect(page.locator(`.an-bubble-full`)).toHaveText(/^Turn 12hextide's own view: x\u00a00\.\d\d after this turn$/u);
+    await expect(page.locator(`.an-bubble-full`)).toHaveText(/^Turn 12hextide's own view: x\u00a00\.\d\d after this turn\.$/u);
     await expect(page.locator(`.dr-marks`)).toHaveCount(0);
     await expect(page.locator(`.an-tree .jd`)).toHaveCount(0);
 
@@ -149,7 +156,7 @@ test('a game whose player opted out says so, and its positions are still read on
     await page.keyboard.press(`a`);
     await expect(lines(page)).toHaveCount(1);
     // Read live, a turn of a game no reading may judge whole waits for no such reading.
-    await expect(page.locator(`.an-bubble-full`)).toHaveText(/^Turn 12, hextide[xo]\u00a00\.\d\d after$/u);
+    await expect(page.locator(`.an-bubble-full`)).toHaveText(/^Turn 12, hextide[xo]\u00a00\.\d\d after\.$/u);
     expect(state.asked).toHaveLength(1);
 });
 
@@ -165,7 +172,7 @@ test('on a phone the window folds into a strip of the graph, Analyze, and the ge
     await expect(page.locator(`.an-win-who`)).toBeHidden();
     await expect(counts(page)).toBeHidden();
     await expect(page.locator(`.an-bubble-full`)).toBeHidden();
-    await expect(page.locator(`.an-bubble-flat`)).toHaveText(/^Turn 12, hextide: x\u00a00\.24 before, x\u00a00\.28 after; kestrel preferred x: \[-?\d+,-?\d+\] \[-?\d+,-?\d+\]$/u);
+    await expect(page.locator(`.an-bubble-flat`)).toHaveText(`Turn 12, hextide: kestrel found a win for o before this turn.`);
     const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
     expect(overflow).toBeLessThanOrEqual(0);
 });

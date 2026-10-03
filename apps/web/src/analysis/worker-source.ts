@@ -6,6 +6,7 @@ import {
     bwsSetupPacketSchema,
     internalToWire,
     playerOf,
+    undeclaredValues,
     wireToInternal,
     type AnalysisFailure,
     type BwsMoveResponsePacket,
@@ -141,7 +142,15 @@ export function workerSource({ connect, engine, now = Date.now }: { connect: () 
                 }
                 yield {
                     kind: `reading`,
-                    reading: { by: { kind: `worker`, engine, version: live.version }, lines: lines.lines, seconds, final: index === steps.length - 1, elapsedMs: now() - started },
+                    reading: {
+                        by: { kind: `worker`, engine, version: live.version },
+                        // An engine in the browser declares nothing of its values.
+                        values: undeclaredValues,
+                        lines: lines.lines,
+                        seconds,
+                        final: index === steps.length - 1,
+                        elapsedMs: now() - started,
+                    },
                 };
             }
         },

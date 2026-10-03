@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, render } from '@testing-library/react';
+import { cleanup, fireEvent, render } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
 import type { TurnCells } from '@hexo-arena/rules';
 import { bandOf, lineTokens } from '../src/analysis/move-list';
@@ -66,7 +66,7 @@ describe('the variations a move list shows under a main-line turn', () => {
     it('render the main line as rows and the band as tokens with their numbers and cells, the parentheses held to them', () => {
         const { tree, ids } = branched();
         const { container } = render(
-            <MoveList tree={tree} gameTurns={[]} at={ids.c4 ?? rootId} onGo={() => undefined} actions={{ promote: () => undefined, remove: () => undefined, copy: () => undefined }} facts={new Map()} />,
+            <MoveList tree={tree} gameTurns={[]} at={ids.c4 ?? rootId} onGo={() => undefined} actions={{ promote: () => undefined, remove: () => undefined, copy: () => undefined }} facts={new Map()} folds={[]} />,
         );
         expect([...container.querySelectorAll(`.an-row .an-row-n`)].map((each) => each.textContent)).toEqual([`1`, `2`, `3`, `4`]);
         const paragraphs = [...container.querySelectorAll(`.an-band .an-band-line`)].map((line) =>
@@ -86,5 +86,46 @@ describe('the variations a move list shows under a main-line turn', () => {
         const current = container.querySelector(`[aria-current="step"]`);
         expect(current?.classList.contains(`an-tok`)).toBe(true);
         expect(current?.textContent).toContain(`[2,-2] [3,-3]`);
+    });
+});
+
+describe('a run of marked turns in the move list', () => {
+    function mainLineOf(count: number) {
+        let tree: MoveTree = newTree({ kind: `origin` });
+        const ids: NodeId[] = [];
+        const cells: TurnCells[] = [pair(1, 0, 0, 1), pair(-1, 0, 0, -1), pair(2, 0, 3, 0), pair(-2, 0, -3, 0), pair(4, 0, 5, 0), pair(-4, 0, -5, 0)];
+        for (const turn of cells.slice(0, count)) {
+            const played = play(tree, ids.at(-1) ?? rootId, turn);
+            if (!played.ok) throw new Error(`refused`);
+            tree = played.tree;
+            ids.push(played.node);
+        }
+        return { tree, ids };
+    }
+    const rowsShown = (container: HTMLElement) => [...container.querySelectorAll(`.an-row .an-row-n`)].map((each) => each.textContent);
+
+    it('folds the turns after the run\'s first under one note, a press showing them, each keeping its row', () => {
+        const { tree, ids } = mainLineOf(6);
+        const fold = { first: ids[1] ?? rootId, hidden: [ids[2] ?? rootId, ids[3] ?? rootId], title: `Turns 2 to 4: wins let go`, text: `Each turn here let a win go or handed one over; kestrel marks all 3.` };
+        const { container } = render(
+            <MoveList tree={tree} gameTurns={[]} at={ids[5] ?? rootId} onGo={() => undefined} actions={{ promote: () => undefined, remove: () => undefined, copy: () => undefined }} facts={new Map()} folds={[fold]} />,
+        );
+        expect(rowsShown(container)).toEqual([`1`, `2`, `5`, `6`]);
+        const note = container.querySelector(`.an-row:nth-child(2) + .an-run button`);
+        expect(note?.textContent).toBe(`Turns 2 to 4: wins let goEach turn here let a win go or handed one over; kestrel marks all 3.`);
+        expect(note?.getAttribute(`aria-expanded`)).toBe(`false`);
+        if (note === null) throw new Error(`no note`);
+        fireEvent.click(note);
+        expect(rowsShown(container)).toEqual([`1`, `2`, `3`, `4`, `5`, `6`]);
+        expect(note.getAttribute(`aria-expanded`)).toBe(`true`);
+    });
+
+    it('stays open while the turn shown lies in it', () => {
+        const { tree, ids } = mainLineOf(6);
+        const fold = { first: ids[1] ?? rootId, hidden: [ids[2] ?? rootId, ids[3] ?? rootId], title: `Turns 2 to 4: wins let go`, text: `` };
+        const { container } = render(
+            <MoveList tree={tree} gameTurns={[]} at={ids[3] ?? rootId} onGo={() => undefined} actions={{ promote: () => undefined, remove: () => undefined, copy: () => undefined }} facts={new Map()} folds={[fold]} />,
+        );
+        expect(rowsShown(container)).toEqual([`1`, `2`, `3`, `4`, `5`, `6`]);
     });
 });

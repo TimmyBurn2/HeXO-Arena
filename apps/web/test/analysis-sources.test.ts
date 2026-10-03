@@ -57,6 +57,8 @@ describe('a community analyzer as a source', () => {
                 kind: `reading`,
                 reading: {
                     by: { kind: `bot`, name: `kestrel`, version: `0.9`, ownerName: `tom` },
+                    // The values the analyzer declared when it read come with its reading.
+                    values: undeclaredValues,
                     lines: [
                         { cells: [{ x: 1, y: -1 }, { x: 0, y: -1 }], evaluation: { heuristic: -0.12 } },
                         { cells: [{ x: 1, y: 0 }, { x: -1, y: 1 }], evaluation: { win_in: -3 } },
@@ -161,10 +163,10 @@ describe('source ids', () => {
         expect(botSourceId(`kestrel`)).toBe(`bot:kestrel`);
         expect(botSourceId(null)).toBe(`bot:*`);
         expect(
-            authorSourceId({ by: { kind: `own`, name: `hextide`, side: `x` }, lines: [], seconds: 2, final: true, elapsedMs: null }),
+            authorSourceId({ by: { kind: `own`, name: `hextide`, side: `x` }, values: undeclaredValues, lines: [], seconds: 2, final: true, elapsedMs: null }),
         ).toBeNull();
         expect(
-            authorSourceId({ by: { kind: `bot`, name: `driftwood`, version: null, ownerName: null }, lines: [], seconds: 2, final: true, elapsedMs: null }),
+            authorSourceId({ by: { kind: `bot`, name: `driftwood`, version: null, ownerName: null }, values: undeclaredValues, lines: [], seconds: 2, final: true, elapsedMs: null }),
         ).toBe(`bot:driftwood`);
     });
 

@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useLayoutEffect } from 'react';
 import { rootMeta, routeMeta } from './route-meta';
 import type { Route } from './router/route';
 import { usePath } from './router/use-route';
@@ -7,13 +7,15 @@ import { usePath } from './router/use-route';
  * Keep the document title and the embed tags in step with the route, under
  * the titles the server shell renders for the same paths.
  * Detail screens pass the fetched headline; nothing else overrides.
+ * They change in the same commit as the content they name, so no reader,
+ * and no test, sees a page under the title of the one before.
  */
 export function useDocumentMeta(route: Route, titleOverride?: string, descriptionOverride?: string): void {
     const base = usePath() === `/` ? rootMeta : routeMeta(route);
     const title = titleOverride ?? base.title;
     const description = descriptionOverride ?? base.description;
 
-    useEffect(() => {
+    useLayoutEffect(() => {
         document.title = title;
         setMetaContent(`property`, `og:title`, title);
         setMetaContent(`property`, `og:description`, description);

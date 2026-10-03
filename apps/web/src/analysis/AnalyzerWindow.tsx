@@ -127,11 +127,12 @@ export function AnalyzerWindow({ signedIn, analyzing, onAnalyzing, settings, sho
 // The explanation of the turn shown, edged in its severity's color: a head and the text under it,
 // or on a phone one paragraph, the verdict or the turn's name joined to the text.
 function Bubble({ explanation, onPreferred, onPlay }: { explanation: Explanation; onPreferred: (line: PreferredLine | null) => void; onPlay: (line: PreferredLine) => void }) {
-    const { severity, verdict, title, head, joiner, text: said, line, tail } = explanation;
+    const { severity, verdict, title, head, joiner, text: said, inline, line, tail } = explanation;
     if (title === null && said === ``) return null;
-    const preferred = (
+    // The text as it stands alone under the head, or as it runs on after the verdict on a phone.
+    const preferred = (opening: string) => (
         <>
-            {said}
+            {opening}
             {line === null ? null : (
                 <>
                     {` `}
@@ -182,7 +183,7 @@ function Bubble({ explanation, onPreferred, onPlay }: { explanation: Explanation
                     <span className="an-bubble-title">{named}</span>
                     {title === null ? null : <span className="an-bubble-meta">{head}</span>}
                 </p>
-                {said === `` ? null : <p className="an-bubble-text">{preferred}</p>}
+                {said === `` ? null : <p className="an-bubble-text">{preferred(said)}</p>}
             </div>
             <p className="an-bubble-flat">
                 {chip}
@@ -191,7 +192,7 @@ function Bubble({ explanation, onPreferred, onPlay }: { explanation: Explanation
                     {said === `` ? null : (
                         <>
                             {joiner}
-                            {preferred}
+                            {preferred(inline)}
                         </>
                     )}
                 </span>
@@ -202,7 +203,8 @@ function Bubble({ explanation, onPreferred, onPlay }: { explanation: Explanation
 
 /**
  * A stored game's course as the window draws it: the reading picked, from the board after the opening to the last turn,
- * x ahead above the middle and o below, keyed by each side's swatch; a press goes to the turn under it.
+ * x ahead above the middle and o below, keyed by each side's swatch and named by what its values mean;
+ * a press goes to the turn under it.
  */
 export function CourseGraph({ view, choice, line, cursor, onTurn }: { view: GameReading; choice: ReadingChoice; line: GameLine; cursor: number; onTurn: (turn: number) => void }) {
     const last = line.lastTurn;
@@ -223,6 +225,7 @@ export function CourseGraph({ view, choice, line, cursor, onTurn }: { view: Game
             <span className="an-graph-key an-graph-key-o" aria-hidden="true">
                 <Swatch side="o" />
             </span>
+            <span className="an-graph-meaning">{words.meaning[view.meaning]}</span>
         </>
     );
 }

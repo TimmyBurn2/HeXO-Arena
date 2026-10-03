@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { undeclaredValues } from '@hexo-arena/contract';
 import { ReadingsStore, covers, nextUtcDay, type ReadingTarget } from '../src/analysis/readings';
 import { authorSourceId, type AnalysisPosition, type EvaluationSource, type Reading, type ReadingAsk, type SourceEvent } from '../src/analysis/sources';
 
@@ -61,6 +62,7 @@ const three: ReadingAsk = { lines: 3, seconds: 2 };
 function reading(name: string, heuristic = 0.12): Reading {
     return {
         by: { kind: `bot`, name, version: `0.9`, ownerName: `tom` },
+        values: undeclaredValues,
         lines: [{ cells: [{ x: 1, y: -1 }, { x: 0, y: -1 }], evaluation: { heuristic } }],
         seconds: 2,
         final: true,

@@ -1,8 +1,11 @@
 import {
     analysisLinesMax,
     forcedWinner,
+    forcedWinsAround,
     judgeTurn,
+    judgmentRuns,
     playerOf,
+    sideValue,
     turnsOnBoard,
     valueWords,
     type AnalysisList,
@@ -11,14 +14,17 @@ import {
     type AxialCoord,
     type BoardFacts,
     type GameCell,
+    type ForcedWin,
+    type ForcedWinsAround,
     type HtttxPositionEvaluation,
     type Judgment,
+    type JudgmentRun,
     type JudgmentSeverity,
     type OwnAnalysis,
     type Side,
 } from '@hexo-arena/contract';
 import { otherPlayer, positionKey, sixesBlockable, winner, winsThisTurn, type Setup } from '@hexo-arena/rules';
-import { afterWords, type AfterReading } from './reading-view';
+import { afterWords, drawnValue, shownLinesOf, type AfterReading, type ShownLine } from './reading-view';
 import { botAuthor, botSourceId, readingLineOf, type Reading, type ReadingAsk, type ReadingLine } from './sources';
 
 /** A finished game's main line, as its readings are laid against it. */
@@ -74,13 +80,24 @@ export interface TurnRead {
     /** The evaluation of the board after the turn: the played turn's own where a line names it, else the next position's best. */
     readonly after: HtttxPositionEvaluation | null;
     readonly completesSix: boolean;
-    /** The value after the turn in words; null where the reading has none yet. */
+    /** The value after the turn in words, on its analyzer's scale; null where the reading has none yet. */
     readonly value: string | null;
     readonly judgment: Judgment | null;
+    /** The forced wins before and after the turn, from the board's facts and the reading; null where either reading is missing. */
+    readonly forced: ForcedWinsAround | null;
+    /** On a value drop, how far the mover's value fell on its analyzer's scale. */
+    readonly drop: number | null;
+    /** How the values of the reading that read this turn read. */
+    readonly values: AnalyzerValues;
+}
+
+/** The lines of a turn's reading as the board and the explanation name them, A first, on its analyzer's scale. */
+export function turnLines(line: GameLine, read: TurnRead): ShownLine[] {
+    return shownLinesOf(read.options, setupBefore(line, read.turn), read.side, read.options.length, read.values);
 }
 
 /**
- * A point of the graph: the value of the board after a turn, x-positive and held to -1 to 1,
+ * A point of the graph: the value of the board after a turn as it draws, x-positive on -1 to 1,
  * with the side a forced win belongs to, which pins it to that side's edge.
  * `series` names the side whose own view it is, or null on a community reading's one trace.
  */
@@ -98,26 +115,28 @@ export interface GraphMark {
     readonly value: number;
 }
 
+/** A turn whose position held a forced win for its mover, which the graph shades on that side's half. */
+export interface GraphHold {
+    readonly turn: number;
+    readonly side: Side;
+}
+
 /** Judged turns by side and severity. */
 export type MarkCounts = Readonly<Record<Side, Readonly<Record<JudgmentSeverity, number>>>>;
 
-/** One reading of a whole game, turn by turn, as the drawer, the graph, and the board show it. */
+/**
+ * One reading of a whole game, turn by turn, as the drawer, the graph, and the board show it:
+ * its points and marks, the turns that held a forced win for their mover, the runs its marks fold into,
+ * and what its values mean, which decides how the graph draws them.
+ */
 export interface GameReading {
     readonly turns: ReadonlyMap<number, TurnRead>;
     readonly points: readonly GraphPoint[];
     readonly marks: readonly GraphMark[];
     readonly counts: MarkCounts;
-}
-
-/**
- * Where an evaluation plots, x-positive: a forced win at its winner's edge,
- * a heuristic held to -1 to 1, where a reading's scale ends.
- */
-export function plotValue(evaluation: HtttxPositionEvaluation): number {
-    const winner = forcedWinner(evaluation);
-    if (winner !== null) return winner === `x` ? 1 : -1;
-    const heuristic = evaluation.heuristic ?? 0;
-    return Number.isFinite(heuristic) ? Math.max(-1, Math.min(1, heuristic)) : 0;
+    readonly holds: readonly GraphHold[];
+    readonly runs: readonly JudgmentRun[];
+    readonly meaning: AnalyzerValues[`meaning`];
 }
 
 /**
@@ -133,8 +152,9 @@ export function communityReading(line: GameLine, turns: readonly AnalysisTurn[],
     const byTurn = linesByTurn(turns);
     const reads = new Map<number, TurnRead>();
     const points: GraphPoint[] = [];
+    const holds: GraphHold[] = [];
     const opening = byTurn.get(line.firstTurn)?.[0];
-    if (opening !== undefined) points.push(pointOf(line.firstTurn - 1, opening.evaluation, null));
+    if (opening !== undefined) points.push(pointOf(line.firstTurn - 1, opening.evaluation, null, values));
     for (let turn = line.firstTurn; turn <= line.lastTurn; turn += 1) {
         const options = byTurn.get(turn) ?? [];
         const side = moverOf(turn);
@@ -146,15 +166,24 @@ export function communityReading(line: GameLine, turns: readonly AnalysisTurn[],
         const after = source?.evaluation ?? null;
         // A six is known from the board, but it joins the graph only once the reading reaches it.
         const read = completesSix ? options.length > 0 : after !== null;
-        // The board is read only for a turn the reading can judge, as long games make it the costliest part.
-        const judgeable = judged && !completesSix && options.length > 0 && after !== null;
-        const judgment = judgeable ? judgeTurn({ turn, side, cells: played, opening: false, completesSix }, { before: options, nextBest, board: boardFactsOf(line, turn), values }) : null;
-        const value = !read ? null : completesSix ? sixWords(side) : source === null ? null : afterWords(source);
-        reads.set(turn, { turn, side, options, after, completesSix, value, judgment });
+        // The board is read only for a turn the reading reaches on both sides, as long games make it the costliest part.
+        const readings = !completesSix && options.length > 0 && after !== null ? { before: options, nextBest, board: boardFactsOf(line, turn), values } : null;
+        const playedTurn = { turn, side, cells: played, opening: false, completesSix };
+        const forced = readings === null ? null : forcedWinsAround(playedTurn, readings);
+        const judgment = judged && readings !== null ? judgeTurn(playedTurn, readings) : null;
+        const best = options[0];
+        const drop = judgment?.reason === `value-drop` && best !== undefined && after !== null ? dropOf(best.evaluation, after, side, values) : null;
+        // A forced win after the turn, the board's first, as a six left, decides its value and pins its point.
+        const decided = forced?.after ?? null;
+        const value = !read ? null : completesSix ? sixWords(side) : decided !== null ? winWords(decided) : source === null ? null : afterWords(source, values);
+        reads.set(turn, { turn, side, options, after, completesSix, value, judgment, forced, drop, values });
+        // The turn that completes six held its mover's win as surely as any.
+        if (forced?.before?.winner === side || (completesSix && read)) holds.push({ turn, side });
         if (completesSix && read) points.push({ turn, value: side === `x` ? 1 : -1, forced: side, series: null });
-        else if (after !== null) points.push(pointOf(turn, after, null));
+        else if (decided !== null) points.push({ turn, value: decided.winner === `x` ? 1 : -1, forced: decided.winner, series: null });
+        else if (after !== null) points.push(pointOf(turn, after, null, values));
     }
-    return { turns: reads, points, ...marksOf(reads, points) };
+    return { turns: reads, points, ...marksOf(reads, points), holds, runs: judgmentRuns(reads.values()), meaning: values.meaning };
 }
 
 /**
@@ -171,13 +200,15 @@ export function ownReading(line: GameLine, views: readonly OwnAnalysis[]): GameR
             const options = turn.lines.map(readingLineOf);
             const after = options[0]?.evaluation ?? null;
             const completesSix = line.sixAtEnd && turn.turn === line.lastTurn;
-            const value = completesSix ? sixWords(view.side) : after === null ? null : afterWords({ kind: `played`, evaluation: after });
-            reads.set(turn.turn, { turn: turn.turn, side: view.side, options, after, completesSix, value, judgment: null });
-            if (after !== null) points.push(pointOf(turn.turn, after, view.side));
+            const value = completesSix ? sixWords(view.side) : after === null ? null : afterWords({ kind: `played`, evaluation: after }, view.values);
+            reads.set(turn.turn, { turn: turn.turn, side: view.side, options, after, completesSix, value, judgment: null, forced: null, drop: null, values: view.values });
+            if (after !== null) points.push(pointOf(turn.turn, after, view.side, view.values));
         }
     }
     points.sort((a, b) => a.turn - b.turn);
-    return { turns: reads, points, marks: [], counts: noCounts() };
+    // Two seats' views may read differently; the graph names them raw unless both read as expected.
+    const meaning = views.length > 0 && views.every((view) => view.values.meaning === `expected`) ? `expected` : `raw`;
+    return { turns: reads, points, marks: [], counts: noCounts(), holds: [], runs: [], meaning };
 }
 
 /** The source id of a bot's own view of the turns it played in a game, one seat's. */
@@ -222,14 +253,14 @@ export function storedReadings(list: AnalysisList, gameId: string, line: GameLin
                 kept.push({
                     ids: [botSourceId(analyzer.name), botSourceId(null)],
                     key,
-                    reading: { by: botAuthor(analyzer), lines, seconds: analysis.seconds, final: true, elapsedMs: null },
+                    reading: { by: botAuthor(analyzer), values: analyzer.values, lines, seconds: analysis.seconds, final: true, elapsedMs: null },
                     ask: { lines: analysisLinesMax, seconds: analysis.seconds },
                 });
             } else if (analysis.kind === `own`) {
                 kept.push({
                     ids: [ownSourceId(gameId, analysis.side)],
                     key,
-                    reading: { by: { kind: `own`, name: analysis.player, side: analysis.side }, lines, seconds: 0, final: true, elapsedMs: null },
+                    reading: { by: { kind: `own`, name: analysis.player, side: analysis.side }, values: analysis.values, lines, seconds: 0, final: true, elapsedMs: null },
                     ask: { lines: analysisLinesMax, seconds: 0 },
                 });
             }
@@ -242,8 +273,20 @@ function linesByTurn(turns: readonly AnalysisTurn[]): Map<number, ReadingLine[]>
     return new Map(turns.map((turn) => [turn.turn, turn.lines.map(readingLineOf)]));
 }
 
-function pointOf(turn: number, evaluation: HtttxPositionEvaluation, series: Side | null): GraphPoint {
-    return { turn, value: plotValue(evaluation), forced: forcedWinner(evaluation), series };
+function pointOf(turn: number, evaluation: HtttxPositionEvaluation, series: Side | null, values: AnalyzerValues): GraphPoint {
+    return { turn, value: drawnValue(evaluation, values), forced: forcedWinner(evaluation), series };
+}
+
+// How far the mover's value fell from its analyzer's best line to the board after the turn, on its declared scale.
+function dropOf(best: HtttxPositionEvaluation, after: HtttxPositionEvaluation, side: Side, values: AnalyzerValues): number | null {
+    const before = sideValue(best, side, values.scale);
+    const now = sideValue(after, side, values.scale);
+    return before === null || now === null ? null : Math.round((before - now) * 100) / 100;
+}
+
+// A forced win in words, as a board evaluation of it reads: an odd count of turns, its winner's first, wins in its own turns.
+function winWords(win: ForcedWin): string | null {
+    return valueWords({ win_in: (win.winner === `x` ? 1 : -1) * (2 * win.turns - 1) }, { kind: `board` });
 }
 
 function sixWords(side: Side): string | null {

@@ -441,6 +441,7 @@ function GameView({ snapshot, send, link }: { snapshot: GameSnapshot; send: Game
                     feed={feed}
                     current={replaying ? currentLine : feed.length - 1}
                     notes={reading.notes}
+                    folds={reading.folds}
                     onLine={line === null ? null : reading.goToLine}
                     onPoint={reading.point}
                     head={

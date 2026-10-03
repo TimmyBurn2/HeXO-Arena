@@ -29,8 +29,9 @@ import {
     unlimitedWallCapMs,
     type AnalysisFailure,
     type DiscordNames,
-    type JudgmentReason,
+    type Judgment,
     type JudgmentSeverity,
+    type ValueMeaning,
     type LegalPage,
     type ReportReason,
     type SignInFailure,
@@ -50,10 +51,21 @@ function ordinal(place: number): string {
     const suffix = tens >= 11 && tens <= 13 ? `th` : ones === 1 ? `st` : ones === 2 ? `nd` : ones === 3 ? `rd` : `th`;
     return `${String(place)}${suffix}`;
 }
-// A forced win given up or handed over, as a verdict names it after its severity, which heads it.
-const reasons = { 'gave-away-win': `gave away the win`, 'missed-win': `missed a forced win`, 'allowed-win': `allowed a forced win` } as const satisfies Record<Exclude<JudgmentReason, `value-drop`>, string>;
+// A verdict's severity word, which heads it, and its reason after it: a forced win let go or handed over, a win in 1 being a six.
 const severityWord = (severity: JudgmentSeverity) => `${severity.charAt(0).toUpperCase()}${severity.slice(1)}`;
-const reasonWords = (reason: JudgmentReason) => (reason === `value-drop` ? `` : `: ${reasons[reason]}`);
+function reasonWords(judgment: Judgment): string {
+    switch (judgment.reason) {
+        case `gave-away-win`:
+            return `gave away the win`;
+        case `missed-win`:
+            return judgment.turns === 1 ? `missed a six` : `missed a win`;
+        case `allowed-win`:
+            return judgment.turns === 1 ? `left a six` : `allowed a win`;
+        case `value-drop`:
+            return ``;
+    }
+}
+const reasonAfter = (judgment: Judgment) => (judgment.reason === `value-drop` ? `` : `: ${reasonWords(judgment)}`);
 // A count in the catalog's language, its thousands grouped: 1,234.
 const countFormat = new Intl.NumberFormat(`en-US`);
 const counted = (count: number) => countFormat.format(count);
@@ -1148,31 +1160,54 @@ export const en = {
             requestsLeft: (left: number) =>
                 left === 0 ? `No requests left today` : `${String(left)} of ${String(analysisRequestsPerUserDay)} requests left today`,
             playPreferred: (line: string) => `Play ${line} as a variation`,
+            // What a reading's values mean, which decides how its graph draws them.
+            meaning: { expected: `Win chances`, raw: `Raw values` } satisfies Record<ValueMeaning, string>,
         },
         // A turn explained as a named analyzer's opinion; values keep their side and number together.
+        // A sentence comes without its preferred line and its end, which explain adds,
+        // and as it runs on after a verdict, which explain capitalizes where it stands alone.
         explain: {
-            // "Mistake", or "Blunder: allowed a forced win" for a forced win given up or handed over.
-            title: (severity: JudgmentSeverity, reason: JudgmentReason) => `${severityWord(severity)}${reasonWords(reason)}`,
+            // "Mistake", or "Blunder: left a six" for a forced win let go or handed over.
+            title: (judgment: Judgment) => `${severityWord(judgment.severity)}${reasonAfter(judgment)}`,
             severity: severityWord,
-            reason: reasonWords,
-            // The verdict as a line runs on: "mistake", "allowed a forced win".
-            inLine: (severity: JudgmentSeverity, reason: JudgmentReason) => (reason === `value-drop` ? severity : reasons[reason]),
+            reason: reasonAfter,
+            // The verdict as a line runs on: "mistake", "left a six".
+            inLine: (judgment: Judgment) => (judgment.reason === `value-drop` ? judgment.severity : reasonWords(judgment)),
             // A title that names its reason takes a semicolon before the text, a bare severity a colon.
             joiner: (namesReason: boolean) => (namesReason ? `; ` : `: `),
-            preferred: (before: string, after: string, analyzer: string) => `${before} before, ${after} after; ${analyzer} preferred`,
+            gaveAway: (analyzer: string, mover: string, held: number, opponent: string, handed: number) =>
+                `${analyzer} found a win in ${String(held)} for ${mover} here, and after this turn finds one in ${String(handed)} for ${opponent}`,
+            missedSix: (mover: string) => `${mover} could complete six here`,
+            missedWin: (analyzer: string, turns: number, mover: string) => `${analyzer} found a win in ${String(turns)} for ${mover} here and none after this turn`,
+            leftSix: (opponent: string) => `this turn leaves ${opponent} a six to complete`,
+            allowedWin: (analyzer: string, turns: number, opponent: string) => `after this turn ${analyzer} finds a win in ${String(turns)} for ${opponent}`,
+            valueDrop: (analyzer: string, drop: number, before: string, after: string) =>
+                `${analyzer} rates this turn ${drop.toFixed(2)} below its choice, ${before} before and ${after} after`,
+            stillWinning: (analyzer: string, turns: number, mover: string) => `${analyzer} still finds a win in ${String(turns)} for ${mover} after this turn`,
+            alreadyLost: (analyzer: string, opponent: string) => `${analyzer} found a win for ${opponent} before this turn`,
+            foundWin: (analyzer: string, turns: number, mover: string) => `after this turn ${analyzer} finds a win in ${String(turns)} for ${mover}`,
+            // The preferred line follows a sentence that named its analyzer as "it", or names it there.
+            itPreferred: `; it preferred`,
+            namedPreferred: (analyzer: string) => `; ${analyzer} preferred`,
+            values: (before: string, after: string) => `${before} before, ${after} after`,
             firstChoice: (after: string, analyzer: string) => `${after} after; ${analyzer}'s first choice`,
             afterOnly: (after: string) => `${after} after`,
             six: (side: string) => `${side} wins with six in a row`,
-            opening: `Placed by the opening; not judged`,
+            opening: `placed by the opening; not judged`,
             variation: (after: string) => `${after} after; variations are not judged`,
-            variationUnread: `Variations are not judged`,
+            variationUnread: `variations are not judged`,
             unjudged: `; not judged until the game is read whole`,
-            unread: `Not read yet; not judged until the game is read whole`,
+            unread: `not read yet; not judged until the game is read whole`,
             own: (name: string, after: string) => `${name}'s own view: ${after} after this turn`,
+            end: `.`,
             openingHead: `The opening`,
             gameHead: (turn: number, player: string) => `Turn ${String(turn)}, ${player}`,
             variationHead: (turn: number) => `Turn ${String(turn)}, a variation`,
             boardHead: (turn: number) => `Turn ${String(turn)}`,
+            // A run of turns, each letting a win go or handing one over, folded under one note.
+            run: (from: number, to: number) => `Turns ${String(from)} to ${String(to)}: wins let go`,
+            runText: (analyzer: string, count: number) => `Each turn here let a win go or handed one over; ${analyzer} marks all ${String(count)}.`,
+            inRuns: (count: number) => `${String(count)} in runs`,
         },
     },
     rundown: {

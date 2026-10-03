@@ -1,7 +1,7 @@
 import { undeclaredValues, winChanceCuts } from '@hexo-arena/contract';
 import { describe, expect, it } from 'vitest';
 import { communityReading, gameLineOf, ownReading } from '../src/analysis/game-readings';
-import { boardReading, feedNotes } from '../src/game/drawer-reading';
+import { boardReading, feedFolds, feedNotes } from '../src/game/drawer-reading';
 import { judgedCells, judgedTurns, ownViews } from './judged-game';
 
 const line = gameLineOf(judgedCells, 1);
@@ -17,11 +17,11 @@ describe('what a reading adds to the feed', () => {
             [null, `x 0.17`],
             [`inaccuracy`, `x 0.05`],
             [`blunder`, `x 0.45`],
-            [`blunder`, `o wins in 2`],
+            [`blunder`, `o wins in 1`],
             [null, `o wins`],
         ]);
-        expect(notes[2]?.note).toBe(`Inaccuracy: x\u00a00.17 before, x\u00a00.05 after; kestrel preferred x: [-1,1] [0,1]`);
-        expect(notes[4]?.note).toBe(`Blunder: allowed a forced win; x\u00a00.45 before, o wins in 2 after; kestrel preferred x: [0,-1] [1,-2]`);
+        expect(notes[2]?.note).toBe(`Inaccuracy: kestrel rates this turn 0.12 below its choice, x\u00a00.17 before and x\u00a00.05 after; it preferred x: [-1,1] [0,1].`);
+        expect(notes[4]?.note).toBe(`Blunder: left a six; this turn leaves o a six to complete; kestrel preferred x: [0,-1] [1,-2].`);
         expect(notes[1]?.note).toBe(null);
     });
 
@@ -29,6 +29,15 @@ describe('what a reading adds to the feed', () => {
         const notes = feedNotes(line, ownReading(line, ownViews), 6, null);
         expect(notes.map((note) => note?.note ?? null)).toEqual([null, null, null, null, null, null]);
         expect(notes[2]?.more).toBe(true);
+    });
+});
+
+describe('the runs a feed folds', () => {
+    it('fold each run of marked turns after its first line, by the lines it spans, under a note naming its analyzer', () => {
+        expect(feedFolds(line, { ...reading, runs: [{ from: 2, to: 4 }] }, `kestrel`)).toEqual([
+            { first: 2, last: 4, title: `Turns 2 to 4: wins let go`, text: `Each turn here let a win go or handed one over; kestrel marks all 3.` },
+        ]);
+        expect(feedFolds(line, { ...reading, runs: [{ from: 2, to: 4 }] }, null)).toEqual([]);
     });
 });
 

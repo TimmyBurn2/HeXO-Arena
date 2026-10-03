@@ -31,10 +31,11 @@ function valueAfter(node: TurnNode, parentKey: string, read: (key: string, sourc
     // A six is won whatever the reading, but says so only where the source read the position it was played from.
     if (node.win !== null) return before === null ? null : valueWords({}, { kind: `line`, mover: node.side, completesSix: true });
     const listed = before?.lines.find((line) => sameCells(line.cells, node.cells));
-    if (listed !== undefined) return afterWords({ kind: `played`, evaluation: listed.evaluation });
+    if (listed !== undefined && before !== null) return afterWords({ kind: `played`, evaluation: listed.evaluation }, before.values);
     const next: Side = node.side === `x` ? `o` : `x`;
-    const best = read(node.key, sourceFor(next))?.lines[0]?.evaluation;
-    return best === undefined ? null : afterWords({ kind: `next`, evaluation: best, mover: next });
+    const reading = read(node.key, sourceFor(next));
+    const best = reading?.lines[0]?.evaluation;
+    return reading === null || best === undefined ? null : afterWords({ kind: `next`, evaluation: best, mover: next }, reading.values);
 }
 
 function sameCells(a: readonly AxialCoord[], b: readonly AxialCoord[]): boolean {

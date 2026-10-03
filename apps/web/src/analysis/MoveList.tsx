@@ -9,7 +9,15 @@ import { bandOf, type BandToken } from './move-list';
 import { cellText } from './notation';
 import type { RowFact } from './row-facts';
 import { deletable, floorOf } from './state';
-import { isMainLine, mainLine, nodeAt, openingTurns, rootId, type MoveTree as Tree, type NodeId } from './tree';
+import { isMainLine, mainLine, nodeAt, openingTurns, pathTo, rootId, type MoveTree as Tree, type NodeId } from './tree';
+
+/** A run of the game's turns folded under one note after its first turn: the rows it hides, and the note. */
+export interface ListFold {
+    readonly first: NodeId;
+    readonly hidden: readonly NodeId[];
+    readonly title: string;
+    readonly text: string;
+}
 
 /** What a row's menu does to the line through its turn. */
 export interface RowActions {
@@ -27,11 +35,12 @@ const words = text.analysis.tree;
  * The move tree as a list: one row a turn down the main line, a stored game's drawn opening as one row,
  * and under the main-line turn they replace, its variations as one indented band,
  * each a paragraph of turns with the alternatives inside it in parentheses.
- * A row says, where a reading does, the verdict on its turn and the value after it.
+ * A row says, where a reading does, the verdict on its turn and the value after it;
+ * a run of marked turns folds under one note after its first, open while the turn shown lies in it.
  * A turn's menu, from its "more" button, a right click, or a long press,
  * promotes, deletes, or copies the line through it.
  */
-export function MoveList({ tree, gameTurns, at, onGo, actions, facts }: {
+export function MoveList({ tree, gameTurns, at, onGo, actions, facts, folds }: {
     tree: Tree;
     // A stored game's own turns, which stay in the tree; none for any other root.
     gameTurns: readonly TurnCells[];
@@ -39,8 +48,10 @@ export function MoveList({ tree, gameTurns, at, onGo, actions, facts }: {
     onGo: (id: NodeId) => void;
     actions: RowActions;
     facts: ReadonlyMap<NodeId, RowFact>;
+    folds: readonly ListFold[];
 }) {
     const [menu, setMenu] = useState<NodeId | null>(null);
+    const [opened, setOpened] = useState<ReadonlySet<NodeId>>(new Set());
     const listRef = useRef<HTMLOListElement>(null);
     const floor = floorOf(tree);
     const line = mainLine(tree);
@@ -111,10 +122,21 @@ export function MoveList({ tree, gameTurns, at, onGo, actions, facts }: {
         />
     );
 
+    // A fold stays open while the turn shown, or the variation it stands in, lies inside it.
+    const path = new Set(pathTo(tree, at));
+    const shut = new Set<NodeId>();
+    const foldAfter = new Map<NodeId, { fold: ListFold; open: boolean }>();
+    for (const fold of folds) {
+        const inside = fold.hidden.some((id) => id === at || siblingsOf(tree, id).some((sibling) => path.has(sibling)));
+        const open = inside || opened.has(fold.first);
+        foldAfter.set(fold.first, { fold, open });
+        if (!open) for (const id of fold.hidden) shut.add(id);
+    }
+
     const items: ReactNode[] = [];
     for (const id of rows) {
         const node = nodeAt(tree, id);
-        if (node?.kind !== `turn`) continue;
+        if (node?.kind !== `turn` || shut.has(id)) continue;
         const fact = facts.get(id);
         items.push(
             <Row
@@ -156,6 +178,24 @@ export function MoveList({ tree, gameTurns, at, onGo, actions, facts }: {
                 </li>,
             );
         }
+        const folded = foldAfter.get(id);
+        if (folded !== undefined) {
+            items.push(
+                <RunNote
+                    key={`run-${String(id)}`}
+                    fold={folded.fold}
+                    open={folded.open}
+                    onToggle={() => {
+                        setOpened((current) => {
+                            const next = new Set(current);
+                            if (next.has(id)) next.delete(id);
+                            else next.add(id);
+                            return next;
+                        });
+                    }}
+                />,
+            );
+        }
     }
 
     return (
@@ -163,6 +203,30 @@ export function MoveList({ tree, gameTurns, at, onGo, actions, facts }: {
             {opening.length > 0 ? <OpeningRow tree={tree} ids={opening} current={at === floor} onGo={onGo} floor={floor} /> : null}
             {items}
         </ol>
+    );
+}
+
+// The other turns played from the same position as this one: the variations a band under its row shows.
+function siblingsOf(tree: Tree, id: NodeId): readonly NodeId[] {
+    const node = nodeAt(tree, id);
+    if (node?.kind !== `turn`) return [];
+    return (nodeAt(tree, node.parent)?.children ?? []).filter((child) => child !== id);
+}
+
+// A run's note: what its turns did and who marks them, a press showing or hiding the turns it folds.
+function RunNote({ fold, open, onToggle }: { fold: ListFold; open: boolean; onToggle: () => void }) {
+    return (
+        <li className="an-run">
+            <button type="button" className="an-run-go" aria-expanded={open} onClick={onToggle}>
+                <span className="an-run-words">
+                    <span className="an-run-title">{fold.title}</span>
+                    <span className="an-run-text">{fold.text}</span>
+                </span>
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="M6 9l6 6 6-6" />
+                </svg>
+            </button>
+        </li>
     );
 }
 

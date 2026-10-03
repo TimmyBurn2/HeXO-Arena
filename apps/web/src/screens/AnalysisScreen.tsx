@@ -19,10 +19,10 @@ import { AnalyzerWindow, CourseGraph, GameRequest } from '../analysis/AnalyzerWi
 import { effectiveSeconds, useAnalysisSettings } from '../analysis/analysis-settings';
 import { ExportDialog, ImportDialog, type ExportView } from '../analysis/dialogs';
 import { draftOf, draftSetup, type SetupDraft, clickCell } from '../analysis/draft';
-import { explain, type ExplainedTurn, type Explanation, type PreferredLine } from '../analysis/explain';
+import { explain, explainRun, turnReading, type ExplainedTurn, type Explanation, type PreferredLine } from '../analysis/explain';
 import type { Imported } from '../analysis/import-text';
 import { gameLink, lineLink, readAddress, setupLink } from '../analysis/links';
-import { MoveList, type RowActions } from '../analysis/MoveList';
+import { MoveList, type ListFold, type RowActions } from '../analysis/MoveList';
 import { writeGame } from '../analysis/notation';
 import { communityReading, gameLineOf, ownReading, ownSourceId, storedReadings, turnCells } from '../analysis/game-readings';
 import { rowFacts } from '../analysis/row-facts';
@@ -65,7 +65,6 @@ import { notationErrorText, positionWords, refusalText } from '../analysis/words
 import type { BoardStone } from '../board/Board';
 import { BotBadge, PlayerName, seatName, Swatch } from '../components/player';
 import { Marks, type Asker } from '../game/DrawerAnalysis';
-import { turnLines } from '../game/drawer-reading';
 import { headOf, useGameAnalyses, type ReadingChoice } from '../game/game-analyses';
 import { useWait, WaitText } from '../components/wait';
 import { meStore, useMe } from '../me';
@@ -558,6 +557,18 @@ function Workspace({ board, game, notice, onBoard, onReplace, onNewBoard }: {
         return all;
     }, [tree, snapshot, sourceFor, view, gameNodes]);
 
+    // A community reading's runs of marked turns fold in the list after their first turn.
+    const folds = useMemo((): ListFold[] => {
+        if (view === null || active?.kind !== `community`) return [];
+        const idOf = new Map(gameNodes.map((node) => [node.turn, node.id]));
+        return view.runs.flatMap((run) => {
+            const first = idOf.get(run.from);
+            if (first === undefined) return [];
+            const hidden = Array.from({ length: run.to - run.from }, (_, index) => idOf.get(run.from + 1 + index)).filter((id) => id !== undefined);
+            return [{ first, hidden, ...explainRun(run, active.name) }];
+        });
+    }, [view, active, gameNodes]);
+
     // The turn shown explained from the reading its row's value comes from:
     // a game's own turn from the game's reading picked, any other from what the same source read around it.
     const explanation = useMemo((): Explanation | null => {
@@ -573,7 +584,7 @@ function Workspace({ board, game, notice, onBoard, onReplace, onNewBoard }: {
             const read = view.turns.get(node.turn);
             if (active.kind === `own`) return explain(turn, { kind: `own`, name: player ?? ``, after: read?.value ?? null });
             if (read === undefined) return explain(turn, { kind: `none` });
-            return explain(turn, { kind: `analyzer`, name: active.name, best: turnLines(record, read)[0] ?? null, after: read.value, judgment: read.judgment, whole: active.analysis.status === `done` });
+            return explain(turn, turnReading(record, read, active.name, active.analysis.status === `done`));
         }
         const parent = nodeAt(tree, node.parent);
         const readAt = (key: string, side: Side) => snapshot.get(key)?.get(sourceFor(side))?.read?.reading ?? null;
@@ -583,7 +594,7 @@ function Workspace({ board, game, notice, onBoard, onReplace, onNewBoard }: {
         if (by === null || (before === null && after === null)) return explain(turn, { kind: `none` });
         if (by.kind === `own`) return explain(turn, { kind: `own`, name: by.name, after });
         const best = before === null ? null : (shownLines(before, positionAt(tree, node.parent), node.side, 1)[0] ?? null);
-        return explain(turn, { kind: `analyzer`, name: authorName(by), best, after, judgment: null, whole: false });
+        return explain(turn, { kind: `analyzer`, name: authorName(by), best, after, judgment: null, whole: false, forced: null, drop: null });
     }, [game, at, floor, tree, node, lineDepth, gameId, head, view, active, record, snapshot, sourceFor, facts]);
 
     const openSetup = useCallback(() => {
@@ -853,7 +864,7 @@ function Workspace({ board, game, notice, onBoard, onReplace, onNewBoard }: {
                         if (editing === null) setDialog({ kind: `import`, text: pasted });
                     }}
                 />
-                {editing === null && unreadable === null ? <EvalBar line={lines[0] ?? null} mover={toMove} held={waiting} /> : null}
+                {editing === null && unreadable === null ? <EvalBar line={lines[0] ?? null} held={waiting} /> : null}
                 <div className="hud-lift an-chip-source">
                     <div className="hud-chip">{source}</div>
                 </div>
@@ -956,7 +967,7 @@ function Workspace({ board, game, notice, onBoard, onReplace, onNewBoard }: {
                             ) : null}
                             {/* The keys scroll with the tree, which keeps the panel's room for its rows. */}
                             <div className="an-tree-host">
-                                <MoveList tree={tree} gameTurns={gameTurns} at={at} onGo={goToNode} actions={actions} facts={facts} />
+                                <MoveList tree={tree} gameTurns={gameTurns} at={at} onGo={goToNode} actions={actions} facts={facts} folds={folds} />
                                 <p className="note an-keys">{text.analysis.keys(key)}</p>
                             </div>
                             <p className="note an-status" role="status">

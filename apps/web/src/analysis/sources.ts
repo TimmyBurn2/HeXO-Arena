@@ -5,6 +5,7 @@ import {
     type AnalysisFailure,
     type AnalysisLine,
     type AnalyzerRef,
+    type AnalyzerValues,
     type AxialCoord,
     type GameCell,
     type HtttxPositionEvaluation,
@@ -37,11 +38,12 @@ export type ReadingAuthor =
     | { readonly kind: `worker`; readonly engine: string; readonly version: string };
 
 /**
- * A reading of one position, best line first.
+ * A reading of one position, best line first, with how its author's values read, as it declared them when it read.
  * `elapsedMs` is how long it took, or null for one kept from an earlier ask, which cost nothing.
  */
 export interface Reading {
     readonly by: ReadingAuthor;
+    readonly values: AnalyzerValues;
     readonly lines: readonly ReadingLine[];
     readonly seconds: number;
     readonly final: boolean;
@@ -197,6 +199,7 @@ export function botSource({ analyzer, label, onLeft, fetcher = fetch, now = Date
                             kind: `reading`,
                             reading: {
                                 by: botAuthor(reading.analyzer),
+                                values: reading.analyzer.values,
                                 lines: reading.lines.map(readingLineOf),
                                 seconds: reading.seconds,
                                 final: true,

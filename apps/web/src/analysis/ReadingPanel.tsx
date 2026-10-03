@@ -303,13 +303,14 @@ export function Trouble({ state, analyzer, onAsk, wait }: {
 
 /**
  * The eval bar beside the board: x fills it from the bottom, where x's chip
- * sits on the game screen, up to the best line's value, which a chip at the
- * split names; on a phone it runs under the board, x from the left.
+ * sits on the game screen, up to the best line's value as the graph draws it,
+ * which a chip at the split names; on a phone it runs under the board, x from the left.
+ * Only a forced win fills it; a raw value stays within the inner band.
  * While a position is `held` for its reading the bar stays, even and dimmed.
  */
-export function EvalBar({ line, mover, held }: { line: ShownLine | null; mover: Side; held: boolean }) {
+export function EvalBar({ line, held }: { line: ShownLine | null; held: boolean }) {
     if (line === null && !held) return null;
-    const share = `${((line === null ? 0.5 : xShare(line, mover)) * 100).toFixed(1)}%`;
+    const share = `${((line === null ? 0.5 : xShare(line)) * 100).toFixed(1)}%`;
     // React passes custom properties through as written; CSSProperties only lacks their names.
     const style = { '--x-share': share } as CSSProperties;
     return (

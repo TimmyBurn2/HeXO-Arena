@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { cleanup, renderHook } from '@testing-library/react';
+import { undeclaredValues } from '@hexo-arena/contract';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { checkPosition, guarded, seatedByMe, type PositionCheck } from '../src/analysis/guard';
 import { SeatWatch, useSeatBroadcast, type SeatPort } from '../src/analysis/seat-channel';
@@ -35,7 +36,7 @@ function channel(): { open: () => SeatPort; posted: unknown[] } {
 }
 
 const position: AnalysisPosition = { cells: [{ x: 0, y: 0, side: `x` }], toMove: `o` };
-const reading: Reading = { by: { kind: `worker`, engine: `toy`, version: `0.3` }, lines: [{ cells: [{ x: 1, y: 0 }, { x: 0, y: 1 }], evaluation: { heuristic: -0.1 } }], seconds: 1, final: true, elapsedMs: 40 };
+const reading: Reading = { by: { kind: `worker`, engine: `toy`, version: `0.3` }, values: undeclaredValues, lines: [{ cells: [{ x: 1, y: 0 }, { x: 0, y: 1 }], evaluation: { heuristic: -0.1 } }], seconds: 1, final: true, elapsedMs: 40 };
 
 // An engine that says it thinks, then reads once `finish` is called, or stops when its signal aborts.
 function engine(): { source: EvaluationSource; reads: AbortSignal[]; finish: () => void } {

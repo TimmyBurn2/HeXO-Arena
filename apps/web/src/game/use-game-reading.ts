@@ -3,7 +3,7 @@ import { undeclaredValues, type GameSnapshot } from '@hexo-arena/contract';
 import { useAnalysisSettings } from '../analysis/analysis-settings';
 import { communityReading, gameLineOf, ownReading, type GameLine, type GameReading } from '../analysis/game-readings';
 import type { BoardStone } from '../board/Board';
-import { boardReading, feedNotes, type BoardReading, type FeedNote } from './drawer-reading';
+import { boardReading, feedFolds, feedNotes, type BoardReading, type FeedFold, type FeedNote } from './drawer-reading';
 import { headOf, useGameAnalyses, type AnalysesState, type AnalysisHeadState, type ReadingChoice } from './game-analyses';
 import { shownAtTurn, turnOf, type Replay } from './replay';
 
@@ -19,6 +19,7 @@ export interface GameReadingView {
     readonly turn: number;
     readonly board: BoardReading | null;
     readonly notes: readonly (FeedNote | null)[] | null;
+    readonly folds: readonly FeedFold[];
     readonly choose: (id: string) => void;
     readonly point: (index: number | null) => void;
     readonly goToTurn: (turn: number) => void;
@@ -68,6 +69,7 @@ export function useGameReading({ snapshot, replay, shownStones, feedLines, curre
         () => (line === null || view === null ? null : feedNotes(line, view, feedLines, active?.kind === `community` ? active.name : null)),
         [line, view, feedLines, active],
     );
+    const folds = useMemo(() => (line === null || view === null ? [] : feedFolds(line, view, active?.kind === `community` ? active.name : null)), [line, view, active]);
     const goToTurn = useCallback(
         (to: number) => {
             go(to <= turnOf(range.opening) ? range.opening : shownAtTurn(to, range));
@@ -89,6 +91,7 @@ export function useGameReading({ snapshot, replay, shownStones, feedLines, curre
         turn,
         board,
         notes,
+        folds,
         choose: setChosen,
         point: setPointed,
         goToTurn,
