@@ -17,6 +17,7 @@ import {
     clockFromParam,
     levelFor,
     openingFromParam,
+    ownedBy,
     playPath,
     preselect,
     readinessOf,
@@ -170,10 +171,13 @@ export function PlayScreen() {
     // and its name stays in a line;
     // listed again before the person picks, it takes the card back.
     const rating = me.status === `ready` && me.me?.kind === `user` ? me.me.rating : null;
-    // Only someone signed in has a rating to stake, so only they see the switch.
-    const signedIn = me.status === `ready` && me.me?.kind === `user`;
+    // Only someone signed in has a rating to stake, so only they see the switch, and only they own bots.
+    const viewer = me.status === `ready` && me.me?.kind === `user` ? me.me.name : null;
+    const signedIn = viewer !== null;
     const fallback =
-        ready && pickedBot === null && openedBot === null ? preselect(bots, picked === null && lost === null ? asked.bot : null, played.opponent, rating, list.reserved) : null;
+        ready && pickedBot === null && openedBot === null
+            ? preselect(bots, picked === null && lost === null ? asked.bot : null, played.opponent, rating, list.reserved, viewer)
+            : null;
     const bot = pickedBot ?? openedBot ?? fallback;
     useEffect(() => {
         if (bots === null) return;
@@ -194,8 +198,8 @@ export function PlayScreen() {
     // A bot the card showed while it was not ready keeps its row for the visit,
     // so picking another never moves the list under the pointer.
     useEffect(() => {
-        if (bot !== null && readinessOf(bot, list.reserved) !== `ready` && !shown.includes(bot.name)) setShown([...shown, bot.name]);
-    }, [bot, shown, list.reserved]);
+        if (bot !== null && readinessOf(bot, list.reserved, viewer) !== `ready` && !shown.includes(bot.name)) setShown([...shown, bot.name]);
+    }, [bot, shown, list.reserved, viewer]);
     const unlisted = picked === null && lost === null && asked.bot !== null && bots !== null && find(asked.bot) === null ? asked.bot : null;
     // A lost bot listed again needs no line.
     const gone = lost !== null ? (find(lost) === null ? lost : null) : unlisted;
@@ -234,7 +238,7 @@ export function PlayScreen() {
     }
     if (bots.length === 0) return <Empty kind="none" />;
     if (bot === null || clock === null) return <Empty kind="unready" />;
-    const roster = rosterOf(bots, [...(asked.bot === null ? [] : [asked.bot]), ...shown, bot.name], list.reserved);
+    const roster = rosterOf(bots, [...(asked.bot === null ? [] : [asked.bot]), ...shown, bot.name], list.reserved, viewer);
 
     return (
         <>
@@ -247,13 +251,14 @@ export function PlayScreen() {
                         </h2>
                         <span className="note">{text.play.readyCount(roster.ready.length)}</span>
                     </div>
-                    <RosterList roster={roster} reserved={list.reserved} chosen={bot} name="opponent" labelledBy="opponent-label" onChoose={choose} />
+                    <RosterList roster={roster} reserved={list.reserved} viewer={viewer} chosen={bot} name="opponent" labelledBy="opponent-label" onChoose={choose} />
                 </section>
                 <SetupCard
                     key={visit}
                     bot={bot}
                     clock={clock}
                     level={level}
+                    own={ownedBy(bot, viewer)}
                     switchOn={signedIn ? ratedPick : null}
                     last={played.clock}
                     opening={opening}
@@ -294,7 +299,7 @@ export function PlayScreen() {
                         setSheet(false);
                     }}
                 >
-                    <RosterList roster={roster} reserved={list.reserved} chosen={bot} name="sheet-opponent" labelledBy="sheet-title" onChoose={choose} />
+                    <RosterList roster={roster} reserved={list.reserved} viewer={viewer} chosen={bot} name="sheet-opponent" labelledBy="sheet-title" onChoose={choose} />
                 </OpponentSheet>
             ) : null}
         </>
@@ -337,6 +342,7 @@ function SetupCard({
     bot,
     clock,
     level,
+    own,
     switchOn,
     last,
     opening,
@@ -359,6 +365,8 @@ function SetupCard({
     clock: TimeControl;
     // The bot's level picked, null at its default.
     level: Level | null;
+    // The bot is the person's own, which plays them unrated.
+    own: boolean;
     // The Rated switch, null for anyone not signed in, who has no switch.
     switchOn: boolean | null;
     last: TimeControl | null;
@@ -379,9 +387,9 @@ function SetupCard({
     onChange: () => void;
     onRefused: () => void;
 }) {
-    // The expected score is a rated game's; practice at another level, and a game with Rated off, have none.
+    // The expected score is a rated game's; practice at another level, a game with Rated off, and one against the person's own bot have none.
     const expected = useExpectedScore(bot.name);
-    const rated = switchOn === true && level === null;
+    const rated = switchOn === true && level === null && !own;
     return (
         <div className="play-setup-lift">
             <section className="play-setup" aria-label={text.play.setup}>
@@ -417,10 +425,11 @@ function SetupCard({
                 ) : null}
                 {/* practice and Rated off keep the line's place, saying why the score is gone, so a pick never moves the row under the pointer */}
                 {level !== null && expected.kind !== `none` ? <p className="note setup-expected">{text.play.practiceScore(level.label)}</p> : null}
-                {level === null && switchOn === false && expected.kind !== `none` ? <p className="note setup-expected">{text.play.unratedScore}</p> : null}
+                {level === null && own && expected.kind !== `none` ? <p className="note setup-expected">{text.play.ownScore}</p> : null}
+                {level === null && !own && switchOn === false && expected.kind !== `none` ? <p className="note setup-expected">{text.play.unratedScore}</p> : null}
                 <ClockPicker bot={bot} clock={clock} last={last} onClock={onClock} onAdjust={onAdjust} />
                 <StrengthRow bot={bot} level={level} onLevel={onLevel} />
-                {switchOn === null ? null : <RatedRow rated={switchOn} practice={level !== null} onRated={onRated} />}
+                {switchOn === null ? null : <RatedRow rated={switchOn} practice={level !== null} own={own} onRated={onRated} />}
                 <OpeningRow opening={opening} onOpening={onOpening} />
                 <StartArea
                     bot={bot}

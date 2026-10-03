@@ -1,10 +1,11 @@
 import { z } from 'zod';
 import { analysisStatusSchema, analyzerValuesSchema } from './analysis';
-import { acceptsSchema } from './api';
+import { acceptsSchema, botClientSchema } from './api';
 import { axialCoordSchema } from './board';
 import { gameCellSchema, unratedByChoiceSchema } from './games';
 import { levelsSchema, seatLevelSchema } from './levels';
 import { nameMaxLength } from './names';
+import { duelKindSchema, duelStatusSchema } from './duels';
 import { finishReasonSchema, firstPlayerSchema, openingPliesSchema, sideSchema, timeControlSchema, challengeStatusSchema } from './stream';
 import { tournamentEntryReasonSchema, tournamentEntryStateSchema } from './tournaments';
 
@@ -44,8 +45,8 @@ const exportedRatingSchema = z.object({ rating: z.number(), deviation: z.number(
  * Everything stored about one account: the account and the Discord
  * identity it keeps, its sessions' times and Discord names, its rating,
  * its bots, every game it or its bots played with their moves, its
- * tournament entries, its bots' challenges, and the moderation records
- * naming it or its bots.
+ * tournament entries, the duels and tests it started, its bots' challenges, and the
+ * moderation records naming it or its bots.
  * Never a token, a token's hash, or a sign-in's state.
  */
 export const accountExportSchema = z
@@ -76,6 +77,9 @@ export const accountExportSchema = z
                 about: z.string().nullable(),
                 version: z.string().nullable(),
                 repoUrl: z.string().nullable(),
+                ownerAbout: z.string().nullable().meta({ description: `The owner's text from the website; about and repoUrl are as the bot declared them.` }),
+                ownerRepoUrl: z.string().nullable(),
+                client: botClientSchema.nullable(),
                 accepts: acceptsSchema.nullable(),
                 levels: levelsSchema.nullable(),
                 analyzer: z.object({ maxSeconds: z.number().int(), lines: z.number().int(), whilePlaying: z.boolean(), values: analyzerValuesSchema }).nullable(),
@@ -112,6 +116,21 @@ export const accountExportSchema = z
                 enteredAt: time,
             }),
         ),
+        duels: z
+            .array(
+                z.object({
+                    id: z.string(),
+                    first: z.string(),
+                    second: z.string(),
+                    games: z.number().int(),
+                    kind: duelKindSchema,
+                    rated: z.boolean(),
+                    status: duelStatusSchema,
+                    createdAt: time,
+                    endedAt: time.nullable(),
+                }),
+            )
+            .meta({ description: `Duels and tests the account started.` }),
         challenges: z.array(
             z.object({
                 id: z.string(),

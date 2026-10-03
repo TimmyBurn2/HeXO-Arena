@@ -14,6 +14,8 @@ import {
     type ReportRequest,
     botDirectoryQuerySchema,
     botListingSchema,
+    botSettingsPath,
+    botSettingsSchema,
     botWithTokenSchema,
     botsPath,
     createBotRequestSchema,
@@ -44,6 +46,8 @@ import {
     liveGameEntrySchema,
     type AxialCoord,
     type BotListing,
+    type BotSettings,
+    type BotSettingsUpdate,
     type CreateGameRequest,
     type FinishedGamesPage,
     type FinishedGamesQuery,
@@ -231,6 +235,16 @@ export function cancelSignup(): Promise<void> {
 /** Mint a new token for an owned bot; the old one dies and the new one shows once. */
 export function rotateBotToken(name: string): Promise<{ name: string; token: string }> {
     return sendJson(`/api/bots/${encodeURIComponent(name)}/token`, `POST`, {}, botWithTokenSchema);
+}
+
+/** An owned bot's settings, which only its owner reads. */
+export function fetchBotSettings(name: string): Promise<BotSettings> {
+    return getJson(botSettingsPath.replace(`{name}`, encodeURIComponent(name)), botSettingsSchema);
+}
+
+/** Change an owned bot's settings; the answer is the settings after the change, and a refused value answers bad_request. */
+export function updateBotSettings(name: string, changes: BotSettingsUpdate): Promise<BotSettings> {
+    return sendJson(botSettingsPath.replace(`{name}`, encodeURIComponent(name)), `PATCH`, changes, botSettingsSchema);
 }
 
 /** Delete an owned bot; a bot seated in a live game answers in_game. */

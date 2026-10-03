@@ -104,6 +104,11 @@ export function deleteBotByPolicy(query: Query, botId: string): BotDeletion {
                 about: null,
                 version: null,
                 repoUrl: null,
+                ownerAbout: null,
+                ownerRepoUrl: null,
+                clientKind: null,
+                clientVersion: null,
+                clientAt: null,
                 accepts: null,
             })
             .where(eq(bots.id, botId))

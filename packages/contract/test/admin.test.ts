@@ -94,6 +94,12 @@ describe('adminRequestSchema', () => {
         expect(adminRequestSchema.safeParse({ op: `recompute-ratings`, exclude: [`g_x y`], reason: `r` }).success).toBe(false);
     });
 
+    it('stops a duel by its id, with a reason', () => {
+        expect(adminRequestSchema.safeParse({ op: `duel-stop`, id: `d_abcdefghjkmn`, reason: `r` }).success).toBe(true);
+        expect(adminRequestSchema.safeParse({ op: `duel-stop`, id: `t_abcdefghjkmn`, reason: `r` }).success).toBe(false);
+        expect(adminRequestSchema.safeParse({ op: `duel-stop`, id: `d_abcdefghjkmn` }).success).toBe(false);
+    });
+
     it('targets bots by a name that passes the name rules', () => {
         expect(adminRequestSchema.safeParse({ op: `delist-bot`, name: `alpha`, reason: `r` }).success).toBe(true);
         expect(adminRequestSchema.safeParse({ op: `delete-user`, name: `ann`, reason: `r` }).success).toBe(true);

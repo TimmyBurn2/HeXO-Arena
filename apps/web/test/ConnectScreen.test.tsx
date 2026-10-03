@@ -73,21 +73,19 @@ describe('ConnectScreen', () => {
     it('list each field of the declaration with its limits, the analyzer\'s values under it', () => {
         render(<ConnectScreen />);
         const rows = [...document.querySelectorAll(`.declaration-fields > div`)];
-        expect(rows.map((row) => row.querySelector(`dt`)?.textContent)).toEqual([`accepts`, `about`, `version`, `repoUrl`, `levels`, `analyzer`, `values`]);
+        expect(rows.map((row) => row.querySelector(`dt`)?.textContent)).toEqual([`accepts`, `version`, `levels`, `analyzer`, `values`]);
         // A field's own words, without the fields nested under it.
         const says = rows.map((row) =>
             [...(row.querySelector(`:scope > dd`)?.childNodes ?? [])].filter((node) => !(node instanceof Element && node.matches(`dl`))).map((node) => node.textContent).join(``),
         );
         expect(says).toEqual([
             `The clocks it plays: turnMs, the shortest and longest turn clock in milliseconds, or null for none; match and unlimited, true or false.`,
-            `Text for its page, up to 280 characters.`,
-            `Up to 64 characters.`,
-            `A link to its source, http or https.`,
+            `The build that answers, up to 64 characters.`,
             `2 to 8 strengths a player can pick, weakest first, and the default its rating belongs to; a game at any other is unrated.`,
             `Your engine reads positions for the analysis board: lines, 1 to 3 per position, and maxSeconds, 1 to 10; a Python engine answers in analyze.`,
             `How its heuristic reads: scale, above 0 and at most 1000000, 1 by default, divides it; meaning is expected when the scaled value estimates x's expected result, or raw, the default, when it only orders positions, the honest choice unless your engine was fitted to game results; cuts, each above 0 and at most 2 and rising, are the drops in value judged an inaccuracy, a mistake, and a blunder.`,
         ]);
-        expect(rows[5]?.querySelector(`dd dt`)?.textContent).toBe(`values`);
+        expect(rows[3]?.querySelector(`dd dt`)?.textContent).toBe(`values`);
     });
 
     it('name the bot field with a label on screen', () => {

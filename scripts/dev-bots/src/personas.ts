@@ -71,8 +71,8 @@ export interface BotGame {
     readonly openingPlies: OpeningPlies;
 }
 
-/** Challenges one bot sends another, counted by the challenger's games against bots. */
-export interface BotSeries {
+/** A run of challenges one bot sends another, counted by the challenger's games against bots. */
+export interface BotRun {
     readonly from: string;
     readonly to: string;
     readonly games: readonly BotGame[];
@@ -80,12 +80,12 @@ export interface BotSeries {
 
 /**
  * The history the seed tops up to: each human's games in order, counted by
- * the games the human has finished, each series likewise, and the personas
+ * the games the human has finished, each run likewise, and the personas
  * banned once their games are played.
  */
 export interface SeedPlan {
     readonly humans: Partial<Record<PersonaName, readonly HumanGame[]>>;
-    readonly series: readonly BotSeries[];
+    readonly runs: readonly BotRun[];
     readonly banned: readonly PersonaName[];
 }
 
@@ -94,7 +94,7 @@ const match: TimeControl = { mode: `match`, mainTimeMs: 180_000, incrementMs: 2_
 const unlimited: TimeControl = { mode: `unlimited` };
 const play: HumanEnding = { kind: `play` };
 
-function series(from: string, to: string, clocks: readonly TimeControl[], count: number): BotSeries {
+function run(from: string, to: string, clocks: readonly TimeControl[], count: number): BotRun {
     const openings: readonly OpeningPlies[] = [5, 3, 1, 7, 9];
     return {
         from,
@@ -136,6 +136,6 @@ export const seedPlan: SeedPlan = {
             { bot: `pebble`, timeControl: turn(30), openingPlies: 3, ending: { kind: `resign`, afterTurns: 3 } },
         ],
     },
-    series: [series(`hextide`, `quietlake`, [turn(10), unlimited, turn(30)], 12), series(`pebble`, `quietlake`, [turn(10), unlimited], 8)],
+    runs: [run(`hextide`, `quietlake`, [turn(10), unlimited, turn(30)], 12), run(`pebble`, `quietlake`, [turn(10), unlimited], 8)],
     banned: [`eve`],
 };

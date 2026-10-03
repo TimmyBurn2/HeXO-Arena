@@ -66,6 +66,24 @@ test('Rated starts off for someone signed in, stays on once turned on, and stand
     await expect(rated).toBeChecked();
 });
 
+test('Rated stands off on the person\'s own bot, saying why, though the bot is closed to others, and the game starts unrated', async ({ page }) => {
+    await page.addInitScript(() => {
+        window.localStorage.setItem(`hexo-arena.play.v1`, JSON.stringify({ rated: true }));
+    });
+    const ana: Me = { kind: `user`, name: `ana`, rating: 1402, provisional: false, discord: null, liveGames: [], analysisOptOut: false, analysisLeft: { positions: 300, games: 10 } };
+    await open(page, `/play?bot=pebble`, { me: ana });
+    const rated = page.getByRole(`switch`, { name: /^Rated/u });
+    await expect(rated).not.toBeChecked();
+    await expect(rated).toBeDisabled();
+    await expect(page.locator(`.rated-row`)).toHaveText(`RatedYour own bot`);
+    await expect(page.locator(`.start-area > .note`)).toHaveText(`Unrated, your own bot; sides are drawn at random`);
+    await expect(page.locator(`.play-roster .roster-row`, { hasText: `pebble` })).toContainText(`Your bot`);
+    const sent = page.waitForRequest((request) => new URL(request.url()).pathname === `/api/games` && request.method() === `POST`);
+    await page.getByRole(`button`, { name: `Start game` }).click();
+    expect((await sent).postDataJSON()).toMatchObject({ bot: `pebble`, rated: false });
+    await expect(page).toHaveURL(/\/game\/running$/u);
+});
+
 test('a guest and a signed-out visitor see no Rated switch, their games being unrated', async ({ page }) => {
     await open(page, `/play?bot=devbot-c`, { me: guest });
     await expect(page.getByRole(`switch`)).toHaveCount(0);

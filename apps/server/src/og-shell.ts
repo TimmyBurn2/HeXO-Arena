@@ -5,6 +5,8 @@ import {
     botsMeta,
     connectMeta,
     creditsMeta,
+    duelMeta,
+    duelsMeta,
     welcomeMeta,
     welcomePath,
     gameMeta,
@@ -34,6 +36,7 @@ import type { FastifyInstance, FastifyReply } from 'fastify';
 import { readFile } from 'node:fs/promises';
 import { listBots } from './bots';
 import type { Query } from './db';
+import { duelSummary } from './duel-api';
 import type { GameRegistry } from './game-registry';
 import type { Ladder } from './ladder';
 import type { PresenceRegistry } from './presence';
@@ -101,6 +104,7 @@ const fixedPages: readonly (readonly [string, PageMeta])[] = [
     [`/bots`, botsMeta],
     [`/games`, gamesMeta],
     [`/games/live`, liveGamesMeta],
+    [`/play/duels`, duelsMeta],
     [`/tournaments`, tournamentsMeta],
     [`/connect`, connectMeta],
     [`/profile`, profileMeta],
@@ -118,7 +122,7 @@ const gameIdPattern = /^[A-Za-z0-9_-]{1,100}$/u;
  * page of the site, so a pasted link to any of them previews with an
  * absolute image.
  */
-export const shellRoutes: readonly string[] = [`/`, `/play`, analysisPagePath, `/ladder`, `/bots/:name`, `/players/:name`, `/game/:gameId`, `/tournaments/:id`, ...fixedPages.map(([path]) => path)];
+export const shellRoutes: readonly string[] = [`/`, `/play`, analysisPagePath, `/ladder`, `/bots/:name`, `/players/:name`, `/game/:gameId`, `/tournaments/:id`, `/play/duels/:id`, ...fixedPages.map(([path]) => path)];
 
 /**
  * Serves the SPA shell for every page of the site, with meta from live
@@ -214,5 +218,10 @@ export function registerOgShell(app: FastifyInstance, deps: OgShellDeps): void {
         const { id } = request.params;
         const tournament = tournamentIdSchema.safeParse(id).success ? tournamentSummary(query, id) : null;
         return tournament === null ? sendShell(reply, 404, notFoundMeta) : sendShell(reply, 200, tournamentMeta(tournament));
+    });
+
+    app.get<{ Params: { id: string } }>(`/play/duels/:id`, { config: { limit: `shell` } }, async (request, reply) => {
+        const duel = duelSummary(query, request.params.id);
+        return duel === null ? sendShell(reply, 404, notFoundMeta) : sendShell(reply, 200, duelMeta(duel));
     });
 }

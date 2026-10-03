@@ -192,20 +192,25 @@ describe('PlayScreen', () => {
         expect(document.querySelector(`.play-roster .roster-foot`)?.textContent).toBe(`1 more bot is offline or closed; see Bots.`);
     });
 
-    it('hold Start on a bot of the person\'s own, saying so, and say it when the server refuses one', async () => {
-        window.history.replaceState(null, ``, `/play?bot=devbot-c`);
-        serve({ bots: roster.map((listed) => (listed.name === `devbot-c` ? { ...listed, ownerName: `quinn` } : listed)) });
-        render(<PlayScreen />);
-        await ready();
-        expect(title()).toBe(`Play devbot-c`);
-        expect(screen.getByText(`devbot-c is your own bot; pick another bot`)).toBeTruthy();
-        expect(screen.getByRole(`button`, { name: `Start game` }).getAttribute(`aria-disabled`)).toBe(`true`);
-        cleanup();
-        serve({ start: refused(403, `own_bot`) });
+    it('start a game against the person\'s own bot though it is closed to others, with Rated off and saying why', async () => {
+        window.history.replaceState(null, ``, `/play?bot=pebble`);
+        window.localStorage.setItem(playStorageKey, JSON.stringify({ rated: true }));
+        const served = serve({ bots: roster.map((listed) => (listed.name === `pebble` ? { ...listed, ownerName: `quinn` } : listed)) });
         render(<PlayScreen />);
         const card = await ready();
+        expect(title()).toBe(`Play pebble`);
+        const rated = within(card).getByRole(`switch`);
+        expect(rated).toHaveProperty(`checked`, false);
+        expect(rated).toHaveProperty(`disabled`, true);
+        expect(rated.closest(`label`)?.textContent).toBe(`RatedYour own bot`);
+        expect(within(card).getByText(`Unrated, your own bot; sides are drawn at random`)).toBeTruthy();
+        const row = [...document.querySelectorAll(`.play-roster .roster-row`)].find((entry) => entry.querySelector(`.player-name`)?.textContent === `pebble`);
+        expect(row?.textContent).toContain(`Your bot`);
+        expect(row?.textContent).not.toContain(`Closed for challenges`);
         fireEvent.click(screen.getByRole(`button`, { name: `Start game` }), { detail: 1 });
-        expect(await within(card).findByText(`devbot-c is your own bot; pick another bot`)).toBeTruthy();
+        await waitFor(() => {
+            expect(served.posts.find((post) => post.url === `/api/games`)?.body).toMatchObject({ bot: `pebble`, rated: false });
+        });
     });
 
     it('open on the last bot played here when it is ready, with the last clock it takes', async () => {

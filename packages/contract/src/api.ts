@@ -15,6 +15,7 @@ export const botPath = `/api/bots/{name}`;
 export const botTokenPath = `/api/bots/{name}/token`;
 export const botStreamPath = `/api/bot/stream`;
 export const botAccountPath = `/api/bot/account`;
+export const botSettingsPath = `/api/bots/{name}/settings`;
 
 /** The session cookie where the site runs without TLS, as in development. */
 export const sessionCookieName = `hexo_arena_session`;
@@ -142,10 +143,13 @@ export const botAboutSchema = z.string().max(botAboutMaxLength);
 // Capped explicitly instead of leaning on the request body limit.
 export const botVersionSchema = z.string().max(botVersionMaxLength);
 
+/** The most characters a link to a bot's source holds. */
+export const botRepoUrlMaxLength = 2048;
+
 // Link to the bot's source, http(s) only; the empty string clears it.
 export const botRepoUrlSchema = z
     .url({ protocol: /^https?$/ })
-    .max(2048)
+    .max(botRepoUrlMaxLength)
     .or(z.literal(``));
 
 // What a bot will play under, declared by the bot itself.
@@ -191,7 +195,10 @@ export const botListingSchema = z
         levels: levelsSchema.nullable(),
         analyzer: analyzerSchema.nullable(),
     })
-    .meta({ id: `BotListing`, description: `The declaration fields are absent until the bot declares them, and levels and analyzer are null.` });
+    .meta({
+        id: `BotListing`,
+        description: `The declaration fields are absent until the bot declares them, and levels and analyzer are null; about and repoUrl are the owner's from the website where set, else the declared ones.`,
+    });
 export type BotListing = z.infer<typeof botListingSchema>;
 
 // The Hexo-Bot-Api error shape: `error` is human-readable prose, `code` is
@@ -213,11 +220,18 @@ const cleanedTo = (capped: z.ZodString) => z.string().transform(cleanText).pipe(
 // The self-declaration the token-holding process sends; every field
 // optional, each present field replacing the stored one. Strict, so a
 // typo'd key answers 400 instead of silently declaring nothing.
+// about and repoUrl are the owner's to set on the website; a bot declaring
+// them is still accepted, never refused, and its text is the fallback.
 export const accountDeclarationSchema = z
     .strictObject({
-        about: cleanedTo(botAboutSchema).optional().meta({ description: `At most ${String(botAboutMaxLength)} characters once cleaned; empty clears it.` }),
+        about: cleanedTo(botAboutSchema)
+            .optional()
+            .meta({
+                deprecated: true,
+                description: `Deprecated: the owner sets the bot's text on the website, which takes this one's place. At most ${String(botAboutMaxLength)} characters once cleaned; empty clears it.`,
+            }),
         version: cleanedTo(botVersionSchema).optional().meta({ description: `At most ${String(botVersionMaxLength)} characters once cleaned; empty clears it.` }),
-        repoUrl: botRepoUrlSchema.optional(),
+        repoUrl: botRepoUrlSchema.optional().meta({ deprecated: true, description: `Deprecated: the owner sets the bot's link on the website, which takes this one's place. Empty clears it.` }),
         accepts: acceptsSchema.optional(),
         levels: levelsSchema.nullable().optional(),
         analyzer: analyzerDeclarationSchema.nullable().optional(),
@@ -238,15 +252,70 @@ export const botAccountSchema = z
         name: z.string(),
         rating: ratingSchema,
         provisional: provisionalSchema,
-        about: botAboutSchema.optional(),
+        about: botAboutSchema.optional().meta({ description: `The owner's text from the website, which the bot's pages show; else the declared one.` }),
         version: botVersionSchema.optional(),
-        repoUrl: botRepoUrlSchema.optional(),
+        repoUrl: botRepoUrlSchema.optional().meta({ description: `The owner's link from the website, which the bot's pages show; else the declared one.` }),
         accepts: acceptsSchema.optional(),
         levels: levelsSchema.nullable(),
         analyzer: analyzerSchema.nullable(),
     })
     .meta({ id: `Account`, description: `levels and analyzer are null until the bot declares them.` });
 export type BotAccount = z.infer<typeof botAccountSchema>;
+
+// The owner's link, http(s) with its scheme spelled out as stored, so a
+// link such as https:host that a URL parser would mend is refused instead.
+const ownerRepoUrlSchema = z
+    .string()
+    .trim()
+    .pipe(botRepoUrlSchema)
+    .refine((url) => url === `` || /^https?:\/\//iu.test(url), { message: `the link must start with http:// or https://` });
+
+/** The digits of a hexo-bridge release, as its User-Agent names it. */
+export const bridgeVersionPattern = /^\d{1,4}\.\d{1,4}\.\d{1,4}$/;
+
+// Only this parse of the User-Agent is kept: never the raw header, which
+// could carry anything a client chose to send.
+export const botClientSchema = z
+    .discriminatedUnion(`kind`, [
+        z.object({ kind: z.literal(`hexo-bridge`), version: z.string().regex(bridgeVersionPattern) }),
+        z.object({ kind: z.literal(`other`) }),
+    ])
+    .meta({ id: `BotClient`, description: `The client the bot's stream last opened with, read from its User-Agent: hexo-bridge and its release, or another client.` });
+export type BotClient = z.infer<typeof botClientSchema>;
+
+/**
+ * The client a User-Agent names: hexo-bridge when the header leads with
+ * hexo-bridge/ and a release, any other header or none as other.
+ */
+export function botClientOf(userAgent: string | undefined): BotClient {
+    const product = userAgent?.trim().split(/[\s(]/u, 1)[0] ?? ``;
+    const version = product.startsWith(`hexo-bridge/`) ? product.slice(`hexo-bridge/`.length) : null;
+    return version !== null && bridgeVersionPattern.test(version) ? { kind: `hexo-bridge`, version } : { kind: `other` };
+}
+
+export const botSettingsSchema = z
+    .object({
+        name: z.string(),
+        duelsByOthers: z.boolean().meta({ description: `True lets any signed-in person start a duel the bot plays; false keeps that to its owner. On until the owner turns it off.` }),
+        about: botAboutSchema.optional().meta({ description: `The owner's text for the bot's pages, absent until set; it shows in place of the declared one.` }),
+        repoUrl: botRepoUrlSchema.optional().meta({ description: `The owner's link to the bot's source, absent until set; it shows in place of the declared one.` }),
+        declaredAbout: botAboutSchema.optional().meta({ description: `The text the bot declares, which shows while the owner has set none.` }),
+        declaredRepoUrl: botRepoUrlSchema.optional().meta({ description: `The link the bot declares, which shows while the owner has set none.` }),
+        client: botClientSchema.optional().meta({ description: `Absent until the bot opens its stream.` }),
+    })
+    .meta({ id: `BotSettings`, description: `What a bot's owner decides for it on the website, apart from what the bot declares, and what only the owner sees.` });
+export type BotSettings = z.infer<typeof botSettingsSchema>;
+
+export const botSettingsUpdateSchema = z
+    .strictObject({
+        duelsByOthers: z.boolean().optional(),
+        about: cleanedTo(botAboutSchema)
+            .optional()
+            .meta({ description: `At most ${String(botAboutMaxLength)} characters once cleaned as a declaration's text is; empty clears it.` }),
+        repoUrl: ownerRepoUrlSchema.optional().meta({ description: `An http or https link of at most ${String(botRepoUrlMaxLength)} characters; empty clears it.` }),
+    })
+    .meta({ id: `BotSettingsUpdate`, description: `Each present field replaces the stored one.` });
+export type BotSettingsUpdate = z.infer<typeof botSettingsUpdateSchema>;
 
 export const unauthorizedErrorCodes = [`unauthorized`] as const;
 export const notFoundErrorCodes = [`not_found`] as const;

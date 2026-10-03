@@ -8,7 +8,7 @@ import {
     pairDailyCap,
     timeControlSchema,
     tournamentMinPresent,
-    tournamentPresenceGraceMs,
+    presenceGraceMs,
     tournamentRoundGapMs,
     type FinishReason,
     type Side,
@@ -418,7 +418,7 @@ export class TournamentScheduler {
             this.#play(tournament, pairing, game);
             return false;
         }
-        const deadline = this.#graceUntil.get(key) ?? now + tournamentPresenceGraceMs;
+        const deadline = this.#graceUntil.get(key) ?? now + presenceGraceMs;
         this.#graceUntil.set(key, deadline);
         if (now < deadline) return false;
         this.#graceUntil.delete(key);
@@ -434,13 +434,13 @@ export class TournamentScheduler {
         // The slot is live before its game exists, so a finish heard at once
         // finds it; a game that never got created reads as pending at boot.
         this.#settle(pairing.id, game, { state: `live`, seat: null });
-        const { opening } = this.#deps.games.createTournamentGame({
+        const { opening } = this.#deps.games.createScheduledGame({
             x: { id: x, name: name(x) },
             o: { id: o, name: name(o) },
             timeControl: timeControlSchema.parse(JSON.parse(tournament.timeControl)),
             openingPlies: openingPliesSchema.parse(tournament.openingPlies),
             opening: stored,
-            pairing: { id: pairing.id, game },
+            tag: { kind: `pairing`, id: pairing.id, game },
         });
         if (stored === null) {
             this.#query.update(tournamentPairings).set({ openingCells: JSON.stringify(opening) }).where(eq(tournamentPairings.id, pairing.id)).run();

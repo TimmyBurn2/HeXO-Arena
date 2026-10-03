@@ -152,6 +152,7 @@ export class ChallengeRegistry {
             timeControl: live.record.timeControl,
             openingPlies: live.record.openingPlies,
             firstPlayer: live.record.firstPlayer,
+            sameOwner: live.record.sameOwner,
         });
         this.#decide(live, `accepted`, gameId);
         return { kind: `ok` };

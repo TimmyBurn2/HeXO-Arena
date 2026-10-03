@@ -45,10 +45,18 @@ export interface Holder {
 
 const unreserved: ReadonlySet<string> = new Set();
 
-/** A bot's readiness; one the running tournament reserves takes no other game until it ends. */
-export function readinessOf(bot: BotListing, reserved: ReadonlySet<string> = unreserved): Readiness {
+/** Whether the person signed in under this name owns the bot. */
+export function ownedBy(bot: BotListing, viewer: string | null): boolean {
+    return viewer !== null && bot.ownerName === viewer;
+}
+
+/**
+ * A bot's readiness; one the running tournament reserves takes no other game until it ends.
+ * Its owner, the viewer, plays it online whether or not it is open to others.
+ */
+export function readinessOf(bot: BotListing, reserved: ReadonlySet<string> = unreserved, viewer: string | null = null): Readiness {
     if (!bot.online) return `offline`;
-    if (!bot.openForChallenges) return `closed`;
+    if (!bot.openForChallenges && !ownedBy(bot, viewer)) return `closed`;
     const covered = coveredModes(bot.accepts);
     if (!covered.turn && !covered.match && !covered.unlimited) return `nothing`;
     if (reserved.has(bot.name)) return `tournament`;
@@ -66,8 +74,8 @@ export interface Roster {
 
 const byRating = (a: BotListing, b: BotListing) => b.rating - a.rating || a.name.localeCompare(b.name);
 /** The roster, pinning each named bot that is not ready in the order named, once; busy bots include those a tournament holds. */
-export function rosterOf(bots: readonly BotListing[], named: readonly string[], reserved: ReadonlySet<string> = unreserved): Roster {
-    const state = (bot: BotListing) => readinessOf(bot, reserved);
+export function rosterOf(bots: readonly BotListing[], named: readonly string[], reserved: ReadonlySet<string> = unreserved, viewer: string | null = null): Roster {
+    const state = (bot: BotListing) => readinessOf(bot, reserved, viewer);
     const listed = (bot: BotListing) => state(bot) === `ready` || state(bot) === `busy` || state(bot) === `tournament`;
     const keys = [...new Set(named.map(nameKeyOf))];
     const pinned = keys.flatMap((key) => bots.filter((bot) => nameKeyOf(bot.name) === key && !listed(bot)));
@@ -82,7 +90,8 @@ export function rosterOf(bots: readonly BotListing[], named: readonly string[], 
 /**
  * The bot the page opens on: the one the link names, if listed;
  * else the last one played in this browser, if ready;
- * else the ready bot nearest the player's rating, a visitor counting as a new player;
+ * else the ready bot nearest the player's rating, a visitor counting as a new player,
+ * another's before the viewer's own, which plays unrated;
  * else a busy one, so the card says why nothing can start.
  */
 export function preselect(
@@ -91,16 +100,18 @@ export function preselect(
     last: string | null,
     rating: number | null,
     reserved: ReadonlySet<string> = unreserved,
+    viewer: string | null = null,
 ): BotListing | null {
     const find = (name: string | null) => (name === null ? undefined : bots.find((bot) => nameKeyOf(bot.name) === nameKeyOf(name)));
     const linked = find(named);
     if (linked !== undefined) return linked;
     const previous = find(last);
-    if (previous !== undefined && readinessOf(previous, reserved) === `ready`) return previous;
+    if (previous !== undefined && readinessOf(previous, reserved, viewer) === `ready`) return previous;
     const target = rating ?? humanSeedRating;
-    const ready = bots.filter((bot) => readinessOf(bot, reserved) === `ready`);
-    const nearest = [...ready].sort((a, b) => Math.abs(a.rating - target) - Math.abs(b.rating - target) || b.rating - a.rating)[0];
-    return nearest ?? rosterOf(bots, [], reserved).busy[0] ?? null;
+    const ready = bots.filter((bot) => readinessOf(bot, reserved, viewer) === `ready`);
+    const own = (bot: BotListing) => Number(ownedBy(bot, viewer));
+    const nearest = [...ready].sort((a, b) => own(a) - own(b) || Math.abs(a.rating - target) - Math.abs(b.rating - target) || b.rating - a.rating)[0];
+    return nearest ?? rosterOf(bots, [], reserved, viewer).busy[0] ?? null;
 }
 
 /** Whether the bot accepts the clock; a bot with nothing declared accepts none. */

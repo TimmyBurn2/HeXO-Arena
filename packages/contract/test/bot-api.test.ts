@@ -124,6 +124,29 @@ describe('bot api export', () => {
         expect(renderStreamExamples()).toBe(renderStreamExamples());
     });
 
+    it('marks the declared about and repoUrl and the moveRequest line deprecated, while every key stays accepted', () => {
+        const declaration = dig(document, `components`, `schemas`, `AccountDeclaration`, `properties`);
+        expect(dig(declaration, `about`, `deprecated`)).toBe(true);
+        expect(dig(declaration, `repoUrl`, `deprecated`)).toBe(true);
+        expect(dig(declaration, `version`, `deprecated`)).toBeUndefined();
+        expect(dig(document, `components`, `schemas`, `MoveRequestEvent`, `deprecated`)).toBe(true);
+        expect(dig(document, `components`, `schemas`, `GameStartEvent`, `deprecated`)).toBeUndefined();
+    });
+
+    it('keeps own_bot among the challenge refusals a bot may know, though none is sent', () => {
+        const forbidden = dig(document, `paths`, `/api/bot/challenge/{name}`, `post`, `responses`, `403`, `content`, `application/json`, `schema`);
+        const code = dig(forbidden, `properties`, `code`, `enum`) ?? dig(document, ...String(dig(forbidden, `$ref`)).replace(`#/`, ``).split(`/`), `properties`, `code`, `enum`);
+        expect(code).toEqual(expect.arrayContaining([`own_bot`, `delisted`]));
+    });
+
+    it('carries neither the owner\'s settings nor the client on the bot surface', () => {
+        for (const schema of [`BotListing`, `Account`]) {
+            for (const key of [`client`, `declaredAbout`, `duelsByOthers`]) expect(dig(document, `components`, `schemas`, schema, `properties`, key), `${schema}.${key}`).toBeUndefined();
+        }
+        expect(dig(document, `components`, `schemas`, `BotSettings`)).toBeUndefined();
+        expect(dig(document, `components`, `schemas`, `BotClient`)).toBeUndefined();
+    });
+
     it('writes one stream example per event type, each parsing as a stream event', () => {
         const lines = renderStreamExamples().split(`\n`);
         expect(lines.pop()).toBe(``);

@@ -26,6 +26,8 @@ import {
     reportFormMetaName,
     reportRequestSchema,
     botListingSchema,
+    botSettingsSchema,
+    botSettingsUpdateSchema,
     devAccountSchema,
     gameSnapshotSchema,
     leaderboardActiveDays,
@@ -47,6 +49,7 @@ import {
     tournamentEntryRequestSchema,
     tournamentListSchema,
     type BotListing,
+    type BotSettings,
     type DevAccount,
     type GameSnapshot,
     type LegalDetails,
@@ -120,6 +123,8 @@ export interface World {
     analyses: Record<string, AnalysisList>;
     // Every whole-game request so far, by game, in order.
     requested: { gameId: string; request: AnalysisRequest }[];
+    // The settings of bots the signed-in person owns, by name; one not named reads as never set, its declared text as listed.
+    settings: Record<string, BotSettings>;
 }
 
 /**
@@ -1110,6 +1115,32 @@ function finishedPage(state: World, params: URLSearchParams): { status: 200; bod
     return { status: 200, body: { ...body, record: { games: counted.length, won, lost, undecided: counted.length - won - lost, voided: matches.length - counted.length, asX, asO } } };
 }
 
+// A bot's settings before its owner set any: its listed text as declared, the duel switch on.
+function settingsOf(bot: BotListing): BotSettings {
+    return {
+        name: bot.name,
+        duelsByOthers: true,
+        ...(bot.about === undefined ? {} : { declaredAbout: bot.about }),
+        ...(bot.repoUrl === undefined ? {} : { declaredRepoUrl: bot.repoUrl }),
+    };
+}
+
+// The owner's text replaces the stored one, an empty one clearing it.
+function withOwnerText(held: BotSettings, changes: { about?: string | undefined; repoUrl?: string | undefined; duelsByOthers?: boolean | undefined }): BotSettings {
+    const { about: _about, repoUrl: _repoUrl, ...rest } = held;
+    const about = changes.about ?? held.about ?? ``;
+    const repoUrl = changes.repoUrl ?? held.repoUrl ?? ``;
+    return { ...rest, duelsByOthers: changes.duelsByOthers ?? held.duelsByOthers, ...(about === `` ? {} : { about }), ...(repoUrl === `` ? {} : { repoUrl }) };
+}
+
+// The listing shows the owner's text, else the declared one, as the server does.
+function shownWith(bot: BotListing, settings: BotSettings): BotListing {
+    const { about: _about, repoUrl: _repoUrl, ...rest } = bot;
+    const about = settings.about ?? settings.declaredAbout;
+    const repoUrl = settings.repoUrl ?? settings.declaredRepoUrl;
+    return { ...rest, ...(about === undefined ? {} : { about }), ...(repoUrl === undefined ? {} : { repoUrl }) };
+}
+
 export function world(overrides: Partial<World> = {}): World {
     return {
         me: { kind: `user`, name: `quinn`, rating: 1503, provisional: false, discord: { username: `quinn.hex`, displayName: `Quinn` }, liveGames: [], analysisOptOut: false, analysisLeft: { positions: 300, games: 10 } },
@@ -1138,6 +1169,7 @@ export function world(overrides: Partial<World> = {}): World {
         asked: [],
         analyses: {},
         requested: [],
+        settings: {},
         // A world owns its data, so an entry one test makes stays out of the next.
         ...structuredClone(overrides),
     };
@@ -1701,15 +1733,40 @@ export async function serve(page: Page, state: World): Promise<void> {
                 });
                 return;
             }
-            // As the server does, the mark goes on a signed-in person's game at the bot's default level alone.
+            // As the server does, the mark goes on a signed-in person's game at the bot's default level alone, asked unrated or against their own bot.
             const asked = createGameRequestSchema.parse(request.postDataJSON());
             const running = state.games.running;
             if (running !== undefined) {
                 const { unratedByChoice: _mark, ...unmarked } = running;
-                const chose = state.me?.kind === `user` && asked.level === undefined && asked.rated === false;
+                const own = state.me?.kind === `user` && state.bots.some((entry) => entry.name === asked.bot && entry.ownerName === state.me?.name);
+                const chose = state.me?.kind === `user` && asked.level === undefined && (asked.rated === false || own);
                 state.games.running = chose ? { ...unmarked, unratedByChoice: true } : unmarked;
                 await json(route, 201, viewOf(state.games.running, state.me));
             }
+            return;
+        }
+        const owned = /^\/api\/bots\/([^/]+)\/settings$/.exec(path);
+        if (owned !== null) {
+            const name = decodeURIComponent(owned[1] ?? ``);
+            const listed = state.bots.find((entry) => entry.name === name);
+            if (state.me?.kind !== `user` || listed === undefined || listed.ownerName !== state.me.name) {
+                await json(route, 404, { error: `no such bot of yours`, code: `not_found` });
+                return;
+            }
+            const held = state.settings[name] ?? settingsOf(listed);
+            if (method !== `PATCH`) {
+                await json(route, 200, botSettingsSchema.parse(held));
+                return;
+            }
+            const asked = botSettingsUpdateSchema.safeParse(request.postDataJSON());
+            if (!asked.success) {
+                await json(route, 400, { error: `the request fails validation`, code: `bad_request` });
+                return;
+            }
+            const next = withOwnerText(held, asked.data);
+            state.settings[name] = next;
+            state.bots = state.bots.map((entry) => (entry.name === name ? shownWith(entry, next) : entry));
+            await json(route, 200, botSettingsSchema.parse(next));
             return;
         }
         const token = /^\/api\/bots\/([^/]+)\/token$/.exec(path);

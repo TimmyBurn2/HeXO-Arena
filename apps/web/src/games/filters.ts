@@ -1,7 +1,7 @@
 import { finishedGamesQuerySchema, nameKeyOf, type FinishedGamesQuery } from '@hexo-arena/contract';
 
-/** The filters a list of finished games can carry, as its address holds them. */
-export type GameFilters = Omit<FinishedGamesQuery, `page`>;
+/** The filters a list of finished games can carry, as its address holds them; whether tests show is the browser's, not the address's. */
+export type GameFilters = Omit<FinishedGamesQuery, `page` | `tests`>;
 
 /** One filter's name. */
 export type FilterKey = keyof GameFilters;

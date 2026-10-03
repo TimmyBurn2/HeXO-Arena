@@ -6,6 +6,7 @@ import { z } from 'zod';
 import { seedPlan } from './personas';
 import { NotADevServer, seats } from './runner';
 import { seedDevData } from './seed';
+import { devDuelPlans } from './duels';
 import type { DevWeeklyRule } from './tournament';
 
 const envSchema = z.object({
@@ -83,6 +84,7 @@ try {
         log,
         scheduleTournament,
         addWeeklyRule,
+        duels: devDuelPlans,
         tournamentCandidates: seats.map((seat) => ({ owner: `devowner-${seat}`, bot: `devbot-${seat}` })),
     });
     log(`played ${String(report.played)} games`);
@@ -98,6 +100,9 @@ try {
     log(`ranked: ${report.ranked.length === 0 ? `none` : report.ranked.join(`, `)}`);
     if (report.tournament !== null) {
         log(`dev tournament ${report.tournament.id}, entered: ${report.tournament.entered.join(`, `) || `none`}`);
+    }
+    if (report.duels !== null) {
+        log(`finished duel: ${report.duels.finished ?? `none`}; test: ${report.duels.test ?? `none`}; live duel: ${report.duels.live ?? `none, start pnpm dev:bots and seed again`}`);
     }
     log(`restart pnpm dev:bots to bring the personas' online bots up`);
 } catch (error) {

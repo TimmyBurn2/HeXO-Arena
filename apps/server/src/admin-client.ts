@@ -2,6 +2,8 @@ import {
     parseClockArg,
     adminRequestSchema,
     adminResponseSchema,
+    clientCensusDays,
+    type AdminBot,
     type AdminRequest,
     type AdminResponse,
     type AdminStatus,
@@ -15,6 +17,7 @@ export const adminUsage = `usage: hexo-arena-admin <op> [target] [--reason <text
 
   status
   backup [label]
+  bot <name>
   pause --reason <text>
   resume --reason <text>
   ban-user <name> --reason <text>
@@ -32,7 +35,8 @@ export const adminUsage = `usage: hexo-arena-admin <op> [target] [--reason <text
   tournament-schedule list
   tournament-schedule remove <ruleId> --reason <text>
   report-close <reportId> --reason <note>
-  delete-analysis <analysisId> --reason <text>`;
+  delete-analysis <analysisId> --reason <text>
+  duel-stop <duelId> --reason <text>`;
 
 export type ParsedArgs = { kind: `request`; request: AdminRequest } | { kind: `usage`; error: string };
 
@@ -66,6 +70,7 @@ function requestBody(op: string, target: string | undefined, flags: Flags): Reco
     const reason = flags.reason === undefined ? {} : { reason: flags.reason };
     if (op === `status`) return { op };
     if (op === `backup`) return { op, ...(target !== undefined && { label: target }) };
+    if (op === `bot`) return { op, name: target };
     if (namedOps.has(op)) return { op, name: target, ...reason };
     if (op === `abort-game`) {
         return { op, ...(target !== undefined && { gameId: target }), ...(flags.bot !== undefined && { bot: flags.bot }), ...reason };
@@ -84,7 +89,7 @@ function requestBody(op: string, target: string | undefined, flags: Flags): Reco
             ...reason,
         };
     }
-    if (op === `tournament-cancel` || op === `delete-analysis`) return { op, id: target, ...reason };
+    if (op === `tournament-cancel` || op === `delete-analysis` || op === `duel-stop`) return { op, id: target, ...reason };
     if (op === `tournament-schedule-add`) {
         const opening = numberFlag(flags.opening);
         const max = numberFlag(flags.max);
@@ -195,8 +200,11 @@ function formatStatus(status: AdminStatus): string {
         `paused        ${status.paused ? `yes` : `no`}`,
         `live streams  ${String(status.liveStreams)}`,
         `active games  ${String(status.activeGames)}`,
+        `live duels    ${String(status.liveDuels)}`,
         `client keys   ${String(status.clientKeys)}`,
         `keyless       ${String(status.keylessRequests)}`,
+        `bot clients, last ${String(clientCensusDays)} days:`,
+        ...(status.clients.length === 0 ? [`  none`] : status.clients.map((count) => `  ${count.client}  ${String(count.bots)}`)),
         `tournaments:`,
     ];
     if (status.tournaments.length === 0) lines.push(`  none running or scheduled`);
@@ -215,10 +223,26 @@ function formatStatus(status: AdminStatus): string {
     return lines.join(`\n`);
 }
 
+function formatBot(bot: AdminBot): string {
+    const client = bot.client === null ? `none yet` : bot.client.kind === `hexo-bridge` ? `hexo-bridge/${bot.client.version}` : `other`;
+    const seen = bot.clientAt === null ? `` : `  ${new Date(bot.clientAt * 1000).toISOString()}`;
+    return [
+        `bot           ${bot.name}`,
+        `owner         ${bot.owner}`,
+        `online        ${bot.online ? (bot.open ? `yes, open` : `yes, closed`) : `no`}`,
+        `live games    ${String(bot.liveGames)}`,
+        `delisted      ${bot.delisted ? `yes` : `no`}`,
+        `version       ${bot.version === null ? `-` : JSON.stringify(bot.version)}`,
+        `client        ${client}${seen}`,
+    ].join(`\n`);
+}
+
 export function formatAdminResponse(response: AdminResponse): string {
     switch (response.kind) {
         case `status`:
             return formatStatus(response.status);
+        case `bot`:
+            return formatBot(response.bot);
         case `tournament-rules`:
             return ruleLines(response.rules).join(`\n`);
         case `done`:

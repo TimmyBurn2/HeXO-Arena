@@ -54,13 +54,12 @@ export function ConnectScreen() {
         landed();
     }, [signedIn]);
 
-    // Keyed by the contract's own fields, so one it adds cannot go undescribed.
+    // Keyed by the contract's own fields, so one it adds cannot go undescribed;
+    // about and repoUrl are left out, the owner setting the bot's text and link on its page.
     const analyzerFields: Pick<Record<keyof AnalyzerDeclaration, ReactNode>, `values`> = { values: words.declaration.values(code) };
-    const declared: Record<keyof AccountDeclaration, ReactNode> = {
+    const declared: Record<Exclude<keyof AccountDeclaration, `about` | `repoUrl`>, ReactNode> = {
         accepts: words.declaration.accepts(code),
-        about: words.declaration.about,
         version: words.declaration.version,
-        repoUrl: words.declaration.repoUrl,
         levels: words.declaration.levels,
         analyzer: (
             <>

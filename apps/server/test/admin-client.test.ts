@@ -24,6 +24,7 @@ describe('parseAdminArgs', () => {
         [[`status`], { op: `status` }],
         [[`backup`], { op: `backup` }],
         [[`backup`, `pre-update`], { op: `backup`, label: `pre-update` }],
+        [[`bot`, `alpha`], { op: `bot`, name: `alpha` }],
         [[`pause`, `--reason`, `incident`], { op: `pause`, reason: `incident` }],
         [[`ban-user`, `ann`, `--reason`, `cheating`], { op: `ban-user`, name: `ann`, reason: `cheating` }],
         [[`abort-game`, `--bot`, `alpha`, `--reason`, `rogue`], { op: `abort-game`, bot: `alpha`, reason: `rogue` }],
@@ -57,6 +58,7 @@ describe('parseAdminArgs', () => {
             },
         ],
         [[`tournament-cancel`, `t_abcdefghijk2`, `--reason`, `rain`], { op: `tournament-cancel`, id: `t_abcdefghijk2`, reason: `rain` }],
+        [[`duel-stop`, `d_abcdefghijk2`, `--reason`, `farming`], { op: `duel-stop`, id: `d_abcdefghijk2`, reason: `farming` }],
         [
             [`tournament-schedule`, `add`, `--weekday`, `sun`, `--time`, `18:00`, `--name`, `Sunday cup {date}`, `--clock`, `turn:10`, `--reason`, `weekly`],
             {
@@ -140,6 +142,9 @@ describe('parseAdminArgs', () => {
         [`a report closed without a note`, [`report-close`, `12`]],
         [`a report closed by an id that is no number`, [`report-close`, `first`, `--reason`, `r`]],
         [`an analysis deleted by a game's id`, [`delete-analysis`, `g_0f8d2c4e-1b3a-4c5d-8e9f-0a1b2c3d4e5f`, `--reason`, `r`]],
+        [`a duel stopped by a tournament's id`, [`duel-stop`, `t_abcdefghijk2`, `--reason`, `r`]],
+        [`a duel stopped without a reason`, [`duel-stop`, `d_abcdefghijk2`]],
+        [`a bot looked up without a name`, [`bot`]],
     ])('refuses %s with usage', (_label, argv) => {
         expect(parseAdminArgs(argv).kind).toBe(`usage`);
     });
@@ -154,8 +159,13 @@ describe('formatAdminResponse', () => {
                 paused: true,
                 liveStreams: 3,
                 activeGames: 1,
+                liveDuels: 2,
                 clientKeys: 12,
                 keylessRequests: 5,
+                clients: [
+                    { client: `hexo-bridge/0.3.0`, bots: 3 },
+                    { client: `other`, bots: 1 },
+                ],
                 tournaments: [{ id: `t_abcdefghijk2`, name: `Autumn round robin`, status: `scheduled`, startsAt: 0, entrants: 4 }],
                 tournamentRules: [sundayRule],
                 recentActions: [{ actor: `operator`, action: `pause`, target: null, reason: `incident`, at: 0 }],
@@ -172,8 +182,12 @@ describe('formatAdminResponse', () => {
                 `paused        yes`,
                 `live streams  3`,
                 `active games  1`,
+                `live duels    2`,
                 `client keys   12`,
                 `keyless       5`,
+                `bot clients, last 14 days:`,
+                `  hexo-bridge/0.3.0  3`,
+                `  other  1`,
                 `tournaments:`,
                 `  t_abcdefghijk2  scheduled  1970-01-01T00:00:00.000Z  4 entered  Autumn round robin`,
                 `weekly rules:`,
@@ -189,6 +203,25 @@ describe('formatAdminResponse', () => {
             ].join(`\n`),
         );
         expect(formatAdminResponse({ kind: `error`, code: `not_found`, error: `no such user` })).toBe(`not_found: no such user`);
+    });
+
+    it('renders a bot with its owner, presence, and the client it last connected with, or none yet', () => {
+        const bot = { name: `alpha`, owner: `ann`, online: true, open: false, liveGames: 2, delisted: false, version: `1.2`, client: { kind: `hexo-bridge`, version: `0.3.0` }, clientAt: 60 } as const;
+        expect(formatAdminResponse({ kind: `bot`, bot })).toBe(
+            [
+                `bot           alpha`,
+                `owner         ann`,
+                `online        yes, closed`,
+                `live games    2`,
+                `delisted      no`,
+                `version       "1.2"`,
+                `client        hexo-bridge/0.3.0  1970-01-01T00:01:00.000Z`,
+            ].join(`\n`),
+        );
+        const fresh = formatAdminResponse({ kind: `bot`, bot: { ...bot, online: false, version: null, client: null, clientAt: null } });
+        expect(fresh).toContain(`online        no`);
+        expect(fresh).toContain(`version       -`);
+        expect(fresh).toContain(`client        none yet`);
     });
 
     it('renders the weekly rules with their next starts, or says there are none', () => {

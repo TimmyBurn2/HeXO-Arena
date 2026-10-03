@@ -8,6 +8,7 @@ import {
     humanMoveRequestSchema,
     liveGameListCap,
     liveGameListMemoMs,
+    liveGamesQuerySchema,
     nameKeyOf,
     nameSyntaxSchema,
     pairDailyCap,
@@ -96,10 +97,9 @@ export function registerGameApi(app: FastifyInstance, deps: GameApiDeps): void {
         if (bot.delisted) {
             return reply.code(403).send({ error: `the bot is delisted`, code: `delisted` });
         }
-        // An owner's wins over their own bot would rate them up at will.
-        if (person.kind === `user` && bot.ownerId === person.id) {
-            return reply.code(403).send({ error: `the bot is your own`, code: `own_bot` });
-        }
+        // An owner may test their own bot without opening it to others; the
+        // game is a test, unrated, since a win over one's own bot proves nothing.
+        const own = person.kind === `user` && bot.ownerId === person.id;
         if (games.activeHumanGameCount(person) >= humanConcurrentGameCap) {
             return reply.code(400).send({
                 error: `you already hold the active-game cap`,
@@ -115,7 +115,7 @@ export function registerGameApi(app: FastifyInstance, deps: GameApiDeps): void {
                 code: `game_cooldown`,
             });
         }
-        if (!presence.isOnline(bot.id) || !presence.isOpenForChallenges(bot.id)) {
+        if (!presence.isOnline(bot.id) || (!own && !presence.isOpenForChallenges(bot.id))) {
             return reply.code(400).send({
                 error: `the bot is not online and taking games`,
                 code: `not_open`,
@@ -135,8 +135,8 @@ export function registerGameApi(app: FastifyInstance, deps: GameApiDeps): void {
         }
         const level = declared === undefined || declared.id === bot.levels?.default ? null : seatLevelOf(declared);
         // A guest's game and practice at another level are unrated by their
-        // seats, so only a signed-in person's game at the default carries the choice.
-        const unratedByChoice = person.kind === `user` && level === null && parsed.data.rated === false;
+        // seats, so only a signed-in person's game at the default carries the mark.
+        const unratedByChoice = person.kind === `user` && level === null && (own || parsed.data.rated === false);
         if (games.activeGameCount(bot.id) >= botConcurrentGameCap || deps.reservations.isReserved(bot.id)) {
             return reply.code(400).send({
                 error: `the bot is at its concurrent-game cap or playing a tournament`,
@@ -161,6 +161,7 @@ export function registerGameApi(app: FastifyInstance, deps: GameApiDeps): void {
             bot: { id: bot.id, name: bot.name },
             ...(level === null ? {} : { level }),
             unratedByChoice,
+            test: own,
             timeControl: parsed.data.timeControl,
             openingPlies: parsed.data.openingPlies,
         });
@@ -171,13 +172,18 @@ export function registerGameApi(app: FastifyInstance, deps: GameApiDeps): void {
 
     // Pages with live boards poll this list, so it is serialized once a window
     // and that body served to everyone; a clock that steps back starts a new window.
-    let liveList: { at: number; body: string } | null = null;
-    app.get(`/api/games`, { config: { limit: `public` } }, async (_request, reply) => {
+    const liveLists = new Map<boolean, { at: number; body: string }>();
+    app.get(`/api/games`, { config: { limit: `public` } }, async (request, reply) => {
+        const parsed = liveGamesQuerySchema.safeParse(request.query);
+        if (!parsed.success) return reply.code(400).send({ error: `the query fails validation`, code: `bad_request` });
+        const tests = parsed.data.tests !== undefined;
         const now = Date.now();
-        if (liveList === null || now < liveList.at || now - liveList.at >= liveGameListMemoMs) {
-            liveList = { at: now, body: JSON.stringify(games.liveGames(liveGameListCap)) };
+        let held = liveLists.get(tests);
+        if (held === undefined || now < held.at || now - held.at >= liveGameListMemoMs) {
+            held = { at: now, body: JSON.stringify(games.liveGames(liveGameListCap, tests)) };
+            liveLists.set(tests, held);
         }
-        return reply.code(200).header(`content-type`, `application/json; charset=utf-8`).send(liveList.body);
+        return reply.code(200).header(`content-type`, `application/json; charset=utf-8`).send(held.body);
     });
 
     // Every game is public; the session only decides whether the reader

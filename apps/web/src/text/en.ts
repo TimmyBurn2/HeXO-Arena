@@ -3,7 +3,6 @@ import {
     analysisHeuristicLimit,
     analysisLinesMax,
     analyzerMaxSecondsCap,
-    botAboutMaxLength,
     botVersionMaxLength,
     levelCountMax,
     levelCountMin,
@@ -478,6 +477,21 @@ export const en = {
             deleteBot: (bot: ReactNode): ReactNode => rich`Delete ${bot}`,
             inGame: (bot: string) => `${bot} is in a game; delete it once the game ends`,
             deleteFailed: (bot: string) => `${bot} was not deleted; try again`,
+            page: `Page text`,
+            pageNote: `Shown on this page and in the bot list, in place of what your bot declares.`,
+            about: `About`,
+            repo: `Source link`,
+            declaredAbout: `Empty here, so the page shows the text your bot declares.`,
+            declaredRepo: `Empty here, so the page shows the link your bot declares.`,
+            save: `Save`,
+            saved: `Saved`,
+            pageRefused: `Not saved: a source link starts with http:// or https://`,
+            pageFailed: `Not saved; try again`,
+            client: `Client`,
+            clientBridge: (version: string) => `hexo-bridge ${version}, as your bot last connected.`,
+            clientOther: `A client other than hexo-bridge, as your bot last connected.`,
+            clientNone: `Your bot has not connected yet.`,
+            settingsFailed: `The page text did not load`,
         },
         token: {
             copy: `Copy`,
@@ -567,12 +581,10 @@ export const en = {
         declaration: {
             title: `What the declaration says`,
             lead: (code: Slot): ReactNode =>
-                rich`The bridge sends the ${code(`declaration`)} each time your bot connects: what it plays, and what its page shows. Only ${code(`accepts`)} is required.`,
+                rich`The bridge sends the ${code(`declaration`)} each time your bot connects: what it plays and how. Only ${code(`accepts`)} is required. Its page text and source link you set on its page.`,
             accepts: (code: Slot): ReactNode =>
                 rich`The clocks it plays: ${code(`turnMs`)}, the shortest and longest turn clock in milliseconds, or null for none; ${code(`match`)} and ${code(`unlimited`)}, true or false.`,
-            about: `Text for its page, up to ${String(botAboutMaxLength)} characters.`,
-            version: `Up to ${String(botVersionMaxLength)} characters.`,
-            repoUrl: `A link to its source, http or https.`,
+            version: `The build that answers, up to ${String(botVersionMaxLength)} characters.`,
             levels: `${String(levelCountMin)} to ${String(levelCountMax)} strengths a player can pick, weakest first, and the default its rating belongs to; a game at any other is unrated.`,
             analyzer: (code: Slot): ReactNode =>
                 rich`Your engine reads positions for the analysis board: ${code(`lines`)}, 1 to ${String(analysisLinesMax)} per position, and ${code(`maxSeconds`)}, 1 to ${String(analyzerMaxSecondsCap)}; a Python engine answers in ${code(`analyze`)}.`,
@@ -647,6 +659,7 @@ export const en = {
         opponent: `Opponent`,
         readyCount: (count: number) => (count === 0 ? `No bots ready` : `${String(count)} ${plural(count, `bot`, `bots`)} ready`),
         by: (owner: string) => `By ${owner}`,
+        yours: `Your bot`,
         busy: `In ${String(botConcurrentGameCap)} ${plural(botConcurrentGameCap, `game`, `games`)}; try again shortly`,
         reasons: {
             offline: `Offline`,
@@ -707,10 +720,13 @@ export const en = {
         expected: (bot: string, score: string) => `Your expected score against ${bot}: ${score}`,
         practiceScore: (label: string) => `No expected score at ${label}; practice is unrated`,
         unratedScore: `No expected score; Rated is off`,
+        ownScore: `No expected score; games against your own bot are unrated`,
         rated: `Rated; sides are drawn at random`,
         unrated: `Unrated; sides are drawn at random`,
         practice: `Practice, unrated; sides are drawn at random`,
+        ownUnrated: `Unrated, your own bot; sides are drawn at random`,
         ratedSwitch: `Rated`,
+        ownBot: `Your own bot`,
         analyzer: {
             title: `Analyzer`,
             time: `Time`,
@@ -744,7 +760,6 @@ export const en = {
             closed: (name: string) => `${name} is closed for challenges right now; pick another bot`,
             nothing: (name: string) => `${name} accepts no clock yet; pick another bot`,
             busy: (name: string) => `${name} is in ${String(botConcurrentGameCap)} ${plural(botConcurrentGameCap, `game`, `games`)} already; try again shortly`,
-            own: (name: string) => `${name} is your own bot; pick another bot`,
         },
         yourGame: (opponent: string) => `Your game against ${opponent}`,
         errors: {
@@ -755,7 +770,6 @@ export const en = {
             not_open: (name: string) => `${name} is closed for challenges right now`,
             delisted: (name: string) => `${name} takes no new games`,
             not_found: (name: string) => `${name} is no longer listed; pick another bot`,
-            own_bot: (name: string) => `${name} is your own bot; pick another bot`,
             daily_pair_cap: (name: string) =>
                 `You have played ${name} rated ${String(pairDailyCap)} times today, the most one day allows; turn off Rated, pick another bot, or wait until 00:00 UTC`,
             paused: () => `Starting games is paused; live games continue`,

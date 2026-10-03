@@ -5,6 +5,7 @@ import {
     firstPlayerSchema,
     nameKeyOf,
     openingPliesSchema,
+    duelStatusSchema,
     sideOf,
     timeControlSchema,
     tournamentEntryReasonSchema,
@@ -15,10 +16,10 @@ import {
 import { alias } from 'drizzle-orm/sqlite-core';
 import { and, asc, eq, inArray, isNotNull, or, type SQL } from 'drizzle-orm';
 import type { Query } from './db';
-import { adminActions, bots, challenges, gameRatings, games, moves, ratings, sessions, tournamentEntries, tournaments, users } from './db/schema';
+import { adminActions, bots, challenges, duels, gameRatings, games, moves, ratings, sessions, tournamentEntries, tournaments, users } from './db/schema';
 import { findGame, type GameRecord } from './game-store';
 import { requestsOf } from './analysis-store';
-import { storedAnalyzer } from './bots';
+import { storedAnalyzer, storedClient } from './bots';
 import { namedTargetActions } from './moderation';
 import { shownBot } from './shown-names';
 
@@ -79,7 +80,7 @@ function gamesOf(query: Query, userId: string, botIds: readonly string[]): Accou
                     createdAt: isoOf(row.createdAt),
                     finishedAt: isoOrNull(row.finishedAt),
                     voided: record.voided,
-                    ...(record.kind === `human` && record.unratedByChoice ? { unratedByChoice: true as const } : {}),
+                    ...(record.kind !== `guest` && record.unratedByChoice ? { unratedByChoice: true as const } : {}),
                     ratings: query
                         .select({ side: gameRatings.side, before: gameRatings.ratingBefore, after: gameRatings.ratingAfter, deviationAfter: gameRatings.deviationAfter })
                         .from(gameRatings)
@@ -95,6 +96,49 @@ function gamesOf(query: Query, userId: string, botIds: readonly string[]): Accou
 
 const challengerBots = alias(bots, `challenger_bot`);
 const destBots = alias(bots, `dest_bot`);
+const duelBotsA = alias(bots, `duel_bot_a`);
+const duelBotsB = alias(bots, `duel_bot_b`);
+
+// The duels and tests the account started, their bots in the order it named them.
+function duelsOf(query: Query, userId: string): AccountExport[`duels`] {
+    return query
+        .select({
+            id: duels.id,
+            aFirst: duels.aFirst,
+            a: duelBotsA.name,
+            aDeletedAt: duelBotsA.deletedAt,
+            b: duelBotsB.name,
+            bDeletedAt: duelBotsB.deletedAt,
+            test: duels.test,
+            games: duels.games,
+            rated: duels.rated,
+            status: duels.status,
+            createdAt: duels.createdAt,
+            endedAt: duels.endedAt,
+        })
+        .from(duels)
+        .innerJoin(duelBotsA, eq(duelBotsA.id, duels.botAId))
+        .innerJoin(duelBotsB, eq(duelBotsB.id, duels.botBId))
+        .where(eq(duels.startedBy, userId))
+        .orderBy(asc(duels.createdAt), asc(duels.id))
+        .all()
+        .map((row) => {
+            const a = shownBot(row.a, row.aDeletedAt).name;
+            const b = shownBot(row.b, row.bDeletedAt).name;
+            return {
+                id: row.id,
+                first: row.aFirst === 1 ? a : b,
+                second: row.aFirst === 1 ? b : a,
+                kind: row.test === 1 ? (`test` as const) : (`duel` as const),
+                games: row.games,
+                rated: row.rated === 1,
+                // The status check admits only the contract's statuses.
+                status: duelStatusSchema.parse(row.status),
+                createdAt: isoOf(row.createdAt),
+                endedAt: isoOrNull(row.endedAt),
+            };
+        });
+}
 
 /**
  * Every row tied to one account, as its owner downloads it: never a token,
@@ -127,6 +171,9 @@ export function accountExport(query: Query, userId: string, nowMs: number): Acco
             about: bot.about,
             version: bot.version,
             repoUrl: bot.repoUrl,
+            ownerAbout: bot.ownerAbout,
+            ownerRepoUrl: bot.ownerRepoUrl,
+            client: storedClient(bot) ?? null,
             accepts: bot.accepts === null ? null : acceptsSchema.parse(JSON.parse(bot.accepts)),
             levels: bot.levels === null ? null : levelsSchema.parse(JSON.parse(bot.levels)),
             analyzer: storedAnalyzer(bot),
@@ -160,6 +207,7 @@ export function accountExport(query: Query, userId: string, nowMs: number): Acco
                 reason: entry.reason === null ? null : tournamentEntryReasonSchema.parse(entry.reason),
                 enteredAt: isoOf(entry.enteredAt),
             })),
+        duels: duelsOf(query, userId),
         challenges:
             botIds.length === 0
                 ? []

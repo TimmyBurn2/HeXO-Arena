@@ -1,13 +1,15 @@
 import { z } from 'zod';
 import { analysisIdSchema } from './analysis';
+import { botClientSchema } from './api';
+import { scheduledClockSchema } from './games';
 import { nameSyntaxSchema } from './names';
 import { reportReasonSchema } from './reports';
+import { duelIdSchema } from './duels';
 import { openingPliesSchema } from './stream';
 import {
     adminTournamentRuleSchema,
     adminTournamentSchema,
     defaultTournamentOpening,
-    tournamentClockSchema,
     tournamentDaysAhead,
     tournamentIdSchema,
     tournamentMaxEntrants,
@@ -48,6 +50,7 @@ export const adminRequestSchema = z.discriminatedUnion(`op`, [
     // A labelled backup is kept apart from the nightly ones, which never
     // replace it.
     z.strictObject({ op: z.literal(`backup`), label: adminBackupLabelSchema.optional() }),
+    z.strictObject({ op: z.literal(`bot`), name: nameSyntaxSchema }),
     z.strictObject({ op: z.literal(`pause`), reason: adminReasonSchema }),
     z.strictObject({ op: z.literal(`resume`), reason: adminReasonSchema }),
     z.strictObject({ op: z.literal(`ban-user`), name: nameSyntaxSchema, reason: adminReasonSchema }),
@@ -80,7 +83,7 @@ export const adminRequestSchema = z.discriminatedUnion(`op`, [
         op: z.literal(`tournament-create`),
         name: tournamentNameSchema,
         startsAt: z.iso.datetime({ offset: true }),
-        timeControl: tournamentClockSchema,
+        timeControl: scheduledClockSchema,
         openingPlies: openingPliesSchema.default(defaultTournamentOpening),
         maxEntrants: tournamentEntrantsSchema.default(tournamentMaxEntrants),
         reason: adminReasonSchema,
@@ -91,7 +94,7 @@ export const adminRequestSchema = z.discriminatedUnion(`op`, [
         weekday: tournamentWeekdaySchema,
         time: tournamentTimeOfDaySchema,
         namePattern: tournamentNamePatternSchema,
-        timeControl: tournamentClockSchema,
+        timeControl: scheduledClockSchema,
         openingPlies: openingPliesSchema.default(defaultTournamentOpening),
         maxEntrants: tournamentEntrantsSchema.default(tournamentMaxEntrants),
         daysAhead: z.number().int().min(tournamentDaysAhead.min).max(tournamentDaysAhead.max).default(tournamentDaysAhead.default),
@@ -103,9 +106,11 @@ export const adminRequestSchema = z.discriminatedUnion(`op`, [
     z.strictObject({ op: z.literal(`report-close`), id: z.number().int().min(1), reason: adminReasonSchema }),
     // A reading that lies or misleads goes, with its lines; the audit row keeps why.
     z.strictObject({ op: z.literal(`delete-analysis`), id: analysisIdSchema, reason: adminReasonSchema }),
+    // No further game of the duel starts; a live one plays on.
+    z.strictObject({ op: z.literal(`duel-stop`), id: duelIdSchema, reason: adminReasonSchema }),
 ]);
 export type AdminRequest = z.infer<typeof adminRequestSchema>;
-export type AdminMutation = Exclude<AdminRequest, { op: `status` | `backup` | `tournament-schedule-list` }>;
+export type AdminMutation = Exclude<AdminRequest, { op: `status` | `backup` | `bot` | `tournament-schedule-list` }>;
 
 export const adminActionSchema = z.object({
     actor: z.string(),
@@ -130,6 +135,31 @@ export const adminReportSchema = z.object({
 });
 export type AdminReport = z.infer<typeof adminReportSchema>;
 
+/** The census counts the bots whose stream opened within this many days. */
+export const clientCensusDays = 14;
+
+export const adminClientCountSchema = z.object({
+    // hexo-bridge/<release>, or other.
+    client: z.string(),
+    bots: z.number().int().min(1),
+});
+export type AdminClientCount = z.infer<typeof adminClientCountSchema>;
+
+// One bot as the operator looks it up: its owner, presence, and the client
+// it last connected with, which only the owner and the operator see.
+export const adminBotSchema = z.object({
+    name: z.string(),
+    owner: z.string(),
+    online: z.boolean(),
+    open: z.boolean(),
+    liveGames: z.number().int().min(0),
+    delisted: z.boolean(),
+    version: z.string().nullable(),
+    client: botClientSchema.nullable(),
+    clientAt: z.number().int().nullable(),
+});
+export type AdminBot = z.infer<typeof adminBotSchema>;
+
 export const adminStatusSchema = z.object({
     uptimeSeconds: z.number().int().min(0),
     paused: z.boolean(),
@@ -142,6 +172,8 @@ export const adminStatusSchema = z.object({
     keylessRequests: z.number().int().min(0),
     tournaments: z.array(adminTournamentSchema),
     tournamentRules: z.array(adminTournamentRuleSchema),
+    liveDuels: z.number().int().min(0),
+    clients: z.array(adminClientCountSchema),
     recentActions: z.array(adminActionSchema).max(10),
     openReportCount: z.number().int().min(0),
     openReports: z.array(adminReportSchema).max(adminOpenReportsShown),
@@ -155,6 +187,7 @@ export type AdminErrorCode = (typeof adminErrorCodes)[number];
 
 export const adminResponseSchema = z.discriminatedUnion(`kind`, [
     z.object({ kind: z.literal(`status`), status: adminStatusSchema }),
+    z.object({ kind: z.literal(`bot`), bot: adminBotSchema }),
     z.object({ kind: z.literal(`tournament-rules`), rules: z.array(adminTournamentRuleSchema) }),
     z.object({ kind: z.literal(`done`), summary: z.string() }),
     z.object({ kind: z.literal(`error`), error: z.string(), code: z.enum(adminErrorCodes) }),

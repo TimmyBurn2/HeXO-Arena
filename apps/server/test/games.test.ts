@@ -11,6 +11,7 @@ import {
     type BotListing,
     gameSnapshotSchema,
     meSchema,
+    nameKeyOf,
     pairDailyCap,
     type BwsMoveRequestPacket,
     type BwsSetupPacket,
@@ -162,6 +163,12 @@ class Arena {
         return this.#call(`POST`, `/api/auth/logout`, { cookie });
     }
 
+    // Whether the bot holds a stream, and with open=1, as presence has it now.
+    presenceOf(name: string): { online: boolean; open: boolean } {
+        const id = findBot(this.query, nameKeyOf(name))?.id ?? ``;
+        return { online: this.world.presence.isOnline(id), open: this.world.presence.isOpenForChallenges(id) };
+    }
+
     async directoryEntry(name: string): Promise<BotListing | undefined> {
         const result = await this.#call(`GET`, `/api/bots`);
         return botListingSchema.array().parse(json(result)).find((bot) => bot.name === name);
@@ -205,12 +212,12 @@ class Arena {
         expect(result.status).toBe(200);
     }
 
-    liveGames(): Promise<HttpResult> {
-        return this.#call(`GET`, `/api/games`);
+    liveGames(query = ``): Promise<HttpResult> {
+        return this.#call(`GET`, `/api/games${query}`);
     }
 
-    finishedGames(): Promise<HttpResult> {
-        return this.#call(`GET`, `/api/games/finished`);
+    finishedGames(query = ``): Promise<HttpResult> {
+        return this.#call(`GET`, `/api/games/finished${query}`);
     }
 
     readAccount(token: string): Promise<HttpResult> {
@@ -1184,6 +1191,88 @@ describe('a signed-in person plays unrated', () => {
     });
 });
 
+describe('an owner plays their own bot', () => {
+    let arena: Arena;
+    let bot: Fixture;
+    let owner: string;
+
+    beforeEach(async () => {
+        vi.useFakeTimers(timerFakes);
+        arena = await startArena();
+        bot = await standardBot(arena);
+        owner = await arena.login(`botowner`);
+    });
+
+    afterEach(async () => {
+        bot.dispose();
+        await arena.close();
+        vi.useRealTimers();
+    });
+
+    it('plays the owner\'s game as an unrated test whatever the request says, tells the bot rated false, and rates nobody', async () => {
+        const created = await arena.createGame(owner, { bot: `opponentbot`, timeControl: turnControl, rated: true });
+        expect(created.status).toBe(201);
+        const { gameId, unratedByChoice, test } = snapshotOf(created);
+        expect(unratedByChoice).toBe(true);
+        expect(test).toBe(true);
+        expect((await gameStartOn(bot.stream)).rated).toBe(false);
+        expect((await arena.humanResign(owner, gameId)).status).toBe(200);
+        await finishOn(bot.stream);
+        expect(arena.count(`game_ratings`)).toBe(0);
+        expect(recomputeRatings(arena.query)).toBe(0);
+        const [entry] = finishedGamesPageSchema.parse(json(await arena.finishedGames(`?tests=1`))).games;
+        expect(entry).toMatchObject({ gameId, rated: false, unratedByChoice: true, test: true });
+    });
+
+    it('keeps the owner\'s test off the live and finished lists unless they ask for tests', async () => {
+        const created = await arena.createGame(owner, { bot: `opponentbot`, timeControl: turnControl });
+        const { gameId } = snapshotOf(created);
+        const live = async (query?: string) => liveGameEntrySchema.array().parse(json(await arena.liveGames(query))).map((entry) => [entry.gameId, entry.test]);
+        expect(await live()).toEqual([]);
+        expect(await live(`?tests=1`)).toEqual([[gameId, true]]);
+        expect((await arena.liveGames(`?tests=yes`)).status).toBe(400);
+        expect((await arena.humanResign(owner, gameId)).status).toBe(200);
+        await finishOn(bot.stream);
+        const finished = async (query?: string) => finishedGamesPageSchema.parse(json(await arena.finishedGames(query)));
+        expect(await finished()).toMatchObject({ games: [], total: 0 });
+        expect(await finished(`?tests=1`)).toMatchObject({ games: [{ gameId, test: true }], total: 1 });
+    });
+
+    it('counts the owner\'s games toward no daily pair cap', async () => {
+        const now = Math.floor(Date.now() / 1000);
+        arena.seedPairGames(`botowner`, `opponentbot`, pairDailyCap, now - (now % 86_400));
+        expect((await arena.createGame(owner, { bot: `opponentbot`, timeControl: unlimitedControl })).status).toBe(201);
+        expect(arena.query.get(sql`select count(*) as n from games where unrated_by_choice = 1`)).toEqual({ n: 1 });
+    });
+
+    it('starts the owner\'s game while the bot is online without open, and refuses it offline or outside the bot\'s accepts', async () => {
+        bot.stream.close();
+        bot.stream = arena.openStream(bot.token, false);
+        await until(() => arena.presenceOf(`opponentbot`).online && !arena.presenceOf(`opponentbot`).open);
+        expect(json(await arena.createGame(bot.cookie, { bot: `opponentbot`, timeControl: turnControl }))).toMatchObject({ code: `not_open` });
+        const outside = await arena.createGame(owner, { bot: `opponentbot`, timeControl: { mode: `turn`, turnTimeMs: 700_000 } });
+        expect(json(outside)).toMatchObject({ code: `clock_not_accepted` });
+        expect((await arena.createGame(owner, { bot: `opponentbot`, timeControl: turnControl })).status).toBe(201);
+        bot.stream.close();
+        await until(() => !arena.presenceOf(`opponentbot`).online);
+        await vi.advanceTimersByTimeAsync(60_000);
+        const offline = await arena.createGame(owner, { bot: `opponentbot`, timeControl: turnControl });
+        expect(offline.status).toBe(400);
+        expect(json(offline)).toMatchObject({ code: `not_open` });
+    });
+
+    it('holds the owner\'s games to the live-game caps of both sides', async () => {
+        for (let started = 0; started < 3; started += 1) {
+            expect((await arena.createGame(owner, { bot: `opponentbot`, timeControl: unlimitedControl })).status).toBe(201);
+            await vi.advanceTimersByTimeAsync(60_000);
+        }
+        expect(json(await arena.createGame(owner, { bot: `opponentbot`, timeControl: unlimitedControl }))).toMatchObject({ code: `human_busy` });
+        expect((await arena.createGame(bot.cookie, { bot: `opponentbot`, timeControl: unlimitedControl })).status).toBe(201);
+        const busy = await arena.createGame(await arena.login(`lateplayer`), { bot: `opponentbot`, timeControl: unlimitedControl });
+        expect(json(busy)).toMatchObject({ code: `bot_busy` });
+    });
+});
+
 describe('game creation gates', () => {
     let arena: Arena;
     let bot: Fixture;
@@ -1314,15 +1403,6 @@ describe('game creation gates', () => {
         expect(json(refused)).toMatchObject({ code: `daily_pair_cap` });
         const later = Math.floor(Date.now() / 1000);
         expect(refused.retryAfter).toBe(String(dayStart + 86_400 - later));
-    });
-
-    it('refuses an owner a game against their own bot, starting nothing, while another person still plays it', async () => {
-        const owner = await arena.login(`botowner`);
-        const refused = await arena.createGame(owner, { bot: `opponentbot`, timeControl: unlimitedControl });
-        expect(refused.status).toBe(403);
-        expect(json(refused)).toMatchObject({ code: `own_bot` });
-        expect(arena.count(`games`)).toBe(0);
-        expect((await arena.createGame(bot.cookie, { bot: `opponentbot`, timeControl: unlimitedControl })).status).toBe(201);
     });
 
     it('answers 404 for an unknown bot and rejects malformed bodies', async () => {

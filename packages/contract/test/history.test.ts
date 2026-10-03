@@ -108,7 +108,7 @@ describe('listFinishedGames in the document', () => {
         expect(operation?.operationId).toBe(`listFinishedGames`);
         expect(operation?.security).toEqual([]);
         const names = (operation?.parameters ?? []).map((parameter) => (`name` in parameter ? parameter.name : ``));
-        expect(names.sort()).toEqual([`analyzed`, `before`, `clock`, `kind`, `opening`, `page`, `player`, `reason`, `result`, `side`, `vs`]);
+        expect(names.sort()).toEqual([`analyzed`, `before`, `clock`, `kind`, `opening`, `page`, `player`, `reason`, `result`, `side`, `tests`, `vs`]);
         expect(Object.keys(operation?.responses ?? {}).sort()).toEqual([`200`, `400`, `404`, `429`]);
     });
 });

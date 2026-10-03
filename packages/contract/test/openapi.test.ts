@@ -5,6 +5,7 @@ import {
     botGameResignPath,
     botGameSocketPath,
     botStreamPath,
+    botSettingsPath,
     botTokenPath,
     botsPath,
     challengeAcceptPath,
@@ -27,6 +28,10 @@ import {
     leaderboardPath,
     mePath,
     serverLineLimitBytes,
+    duelBotsPath,
+    duelListPath,
+    duelPath,
+    duelStopPath,
     signupPath,
     streamBacklogLimitBytes,
 } from '../src';
@@ -386,11 +391,41 @@ describe('openapi document', () => {
         }
     });
 
+    it('documents the duel: started behind the session cookie with each refusal, read by anyone, stopped by its starter or owners', () => {
+        const document = buildOpenApiDocument();
+        const create = dig(document, `paths`, duelListPath, `post`);
+        expect(dig(create, `security`)).toEqual([{ sessionCookie: [] }]);
+        expect(dig(create, `responses`, `201`, `content`, `application/json`, `schema`, `properties`, `games`, `maxItems`)).toBe(50);
+        const refusals = (status: string) => arrayOfUnknown(dig(create, `responses`, status, `content`, `application/json`, `schema`, `properties`, `code`, `enum`));
+        expect(refusals(`400`)).toEqual([`bad_request`, `not_open`, `duel_refused`, `clock_not_accepted`, `unknown_level`, `bot_busy`, `duel_live`, `duel_busy`, `unrated_only`, `test_only`]);
+        expect(refusals(`403`)).toEqual([`delisted`, `banned`]);
+        expect(refusals(`429`)).toEqual([`daily_duel_cap`, `daily_pair_cap`, `daily_bot_cap`, `rate_limited`]);
+        expect(dig(create, `responses`, `429`, `headers`, `Retry-After`)).toBeDefined();
+        for (const path of [duelListPath, duelPath, duelBotsPath]) expect(dig(document, `paths`, path, `get`, `security`), path).toEqual([]);
+        expect(dig(document, `components`, `schemas`, `DuelBotState`, `properties`, `duelsByOthers`, `type`)).toBe(`boolean`);
+        const stop = dig(document, `paths`, duelStopPath, `post`);
+        expect(dig(stop, `security`)).toEqual([{ sessionCookie: [] }]);
+        expect(arrayOfUnknown(dig(stop, `responses`, `403`, `content`, `application/json`, `schema`, `properties`, `code`, `enum`))).toEqual([`not_yours`]);
+        expect(arrayOfUnknown(dig(stop, `responses`, `409`, `content`, `application/json`, `schema`, `properties`, `code`, `enum`))).toEqual([`over`]);
+    });
+
+    it('documents a bot\'s settings for its owner on the site alone, never in the bot surface', () => {
+        const document = buildOpenApiDocument();
+        for (const method of [`get`, `patch`]) {
+            const operation = dig(document, `paths`, botSettingsPath, method);
+            expect(dig(operation, `security`), method).toEqual([{ sessionCookie: [] }]);
+            expect(dig(operation, `responses`, `200`, `content`, `application/json`, `schema`, `properties`, `duelsByOthers`, `type`), method).toBe(`boolean`);
+        }
+        expect(dig(document, `components`, `schemas`, `BotListing`, `properties`, `duelsByOthers`)).toBeUndefined();
+        expect(dig(document, `components`, `schemas`, `Account`, `properties`, `duelsByOthers`)).toBeUndefined();
+    });
+
     it('documents the pause refusal with Retry-After wherever something new starts', () => {
         const document = buildOpenApiDocument();
         const starts: [string, string][] = [
             [botStreamPath, `get`],
             [gamesPath, `post`],
+            [duelListPath, `post`],
             [botChallengePath, `post`],
             [challengeAcceptPath, `post`],
         ];

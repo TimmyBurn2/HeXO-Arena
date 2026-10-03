@@ -3,6 +3,7 @@ import type { BotListing } from '@hexo-arena/contract';
 import { fetchBots } from '../api/client';
 import { useAsync } from '../api/use-async';
 import { BotBadge, PresenceDot, OpenTag, PlayerName, Rating, summarizeAccepts } from '../components/player';
+import { useMe } from '../me';
 import { playBotPath, readinessOf } from '../play/setup';
 import { ErrorFrame, SkeletonRows } from '../components/states';
 import { Link } from '../router/Link';
@@ -123,6 +124,9 @@ function Directory({ onlineOnly, analyzersOnly, onDayOne }: { onlineOnly: boolea
 }
 
 function BotRow({ bot }: { bot: BotListing }) {
+    const me = useMe();
+    // An owner plays their own bot while it is online, open to others or not.
+    const readiness = readinessOf(bot, undefined, me.status === `ready` && me.me?.kind === `user` ? me.me.name : null);
     return (
         <tr>
             <td>
@@ -143,11 +147,11 @@ function BotRow({ bot }: { bot: BotListing }) {
             <td className="col-optional">{summarizeAccepts(bot.accepts)}</td>
             <td className="col-optional">{bot.version ?? ``}</td>
             <td>
-                {readinessOf(bot) === `ready` ? (
+                {readiness === `ready` ? (
                     <Link to={playBotPath(bot.name)} className="btn btn-primary btn-sm" ariaLabel={text.bots.playBot(bot.name)}>
                         {text.bots.play}
                     </Link>
-                ) : readinessOf(bot) === `busy` ? (
+                ) : readiness === `busy` ? (
                     <span className="note">{text.bots.busy}</span>
                 ) : null}
             </td>

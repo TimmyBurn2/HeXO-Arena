@@ -12,7 +12,7 @@ import { useLiveReplay } from '../live/use-live-replay';
 import { BotBadge, OpenTag, PlayerName, PresenceDot, Rating } from '../components/player';
 import { useMe } from '../me';
 import { turnWindowOf } from '../play/accepts';
-import { playBotPath, readinessOf, type Readiness } from '../play/setup';
+import { ownedBy, playBotPath, readinessOf, type Readiness } from '../play/setup';
 import { ErrorFrame, SkeletonRows } from '../components/states';
 import { Link } from '../router/Link';
 import { botApiRepository } from '../site-links';
@@ -51,7 +51,7 @@ export function BotScreen({ name }: { name: string }) {
     if (data !== null && bot === undefined) return <MissingBot name={name} />;
     if (bot === undefined) return null;
 
-    return <BotProfile bot={bot} />;
+    return <BotProfile bot={bot} onChanged={reload} />;
 }
 
 function MissingBot({ name }: { name: string }) {
@@ -67,10 +67,12 @@ function MissingBot({ name }: { name: string }) {
     );
 }
 
-function BotProfile({ bot }: { bot: BotListing }) {
+function BotProfile({ bot, onChanged }: { bot: BotListing; onChanged: () => void }) {
     const me = useMe();
-    const owned = me.status === `ready` && me.me?.kind === `user` && me.me.name === bot.ownerName;
-    const readiness = readinessOf(bot);
+    const viewer = me.status === `ready` && me.me?.kind === `user` ? me.me.name : null;
+    const owned = ownedBy(bot, viewer);
+    // The owner plays their own bot while it is online, open to others or not.
+    const readiness = readinessOf(bot, undefined, viewer);
     const blockedReasons = {
         busy: text.play.busy,
         tournament: text.play.inTournament,
@@ -128,7 +130,7 @@ function BotProfile({ bot }: { bot: BotListing }) {
             <PlayingNow bot={bot.name} />
             <PlayerBlocks name={bot.name} />
             <PlayerHistory player={bot.name} title={text.games.recent} />
-            {owned ? <OwnerPanel bot={bot.name} /> : null}
+            {owned ? <OwnerPanel bot={bot.name} onChanged={onChanged} /> : null}
             <ReportLine subject={`/bots/${encodeURIComponent(bot.name)}`} name={bot.name} />
         </>
     );

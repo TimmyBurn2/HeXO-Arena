@@ -6,6 +6,7 @@ import {
     turnsOnBoard,
     type FinishReason,
     type GameHeadline,
+    type GameDuel,
     type GameTournament,
     type SeatLevel,
     type Side,
@@ -16,7 +17,7 @@ import { randomUUID } from 'node:crypto';
 import { replay, type Coord, type Position } from '@hexo-arena/rules';
 import { nowSeconds, type Query } from './db';
 import { alias } from 'drizzle-orm/sqlite-core';
-import { bots, games, moves, tournamentPairings, tournaments, users } from './db/schema';
+import { bots, duels, games, moves, tournamentPairings, tournaments, users } from './db/schema';
 import { applyFinishedGame, countedGameOf, ratable, ratesSomebody, seatColumns } from './rating-store';
 import { shownBot, shownUser, type ShownName } from './shown-names';
 
@@ -47,6 +48,7 @@ export interface HumanGameRecord {
     readonly opening: readonly OpeningCell[];
     readonly levels: SeatLevels;
     readonly unratedByChoice: boolean;
+    readonly test: boolean;
     readonly winner: Side | null;
     readonly finishReason: FinishReason | null;
     readonly voided: boolean;
@@ -80,6 +82,8 @@ export interface BotGameRecord {
     readonly timeControl: TimeControl;
     readonly opening: readonly OpeningCell[];
     readonly levels: SeatLevels;
+    readonly unratedByChoice: boolean;
+    readonly test: boolean;
     readonly winner: Side | null;
     readonly finishReason: FinishReason | null;
     readonly voided: boolean;
@@ -89,11 +93,12 @@ export type GameRecord = HumanGameRecord | GuestGameRecord | BotGameRecord;
 
 /**
  * A game a person plays against a bot: a user by id, who may start it
- * unrated, a guest by its label alone; `level` is the bot's, absent at its default.
+ * unrated or play their own bot in a test, a guest by its label alone;
+ * `level` is the bot's, absent at its default.
  */
 export function insertGame(
     query: Query,
-    game: ({ userId: string; unratedByChoice?: boolean } | { guestName: string }) & {
+    game: ({ userId: string; unratedByChoice?: boolean; test?: boolean } | { guestName: string }) & {
         botId: string;
         userSide: Side;
         timeControl: TimeControl;
@@ -106,7 +111,9 @@ export function insertGame(
     query.insert(games)
         .values({
             id,
-            ...(`userId` in game ? { userId: game.userId, unratedByChoice: game.unratedByChoice === true ? 1 : 0 } : { guestName: game.guestName }),
+            ...(`userId` in game
+                ? { userId: game.userId, unratedByChoice: game.unratedByChoice === true ? 1 : 0, test: game.test === true ? 1 : 0 }
+                : { guestName: game.guestName }),
             botId: game.botId,
             userSide: game.userSide,
             ...(game.userSide === `x` ? { oLevel: level } : { xLevel: level }),
@@ -136,6 +143,15 @@ export function insertMove(
         .run();
 }
 
+/** What a bot game belongs to: a tournament's pairing, or a duel. */
+export type BotGameTag = { readonly kind: `pairing`; readonly id: string; readonly game: 1 | 2 } | { readonly kind: `duel`; readonly id: string; readonly game: number };
+
+/**
+ * A game between two bots: a challenge's, a tournament's, or a duel's.
+ * Only a duel's games play a level other than a bot's default; a duel's
+ * games and a challenge's between two bots of one owner carry the unrated
+ * mark, and the latter and a test's games are tests.
+ */
 export function insertBotGame(
     query: Query,
     game: {
@@ -144,20 +160,32 @@ export function insertBotGame(
         challengerSide: Side;
         timeControl: TimeControl;
         opening: readonly OpeningCell[];
-        pairing?: { id: string; game: 1 | 2 };
+        tag?: BotGameTag;
+        levels?: SeatLevels;
+        unratedByChoice?: boolean;
+        test?: boolean;
     },
 ): string {
     const id = `g_${randomUUID()}`;
+    const level = (side: Side) => {
+        const stored = game.levels?.[side] ?? null;
+        return stored === null ? null : JSON.stringify(stored);
+    };
+    const tag = game.tag;
     query.insert(games)
         .values({
             id,
             challengerBotId: game.challengerBotId,
             destBotId: game.destBotId,
             challengerSide: game.challengerSide,
+            xLevel: level(`x`),
+            oLevel: level(`o`),
+            unratedByChoice: game.unratedByChoice === true ? 1 : 0,
+            test: game.test === true ? 1 : 0,
             timeControl: JSON.stringify(game.timeControl),
             openingCells: JSON.stringify(game.opening),
             createdAt: nowSeconds(),
-            ...(game.pairing === undefined ? {} : { pairingId: game.pairing.id, pairingGame: game.pairing.game }),
+            ...(tag === undefined ? {} : tag.kind === `pairing` ? { pairingId: tag.id, pairingGame: tag.game } : { duelId: tag.id, duelGame: tag.game }),
         })
         .run();
     return id;
@@ -229,6 +257,7 @@ export function findGame(query: Query, gameId: string): GameRecord | undefined {
             xLevel: games.xLevel,
             oLevel: games.oLevel,
             unratedByChoice: games.unratedByChoice,
+            test: games.test,
             timeControl: games.timeControl,
             openingCells: games.openingCells,
             winner: games.winner,
@@ -271,6 +300,7 @@ export function findGame(query: Query, gameId: string): GameRecord | undefined {
             opening,
             levels,
             unratedByChoice: row.unratedByChoice === 1,
+            test: row.test === 1,
             winner,
             finishReason,
             voided,
@@ -313,6 +343,8 @@ export function findGame(query: Query, gameId: string): GameRecord | undefined {
             timeControl,
             opening,
             levels,
+            unratedByChoice: row.unratedByChoice === 1,
+            test: row.test === 1,
             winner,
             finishReason,
             voided,
@@ -403,8 +435,9 @@ export function countHumanPairGamesSince(query: Query, pair: { userId: string; b
     return row?.n ?? 0;
 }
 
-// Bot-vs-bot caps count games the log already holds, from the start of
-// the current UTC day.
+// Bot-vs-bot caps count the games the log already holds that can move a
+// rating, from the start of the current UTC day: an unrated duel counts
+// toward no cap, as practice and unrated human games do.
 export function countPairBotGamesSince(
     query: Query,
     pair: { one: string; two: string },
@@ -420,6 +453,7 @@ export function countPairBotGamesSince(
                     and(eq(games.challengerBotId, pair.one), eq(games.destBotId, pair.two)),
                     and(eq(games.challengerBotId, pair.two), eq(games.destBotId, pair.one)),
                 ),
+                ratable,
             ),
         )
         .all();
@@ -439,6 +473,17 @@ export function findGameTournament(query: Query, gameId: string): GameTournament
     return { id: row.id, name: row.name, round: row.round, game: row.game };
 }
 
+/** The duel a game belongs to, with its number and the duel's length. */
+export function findGameDuel(query: Query, gameId: string): GameDuel | undefined {
+    const row = query
+        .select({ id: duels.id, game: games.duelGame, of: duels.games })
+        .from(games)
+        .innerJoin(duels, eq(duels.id, games.duelId))
+        .where(eq(games.id, gameId))
+        .get();
+    return row?.game == null ? undefined : { id: row.id, game: row.game, of: row.of };
+}
+
 export function countBotBotGamesSince(query: Query, botId: string, sinceSeconds: number): number {
     const [row] = query
         .select({ n: count() })
@@ -447,6 +492,7 @@ export function countBotBotGamesSince(query: Query, botId: string, sinceSeconds:
             and(
                 gte(games.createdAt, sinceSeconds),
                 or(eq(games.challengerBotId, botId), eq(games.destBotId, botId)),
+                ratable,
             ),
         )
         .all();

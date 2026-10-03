@@ -10,9 +10,6 @@ export const tournamentMinPresent = 3;
 /** Entries one tournament takes at most, and the default cap the operator sets. */
 export const tournamentMaxEntrants = 12;
 
-/** How long a game waits for a bot that is not connected before it counts as a no-show. */
-export const tournamentPresenceGraceMs = 60_000;
-
 /** Pairings missed in a row that withdraw a bot. */
 export const tournamentMissesToWithdraw = 2;
 
@@ -29,13 +26,6 @@ export const tournamentHorizonMs = 14 * 86_400_000;
 /** A development server schedules a tournament this soon, so a seeded one starts within minutes. */
 export const tournamentDevLeadMs = 60_000;
 
-/** The turn clock a tournament takes, and its default. */
-export const tournamentTurnMs = { min: 5_000, max: 60_000, default: 10_000 } as const;
-
-/** The match clock a tournament takes: main time and increment. */
-export const tournamentMainMs = { min: 60_000, max: 600_000 } as const;
-export const tournamentIncrementMs = { min: 0, max: 10_000 } as const;
-
 /** The default opening of a tournament's games. */
 export const defaultTournamentOpening = 5 as const;
 
@@ -47,19 +37,6 @@ export const tournamentNameSchema = z
     .regex(/^[!-~](?:[ -~]*[!-~])?$/);
 
 export const tournamentIdSchema = z.string().regex(/^t_[a-z0-9]{12}$/);
-
-/** A tournament's clock: a turn or match clock in the tournament bounds, never unlimited. */
-export const tournamentClockSchema = timeControlSchema.refine(
-    (clock: TimeControl) =>
-        clock.mode === `turn`
-            ? clock.turnTimeMs >= tournamentTurnMs.min && clock.turnTimeMs <= tournamentTurnMs.max
-            : clock.mode === `match` &&
-              clock.mainTimeMs >= tournamentMainMs.min &&
-              clock.mainTimeMs <= tournamentMainMs.max &&
-              clock.incrementMs >= tournamentIncrementMs.min &&
-              clock.incrementMs <= tournamentIncrementMs.max,
-    { message: `a turn clock of 5 to 60 s, or a match clock of 1 to 10 min plus 0 to 10 s` },
-);
 
 export const tournamentStatusSchema = z.enum([`scheduled`, `running`, `finished`, `called_off`, `canceled`]);
 export type TournamentStatus = z.infer<typeof tournamentStatusSchema>;

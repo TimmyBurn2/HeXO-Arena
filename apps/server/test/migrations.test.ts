@@ -318,7 +318,7 @@ describe('the guest games migration', () => {
         expect(() => guest.run(`g4`, null, `Guest k3f9 and more`)).toThrow(/CHECK/);
         expect(() => guest.run(`g5`, null, null)).toThrow(/CHECK/);
         const indexes = sqlite.prepare(`select name from sqlite_master where type = 'index' and tbl_name = 'games' and name like 'games_%' order by name`).all();
-        expect(indexes).toHaveLength(14);
+        expect(indexes).toHaveLength(16);
     });
 });
 
@@ -482,9 +482,9 @@ describe('the unrated by choice migration', () => {
         const guest = sqlite.prepare(`insert into games (id, guest_name, bot_id, user_side, unrated_by_choice, time_control, opening_cells, created_at) values (?, 'Guest k3f9', 'b1', 'o', ?, '{}', '[]', 5)`);
         expect(() => guest.run(`g5`, 0)).not.toThrow();
         expect(() => guest.run(`g6`, 1)).toThrow(/CHECK/);
-        const bots = sqlite.prepare(`insert into games (id, challenger_bot_id, dest_bot_id, challenger_side, unrated_by_choice, time_control, opening_cells, created_at) values (?, 'b1', 'b2', 'x', ?, '{}', '[]', 5)`);
-        expect(() => bots.run(`g7`, 0)).not.toThrow();
-        expect(() => bots.run(`g8`, 1)).toThrow(/CHECK/);
+        const bots = sqlite.prepare(`insert into games (id, challenger_bot_id, dest_bot_id, challenger_side, x_level, unrated_by_choice, time_control, opening_cells, created_at) values (?, 'b1', 'b2', 'x', ?, ?, '{}', '[]', 5)`);
+        expect(() => bots.run(`g7`, null, 0)).not.toThrow();
+        expect(() => bots.run(`g8`, level, 1)).toThrow(/CHECK/);
     });
 });
 
@@ -603,5 +603,325 @@ describe('the involved analyzers migration', () => {
         expect(() => mark.run(1, `a2`)).toThrow(/CHECK/);
         expect(() => mark.run(2, `a1`)).toThrow(/CHECK/);
         expect(() => mark.run(null, `a1`)).toThrow(/NOT NULL/);
+    });
+});
+
+describe('the series migration', () => {
+    let sqlite: Sqlite;
+    let folder: string;
+
+    afterEach(() => {
+        sqlite.close();
+        rmSync(folder, { recursive: true, force: true });
+    });
+
+    it('keeps every game, its unrated mark, moves, and ratings, and turns every bot\'s switch for duels by others on', () => {
+        sqlite = openDatabase(`:memory:`);
+        folder = migrationsUpTo(24);
+        migrate(drizzle(sqlite), { migrationsFolder: folder });
+        sqlite.exec(`
+            insert into name_reservations (name_key) values ('owner'), ('alpha'), ('beta');
+            insert into users (id, discord_id, name, name_key, created_at) values ('u1', 'd1', 'owner', 'owner', 1);
+            insert into bots (id, owner_id, name, name_key, token_hash, scope, created_at)
+                values ('b1', 'u1', 'alpha', 'alpha', 'h1', 'bot:play', 1), ('b2', 'u1', 'beta', 'beta', 'h2', 'bot:play', 1);
+            insert into games (id, user_id, bot_id, user_side, unrated_by_choice, time_control, opening_cells, winner, finish_reason, created_at, finished_at, finish_seq)
+                values ('chosen', 'u1', 'b1', 'x', 1, '{"mode":"unlimited"}', '[]', 'x', 'surrender', 1, 2, 1),
+                       ('rated', 'u1', 'b1', 'o', 0, '{"mode":"unlimited"}', '[]', 'x', 'surrender', 1, 3, 2);
+            insert into game_ratings (game_id, side, rating_before, rating_after, deviation_after) values ('rated', 'x', 1000, 1100, 300), ('rated', 'o', 1500, 1500, 500);
+            insert into moves (game_id, seq, side, first_x, first_y, second_x, second_y, created_at) values ('chosen', 1, 'o', 1, 0, 0, 1, 2);
+        `);
+        runMigrations(sqlite);
+        expect(sqlite.prepare(`select id, unrated_by_choice as unrated, duel_id as duel from games order by id`).all()).toEqual([
+            { id: `chosen`, unrated: 1, duel: null },
+            { id: `rated`, unrated: 0, duel: null },
+        ]);
+        expect(sqlite.prepare(`select count(*) as n from moves`).get()).toEqual({ n: 1 });
+        expect(sqlite.prepare(`select count(*) as n from game_ratings`).get()).toEqual({ n: 2 });
+        expect(sqlite.prepare(`select distinct duels_by_others as on_ from bots`).all()).toEqual([{ on_: 1 }]);
+        expect(sqlite.pragma(`foreign_key_check`)).toEqual([]);
+        expect(() => sqlite.prepare(`update bots set duels_by_others = 2 where id = 'b1'`).run()).toThrow(/CHECK/);
+    });
+});
+
+describe('the duels migration', () => {
+    let sqlite: Sqlite;
+    let folder: string;
+
+    afterEach(() => {
+        sqlite.close();
+        rmSync(folder, { recursive: true, force: true });
+    });
+
+    const turn = `{"mode":"turn","turnTimeMs":10000}`;
+
+    // As the dev stack left it: a series between two owners' bots with its games, one between one owner's bots,
+    // a game of a person against their own bot, one played rated before, an owner's switch off, and the operator's stop.
+    function seedSeries(): void {
+        sqlite = openDatabase(`:memory:`);
+        folder = migrationsUpTo(27);
+        migrate(drizzle(sqlite), { migrationsFolder: folder });
+        sqlite.exec(`
+            insert into name_reservations (name_key) values ('ann'), ('bob'), ('alpha'), ('aster'), ('beta');
+            insert into users (id, discord_id, name, name_key, created_at) values ('u1', 'd1', 'ann', 'ann', 1), ('u2', 'd2', 'bob', 'bob', 1);
+            insert into bots (id, owner_id, name, name_key, token_hash, scope, created_at, series_by_others)
+                values ('b1', 'u1', 'alpha', 'alpha', 'h1', 'bot:play', 1, 1), ('b2', 'u1', 'aster', 'aster', 'h2', 'bot:play', 1, 0), ('b3', 'u2', 'beta', 'beta', 'h3', 'bot:play', 1, 1);
+            insert into series (id, started_by, bot_a_id, bot_b_id, a_first, a_x, games, time_control, opening_plies, a_rating, b_rating, rated, status, end_reason, end_bot, created_at, ended_at)
+                values ('s_abcdefghjkmn', 'u2', 'b1', 'b3', 1, 0, 2, '${turn}', 5, 1500, 1500, 1, 'finished', null, null, 10, 20),
+                       ('s_npqrstuvwxyz', 'u1', 'b1', 'b2', 0, 1, 4, '${turn}', 5, 1500, 1480, 0, 'stopped', 'operator', null, 30, 40);
+            insert into games (id, challenger_bot_id, dest_bot_id, challenger_side, unrated_by_choice, series_id, series_game, time_control, opening_cells, winner, finish_reason, created_at, finished_at, finish_seq)
+                values ('g1', 'b3', 'b1', 'x', 0, 's_abcdefghjkmn', 1, '${turn}', '[]', 'x', 'surrender', 10, 11, 1),
+                       ('g2', 'b1', 'b3', 'x', 0, 's_abcdefghjkmn', 2, '${turn}', '[]', 'o', 'surrender', 12, 13, 2),
+                       ('g3', 'b2', 'b1', 'x', 1, 's_npqrstuvwxyz', 1, '${turn}', '[]', 'x', 'surrender', 30, 31, 3),
+                       ('rated', 'b1', 'b2', 'x', 0, null, null, '${turn}', '[]', 'x', 'surrender', 1, 2, 4);
+            insert into games (id, user_id, bot_id, user_side, unrated_by_choice, time_control, opening_cells, winner, finish_reason, created_at, finished_at, finish_seq)
+                values ('own', 'u1', 'b1', 'x', 1, '{"mode":"unlimited"}', '[]', 'x', 'surrender', 5, 6, 5),
+                       ('chosen', 'u2', 'b1', 'x', 1, '{"mode":"unlimited"}', '[]', 'x', 'surrender', 5, 7, 6);
+            insert into game_ratings (game_id, side, rating_before, rating_after, deviation_after) values ('g1', 'x', 1500, 1510, 300), ('g1', 'o', 1500, 1490, 300);
+            insert into admin_actions (actor, action, target, reason, at) values ('operator', 'series-stop', 's_npqrstuvwxyz', 'farming', 40), ('operator', 'pause', null, 'deploy', 41);
+        `);
+        runMigrations(sqlite);
+    }
+
+    const insertDuel = (id: string, status: string, extra: Record<string, unknown> = {}) => {
+        const row = {
+            id,
+            started_by: `u1`,
+            bot_a_id: `b1`,
+            bot_b_id: `b3`,
+            a_first: 1,
+            a_x: 0,
+            test: 0,
+            games: 2,
+            time_control: turn,
+            opening_plies: 5,
+            a_level: null,
+            b_level: null,
+            a_rating: 1500,
+            b_rating: 1500,
+            a_version: null,
+            b_version: null,
+            rated: 0,
+            status,
+            end_reason: null,
+            end_bot: null,
+            created_at: 10,
+            ended_at: status === `running` ? null : 20,
+            ...extra,
+        };
+        const columns = Object.keys(row);
+        return sqlite.prepare(`insert into duels (${columns.join(`, `)}) values (${columns.map((column) => `@${column}`).join(`, `)})`).run(row).changes;
+    };
+
+    it('keeps every series as a duel under a new id, a test where one person owns both bots, and its games pointing at it', () => {
+        seedSeries();
+        expect(sqlite.prepare(`select id, test, games, rated, status, end_reason as reason, a_version as aVersion, b_version as bVersion from duels order by created_at`).all()).toEqual([
+            { id: `d_abcdefghjkmn`, test: 0, games: 2, rated: 1, status: `finished`, reason: null, aVersion: null, bVersion: null },
+            { id: `d_npqrstuvwxyz`, test: 1, games: 4, rated: 0, status: `stopped`, reason: `operator`, aVersion: null, bVersion: null },
+        ]);
+        expect(sqlite.prepare(`select id, duel_id as duel, duel_game as game, unrated_by_choice as unrated, test from games order by id`).all()).toEqual([
+            { id: `chosen`, duel: null, game: null, unrated: 1, test: 0 },
+            { id: `g1`, duel: `d_abcdefghjkmn`, game: 1, unrated: 0, test: 0 },
+            { id: `g2`, duel: `d_abcdefghjkmn`, game: 2, unrated: 0, test: 0 },
+            { id: `g3`, duel: `d_npqrstuvwxyz`, game: 1, unrated: 1, test: 1 },
+            { id: `own`, duel: null, game: null, unrated: 1, test: 1 },
+            { id: `rated`, duel: null, game: null, unrated: 0, test: 0 },
+        ]);
+        expect(sqlite.prepare(`select count(*) as n from game_ratings`).get()).toEqual({ n: 2 });
+        expect(sqlite.prepare(`select id, duels_by_others as on_ from bots order by id`).all()).toEqual([
+            { id: `b1`, on_: 1 },
+            { id: `b2`, on_: 0 },
+            { id: `b3`, on_: 1 },
+        ]);
+        expect(sqlite.prepare(`select action, target from admin_actions order by id`).all()).toEqual([
+            { action: `duel-stop`, target: `d_npqrstuvwxyz` },
+            { action: `pause`, target: null },
+        ]);
+        expect(sqlite.prepare(`select count(*) as n from sqlite_master where name = 'series'`).get()).toEqual({ n: 0 });
+        expect(sqlite.pragma(`foreign_key_check`)).toEqual([]);
+        expect(() => sqlite.prepare(`insert into admin_actions (actor, action, target, reason, at) values ('operator', 'series-stop', 'x', 'r', 1)`).run()).toThrow(/CHECK/);
+    });
+
+    it('holds a pair to one running duel in one stored order, and a duel to its lengths, openings, and endings', () => {
+        seedSeries();
+        insertDuel(`d1`, `running`);
+        expect(() => insertDuel(`d2`, `running`)).toThrow(/UNIQUE/);
+        expect(() => insertDuel(`d3`, `finished`)).not.toThrow();
+        expect(() => insertDuel(`d4`, `running`, { bot_a_id: `b3`, bot_b_id: `b1` })).toThrow(/CHECK/);
+        expect(() => insertDuel(`d5`, `finished`, { games: 3 })).toThrow(/CHECK/);
+        expect(() => insertDuel(`d6`, `finished`, { opening_plies: 1, games: 4 })).toThrow(/CHECK/);
+        expect(() => insertDuel(`d7`, `finished`, { opening_plies: 1, games: 2 })).not.toThrow();
+        expect(() => insertDuel(`d8`, `cut_short`, { end_reason: `offline`, end_bot: `a` })).not.toThrow();
+        expect(() => insertDuel(`d9`, `cut_short`)).toThrow(/CHECK/);
+        expect(() => insertDuel(`d10`, `stopped`, { end_reason: `offline` })).toThrow(/CHECK/);
+        expect(() => insertDuel(`d11`, `stopped`, { end_reason: `owner`, end_bot: `b` })).not.toThrow();
+        expect(() => insertDuel(`d12`, `finished`, { end_bot: `a` })).toThrow(/CHECK/);
+        expect(() => insertDuel(`d13`, `finished`, { ended_at: null })).toThrow(/CHECK/);
+        expect(() => insertDuel(`d14`, `finished`, { rated: 1, a_level: `{"id":"easy","label":"easy"}` })).toThrow(/CHECK/);
+        expect(() => insertDuel(`d15`, `finished`, { rated: 0, a_level: `{"id":"easy","label":"easy"}` })).not.toThrow();
+        expect(() => insertDuel(`d16`, `finished`, { a_version: `0.3.1`, b_version: `x`.repeat(64) })).not.toThrow();
+        expect(() => insertDuel(`d17`, `finished`, { a_version: `` })).toThrow(/CHECK/);
+        expect(() => insertDuel(`d18`, `finished`, { b_version: `x`.repeat(65) })).toThrow(/CHECK/);
+    });
+
+    it('lets only a test play more than ten games, and never rated', () => {
+        seedSeries();
+        expect(() => insertDuel(`d1`, `finished`, { games: 20 })).toThrow(/CHECK/);
+        for (const games of [20, 30, 50]) expect(() => insertDuel(`t${String(games)}`, `finished`, { test: 1, games })).not.toThrow();
+        expect(() => insertDuel(`d2`, `finished`, { test: 1, games: 40 })).toThrow(/CHECK/);
+        expect(() => insertDuel(`d3`, `finished`, { test: 1, rated: 1 })).toThrow(/CHECK/);
+        expect(() => insertDuel(`d4`, `finished`, { test: 2 })).toThrow(/CHECK/);
+    });
+
+    it('lets a duel game be a bot game alone, numbered within its duel, and marks unrated games of a duel', () => {
+        seedSeries();
+        insertDuel(`d1`, `running`, { test: 1, games: 50 });
+        const game = sqlite.prepare(
+            `insert into games (id, challenger_bot_id, dest_bot_id, challenger_side, unrated_by_choice, x_level, duel_id, duel_game, time_control, opening_cells, created_at) values (?, 'b1', 'b3', 'x', ?, ?, ?, ?, '{}', '[]', 5)`,
+        );
+        expect(() => game.run(`x1`, 1, null, `d1`, 1)).not.toThrow();
+        expect(() => game.run(`x2`, 1, `{"id":"easy","label":"easy"}`, `d1`, 50)).not.toThrow();
+        expect(() => game.run(`x3`, 1, `{"id":"easy","label":"easy"}`, null, null)).toThrow(/CHECK/);
+        expect(() => game.run(`x4`, 0, null, `d1`, null)).toThrow(/CHECK/);
+        expect(() => game.run(`x5`, 0, null, `d1`, 51)).toThrow(/CHECK/);
+        expect(() => game.run(`x6`, 0, null, `nowhere`, 1)).toThrow(/FOREIGN KEY/);
+        const human = sqlite.prepare(`insert into games (id, user_id, bot_id, user_side, duel_id, duel_game, time_control, opening_cells, created_at) values (?, 'u1', 'b1', 'x', 'd1', 1, '{}', '[]', 5)`);
+        expect(() => human.run(`x7`)).toThrow(/CHECK/);
+        sqlite.prepare(`delete from bots where id = 'b3'`).run();
+        expect(sqlite.prepare(`select count(*) as n from duels where id = 'd1'`).get()).toEqual({ n: 0 });
+        expect(sqlite.prepare(`select count(*) as n from games where duel_id = 'd1'`).get()).toEqual({ n: 0 });
+    });
+
+    it('marks a test only on an unrated game or one at another level, never a guest\'s or a tournament\'s', () => {
+        seedSeries();
+        const human = sqlite.prepare(`insert into games (id, user_id, bot_id, user_side, unrated_by_choice, o_level, test, time_control, opening_cells, created_at) values (?, 'u1', 'b1', 'x', ?, ?, 1, '{}', '[]', 5)`);
+        expect(() => human.run(`t1`, 1, null)).not.toThrow();
+        expect(() => human.run(`t2`, 0, `{"id":"easy","label":"easy"}`)).not.toThrow();
+        expect(() => human.run(`t3`, 0, null)).toThrow(/CHECK/);
+        const guest = sqlite.prepare(`insert into games (id, guest_name, bot_id, user_side, test, time_control, opening_cells, created_at) values (?, 'Guest k3f9', 'b1', 'o', 1, '{}', '[]', 5)`);
+        expect(() => guest.run(`t4`)).toThrow(/CHECK/);
+        expect(() => sqlite.prepare(`update games set test = 2 where id = 't1'`).run()).toThrow(/CHECK/);
+    });
+
+    it('keeps a duel when its starter goes, naming nobody', () => {
+        seedSeries();
+        sqlite.exec(`insert into name_reservations (name_key) values ('starter'); insert into users (id, discord_id, name, name_key, created_at) values ('u3', 'd3', 'starter', 'starter', 1)`);
+        insertDuel(`d1`, `finished`, { started_by: `u3` });
+        sqlite.prepare(`delete from users where id = 'u3'`).run();
+        expect(sqlite.prepare(`select id, started_by as startedBy from duels where id = 'd1'`).all()).toEqual([{ id: `d1`, startedBy: null }]);
+    });
+});
+
+describe('the own bot games migration', () => {
+    let sqlite: Sqlite;
+    let folder: string;
+
+    afterEach(() => {
+        sqlite.close();
+        rmSync(folder, { recursive: true, force: true });
+    });
+
+    it('keeps every game and its unrated mark, and admits the mark on a challenge\'s game between two bots at their defaults', () => {
+        sqlite = openDatabase(`:memory:`);
+        folder = migrationsUpTo(25);
+        migrate(drizzle(sqlite), { migrationsFolder: folder });
+        sqlite.exec(`
+            insert into name_reservations (name_key) values ('owner'), ('alpha'), ('beta');
+            insert into users (id, discord_id, name, name_key, created_at) values ('u1', 'd1', 'owner', 'owner', 1);
+            insert into bots (id, owner_id, name, name_key, token_hash, scope, created_at)
+                values ('b1', 'u1', 'alpha', 'alpha', 'h1', 'bot:play', 1), ('b2', 'u1', 'beta', 'beta', 'h2', 'bot:play', 1);
+            insert into games (id, user_id, bot_id, user_side, unrated_by_choice, time_control, opening_cells, winner, finish_reason, created_at, finished_at, finish_seq)
+                values ('chosen', 'u1', 'b1', 'x', 1, '{"mode":"unlimited"}', '[]', 'x', 'surrender', 1, 2, 1),
+                       ('rated', 'u1', 'b1', 'o', 0, '{"mode":"unlimited"}', '[]', 'x', 'surrender', 1, 3, 2);
+            insert into game_ratings (game_id, side, rating_before, rating_after, deviation_after) values ('rated', 'x', 1000, 1100, 300), ('rated', 'o', 1500, 1500, 500);
+            insert into moves (game_id, seq, side, first_x, first_y, second_x, second_y, created_at) values ('chosen', 1, 'o', 1, 0, 0, 1, 2);
+        `);
+        runMigrations(sqlite);
+        expect(sqlite.prepare(`select id, unrated_by_choice as unrated from games order by id`).all()).toEqual([
+            { id: `chosen`, unrated: 1 },
+            { id: `rated`, unrated: 0 },
+        ]);
+        expect(sqlite.prepare(`select count(*) as n from moves`).get()).toEqual({ n: 1 });
+        expect(sqlite.prepare(`select count(*) as n from game_ratings`).get()).toEqual({ n: 2 });
+        expect(sqlite.pragma(`foreign_key_check`)).toEqual([]);
+
+        const level = `{"id":"easy","label":"easy"}`;
+        const bots = sqlite.prepare(`insert into games (id, challenger_bot_id, dest_bot_id, challenger_side, x_level, unrated_by_choice, time_control, opening_cells, created_at) values (?, 'b1', 'b2', 'x', ?, ?, '{}', '[]', 5)`);
+        expect(() => bots.run(`g1`, null, 1)).not.toThrow();
+        expect(() => bots.run(`g2`, level, 1)).toThrow(/CHECK/);
+        expect(() => bots.run(`g3`, null, 2)).toThrow(/CHECK/);
+        const guest = sqlite.prepare(`insert into games (id, guest_name, bot_id, user_side, unrated_by_choice, time_control, opening_cells, created_at) values (?, 'Guest k3f9', 'b1', 'o', ?, '{}', '[]', 5)`);
+        expect(() => guest.run(`g4`, 1)).toThrow(/CHECK/);
+    });
+});
+
+describe('the owner text and bot clients migrations', () => {
+    let sqlite: Sqlite;
+    let folder: string;
+
+    afterEach(() => {
+        sqlite.close();
+        rmSync(folder, { recursive: true, force: true });
+    });
+
+    function seed(): void {
+        sqlite = openDatabase(`:memory:`);
+        folder = migrationsUpTo(26);
+        migrate(drizzle(sqlite), { migrationsFolder: folder });
+        sqlite.exec(`
+            insert into name_reservations (name_key) values ('owner'), ('alpha'), ('beta');
+            insert into users (id, discord_id, name, name_key, created_at) values ('u1', 'd1', 'owner', 'owner', 1);
+            insert into bots (id, owner_id, name, name_key, token_hash, scope, created_at, about, repo_url)
+                values ('b1', 'u1', 'alpha', 'alpha', 'h1', 'bot:play', 1, 'Declared', 'https://example.org'), ('b2', 'u1', 'beta', 'beta', 'h2', 'bot:play', 1, null, null);
+            insert into games (id, challenger_bot_id, dest_bot_id, challenger_side, time_control, opening_cells, winner, finish_reason, created_at, finished_at, finish_seq)
+                values ('played', 'b1', 'b2', 'x', '{"mode":"unlimited"}', '[]', 'x', 'surrender', 1, 2, 1);
+        `);
+        runMigrations(sqlite);
+    }
+
+    it('keeps every bot as it declared, with no text of its owner\'s and no client seen', () => {
+        seed();
+        expect(sqlite.prepare(`select id, about, repo_url as repo, owner_about as ownerAbout, owner_repo_url as ownerRepo, client_kind as kind, client_version as version, client_at as at from bots order by id`).all()).toEqual([
+            { id: `b1`, about: `Declared`, repo: `https://example.org`, ownerAbout: null, ownerRepo: null, kind: null, version: null, at: null },
+            { id: `b2`, about: null, repo: null, ownerAbout: null, ownerRepo: null, kind: null, version: null, at: null },
+        ]);
+        expect(sqlite.prepare(`select count(*) as n from games`).get()).toEqual({ n: 1 });
+        expect(sqlite.pragma(`foreign_key_check`)).toEqual([]);
+    });
+
+    it('holds the owner\'s text to its cap, and the link to http or https within its cap', () => {
+        seed();
+        const set = (column: string, value: string) => sqlite.prepare(`update bots set ${column} = ? where id = 'b1'`).run(value);
+        expect(() => set(`owner_about`, `x`.repeat(280))).not.toThrow();
+        expect(() => set(`owner_about`, `x`.repeat(281))).toThrow(/CHECK/);
+        expect(() => set(`owner_about`, ``)).toThrow(/CHECK/);
+        expect(() => set(`owner_repo_url`, `HTTPS://example.org`)).not.toThrow();
+        expect(() => set(`owner_repo_url`, `http://example.org`)).not.toThrow();
+        expect(() => set(`owner_repo_url`, `javascript:alert(1)`)).toThrow(/CHECK/);
+        expect(() => set(`owner_repo_url`, `https://${`x`.repeat(2041)}`)).toThrow(/CHECK/);
+    });
+
+    it('holds a client to hexo-bridge with a release of three numbers, or other with none, and a time beside either', () => {
+        seed();
+        const client = (kind: string | null, version: string | null, at: number | null) =>
+            sqlite.prepare(`update bots set client_kind = ?, client_version = ?, client_at = ? where id = 'b1'`).run(kind, version, at);
+        expect(() => client(`hexo-bridge`, `0.3.0`, 5)).not.toThrow();
+        expect(() => client(`hexo-bridge`, `12.40.1000`, 5)).not.toThrow();
+        expect(() => client(`other`, null, 5)).not.toThrow();
+        expect(() => client(null, null, null)).not.toThrow();
+        for (const [kind, version, at] of [
+            [`hexo-bridge`, null, 5],
+            [`other`, `0.3.0`, 5],
+            [`other`, null, null],
+            [null, null, 5],
+            [`firefox`, null, 5],
+            [`hexo-bridge`, `0.3`, 5],
+            [`hexo-bridge`, `0.3.0.1`, 5],
+            [`hexo-bridge`, `0..3`, 5],
+            [`hexo-bridge`, `0.3.0rc1`, 5],
+            [`hexo-bridge`, `0.3.`, 5],
+            [`hexo-bridge`, `.0.3`, 5],
+        ] as const) {
+            expect(() => client(kind, version, at), `${String(kind)} ${String(version)} ${String(at)}`).toThrow(/CHECK/);
+        }
     });
 });

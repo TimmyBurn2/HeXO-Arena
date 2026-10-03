@@ -8,11 +8,12 @@ import {
     type Analyzer,
     type AnalyzerValues,
     type BotAccount,
+    type BotClient,
     type JudgmentCuts,
     type Levels,
     type ValueMeaning,
 } from '@hexo-arena/contract';
-import { and, count, eq, isNull } from 'drizzle-orm';
+import { and, count, eq, gte, isNull } from 'drizzle-orm';
 import { randomUUID } from 'node:crypto';
 import { nowSeconds, type Query } from './db';
 import { bots, nameReservations, ratings, users } from './db/schema';
@@ -47,6 +48,8 @@ interface DeclarationColumns {
     about: string | null;
     version: string | null;
     repoUrl: string | null;
+    ownerAbout: string | null;
+    ownerRepoUrl: string | null;
     accepts: string | null;
     levels: string | null;
     analyzerMaxSeconds: number | null;
@@ -75,6 +78,8 @@ const declarationColumns = {
     about: bots.about,
     version: bots.version,
     repoUrl: bots.repoUrl,
+    ownerAbout: bots.ownerAbout,
+    ownerRepoUrl: bots.ownerRepoUrl,
     accepts: bots.accepts,
     levels: bots.levels,
     ...analyzerColumns,
@@ -130,14 +135,18 @@ export function storedAnalyzer(row: AnalyzerColumns): StoredAnalyzer | null {
 // Absent, not null: the wire shape omits a text field or accepts the bot
 // never declared, so the row nulls are dropped here and never cross a
 // boundary again; levels and the analyzer alone read as null until declared.
+// The owner's text and link take the place of the declared ones wherever
+// the bot is shown, and in what the bot reads back.
 function declarationView(row: DeclarationColumns): DeclarationView {
     const view: DeclarationView = {
         levels: row.levels === null ? null : levelsSchema.parse(JSON.parse(row.levels)),
         analyzer: storedAnalyzer(row),
     };
-    if (row.about !== null) view.about = row.about;
+    const about = row.ownerAbout ?? row.about;
+    const repoUrl = row.ownerRepoUrl ?? row.repoUrl;
+    if (about !== null) view.about = about;
     if (row.version !== null) view.version = row.version;
-    if (row.repoUrl !== null) view.repoUrl = row.repoUrl;
+    if (repoUrl !== null) view.repoUrl = repoUrl;
     if (row.accepts !== null) view.accepts = acceptsSchema.parse(JSON.parse(row.accepts));
     return view;
 }
@@ -294,6 +303,40 @@ export function updateBotDeclaration(query: Query, botId: string, changes: Accou
         if (!row) throw new Error(`bot row vanished while declaring: ${botId}`);
         return { name: row.name, ...declarationView(row) };
     });
+}
+
+/** A stored client as the wire names it, undefined before any; the schema keeps the columns set together. */
+export function storedClient(row: { clientKind: string | null; clientVersion: string | null }): BotClient | undefined {
+    if (row.clientKind === `hexo-bridge` && row.clientVersion !== null) return { kind: `hexo-bridge`, version: row.clientVersion };
+    return row.clientKind === null ? undefined : { kind: `other` };
+}
+
+/** The client a bot's stream last opened with, and when; null before the first. */
+export function findBotClient(query: Query, botId: string): { client: BotClient; at: number } | null {
+    const row = query.select({ clientKind: bots.clientKind, clientVersion: bots.clientVersion, clientAt: bots.clientAt }).from(bots).where(eq(bots.id, botId)).get();
+    if (row === undefined || row.clientAt === null) return null;
+    const client = storedClient(row);
+    return client === undefined ? null : { client, at: row.clientAt };
+}
+
+/** Keeps the client a bot's stream opened with, and when; the header it was read from is never kept. */
+export function recordClient(query: Query, botId: string, client: BotClient, at: number): void {
+    query.update(bots)
+        .set({ clientKind: client.kind, clientVersion: client.kind === `hexo-bridge` ? client.version : null, clientAt: at })
+        .where(eq(bots.id, botId))
+        .run();
+}
+
+/** Live bots whose stream opened since a moment, counted by the client it opened with, the most used first. */
+export function clientCensus(query: Query, sinceSeconds: number): { client: string; bots: number }[] {
+    return query
+        .select({ kind: bots.clientKind, version: bots.clientVersion, bots: count() })
+        .from(bots)
+        .where(and(gte(bots.clientAt, sinceSeconds), isNull(bots.deletedAt)))
+        .groupBy(bots.clientKind, bots.clientVersion)
+        .all()
+        .map((row) => ({ client: row.version === null ? (row.kind ?? `other`) : `${row.kind ?? `other`}/${row.version}`, bots: row.bots }))
+        .sort((a, b) => b.bots - a.bots || a.client.localeCompare(b.client));
 }
 
 export function rotateBotToken(

@@ -1,4 +1,4 @@
-import { botListingSchema, botsPath, parseClockArg, tournamentListSchema, tournamentsPath } from '@hexo-arena/contract';
+import { botListingSchema, botsPath, duelDetailSchema, parseClockArg, tournamentListSchema, tournamentsPath } from '@hexo-arena/contract';
 import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -9,6 +9,7 @@ import { games } from '../../../apps/server/src/db/schema';
 import { createTestApp, type TestApp } from '../../../apps/server/test/helpers';
 import type { SeedPlan } from '../src/personas';
 import { NotADevServer } from '../src/runner';
+import type { DevDuelPlans } from '../src/duels';
 import { seedDevData, type SeedReport } from '../src/seed';
 import { devTournamentLeadMs, devTournamentName, devWeeklyRule, type DevWeeklyRule } from '../src/tournament';
 
@@ -20,7 +21,7 @@ const plan: SeedPlan = {
         dmitri: [{ bot: `pebble`, timeControl: { mode: `turn`, turnTimeMs: 5_000 }, openingPlies: 3, ending: { kind: `idle` } }],
         eve: [{ bot: `hextide`, timeControl: { mode: `turn`, turnTimeMs: 20_000 }, openingPlies: 5, ending: { kind: `resign`, afterTurns: 0 } }],
     },
-    series: [{ from: `hextide`, to: `quietlake`, games: [{ timeControl: { mode: `unlimited` }, openingPlies: 1 }] }],
+    runs: [{ from: `hextide`, to: `quietlake`, games: [{ timeControl: { mode: `unlimited` }, openingPlies: 1 }] }],
     banned: [`eve`],
 };
 
@@ -165,6 +166,28 @@ describe('the dev seed', () => {
         expect(answer.kind === `tournament-rules` && answer.rules).toMatchObject([
             { weekday: devWeeklyRule.weekday, time: devWeeklyRule.time, namePattern: devWeeklyRule.namePattern, maxEntrants: devWeeklyRule.maxEntrants },
         ]);
+    }, 60_000);
+
+    it('plays one duel and a test out and leaves another duel running, and a rerun starts none again', async () => {
+        const booted = await boot(true);
+        // The app under test leaves its runner to the caller, which ticks it as a server does.
+        booted.duels.start(50);
+        const duels: DevDuelPlans = {
+            finished: { starter: `ana`, first: `hextide`, second: `quietlake`, games: 2, rated: true },
+            live: { starter: `bruno`, first: `pebble`, second: `quietlake`, games: 10, rated: false },
+            test: { starter: `ana`, first: `hextide`, second: `pebble`, games: 2, rated: false },
+        };
+        const first = await seed(booted, { duels });
+        const read = async (id: string | null | undefined) => duelDetailSchema.parse(await (await fetch(`${origin}/api/duels/${id ?? ``}`)).json());
+        const finished = await read(first.duels?.finished);
+        expect(finished).toMatchObject({ kind: `duel`, status: `finished`, startedBy: `ana`, terms: { games: 2, rated: true } });
+        expect(finished.games.map((game) => game.state)).toEqual([`played`, `played`]);
+        const test = await read(first.duels?.test);
+        expect(test).toMatchObject({ kind: `test`, status: `finished`, first: { name: `hextide`, version: `1.4.0` }, second: { name: `pebble`, version: `0.3.1` } });
+        expect(test.estimate?.games).toBe(2);
+        expect((await read(first.duels?.live)).status).toBe(`running`);
+        const second = await seed(booted, { duels });
+        expect(second.duels).toEqual(first.duels);
     }, 60_000);
 
     it('refuses a target without the dev routes and creates nothing', async () => {

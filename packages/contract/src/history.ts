@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { analysesPerGame } from './analysis';
-import { gamePlayersSchema, unratedByChoiceSchema } from './games';
+import { gameDuelSchema, gamePlayersSchema, testMarkSchema, unratedByChoiceSchema } from './games';
 import { rankableDeviation } from './leaderboard';
 import { nameKeyOf, nameMaxLength } from './names';
 import { finishReasonSchema, openingPliesSchema, sideSchema, timeControlSchema } from './stream';
@@ -42,6 +42,10 @@ export const finishedGamesQuerySchema = z
         opening: z.enum([`1`, `3`, `5`, `7`, `9`]).optional().meta({ param: { description: `The opening's plies.` } }),
         before: z.iso.date().optional().meta({ param: { description: `Only games finished before this UTC date, YYYY-MM-DD.` } }),
         analyzed: z.literal(`1`).optional().meta({ param: { description: `Present as 1, only games a community analyzer has read whole.` } }),
+        tests: z
+            .literal(`1`)
+            .optional()
+            .meta({ param: { description: `Present as 1, tests are listed and counted beside the other games; else they are left out.` } }),
         page: z
             .string()
             .regex(pagePattern)
@@ -67,10 +71,12 @@ export const finishedGameEntrySchema = z
         turns: z.number().int().min(0).meta({ description: `Turns on the board at the finish, the opening's included.` }),
         finishedAt: z.iso.datetime(),
         rated: z.boolean().meta({
-            description: `False for a game without a winner, a voided one, a guest's, one with a bot at a level other than its default, and one its player started unrated.`,
+            description: `False for a game without a winner, a voided one, a guest's, one with a bot at a level other than its default, one started unrated, alone or in a duel, and a test.`,
         }),
         voided: z.boolean().meta({ description: `Taken out by the operator: still listed, and counted in no record and no rating.` }),
         unratedByChoice: unratedByChoiceSchema.optional(),
+        test: testMarkSchema.optional(),
+        duel: gameDuelSchema.optional(),
         analyses: z
             .number()
             .int()

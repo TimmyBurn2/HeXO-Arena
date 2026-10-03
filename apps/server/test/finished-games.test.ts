@@ -323,8 +323,10 @@ describe('GET /api/games/finished', () => {
     });
 
     it.each([
-        [{}, [`games_finish_seq_idx`]],
-        [{ page: `2` }, [`games_finish_seq_idx`]],
+        [{}, [`games_shown_finish_idx`]],
+        [{ page: `2` }, [`games_shown_finish_idx`]],
+        [{ tests: `1` }, [`games_finish_seq_idx`]],
+        [{ tests: `1`, kind: `bot-bot` }, [`games_bots_finish_idx`]],
         [{ page: `5`, player: `alpha` }, [`games_bot_finish_idx`, `games_challenger_finish_idx`, `games_dest_finish_idx`]],
         [{ player: `ann` }, [`games_user_finish_idx`]],
         [{ player: `alpha` }, [`games_bot_finish_idx`, `games_challenger_finish_idx`, `games_dest_finish_idx`]],

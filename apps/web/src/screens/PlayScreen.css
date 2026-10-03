@@ -420,6 +420,13 @@
         background: var(--c-border-strong);
     }
 
+    /* Why the switch stands off sits beside it, read with its name. */
+    .rated-control {
+        display: inline-flex;
+        align-items: center;
+        gap: var(--space-2);
+    }
+
     /* The opening: one quiet row, shut until asked. */
     .opening {
         padding-top: var(--space-3);
