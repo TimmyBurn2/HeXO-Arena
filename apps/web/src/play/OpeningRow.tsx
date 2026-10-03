@@ -5,9 +5,22 @@ import { OpeningPreview } from './OpeningPreview';
 
 /**
  * The opening, one quiet row until opened: the count, and an example the
- * server could deal for it.
+ * server could deal for it. A setup that words it its own way passes the
+ * row's value and the note under the counts, and the counts it allows.
  */
-export function OpeningRow({ opening, onOpening }: { opening: OpeningPlies; onOpening: (opening: OpeningPlies) => void }) {
+export function OpeningRow({
+    opening,
+    onOpening,
+    value = text.play.openingValue(opening),
+    note = text.play.openingNote,
+    allowed = () => true,
+}: {
+    opening: OpeningPlies;
+    onOpening: (opening: OpeningPlies) => void;
+    value?: string;
+    note?: (stones: number) => string;
+    allowed?: (count: OpeningPlies) => boolean;
+}) {
     const [draws, setDraws] = useState(0);
     const [open, setOpen] = useState(false);
     const ids = useId();
@@ -21,7 +34,7 @@ export function OpeningRow({ opening, onOpening }: { opening: OpeningPlies; onOp
         >
             <summary>
                 <span>{text.play.opening}</span>
-                <span className="opening-value">{text.play.openingValue(opening)}</span>
+                <span className="opening-value">{value}</span>
                 <svg className="chevron" viewBox="0 0 12 12" aria-hidden="true">
                     <path d="M2 4.5l4 4 4-4" />
                 </svg>
@@ -41,6 +54,7 @@ export function OpeningRow({ opening, onOpening }: { opening: OpeningPlies; onOp
                                             name={`${ids}-opening`}
                                             value={count}
                                             checked={opening === count}
+                                            disabled={!allowed(count)}
                                             onChange={() => {
                                                 onOpening(count);
                                                 setDraws((current) => current + 1);
@@ -59,7 +73,7 @@ export function OpeningRow({ opening, onOpening }: { opening: OpeningPlies; onOp
                                 ))}
                             </div>
                         </fieldset>
-                        <p className="opening-caption">{text.play.openingNote(opening)}</p>
+                        <p className="opening-caption">{note(opening)}</p>
                     </div>
                 </div>
             ) : null}

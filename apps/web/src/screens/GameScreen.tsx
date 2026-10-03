@@ -1,8 +1,10 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type RefObject } from 'react';
-import { clockText, gameMeta, levelFacts, turnsOnBoard, type FinishedGamesRecord, type GameHeadline, type GameSnapshot } from '@hexo-arena/contract';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from 'react';
+import { clockText, gameMeta, levelFacts, turnsOnBoard, type DuelDetail, type FinishedGamesRecord, type GameHeadline, type GameSnapshot } from '@hexo-arena/contract';
 import { useSeatBroadcast } from '../analysis/seat-channel';
 import { gameLink } from '../analysis/links';
-import { fetchFinishedGames } from '../api/client';
+import { fetchDuel, fetchFinishedGames } from '../api/client';
+import { duelPagePath } from '../duels/setup';
+import { noWinnerCount, pointsText, signed, standingText, sweptBy } from '../duels/words';
 import { BotBadge, PlayerName, seatName, seatsRateNobody, Swatch } from '../components/player';
 import { useWait, WaitText } from '../components/wait';
 import { gamesPathOf } from '../games/filters';
@@ -18,7 +20,7 @@ import { clockOf, Pips, SeatChip, TurnChip, YouChip } from '../game/GameHud';
 import { PeekGraph, PeekReadout, ReadingHead, type Asker } from '../game/DrawerAnalysis';
 import { lastTurnOf, turnOf, useReplay, type Replay } from '../game/replay';
 import { Scrubber } from '../game/Scrubber';
-import { Rundown } from '../game/Rundown';
+import { Rundown, unratedByOf } from '../game/Rundown';
 import { useRundown } from '../game/rundown';
 import { useDrawer } from '../game/use-drawer';
 import { useGameReading } from '../game/use-game-reading';
@@ -210,6 +212,7 @@ function GameView({ snapshot, send, link }: { snapshot: GameSnapshot; send: Game
     const finishedShown = useRef(!running);
     const host = useResultReach(!running);
     const meetings = useMeetings(snapshot);
+    const duel = useDuelOf(snapshot);
     const rundown = useRundown(snapshot.players, running);
     const [rundownHidden, setRundownHidden] = useState(false);
     // Before the first turn only the opening stands on the board.
@@ -412,7 +415,7 @@ function GameView({ snapshot, send, link }: { snapshot: GameSnapshot; send: Game
                         <div className="hud-chip">
                             <Rundown
                                 players={snapshot.players}
-                                unratedByChoice={snapshot.unratedByChoice === true}
+                                unratedBy={unratedByOf(snapshot)}
                                 data={rundown}
                                 meetings={
                                     meetings === null ? null : meetings.record.games === 0 ? (
@@ -462,9 +465,10 @@ function GameView({ snapshot, send, link }: { snapshot: GameSnapshot; send: Game
                             />
                         )
                     }
-                    facts={factsOf(snapshot)}
+                    facts={factsOf(snapshot, duel)}
                     meetings={meetingsLine}
-                    rundown={running && !rundownShown ? <Rundown players={snapshot.players} unratedByChoice={snapshot.unratedByChoice === true} data={rundown} meetings={null} /> : null}
+                    rundown={running && !rundownShown ? <Rundown players={snapshot.players} unratedBy={unratedByOf(snapshot)} data={rundown} meetings={null} /> : null}
+                    duel={duelRowOf(snapshot, duel)}
                     tournament={snapshot.tournament === undefined ? null : (
                         <Link to={`/tournaments/${encodeURIComponent(snapshot.tournament.id)}`}>
                             {text.drawer.tournamentGame(snapshot.tournament.name, snapshot.tournament.round, snapshot.tournament.game)}
@@ -507,11 +511,13 @@ function useMeetings(snapshot: GameSnapshot): Meetings | null {
     const seated = (player: typeof x) => ({ name: player.name, kind: player.kind === `bot` ? (`bot` as const) : (`human` as const) });
     const kept = [x, o].every((player) => player.kind !== `guest` && player.deleted !== true);
     const finished = snapshot.status === `finished`;
+    const test = snapshot.test === true;
     const [meetings, setMeetings] = useState<Meetings | null>(null);
     useEffect(() => {
         if (!kept) return;
         let cancelled = false;
-        fetchFinishedGames({ player: x.name, vs: o.name }).then(
+        // A test meets only in tests, which the list leaves out unless asked.
+        fetchFinishedGames({ player: x.name, vs: o.name, ...(test ? { tests: `1` as const } : {}) }).then(
             (page) => {
                 if (!cancelled && page.record !== undefined) setMeetings({ x: seated(x), o: seated(o), record: page.record });
             },
@@ -521,11 +527,11 @@ function useMeetings(snapshot: GameSnapshot): Meetings | null {
         return () => {
             cancelled = true;
         };
-    }, [kept, x.name, o.name, finished]);
+    }, [kept, x.name, o.name, finished, test]);
     return meetings;
 }
 
-function factsOf(snapshot: GameSnapshot): (readonly [string, string])[] {
+function factsOf(snapshot: GameSnapshot, duel: DuelDetail | null): (readonly [string, string])[] {
     // A finished game whose clock went with its process has no clock to name.
     const facts: (readonly [string, string])[] =
         snapshot.clock === undefined ? [] : [[text.drawer.clock, text.drawer.clockValue(clockText(snapshot.clock.mode))]];
@@ -536,20 +542,79 @@ function factsOf(snapshot: GameSnapshot): (readonly [string, string])[] {
     const voided = snapshot.status === `finished` && snapshot.voided;
     const guest = snapshot.players.x.kind === `guest` || snapshot.players.o.kind === `guest`;
     const practice = !guest && seatsRateNobody(snapshot.players);
-    // Only one reason holds at a time: a guest's game and practice never carry the choice.
-    const unrated = practice ? text.drawer.ratedNoPractice : snapshot.unratedByChoice === true ? text.drawer.ratedNoChoice : null;
+    // Only one reason holds at a time: a guest's game and practice never carry the mark.
+    const unrated = practice ? text.drawer.ratedNoPractice : unratedReason(snapshot, duel);
     if (snapshot.you === undefined) {
         const unratedGuest = snapshot.status === `finished` ? text.drawer.ratedNoGuestPlayed : text.drawer.ratedNoGuest;
         facts.push([text.drawer.rated, guest ? unratedGuest : (unrated ?? (voided ? text.drawer.ratedNoVoided : text.drawer.ratedYes))]);
     } else {
         facts.push([text.drawer.yourSide, snapshot.you]);
         // A seated player's own game needs no Rated row until the operator
-        // voids it, unless a bot level or the player's choice made it unrated.
+        // voids it, unless a bot level, a test, or the player's choice made it unrated.
         if (unrated !== null) facts.push([text.drawer.rated, unrated]);
         else if (voided) facts.push([text.drawer.rated, text.drawer.ratedNoVoided]);
     }
     if (snapshot.status === `finished`) facts.push([text.drawer.result, resultLine(snapshot)]);
     return facts;
+}
+
+// Why a game started unrated is unrated: a test, one person on both sides;
+// a duel its starter started so; or the person's own choice.
+function unratedReason(snapshot: GameSnapshot, duel: DuelDetail | null): string | null {
+    const words = text.drawer;
+    const person = [snapshot.players.x, snapshot.players.o].find((player) => player.kind === `user`);
+    if (snapshot.test === true) {
+        if (person !== undefined) return snapshot.you === undefined ? words.ratedNoTestPerson(person.name) : words.ratedNoTestYours;
+        return duel === null ? words.ratedNoTestOwner : words.ratedNoTestBots(duel.first.ownerName);
+    }
+    if (snapshot.unratedByChoice !== true) return null;
+    if (snapshot.duel === undefined) return words.ratedNoChoice;
+    if (duel === null) return words.ratedNoDuel;
+    const owns = duel.startedBy === duel.first.ownerName || duel.startedBy === duel.second.ownerName;
+    return owns ? words.ratedNoDuelChoice(duel.startedBy) : words.ratedNoDuelNeither(duel.startedBy);
+}
+
+// A duel's game names its place in the duel and how the duel stands, a test's the estimate so far.
+function duelRowOf(snapshot: GameSnapshot, duel: DuelDetail | null): { term: string; place: ReactNode } | null {
+    const tag = snapshot.duel;
+    if (tag === undefined) return null;
+    const term = snapshot.test === true ? text.duels.page.test : text.duels.page.duel;
+    if (duel === null) return { term, place: <Link to={duelPagePath(tag.id)}>{text.duels.caption(snapshot.test === true ? `test` : `duel`, tag.game, tag.of)}</Link> };
+    const place = <Link to={duelPagePath(tag.id)}>{text.drawer.duelPlace(duel.first.name, duel.second.name, tag.game, tag.of)}</Link>;
+    const estimate = duel.estimate;
+    if (duel.kind === `test` && estimate !== undefined && estimate.favored !== null) {
+        const lead = estimate.favored;
+        if (sweptBy(estimate) === lead) return { term, place: text.drawer.duelStanding(place, text.drawer.testSwept(duel[lead].name, estimate.games)) };
+        const trail = lead === `first` ? `second` : `first`;
+        const rating = lead === `first` ? estimate.rating : -estimate.rating;
+        const score = text.duels.row.score(pointsText(estimate.points[lead]), pointsText(estimate.points[trail]));
+        const drawn = text.duels.noWinner(noWinnerCount(duel.games));
+        return { term, place: text.drawer.duelStanding(place, text.drawer.testSoFar(duel[lead].name, score, drawn, signed(rating))) };
+    }
+    const scored = duel.games.some((game) => game.state === `played`);
+    return { term, place: scored ? text.drawer.duelStanding(place, standingText(duel, duel.games)) : place };
+}
+
+// The duel a game belongs to, read once and again as the game ends; null until it is, or for any other game.
+function useDuelOf(snapshot: GameSnapshot): DuelDetail | null {
+    const id = snapshot.duel?.id ?? null;
+    const finished = snapshot.status === `finished`;
+    const [duel, setDuel] = useState<DuelDetail | null>(null);
+    useEffect(() => {
+        if (id === null) return;
+        let cancelled = false;
+        fetchDuel(id).then(
+            (read) => {
+                if (!cancelled) setDuel(read);
+            },
+            // The row is extra; a read that fails leaves the caption alone.
+            () => undefined,
+        );
+        return () => {
+            cancelled = true;
+        };
+    }, [id, finished]);
+    return id === null ? null : duel;
 }
 
 // The seated player reads the game from their own side; a watcher reads it

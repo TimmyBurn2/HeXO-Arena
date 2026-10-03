@@ -420,11 +420,10 @@
         background: var(--c-border-strong);
     }
 
-    /* Why the switch stands off sits beside it, read with its name. */
-    .rated-control {
-        display: inline-flex;
-        align-items: center;
-        gap: var(--space-2);
+    /* Why the switch stands off sits under it, read with it. */
+    .rated-row .rated-line {
+        margin: var(--space-1) 0 0;
+        max-width: var(--measure);
     }
 
     /* The opening: one quiet row, shut until asked. */

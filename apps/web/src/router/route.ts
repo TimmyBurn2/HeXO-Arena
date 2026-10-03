@@ -4,6 +4,8 @@ import { reportForm } from '../report-form';
 export type Route =
     | { readonly name: `home` }
     | { readonly name: `play` }
+    | { readonly name: `duels` }
+    | { readonly name: `duel`; readonly id: string }
     | { readonly name: `ladder` }
     | { readonly name: `tournaments` }
     | { readonly name: `tournament`; readonly id: string }
@@ -26,9 +28,11 @@ export type Route =
 export function parseRoute(pathname: string): Route {
     const path = pathname.length > 1 && pathname.endsWith(`/`) ? pathname.slice(0, -1) : pathname;
     const segments = path.split(`/`).filter((segment) => segment !== ``);
-    const [head, second] = segments;
+    const [head, second, third] = segments;
     if (segments.length === 0) return { name: `home` };
     if (head === `play` && segments.length === 1) return { name: `play` };
+    if (head === `play` && second === `duels` && segments.length === 2) return { name: `duels` };
+    if (head === `play` && second === `duels` && segments.length === 3 && third !== undefined) return { name: `duel`, id: safeDecode(third) };
     if (head === `ladder` && segments.length === 1) return { name: `ladder` };
     if (head === `tournaments` && segments.length === 1) return { name: `tournaments` };
     if (head === `tournaments` && segments.length === 2 && second !== undefined) return { name: `tournament`, id: safeDecode(second) };
@@ -61,6 +65,10 @@ export function routePath(route: Route): string {
             return `/`;
         case `play`:
             return `/play`;
+        case `duels`:
+            return `/play/duels`;
+        case `duel`:
+            return `/play/duels/${encodeURIComponent(route.id)}`;
         case `ladder`:
             return `/ladder`;
         case `tournaments`:

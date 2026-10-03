@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState, useSyncExternalStore } from 'react';
 import { nameKeyOf, playMeta, type BotListing, type Level, type OpeningPlies, type TimeControl } from '@hexo-arena/contract';
-import { fetchBots, fetchTournament, fetchTournaments, limitedFor } from '../api/client';
+import { fetchBots, limitedFor } from '../api/client';
 import { liveRefreshMs } from '../api/refresh';
 import { BotBadge, Rating } from '../components/player';
 import { ErrorFrame, SkeletonRows } from '../components/states';
@@ -8,6 +8,8 @@ import { useMe } from '../me';
 import { ClockPicker } from '../play/ClockPicker';
 import { useExpectedScore } from '../play/expected';
 import { OpeningRow } from '../play/OpeningRow';
+import { PlayHead } from '../play/PlayHead';
+import { noReservations, reservedBots } from '../play/reserved';
 import { RatedRow } from '../play/RatedRow';
 import { OpponentSheet, RosterList, type PickedBy } from '../play/Roster';
 import { StartArea } from '../play/StartArea';
@@ -76,25 +78,6 @@ function useBotList() {
         };
     }, [reload]);
     return { bots, reserved, holder, reads, failed, limited, reload };
-}
-
-const noReservations: ReadonlySet<string> = new Set();
-
-// The bots the running tournament holds, and the tournament; null when
-// the read failed, which leaves the last set standing, since the bot
-// list stands without it.
-async function reservedBots(): Promise<{ bots: ReadonlySet<string>; tournament: Holder | null } | null> {
-    try {
-        const { running } = await fetchTournaments();
-        if (running === null) return { bots: noReservations, tournament: null };
-        const detail = await fetchTournament(running.id);
-        return {
-            bots: new Set(detail.entries.filter((entry) => entry.state === `playing`).map((entry) => entry.bot)),
-            tournament: { id: running.id, name: running.name },
-        };
-    } catch {
-        return null;
-    }
 }
 
 // A level in the address belongs to the bot the address names.
@@ -231,7 +214,7 @@ export function PlayScreen() {
     if (!ready) {
         return (
             <>
-                <h1 className="screen-title">{text.play.title}</h1>
+                <PlayHead view="bot" />
                 {list.failed && bots === null ? <ErrorFrame sentence={text.play.listFailed} onRetry={() => void list.reload()} wait={list.limited} /> : <SkeletonRows />}
             </>
         );
@@ -242,7 +225,7 @@ export function PlayScreen() {
 
     return (
         <>
-            <h1 className="screen-title">{text.play.title}</h1>
+            <PlayHead view="bot" />
             <div className="play-layout">
                 <section className="play-roster" aria-labelledby="opponent-label">
                     <div className="block-head">
@@ -309,7 +292,7 @@ export function PlayScreen() {
 function Empty({ kind }: { kind: `none` | `unready` }) {
     return (
         <>
-            <h1 className="screen-title">{text.play.title}</h1>
+            <PlayHead view="bot" />
             {kind === `none` ? (
                 <div className="empty">
                     <h2>{text.play.empty.heading}</h2>
@@ -429,7 +412,7 @@ function SetupCard({
                 {level === null && !own && switchOn === false && expected.kind !== `none` ? <p className="note setup-expected">{text.play.unratedScore}</p> : null}
                 <ClockPicker bot={bot} clock={clock} last={last} onClock={onClock} onAdjust={onAdjust} />
                 <StrengthRow bot={bot} level={level} onLevel={onLevel} />
-                {switchOn === null ? null : <RatedRow rated={switchOn} practice={level !== null} own={own} onRated={onRated} />}
+                {switchOn === null ? null : <RatedRow rated={switchOn} practice={level !== null} own={own} bot={bot.name} onRated={onRated} />}
                 <OpeningRow opening={opening} onOpening={onOpening} />
                 <StartArea
                     bot={bot}

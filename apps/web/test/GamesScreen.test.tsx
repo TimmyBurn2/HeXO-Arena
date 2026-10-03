@@ -73,7 +73,7 @@ describe('GamesScreen', () => {
         expect(won.textContent).toBe(`hextideBOT1712vsquietlakeBOT1690?hextide won with six in a rowturn clock 10 s5 stones38 turns3 h ago`);
         expect(aborted.textContent).toContain(`No winner; the game was aborted`);
         expect(aborted.textContent).toContain(`unlimitedOrigin only1 turn`);
-        expect(screen.getByText(`Newest first; a guest's games show under the guest's label, unrated.`)).toBeTruthy();
+        expect(screen.getByText(`Newest first; a guest's games show under the guest's label, unrated. Tests show while Show tests is on.`)).toBeTruthy();
         expect(screen.getByText(`2 games`)).toBeTruthy();
     });
 

@@ -3,6 +3,7 @@ import {
     botsMeta,
     connectMeta,
     creditsMeta,
+    duelsMeta,
     gamesMeta,
     ladderMeta,
     legalPageMeta,
@@ -36,6 +37,10 @@ export function routeMeta(route: Route): PageMeta {
             return rootMeta;
         case `play`:
             return playMeta();
+        case `duels`:
+            return duelsMeta;
+        case `duel`:
+            return { title: pageTitle(text.meta.duel), description: duelsMeta.description };
         case `ladder`:
             return ladderMeta();
         case `tournaments`:

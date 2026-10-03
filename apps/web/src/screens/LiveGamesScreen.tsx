@@ -1,5 +1,7 @@
 import { ErrorFrame } from '../components/states';
 import { GamesHead } from '../games/GamesHead';
+import { useShowTests } from '../games/show-tests';
+import { ShowTests } from '../games/ShowTests';
 import { LiveGameGrid } from '../live/LiveGameCard';
 import { useLiveReplay } from '../live/use-live-replay';
 import { Link } from '../router/Link';
@@ -8,12 +10,16 @@ import './LiveGamesScreen.css';
 
 /** Every game the live list holds, as boards whose stones land as they are played. */
 export function LiveGamesScreen() {
-    const { games, failed, limited, reload } = useLiveReplay();
+    const [tests, setTests] = useShowTests();
+    const { games, failed, limited, reload } = useLiveReplay(tests);
     return (
         <>
             <div className="live-head">
                 <GamesHead view="live" live={games?.length ?? null} />
-                {games === null || games.length === 0 ? null : <p className="note">{text.live.count(games.length)}</p>}
+                <div className="live-tools">
+                    {games === null || games.length === 0 ? null : <p className="note">{text.live.count(games.length)}</p>}
+                    <ShowTests on={tests} onChange={setTests} />
+                </div>
             </div>
             {games === null ? (
                 failed ? (

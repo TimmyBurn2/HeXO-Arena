@@ -1,7 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
 import type { Me } from '@hexo-arena/contract';
 import { looks, wear } from './matrix';
-import { analyzerBots, bots, heldBots, liveGames, longReadings, playBots, rivalry, serve, signup, tournaments, world, type World } from './mock-api';
+import { analyzerBots, bots, duelBots, duelFixtures, heldBots, liveGames, longReadings, playBots, rivalry, serve, signup, tournaments, world, type World } from './mock-api';
 
 const visitors: readonly { name: string; me: Me }[] = [
     { name: `signed-out`, me: null },
@@ -19,6 +19,18 @@ const screens: readonly { name: string; path: string; world?: Partial<World>; th
     { name: `the root`, path: `/` },
     { name: `play`, path: `/play`, world: { bots: playBots } },
     { name: `play with a limited bot`, path: `/play?bot=quietlake`, world: { bots: playBots } },
+    { name: `bot duels`, path: `/play/duels?first=Pistol1`, world: { bots: duelBots, duels: Object.values(duelFixtures).filter((duel) => duel.id !== duelFixtures.testLive.id) } },
+    {
+        name: `a new test with its picker`,
+        path: `/play/duels?first=pebble`,
+        world: { bots: duelBots.map((bot) => ({ ...bot, ownerName: bot.ownerName === `ana` ? `quinn` : bot.ownerName })) },
+        then: async (page) => {
+            await page.getByRole(`button`, { name: `Add a bot, Second bot` }).click();
+            await page.locator(`dialog.duel-picker[open] .pick-detail`).waitFor();
+        },
+    },
+    { name: `a duel`, path: `/play/duels/${duelFixtures.live.id}`, world: { bots: duelBots, duels: [duelFixtures.live] } },
+    { name: `a test`, path: `/play/duels/${duelFixtures.test.id}`, world: { bots: duelBots, duels: [duelFixtures.test] } },
     { name: `games`, path: `/games` },
     { name: `a head-to-head`, path: `/games?player=hextide&vs=quietlake`, world: { finished: rivalry(30) } },
     { name: `live games`, path: `/games/live` },

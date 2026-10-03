@@ -49,8 +49,9 @@ function LiveGameCard({ game, level }: { game: LiveView; level: 2 | 3 }) {
                     {landed ? <RunningClock entry={entry} side={game.toMove} since={game.readAt} /> : null}
                 </p>
                 <p className="live-card-meta">
-                    {entry.rated ? null : <span className="tag muted">{text.ladder.live.unrated}</span>}
+                    {entry.test === true ? <span className="tag muted">{text.games.test}</span> : entry.rated ? null : <span className="tag muted">{text.ladder.live.unrated}</span>}
                     <span>{clockText(entry.timeControl)}</span>
+                    {entry.duel === undefined ? null : <span>{text.duels.caption(entry.test === true ? `test` : `duel`, entry.duel.game, entry.duel.of)}</span>}
                 </p>
             </div>
             <MiniBoard game={game} />

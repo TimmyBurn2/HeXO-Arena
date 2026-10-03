@@ -13,6 +13,7 @@ const visitors: readonly { name: string; me: Me }[] = [
 const screens: readonly { name: string; path: string }[] = [
     { name: `the root`, path: `/` },
     { name: `play`, path: `/play` },
+    { name: `bot duels`, path: `/play/duels` },
     { name: `live games`, path: `/games/live` },
     { name: `analysis`, path: `/analysis` },
     { name: `the ladder`, path: `/ladder` },

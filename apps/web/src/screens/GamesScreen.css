@@ -1,7 +1,17 @@
 @layer screens {
     /* The filters' popover hangs under the search row. */
+    /* Show tests stands beside the search while both fit, under it where they do not. */
     .games-search {
         position: relative;
+        display: flex;
+        flex-wrap: wrap;
+        align-items: flex-end;
+        gap: var(--space-3);
+    }
+
+    .games-search > .games-filters {
+        flex: 0 1 auto;
+        min-width: 0;
     }
 
     /* Large text puts the Filters button on a line of its own under Player. */

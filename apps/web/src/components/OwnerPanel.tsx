@@ -24,6 +24,7 @@ export function OwnerPanel({ bot, onChanged }: { bot: string; onChanged: () => v
             </h2>
             {settings.data !== null ? (
                 <>
+                    <DuelsByOthers bot={bot} on={settings.data.duelsByOthers} />
                     <PageText bot={bot} settings={settings.data} onSaved={onChanged} />
                     <ClientRow client={settings.data.client} />
                 </>
@@ -136,6 +137,51 @@ function PageText({ bot, settings, onSaved }: { bot: string; settings: BotSettin
                 </div>
                 <ActionFailure failure={failure} wait={limited.wait} />
             </form>
+        </div>
+    );
+}
+
+// The switch saves as it flips; a refusal flips it back and says so.
+function DuelsByOthers({ bot, on }: { bot: string; on: boolean }) {
+    const [held, setHeld] = useState(on);
+    const [sending, setSending] = useState(false);
+    const [failure, setFailure] = useState<string | null>(null);
+    const limited = useWait();
+    const words = text.duels.owner;
+
+    async function flip(next: boolean) {
+        setHeld(next);
+        setSending(true);
+        setFailure(null);
+        try {
+            setHeld((await updateBotSettings(bot, { duelsByOthers: next })).duelsByOthers);
+        } catch (cause) {
+            setHeld(!next);
+            const wait = limitedFor(cause);
+            if (wait !== null) limited.start(wait);
+            else setFailure(words.failed);
+        }
+        setSending(false);
+    }
+
+    return (
+        <div className="owner-row">
+            <div className="owner-text">
+                <h3 id="duels-by-others">{words.title}</h3>
+                <p className="note" id="duels-by-others-note">
+                    {words.note(bot)}
+                </p>
+            </div>
+            <input
+                type="checkbox"
+                role="switch"
+                aria-labelledby="duels-by-others"
+                aria-describedby="duels-by-others-note"
+                checked={held}
+                disabled={sending || limited.wait !== null}
+                onChange={(event) => void flip(event.target.checked)}
+            />
+            <ActionFailure failure={failure} wait={limited.wait} />
         </div>
     );
 }

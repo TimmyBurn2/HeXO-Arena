@@ -6,7 +6,7 @@ The site never shows this note.
 
 # Privacy policy
 
-Last updated 2 October 2026
+Last updated 3 October 2026
 
 ## Who is responsible
 

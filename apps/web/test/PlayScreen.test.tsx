@@ -202,10 +202,11 @@ describe('PlayScreen', () => {
         const rated = within(card).getByRole(`switch`);
         expect(rated).toHaveProperty(`checked`, false);
         expect(rated).toHaveProperty(`disabled`, true);
-        expect(rated.closest(`label`)?.textContent).toBe(`RatedYour own bot`);
-        expect(within(card).getByText(`Unrated, your own bot; sides are drawn at random`)).toBeTruthy();
+        expect(rated.closest(`label`)?.textContent).toBe(`Rated`);
+        expect(within(card).getByText(`Unrated: pebble is your own bot. A game against your own bot is a test; it moves no rating and stays off Home.`)).toBeTruthy();
+        expect(within(card).getByText(`A test, unrated; sides are drawn at random`)).toBeTruthy();
         const row = [...document.querySelectorAll(`.play-roster .roster-row`)].find((entry) => entry.querySelector(`.player-name`)?.textContent === `pebble`);
-        expect(row?.textContent).toContain(`Your bot`);
+        expect(row?.textContent).toContain(`Yours`);
         expect(row?.textContent).not.toContain(`Closed for challenges`);
         fireEvent.click(screen.getByRole(`button`, { name: `Start game` }), { detail: 1 });
         await waitFor(() => {

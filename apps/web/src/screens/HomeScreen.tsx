@@ -100,7 +100,8 @@ function yourLiveGames(named: readonly LiveGameEntry[], live: readonly LiveGameE
     return named.flatMap((entry) => {
         const fresh = byId.get(entry.gameId);
         if (fresh !== undefined) return [fresh];
-        return full ? [entry] : [];
+        // The live list leaves tests out, so one of the reader's own stays as the session named it.
+        return full || entry.test === true ? [entry] : [];
     });
 }
 

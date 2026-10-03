@@ -139,6 +139,7 @@ describe('the game panel\'s feed and peek', () => {
                 meetings={null}
                 rundown={null}
                 tournament={null}
+                duel={null}
                 analysis={null}
                 running={false}
                 timed={false}

@@ -1,6 +1,6 @@
 import type { Page } from '@playwright/test';
 import { themes } from '../src/theme/themes';
-import { analyzerBots, bots, heldBots, keptNames, leaderboard, liveGames, longReadings, playBots, rivalry, signup, tournaments, world, type World } from './mock-api';
+import { anaMe, analyzerBots, bots, brunoMe, duelBots, duelFixtures, duelGameRows, duelGameSnapshots, games as gameFixtures, heldBots, keptNames, leaderboard, liveGames, longReadings, playBots, rivalry, signup, tournaments, world, type World } from './mock-api';
 
 /** A named look the whole site can wear. */
 export interface Look {
@@ -52,7 +52,8 @@ export interface Shot {
     // captured; elsewhere a look changes only surface and text tokens,
     // which the contrast gate holds pair by pair and step by step, so the
     // default look stands for all.
-    board?: true;
+    // A list names the widths the other looks take, the default look taking every one.
+    board?: true | readonly Viewport[];
     // Widths other than the matrix's own.
     viewports?: readonly Viewport[];
     // A page read top to bottom is captured whole, so one shot shows every part.
@@ -156,7 +157,161 @@ async function openIdentity(page: Page): Promise<void> {
     await page.locator(`dialog.identity-panel[open]`).waitFor();
 }
 
+// The duel screens at a laptop's width and a phone's, as the duel mockups show them.
+const duelViewports: readonly Viewport[] = [
+    { name: `laptop`, width: 1280, height: 900 },
+    { name: `phone`, width: 390, height: 844 },
+];
+const laptopOnly: readonly Viewport[] = [{ name: `laptop`, width: 1280, height: 900 }];
+const allDuels = Object.values(duelFixtures).filter((duel) => duel.id !== duelFixtures.testLive.id);
+// ana's bots and everyone else's, the live duel and the past ones listed.
+const dueling = (overrides: Partial<World> = {}) => world({ me: anaMe, bots: duelBots, duels: structuredClone(allDuels), live: [], ...overrides });
+
+async function addBot(page: Page, slot: `first` | `second`, name: string): Promise<void> {
+    await page.getByRole(`button`, { name: `Add a bot, ${slot === `first` ? `First` : `Second`} bot` }).click();
+    const dialog = page.locator(`dialog.duel-picker[open]`);
+    await dialog.waitFor();
+    await dialog.getByRole(`button`, { name: new RegExp(`^${name}\\b`, `u`) }).dblclick();
+    await dialog.waitFor({ state: `detached` });
+}
+
+// A duel's page in every look at a laptop's width, since it draws boards, and in the default look on a phone.
+function duelPage(name: string, path: string, state: World, ready: string): Shot {
+    return { name, path, world: state, ready, framed: true, board: laptopOnly, viewports: duelViewports };
+}
+
 export const shots: readonly Shot[] = [
+    { name: `duels-empty`, path: `/play/duels`, world: dueling(), ready: `.duel-card`, framed: true, viewports: duelViewports },
+    {
+        name: `duels-picker`,
+        path: `/play/duels`,
+        world: dueling(),
+        ready: `.duel-card`,
+        framed: true,
+        viewports: duelViewports,
+        after: async (page) => {
+            await page.getByRole(`button`, { name: `Add a bot, First bot` }).click();
+            await page.locator(`dialog.duel-picker[open] .pick-detail`).waitFor();
+        },
+    },
+    {
+        name: `duels-ready`,
+        path: `/play/duels?first=Pistol1`,
+        world: dueling(),
+        ready: `.slot-filled`,
+        framed: true,
+        viewports: duelViewports,
+        fullPage: true,
+        after: async (page) => {
+            await page.getByLabel(`Strength`).first().selectOption(`club`);
+            await addBot(page, `second`, `devbot-a`);
+            await page.getByRole(`button`, { name: `Start duel` }).waitFor();
+        },
+    },
+    {
+        name: `duels-test`,
+        path: `/play/duels?first=pebble`,
+        world: dueling(),
+        ready: `.slot-filled`,
+        framed: true,
+        viewports: duelViewports,
+        fullPage: true,
+        after: async (page) => {
+            await addBot(page, `second`, `cinder`);
+            await page.getByRole(`button`, { name: `Start test` }).waitFor();
+        },
+    },
+    { name: `duels-signed-out`, path: `/play/duels`, world: dueling({ me: null }), ready: `.discord-button`, framed: true, viewports: duelViewports },
+    {
+        name: `duels-refused`,
+        path: `/play/duels?first=hextide`,
+        world: dueling({ duelStart: { status: 400, code: `duel_busy` } }),
+        ready: `.slot-filled`,
+        framed: true,
+        viewports: duelViewports,
+        after: async (page) => {
+            await addBot(page, `second`, `devbot-a`);
+            await page.getByRole(`button`, { name: `Start duel` }).click();
+            await page.locator(`.start-refusal`).waitFor();
+        },
+    },
+    {
+        name: `duels-gone`,
+        path: `/play/duels?first=driftwood`,
+        world: dueling(),
+        ready: `.slot-warn`,
+        framed: true,
+        viewports: duelViewports,
+    },
+    {
+        name: `duels-none-ready`,
+        path: `/play/duels`,
+        world: dueling({ bots: duelBots.map((bot) => (bot.name === `hextide` ? bot : { ...bot, online: false })) }),
+        ready: `.empty`,
+        framed: true,
+        viewports: duelViewports,
+    },
+    {
+        name: `duels-tests`,
+        path: `/play/duels`,
+        world: dueling(),
+        ready: `.duel-card`,
+        framed: true,
+        viewports: duelViewports,
+        after: async (page) => {
+            await page.getByRole(`button`, { name: `Tests` }).click();
+            await page.locator(`#recent-duels`).waitFor();
+            await page.getByText(`hextide won all 20; stronger`).waitFor();
+        },
+    },
+    duelPage(`duel-live`, `/play/duels/${duelFixtures.live.id}`, dueling({ me: brunoMe }), `.duel-head .score-hex`),
+    duelPage(`duel-finished`, `/play/duels/${duelFixtures.rated.id}`, dueling(), `.duel-head .score-hex`),
+    duelPage(`duel-test`, `/play/duels/${duelFixtures.test.id}`, dueling(), `.estimate`),
+    duelPage(`duel-test-live`, `/play/duels/${duelFixtures.testLive.id}`, dueling({ duels: [structuredClone(duelFixtures.testLive)] }), `.estimate`),
+    duelPage(`duel-cut-short`, `/play/duels/${duelFixtures.cutShort.id}`, dueling(), `.duel-head .score-hex`),
+    {
+        name: `duel-stopping`,
+        path: `/play/duels/${duelFixtures.live.id}`,
+        world: dueling({ me: brunoMe }),
+        ready: `.duel-head`,
+        framed: true,
+        viewports: duelViewports,
+        after: async (page) => {
+            await page.getByRole(`button`, { name: `Stop duel` }).click();
+            await page.getByRole(`button`, { name: `Keep playing` }).waitFor();
+        },
+    },
+    { name: `duel-missing`, path: `/play/duels/d_nothingthere`, world: dueling(), ready: `.empty`, framed: true, viewports: duelViewports },
+    { name: `home-duel`, path: `/`, world: dueling({ live: liveGames.slice(1, 2) }), ready: `.home-duel`, framed: true, viewports: duelViewports },
+    { name: `bot-page-duels`, path: `/bots/Pistol1`, world: dueling(), ready: `.bot-duels`, framed: true, viewports: duelViewports },
+    {
+        name: `games-duels`,
+        path: `/games`,
+        world: dueling({ finished: [...duelGameRows, ...keptNames] }),
+        ready: `.game-row-cap`,
+        framed: true,
+        viewports: duelViewports,
+        storage: { 'hexo-arena.tests.v1': `on` },
+    },
+    ...([
+        [`game-drawer-duel`, `duel-game`],
+        [`game-drawer-test`, `test-game`],
+    ] as const).map(([name, id]): Shot => ({
+        name,
+        path: `/game/${id}`,
+        world: dueling({ games: { ...structuredClone(gameFixtures), ...structuredClone(duelGameSnapshots) }, duels: structuredClone(Object.values(duelFixtures)) }),
+        ready: `svg polygon.cell`,
+        framed: false,
+        viewports: laptopOnly,
+        after: async (page) => {
+            await page.keyboard.press(`m`);
+            await page.locator(`#drawer-body:not([hidden])`).waitFor();
+            await page.getByRole(`tab`, { name: `Game` }).click();
+            await page.locator(`.facts a[href^="/play/duels/"]`).waitFor();
+        },
+    })),
+    { name: `bot-page-duels-owner`, path: `/bots/Pistol1`, world: dueling({ me: brunoMe }), ready: `#duels-by-others`, framed: true, viewports: duelViewports, fullPage: true },
+
     { name: `home`, path: `/`, world: world({ live: liveGames, finished: keptNames }), ready: `.featured`, framed: true, board: true },
     { name: `home-few`, path: `/`, world: world({ live: liveGames.slice(1, 2), leaderboard: [] }), ready: `.featured`, framed: true, board: true },
     { name: `home-quiet`, path: `/`, world: world({ live: [] }), ready: `.featured`, framed: true, board: true },

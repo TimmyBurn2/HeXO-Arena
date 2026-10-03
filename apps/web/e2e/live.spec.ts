@@ -136,8 +136,8 @@ test('the boards take no focus: Tab walks the cards, one stop each, to their gam
     await serve(page, world({ live: liveGames.slice(0, 3) }));
     await page.goto(`/games/live`);
     await page.locator(`.live-card`).first().waitFor();
-    // The walk starts past the head's two views, Finished and Live.
-    await page.getByRole(`navigation`, { name: `Games` }).getByRole(`link`, { name: /^Live/u }).focus();
+    // The walk starts past the head's two views, Finished and Live, and the Show tests switch.
+    await page.getByRole(`switch`, { name: `Show tests` }).focus();
     const stops: string[] = [];
     for (let press = 0; press < 3; press += 1) {
         await page.keyboard.press(`Tab`);

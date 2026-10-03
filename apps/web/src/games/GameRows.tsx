@@ -40,8 +40,13 @@ export function GameRows({ games, now, label }: { games: readonly FinishedGameEn
                         <span className="game-row-result">
                             {resultSentence(game, { x: seatName(game.players.x), o: seatName(game.players.o) })}
                             {game.voided ? <span className="tag muted">{text.games.voided}</span> : null}
-                            {seatsRateNobody(game.players) || game.unratedByChoice === true ? <span className="tag muted">{text.games.unrated}</span> : null}
+                            {game.test === true ? (
+                                <span className="tag muted">{text.games.test}</span>
+                            ) : seatsRateNobody(game.players) || game.unratedByChoice === true ? (
+                                <span className="tag muted">{text.games.unrated}</span>
+                            ) : null}
                             {game.analyses > 0 ? <span className="tag">{text.games.analyses(game.analyses)}</span> : null}
+                            {game.duel === undefined ? null : <span className="game-row-cap">{text.duels.caption(game.test === true ? `test` : `duel`, game.duel.game, game.duel.of)}</span>}
                         </span>
                         <span className="game-row-facts">
                             <span>{clockText(game.timeControl)}</span>

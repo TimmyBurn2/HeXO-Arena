@@ -75,9 +75,10 @@ test('Rated stands off on the person\'s own bot, saying why, though the bot is c
     const rated = page.getByRole(`switch`, { name: /^Rated/u });
     await expect(rated).not.toBeChecked();
     await expect(rated).toBeDisabled();
-    await expect(page.locator(`.rated-row`)).toHaveText(`RatedYour own bot`);
-    await expect(page.locator(`.start-area > .note`)).toHaveText(`Unrated, your own bot; sides are drawn at random`);
-    await expect(page.locator(`.play-roster .roster-row`, { hasText: `pebble` })).toContainText(`Your bot`);
+    await expect(page.locator(`.rated-row .checkline`)).toHaveText(`Rated`);
+    await expect(page.locator(`.rated-row .rated-line`)).toHaveText(/^Unrated: \w+ is your own bot\. A game against your own bot is a test; it moves no rating and stays off Home\.$/u);
+    await expect(page.locator(`.start-area > .note`)).toHaveText(`A test, unrated; sides are drawn at random`);
+    await expect(page.locator(`.play-roster .roster-row`, { hasText: `pebble` })).toContainText(`Yours`);
     const sent = page.waitForRequest((request) => new URL(request.url()).pathname === `/api/games` && request.method() === `POST`);
     await page.getByRole(`button`, { name: `Start game` }).click();
     expect((await sent).postDataJSON()).toMatchObject({ bot: `pebble`, rated: false });

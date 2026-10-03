@@ -1,3 +1,4 @@
+import { useId } from 'react';
 import { text } from '../text';
 
 /**
@@ -5,27 +6,31 @@ import { text } from '../text';
  * unrated for both sides.
  * At a strength other than the bot's default the game is practice, unrated
  * either way, so the switch stands off and disabled; against the person's
- * own bot it stands off and disabled too, saying why.
+ * own bot, a test, it stands off and disabled too, saying why under it.
  */
-export function RatedRow({ rated, practice, own, onRated }: { rated: boolean; practice: boolean; own: boolean; onRated: (rated: boolean) => void }) {
+export function RatedRow({ rated, practice, own, bot, onRated }: { rated: boolean; practice: boolean; own: boolean; bot: string; onRated: (rated: boolean) => void }) {
     const held = practice || own;
+    const ids = useId();
     return (
         <div className="rated-row">
             <label className="checkline">
                 <span>{text.play.ratedSwitch}</span>
-                <span className="rated-control">
-                    {own ? <span className="rated-reason">{text.play.ownBot}</span> : null}
-                    <input
-                        type="checkbox"
-                        role="switch"
-                        checked={rated && !held}
-                        disabled={held}
-                        onChange={(event) => {
-                            onRated(event.target.checked);
-                        }}
-                    />
-                </span>
+                <input
+                    type="checkbox"
+                    role="switch"
+                    checked={rated && !held}
+                    disabled={held}
+                    aria-describedby={own ? `${ids}-own` : undefined}
+                    onChange={(event) => {
+                        onRated(event.target.checked);
+                    }}
+                />
             </label>
+            {own ? (
+                <p className="note rated-line" id={`${ids}-own`}>
+                    {text.play.ownBot(bot)}
+                </p>
+            ) : null}
         </div>
     );
 }
