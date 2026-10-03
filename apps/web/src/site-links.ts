@@ -8,9 +8,8 @@ export const botApiRepository = `https://github.com/TimmyBurn2/Hexo-Bot-Api`;
 export const bridgeRepository = `https://github.com/TimmyBurn2/hexo-bridge`;
 
 /** The command that installs hexo-bridge. */
-// The bridge tags no releases yet, so this installs its default branch;
-// it moves to a tagged install once the bridge tags one.
-export const bridgeInstall = `pip install git+${bridgeRepository}`;
+// Each bridge tag is a release, so this follows the bridge's latest tag.
+export const bridgeInstall = `pip install git+${bridgeRepository}@v0.3.0`;
 
 /** The site's own repository: its code, the legal templates, and how to run it. */
 export const siteRepository = `https://github.com/TimmyBurn2/HeXO-Arena`;

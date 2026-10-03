@@ -432,6 +432,8 @@ export const analyses = sqliteTable(
         analyzerCutMistake: real(`analyzer_cut_mistake`),
         analyzerCutBlunder: real(`analyzer_cut_blunder`),
         analyzerMeaning: text(`analyzer_meaning`),
+        // Whether the analyzer's owner sat in the game, as it was when the analyzer took it.
+        involved: integer(`involved`).notNull().default(0),
         // The analyzer the requester named, if any; only it may take the request.
         namedBotId: text(`named_bot_id`).references(() => bots.id, { onDelete: `cascade` }),
         requestedBy: text(`requested_by`).references(() => users.id, { onDelete: `set null` }),
@@ -460,6 +462,7 @@ export const analyses = sqliteTable(
         // A request no analyzer took ends as expired, with none.
         check(`analyses_analyzer_check`, sql`((${table.status} = 'queued') = (${table.analyzerBotId} is null)) or (${table.status} = 'failed' and ${table.analyzerBotId} is null)`),
         check(`analyses_version_check`, sql`${table.analyzerVersion} is null or length(${table.analyzerVersion}) <= 64`),
+        check(`analyses_involved_check`, sql`${table.involved} in (0, 1) and (${table.involved} = 0 or ${table.analyzerBotId} is not null)`),
         check(`analyses_seconds_check`, sql`${table.seconds} between 1 and ${analyzerSecondsMax}`),
         check(`analyses_finished_check`, sql`(${table.status} in ('done', 'failed')) = (${table.finishedAt} is not null)`),
         ...valuesChecks(

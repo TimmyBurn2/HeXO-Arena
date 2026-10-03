@@ -192,6 +192,7 @@ describe('a game reading', () => {
         kind: `community`,
         analysisId: `a_1`,
         analyzer: null,
+        involved: false,
         status: `queued`,
         requestedAt: `2026-10-02T10:00:00Z`,
         finishedAt: null,
@@ -201,12 +202,14 @@ describe('a game reading', () => {
         turns: [],
     };
 
-    it('lists community readings and each bot seat\'s own view, and whether a player opted out', () => {
+    it('lists community readings, each marked whether its analyzer\'s owner played, each bot seat\'s own view, an opt-out, and whether an independent analyzer is online', () => {
         const own = { kind: `own`, side: `x`, player: `hextide`, values: { scale: 1, cuts: null, meaning: `raw` }, turns: [{ turn: 4, toMove: `x`, lines: [line] }] };
-        const list = { analyses: [community, own], optedOut: false };
+        const list = { analyses: [community, own], optedOut: false, independentOnline: true };
         expect(analysisListSchema.parse(list)).toEqual(list);
-        expect(analysisListSchema.safeParse({ analyses: [] }).success).toBe(false);
-        expect(analysisListSchema.safeParse({ analyses: [{ ...own, kind: `peer` }], optedOut: false }).success).toBe(false);
+        expect(analysisListSchema.safeParse({ analyses: [], optedOut: false }).success).toBe(false);
+        expect(analysisListSchema.safeParse({ ...list, analyses: [{ ...own, kind: `peer` }] }).success).toBe(false);
+        const { involved: _involved, ...unmarked } = community;
+        expect(analysisListSchema.safeParse({ ...list, analyses: [unmarked] }).success).toBe(false);
     });
 
     it('may name an analyzer or leave it to any', () => {

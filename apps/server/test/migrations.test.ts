@@ -564,3 +564,44 @@ describe('the analyzer values migration', () => {
         expect(sqlite.prepare(`select count(*) as n from own_values`).get()).toEqual({ n: 0 });
     });
 });
+
+describe('the involved analyzers migration', () => {
+    let sqlite: Sqlite;
+    let folder: string;
+
+    afterEach(() => {
+        sqlite.close();
+        rmSync(folder, { recursive: true, force: true });
+    });
+
+    it('keeps every reading and its lines as read by an analyzer whose owner sat in neither seat, and holds the mark to a reading an analyzer took', () => {
+        sqlite = openDatabase(`:memory:`);
+        folder = migrationsUpTo(23);
+        migrate(drizzle(sqlite), { migrationsFolder: folder });
+        sqlite.exec(`
+            insert into name_reservations (name_key) values ('owner'), ('reader'), ('alpha'), ('beta'), ('gamma');
+            insert into users (id, discord_id, name, name_key, created_at) values ('u1', 'd1', 'owner', 'owner', 1), ('u2', 'd2', 'reader', 'reader', 1);
+            insert into bots (id, owner_id, name, name_key, token_hash, scope, created_at, analyzer_max_seconds, analyzer_lines, analyzer_while_playing)
+                values ('b1', 'u1', 'alpha', 'alpha', 'h1', 'bot:play', 1, null, null, null), ('b2', 'u1', 'beta', 'beta', 'h2', 'bot:play', 1, null, null, null),
+                    ('b3', 'u2', 'gamma', 'gamma', 'h3', 'bot:play', 1, 2, 3, 0);
+            insert into games (id, challenger_bot_id, dest_bot_id, challenger_side, time_control, opening_cells, winner, finish_reason, created_at, finished_at, finish_seq)
+                values ('g1', 'b1', 'b2', 'x', '{"mode":"unlimited"}', '[]', 'x', 'surrender', 1, 2, 1);
+            insert into analyses (id, game_id, analyzer_bot_id, analyzer_version, status, seconds, created_at, started_at, finished_at)
+                values ('a1', 'g1', 'b3', '0.9', 'done', 2, 1, 1, 2), ('a2', 'g1', null, null, 'queued', 2, 3, null, null);
+            insert into analysis_lines (analysis_id, turn, rank, first_x, first_y, second_x, second_y, heuristic) values ('a1', 1, 0, 1, 0, 2, 0, 0.3);
+        `);
+        runMigrations(sqlite);
+        expect(sqlite.prepare(`select id, analyzer_bot_id as bot, status, involved from analyses order by id`).all()).toEqual([
+            { id: `a1`, bot: `b3`, status: `done`, involved: 0 },
+            { id: `a2`, bot: null, status: `queued`, involved: 0 },
+        ]);
+        expect(sqlite.prepare(`select count(*) as n from analysis_lines`).get()).toEqual({ n: 1 });
+        expect(sqlite.pragma(`foreign_key_check`)).toEqual([]);
+
+        const mark = sqlite.prepare(`update analyses set involved = ? where id = ?`);
+        expect(() => mark.run(1, `a1`)).not.toThrow();
+        expect(() => mark.run(1, `a2`)).toThrow(/CHECK/);
+        expect(() => mark.run(2, `a1`)).toThrow(/CHECK/);
+        expect(() => mark.run(null, `a1`)).toThrow(/NOT NULL/);
+    });
+});

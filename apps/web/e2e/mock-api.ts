@@ -929,20 +929,25 @@ function ownWinIn(next: number, nextMover: Side): number {
 const kestrelRef = { name: `kestrel`, version: `0.9`, ownerName: `tom`, values: winChanceValues };
 const readAt = new Date(Date.UTC(2026, 9, 1, 12)).toISOString();
 
-/** long-finished's readings in each state a community reading passes through, and both bots' own views. */
+/**
+ * long-finished's readings in each state a community reading passes through, and both bots' own views;
+ * and one by hextide, an analyzer as well as x's seat, which played in the game it read.
+ */
 export const longReadings: {
     kestrel: CommunityAnalysis;
     driftwood: CommunityAnalysis;
+    hextide: CommunityAnalysis;
     running: CommunityAnalysis;
     queued: CommunityAnalysis;
     failed: CommunityAnalysis;
     own: OwnAnalysis[];
 } = {
-    kestrel: { kind: `community`, analysisId: `a_6b1f0c3e-2d4a-4e5b-8c6d-7e8f9a0b1c2d`, analyzer: kestrelRef, status: `done`, requestedAt: readAt, finishedAt: readAt, progress: { done: longPositions, of: longPositions }, seconds: 2, turns: longTurns(longLastTurn, 3) },
+    kestrel: { kind: `community`, analysisId: `a_6b1f0c3e-2d4a-4e5b-8c6d-7e8f9a0b1c2d`, analyzer: kestrelRef, involved: false, status: `done`, requestedAt: readAt, finishedAt: readAt, progress: { done: longPositions, of: longPositions }, seconds: 2, turns: longTurns(longLastTurn, 3) },
     driftwood: {
         kind: `community`,
         analysisId: `a_7c2a1d4f-3e5b-4f6c-9d7e-8f9a0b1c2d3e`,
         analyzer: { name: `driftwood`, version: null, ownerName: `mika`, values: undeclaredValues },
+        involved: false,
         status: `done`,
         requestedAt: readAt,
         finishedAt: readAt,
@@ -950,12 +955,25 @@ export const longReadings: {
         seconds: 2,
         turns: longTurns(longLastTurn, 2, 0.8),
     },
-    running: { kind: `community`, analysisId: `a_8d3b2e5a-4f6c-4a7d-8e8f-9a0b1c2d3e4f`, analyzer: kestrelRef, status: `running`, requestedAt: readAt, finishedAt: null, progress: { done: 10, of: longPositions }, seconds: 2, turns: longTurns(12, 3) },
-    queued: { kind: `community`, analysisId: `a_8d3b2e5a-4f6c-4a7d-8e8f-9a0b1c2d3e4f`, analyzer: null, status: `queued`, requestedAt: readAt, finishedAt: null, queuePosition: 3, progress: { done: 0, of: longPositions }, seconds: 2, turns: [] },
+    hextide: {
+        kind: `community`,
+        analysisId: `a_5a0e9b2d-1c3f-4d4a-9b5c-6d7e8f9a0b1c`,
+        analyzer: { name: `hextide`, version: `2.1`, ownerName: `ana`, values: winChanceValues },
+        involved: true,
+        status: `done`,
+        requestedAt: readAt,
+        finishedAt: readAt,
+        progress: { done: longPositions, of: longPositions },
+        seconds: 2,
+        turns: longTurns(longLastTurn, 3),
+    },
+    running: { kind: `community`, analysisId: `a_8d3b2e5a-4f6c-4a7d-8e8f-9a0b1c2d3e4f`, analyzer: kestrelRef, involved: false, status: `running`, requestedAt: readAt, finishedAt: null, progress: { done: 10, of: longPositions }, seconds: 2, turns: longTurns(12, 3) },
+    queued: { kind: `community`, analysisId: `a_8d3b2e5a-4f6c-4a7d-8e8f-9a0b1c2d3e4f`, analyzer: null, involved: false, status: `queued`, requestedAt: readAt, finishedAt: null, queuePosition: 3, progress: { done: 0, of: longPositions }, seconds: 2, turns: [] },
     failed: {
         kind: `community`,
         analysisId: `a_9e4c3f6b-5a7d-4b8e-9f0a-0b1c2d3e4f5a`,
         analyzer: kestrelRef,
+        involved: false,
         status: `failed`,
         failure: `timeout`,
         failedTurn: 14,
@@ -1418,13 +1436,13 @@ export async function serve(page: Page, state: World): Promise<void> {
             } else if (snapshot?.status === `in-progress`) {
                 await json(route, 409, { error: `the game is live`, code: `game_live` });
             } else if (method === `GET`) {
-                await json(route, 200, analysisListSchema.parse(state.analyses[id] ?? { analyses: [], optedOut: false }));
+                await json(route, 200, analysisListSchema.parse(state.analyses[id] ?? { analyses: [], optedOut: false, independentOnline: false }));
             } else if (state.me?.kind !== `user`) {
                 await json(route, 401, { error: `no session`, code: `unauthorized` });
             } else {
                 const body = analysisRequestSchema.parse(request.postDataJSON() ?? {});
                 state.requested.push({ gameId: id, request: body });
-                const listed = state.analyses[id] ?? { analyses: [], optedOut: false };
+                const listed = state.analyses[id] ?? { analyses: [], optedOut: false, independentOnline: false };
                 const community = listed.analyses.filter((analysis) => analysis.kind === `community`);
                 const named = body.analyzer === undefined ? null : state.analyzers.find((bot) => bot.name === body.analyzer);
                 const refusal = listed.optedOut
@@ -1455,6 +1473,7 @@ export async function serve(page: Page, state: World): Promise<void> {
                         kind: `community`,
                         analysisId: `a_0f8d2c4e-1b3a-4c5d-8e9f-0a1b2c3d4e5f`,
                         analyzer: null,
+                        involved: false,
                         status: `queued`,
                         requestedAt: finishedAt(0),
                         finishedAt: null,
@@ -1463,7 +1482,7 @@ export async function serve(page: Page, state: World): Promise<void> {
                         seconds: 2,
                         turns: [],
                     });
-                    state.analyses[id] = { analyses: [...listed.analyses, queued], optedOut: false };
+                    state.analyses[id] = { ...listed, analyses: [...listed.analyses, queued] };
                     state.me = { ...state.me, analysisLeft: { ...state.me.analysisLeft, games: state.me.analysisLeft.games - 1 } };
                     await json(route, 202, queued);
                 }

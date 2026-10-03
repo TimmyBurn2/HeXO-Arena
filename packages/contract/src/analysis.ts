@@ -372,6 +372,9 @@ export const communityAnalysisSchema = z
         kind: z.literal(`community`),
         analysisId: z.string(),
         analyzer: analyzerRefSchema.nullable(),
+        involved: z.boolean().meta({
+            description: `True when the analyzer's owner played in the game, as a human or through one of their bots, the analyzer itself included; set as the analyzer takes the game, never changed after, and false while none has.`,
+        }),
         status: analysisStatusSchema,
         failure: analysisFailureSchema.optional(),
         failedTurn: z.number().int().min(1).optional().meta({ description: `The turn whose position failed, when one did.` }),
@@ -418,12 +421,19 @@ export const analysisListSchema = z
             .max(analysesListed)
             .meta({ description: `Community readings, finished first, then queued or running, then the latest failed one; then each bot seat's own.` }),
         optedOut: z.boolean().meta({ description: `True when a player asked that their games stay out of public analysis; the list is then empty.` }),
+        independentOnline: z.boolean().meta({
+            description: `True while an analyzer whose owner played in neither seat is online and may read the game now; a request naming no analyzer goes to such an analyzer first.`,
+        }),
     })
     .meta({ id: `AnalysisList` });
 export type AnalysisList = z.infer<typeof analysisListSchema>;
 
 export const analysisRequestSchema = z
-    .object({ analyzer: nameSyntaxSchema.optional().meta({ description: `The analyzer to ask, by name; any eligible one when absent.` }) })
+    .object({
+        analyzer: nameSyntaxSchema.optional().meta({
+            description: `The analyzer to ask, by name; when absent, any eligible one, preferring one whose owner played in neither seat while such an analyzer is online.`,
+        }),
+    })
     .meta({ id: `AnalysisRequest` });
 export type AnalysisRequest = z.infer<typeof analysisRequestSchema>;
 

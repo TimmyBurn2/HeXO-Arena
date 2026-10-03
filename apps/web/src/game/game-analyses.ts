@@ -6,11 +6,13 @@ import {
     type AnalysisList,
     type AnalyzerRef,
     type CommunityAnalysis,
+    type GamePlayers,
     type OwnAnalysis,
 } from '@hexo-arena/contract';
 import { ApiError, fetchAnalyses, requestAnalysis } from '../api/client';
 import type { GameLine } from '../analysis/game-readings';
 import { meStore } from '../me';
+import { text } from '../text';
 
 /** A reading the drawer's head can show: a community analyzer's, done or under way, or the bots' own views. */
 export type ReadingChoice =
@@ -23,10 +25,12 @@ export const ownChoiceId = `own`;
 /**
  * What the head says of asking for a community reading:
  * none yet, so one may be asked for; waiting for an analyzer; being read; the latest failed;
- * a player opted out; or the game cannot be read whole.
+ * a player opted out; the game cannot be read whole;
+ * or its one reading came from an analyzer whose owner played, and an independent one is online to read it again.
  */
 export type RequestCard =
     | { readonly kind: `none` }
+    | { readonly kind: `independent` }
     | { readonly kind: `queued`; readonly ahead: number }
     | { readonly kind: `running`; readonly analyzer: AnalyzerRef | null; readonly turn: number; readonly last: number; readonly share: number }
     | { readonly kind: `failed`; readonly analyzer: AnalyzerRef | null; readonly cause: AnalysisFailure; readonly turn: number | null }
@@ -55,21 +59,38 @@ export function headOf(list: AnalysisList, line: GameLine): AnalysisHeadState {
     for (const analysis of done) choices.push(communityChoice(analysis));
     if (pending?.status === `running` && pending.analyzer !== null) choices.push(communityChoice(pending));
     if (views.length > 0) choices.push({ kind: `own`, id: ownChoiceId, views });
-    return { choices, card: cardOf(line, done.length > 0, pending, failed) };
+    return { choices, card: cardOf(line, done, pending, failed, list.independentOnline) };
+}
+
+/**
+ * What a community reading says of its analyzer when the analyzer's owner played in the game:
+ * that the analyzer itself played, or that a player's analyzer read it; null for an independent reading.
+ */
+export function involvedNote(analysis: CommunityAnalysis, players: GamePlayers): string | null {
+    if (!analysis.involved) return null;
+    const name = analysis.analyzer?.name ?? null;
+    const seated = name !== null && [players.x, players.o].some((seat) => seat.kind === `bot` && seat.deleted === undefined && seat.name === name);
+    return name !== null && seated ? text.drawer.reading.involvedSelf(name) : text.drawer.reading.involvedOwner;
 }
 
 function communityChoice(analysis: CommunityAnalysis): ReadingChoice {
     return { kind: `community`, id: analysis.analysisId, name: analysis.analyzer?.name ?? ``, analysis };
 }
 
-function cardOf(line: GameLine, anyDone: boolean, pending: CommunityAnalysis | undefined, failed: CommunityAnalysis | undefined): RequestCard | null {
+function cardOf(
+    line: GameLine,
+    done: readonly CommunityAnalysis[],
+    pending: CommunityAnalysis | undefined,
+    failed: CommunityAnalysis | undefined,
+    independentOnline: boolean,
+): RequestCard | null {
     if (pending?.status === `queued`) return { kind: `queued`, ahead: Math.max(0, (pending.queuePosition ?? 1) - 1) };
     if (pending !== undefined) {
         const { done, of } = pending.progress;
         // The position under way is the one after those read; the last, the final board, belongs to the last turn.
         return { kind: `running`, analyzer: pending.analyzer, turn: Math.min(line.firstTurn + done, line.lastTurn), last: line.lastTurn, share: of === 0 ? 0 : done / of };
     }
-    if (anyDone) return null;
+    if (done.length > 0) return done.length === 1 && done[0]?.involved === true && independentOnline ? { kind: `independent` } : null;
     if (line.lastTurn < line.firstTurn) return { kind: `unreadable`, why: `unplayed` };
     if (line.lastTurn > analysisTurnCap) return { kind: `unreadable`, why: `too-long` };
     if (failed !== undefined) {
@@ -145,7 +166,7 @@ export function analysesStep(state: AnalysesState, event: AnalysesEvent): Analys
         case `sending`:
             return { ...state, request: { kind: `sending` } };
         case `queued`: {
-            const list = state.load.kind === `ready` ? state.load.list : { analyses: [], optedOut: false };
+            const list = state.load.kind === `ready` ? state.load.list : { analyses: [], optedOut: false, independentOnline: false };
             const others = list.analyses.filter((analysis) => analysis.kind !== `community` || analysis.analysisId !== event.analysis.analysisId);
             return { load: { kind: `ready`, list: { ...list, analyses: [...others, event.analysis] } }, request: { kind: `idle` } };
         }

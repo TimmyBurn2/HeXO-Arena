@@ -1,5 +1,6 @@
 import {
     analysesPerGame,
+    analysisHeuristicLimit,
     analysisLinesMax,
     analyzerMaxSecondsCap,
     botAboutMaxLength,
@@ -27,6 +28,7 @@ import {
     plural,
     siteName,
     unlimitedWallCapMs,
+    valueCutMax,
     type AnalysisFailure,
     type DiscordNames,
     type Judgment,
@@ -309,8 +311,8 @@ export const en = {
         allGames: `All games`,
         botsOnline: `Bots online`,
         allBots: `All bots`,
-        buildLead: `Write a program that plays HeXO through the Bot API; it plays everyone here and climbs the ladder.`,
-        buildSteps: [`Sign in with Discord`, `Create your bot and copy its token`, `Run the example and watch it play`],
+        buildLead: `Write an engine that plays HeXO; your bot plays everyone here and climbs the ladder.`,
+        buildSteps: [`Sign in with Discord`, `Create your bot and copy its token`, `Run your engine with hexo-bridge`],
         signedInStep: (name: string) => `Signed in as ${name}`,
         startBuilding: `Start building`,
         readApi: `Read the Bot API`,
@@ -574,6 +576,8 @@ export const en = {
             levels: `${String(levelCountMin)} to ${String(levelCountMax)} strengths a player can pick, weakest first, and the default its rating belongs to; a game at any other is unrated.`,
             analyzer: (code: Slot): ReactNode =>
                 rich`Your engine reads positions for the analysis board: ${code(`lines`)}, 1 to ${String(analysisLinesMax)} per position, and ${code(`maxSeconds`)}, 1 to ${String(analyzerMaxSecondsCap)}; a Python engine answers in ${code(`analyze`)}.`,
+            values: (code: Slot): ReactNode =>
+                rich`How its heuristic reads: ${code(`scale`)}, above 0 and at most ${String(analysisHeuristicLimit)}, 1 by default, divides it; ${code(`meaning`)} is ${code(`expected`)} when the scaled value estimates x's expected result, or ${code(`raw`)}, the default, when it only orders positions, the honest choice unless your engine was fitted to game results; ${code(`cuts`)}, each above 0 and at most ${String(valueCutMax)} and rising, are the drops in value judged an inaccuracy, a mistake, and a blunder.`,
         },
         api: {
             title: `Speak the Bot API yourself`,
@@ -1181,8 +1185,8 @@ export const en = {
             missedWin: (analyzer: string, turns: number, mover: string) => `${analyzer} found a win in ${String(turns)} for ${mover} here and none after this turn`,
             leftSix: (opponent: string) => `this turn leaves ${opponent} a six to complete`,
             allowedWin: (analyzer: string, turns: number, opponent: string) => `after this turn ${analyzer} finds a win in ${String(turns)} for ${opponent}`,
-            valueDrop: (analyzer: string, drop: number, before: string, after: string) =>
-                `${analyzer} rates this turn ${drop.toFixed(2)} below its choice, ${before} before and ${after} after`,
+            valueDrop: (analyzer: string, drop: string, before: string, after: string) =>
+                `${analyzer} rates this turn ${drop} below its choice, ${before} before and ${after} after`,
             stillWinning: (analyzer: string, turns: number, mover: string) => `${analyzer} still finds a win in ${String(turns)} for ${mover} after this turn`,
             alreadyLost: (analyzer: string, opponent: string) => `${analyzer} found a win for ${opponent} before this turn`,
             foundWin: (analyzer: string, turns: number, mover: string) => `after this turn ${analyzer} finds a win in ${String(turns)} for ${mover}`,
@@ -1296,6 +1300,9 @@ export const en = {
             own: `Own view`,
             ownBy: `own view`,
             ownNote: `Each bot's view of its own turns, published once the game ended`,
+            // Under a community reading by an analyzer whose owner played: one that sat in the game itself, or one that did not.
+            involvedSelf: (name: string) => `${name} played in this game`,
+            involvedOwner: `Read by an analyzer of a player in this game`,
             // "hextide: allowed a forced win; kestrel"
             readout: (who: string, what: string, by: string) => `${who}: ${what}; ${by}`,
             // A value's side stays with its number, so "x 0.12" never breaks between them.
@@ -1313,6 +1320,9 @@ export const en = {
             named: (name: string, owner: string | null) => (owner === null ? name : `${name}, by ${owner}`),
             request: `Request analysis`,
             again: `Request again`,
+            // The game's one reading came from a player's analyzer.
+            independent: `An independent analyzer is online`,
+            askIndependent: `Ask an independent analyzer`,
             left: (left: number) =>
                 left === 0
                     ? `No requests left today; the count starts again at 00:00 UTC.`

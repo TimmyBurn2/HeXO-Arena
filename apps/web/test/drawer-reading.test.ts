@@ -13,16 +13,23 @@ describe('what a reading adds to the feed', () => {
     it('give each turn its mark and value, none the opening, and a judged turn its explanation on one line', () => {
         const notes = feedNotes(line, reading, 6, `kestrel`);
         expect(notes[0]).toBe(null);
-        expect(notes.slice(1).map((note) => [note?.severity, note?.value])).toEqual([
-            [null, `x 0.17`],
-            [`inaccuracy`, `x 0.05`],
-            [`blunder`, `x 0.45`],
+        expect(notes.slice(1).map((note) => [note?.severity, note?.value?.shown])).toEqual([
+            [null, `x 59%`],
+            [`inaccuracy`, `x 53%`],
+            [`blunder`, `x 73%`],
             [`blunder`, `o wins in 1`],
             [null, `o wins`],
         ]);
-        expect(notes[2]?.note).toBe(`Inaccuracy: kestrel rates this turn 0.12 below its choice, x\u00a00.17 before and x\u00a00.05 after; it preferred x: [-1,1] [0,1].`);
+        expect(notes[1]?.value?.spoken).toBe(`x's win chance 59 percent`);
+        expect(notes[2]?.note).toBe(`Inaccuracy: kestrel rates this turn 6 points below its choice, x\u00a059% before and x\u00a053% after; it preferred x: [-1,1] [0,1].`);
         expect(notes[4]?.note).toBe(`Blunder: left a six; this turn leaves o a six to complete; kestrel preferred x: [0,-1] [1,-2].`);
         expect(notes[1]?.note).toBe(null);
+    });
+
+    it('keep a raw reading\'s values and drops in hundredths', () => {
+        const notes = feedNotes(line, communityReading(line, judgedTurns, true, { scale: 1, cuts: winChanceCuts, meaning: `raw` }), 6, `kestrel`);
+        expect(notes[2]?.value).toEqual({ shown: `x 0.05`, spoken: `x 0.05` });
+        expect(notes[2]?.note).toBe(`Inaccuracy: kestrel rates this turn 0.12 below its choice, x\u00a00.17 before and x\u00a00.05 after; it preferred x: [-1,1] [0,1].`);
     });
 
     it('add no note to a bot\'s own view, which judges nothing', () => {

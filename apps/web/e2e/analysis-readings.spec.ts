@@ -38,15 +38,15 @@ test('Analyze is off on every visit; on, it reads the position into lines A to C
     await expect(lines(page)).toHaveCount(1);
     await unfold(page);
     await expect(lines(page)).toHaveCount(3);
-    await expect(page.locator(`.an-line .an-value`)).toHaveText([`o 0.12`, `o 0.07`, `x 0.02`]);
+    await expect(page.locator(`.an-line .an-value`)).toHaveText([`o 56%`, `o 54%`, `x 51%`]);
     await expect(page.locator(`.an-line .an-cells`).first()).toHaveText(/^o: \[-?\d+,-?\d+\] \[-?\d+,-?\d+\]$/u);
-    await expect(lines(page).first()).toHaveAccessibleName(/^Play line A: o 0\.12, o: /u);
+    await expect(lines(page).first()).toHaveAccessibleName(/^Play line A: o's win chance 56 percent, o: /u);
     await expect(page.locator(`.an-by`)).toHaveText(`kestrelBOT`);
     await expect(stateLine(page)).toHaveText(`Read in 1.8 s; o to move`);
     await expect(page.locator(`.line-mark`)).toHaveCount(6);
     await expect(page.locator(`.line-mark.best`)).toHaveCount(2);
     await expect(page.locator(`.line-mark.best .line-letters`)).toHaveText([`A`, `A`]);
-    await expect(page.locator(`.an-evalbar-chip`)).toHaveText(`o 0.12`);
+    await expect(page.locator(`.an-evalbar-chip`)).toHaveText(`o 56%`);
     expect(state.asked).toHaveLength(1);
     expect(state.asked[0]).toMatchObject({ toMove: `o`, analyzer: null, lines: 3, seconds: 2 });
     expect(state.asked[0]?.cells).toHaveLength(25);

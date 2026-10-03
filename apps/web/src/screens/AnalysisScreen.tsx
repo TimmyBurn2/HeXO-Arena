@@ -65,7 +65,7 @@ import { notationErrorText, positionWords, refusalText } from '../analysis/words
 import type { BoardStone } from '../board/Board';
 import { BotBadge, PlayerName, seatName, Swatch } from '../components/player';
 import { Marks, type Asker } from '../game/DrawerAnalysis';
-import { headOf, useGameAnalyses, type ReadingChoice } from '../game/game-analyses';
+import { headOf, involvedNote, useGameAnalyses, type ReadingChoice } from '../game/game-analyses';
 import { useWait, WaitText } from '../components/wait';
 import { meStore, useMe } from '../me';
 import { Link } from '../router/Link';
@@ -570,9 +570,11 @@ function Workspace({ board, game, notice, onBoard, onReplace, onNewBoard }: {
     }, [view, active, gameNodes]);
 
     // The turn shown explained from the reading its row's value comes from:
-    // a game's own turn from the game's reading picked, any other from what the same source read around it.
-    const explanation = useMemo((): Explanation | null => {
-        if (game !== null && at === floor && openingTurns(tree.root) > 0) return explain({ kind: `opening` }, { kind: `none` });
+    // a game's own turn from the game's reading picked, any other from what the same source read around it;
+    // and whether the game's community reading is the one that says it.
+    const explained = useMemo((): { readonly explanation: Explanation; readonly community: boolean } | null => {
+        const plainly = (explanation: Explanation) => ({ explanation, community: false });
+        if (game !== null && at === floor && openingTurns(tree.root) > 0) return plainly(explain({ kind: `opening` }, { kind: `none` }));
         if (node?.kind !== `turn`) return null;
         const onGame = lineDepth.has(node.id);
         // A game no reading may judge whole, opted out or out of an analyzer's reach, waits for none.
@@ -582,20 +584,29 @@ function Workspace({ board, game, notice, onBoard, onReplace, onNewBoard }: {
         const turn: ExplainedTurn = { kind: `turn`, turn: node.turn, side: node.side, cells: node.cells, completesSix: node.win !== null, place, player };
         if (onGame && view !== null && active !== null && record !== null) {
             const read = view.turns.get(node.turn);
-            if (active.kind === `own`) return explain(turn, { kind: `own`, name: player ?? ``, after: read?.value ?? null });
-            if (read === undefined) return explain(turn, { kind: `none` });
-            return explain(turn, turnReading(record, read, active.name, active.analysis.status === `done`));
+            if (active.kind === `own`) return plainly(explain(turn, { kind: `own`, name: player ?? ``, after: read?.value ?? null }));
+            if (read === undefined) return plainly(explain(turn, { kind: `none` }));
+            // A six speaks for itself, whoever read the game.
+            return { explanation: explain(turn, turnReading(record, read, active.name, active.analysis.status === `done`)), community: !turn.completesSix };
         }
         const parent = nodeAt(tree, node.parent);
         const readAt = (key: string, side: Side) => snapshot.get(key)?.get(sourceFor(side))?.read?.reading ?? null;
         const before = parent === undefined ? null : readAt(parent.key, node.side);
         const after = facts.get(node.id)?.value ?? null;
         const by = before?.by ?? readAt(node.key, node.side === `x` ? `o` : `x`)?.by ?? null;
-        if (by === null || (before === null && after === null)) return explain(turn, { kind: `none` });
-        if (by.kind === `own`) return explain(turn, { kind: `own`, name: by.name, after });
+        if (by === null || (before === null && after === null)) return plainly(explain(turn, { kind: `none` }));
+        if (by.kind === `own`) return plainly(explain(turn, { kind: `own`, name: by.name, after }));
         const best = before === null ? null : (shownLines(before, positionAt(tree, node.parent), node.side, 1)[0] ?? null);
-        return explain(turn, { kind: `analyzer`, name: authorName(by), best, after, judgment: null, whole: false, forced: null, drop: null });
+        return plainly(explain(turn, { kind: `analyzer`, name: authorName(by), best, after, judgment: null, whole: false, forced: null, drop: null }));
     }, [game, at, floor, tree, node, lineDepth, gameId, head, view, active, record, snapshot, sourceFor, facts]);
+    const explanation = explained?.explanation ?? null;
+
+    // A game's community reading by an analyzer whose owner played says so in the head while the head names its analyzer,
+    // and under the explanation while the explanation is the reading's.
+    const involvedWords = active?.kind === `community` && game !== null ? involvedNote(active.analysis, game.snapshot.players) : null;
+    const headName = analyzerShown.kind === `named` || analyzerShown.kind === `offline` ? analyzerShown.name : null;
+    const headNamesActive = !ownView && active?.kind === `community` && headName === active.name;
+    const involved = { head: headNamesActive ? involvedWords : null, explanation: explained?.community === true ? involvedWords : null };
 
     const openSetup = useCallback(() => {
         setRefusal(null);
@@ -920,6 +931,7 @@ function Workspace({ board, game, notice, onBoard, onReplace, onNewBoard }: {
                                 />
                             }
                             shown={{ analyzer: analyzerShown, entry: shown, lines, held: waiting, toMove, unreadable }}
+                            involved={involved}
                             pills={pills}
                             activePill={activePill}
                             onPill={(pill) => {

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode, type Ref } from 'react';
-import { namePattern, isReservedName, type AccountDeclaration } from '@hexo-arena/contract';
+import { namePattern, isReservedName, type AccountDeclaration, type AnalyzerDeclaration } from '@hexo-arena/contract';
 import { ApiError, createBot, limitedFor } from '../api/client';
 import { useWait, WaitText } from '../components/wait';
 import { CodeBlock } from '../components/CodeBlock';
@@ -55,13 +55,19 @@ export function ConnectScreen() {
     }, [signedIn]);
 
     // Keyed by the contract's own fields, so one it adds cannot go undescribed.
+    const analyzerFields: Pick<Record<keyof AnalyzerDeclaration, ReactNode>, `values`> = { values: words.declaration.values(code) };
     const declared: Record<keyof AccountDeclaration, ReactNode> = {
         accepts: words.declaration.accepts(code),
         about: words.declaration.about,
         version: words.declaration.version,
         repoUrl: words.declaration.repoUrl,
         levels: words.declaration.levels,
-        analyzer: words.declaration.analyzer(code),
+        analyzer: (
+            <>
+                {words.declaration.analyzer(code)}
+                <Fields fields={analyzerFields} className="declaration-fields declaration-sub" />
+            </>
+        ),
     };
 
     return (
@@ -143,16 +149,7 @@ export function ConnectScreen() {
             <section className="build-part">
                 <h2 className="section-title">{words.declaration.title}</h2>
                 <p>{words.declaration.lead(code)}</p>
-                <dl className="declaration-fields">
-                    {Object.entries(declared).map(([field, says]) => (
-                        <div key={field}>
-                            <dt>
-                                <code>{field}</code>
-                            </dt>
-                            <dd>{says}</dd>
-                        </div>
-                    ))}
-                </dl>
+                <Fields fields={declared} className="declaration-fields" />
             </section>
             <section className="build-part">
                 <h2 className="section-title">{words.api.title}</h2>
@@ -160,6 +157,21 @@ export function ConnectScreen() {
                 <p>{words.api.example(outTo(exampleBot), outTo(botApiRepository))}</p>
             </section>
         </div>
+    );
+}
+
+function Fields({ fields, className }: { fields: Readonly<Record<string, ReactNode>>; className: string }) {
+    return (
+        <dl className={className}>
+            {Object.entries(fields).map(([field, says]) => (
+                <div key={field}>
+                    <dt>
+                        <code>{field}</code>
+                    </dt>
+                    <dd>{says}</dd>
+                </div>
+            ))}
+        </dl>
     );
 }
 

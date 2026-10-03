@@ -39,13 +39,19 @@ describe('a community reading of a whole game', () => {
 
     it('value each turn by its own line where the reading lists it, else by the best line after it, and a six as its winner', () => {
         // x's turn 4 leaves o a six, which the board says is o's win in 1, whatever the reading's longer count.
-        expect([1, 2, 3, 4, 5].map((turn) => reading.turns.get(turn)?.value)).toEqual([`x 0.17`, `x 0.05`, `x 0.45`, `o wins in 1`, `o wins`]);
+        expect([1, 2, 3, 4, 5].map((turn) => reading.turns.get(turn)?.value?.shown)).toEqual([`x 59%`, `x 53%`, `x 73%`, `o wins in 1`, `o wins`]);
+        expect(reading.turns.get(3)?.value?.spoken).toBe(`x's win chance 73 percent`);
+    });
+
+    it('word the values of an analyzer that declared them raw, or nothing, in hundredths', () => {
+        const raw = communityReading(line, judgedTurns, true, undeclaredValues);
+        expect([1, 2, 3, 4, 5].map((turn) => raw.turns.get(turn)?.value?.shown)).toEqual([`x 0.17`, `x 0.05`, `x 0.45`, `o wins in 1`, `o wins`]);
     });
 
     it('count a win the next mover\'s best line finds from the board after a turn, that line\'s own turn included, in the rows and the feed', () => {
         const next = communityReading(line, nextWinTurns, true, undeclaredValues);
-        expect(next.turns.get(3)?.value).toBe(`x wins in 2`);
-        expect(feedNotes(line, next, 6, `kestrel`)[3]?.value).toBe(`x wins in 2`);
+        expect(next.turns.get(3)?.value?.shown).toBe(`x wins in 2`);
+        expect(feedNotes(line, next, 6, `kestrel`)[3]?.value?.shown).toBe(`x wins in 2`);
     });
 
     it('judge each turn by the board, its forced wins, and its analyzer\'s declared cuts, never the six, and count the marks per side', () => {
@@ -94,8 +100,11 @@ describe('a community reading of a whole game', () => {
 
     it('keep the forced wins around each turn, how far a value drop fell, and the turns that held a forced win for their mover', () => {
         expect(reading.turns.get(4)?.forced).toEqual({ before: null, after: { winner: `o`, turns: 1 } });
-        expect([2, 3].map((turn) => reading.turns.get(turn)?.drop)).toEqual([0.12, 0.37]);
+        // o's turn 3 takes its win chance from 46 to 27 percent, as shown, though its value fell 0.37.
+        expect([2, 3].map((turn) => reading.turns.get(turn)?.drop)).toEqual([`6 points`, `19 points`]);
         expect(reading.turns.get(1)?.drop).toBe(null);
+        const raw = communityReading(line, judgedTurns, true, { scale: 1, cuts: winChanceCuts, meaning: `raw` });
+        expect([2, 3].map((turn) => raw.turns.get(turn)?.drop)).toEqual([`0.12`, `0.37`]);
         expect(reading.holds).toEqual([{ turn: 5, side: `o` }]);
         expect(reading.runs).toEqual([]);
         expect(reading.meaning).toBe(`expected`);
@@ -133,7 +142,7 @@ describe('the bots\' own views of a game', () => {
         ]);
         expect(reading.meaning).toBe(`raw`);
         expect(reading.marks).toEqual([]);
-        expect(reading.turns.get(5)?.value).toBe(`o wins`);
+        expect(reading.turns.get(5)?.value?.shown).toBe(`o wins`);
         expect(reading.turns.get(2)?.options).toHaveLength(2);
     });
 

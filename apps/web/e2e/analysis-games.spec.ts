@@ -4,7 +4,7 @@ import type { AnalysisList } from '@hexo-arena/contract';
 import { looks, wear } from './matrix';
 import { longReadings, serve, world, type World } from './mock-api';
 
-const review: AnalysisList = { analyses: [longReadings.kestrel, longReadings.driftwood, ...longReadings.own], optedOut: false };
+const review: AnalysisList = { analyses: [longReadings.kestrel, longReadings.driftwood, ...longReadings.own], optedOut: false, independentOnline: false };
 
 // Opens a page on a world the test keeps, so it can read the requests the page sent.
 async function open(page: Page, path: string, overrides: Partial<World> = {}, width = 1280, height = 800): Promise<World> {
@@ -47,16 +47,20 @@ test('a game read whole shows its graph, each side\'s marks, and every turn\'s v
     await expect(row(page, 22).getByRole(`button`).first()).toHaveAccessibleName(/^22 x: \[-?\d+,-?\d+\] \[-?\d+,-?\d+\] Blunder: left a six; o wins in 1$/u);
     await expect(row(page, 6).locator(`.an-row-mark`)).toHaveAttribute(`title`, `Inaccuracy`);
     await expect(row(page, 22).locator(`.an-row-value`)).toHaveText(`o wins in 1`);
+    // kestrel's values are x's expected result: a row shows the leader's win chance and says it in full.
+    await expect(row(page, 21).locator(`.an-row-value`)).toHaveText(`o 56%`);
+    await expect(row(page, 21).getByRole(`button`).first()).toHaveAccessibleName(/; o's win chance 56 percent$/u);
     await expect(row(page, 25).locator(`.an-row-value`)).toHaveText(`o wins`);
     await expect(row(page, 12).locator(`.jd`)).toHaveCount(0);
 
     // The position after turn 12 holds kestrel's reading before turn 13, with o to move.
     await expect(lines(page)).toHaveCount(1);
     await page.getByRole(`button`, { name: `Lines B, C` }).click();
-    await expect(page.locator(`.an-line .an-value`)).toHaveText([`x 0.28`, `x 0.35`, `x 0.42`]);
+    await expect(page.locator(`.an-line .an-value`)).toHaveText([`x 64%`, `x 68%`, `x 71%`]);
+    await expect(lines(page).first()).toHaveAccessibleName(/^Play line A: x's win chance 64 percent, o: /u);
     await expect(page.locator(`.an-by`)).toHaveText(`kestrelBOT`);
     await expect(page.locator(`.an-state`)).toHaveText(`Read before; o to move`);
-    await expect(page.locator(`.an-evalbar-chip`)).toHaveText(`x 0.28`);
+    await expect(page.locator(`.an-evalbar-chip`)).toHaveText(`x 64%`);
 
     // Stepping moves the cursor; a press on the graph goes to the turn under it; a judged turn wears its mark on the board.
     const cursor = graph(page).locator(`.graph-cursor`);
@@ -96,7 +100,7 @@ test('a position a stored game passes through shows its reading on any line that
     }
     await expect(page.locator(`.an-chip-nav .scrub-words`)).toHaveText(`Turn 13, a variation`);
     await expect(page.locator(`.an-state`)).toHaveText(`Read before; x to move`);
-    await expect(page.locator(`.an-line .an-value`).first()).toHaveText(`x 0.33`);
+    await expect(page.locator(`.an-line .an-value`).first()).toHaveText(`x 67%`);
 });
 
 test('the bots\' own views sit under their own pill, each seat\'s trace in its color and no marks', async ({ page }) => {
@@ -138,7 +142,7 @@ test('signed out, a stored game\'s readings and own views show, and only asking 
 });
 
 test('a reading still running draws its graph so far and keeps its marks for its end', async ({ page }) => {
-    await open(page, game, { analyses: { 'long-finished': { analyses: [longReadings.running, ...longReadings.own], optedOut: false } } });
+    await open(page, game, { analyses: { 'long-finished': { analyses: [longReadings.running, ...longReadings.own], optedOut: false, independentOnline: false } } });
     await expect(graph(page).getByRole(`img`)).toHaveAccessibleName(`Graph of kestrel's reading, from the opening to turn 25`);
     await expect(page.locator(`.an-win-card`)).toContainText(`kestrel is reading turn 13 of 25`);
     await expect(page.locator(`.dr-marks`)).toHaveCount(0);
@@ -149,14 +153,14 @@ test('a reading still running draws its graph so far and keeps its marks for its
 });
 
 test('a game whose player opted out says so, and its positions are still read on request', async ({ page }) => {
-    const state = await open(page, game, { analyses: { 'long-finished': { analyses: [], optedOut: true } } });
+    const state = await open(page, game, { analyses: { 'long-finished': { analyses: [], optedOut: true, independentOnline: false } } });
     await expect(page.locator(`.an-win-card`)).toHaveText(`A player in this game asked that their games not be analyzed`);
     await expect(graph(page)).toHaveCount(0);
     await expect(page.locator(`.an-bubble`)).toHaveCount(0);
     await page.keyboard.press(`a`);
     await expect(lines(page)).toHaveCount(1);
     // Read live, a turn of a game no reading may judge whole waits for no such reading.
-    await expect(page.locator(`.an-bubble-full`)).toHaveText(/^Turn 12, hextide[xo]\u00a00\.\d\d after\.$/u);
+    await expect(page.locator(`.an-bubble-full`)).toHaveText(/^Turn 12, hextide[xo]\u00a0\d+% after\.$/u);
     expect(state.asked).toHaveLength(1);
 });
 

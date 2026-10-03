@@ -58,6 +58,7 @@ export function community(overrides: Partial<CommunityAnalysis> = {}): Community
         kind: `community`,
         analysisId: `a_1`,
         analyzer: kestrel,
+        involved: false,
         status: `done`,
         requestedAt: `2026-10-01T12:00:00Z`,
         finishedAt: `2026-10-01T12:01:00Z`,

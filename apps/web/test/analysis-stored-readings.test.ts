@@ -9,7 +9,7 @@ import { nodeAt, playLineFrom } from '../src/analysis/tree';
 import { community, judgedCells, nextWinTurns, ownViews } from './judged-game';
 
 const line = gameLineOf(judgedCells, 1);
-const list = (analyses: AnalysisList[`analyses`]): AnalysisList => ({ analyses, optedOut: false });
+const list = (analyses: AnalysisList[`analyses`]): AnalysisList => ({ analyses, optedOut: false, independentOnline: false });
 const turns = turnsOfGame(judgedCells);
 const tree = gameTree(`g1`, 1, turns);
 const played = gameLine(tree, turns);
@@ -44,18 +44,18 @@ describe('rowFacts', () => {
     const facts = rowFacts(tree, reader(list([community()])), () => botSourceId(`kestrel`));
     const of = (turn: number) => facts.get(played[turn - 1]?.id ?? -1);
 
-    it('reads a turn\'s value from its own line where the reading before it lists it, else from the best line after it', () => {
-        expect(of(2)).toEqual({ judgment: null, value: `x 0.05` });
-        expect(of(3)).toEqual({ judgment: null, value: `x 0.45` });
+    it('reads a turn\'s value from its own line where the reading before it lists it, else from the best line after it, as its analyzer declared its values read', () => {
+        expect(of(2)).toEqual({ judgment: null, value: { shown: `x 53%`, spoken: `x's win chance 53 percent` } });
+        expect(of(3)).toEqual({ judgment: null, value: { shown: `x 73%`, spoken: `x's win chance 73 percent` } });
     });
 
     it('counts a win the next mover\'s best line finds from the board after a turn, that line\'s own turn included', () => {
         const next = rowFacts(tree, reader(list([community({ turns: nextWinTurns })])), () => botSourceId(`kestrel`));
-        expect(next.get(played[2]?.id ?? -1)?.value).toBe(`x wins in 2`);
+        expect(next.get(played[2]?.id ?? -1)?.value?.shown).toBe(`x wins in 2`);
     });
 
     it('reads a six as won only where the source read the position it was played from', () => {
-        expect(of(5)?.value).toBe(`o wins`);
+        expect(of(5)?.value).toEqual({ shown: `o wins`, spoken: `o wins` });
         expect(rowFacts(tree, () => null, () => botSourceId(`kestrel`)).size).toBe(0);
     });
 
@@ -69,14 +69,14 @@ describe('rowFacts', () => {
         if (!branched.ok) throw new Error(`the variation did not play`);
         expect(nodeAt(branched.tree, branched.node)?.key).toBe(played[3]?.key);
         const variation = rowFacts(branched.tree, reader(list([community()])), () => botSourceId(`kestrel`));
-        expect(variation.get(branched.node)).toEqual({ judgment: null, value: `o wins in 1` });
+        expect(variation.get(branched.node)).toEqual({ judgment: null, value: { shown: `o wins in 1`, spoken: `o wins in 1` } });
         // The variation's first turn leaves the game for a position no reading holds.
         expect(variation.get(tree.nextId)).toBeUndefined();
     });
 
     it('reads the own views by the seat that moves', () => {
         const own = rowFacts(tree, reader(list(ownViews)), (side) => ownSourceId(`g1`, side));
-        expect(own.get(played[1]?.id ?? -1)?.value).toBe(`x 0.30`);
-        expect(own.get(played[0]?.id ?? -1)?.value).toBe(`o 0.05`);
+        expect(own.get(played[1]?.id ?? -1)?.value?.shown).toBe(`x 0.30`);
+        expect(own.get(played[0]?.id ?? -1)?.value?.shown).toBe(`o 0.05`);
     });
 });

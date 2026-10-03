@@ -6,6 +6,7 @@ import { Link } from '../router/Link';
 import { siteLinks } from '../site-links';
 import { text } from '../text';
 import { JudgmentChip } from '../analysis/Judgment';
+import { SpokenText } from '../analysis/SpokenText';
 import type { Drawer, DrawerTab } from './use-drawer';
 import type { FeedFold, FeedNote } from './drawer-reading';
 import type { FeedLine } from './snapshot-views';
@@ -312,7 +313,11 @@ function MoveFeed({ feed, current, visible, notes, folds, onLine, onPoint }: {
                             {notes === null || index === 0 ? null : (
                                 <>
                                     <span className="feed-mark">{note === null || note.severity === null ? null : <JudgmentChip severity={note.severity} />}</span>
-                                    <span className="feed-value">{note === null || note.value === null ? null : text.drawer.reading.value(note.value)}</span>
+                                    {note === null || note.value === null ? (
+                                        <span className="feed-value" />
+                                    ) : (
+                                        <SpokenText words={note.value} className="feed-value" write={text.drawer.reading.value} />
+                                    )}
                                 </>
                             )}
                         </li>

@@ -725,6 +725,10 @@ components:
             $ref: "#/components/schemas/Analysis"
           maxItems: 6
           type: array
+        independentOnline:
+          description: True while an analyzer whose owner played in neither seat is online and may read the
+            game now; a request naming no analyzer goes to such an analyzer first.
+          type: boolean
         optedOut:
           description: True when a player asked that their games stay out of public analysis; the list is then
             empty.
@@ -732,6 +736,7 @@ components:
       required:
         - analyses
         - optedOut
+        - independentOnline
       type: object
     AnalysisListConflictError:
       properties:
@@ -748,7 +753,8 @@ components:
     AnalysisRequest:
       properties:
         analyzer:
-          description: The analyzer to ask, by name; any eligible one when absent.
+          description: The analyzer to ask, by name; when absent, any eligible one, preferring one whose owner
+            played in neither seat while such an analyzer is online.
           pattern: ^[A-Za-z][A-Za-z0-9_-]{0,28}[A-Za-z0-9]$
           type: string
       type: object
@@ -1293,6 +1299,11 @@ components:
           format: date-time
           nullable: true
           type: string
+        involved:
+          description: True when the analyzer's owner played in the game, as a human or through one of their
+            bots, the analyzer itself included; set as the analyzer takes the game, never changed
+            after, and false while none has.
+          type: boolean
         kind:
           enum:
             - community
@@ -1333,6 +1344,7 @@ components:
         - kind
         - analysisId
         - analyzer
+        - involved
         - status
         - requestedAt
         - finishedAt
@@ -3628,7 +3640,7 @@ components:
       type: apiKey
 info:
   title: HeXO Arena
-  version: 0.41.0
+  version: 0.42.0
 openapi: 3.0.3
 paths:
   /api/analysis/check:

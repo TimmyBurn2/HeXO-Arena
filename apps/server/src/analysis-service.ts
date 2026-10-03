@@ -99,6 +99,7 @@ interface PositionEntry {
 
 interface Attempt {
     readonly analyzer: AnalyzerInfo;
+    readonly involved: boolean;
     readonly seconds: number;
     readonly turns: AnalysisTurn[];
     index: number;
@@ -318,7 +319,8 @@ export class AnalysisService {
     /** Gives every idle analyzer that may read its next request: positions first, then its game, then a queued game. */
     dispatch(): void {
         if (this.#stopped) return;
-        const idle = this.#available().filter((info) => this.#analyzers.isIdle(info.id));
+        const available = this.#available();
+        const idle = available.filter((info) => this.#analyzers.isIdle(info.id));
         idle.sort((a, b) => (this.#lastAssigned.get(a.id) ?? 0) - (this.#lastAssigned.get(b.id) ?? 0));
         for (const info of idle) {
             const entry = this.#positions.find((each) => each.assigned === null && (each.target === null || each.target === info.id));
@@ -331,7 +333,7 @@ export class AnalysisService {
                 if (taken.attempt !== null && !taken.attempt.inFlight) void this.#readGamePosition(taken, taken.attempt);
                 continue;
             }
-            const job = this.#jobs.find((each) => this.#mayRead(each, info));
+            const job = this.#jobs.find((each) => this.#mayTake(each, info, available));
             if (job !== undefined) this.#take(job, info);
         }
     }
@@ -387,10 +389,11 @@ export class AnalysisService {
     #take(job: GameJob, info: AnalyzerInfo): void {
         this.#jobs.splice(this.#jobs.indexOf(job), 1);
         const seconds = Math.min(wholeGameSeconds, info.analyzer.maxSeconds);
-        job.attempt = { analyzer: info, seconds, turns: [], index: 0, timeoutRetried: false, inFlight: false };
+        const involved = involvedIn(job.game, info);
+        job.attempt = { analyzer: info, involved, seconds, turns: [], index: 0, timeoutRetried: false, inFlight: false };
         this.#lastAssigned.set(info.id, this.#now());
         this.#memo.delete(job.game.gameId);
-        if (!startAnalysis(this.#query, job.analysisId, { botId: info.id, version: info.version, values: info.analyzer.values, seconds }, Math.floor(this.#now() / 1000))) {
+        if (!startAnalysis(this.#query, job.analysisId, { botId: info.id, version: info.version, values: info.analyzer.values, involved, seconds }, Math.floor(this.#now() / 1000))) {
             job.attempt = null;
             return;
         }
@@ -447,13 +450,25 @@ export class AnalysisService {
         failAnalysis(this.#query, job.analysisId, outcome.failure, turn, nowSeconds);
     }
 
-    // A game no analyzer reads twice, nor one whose owner sat in it, nor a
-    // second of one owner's analyzers.
-    #mayRead(job: GameJob, info: AnalyzerInfo): boolean {
+    // A game no analyzer reads twice, nor a second of one owner's analyzers.
+    #mayRead(job: Pick<GameJob, `game` | `target` | `tried`>, info: AnalyzerInfo): boolean {
         if (job.target !== null && job.target !== info.id) return false;
-        if (job.tried.has(info.id) || job.game.owners.includes(info.ownerId)) return false;
+        if (job.tried.has(info.id)) return false;
         const standing = standingOf(this.#query, job.game.gameId);
         return !standing.analyzers.includes(info.id) && !standing.owners.includes(info.ownerId);
+    }
+
+    // Asked for by no name, a game waits for an analyzer whose owner sat in
+    // neither seat while one that may read it is available, busy or not;
+    // only with none does one whose owner played take it.
+    #mayTake(job: GameJob, info: AnalyzerInfo, available: readonly AnalyzerInfo[]): boolean {
+        if (!this.#mayRead(job, info)) return false;
+        if (job.target !== null || !involvedIn(job.game, info)) return true;
+        return !this.#independentMayRead(job, available);
+    }
+
+    #independentMayRead(job: Pick<GameJob, `game` | `target` | `tried`>, available: readonly AnalyzerInfo[]): boolean {
+        return available.some((info) => !involvedIn(job.game, info) && this.#mayRead(job, info));
     }
 
     #cancel(job: GameJob): void {
@@ -612,7 +627,7 @@ export class AnalysisService {
         const record = findGame(this.#query, gameId);
         const game = analysableGame(this.#query, gameId);
         if (record === undefined || game === undefined) return { kind: `refused`, code: this.#games.isLive(gameId) ? `game_live` : `not_found` };
-        if (gameOptedOut(this.#query, game.users)) return { kind: `list`, list: { analyses: [], optedOut: true } };
+        if (gameOptedOut(this.#query, game.users)) return { kind: `list`, list: { analyses: [], optedOut: true, independentOnline: false } };
         const rows = analysesOfGame(this.#query, gameId);
         const done = rows.filter((row) => row.status === `done`).sort((a, b) => (a.finishedAt ?? 0) - (b.finishedAt ?? 0));
         const pending = rows.filter((row) => row.status === `queued` || row.status === `running`);
@@ -644,7 +659,8 @@ export class AnalysisService {
             const player = seats[side];
             return player === null || own[side].length === 0 ? [] : [{ kind: `own` as const, side, player, values: values[side], turns: own[side] }];
         });
-        return { kind: `list`, list: { analyses: [...community, ...views], optedOut: false } };
+        const independentOnline = this.#independentMayRead({ game, target: null, tried: new Set() }, this.#available());
+        return { kind: `list`, list: { analyses: [...community, ...views], optedOut: false, independentOnline } };
     }
 
     #rowView(row: AnalysisRow, game: AnalysableGame, turns: AnalysisTurn[], firstTurn: number): CommunityAnalysis {
@@ -654,6 +670,7 @@ export class AnalysisService {
             kind: `community`,
             analysisId: row.id,
             analyzer: row.analyzerName === null ? null : { name: row.analyzerName, version: row.analyzerVersion, ownerName: row.ownerName, values: row.analyzerValues },
+            involved: row.involved,
             status: row.status,
             ...(row.failure === null ? {} : { failure: row.failure }),
             ...(row.failedTurn === null ? {} : { failedTurn: row.failedTurn }),
@@ -672,6 +689,7 @@ export class AnalysisService {
             kind: `community`,
             analysisId: job.analysisId,
             analyzer: attempt === null ? null : refOf(attempt.analyzer),
+            involved: attempt?.involved ?? false,
             status: attempt === null ? `queued` : `running`,
             requestedAt: isoOf(Math.floor(job.createdAt / 1000)),
             finishedAt: null,
@@ -681,6 +699,12 @@ export class AnalysisService {
             turns: attempt === null ? [] : [...attempt.turns],
         };
     }
+}
+
+// Whether the analyzer's owner sat in the game, as a human or through any of
+// their bots, the analyzer itself among them.
+function involvedIn(game: AnalysableGame, info: AnalyzerInfo): boolean {
+    return game.owners.includes(info.ownerId);
 }
 
 function refOf(info: AnalyzerInfo): AnalyzerRef {

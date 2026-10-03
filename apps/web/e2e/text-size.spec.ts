@@ -24,7 +24,12 @@ const screens: readonly { name: string; path: string; world?: Partial<World>; th
     { name: `live games`, path: `/games/live` },
     { name: `the analysis board`, path: `/analysis` },
     { name: `a game on the analysis board`, path: `/analysis?game=long-finished&turn=12` },
-    { name: `a game read whole on the analysis board`, path: `/analysis?game=long-finished&turn=17`, world: { analyses: { 'long-finished': { analyses: [longReadings.kestrel, longReadings.driftwood, ...longReadings.own], optedOut: false } } } },
+    { name: `a game read whole on the analysis board`, path: `/analysis?game=long-finished&turn=17`, world: { analyses: { 'long-finished': { analyses: [longReadings.kestrel, longReadings.driftwood, ...longReadings.own], optedOut: false, independentOnline: false } } } },
+    {
+        name: `a game read only by a player's analyzer on the analysis board`,
+        path: `/analysis?game=long-finished&turn=22`,
+        world: { analyses: { 'long-finished': { analyses: [{ ...longReadings.kestrel, involved: true }, ...longReadings.own], optedOut: false, independentOnline: true } } },
+    },
     {
         name: `an analyzer's lines on the analysis board`,
         path: `/analysis?game=long-finished&turn=12`,

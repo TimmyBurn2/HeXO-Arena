@@ -60,7 +60,7 @@ export interface Shot {
 }
 
 const signedOut = world({ me: null });
-const analysedLong = world({ analyses: { 'long-finished': { analyses: [longReadings.kestrel, longReadings.driftwood, ...longReadings.own], optedOut: false } } });
+const analysedLong = world({ analyses: { 'long-finished': { analyses: [longReadings.kestrel, longReadings.driftwood, ...longReadings.own], optedOut: false, independentOnline: false } } });
 const playing = (overrides: Partial<World> = {}) => world({ bots: playBots, ...overrides });
 // The top chip carries a level beside the clock, down to the narrowest phone.
 const levelChipViewports: readonly Viewport[] = [

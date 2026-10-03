@@ -1,8 +1,9 @@
 import { useEffect, useId, useRef, useState, type CSSProperties, type ReactNode } from 'react';
-import type { GamePlayers, JudgmentSeverity, Side } from '@hexo-arena/contract';
+import type { GamePlayers, JudgmentSeverity, Side, ValueText } from '@hexo-arena/contract';
 import { GameGraph } from '../analysis/GameGraph';
 import { verdictInLine } from '../analysis/explain';
 import { JudgmentChip } from '../analysis/Judgment';
+import { SpokenText } from '../analysis/SpokenText';
 import { useAnalysisSettings } from '../analysis/analysis-settings';
 import type { GameLine, GameReading } from '../analysis/game-readings';
 import { useAnalyzers } from '../analysis/use-analyzers';
@@ -11,7 +12,7 @@ import { DiscordButton } from '../components/DiscordButton';
 import { BotBadge, seatName, Swatch } from '../components/player';
 import { nextUtcDay } from '../analysis/readings';
 import { text } from '../text';
-import type { AnalysesState, AnalysisHeadState, ReadingChoice, RequestCard, RequestRefusal } from './game-analyses';
+import { involvedNote, type AnalysesState, type AnalysisHeadState, type ReadingChoice, type RequestCard, type RequestRefusal } from './game-analyses';
 import './DrawerAnalysis.css';
 
 const words = text.drawer.reading;
@@ -68,7 +69,7 @@ export function ReadingHead({ state, head, active, onChoose, view, line, players
     return (
         <div className="dr-reading">
             {head !== null && head.choices.length > 0 ? <Pills choices={head.choices} active={active} onChoose={onChoose} /> : null}
-            {active === null ? null : <ReadingBy choice={active} />}
+            {active === null ? null : <ReadingBy choice={active} players={players} />}
             {status}
             <div className="dr-toggles">
                 {card?.kind === `opted-out` ? null : (
@@ -124,21 +125,25 @@ function Pills({ choices, active, onChoose }: { choices: readonly ReadingChoice[
     );
 }
 
-function ReadingBy({ choice }: { choice: ReadingChoice }) {
+function ReadingBy({ choice, players }: { choice: ReadingChoice; players: GamePlayers }) {
     if (choice.kind === `own`) return <p className="note dr-by-note">{words.ownNote}</p>;
     const analyzer = choice.analysis.analyzer;
+    const involved = involvedNote(choice.analysis, players);
     return (
-        <p className="dr-by">
-            <svg className="dr-lens" viewBox="0 0 24 24" aria-hidden="true">
-                <circle cx="10.5" cy="10.5" r="6" />
-                <path d="M15 15l5 5" />
-            </svg>
-            <span className="dr-by-name">
-                {choice.name}
-                <BotBadge />
-            </span>
-            <span className="dr-by-meta">{text.analysis.reading.by(analyzer?.version ?? null, analyzer?.ownerName ?? null, choice.analysis.seconds)}</span>
-        </p>
+        <>
+            <p className="dr-by">
+                <svg className="dr-lens" viewBox="0 0 24 24" aria-hidden="true">
+                    <circle cx="10.5" cy="10.5" r="6" />
+                    <path d="M15 15l5 5" />
+                </svg>
+                <span className="dr-by-name">
+                    {choice.name}
+                    <BotBadge />
+                </span>
+                <span className="dr-by-meta">{text.analysis.reading.by(analyzer?.version ?? null, analyzer?.ownerName ?? null, choice.analysis.seconds)}</span>
+            </p>
+            {involved === null ? null : <p className="note dr-involved">{involved}</p>}
+        </>
     );
 }
 
@@ -280,7 +285,10 @@ export function refusalWords(code: RequestRefusal, retryAfter: number | null, an
     }
 }
 
-/** The status of a community reading: waiting, under way, failed, refused by an opt-out, or out of reach. */
+/**
+ * The status of a community reading: waiting, under way, failed, refused by an opt-out, or out of reach;
+ * or, after a reading by a player's analyzer, the offer of one by an independent analyzer.
+ */
 export function StatusCard({ card, state, asker, onRequest }: {
     card: Exclude<RequestCard, { kind: `none` }>;
     state: AnalysesState;
@@ -329,6 +337,14 @@ export function StatusCard({ card, state, asker, onRequest }: {
             return (
                 <div className="dr-card">
                     <p className="dr-card-title">{card.why === `too-long` ? words.tooLong : words.unplayed}</p>
+                </div>
+            );
+        case `independent`:
+            // Asked for by no name, a reading goes to an independent analyzer while one is online.
+            return (
+                <div className="dr-card">
+                    <p className="dr-card-title">{words.independent}</p>
+                    <Ask label={words.askIndependent} state={state} asker={asker} onRequest={onRequest} analyzer={null} />
                 </div>
             );
     }
@@ -440,12 +456,15 @@ export function PeekReadout({ card, view, choice, turn, players }: {
     const read = view?.turns.get(turn);
     if (read === undefined || choice === null) return null;
     const judgment = read.judgment;
-    const what = judgment === null ? read.value : verdictInLine(judgment);
+    const verdict = judgment === null ? null : verdictInLine(judgment);
+    const what: ValueText | null = verdict === null ? read.value : { shown: verdict, spoken: verdict };
     if (what === null) return null;
+    const who = seatName(players[read.side]);
+    const by = choice.kind === `own` ? words.ownBy : choice.name;
     return (
         <span className="peek-readout">
             {judgment === null ? null : <JudgmentChip severity={judgment.severity} />}
-            <span className="peek-readout-words">{words.readout(seatName(players[read.side]), what, choice.kind === `own` ? words.ownBy : choice.name)}</span>
+            <SpokenText words={{ shown: words.readout(who, what.shown, by), spoken: words.readout(who, what.spoken, by) }} className="peek-readout-words" />
         </span>
     );
 }

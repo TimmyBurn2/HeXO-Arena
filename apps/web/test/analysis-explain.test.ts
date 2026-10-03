@@ -1,10 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import type { AxialCoord, ForcedWinsAround, Judgment } from '@hexo-arena/contract';
+import type { AxialCoord, ForcedWinsAround, Judgment, ValueText } from '@hexo-arena/contract';
 import { explain, explainRun, explanationSentence, explanationText, verdictInLine, verdictTitle, type ExplainedReading, type ExplainedTurn } from '../src/analysis/explain';
 import type { ShownLine } from '../src/analysis/reading-view';
 
 // A value's side and number are held together by a no-break space.
 const nb = (words: string) => words.replace(/^([xo]) /u, `$1\u00a0`);
+
+// A raw value or a forced win, spoken as it shows.
+const plainValue = (words: string): ValueText => ({ shown: words, spoken: words });
 
 // Turn 14 of a game, hextide's, as x: [-2,-2] [-5,1]; kestrel's line A before it read x 0.30 and played x: [-3,4] [-3,3].
 const played: AxialCoord[] = [
@@ -20,15 +23,15 @@ const lineA: ShownLine = {
     cells: [preferred[0] ?? { x: 0, y: 0 }, preferred[1] ?? { x: 0, y: 0 }],
     evaluation: { heuristic: 0.3 },
     completesSix: false,
-    value: `x 0.30`,
+    value: plainValue(`x 0.30`),
     drawn: 0.3,
     cellsText: `[-3,4] [-3,3]`,
 };
 const gameTurn: ExplainedTurn = { kind: `turn`, turn: 14, side: `x`, cells: played, completesSix: false, place: `game`, player: `hextide` };
 const noForced: ForcedWinsAround = { before: null, after: null };
 
-function read(judgment: Judgment | null, after = `x 0.06`, forced: ForcedWinsAround = noForced, drop: number | null = null): Extract<ExplainedReading, { kind: `analyzer` }> {
-    return { kind: `analyzer`, name: `kestrel`, best: lineA, after, judgment, whole: true, forced, drop };
+function read(judgment: Judgment | null, after = `x 0.06`, forced: ForcedWinsAround = noForced, drop: string | null = null): Extract<ExplainedReading, { kind: `analyzer` }> {
+    return { kind: `analyzer`, name: `kestrel`, best: lineA, after: plainValue(after), judgment, whole: true, forced, drop };
 }
 
 describe('a judged turn explained as a named analyzer\'s opinion', () => {
@@ -63,10 +66,17 @@ describe('a judged turn explained as a named analyzer\'s opinion', () => {
             [`mistake`, `Mistake`],
             [`blunder`, `Blunder`],
         ] as const) {
-            const said = explain(gameTurn, read({ severity, reason: `value-drop`, turns: null }, `x 0.06`, noForced, 0.24));
-            expect(said).toMatchObject({ severity, title, verdict: { severity: title, reason: `` }, joiner: `: ` });
-            expect(explanationSentence(said)).toBe(`${title}: kestrel rates this turn 0.24 below its choice, ${nb(`x 0.30`)} before and ${nb(`x 0.06`)} after; it preferred x: [-3,4] [-3,3].`);
+            const judged = explain(gameTurn, read({ severity, reason: `value-drop`, turns: null }, `x 0.06`, noForced, `0.24`));
+            expect(judged).toMatchObject({ severity, title, verdict: { severity: title, reason: `` }, joiner: `: ` });
+            expect(explanationSentence(judged)).toBe(`${title}: kestrel rates this turn 0.24 below its choice, ${nb(`x 0.30`)} before and ${nb(`x 0.06`)} after; it preferred x: [-3,4] [-3,3].`);
         }
+    });
+
+    it('gives an expected analyzer\'s values before and after as win chances, and its drop in points of the mover\'s', () => {
+        const chance = (side: `x` | `o`, percent: number): ValueText => ({ shown: `${side} ${String(percent)}%`, spoken: `${side}'s win chance ${String(percent)} percent` });
+        const reading = { ...read({ severity: `mistake`, reason: `value-drop`, turns: null }, `x 0.06`, noForced, `12 points`), best: { ...lineA, value: chance(`x`, 65) }, after: chance(`o`, 53) };
+        expect(explanationSentence(explain(gameTurn, reading))).toBe(`Mistake: kestrel rates this turn 12 points below its choice, ${nb(`x 65%`)} before and ${nb(`o 53%`)} after; it preferred x: [-3,4] [-3,3].`);
+        expect(explanationText(explain(gameTurn, { ...reading, judgment: null }))).toBe(`${nb(`x 65%`)} before, ${nb(`o 53%`)} after; kestrel preferred x: [-3,4] [-3,3].`);
     });
 
     it('keeps a verdict whose reading names no line before the turn, saying the value after it', () => {
@@ -131,9 +141,9 @@ describe('an unjudged turn explained', () => {
     });
 
     it('gives a bot\'s own view of its turn as its own, the turn named by its number since the text names the bot', () => {
-        const said = explain(gameTurn, { kind: `own`, name: `hextide`, after: `x 0.10` });
-        expect(said).toMatchObject({ head: `Turn 14`, line: null });
-        expect(explanationSentence(said)).toBe(`Turn 14: hextide's own view: ${nb(`x 0.10`)} after this turn.`);
+        const own = explain(gameTurn, { kind: `own`, name: `hextide`, after: plainValue(`x 0.10`) });
+        expect(own).toMatchObject({ head: `Turn 14`, line: null });
+        expect(explanationSentence(own)).toBe(`Turn 14: hextide's own view: ${nb(`x 0.10`)} after this turn.`);
     });
 
     it('leaves out the wait for a whole reading on a game no such reading can judge, still naming who played', () => {

@@ -23,9 +23,10 @@ export default defineConfig({
         port: 5173,
         strictPort: true,
         // The SPA talks to the API on its own origin; dev traffic forwards
-        // to the local server process.
+        // to the local server process, websockets included, so a bot run
+        // against this origin opens its game and analysis sockets.
         proxy: {
-            '/api': 'http://localhost:3000',
+            '/api': { target: 'http://localhost:3000', ws: true },
             '/healthz': 'http://localhost:3000',
         },
     },
