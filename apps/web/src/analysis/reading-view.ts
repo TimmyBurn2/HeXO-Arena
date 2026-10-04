@@ -95,10 +95,9 @@ export function afterWords(after: AfterReading, values: AnalyzerValues): ValueTe
 }
 
 // A line's value for its mover, from the position it is played from;
-// a win in 1 for its own mover is a six it completes this very turn, whatever the board check found,
-// and a six the mover holds on the board makes any forced win of its own a win in 1, however long the line claims.
+// a six the mover holds on the board makes any forced win of its own a win in 1, however long the line claims.
 function lineWords(evaluation: HtttxPositionEvaluation, mover: Side, completesSix: boolean, values: AnalyzerValues, sixHeld = false): ValueText | null {
-    if (!completesSix && forcedWinner(evaluation) === mover && (sixHeld || Math.abs(evaluation.win_in ?? 0) === 1)) {
+    if (!completesSix && sixHeld && forcedWinner(evaluation) === mover) {
         return valueWords({ win_in: mover === `x` ? 1 : -1 }, { kind: `board` }, values);
     }
     return valueWords(evaluation, { kind: `line`, mover, completesSix }, values);

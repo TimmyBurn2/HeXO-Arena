@@ -149,9 +149,7 @@ export type BotGameTag = { readonly kind: `pairing`; readonly id: string; readon
 
 /**
  * A game between two bots: a challenge's, a tournament's, or a duel's.
- * Only a duel's games play a level other than a bot's default; a duel's
- * games and a challenge's between two bots of one owner carry the unrated
- * mark, and the latter and a test's games are tests.
+ * The caller decides its seats' levels and its marks, as the contract's unratedByChoiceSchema and testMarkSchema define them.
  */
 export function insertBotGame(
     query: Query,
@@ -209,9 +207,7 @@ export function recordFinish(
             .where(and(eq(games.id, gameId), isNull(games.finishedAt)))
             .returning({ ...seatColumns, voidedAt: games.voidedAt, guestName: games.guestName, xLevel: games.xLevel, oLevel: games.oLevel, unratedByChoice: games.unratedByChoice })
             .all();
-        // A game voided while live finishes on the record but never rates,
-        // and a guest's game, one against a bot at a level other than its
-        // default, or one started unrated, rates nobody.
+        // A game voided while live finishes on the record but never rates.
         if (finished?.finishSeq != null && ratesSomebody(finished)) applyFinishedGame(tx, gameId, finished.finishSeq, countedGameOf(finished));
         return { voided: finished?.voidedAt != null };
     });
@@ -424,9 +420,8 @@ export function lastHumanGameCreatedAt(query: Query, userId: string): number | n
 }
 
 // A signed-in human's games against one bot since an epoch second, which
-// the daily pair cap counts as it counts two bots'; a game at a level
-// other than the bot's default, or one started unrated, rates nobody, so
-// it counts toward no cap.
+// the daily pair cap counts as it counts two bots'; a game that rates
+// nobody counts toward no cap.
 export function countHumanPairGamesSince(query: Query, pair: { userId: string; botId: string }, sinceSeconds: number): number {
     const [row] = query
         .select({ n: count() })
@@ -437,8 +432,7 @@ export function countHumanPairGamesSince(query: Query, pair: { userId: string; b
 }
 
 // Bot-vs-bot caps count the games the log already holds that can move a
-// rating, from the start of the current UTC day: an unrated duel counts
-// toward no cap, as practice and unrated human games do.
+// rating, from the start of the current UTC day.
 export function countPairBotGamesSince(
     query: Query,
     pair: { one: string; two: string },

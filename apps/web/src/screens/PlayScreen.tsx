@@ -38,7 +38,7 @@ import { useDocumentMeta } from '../use-document-meta';
 import './PlayScreen.css';
 
 // The bot list has no stream of its own,
-// so the page reads it again on the live games' beat while it is in view,
+// so the page reads it again on the bot lists' beat while it is in view,
 // and at once after a refusal on the bot's side.
 function useBotList() {
     const [bots, setBots] = useState<BotListing[] | null>(null);

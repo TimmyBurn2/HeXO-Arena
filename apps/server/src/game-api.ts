@@ -134,8 +134,7 @@ export function registerGameApi(app: FastifyInstance, deps: GameApiDeps): void {
             return reply.code(400).send({ error: `the bot declares no such level`, code: `unknown_level` });
         }
         const level = declared === undefined || declared.id === bot.levels?.default ? null : seatLevelOf(declared);
-        // A guest's game and practice at another level are unrated by their
-        // seats, so only a signed-in person's game at the default carries the mark.
+        // Which games carry the mark: the contract's unratedByChoiceSchema.
         const unratedByChoice = person.kind === `user` && level === null && (own || parsed.data.rated === false);
         if (games.activeGameCount(bot.id) >= botConcurrentGameCap || deps.reservations.isReserved(bot.id)) {
             return reply.code(400).send({
@@ -144,8 +143,7 @@ export function registerGameApi(app: FastifyInstance, deps: GameApiDeps): void {
             });
         }
         // A signed-in human and a bot share the pair cap two bots have, counted
-        // from the log like theirs; a guest's games, practice at another
-        // level, and games started unrated count toward no cap.
+        // from the log like theirs; a game that rates nobody counts toward no cap.
         if (person.kind === `user` && level === null && !unratedByChoice) {
             const now = nowSeconds();
             const dayStart = now - (now % 86_400);

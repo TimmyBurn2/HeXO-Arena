@@ -10,16 +10,6 @@ const sides = [`x`, `o`] as const satisfies readonly Side[];
 const halfWidth = (Math.sqrt(3) * cellSize) / 2;
 const glyphBox = `${String(-halfWidth)} ${String(-cellSize)} ${String(2 * halfWidth)} ${String(2 * cellSize)}`;
 
-/**
- * The pre-game rundown: each player's rating and deviation, their
- * expected score from the rating fold's own function, and their last
- * results, with the two players' meetings under them.
- * A guest's game is unrated, so it shows no expected score on either side;
- * nor does a game against a bot at a level other than its default, which
- * says it is practice, and that bot's seat shows its level, since its
- * rating belongs to its default; nor does a game its player started
- * unrated, which says so.
- */
 /** How a game was started unrated: a person's choice, a duel's, a round robin a person set up, or a test, where one person holds both sides. */
 export type UnratedBy = `choice` | `duel` | `roundRobin` | `test`;
 
@@ -37,9 +27,19 @@ export function unratedByOf(snapshot: {
     return snapshot.duel === undefined ? `choice` : `duel`;
 }
 
+/**
+ * The pre-game rundown: each player's rating and deviation, their
+ * expected score from the rating fold's own function, and their last
+ * results, with the two players' meetings under them.
+ * A guest's game is unrated, so it shows no expected score on either side;
+ * nor does a game against a bot at a level other than its default, which
+ * says it is practice, and that bot's seat shows its level, since its
+ * rating belongs to its default; nor does a game started unrated, which
+ * says how.
+ */
 export function Rundown({ players, unratedBy, data, meetings, onHide }: {
     players: GamePlayers;
-    // How the game was started unrated, if it was: by a person's choice, as a duel, or as a test.
+    // How the game was started unrated, if it was.
     unratedBy: UnratedBy | null;
     // Null while the records load; the names and the seats' ratings stand meanwhile.
     data: RundownSides | null;

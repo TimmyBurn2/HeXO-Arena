@@ -1656,9 +1656,10 @@ function positionsOf(snapshot: GameSnapshot): number {
     return Math.max(0, lastTurn - firstTurn + (six ? 1 : 2));
 }
 
+const finishedAt = (minutesAgo: number) => new Date(Date.now() - minutesAgo * 60_000).toISOString();
+
 // The latest results, newest first; the first three have snapshots, so a
 // frozen board can show the newest.
-const finishedAt = (minutesAgo: number) => new Date(Date.now() - minutesAgo * 60_000).toISOString();
 export const recentGames: FinishedGameEntry[] = [
     { gameId: `won`, players: facing(`hextide`, 1690), winner: `x`, reason: `six-in-a-row`, timeControl: { mode: `turn`, turnTimeMs: 30_000 }, openingPlies: 1, turns: 12, finishedAt: finishedAt(3), rated: true, voided: false, analyses: 0 },
     { gameId: `five-finished`, players: facing(`sealbot`, 1712), winner: `o`, reason: `surrender`, timeControl: { mode: `turn`, turnTimeMs: 30_000 }, openingPlies: 5, turns: 5, finishedAt: finishedAt(41), rated: true, voided: false, analyses: 0 },
@@ -1911,7 +1912,6 @@ function json(route: Route, status: number, body: unknown): Promise<void> {
     return route.fulfill({ status, contentType: `application/json`, body: JSON.stringify(body) });
 }
 
-/** Serve the world at the network layer for every API call the page makes. */
 // A player's record agrees with the ladder and the bot list: the rating and
 // the games come from there, the split and the opponents are drawn from them.
 function recordOf(state: World, name: string): PlayerRecord | null {
@@ -2046,6 +2046,7 @@ function unloadable(path: string, screen: string | null): boolean {
     return path === screen || (name !== undefined && new RegExp(`^/assets/${name}-[\\w-]+\\.js$`, `u`).test(path));
 }
 
+/** Serve the world at the network layer for every API call the page makes. */
 export async function serve(page: Page, state: World): Promise<void> {
     await page.addInitScript(installHeldEventSource);
     // Vite's shell names no report form, as the proxy's static one does

@@ -541,7 +541,7 @@ function factsOf(snapshot: GameSnapshot, duel: DuelDetail | null): (readonly [st
     const voided = snapshot.status === `finished` && snapshot.voided;
     const guest = snapshot.players.x.kind === `guest` || snapshot.players.o.kind === `guest`;
     const practice = !guest && seatsRateNobody(snapshot.players);
-    // Only one reason holds at a time: a guest's game and practice never carry the mark.
+    // One reason shows, practice first: a duel's or a round robin's practice may carry the mark too.
     const unrated = practice ? text.drawer.ratedNoPractice : unratedReason(snapshot, duel);
     if (snapshot.you === undefined) {
         const unratedGuest = snapshot.status === `finished` ? text.drawer.ratedNoGuestPlayed : text.drawer.ratedNoGuest;
@@ -558,7 +558,7 @@ function factsOf(snapshot: GameSnapshot, duel: DuelDetail | null): (readonly [st
 }
 
 // Why a game started unrated is unrated: a test, one person on both sides;
-// a duel its starter started so; or the person's own choice.
+// a round robin a person set up; a duel its starter started so; or the person's own choice.
 function unratedReason(snapshot: GameSnapshot, duel: DuelDetail | null): string | null {
     const words = text.drawer;
     const person = [snapshot.players.x, snapshot.players.o].find((player) => player.kind === `user`);

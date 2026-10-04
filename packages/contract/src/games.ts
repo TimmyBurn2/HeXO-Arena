@@ -65,14 +65,16 @@ export const createGameRequestSchema = z.object({
 export type CreateGameRequest = z.infer<typeof createGameRequestSchema>;
 
 /**
- * The mark on a game unrated by how it started: a signed-in person's game
- * started unrated or against their own bot, a game of an unrated duel,
- * and a challenge's game between two bots of one owner; a guest's game and
- * practice at another level are unrated by their seats and never carry it.
+ * The mark on a game unrated by how it started rather than by its seats.
+ * It marks a signed-in person's game at the bot's default level that they started unrated or that faces their own bot,
+ * a challenge's game between two bots of one owner, every game of an unrated duel, and every game of a round robin a person set up.
+ * A guest's game and a person's practice at another level are unrated by their seats and never carry it;
+ * a duel's or a round robin's game carries it at any level.
+ * A marked game moves no rating and counts toward no daily cap.
  */
 export const unratedByChoiceSchema = z.literal(true).meta({
     id: `UnratedByChoice`,
-    description: `Present when the game was started unrated, alone or in a duel, or one owner holds both seats, a person facing their own bot or two bots of one owner: it moves no rating and counts toward no daily cap.`,
+    description: `Present when the game was started unrated: a person's game at the bot's default level that they started unrated or that faces their own bot, a challenge between two bots of one owner, and every game of an unrated duel or of a round robin a person set up. It moves no rating and counts toward no daily cap.`,
 });
 
 /** The mark on a test: a game one person holds on both sides, which is never rated. */
@@ -200,7 +202,7 @@ export const liveGameEntrySchema = z
     })
     .meta({
         id: `LiveGameEntry`,
-        description: `A game in progress, its board and clock as its snapshot states them; a game with a guest seat, a bot at a level other than its default, one started unrated, alone or in a duel, or one whose seats one owner holds, is unrated.`,
+        description: `A game in progress, its board and clock as its snapshot states them; a game with a guest seat, a bot at a level other than its default, or one its snapshot marks unratedByChoice, is unrated.`,
     });
 export type LiveGameEntry = z.infer<typeof liveGameEntrySchema>;
 

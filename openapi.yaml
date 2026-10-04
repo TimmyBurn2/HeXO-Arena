@@ -2361,7 +2361,7 @@ components:
           $ref: "#/components/schemas/GamePlayers"
         rated:
           description: False for a game without a winner, a voided one, a guest's, one with a bot at a level
-            other than its default, one started unrated, alone or in a duel, and a test.
+            other than its default, one marked unratedByChoice, and a test.
           type: boolean
         reason:
           $ref: "#/components/schemas/FinishReason"
@@ -3178,8 +3178,8 @@ components:
       type: object
     LiveGameEntry:
       description: A game in progress, its board and clock as its snapshot states them; a game with a
-        guest seat, a bot at a level other than its default, one started unrated, alone or in a
-        duel, or one whose seats one owner holds, is unrated.
+        guest seat, a bot at a level other than its default, or one its snapshot marks
+        unratedByChoice, is unrated.
       properties:
         cells:
           description: Every stone in ply order, the opening included.
@@ -4836,9 +4836,10 @@ components:
         - code
       type: object
     UnratedByChoice:
-      description: "Present when the game was started unrated, alone or in a duel, or one owner holds both
-        seats, a person facing their own bot or two bots of one owner: it moves no rating and counts
-        toward no daily cap."
+      description: "Present when the game was started unrated: a person's game at the bot's default level
+        that they started unrated or that faces their own bot, a challenge between two bots of one
+        owner, and every game of an unrated duel or of a round robin a person set up. It moves no
+        rating and counts toward no daily cap."
       enum:
         - true
       type: boolean
@@ -4949,7 +4950,7 @@ components:
       type: apiKey
 info:
   title: HeXO Arena
-  version: 0.49.0
+  version: 0.49.1
 openapi: 3.0.3
 paths:
   /api/analysis/check:
@@ -7042,7 +7043,7 @@ paths:
         - Tournaments
   /api/tournaments/{id}/export:
     get:
-      description: Every game over so far, at most 132, numbered by round, pairing, and game, any game
+      description: Every game over so far, at most 280, numbered by round, pairing, and game, any game
         under way left out; games.csv names each game's round, and standings.csv holds the standings
         as they stand.
       operationId: exportTournament

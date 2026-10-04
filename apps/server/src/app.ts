@@ -268,9 +268,6 @@ export async function buildApp(deps: AppDeps): Promise<BuiltApp> {
             games.endGuest(guestId);
         },
     });
-    // Challenge lines lead the replay: they wait on a TTL that the games,
-    // with their own clocks and sessions, do not.
-    // A bot that declares an analyzer hears last how to dial its session.
     const analysis = new AnalysisService({ query, analyzers, games, now: deps.now ?? Date.now });
     games.onStart((botIds) => {
         analysis.gameStarted(botIds);
@@ -278,6 +275,9 @@ export async function buildApp(deps: AppDeps): Promise<BuiltApp> {
     games.onFinish(() => {
         analysis.dispatch();
     });
+    // Challenge lines lead the replay: they wait on a TTL that the games,
+    // with their own clocks and sessions, do not.
+    // A bot that declares an analyzer hears last how to dial its session.
     const gameReplay = presence.replay;
     presence.replay = (botId) => {
         const offer = analyzers.offer(botId);

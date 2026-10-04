@@ -33,7 +33,7 @@ import { isCurrentGeneration, isPaused } from './site-state';
 import { dueRuleStarts, hasRuleTournament, readTournamentRules } from './tournament-rules';
 import { cancelTournament, createTournament, insertPairings, runningRoundRobinsBy, stopRoundRobin as markStopped, type StopReason } from './tournament-store';
 
-/** Why an entry is left out at the start or withdrawn later. */
+/** Why a bot is taken out of every tournament, as a running one's withdrawn entry records it. */
 export type WithdrawReason = `banned` | `delisted` | `deleted`;
 
 type SlotState = SlotResult[`kind`];
