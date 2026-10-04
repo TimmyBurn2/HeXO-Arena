@@ -7,7 +7,7 @@ async function open(page: Page, path: string, width = 1280): Promise<void> {
     const look = looks[0];
     if (look === undefined) throw new Error(`no look registered`);
     await wear(page, look);
-    await serve(page, world({ tournaments }));
+    await serve(page, world({ tournaments: tournaments() }));
     await page.goto(path);
 }
 

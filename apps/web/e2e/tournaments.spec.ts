@@ -7,7 +7,7 @@ async function open(page: Page, path: string, width = 1280): Promise<void> {
     const look = looks[0];
     if (look === undefined) throw new Error(`no look registered`);
     await wear(page, look);
-    await serve(page, world({ tournaments }));
+    await serve(page, world({ tournaments: tournaments() }));
     await page.goto(path);
 }
 
@@ -76,7 +76,7 @@ for (const width of [1280, 390]) {
         const look = looks[0];
         if (look === undefined) throw new Error(`no look registered`);
         await wear(page, look);
-        await serve(page, world({ tournaments, finished: [...tournamentGameRows, ...keptNames] }));
+        await serve(page, world({ tournaments: tournaments(), finished: [...tournamentGameRows, ...keptNames] }));
         await page.goto(`/tournaments/t_autumnrobin1`);
         await page.getByRole(`link`, { name: `These games in Games` }).click();
         await expect(page).toHaveURL(/\/games\?event=tournament&tournament=t_autumnrobin1$/u);
