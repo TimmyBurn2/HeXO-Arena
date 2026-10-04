@@ -100,3 +100,6 @@ Every task ends green: type-check, lint, tests.
   green: type-check, lint, tests.
 - A conventional one-liner, subject only: `feat(admin): pause kill switch`;
   ASCII, lowercase subject, no body, no trailers.
+- `develop` takes features and fixes by pull request, squash-merged once CI is
+  green; `main` holds one commit per release, merged from a `release/` branch;
+  neither takes direct pushes.
