@@ -19,7 +19,7 @@ The server builds nothing: it pulls one image per commit, tagged
 ## Fork
 
 CI publishes images from `main` only, so fork the repository on GitHub with
-all its branches (untick "Copy the `dev` branch only"), or push the commit
+all its branches (untick "Copy the `develop` branch only"), or push the commit
 you want to run to your fork's `main`.
 Follow this guide, and `legal/`, as they stand at the commit you deploy:
 `main` may lag the branch GitHub shows first.
