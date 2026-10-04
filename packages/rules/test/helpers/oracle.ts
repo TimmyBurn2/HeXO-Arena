@@ -3,8 +3,8 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import type { Coord, Player, RejectionKind, Stone } from '../../src';
 
-// The oracle surface we consume, declared from observed behavior; the dynamic
-// import cannot be typed by the compiler because the path is runtime data.
+// The part of HeXO's module the tests call; the dynamic import cannot be
+// typed by the compiler because the path is runtime data.
 interface OracleModule {
     PLACE_CELL_HEX_RADIUS: number;
     createStartedGameState(

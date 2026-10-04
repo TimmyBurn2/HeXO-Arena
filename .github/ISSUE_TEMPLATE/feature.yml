@@ -6,7 +6,7 @@ body:
       attributes:
           value: |
               Issues are public: leave out personal data, tokens, and passwords.
-              A privacy or data request goes to the operator, at the contact in the site's legal notice.
+              A privacy or data request goes to the operator, at the contact in the site's privacy policy.
     - type: textarea
       id: idea
       attributes:

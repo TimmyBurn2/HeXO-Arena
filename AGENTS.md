@@ -3,24 +3,31 @@
 Rules for every coding agent working in this repo.
 
 Local decision docs (`SPEC.md`, `STACK.md`, `ADMIN.md`, untracked by design)
-record choices in depth; read them when present and follow them. The rules
-below hold regardless.
+record choices in depth; read them when present and follow them.
+The rules below hold regardless.
 
-Layout: pnpm monorepo. `apps/server` (Fastify), `apps/web` (React/Vite SPA),
-`packages/contract` (zod schemas, board types), `packages/rules` (pure rules
-engine, no runtime dependencies). Nested `AGENTS.md` files may appear
-per package later; the nearest one wins.
+Layout: a pnpm monorepo of `apps/server` (Fastify), `apps/web` (React/Vite
+SPA), `packages/contract` (zod schemas, board types), `packages/rules` (pure
+rules engine, no runtime dependencies), and `scripts/dev-bots` (local
+opponents and the dev seed); `README.md` lists the other folders.
 
 ## Commands
 
 - Install: `pnpm install`
-- Dev: `pnpm dev` (server :3000, web :5173, hot reload; Ctrl-C stops both)
-- Local opponents: `pnpm dev:bots` beside `pnpm dev` (three bots over the
-  bot API)
-- Dev personas: `pnpm dev:seed` beside `pnpm dev` (accounts, bots, and a
-  played history over the real API; restart dev:bots after)
+- Dev: `cp .env.example .env` once, then `pnpm dev` (server :3000, web :5173,
+  hot reload, a dev login that signs in any name; Ctrl-C stops both).
+  `.env.example` lists every server variable; without `.env` the dev login is
+  off and `pnpm dev:bots` refuses to run.
+- Local opponents: `pnpm dev:bots` beside `pnpm dev` (three bots playing
+  random turns over the bot API; open http://localhost:5173/play signed out
+  to play one as a guest)
+- Dev personas: `pnpm dev:seed` beside `pnpm dev` (five accounts with bots
+  and a played history over the real API, about ten minutes on a first run;
+  restart `pnpm dev:bots` after)
 - Docker dev runtime: `pnpm dev:compose` (operator-run; containers are not
   verified by day-to-day dev)
+- Schema change: edit `apps/server/src/db/schema.ts`, then
+  `pnpm --filter @hexo-arena/server db:generate` writes the migration
 - Tests: `pnpm test`
 - Browser suite: `pnpm e2e` (Playwright against Vite with the API mocked;
   every screen in every look and viewport, contrast, motion, six-key play;
@@ -44,43 +51,48 @@ Every task ends green: type-check, lint, tests.
 - If code needs a what-comment, rename or restructure until it doesn't.
 - Doc comments (TSDoc) on exported symbols only; internals carry none.
 - No phase, milestone, or step comments; no section banners; no narration of
-  process or history. Comments describe the code as it is; history is git's job.
+  process or history.
+  Comments describe the code as it is; history is git's job.
 - No comment may restate the line below it.
 - Committed files never reference the local decision docs, their sections,
-  slices, phases, or any planning language. Comments stand on their own;
-  process and planning live outside the repo.
-- ASCII only, in code, comments, docs, and commit messages. No em dashes, no
-  decorative unicode; use `; , :` or a new sentence instead.
+  slices, phases, or any planning language.
+  Comments stand on their own; process and planning live outside the repo.
+- ASCII only, in code, comments, docs, and commit messages.
+  No em dashes, no decorative unicode; use `; , :` or a new sentence instead.
 - Prose is lean: if a sentence can be shorter, make it shorter; if a paragraph
-  adds nothing, delete it. Reread before committing.
-- Named exports only. 4-space indent, backtick strings, semicolons, trailing commas.
+  adds nothing, delete it.
+  Reread before committing.
+- Named exports only.
+- Formatting follows the code, as no lint rule or formatter enforces it:
+  4-space indent, semicolons, trailing commas; backticks for string values;
+  single quotes for import paths, quoted keys, and test names; double quotes
+  for JSX attributes.
 
 ## Language standards (strict)
 
 - TypeScript `strict` plus `noUncheckedIndexedAccess`,
   `exactOptionalPropertyTypes`, `noImplicitOverride`, `verbatimModuleSyntax`.
-- No `any`; use `unknown` and narrow. An `as` cast carries a one-line comment
-  stating the invariant that makes it sound.
+- No `any`; use `unknown` and narrow.
+  An `as` cast carries a one-line comment stating the invariant that makes it
+  sound.
 - Discriminated unions over boolean flags; exhaustiveness checked against `never`.
 - Zod parses every boundary: HTTP, websocket, admin socket, env.
 - ESLint with typescript-eslint strict-type-checked and eslint-plugin-tsdoc;
-  lint runs in CI and must stay running. A broken lint config is a bug, not an
-  excuse to skip linting.
+  lint runs in CI and must stay running.
+  A broken lint config is a bug, not an excuse to skip linting.
 - SQL: constraints live in the schema (`NOT NULL`, `CHECK`, foreign keys), never
   in app code; `PRAGMA foreign_keys = ON`; every foreign key indexed; `nameKey`
   unique.
-- Tests: Vitest, colocated, test names are sentences; no snapshot tests;
-  the rules engine keeps its differential tests against HeXO as the oracle.
+- Tests: Vitest, in each package's `test/` folder (Playwright in
+  `apps/web/e2e`, node:test for the repo gates in `scripts/`); test names are
+  sentences; no snapshot tests; the rules engine keeps its differential tests
+  against the committed reference corpus.
 
 ## Hard guardrails
 
 - Spec-first: `packages/contract` zod is the source of truth; `openapi.yaml` is
   generated and diffed in CI.
-- No HeXO code may be copied, translated, or ported into this repo (HeXO is
-  GPLv3). The rules are reimplemented independently: behavior comes from
-  HeXO's rules, its observed behavior, and reading its source for reference,
-  checked against a local HeXO checkout used only as a test oracle (SPEC.md
-  section 11).
+- Third-party code enters only under a compatible license, with its notice.
 - The server executes no engine code and makes no outbound calls except Discord
   OAuth.
 - Never weaken: the egress allowlist, token hashing, one-stream-per-bot, the
@@ -91,8 +103,8 @@ Every task ends green: type-check, lint, tests.
   operator would go; the real values never land in a commit.
 - The vendored htttx schemas are immutable: verbatim from the htttx spec.
   Deviation only when unavoidable, kept local, with a written reason in the
-  decision log. `Hexo-Bot-Api` changes only when a contract change is
-  genuinely needed.
+  decision log.
+  `Hexo-Bot-Api` changes only when a contract change is genuinely needed.
 
 ## Commits
 
@@ -100,6 +112,8 @@ Every task ends green: type-check, lint, tests.
   green: type-check, lint, tests.
 - A conventional one-liner, subject only: `feat(admin): pause kill switch`;
   ASCII, lowercase subject, no body, no trailers.
+- A change to what the site stores updates `legal/privacy.md` in the same
+  commit.
 - `develop` takes features and fixes by pull request, squash-merged once CI is
   green; `main` holds one commit per release, merged from a `release/` branch;
   neither takes direct pushes.
