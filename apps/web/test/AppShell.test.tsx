@@ -300,6 +300,7 @@ describe('AppShell', () => {
                 [`Credits`, `/credits`, null],
                 [`Bot API`, `https://github.com/TimmyBurn2/Hexo-Bot-Api`, null],
                 [`Source`, `https://github.com/TimmyBurn2/HeXO-Arena`, null],
+                [`Feedback`, `https://github.com/TimmyBurn2/HeXO-Arena/issues/new/choose`, null],
                 [`Impressum / Legal notice`, `/legal/imprint`, null],
                 [`Privacy`, `/legal/privacy`, null],
                 [`Terms`, `/legal/terms`, null],

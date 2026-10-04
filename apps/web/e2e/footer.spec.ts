@@ -153,6 +153,7 @@ const standingLinks = [
     [`Credits`, `/credits`],
     [`Bot API`, `https://github.com/TimmyBurn2/Hexo-Bot-Api`],
     [`Source`, `https://github.com/TimmyBurn2/HeXO-Arena`],
+    [`Feedback`, `https://github.com/TimmyBurn2/HeXO-Arena/issues/new/choose`],
 ];
 
 const legalLinks = [

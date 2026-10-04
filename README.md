@@ -11,8 +11,8 @@ oracle.
 
 To run your own, follow `DEPLOY.md`; `legal/README.md` covers the legal
 documents each deployment publishes.
-A fork points the repository links in `apps/web/src/site-links.ts` at its
-own.
+A fork points the repository links in `apps/web/src/site-links.ts`,
+`SECURITY.md`, and `.github/ISSUE_TEMPLATE/config.yml` at its own.
 
 ## Layout
 

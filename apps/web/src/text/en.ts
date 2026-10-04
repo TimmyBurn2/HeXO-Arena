@@ -144,6 +144,7 @@ export const en = {
             credits: `Credits`,
             botApi: `Bot API`,
             source: `Source`,
+            feedback: `Feedback`,
             imprint: `Impressum / Legal notice`,
             privacy: `Privacy`,
             terms: `Terms`,

@@ -82,6 +82,19 @@ describe('LegalScreen', () => {
         expect(section(`Your account and public name`).textContent).toContain(`Your public player page shows your rating and its history, your record, and the opponents you met most.`);
     });
 
+    it('say that the Feedback link leads to GitHub, a separate controller, where posts are public, and that data requests go to the operator', async () => {
+        deploy(details);
+        render(<LegalScreen page="privacy" />);
+        await screen.findByRole(`navigation`, { name: `On this page` });
+        const feedback = section(`Feedback on GitHub`);
+        expect(within(feedback).getByRole(`link`, { name: `GitHub's privacy statement` }).getAttribute(`href`)).toBe(
+            `https://docs.github.com/en/site-policy/privacy-policies/github-general-privacy-statement`,
+        );
+        expect(feedback.textContent).toContain(`GitHub (GitHub, Inc. or GitHub B.V.) is a separate controller.`);
+        expect(feedback.textContent).toContain(`What you post there, such as an issue or a comment, is public under your GitHub name.`);
+        expect(feedback.textContent).toContain(`Requests about your data go to the operator, never into a public issue;`);
+    });
+
     it('leave out Discord and the mail provider when the deployment names none', async () => {
         const { mailProvider: _mail, ...rest } = details;
         const { discord: _discord, ...operator } = details.operator;
