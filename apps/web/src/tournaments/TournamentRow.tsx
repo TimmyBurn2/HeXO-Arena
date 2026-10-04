@@ -6,9 +6,12 @@ import { tournamentPagePath } from './view';
 import { yoursText } from './words';
 import './RoundRobin.css';
 
-function when(iso: string): string {
+/** A tournament's date and time as its list row writes them. */
+export function tournamentWhen(iso: string): string {
     return new Intl.DateTimeFormat(undefined, { dateStyle: `medium`, timeStyle: `short` }).format(new Date(iso));
 }
+
+const when = tournamentWhen;
 
 /** A tournament's tag: the weekly rated, a person's round robin unrated, or a test. */
 export function TournamentTag({ tournament }: { tournament: Pick<TournamentSummary, `rated` | `test`> }) {
@@ -93,7 +96,7 @@ function Facts({ tournament }: { tournament: TournamentSummary }) {
         case `canceled`:
             return (
                 <>
-                    {when(tournament.startsAt)}; {text.tournaments.outcome[tournament.status]}
+                    {when(tournament.startsAt)}; {text.tournaments.outcomeInLine[tournament.status]}
                 </>
             );
     }

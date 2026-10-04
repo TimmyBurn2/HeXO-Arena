@@ -1,4 +1,4 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Locator, type Page } from '@playwright/test';
 import { looks, wear } from './matrix';
 import { keptNames, serve, tournamentGameRows, tournaments, world } from './mock-api';
 
@@ -53,12 +53,22 @@ for (const width of [1280, 390]) {
         const weekly = page.getByRole(`region`, { name: `Weekly tournament` });
         await expect(weekly.getByRole(`link`, { name: `Winter cup` })).toBeVisible();
         await expect(weekly.getByText(/^Starts in 2 h 5\d min; 2 of 12 entered; turn clock 10 s$/u)).toBeVisible();
+        // The entry stands as far under its note as on the tournament's page.
+        const gapUnder = async (note: Locator) =>
+            note.evaluate((element) => {
+                const next = element.nextElementSibling;
+                return next === null ? null : Math.round(next.getBoundingClientRect().top - element.getBoundingClientRect().bottom);
+            });
+        const gap = await gapUnder(weekly.locator(`.entry-control > .note`));
+        expect(gap).toBeGreaterThanOrEqual(12);
         await weekly.getByLabel(`Your bot`).selectOption(`sealbot`);
         await weekly.getByRole(`button`, { name: `Enter`, exact: true }).click();
         await expect(weekly.getByText(`sealbot is entered.`)).toBeVisible();
         await expect(weekly.getByText(/; 3 of 12 entered; turn clock 10 s$/u)).toBeVisible();
         await expect(page.getByRole(`heading`, { name: `No round robin possible right now` })).toBeVisible();
         expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+        await page.goto(`/tournaments/t_wintercup202`);
+        expect(await gapUnder(page.locator(`.entry-control > .note`))).toBe(gap);
     });
 
     test(`a tournament's page leads to its games under Games, a round picked there, at ${String(width)} px`, async ({ page }) => {
@@ -110,5 +120,17 @@ for (const width of [1280, 390]) {
         await open(page, `/tournaments/t_wintercup202`, width);
         await expect(page.getByRole(`heading`, { name: `Entered (2 of 12)` })).toBeVisible();
         await expect(page.getByRole(`link`, { name: `Export games` })).toHaveCount(0);
+    });
+}
+
+for (const width of [1280, 390]) {
+    test(`a tournament no link names reads Not found, as a missing duel does, at ${String(width)} px`, async ({ page }) => {
+        await open(page, `/tournaments/t_nosuchthing1`, width);
+        await expect(page.getByRole(`heading`, { name: `Not found`, level: 1 })).toBeVisible();
+        await expect(page.getByText(`No tournament has that link; see Tournaments.`)).toBeVisible();
+        await expect(page).toHaveTitle(`Not found - HeXO Arena`);
+        await expect(page.locator(`.duel-kicker`)).toHaveCount(0);
+        await page.locator(`main`).getByRole(`link`, { name: `Tournaments` }).click();
+        await expect(page).toHaveURL(/\/games\/tournaments$/u);
     });
 }

@@ -194,6 +194,14 @@ describe('the duels under Games', () => {
         });
         expect(await screen.findByText(`No test has ended yet.`)).toBeTruthy();
     });
+
+    it('ask a signed-out reader on Yours to sign in once, in place of both lists', async () => {
+        serve({ '/api/duels': { running: [], past: [] }, '/api/games?tests=1': [] });
+        open(`/games/duels?list=yours`, () => <GamesDuelsScreen />);
+        expect(await screen.findByText(`Sign in to see your duels and tests.`)).toBeTruthy();
+        expect(screen.queryByRole(`heading`, { name: `Live` })).toBe(null);
+        expect(screen.queryByRole(`heading`, { name: `Past` })).toBe(null);
+    });
 });
 
 describe('the tournaments under Games', () => {
@@ -264,6 +272,17 @@ describe('the Bot duel place under Play', () => {
             expect(within(side).getAllByRole(`link`).map((link) => link.getAttribute(`href`))).toContain(`/duels/d_pastpast0001`);
         });
         expect(screen.getByRole(`navigation`, { name: `Play` }).querySelector(`[aria-current="page"]`)?.textContent).toBe(`Bot duel`);
+    });
+});
+
+describe('a tournament row', () => {
+    it('say one called off mid-line in lower case, and the reader\'s bot as entered in the past', async () => {
+        const off = summary(`t_offoffoffoff`, { name: `Spring cup`, status: `called_off`, yours: { bot: `sealbot`, place: { state: `entered`, rank: null, points: null } } });
+        serve({ '/api/tournaments': { running: [], scheduled: [], past: [off] } });
+        open(`/games/tournaments`, () => <TournamentsScreen />);
+        const row = (await screen.findByRole(`link`, { name: `Spring cup` })).closest(`.tournament-row`) as HTMLElement;
+        expect(row.querySelector(`.tournament-row-facts`)?.textContent).toMatch(/; called off$/u);
+        expect(row.querySelector(`.tournament-row-yours`)?.textContent).toBe(`Yours: sealbot was entered`);
     });
 });
 

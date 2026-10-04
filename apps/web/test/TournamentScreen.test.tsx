@@ -296,10 +296,14 @@ describe('TournamentScreen', () => {
         expect(rounds.querySelectorAll(`:is(.round-names, .round-rest) .deleted-name`)).toHaveLength(6);
     });
 
-    it('say when no tournament has the id', async () => {
+    it('read Not found when no tournament has the id, as a missing duel does, its title included', async () => {
         serve(() => 404);
         render(<TournamentScreen id="t_aaaaaaaaaaaa" />);
-        expect(await screen.findByRole(`heading`, { name: `No tournament here` })).toBeTruthy();
+        expect(await screen.findByRole(`heading`, { name: `Not found`, level: 1 })).toBeTruthy();
+        expect(screen.getByText(`No tournament has that link; see Tournaments.`)).toBeTruthy();
+        expect(screen.getByRole(`link`, { name: `Tournaments` }).getAttribute(`href`)).toBe(`/games/tournaments`);
+        expect(screen.queryByText(`Tournaments`, { selector: `.duel-kicker a` })).toBeNull();
+        expect(document.title).toBe(`Not found - HeXO Arena`);
     });
 });
 
@@ -327,7 +331,7 @@ describe('TournamentsScreen', () => {
         // The owner takes the dim line's color, so the bot reads as the winner.
         expect(screen.getByRole(`link`, { name: `ana` }).closest(`.tournament-owner`)?.textContent).toBe(`by ana`);
         expect(screen.getByRole(`link`, { name: `ana` }).getAttribute(`href`)).toBe(`/players/ana`);
-        expect(screen.getByText(/Called off$/u)).toBeTruthy();
+        expect(screen.getByText(/; called off$/u)).toBeTruthy();
     });
 });
 

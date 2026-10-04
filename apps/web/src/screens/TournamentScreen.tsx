@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { clockText, deletedPlayerName, tournamentMeta, tournamentMinPresent, tournamentRunningPollMs, tournamentWaitingPollMs, type TournamentDetail, type TournamentSummary } from '@hexo-arena/contract';
+import { clockText, deletedPlayerName, notFoundMeta, tournamentMeta, tournamentMinPresent, tournamentRunningPollMs, tournamentWaitingPollMs, type TournamentDetail, type TournamentSummary } from '@hexo-arena/contract';
 import { ApiError, fetchTournament, limitedFor } from '../api/client';
 import { BotBadge, PlayerName, PresenceDot } from '../components/player';
 import { ErrorFrame, SkeletonRows } from '../components/states';
@@ -101,8 +101,21 @@ export function TournamentScreen({ id }: { id: string }) {
     const { load, retry } = useTournament(id);
     const me = useMe();
     const viewer = me.status === `ready` && me.me?.kind === `user` ? me.me.name : null;
-    const meta = load.kind === `ready` ? tournamentMeta(summaryOf(load.detail)) : undefined;
+    const meta = load.kind === `ready` ? tournamentMeta(summaryOf(load.detail)) : load.kind === `missing` ? notFoundMeta : undefined;
     useDocumentMeta(route, meta?.title, meta?.description);
+    if (load.kind === `missing`) {
+        return (
+            <div className="empty">
+                <h1>{text.tournaments.notFound.heading}</h1>
+                <p>{text.tournaments.notFound.body}</p>
+                <div className="actions">
+                    <Link to="/games/tournaments" className="btn btn-ghost">
+                        {text.tournaments.notFound.back}
+                    </Link>
+                </div>
+            </div>
+        );
+    }
     const title = load.kind === `ready` ? load.detail.name : text.tournaments.title;
     const detail = load.kind === `ready` ? load.detail : null;
     return (
@@ -122,17 +135,6 @@ export function TournamentScreen({ id }: { id: string }) {
             <h1 className="screen-title tournament-title">{title}</h1>
             {load.kind === `loading` ? <SkeletonRows /> : null}
             {load.kind === `failed` ? <ErrorFrame sentence={text.tournaments.detailFailed} onRetry={retry} wait={load.limited} /> : null}
-            {load.kind === `missing` ? (
-                <div className="empty">
-                    <h2>{text.tournaments.notFound}</h2>
-                    <p>{text.tournaments.notFoundBody}</p>
-                    <div className="actions">
-                        <Link to="/games/tournaments" className="btn btn-primary">
-                            {text.tournaments.title}
-                        </Link>
-                    </div>
-                </div>
-            ) : null}
             {load.kind === `ready` ? <Tournament detail={load.detail} readAt={load.at} onEntry={retry} /> : null}
         </>
     );

@@ -421,10 +421,10 @@ describe('GameScreen', () => {
             fireEvent.click(screen.getByRole(`tab`, { name: tab }));
             const links = [...document.querySelectorAll(`#drawer-body .drawer-foot a`)];
             expect(links.map((link) => [link.getAttribute(`aria-label`), link.getAttribute(`href`), link.getAttribute(`target`)])).toEqual([
-                [`Tournaments, opens in a new tab`, `/games/tournaments`, `_blank`],
                 [`Build a bot, opens in a new tab`, `/connect`, `_blank`],
                 [`Credits, opens in a new tab`, `/credits`, `_blank`],
                 [`Bot API, opens in a new tab`, `https://github.com/TimmyBurn2/Hexo-Bot-Api`, `_blank`],
+                [`Source, opens in a new tab`, `https://github.com/TimmyBurn2/HeXO-Arena`, `_blank`],
                 [`Impressum / Legal notice, opens in a new tab`, `/legal/imprint`, `_blank`],
                 [`Privacy, opens in a new tab`, `/legal/privacy`, `_blank`],
                 [`Terms, opens in a new tab`, `/legal/terms`, `_blank`],

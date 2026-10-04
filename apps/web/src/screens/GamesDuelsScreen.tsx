@@ -95,36 +95,38 @@ export function GamesDuelsScreen() {
                     </button>
                 ))}
             </div>
-            <section className="events-section" aria-labelledby="live-duels">
-                <h2 id="live-duels" className="section-title">
-                    {words.live}
-                </h2>
-                {signIn ? (
-                    <p className="note">{words.signIn}</p>
-                ) : shown === null ? (
-                    lists.failed ? <p className="note">{words.failed}</p> : <SkeletonRows />
-                ) : shown.running.length === 0 ? (
-                    <p className="note">{words.noLive}</p>
-                ) : (
-                    <LiveDuels duels={shown.running} live={live.games} now={now} readAt={live.at} />
-                )}
-            </section>
-            <section className="events-section" aria-labelledby="past-duels">
-                <h2 id="past-duels" className="section-title">
-                    {words.past}
-                </h2>
-                {signIn ? null : (
-                    <PastList
-                        filter={filter}
-                        duels={shown === null ? null : shown.past}
-                        more={more}
-                        now={now}
-                        onMore={() => {
-                            setMore(true);
-                        }}
-                    />
-                )}
-            </section>
+            {signIn ? (
+                <p className="note events-sign-in">{words.signIn}</p>
+            ) : (
+                <>
+                    <section className="events-section" aria-labelledby="live-duels">
+                        <h2 id="live-duels" className="section-title">
+                            {words.live}
+                        </h2>
+                        {shown === null ? (
+                            lists.failed ? <p className="note">{words.failed}</p> : <SkeletonRows />
+                        ) : shown.running.length === 0 ? (
+                            <p className="note">{words.noLive}</p>
+                        ) : (
+                            <LiveDuels duels={shown.running} live={live.games} now={now} readAt={live.at} />
+                        )}
+                    </section>
+                    <section className="events-section" aria-labelledby="past-duels">
+                        <h2 id="past-duels" className="section-title">
+                            {words.past}
+                        </h2>
+                        <PastList
+                            filter={filter}
+                            duels={shown === null ? null : shown.past}
+                            more={more}
+                            now={now}
+                            onMore={() => {
+                                setMore(true);
+                            }}
+                        />
+                    </section>
+                </>
+            )}
         </>
     );
 }

@@ -111,6 +111,7 @@ const screens: readonly { name: string; path: string; world?: Partial<World>; th
     { name: `terms`, path: `/legal/terms` },
     { name: `a missing page`, path: `/nowhere` },
     { name: `a missing game`, path: `/game/nope` },
+    { name: `a missing tournament`, path: `/tournaments/t_nosuchthing1` },
 ];
 
 // Text at 100, 150, and 200% of the default size, as a reader sets it in the browser;

@@ -271,7 +271,7 @@ export const shots: readonly Shot[] = [
     { name: `duel-list-tests`, path: `/games/duels?list=tests`, world: dueling(), ready: `.duel-row`, framed: true, viewports: duelViewports },
     { name: `duel-list-bot`, path: `/games/duels?bot=hextide`, world: dueling(), ready: `.duel-row`, framed: true, viewports: duelViewports },
     { name: `duel-list-none`, path: `/games/duels`, world: dueling({ duels: [] }), ready: `#past-duels ~ .note`, framed: true, viewports: duelViewports },
-    { name: `duel-list-yours-signed-out`, path: `/games/duels?list=yours`, world: dueling({ me: null }), ready: `#live-duels ~ .note`, framed: true, viewports: duelViewports },
+    { name: `duel-list-yours-signed-out`, path: `/games/duels?list=yours`, world: dueling({ me: null }), ready: `.events-sign-in`, framed: true, viewports: duelViewports },
     {
         name: `duel-list-rows`,
         path: `/games/duels`,

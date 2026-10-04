@@ -140,7 +140,6 @@ export const en = {
         },
         paused: `Starting games is paused; live games continue`,
         links: {
-            tournaments: `Tournaments`,
             build: `Build a bot`,
             credits: `Credits`,
             botApi: `Bot API`,
@@ -393,8 +392,9 @@ export const en = {
             round: `Round`,
             findDuel: `Find a duel: bot name`,
             findTournament: `Find a tournament: name`,
-            duelOption: (first: string, second: string, score: string, test: boolean) => `${first} vs ${second}, ${test ? `test, ` : ``}${score}`,
-            tournamentOption: (name: string, day: string) => `${name}, ${day}`,
+            duelOption: (first: string, second: string, score: string, test: boolean, when: string) => `${first} vs ${second}, ${test ? `test, ` : ``}${score}, ${when}`,
+            tournamentOption: (name: string, when: string) => `${name}, ${when}`,
+            live: `live`,
             roundOption: (round: number) => `Round ${String(round)}`,
             noBot: (name: string) => `No bot named ${name}`,
             noDuel: `No duel matches; clear the search.`,
@@ -1551,6 +1551,7 @@ export const en = {
         },
         yours: {
             entered: (bot: string) => `Yours: ${bot} entered`,
+            wasEntered: (bot: string) => `Yours: ${bot} was entered`,
             soFar: (bot: string, rank: number) => `Yours: ${bot}, ${ordinal(rank)} so far`,
             final: (bot: string, rank: number) => `Yours: ${bot}, ${ordinal(rank)}`,
             withdrawn: (bot: string) => `Yours: ${bot}, withdrawn`,
@@ -1567,8 +1568,8 @@ export const en = {
         starts: (when: string) => `Starts ${when}`,
         winner: (bot: ReactNode): ReactNode => rich`winner ${bot}`,
         outcome: { called_off: `Called off`, canceled: `Canceled` },
-        notFound: `No tournament here`,
-        notFoundBody: `The address names no tournament.`,
+        outcomeInLine: { called_off: `called off`, canceled: `canceled` },
+        notFound: { heading: `Not found`, body: `No tournament has that link; see Tournaments.`, back: `Tournaments` },
         detailFailed: `The tournament did not load`,
         rules: (bots: number, clock: string, plies: number) =>
             `${String(bots)} ${plural(bots, `bot`, `bots`)}, one per owner; ${clock}; ${String(plies)}-stone openings; rated.`,

@@ -276,6 +276,19 @@ for (const width of [1280, 390]) {
         await expect(page).toHaveURL(/\/games\/duels$/u);
     });
 
+    test(`Games asks a signed-out reader on Yours to sign in once, and one bot's duels stand clear of the pills, at ${String(width)} px`, async ({ page }) => {
+        await open(page, `/games/duels?list=yours`, dueling({ me: null }), width);
+        await expect(page.getByText(`Sign in to see your duels and tests.`)).toBeVisible();
+        await expect(page.getByRole(`heading`, { name: `Live` })).toHaveCount(0);
+        await expect(page.getByRole(`heading`, { name: `Past` })).toHaveCount(0);
+        await page.goto(`/games/duels?bot=hextide`);
+        const line = page.locator(`.duels-for`);
+        await expect(line).toContainText(`Duels and tests of hextide`);
+        const [lineBox, pillsBox] = await Promise.all([line.boundingBox(), page.getByRole(`group`, { name: `Which duels` }).boundingBox()]);
+        if (lineBox === null || pillsBox === null) throw new Error(`the bot's line or the pills drew no box`);
+        expect(Math.round(pillsBox.y - (lineBox.y + lineBox.height))).toBe(12);
+    });
+
     test(`a duel's page leads to its games under Games, narrowed to it, at ${String(width)} px`, async ({ page }) => {
         await open(page, `/duels/${duelFixtures.live.id}`, dueling({ finished: [...duelGameRows, ...keptNames] }), width);
         await page.getByRole(`link`, { name: `These games in Games` }).click();

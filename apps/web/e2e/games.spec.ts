@@ -1,3 +1,4 @@
+import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type Page } from '@playwright/test';
 import { looks, wear } from './matrix';
 import { duelGameRows, keptNames, recentGames, rivalry, serve, tournamentGameRows, world } from './mock-api';
@@ -143,8 +144,8 @@ test('the list narrows to games analyzers have read, and each row counts its ana
     await expect(page.locator(`.game-row`)).toHaveCount(finished.length);
 });
 
-for (const width of [1280, 390]) {
-    test(`a game of a tournament or a duel names it under the result, a link of its own to its page, at ${String(width)} px`, async ({ page }) => {
+for (const width of [1280, 390, 320]) {
+    test(`a game of a tournament or a duel names it under the result, a link as wide as its words and tall enough to tap, at ${String(width)} px`, async ({ page }) => {
         await page.setViewportSize({ width, height: 900 });
         const look = looks[0];
         if (look === undefined) throw new Error(`no look registered`);
@@ -168,6 +169,16 @@ for (const width of [1280, 390]) {
             expect(captionBox.y).toBeGreaterThanOrEqual(rowBox.y + rowBox.height - 1);
             expect(Math.abs(captionBox.x - resultBox.x)).toBeLessThanOrEqual(1);
         }
+        expect(Math.round(captionBox.height)).toBe(24);
+        const words = await caption.evaluate((link) => {
+            const range = document.createRange();
+            range.selectNodeContents(link);
+            return range.getBoundingClientRect().width;
+        });
+        expect(Math.abs(captionBox.width - words)).toBeLessThanOrEqual(1);
+        if (width === 1280) expect(Math.round(itemBox.height)).toBe(68);
+        const axe = await new AxeBuilder({ page }).withRules([`target-size`]).analyze();
+        expect(axe.violations.flatMap((violation) => violation.nodes.map((node) => node.target))).toEqual([]);
         await expect(page.getByRole(`link`, { name: `Duel, game 3 of 10` })).toHaveAttribute(`href`, /^\/duels\/d_/u);
         expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
         await caption.click();

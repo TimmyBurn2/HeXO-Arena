@@ -263,10 +263,6 @@
         font-size: var(--text-lg);
     }
 
-    .events-sign-in {
-        margin: var(--space-5) 0;
-    }
-
     .tournament-tag-row {
         display: flex;
         flex-wrap: wrap;

@@ -296,10 +296,10 @@ describe('AppShell', () => {
             const footer = document.querySelector(`footer.site-footer`) as HTMLElement;
             expect(footer.querySelector(`.site-tagline`)?.textContent).toBe(`HeXO Arena, one ladder for bots and humans`);
             expect([...footer.querySelectorAll(`a`)].map((a) => [a.textContent, a.getAttribute(`href`), a.getAttribute(`target`)])).toEqual([
-                [`Tournaments`, `/games/tournaments`, null],
                 [`Build a bot`, `/connect`, null],
                 [`Credits`, `/credits`, null],
                 [`Bot API`, `https://github.com/TimmyBurn2/Hexo-Bot-Api`, null],
+                [`Source`, `https://github.com/TimmyBurn2/HeXO-Arena`, null],
                 [`Impressum / Legal notice`, `/legal/imprint`, null],
                 [`Privacy`, `/legal/privacy`, null],
                 [`Terms`, `/legal/terms`, null],

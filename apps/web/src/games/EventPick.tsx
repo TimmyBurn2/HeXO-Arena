@@ -1,9 +1,10 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { DuelSummary } from '@hexo-arena/contract';
 import { ApiError, fetchDuel, fetchDuels, fetchTournament, fetchTournaments } from '../api/client';
 import { useAsync } from '../api/use-async';
 import { scoreText } from '../duels/words';
 import { text } from '../text';
+import { tournamentWhen } from '../tournaments/TournamentRow';
 import { Choice, NameField } from './Fields';
 import type { GameFilters } from './filters';
 
@@ -82,6 +83,11 @@ export function tournamentWords(named: EventNames[`tournament`]): string {
 
 type DuelsRead = { kind: `loading` } | { kind: `ready`; duels: readonly DuelSummary[] } | { kind: `unknown`; bot: string } | { kind: `failed` };
 
+// A duel lasts minutes, so its day tells repeats of the same pair apart.
+function day(iso: string): string {
+    return new Intl.DateTimeFormat(undefined, { dateStyle: `medium` }).format(new Date(iso));
+}
+
 /**
  * One duel to narrow the list to, recent first: running ones, then those
  * over, of every bot or of the one searched for; tests among them while
@@ -107,7 +113,7 @@ export function DuelPick({ value, named, tests, onChange }: { value: string | un
         };
     }, [bot]);
     const listed = read.kind === `ready` ? read.duels.filter((duel) => tests || duel.kind !== `test`) : [];
-    const options: (readonly [string, string])[] = listed.map((duel) => [duel.id, pick.duelOption(duel.first.name, duel.second.name, scoreText(duel), duel.kind === `test`)] as const);
+    const options: (readonly [string, string])[] = listed.map((duel) => [duel.id, pick.duelOption(duel.first.name, duel.second.name, scoreText(duel), duel.kind === `test`, duel.status === `running` ? pick.live : day(duel.endedAt ?? duel.createdAt))] as const);
     if (value !== undefined && !listed.some((duel) => duel.id === value)) options.unshift([value, duelWords(named)]);
     const note = read.kind === `unknown` ? pick.noBot(read.bot) : read.kind === `failed` ? pick.failed : read.kind === `ready` && listed.length === 0 && bot !== null ? pick.noDuel : null;
     return (
@@ -138,10 +144,9 @@ export function TournamentPick({ value, named, onChange }: { value: string | und
     const pick = text.games.pick;
     const read = useAsync(fetchTournaments);
     const [find, setFind] = useState<string | null>(null);
-    const day = useCallback((iso: string) => new Intl.DateTimeFormat(undefined, { dateStyle: `medium` }).format(new Date(iso)), []);
     const all = read.data === null ? [] : [...read.data.running, ...read.data.past.filter((tournament) => tournament.status !== `called_off`)];
     const listed = find === null ? all : all.filter((tournament) => tournament.name.toLowerCase().includes(find.toLowerCase()));
-    const options: (readonly [string, string])[] = listed.map((tournament) => [tournament.id, pick.tournamentOption(tournament.name, day(tournament.startsAt))] as const);
+    const options: (readonly [string, string])[] = listed.map((tournament) => [tournament.id, pick.tournamentOption(tournament.name, tournament.status === `running` ? pick.live : tournamentWhen(tournament.endedAt ?? tournament.startsAt))] as const);
     if (value !== undefined && !listed.some((tournament) => tournament.id === value)) options.unshift([value, tournamentWords(named)]);
     const note = read.error ? pick.failed : read.data !== null && listed.length === 0 && find !== null ? pick.noTournament : null;
     return (

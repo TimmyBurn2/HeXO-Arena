@@ -14,10 +14,6 @@ export const bridgeInstall = `pip install git+${bridgeRepository}@v0.4.0`;
 /** The site's own repository: its code, the legal templates, and how to run it. */
 export const siteRepository = `https://github.com/TimmyBurn2/HeXO-Arena`;
 
-/** Whether the standing links lead to the site's repository; off while the repository is private. */
-// Widened from the literal: the switch is a setting either value must type-check against.
-export const siteRepositoryPublic = false as boolean;
-
 /**
  * One standing link of the site: a page of the app, or a document it does
  * not render, which may carry the mark of the place it opens.
@@ -32,11 +28,10 @@ export const sourceLink: SiteLink = { kind: `external`, label: text.shell.links.
  * in its drawer; a new standing link is one more row.
  */
 export const siteLinks: readonly SiteLink[] = [
-    { kind: `page`, label: text.shell.links.tournaments, to: `/games/tournaments` },
     { kind: `page`, label: text.shell.links.build, to: `/connect` },
     { kind: `page`, label: text.shell.links.credits, to: `/credits` },
     { kind: `external`, label: text.shell.links.botApi, href: botApiRepository },
-    ...(siteRepositoryPublic ? [sourceLink] : []),
+    sourceLink,
 ];
 
 /** The licenses of the code and the font the site ships, a file the build writes at the site's root. */

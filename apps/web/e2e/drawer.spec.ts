@@ -138,9 +138,10 @@ for (const layout of [
         for (const tab of [`Moves`, `Game`]) {
             await page.getByRole(`tab`, { name: tab }).click();
             for (const name of [
-                `Tournaments, opens in a new tab`,
+                `Build a bot, opens in a new tab`,
                 `Credits, opens in a new tab`,
                 `Bot API, opens in a new tab`,
+                `Source, opens in a new tab`,
                 `Impressum / Legal notice, opens in a new tab`,
                 `Privacy, opens in a new tab`,
                 `Terms, opens in a new tab`,

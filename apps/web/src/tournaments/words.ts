@@ -11,9 +11,10 @@ export function yoursText(tournament: Pick<TournamentSummary, `status`>, yours: 
     const { place } = yours;
     switch (tournament.status) {
         case `scheduled`:
+            return words.entered(yours.bot);
         case `called_off`:
         case `canceled`:
-            return words.entered(yours.bot);
+            return words.wasEntered(yours.bot);
         case `running`:
         case `finished`:
         case `stopped`:
