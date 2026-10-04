@@ -3,11 +3,12 @@ import { emptyPosition, place, type Coord, type Position } from '@hexo-arena/rul
 import { asc } from 'drizzle-orm';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { createBot, findBot } from '../src/bots';
-import { createQuery, openDatabase, runMigrations, type Query, type Sqlite } from '../src/db';
+import { createQuery, type Query, type Sqlite } from '../src/db';
 import { games } from '../src/db/schema';
 import { abortUnfinishedGames, findFinishedHeadline, findGame, insertGame, insertMove, recordFinish, replayPosition } from '../src/game-store';
 import { deleteBotByPolicy } from '../src/moderation';
 import { createUserWithExactName } from '../src/users';
+import { migratedDatabase } from './helpers';
 
 const unlimited = { mode: `unlimited` as const };
 const origin = [{ x: 0, y: 0, player: 0 as const }];
@@ -18,8 +19,7 @@ describe('finish order', () => {
     let seat: { userId: string; botId: string };
 
     beforeEach(() => {
-        sqlite = openDatabase(`:memory:`);
-        runMigrations(sqlite);
+        sqlite = migratedDatabase();
         query = createQuery(sqlite);
         const owner = createUserWithExactName(query, `dev:owner`, `owner`);
         if (owner === `name_taken`) throw new Error(`seed name taken`);
@@ -77,8 +77,7 @@ describe('finish order', () => {
 
 describe('a bot\'s guest games', () => {
     it('keep no bot on the record: a bot with only guest games is deleted outright, its games with it', () => {
-        const sqlite = openDatabase(`:memory:`);
-        runMigrations(sqlite);
+        const sqlite = migratedDatabase();
         const query = createQuery(sqlite);
         const owner = createUserWithExactName(query, `dev:owner`, `owner`);
         if (owner === `name_taken`) throw new Error(`seed name taken`);
@@ -94,8 +93,7 @@ describe('a bot\'s guest games', () => {
 
 describe('a bot\'s games started unrated', () => {
     it('keep no bot on the record: a bot whose only decided game a person started unrated is deleted outright, its games with it', () => {
-        const sqlite = openDatabase(`:memory:`);
-        runMigrations(sqlite);
+        const sqlite = migratedDatabase();
         const query = createQuery(sqlite);
         const owner = createUserWithExactName(query, `dev:owner`, `owner`);
         const player = createUserWithExactName(query, `dev:player`, `player`);
@@ -118,8 +116,7 @@ describe('replay', () => {
     let seat: { userId: string; botId: string };
 
     beforeEach(() => {
-        sqlite = openDatabase(`:memory:`);
-        runMigrations(sqlite);
+        sqlite = migratedDatabase();
         query = createQuery(sqlite);
         const owner = createUserWithExactName(query, `dev:owner`, `owner`);
         if (owner === `name_taken`) throw new Error(`seed name taken`);

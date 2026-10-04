@@ -11,10 +11,11 @@ import type { Setup } from '@hexo-arena/rules';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AnalysisService } from '../src/analysis-service';
 import { AnalyzerSessions } from '../src/analyzers';
-import { createQuery, openDatabase, runMigrations, type Query, type Sqlite } from '../src/db';
+import { createQuery, type Query, type Sqlite } from '../src/db';
 import type { EngineSocket } from '../src/game-registry';
 import { insertOwnLines } from '../src/analysis-store';
 import { insertBotGame, insertGame, insertMove, recordFinish } from '../src/game-store';
+import { migratedDatabase } from './helpers';
 
 class FakeSocket implements EngineSocket {
     readonly sent: Record<string, unknown>[] = [];
@@ -159,8 +160,7 @@ async function settled(): Promise<void> {
 beforeEach(() => {
     vi.useFakeTimers();
     now = Date.UTC(2026, 9, 2, 12);
-    const sqlite = openDatabase(`:memory:`);
-    runMigrations(sqlite);
+    const sqlite = migratedDatabase();
     seed(sqlite);
     world = build(createQuery(sqlite), sqlite);
 });

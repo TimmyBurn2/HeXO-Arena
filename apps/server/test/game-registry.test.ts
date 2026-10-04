@@ -21,7 +21,7 @@ import {
 import { hexDistance, openingRegion, type Coord } from '@hexo-arena/rules';
 import { eq } from 'drizzle-orm';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { createQuery, openDatabase, runMigrations, type Sqlite } from '../src/db';
+import { createQuery, type Sqlite } from '../src/db';
 import { moves } from '../src/db/schema';
 import { createBot, findBot } from '../src/bots';
 import { createUserWithExactName } from '../src/users';
@@ -38,7 +38,7 @@ import { readRating } from '../src/rating-store';
 import { randomFloat } from '../src/random';
 import { beginGeneration, retireGeneration } from '../src/site-state';
 import { GameWatchers } from '../src/watchers';
-import { FakeStreamSocket } from './helpers';
+import { FakeStreamSocket, migratedDatabase } from './helpers';
 
 const user = { kind: `user` as const, id: `user-1`, name: `humanplayer` };
 const bot = { id: `bot-1`, name: `opponentbot` };
@@ -161,8 +161,7 @@ interface Harness {
 // The stream socket records every line the bot would receive; presence and
 // the registry are wired exactly the way the app wires them.
 function harness(random: () => number = randomFloat, randomIndex?: (bound: number) => number): Harness {
-    const sqlite = openDatabase(`:memory:`);
-    runMigrations(sqlite);
+    const sqlite = migratedDatabase();
     const query = createQuery(sqlite);
     seedPair(query);
     const presence = new PresenceRegistry();
@@ -1280,8 +1279,7 @@ describe('a bot\'s own view', () => {
 
     beforeEach(() => {
         vi.useFakeTimers();
-        const sqlite = openDatabase(`:memory:`);
-        runMigrations(sqlite);
+        const sqlite = migratedDatabase();
         const query = createQuery(sqlite);
         seedPair(query);
         const presence = new PresenceRegistry();

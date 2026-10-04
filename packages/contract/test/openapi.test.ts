@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import {
     botAccountPath,
@@ -35,7 +36,7 @@ import {
     signupPath,
     streamBacklogLimitBytes,
 } from '../src';
-import { buildOpenApiDocument } from '../src/openapi';
+import { buildOpenApiDocument, renderOpenApiYaml } from '../src/openapi';
 
 // The generated response types degrade to any (index-signature hack in
 // openapi3-ts), so probes dig structurally instead of trusting the types.
@@ -99,6 +100,14 @@ function arrayOfUnknown(value: unknown): unknown[] {
 }
 
 describe('openapi document', () => {
+    it('is what the committed openapi.yaml holds, so a contract change regenerates it', () => {
+        const committed = readFileSync(new URL(`../../../openapi.yaml`, import.meta.url), `utf8`).split(`\n`);
+        const generated = renderOpenApiYaml(root).split(`\n`);
+        const first = generated.findIndex((line, index) => line !== committed[index]);
+        const stale = first === -1 && committed.length === generated.length ? null : { line: (first === -1 ? generated.length : first) + 1, committed: committed[first], generated: generated[first] };
+        expect(stale, `openapi.yaml is stale; run pnpm openapi`).toBe(null);
+    });
+
     it('lets every operation that takes a body answer 413 payload_too_large', () => {
         const operations = operationsIn(root).filter(([, operation]) => dig(operation, `requestBody`) !== undefined);
         expect(operations.length).toBeGreaterThan(5);

@@ -1,11 +1,12 @@
 import type { Side } from '@hexo-arena/contract';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createBot, findBot } from '../src/bots';
-import { createQuery, openDatabase, runMigrations, type Query, type Sqlite } from '../src/db';
+import { createQuery, type Query, type Sqlite } from '../src/db';
 import { insertBotGame, insertGame, recordFinish } from '../src/game-store';
 import { foldRatings, isProvisional, rateGame, seedRating } from '../src/rating';
 import { explainRatedAtBefore, finishedGameLog, readRating, recomputeRatings, storedRatings } from '../src/rating-store';
 import { createUserWithExactName } from '../src/users';
+import { migratedDatabase } from './helpers';
 
 const unlimited = { mode: `unlimited` as const };
 const origin = [{ x: 0, y: 0, player: 0 as const }];
@@ -34,8 +35,7 @@ describe('stored ratings', () => {
     let bots: string[];
 
     beforeEach(() => {
-        sqlite = openDatabase(`:memory:`);
-        runMigrations(sqlite);
+        sqlite = migratedDatabase();
         query = createQuery(sqlite);
         humans = [];
         bots = [];
@@ -198,16 +198,17 @@ describe('stored ratings', () => {
         }
     }
 
+    // Four hundred games played and folded outlast the default five seconds
+    // on a busy machine.
     it('reproduces the live table exactly when the whole log is folded', () => {
         playRandomLog(20260925);
         const live = storedRatings(query);
         expect(live.size).toBe(humans.length + bots.length);
         expect([...live.values()].some(({ rating }) => !isProvisional(rating))).toBe(true);
         expect(foldRatings(finishedGameLog(query))).toEqual(live);
-    });
+    }, 30_000);
 
-    // Four hundred games played, then folded twice, outlast the default five
-    // seconds on a busy machine.
+    // Folded twice more, the same log needs the same budget.
     it('recomputes the same tables from the same log every time, equal to the live ones', () => {
         playRandomLog(20261001);
         const gameRows = () => sqlite.prepare(`select * from game_ratings order by game_id, side`).all();

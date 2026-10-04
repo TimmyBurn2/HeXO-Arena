@@ -17,7 +17,7 @@ interface World {
 // One bot online for every clock and one logged-in human, the smallest
 // cast that can hold a live game.
 async function world(): Promise<World> {
-    const app = await createTestApp({ logger: false });
+    const app = await createTestApp();
     const token = await mintBot(app.app, await loginAs(app.app, `owner`), `drainbot`);
     await app.app.inject({
         method: `PATCH`,

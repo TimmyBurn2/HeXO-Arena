@@ -30,10 +30,13 @@ opponents and the dev seed); `README.md` lists the other folders.
   `pnpm --filter @hexo-arena/server db:generate` writes the migration
 - Tests: `pnpm test`
 - Browser suite: `pnpm e2e` (Playwright against Vite with the API mocked;
-  every screen in every look and viewport, contrast, motion, six-key play;
-  screenshots land in `apps/web/e2e/shots`)
+  every screen at every viewport, and in every look at one, contrast, motion,
+  six-key play; `E2E_SHOTS=1` writes screenshots to `apps/web/e2e/shots`)
 - Browser suite against the production build: `pnpm e2e:build` (the same
   suite on `vite build` served by `vite preview`; dev-only tests skip)
+- CI's browser job: `pnpm e2e:ci` (the production build without the tests
+  tagged `@sweep`: the default look at a desktop and a phone width, and the
+  behavior specs)
 - Prod build: `pnpm build` (bundled server and admin CLI in `apps/server/dist`,
   static site in `apps/web/dist`)
 - Type-check + lint: `pnpm check`

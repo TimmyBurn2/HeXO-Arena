@@ -1,54 +1,65 @@
 import { expect, test, type Page } from '@playwright/test';
-import { shots, wear, type Shot } from './matrix';
+import { shots, wear, type Viewport } from './matrix';
 import { serve } from './mock-api';
 
-// Every computed duration on every element: zero, or inside the motion
-// band; under reduced motion, zero everywhere.
-const bandMs: readonly [number, number] = [120, 180];
+// The literal gate holds every duration in the sheets to the scale's tokens,
+// and the tokens to the motion band; these pages, one per kind of motion,
+// show the tokens at work in the browser: every computed duration is one of
+// them, and under reduced motion every duration is zero.
+const desktop: Viewport = { name: `desktop`, width: 1440, height: 900 };
+const laptop: Viewport = { name: `laptop`, width: 1280, height: 900 };
+const phone: Viewport = { name: `phone`, width: 390, height: 844 };
+const pages: readonly (readonly [string, Viewport, string])[] = [
+    [`home`, desktop, `links, rows, and buttons under the pointer`],
+    [`menu-settings`, laptop, `a popover dropping from the bar`],
+    [`menu-identity`, phone, `a sheet rising on a phone`],
+    [`game-your-move`, desktop, `stones landing and the clocks`],
+    [`game-pending`, desktop, `the pending stone`],
+    [`game-drawer`, desktop, `the game drawer and its lines`],
+    [`game-analysis`, phone, `the game sheet on a phone`],
+    [`analysis-reading`, desktop, `the analysis board's lines`],
+    [`play-opening`, desktop, `the opening preview`],
+    [`duels-picker`, phone, `the bot picker`],
+];
 
-async function durations(page: Page): Promise<number[]> {
+async function durations(page: Page): Promise<{ found: number[]; tokens: number[] }> {
     return page.evaluate(() => {
+        const ms = (value: string) => (value.trim().endsWith(`ms`) ? Number.parseFloat(value) : Number.parseFloat(value) * 1000);
         const found: number[] = [];
         for (const element of Array.from(document.querySelectorAll(`*`))) {
             const style = getComputedStyle(element);
             for (const list of [style.transitionDuration, style.animationDuration]) {
                 for (const part of list.split(`,`)) {
-                    const value = part.trim();
-                    const ms = value.endsWith(`ms`) ? Number.parseFloat(value) : Number.parseFloat(value) * 1000;
-                    if (Number.isFinite(ms)) found.push(ms);
+                    const value = ms(part);
+                    if (Number.isFinite(value)) found.push(value);
                 }
             }
         }
-        return found;
+        const root = getComputedStyle(document.documentElement);
+        const tokens = [`--dur-fast`, `--dur-base`, `--dur-slow`].map((name) => ms(root.getPropertyValue(name)));
+        return { found, tokens };
     });
 }
 
-// A shot with widths of its own, such as a phone's sheet, is opened at the
-// first of them, where its controls exist.
-async function size(page: Page, shot: Shot): Promise<void> {
-    const viewport = shot.viewports?.[0];
-    if (viewport !== undefined) await page.setViewportSize({ width: viewport.width, height: viewport.height });
-}
-
-for (const shot of shots) {
-    test(`${shot.name} moves only inside the motion band`, async ({ page }) => {
-        await size(page, shot);
+for (const [name, viewport, motion] of pages) {
+    test(`motion on ${motion} runs at the scale's durations and stops under reduced motion`, async ({ page }) => {
+        const shot = shots.find((entry) => entry.name === name);
+        if (shot === undefined) throw new Error(`no shot named ${name}`);
+        await page.setViewportSize({ width: viewport.width, height: viewport.height });
         await wear(page, { name: shot.name, storage: shot.storage ?? {} });
         await serve(page, structuredClone(shot.world));
         await page.goto(shot.path);
         await page.locator(shot.ready).first().waitFor();
         if (shot.after !== undefined) await shot.after(page);
-        const outside = (await durations(page)).filter((ms) => ms !== 0 && (ms < bandMs[0] || ms > bandMs[1]));
-        expect(outside).toEqual([]);
-    });
 
-    test(`${shot.name} holds still under reduced motion`, async ({ page }) => {
+        const moving = await durations(page);
+        expect(moving.tokens.every((token) => token > 0)).toBe(true);
+        expect(moving.found.some((ms) => ms > 0)).toBe(true);
+        expect(moving.found.filter((ms) => ms !== 0 && !moving.tokens.includes(ms))).toEqual([]);
+
         await page.emulateMedia({ reducedMotion: `reduce` });
-        await size(page, shot);
-        await serve(page, structuredClone(shot.world));
-        await page.goto(shot.path);
-        await page.locator(shot.ready).first().waitFor();
-        if (shot.after !== undefined) await shot.after(page);
-        expect((await durations(page)).filter((ms) => ms !== 0)).toEqual([]);
+        const still = await durations(page);
+        expect(still.tokens).toEqual([0, 0, 0]);
+        expect(still.found.filter((ms) => ms !== 0)).toEqual([]);
     });
 }

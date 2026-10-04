@@ -1,6 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 import type { Me } from '@hexo-arena/contract';
-import { looks, wear } from './matrix';
+import { capturing, looks, sweep, wear } from './matrix';
 import { roundRobins, serve, world } from './mock-api';
 
 // A short screen's footer sits at the foot of the window, clear of the
@@ -69,7 +69,7 @@ test('the footer tagline breaks after the comma and wraps at large text', async 
 
 // Scaled-up text on a narrow window must not leave one word of the tagline
 // on a line of its own.
-test('the footer tagline never ends on a lone word from 320 to 1280 px at 100, 150, and 200% text', async ({ page }) => {
+test('the footer tagline never ends on a lone word from 320 to 1280 px at 100, 150, and 200% text', sweep, async ({ page }) => {
     const look = looks[0];
     if (look === undefined) throw new Error(`no look registered`);
     await wear(page, look);
@@ -163,7 +163,11 @@ const legalLinks = [
     [`Licenses`, `/third-party-licenses.txt`],
 ];
 
-const framedScreens = [`/`, `/play/duels`, `/play/tournament`, `/games`, `/games/duels`, `/games/tournaments`, `/tournaments/t_wintercup202`, `/tournaments/t_brunorobin01`, `/tournaments/t_anatest00001`, `/ladder`, `/bots`, `/bots/sealbot`, `/connect`, `/profile`, `/credits`, `/report`, `/legal/imprint`, `/legal/privacy`, `/legal/terms`, `/nowhere`, `/game/nope`];
+// The footer is one component under every framed screen, which the route
+// reaches only through the Report link's subject; the unit tests hold the
+// links on every framed screen, so three screens stand for the layout: a
+// short page, a long one, and the report form, whose Report names no page.
+const framedScreens = [`/nowhere`, `/profile`, `/report`];
 
 // The standing links lead the footer's groups and the legal links are its last:
 // at the bottom right where the footer is a row, at its end where it stacks, signed in or out.
@@ -215,7 +219,7 @@ for (const [visitor, me] of visitors) {
 // Scaled-up text on any window width keeps each link inside its own group,
 // the groups on lines of their own, and no label ending on one word alone;
 // the footer never runs past the window.
-test('the footer keeps its groups apart and leaves no lone word from 320 to 1280 px at 100, 150, and 200% text', async ({ page }) => {
+test('the footer keeps its groups apart and leaves no lone word from 320 to 1280 px at 100, 150, and 200% text', sweep, async ({ page }) => {
     const look = looks[0];
     if (look === undefined) throw new Error(`no look registered`);
     await wear(page, look);
@@ -279,7 +283,7 @@ for (const name of [`ink`, `htttx`]) {
             });
             expect(mark).toEqual({ width: 16, height: 16, fill: `rgb(255, 255, 255)`, inside: true, hidden: `true` });
             expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
-            await footer.screenshot({ path: `e2e/shots/footer-source--${name}--${String(width)}.png` });
+            if (capturing) await footer.screenshot({ path: `e2e/shots/footer-source--${name}--${String(width)}.png` });
         });
     }
 }

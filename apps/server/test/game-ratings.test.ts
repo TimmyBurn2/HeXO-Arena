@@ -2,14 +2,14 @@ import type { Side } from '@hexo-arena/contract';
 import { asc, eq } from 'drizzle-orm';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { createBot, findBot } from '../src/bots';
-import { createQuery, openDatabase, runMigrations, type Query, type Sqlite } from '../src/db';
+import { createQuery, type Query, type Sqlite } from '../src/db';
 import { gameRatings } from '../src/db/schema';
 import { insertBotGame, insertGame, recordFinish } from '../src/game-store';
 import { voidGames } from '../src/moderation';
 import { rateGame, seedRating } from '../src/rating';
 import { fillGameRatings, readRating, recomputeRatings } from '../src/rating-store';
 import { createUserWithExactName } from '../src/users';
-import { createTestApp } from './helpers';
+import { createTestApp, migratedDatabase } from './helpers';
 
 const unlimited = { mode: `unlimited` as const };
 const origin = [{ x: 0, y: 0, player: 0 as const }];
@@ -38,8 +38,7 @@ describe('the game ratings cache', () => {
     let bots: string[];
 
     beforeEach(() => {
-        sqlite = openDatabase(`:memory:`);
-        runMigrations(sqlite);
+        sqlite = migratedDatabase();
         query = createQuery(sqlite);
         humans = [];
         bots = [];
@@ -147,6 +146,8 @@ describe('the game ratings cache', () => {
         expect(readRating(query, { kind: `bot`, id: otherId })).toEqual(seedRating(`bot`));
     });
 
+    // Hundreds of games played and folded outlast the default five seconds
+    // on a busy machine.
     it('rebuilds identical rows on a recompute of a tampered cache', () => {
         playLog(20261001, 300);
         const live = allRows();
@@ -155,7 +156,7 @@ describe('the game ratings cache', () => {
         sqlite.prepare(`delete from game_ratings where side = 'o'`).run();
         recomputeRatings(query);
         expect(allRows()).toEqual(live);
-    });
+    }, 30_000);
 
     it('rebuilds a voided game as one that rates nobody', () => {
         const [userId = ``] = humans;

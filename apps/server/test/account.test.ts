@@ -20,7 +20,7 @@ describe('the account routes', () => {
     beforeEach(async () => {
         dir = mkdtempSync(join(tmpdir(), `hexo-arena-account-`));
         journal = join(dir, `erasures.jsonl`);
-        world = await createTestApp({ logger: false, erasures: { path: journal, keepDays: 15 } });
+        world = await createTestApp({ erasures: { path: journal, keepDays: 15 } });
     });
 
     afterEach(async () => {

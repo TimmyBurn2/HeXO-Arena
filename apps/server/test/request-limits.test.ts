@@ -44,7 +44,7 @@ afterEach(async () => {
 
 async function start(options: Parameters<typeof createTestApp>[0] = {}): Promise<{ app: TestApp[`app`]; tick: (ms: number) => void }> {
     let now = 1_000_000;
-    world = await createTestApp({ logger: false, trustedProxy: proxy, now: () => now, ...options });
+    world = await createTestApp({ trustedProxy: proxy, now: () => now, ...options });
     return {
         app: world.app,
         tick: (ms) => {

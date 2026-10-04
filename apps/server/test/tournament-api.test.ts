@@ -21,7 +21,7 @@ describe('the tournament reads and entries', () => {
 
     beforeEach(async () => {
         clock = Date.UTC(2026, 9, 1, 12);
-        world = await createTestApp({ logger: false, now: () => clock });
+        world = await createTestApp({ now: () => clock });
         for (const [owner, bot] of people) {
             const session = await loginAs(world.app, owner);
             sessions.set(owner, session);

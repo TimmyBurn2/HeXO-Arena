@@ -13,8 +13,10 @@ export type Query = BetterSQLite3Database<typeof schema>;
 // never corrupts.
 // temp_store=MEMORY because the prod rootfs is read-only; foreign keys are
 // a standing repo rule (AGENTS.md).
-export function openDatabase(path: string): Sqlite {
-    mkdirSync(dirname(path), { recursive: true });
+// A buffer opens a serialized image in memory, as tests clone one migrated
+// database instead of migrating each of theirs.
+export function openDatabase(path: string | Buffer): Sqlite {
+    if (typeof path === `string`) mkdirSync(dirname(path), { recursive: true });
     const db = new Database(path);
     db.pragma(`journal_mode = WAL`);
     db.pragma(`synchronous = NORMAL`);

@@ -1,15 +1,22 @@
 name: ci
 on:
+    # A branch with a pull request runs on the pull request alone.
     push:
+        branches: [main, develop]
     pull_request:
     # A fork receives no push until it makes one; a run started by hand on
     # main publishes its first image.
     workflow_dispatch:
+# A newer commit on the same ref supersedes a run still going, except on
+# main, whose run publishes the image.
+concurrency:
+    group: ${{ github.workflow }}-${{ github.ref }}
+    cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 # Every job reads the repository and nothing more unless it says so.
 permissions:
     contents: read
 jobs:
-    verify:
+    check:
         runs-on: ubuntu-latest
         steps:
             - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -22,10 +29,56 @@ jobs:
                   cache: pnpm
             - run: pnpm install --frozen-lockfile
             - run: pnpm check
-            - run: pnpm test
             - run: pnpm build
-            - run: pnpm openapi
-            - run: git diff --exit-code openapi.yaml
+    # The contract's tests hold openapi.yaml to the generated document.
+    test:
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+              with:
+                  persist-credentials: false
+            - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v4.4.0
+            - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+              with:
+                  node-version: 26
+                  cache: pnpm
+            - run: pnpm install --frozen-lockfile
+            - run: pnpm test
+    # The behavior specs and the default look's axe gates at a desktop and a
+    # phone width, against the production build, in two halves side by side.
+    browser:
+        runs-on: ubuntu-latest
+        strategy:
+            fail-fast: false
+            matrix:
+                shard: [1, 2]
+        steps:
+            - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+              with:
+                  persist-credentials: false
+            - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v4.4.0
+            - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+              with:
+                  node-version: 26
+                  cache: pnpm
+            - run: pnpm install --frozen-lockfile
+            - run: pnpm --filter @hexo-arena/web exec playwright install --with-deps chromium
+            # A runner has four cores; Playwright's default would use two.
+            - run: pnpm e2e:ci --workers=4 --shard=${{ matrix.shard }}/2
+              env:
+                  FONTCONFIG_FILE: ${{ github.workspace }}/apps/web/e2e/fonts.conf
+    # The check the branch rules require.
+    # A job skipped after a failed need reports success, so this one runs
+    # whatever its needs did and fails unless both passed.
+    verify:
+        if: ${{ !cancelled() }}
+        needs: [check, test]
+        runs-on: ubuntu-latest
+        steps:
+            - run: test "$CHECK" = success && test "$TEST" = success
+              env:
+                  CHECK: ${{ needs.check.result }}
+                  TEST: ${{ needs.test.result }}
     # Every run builds the image, so a broken Dockerfile fails review; only
     # main pushes it, on a push or a run started by hand.
     # The box never builds, it only pulls.

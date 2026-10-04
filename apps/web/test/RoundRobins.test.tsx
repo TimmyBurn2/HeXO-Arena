@@ -325,7 +325,10 @@ describe('a round robin\'s page', () => {
             expect(screen.queryByRole(`group`, { name: `Withdraw hextide` })).toBeNull();
         });
         expect(screen.queryByRole(`button`, { name: `Withdraw hextide` })).toBeNull();
-        expect(document.activeElement?.id).toBe(`tournament-status`);
+        // The changed detail lands focus in a render of its own, which may follow the one that closes the confirm.
+        await waitFor(() => {
+            expect(document.activeElement?.id).toBe(`tournament-status`);
+        });
     });
 
     it('gives a viewer with several bots playing one Withdraw, its confirm naming the bot chosen', async () => {

@@ -288,7 +288,26 @@ describe('AppShell', () => {
         stubHealthOk();
         stubEventSource(null);
         render(<AppShell />);
-        for (const path of [`/`, `/ladder`, `/bots`, `/bots/sealbot`, `/connect`, `/profile`, `/credits`, `/legal/imprint`, `/legal/privacy`, `/legal/terms`, `/nowhere`]) {
+        for (const path of [
+            `/`,
+            `/play/duels`,
+            `/play/tournament`,
+            `/games`,
+            `/games/duels`,
+            `/games/tournaments`,
+            `/tournaments/t_wintercup202`,
+            `/ladder`,
+            `/bots`,
+            `/bots/sealbot`,
+            `/connect`,
+            `/profile`,
+            `/credits`,
+            `/report`,
+            `/legal/imprint`,
+            `/legal/privacy`,
+            `/legal/terms`,
+            `/nowhere`,
+        ]) {
             navigate(path);
             await waitFor(() => {
                 expect(document.querySelector(`footer.site-footer`)).toBeTruthy();
@@ -305,7 +324,8 @@ describe('AppShell', () => {
                 [`Privacy`, `/legal/privacy`, null],
                 [`Terms`, `/legal/terms`, null],
                 [`Licenses`, `/third-party-licenses.txt`, null],
-                [`Report`, `/report?subject=${encodeURIComponent(path)}`, null],
+                // The report form's own link names no page; every other names the page it stands on.
+                [`Report`, path === `/report` ? `/report` : `/report?subject=${encodeURIComponent(path)}`, null],
             ]);
             expect([...footer.querySelectorAll(`ul`)].at(-1)?.textContent).toBe(`Impressum / Legal noticePrivacyTermsLicensesReport`);
         }

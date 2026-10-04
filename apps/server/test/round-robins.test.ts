@@ -45,7 +45,7 @@ describe('round robins people set up', () => {
     const streams = new Map<BotName, FakeStreamSocket>();
 
     async function setUp(sqlite?: TestApp[`sqlite`]): Promise<void> {
-        world = await createTestApp({ logger: false, now: () => clock, ...(sqlite === undefined ? {} : { sqlite }) });
+        world = await createTestApp({ now: () => clock, ...(sqlite === undefined ? {} : { sqlite }) });
     }
 
     beforeEach(async () => {

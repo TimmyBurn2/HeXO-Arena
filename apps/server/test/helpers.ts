@@ -76,6 +76,23 @@ export interface TestApp {
     watchers: GameWatchers;
 }
 
+let template: Buffer | null = null;
+
+/**
+ * A fresh in-memory database at the latest schema: a clone of one migrated
+ * once per test file, since migrating takes about 90 ms and a clone well
+ * under one.
+ */
+export function migratedDatabase(): Sqlite {
+    if (template === null) {
+        const source = openDatabase(`:memory:`);
+        runMigrations(source);
+        template = source.serialize();
+        source.close();
+    }
+    return openDatabase(template);
+}
+
 /**
  * The contract's limits with a ceiling no test reaches,
  * for tests that make hundreds of requests to reach some other cap.
@@ -100,8 +117,9 @@ export async function createTestApp(options?: {
     roundGapMs?: number;
 }): Promise<TestApp> {
     const discord = options?.discord === undefined ? fakeDiscord({ id: `1`, username: `tester` }).oauth : options.discord;
-    const sqlite = options?.sqlite ?? openDatabase(`:memory:`);
-    runMigrations(sqlite);
+    const given = options?.sqlite;
+    if (given !== undefined) runMigrations(given);
+    const sqlite = given ?? migratedDatabase();
     const presence = options?.presence ?? new PresenceRegistry();
     const watchers = new GameWatchers();
     const { app, admin, drain, limits, tournaments, duels } = await buildApp({
@@ -114,7 +132,8 @@ export async function createTestApp(options?: {
         adminActor: `operator`,
         publicOrigin: `https://arena.example`,
         ...(options?.random !== undefined && { random: options.random }),
-        ...(options?.logger !== undefined && { logger: options.logger }),
+        // Off unless a test reads the log, so a failure's own lines stand out in the output.
+        logger: options?.logger ?? false,
         ...(options?.webIndexPath !== undefined && { webIndexPath: options.webIndexPath }),
         // On unless a test turns it off, so the form's route and its limits stay under test.
         reportForm: options?.reportForm ?? true,
