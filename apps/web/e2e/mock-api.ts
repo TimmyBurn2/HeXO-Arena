@@ -891,7 +891,7 @@ const hoursFromNow = (hours: number) => new Date(Date.now() + hours * 3_600_000)
 
 // A running round robin of four, the second round under way with one
 // game live; one entrant missed the start.
-const runningTournament: NamedTournament = {
+const runningTournament = (): NamedTournament => ({
     id: `t_autumnrobin1`,
     name: `Autumn round robin`,
     origin: `operator`,
@@ -948,18 +948,18 @@ const runningTournament: NamedTournament = {
         { rank: 4, bot: `hextide`, ownerName: `ana`, points: 0, asX: 0, asO: 0, withdrawn: false },
     ],
     live: liveGames.slice(1, 2),
-};
+});
 
 // Every game of the running one played out, sealbot first.
-const finishedTournament: NamedTournament = {
-    ...runningTournament,
+const finishedTournament = (running = runningTournament()): NamedTournament => ({
+    ...running,
     id: `t_summercup202`,
     name: `Summer cup`,
     status: `finished`,
     startsAt: hoursFromNow(-200),
     startedAt: hoursFromNow(-200),
     endedAt: hoursFromNow(-199),
-    rounds: runningTournament.rounds.map((round) => ({
+    rounds: running.rounds.map((round) => ({
         ...round,
         pairings: round.pairings.map((pairing) => ({
             ...pairing,
@@ -975,13 +975,13 @@ const finishedTournament: NamedTournament = {
         { rank: 4, bot: `ember`, ownerName: `cleo`, points: 2, asX: 1, asO: 1, withdrawn: true },
     ],
     gone: [`driftwood`, `ember`],
-    entries: [...runningTournament.entries.slice(0, 3), { bot: `ember`, ownerName: `cleo`, online: false, ratingAtStart: 1320, state: `withdrawn`, reason: `missed` }, { bot: `lantern`, ownerName: `dmitri`, online: false, ratingAtStart: null, state: `left_out`, reason: `daily_cap` }],
+    entries: [...running.entries.slice(0, 3), { bot: `ember`, ownerName: `cleo`, online: false, ratingAtStart: 1320, state: `withdrawn`, reason: `missed` }, { bot: `lantern`, ownerName: `dmitri`, online: false, ratingAtStart: null, state: `left_out`, reason: `daily_cap` }],
     live: [],
-};
+});
 
 // One waiting a few hours, two bots entered; quinn, signed in by default, has entered none.
-const waitingTournament: NamedTournament = {
-    ...runningTournament,
+const waitingTournament = (): NamedTournament => ({
+    ...runningTournament(),
     id: `t_wintercup202`,
     name: `Winter cup`,
     status: `scheduled`,
@@ -994,10 +994,10 @@ const waitingTournament: NamedTournament = {
     rounds: [],
     standings: [],
     live: [],
-};
+});
 
-const calledOffTournament: NamedTournament = {
-    ...waitingTournament,
+const calledOffTournament = (): NamedTournament => ({
+    ...waitingTournament(),
     id: `t_raincup20261`,
     name: `Rain cup`,
     status: `called_off`,
@@ -1008,9 +1008,12 @@ const calledOffTournament: NamedTournament = {
         { bot: `driftwood`, ownerName: `bruno`, online: false, ratingAtStart: null, state: `absent` },
         { bot: `ember`, ownerName: `cleo`, online: true, ratingAtStart: null, state: `entered` },
     ],
-};
+});
 
-export const tournaments: TournamentDetail[] = [runningTournament, waitingTournament, finishedTournament, calledOffTournament].map(keyed);
+/** The operator's tournaments, built on each call: their clocks count from when a test asks, however long its worker has run. */
+export function tournaments(): TournamentDetail[] {
+    return [runningTournament(), waitingTournament(), finishedTournament(), calledOffTournament()].map(keyed);
+}
 
 const secondsFromNow = (seconds: number) => new Date(Date.now() + seconds * 1_000).toISOString().replace(/\.\d{3}Z$/u, `Z`);
 const club = { id: `club`, label: `club` };
@@ -1024,7 +1027,7 @@ const robinLive = (id: string, name: string, createdBy: string, round: number): 
 
 // bruno's round robin of four, round 2 under way: hextide and Pistol1 at
 // their first game, devbot-b waiting for quietlake; Pistol1 plays at club.
-const brunoLive: NamedTournament = {
+const brunoLive = (): NamedTournament => ({
     id: `t_brunorobin01`,
     name: `Round robin by bruno`,
     origin: `person`,
@@ -1080,17 +1083,17 @@ const brunoLive: NamedTournament = {
     live: [robinLive(`t_brunorobin01`, `Round robin by bruno`, `bruno`, 2)],
     waiting: [{ key: 4, until: secondsFromNow(42) }],
     nextRoundAt: null,
-};
+});
 
 // The same played out, hextide first with 5 of 6.
-const brunoFinished: NamedTournament = {
-    ...brunoLive,
+const brunoFinished = (running = brunoLive()): NamedTournament => ({
+    ...running,
     id: `t_brunorobin02`,
     status: `finished`,
     startsAt: hoursFromNow(-30),
     startedAt: hoursFromNow(-30),
     endedAt: hoursFromNow(-29),
-    rounds: brunoLive.rounds.map((round) => ({
+    rounds: running.rounds.map((round) => ({
         ...round,
         pairings: round.pairings.map((pairing) => ({
             ...pairing,
@@ -1105,19 +1108,19 @@ const brunoFinished: NamedTournament = {
         { rank: 3, bot: `devbot-b`, ownerName: `devowner-b`, points: 2, asX: 2, asO: 0, withdrawn: false },
         { rank: 4, bot: `quietlake`, ownerName: `dmitri`, points: 2, asX: 1, asO: 1, withdrawn: true },
     ],
-    entries: [...brunoLive.entries.slice(0, 3), { bot: `quietlake`, ownerName: `dmitri`, online: false, ratingAtStart: 1460, state: `withdrawn`, reason: `refused` }],
+    entries: [...running.entries.slice(0, 3), { bot: `quietlake`, ownerName: `dmitri`, online: false, ratingAtStart: 1460, state: `withdrawn`, reason: `refused` }],
     live: [],
     waiting: [],
-};
+});
 
 // bruno's stopped after round 1 by bruno himself.
-const brunoStopped: NamedTournament = {
-    ...brunoLive,
+const brunoStopped = (running = brunoLive()): NamedTournament => ({
+    ...running,
     id: `t_brunorobin03`,
     status: `stopped`,
     endedAt: hoursFromNow(-0.5),
     end: { reason: `creator`, round: 1 },
-    rounds: brunoLive.rounds.map((round) => (round.round === 1 ? round : { ...round, pairings: round.pairings.map((pairing) => ({ ...pairing, games: pairing.games.map((game) => tGame(game.x, `not_played`)) })) })),
+    rounds: running.rounds.map((round) => (round.round === 1 ? round : { ...round, pairings: round.pairings.map((pairing) => ({ ...pairing, games: pairing.games.map((game) => tGame(game.x, `not_played`)) })) })),
     standings: [
         { rank: 1, bot: `hextide`, ownerName: `ana`, points: 2, asX: 1, asO: 1, withdrawn: false },
         { rank: 2, bot: `Pistol1`, ownerName: `bruno`, points: 1, asX: 1, asO: 0, withdrawn: false },
@@ -1126,10 +1129,10 @@ const brunoStopped: NamedTournament = {
     ],
     live: [],
     waiting: [],
-};
+});
 
 // quinn's own, so the default reader may stop it.
-const quinnLive: NamedTournament = { ...brunoLive, id: `t_quinnrobin01`, name: `Round robin by quinn`, createdBy: `quinn`, live: [robinLive(`t_quinnrobin01`, `Round robin by quinn`, `quinn`, 2)], waiting: [] };
+const quinnLive = (): NamedTournament => ({ ...brunoLive(), id: `t_quinnrobin01`, name: `Round robin by quinn`, createdBy: `quinn`, live: [robinLive(`t_quinnrobin01`, `Round robin by quinn`, `quinn`, 2)], waiting: [] });
 
 const legs = (first: string, second: string, points: readonly string[]): NamedGame[] => points.map((point, index) => tGame(index % 2 === 0 ? first : second, `played`, point, `won`));
 const estimate = (games: number, first: number, rating: number, low: number | null, high: number | null, chance: number, verdict: `stronger` | `likely_stronger` | `too_close`, narrowed: number) => ({
@@ -1145,8 +1148,8 @@ const estimate = (games: number, first: number, rating: number, low: number | nu
 });
 
 // ana's test of her three bots, four games a pair, played out.
-const anaTest: NamedTournament = {
-    ...brunoLive,
+const anaTest = (): NamedTournament => ({
+    ...brunoLive(),
     id: `t_anatest00001`,
     name: `Round robin by ana`,
     createdBy: `ana`,
@@ -1179,10 +1182,12 @@ const anaTest: NamedTournament = {
         { key: 2, estimate: estimate(8, 4, 0, -233, 233, 0.5, `too_close`, 110) },
         { key: 3, estimate: estimate(8, 1, -232, -683, -72, 0.004, `stronger`, 90) },
     ],
-};
+});
 
-/** The round robins people set up: bruno's live, played out, and stopped, quinn's own live, and ana's test. */
-export const roundRobins: TournamentDetail[] = [brunoLive, brunoFinished, brunoStopped, quinnLive, anaTest].map(keyed);
+/** The round robins people set up, built on each call as the tournaments are: bruno's live, played out, and stopped, quinn's own live, and ana's test. */
+export function roundRobins(): TournamentDetail[] {
+    return [brunoLive(), brunoFinished(), brunoStopped(), quinnLive(), anaTest()].map(keyed);
+}
 
 // The circle method over a field's keys, a rest for each bot of an odd field, as the server draws a round robin.
 function circleRounds(size: number): { pairings: (readonly [number, number])[]; rest: number | null }[] {
@@ -1823,7 +1828,7 @@ export function world(overrides: Partial<World> = {}): World {
         devAccounts: null,
         reportForm: true,
         // A running tournament reserves its bots on Play, so a world takes one only when it asks.
-        tournaments: structuredClone(tournaments.filter((entry) => entry.status !== `running`)),
+        tournaments: structuredClone(tournaments().filter((entry) => entry.status !== `running`)),
         analyzers: analyzerBots,
         positions: { kind: `done` },
         asked: [],

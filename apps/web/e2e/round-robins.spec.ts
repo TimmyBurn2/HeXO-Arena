@@ -6,7 +6,7 @@ const quinnMe = { kind: `user` as const, name: `quinn`, rating: 1503, provisiona
 
 // ana's bots and everyone else's, the weekly waiting, and the round robins people set up.
 const robins = (overrides: Partial<World> = {}) =>
-    world({ me: anaMe, bots: duelBots, tournaments: [...structuredClone(tournaments.filter((entry) => entry.status !== `running`)), ...structuredClone(roundRobins)], live: [], ...overrides });
+    world({ me: anaMe, bots: duelBots, tournaments: [...structuredClone(tournaments().filter((entry) => entry.status !== `running`)), ...structuredClone(roundRobins())], live: [], ...overrides });
 
 async function open(page: Page, path: string, width: number, state: World = robins()): Promise<void> {
     await page.setViewportSize({ width, height: 900 });

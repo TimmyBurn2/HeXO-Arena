@@ -178,7 +178,7 @@ for (const [visitor, me] of visitors) {
             const look = looks[0];
             if (look === undefined) throw new Error(`no look registered`);
             await wear(page, look);
-            await serve(page, world({ me, tournaments: [...world().tournaments, ...roundRobins] }));
+            await serve(page, world({ me, tournaments: [...world().tournaments, ...roundRobins()] }));
             await page.setViewportSize({ width: 1280, height: 900 });
             await page.goto(path);
             await page.locator(`h1`).first().waitFor();

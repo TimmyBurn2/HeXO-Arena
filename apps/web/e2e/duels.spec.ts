@@ -64,6 +64,32 @@ test('on a phone a double press adds only the bot pressed, however the list move
     }
 });
 
+test('on a phone a double press adds the bot pressed though its pick grows the foot over its row, and one begun on the foot adds nothing', async ({ page }) => {
+    // With Pistol1 first, the list opens on hextide, whose foot is shorter than devbot-a's with its strengths.
+    await open(page, `/play/duels?first=Pistol1`, dueling(), 390);
+    await page.getByRole(`button`, { name: `Add a bot, Second bot` }).click();
+    const foot = picker(page).locator(`.pick-detail`);
+    await row(page, `devbot-a`).scrollIntoViewIfNeeded();
+    const box = await row(page, `devbot-a`).boundingBox();
+    if (box === null) throw new Error(`devbot-a has no box`);
+    const point = { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+    await page.mouse.click(point.x, point.y);
+    await expect(row(page, `devbot-a`)).toHaveAttribute(`aria-pressed`, `true`);
+    expect(await foot.evaluate((element, at) => element.contains(document.elementFromPoint(at.x, at.y)), point)).toBe(true);
+    await page.mouse.down({ clickCount: 2 });
+    await page.mouse.up({ clickCount: 2 });
+    await expect(picker(page)).toHaveCount(0);
+    await expect(page.getByRole(`button`, { name: `Change devbot-a` })).toBeVisible();
+
+    await page.getByRole(`button`, { name: `Change devbot-a` }).click();
+    await row(page, `devbot-c`).click();
+    await expect(row(page, `devbot-c`)).toHaveAttribute(`aria-pressed`, `true`);
+    await foot.locator(`.pick-detail-name`).dblclick();
+    await page.keyboard.press(`Escape`);
+    await expect(picker(page)).toHaveCount(0);
+    await expect(page.getByRole(`button`, { name: `Change devbot-a` })).toBeVisible();
+});
+
 // Text at 150 and 200% fills a phone's sheet with the head and the foot; the rows still scroll into reach and Add stays in view.
 for (const [width, height] of [[320, 640], [360, 740], [390, 844]] as const) {
     test(`the picker keeps every row within reach and Add in view at 150 and 200% text on a ${String(width)} px phone`, async ({ page }) => {

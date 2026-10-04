@@ -66,6 +66,8 @@ export function Picker({
     const [yoursOnly, setYoursOnly] = useState(false);
     const [strengthsOnly, setStrengthsOnly] = useState(false);
     const [picked, setPicked] = useState<string | null>(current?.name ?? null);
+    // The row the first press of a double press picked: the foot grows with the pick and may cover that row before the second press lands.
+    const pressed = useRef<string | null>(null);
     const list = useRef<HTMLDivElement>(null);
     const foot = useRef<HTMLDivElement>(null);
     const body = useRef<HTMLDivElement>(null);
@@ -132,6 +134,7 @@ export function Picker({
             onAdd(row.bot);
             return;
         }
+        pressed.current = row.bot.name;
         setPicked(row.bot.name);
     }
 
@@ -158,6 +161,14 @@ export function Picker({
             onClose={onClose}
             onClick={(event) => {
                 if (event.target === event.currentTarget) onClose();
+            }}
+            onClickCapture={(event) => {
+                // Each first press begins a new double press; a row's own press then names its row.
+                if (event.detail === 1) pressed.current = null;
+            }}
+            onDoubleClick={() => {
+                // Wherever the second press lands, a double press adds only the row its first press picked.
+                if (selected !== null && selected.bot.name === pressed.current && selected.reason === null) onAdd(selected.bot);
             }}
         >
             <div ref={body} className="duel-picker-body">
@@ -221,7 +232,6 @@ export function Picker({
                                                 selected={selected?.bot.name === row.bot.name}
                                                 tabbable={tabbable?.bot.name === row.bot.name}
                                                 onChoose={choose}
-                                                onAdd={onAdd}
                                             />
                                         </li>
                                     ))}
@@ -245,7 +255,6 @@ function PickButton({
     selected,
     tabbable,
     onChoose,
-    onAdd,
 }: {
     row: PickRow;
     other: BotListing | null;
@@ -254,7 +263,6 @@ function PickButton({
     selected: boolean;
     tabbable: boolean;
     onChoose: (row: PickRow, event: MouseEvent<HTMLButtonElement>) => void;
-    onAdd: (bot: BotListing) => void;
 }) {
     const { bot, reason, hint } = row;
     const words = text.duels.picker;
@@ -269,10 +277,6 @@ function PickButton({
             aria-disabled={reason === null ? undefined : `true`}
             onClick={(event) => {
                 onChoose(row, event);
-            }}
-            onDoubleClick={() => {
-                // Only the row its first press picked, so a list that moved between the presses adds nothing it was not pressed for.
-                if (selected && reason === null) onAdd(bot);
             }}
         >
             <span className="pick-presence" aria-hidden="true">
