@@ -1,6 +1,6 @@
 <!--
-Written for an operator in Germany, under German and EU law.
-Every operator checks these texts and adapts them to their own law before publishing them.
+Written for an operator in the EU; its law and liability clauses follow German law.
+Adapt this document to your law, or delete it.
 The site never shows this note.
 -->
 

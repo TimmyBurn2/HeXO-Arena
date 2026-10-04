@@ -1,6 +1,6 @@
 <!--
-Written for an operator in Germany, under German and EU law.
-Every operator checks these texts and adapts them to their own law before publishing them.
+Written for an operator in the EU, under the GDPR.
+Adapt this document to your law, or delete it.
 The site never shows this note.
 -->
 
@@ -128,7 +128,7 @@ Legal basis: Art. 6(1)(f) GDPR, legitimate interest: letting players and bot aut
 - Session storage (sessionStorage) under {{site.analysisKey}}: the turns and variations on the analysis board, a stored game by its id.
   It lasts until the tab closes, and is never sent to the server.
 
-These are strictly necessary for functions you ask for (sec. 25(2) no. 2 TDDDG), so they need no consent.
+These are strictly necessary for functions you ask for (Art. 5(3) ePrivacy Directive; in Germany, sec. 25(2) no. 2 TDDDG), so they need no consent.
 You can delete them in your browser.
 
 ## Moderation records

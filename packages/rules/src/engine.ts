@@ -87,8 +87,9 @@ export function winner(position: Position): Win | null {
 }
 
 /**
- * Whether a placement is legal, and if not, why; checks run in the oracle's
- * rejection-precedence order so reason choice matches HeXO exactly.
+ * Whether a placement is legal, and if not, why; checks run in a fixed
+ * precedence, so a placement with several faults reports the reason HeXO
+ * reports.
  */
 export function rejection(position: Position, candidate: Coord): Rejection | null {
     if (winner(position) !== null) {

@@ -2,8 +2,8 @@ import type { Coord, Player, Stone } from '../../src';
 import type { Rng } from './prng';
 
 // What a strategy needs from whichever engine is driving the game: the
-// generator implements it over the HeXO oracle, the live test over our own
-// position, so both play from the same move-choice code.
+// generator implements it over the HeXO oracle, the live test over the
+// engine's position, so both play from the same move-choice code.
 export interface Seat {
     stones(): readonly Stone[];
     playerToMove(): Player;

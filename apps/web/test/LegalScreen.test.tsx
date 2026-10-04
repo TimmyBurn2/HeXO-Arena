@@ -127,12 +127,18 @@ describe('LegalScreen', () => {
     });
 
     it('open every document with a note to the operator on the law it was written for, which the page never shows', async () => {
+        const writtenFor = {
+            imprint: `Written for an operator in Germany, whose law requires this notice.`,
+            privacy: `Written for an operator in the EU, under the GDPR.`,
+            terms: `Written for an operator in the EU; its law and liability clauses follow German law.`,
+        } as const;
         for (const page of [`imprint`, `privacy`, `terms`] as const) {
-            expect(template(page)).toMatch(/^<!--\n[^]*?German and EU law[^]*?adapts[^]*?\n-->\n\n# /u);
+            const note = /^<!--\n([^]*?)\n-->\n\n# /u.exec(template(page))?.[1];
+            expect(note?.split(`\n`)).toEqual([writtenFor[page], `Adapt this document to your law, or delete it.`, `The site never shows this note.`]);
             deploy(details);
             const { unmount } = render(<LegalScreen page={page} />);
             await screen.findAllByRole(`heading`, { level: 2 });
-            expect(document.body.textContent).not.toContain(`adapts`);
+            expect(document.body.textContent).not.toContain(`Adapt this document`);
             unmount();
         }
     });

@@ -3,6 +3,23 @@
 This guide takes you from a fork to the site running on your own server and
 domain, with its own ladder and its own legal documents.
 
+## Quick path
+
+1. [Fork](#fork) the repository and run CI once; it publishes the image.
+2. Create the [Discord application](#discord-application).
+3. Prepare [the server](#the-server): rootless Docker, limits, DNS, firewall.
+4. Lay out [the deployment folder](#the-deployment-folder) from the commit
+   you deploy.
+5. Fill in the [legal documents](#legal-documents).
+6. Fill in the [env files](#env-files).
+7. Start the stack: [first deploy](#first-deploy).
+8. Run the [operator checklist](#operator-checklist).
+
+The sections after the checklist are reference: updates, backups,
+administration, and what to do when the app is wedged.
+
+## The stack
+
 The production stack is `docker/prod/compose.yml`: four services, three from
 one image plus Caddy.
 
@@ -28,8 +45,11 @@ A fork receives no push, so CI has not run yet.
 In the fork's Actions tab, enable workflows, open `ci`, and Run workflow on
 `main`; wait for its `image` job to finish.
 
-`apps/web/src/site-links.ts` names the repositories the site links to, the
-Bot API and the site's source; point them at yours if you publish your own.
+Three files link to this repository: `apps/web/src/site-links.ts` (the
+site's Source and Feedback links; it names the Bot API and hexo-bridge
+repositories too), `SECURITY.md`, and `.github/ISSUE_TEMPLATE/config.yml`
+(private vulnerability reports).
+If you publish your own, point them at it.
 
 Below, the image is `ghcr.io/<owner>/hexo-arena`, `<owner>` being your GitHub
 account or organization in lowercase.
@@ -192,28 +212,14 @@ chmod -R a+rX ~/hexo-arena/legal
 
 ## Env files
 
+`.env`, from `docker/prod/env.example`, holds compose's own settings;
+`hexo-arena.env`, from `docker/prod/hexo-arena.env.example`, the app's
+settings and secrets.
+The comments in each say what every key does, which are required, and the
+defaults of the rest.
 Replace every `<...>` value in both files.
 `HEXO_ARENA_DOMAIN`, `PUBLIC_ORIGIN`, and the Discord redirect name the same
 host.
-
-`.env`, which compose reads for its own settings:
-
-| key | what it does |
-|---|---|
-| `HEXO_ARENA_IMAGE` | required: the image `app`, `egress`, and `web` run, `ghcr.io/<owner>/hexo-arena:sha-<full commit sha>`; `update.sh` moves it |
-| `HEXO_ARENA_DOMAIN` | required: the domain Caddy serves and fetches a certificate for, `<domain>` |
-
-`hexo-arena.env`, the app's settings and secrets:
-
-| key | what it does |
-|---|---|
-| `PUBLIC_ORIGIN` | required: `https://<domain>`, with no path; builds the Discord redirect and the link previews' image addresses |
-| `DISCORD_CLIENT_ID` | required: the Discord application's client ID; empty turns sign-in off |
-| `DISCORD_CLIENT_SECRET` | required: the application's client secret |
-| `ADMIN_ACTOR` | the name audit rows give the operator; default `operator` |
-| `BACKUP_KEEP` | how many nightly backups to keep; default 14 |
-| `BACKUP_HOUR_UTC` | the UTC hour of the nightly backup and purge; default 3 |
-| `REPORT_FORM` | `on` opens the report form at `/report`, its links, and `POST /api/reports`; default off, where the legal texts name the contact email alone |
 
 ```sh
 chmod 0600 ~/hexo-arena/.env ~/hexo-arena/hexo-arena.env
@@ -245,7 +251,120 @@ site is copied.
 `backup` writes tonight's snapshot at once, so the restore test can run on
 the first day.
 Then open `https://<domain>/legal/privacy` and the other legal pages and
-read them through, and run the operator checklist.
+read them through, and run the [operator checklist](#operator-checklist).
+
+## Operator checklist
+
+CI verifies the code, the image build, and the proxy's allowlist logic; the
+rest only the server shows.
+Run both lists from `~/hexo-arena` after the first deploy; after changing
+the host or the compose file, run the second.
+
+### After the first deploy
+
+The site:
+
+- [ ] CI is green for the deployed commit and `docker compose pull` fetched
+  its tag.
+- [ ] `docker compose ps` shows `app` and `caddy` healthy.
+- [ ] `docker compose exec app hexo-arena-admin status` answers.
+- [ ] `docker compose exec app hexo-arena-admin pause --reason "checklist"`
+  turns `curl -s -o /dev/null -w '%{http_code}' https://<domain>/healthz` to
+  `503`, and `docker compose exec app hexo-arena-admin resume --reason "checklist"`
+  back to `200`.
+- [ ] `curl -s -o /dev/null -w '%{http_code}' -X POST https://<domain>/api/dev/login`
+  prints `404`.
+
+A bot end to end:
+
+- [ ] A Discord sign-in completes and asks for a public name.
+- [ ] On the Connect page (Build a bot), create a bot and copy its token.
+- [ ] `curl -N -H 'authorization: Bearer <bot token>' https://<domain>/api/bot/stream`
+  shows a bare newline every 10 s: nothing buffers.
+- [ ] The Bot API's example bot, from the repository the site's Bot API link
+  opens, plays a game end to end, engine websocket included: after
+  `pip install websockets`, run
+  `HEXO_TOKEN=<bot token> python3 examples/simple_bot.py https://<domain>`
+  and play it from the Play page.
+  The repository's own dev bots refuse any server without the dev login.
+- [ ] `curl -s https://<domain>/bots/<bot name> | grep og:description`
+  shows the bot's owner and rating; with the app stopped the same URL still
+  answers the static shell.
+
+Legal documents:
+
+- [ ] `https://<domain>/legal/privacy` shows the operator's name and email and
+  the host, the server location and the authority where `details.json` names
+  them, and no `<` placeholder anywhere.
+- [ ] With an Impressum, `https://<domain>/legal/imprint` shows the name,
+  address, and email; without one it is not found and the footer links
+  Privacy and Terms only.
+- [ ] With the app stopped, the legal pages still show in full.
+- [ ] `curl -s https://<domain>/legal/details.json` prints the details, and
+  `curl -s https://<domain>/legal/README.md` the site's page, not the file.
+
+Drain and backup:
+
+- [ ] With no live games, `docker compose restart app` finishes in seconds.
+- [ ] With a live test game, `docker compose restart app` logs `draining`,
+  the game ends on its own or at 120 s as `aborted`, and no rating moves.
+- [ ] `hexo-arena-admin backup` answers `backup written to /backup/...`, and
+  the morning after, `docker compose exec app ls -l /backup` lists last
+  night's file.
+- [ ] The [restore test](#restore-test) passes.
+
+### After changing the host or the compose file
+
+Image:
+
+- [ ] `docker compose exec app node --version` prints v26, the image's
+  Node; the proxy variables need 24.5 or later.
+- [ ] `docker compose exec app id` shows uid 10001.
+- [ ] `docker compose exec caddy caddy version` shows the version the compose
+  file's Caddy image names.
+
+Runtime hardening:
+
+- [ ] `docker compose exec -u 0 app touch /probe` fails with `Read-only file system`.
+- [ ] `docker compose exec app grep -E ' /(tmp|run/hexo-arena) ' /proc/mounts`
+  lists both as tmpfs.
+- [ ] `docker compose exec app stat -c '%a %u' /run/hexo-arena` prints `700 10001`.
+- [ ] `docker compose exec app grep -E 'CapEff|NoNewPrivs' /proc/1/status`
+  prints `0000000000000000` and `1`.
+- [ ] `docker compose exec app cat /sys/fs/cgroup/memory.max /sys/fs/cgroup/pids.max /sys/fs/cgroup/cpu.max`
+  prints `536870912`, `256`, `100000 100000`.
+- [ ] `docker stats --no-stream` shows the 256 MiB cap on `caddy` and 64 MiB
+  on `egress`.
+- [ ] After loading the site from two devices on two networks, such as a phone
+  off Wi-Fi and a laptop, `status` shows at least 2 `client keys`; 0 with a
+  climbing `keyless` means client addresses do not reach Caddy (see
+  The server).
+
+Egress:
+
+- [ ] `docker compose exec app node -e "fetch('https://discord.com/api/v10/gateway').then((r) => console.log(r.status))"`
+  prints `200`.
+- [ ] The same with `https://example.com/` fails, and
+  `docker compose logs egress` shows `refused connect`.
+- [ ] `docker compose exec app node -e "require('net').connect(443, 'discord.com').on('connect', () => console.log('open')).on('error', (e) => console.log('blocked', e.code)).setTimeout(5000, () => { console.log('blocked'); process.exit(); })"`
+  prints `blocked`: there is no route around the proxy.
+
+TLS and proxying:
+
+- [ ] `curl -sI https://<domain>/healthz` answers `200` over a valid
+  certificate, and `http://` redirects to `https://`.
+- [ ] `curl -sI` on `https://<domain>/`, `/api/me`, and a `/assets/` file
+  shows `content-security-policy`, `strict-transport-security`,
+  `x-frame-options`, and no `server` header; `/api/me` also shows
+  `cache-control: no-store`.
+- [ ] The site answers over IPv6: `curl -6 -sI https://<domain>/healthz`
+  from a host with IPv6.
+- [ ] The browser console on the home page and a game page shows no CSP
+  violation.
+- [ ] From one client, after `ulimit -n 4096`, 3,000 idle connections leave Caddy up:
+  `python3 -c "import socket,time;s=[socket.create_connection(('<domain>',443)) for _ in range(3000)];time.sleep(30)"`,
+  then `docker inspect -f '{{.State.OOMKilled}} {{.RestartCount}}' hexo-arena-caddy-1`
+  prints `false 0` and the site still answers.
 
 ## Update
 
@@ -448,6 +567,7 @@ local `pnpm dev`.
 | `tournament-schedule list` | the weekly rules with their ids and next starts |
 | `tournament-schedule remove <ruleId>` | delete a weekly rule; the tournaments it created stay, and `tournament-cancel` ends a waiting one |
 | `report-close <reportId>` | close a report from the site's report form; the reason is the note the report keeps |
+| `delete-analysis <analysisId>` | delete an analyzer's reading of a game, with its lines, for one that lies or misleads; a pending one stops |
 | `duel-stop <duelId>` | stop a duel or test between bots: no further game starts, and a live one plays on to its result |
 
 Every mutation takes `--reason` and writes an audit row.
@@ -491,112 +611,3 @@ To skip the drain, `docker compose kill -s SIGINT app` stops at once; the
 next boot aborts every live game, unrated, and `docker compose start app`
 brings it back.
 The pause flag survives either way.
-
-## Operator checklist
-
-CI verifies the code, the image build, and the proxy's allowlist logic; the
-rest only the server shows.
-Run it from `~/hexo-arena` after the first deploy, and after changing the
-host or the compose file.
-
-Image:
-
-- [ ] CI is green for the deployed commit and `docker compose pull` fetched
-  its tag.
-- [ ] `docker compose exec app node --version` prints v26, the image's
-  Node; the proxy variables need 24.5 or later.
-- [ ] `docker compose exec app id` shows uid 10001.
-- [ ] `docker compose ps` shows `app` and `caddy` healthy.
-- [ ] `docker compose exec caddy caddy version` shows the version the compose
-  file's Caddy image names.
-
-Runtime hardening:
-
-- [ ] `docker compose exec -u 0 app touch /probe` fails with `Read-only file system`.
-- [ ] `docker compose exec app grep -E ' /(tmp|run/hexo-arena) ' /proc/mounts`
-  lists both as tmpfs.
-- [ ] `docker compose exec app stat -c '%a %u' /run/hexo-arena` prints `700 10001`.
-- [ ] `docker compose exec app grep -E 'CapEff|NoNewPrivs' /proc/1/status`
-  prints `0000000000000000` and `1`.
-- [ ] `docker compose exec app cat /sys/fs/cgroup/memory.max /sys/fs/cgroup/pids.max /sys/fs/cgroup/cpu.max`
-  prints `536870912`, `256`, `100000 100000`.
-- [ ] `docker stats --no-stream` shows the 256 MiB cap on `caddy` and 64 MiB
-  on `egress`.
-
-Admin path:
-
-- [ ] `docker compose exec app hexo-arena-admin status` answers.
-- [ ] After loading the site from two devices on two networks, such as a phone
-  off Wi-Fi and a laptop, `status` shows at least 2 `client keys`; 0 with a
-  climbing `keyless` means client addresses do not reach Caddy (see
-  The server).
-- [ ] `docker compose exec app hexo-arena-admin pause --reason "checklist"`
-  turns `curl -s -o /dev/null -w '%{http_code}' https://<domain>/healthz` to
-  `503`, and `docker compose exec app hexo-arena-admin resume --reason "checklist"`
-  back to `200`.
-
-Egress:
-
-- [ ] `docker compose exec app node -e "fetch('https://discord.com/api/v10/gateway').then((r) => console.log(r.status))"`
-  prints `200`.
-- [ ] The same with `https://example.com/` fails, and
-  `docker compose logs egress` shows `refused connect`.
-- [ ] `docker compose exec app node -e "require('net').connect(443, 'discord.com').on('connect', () => console.log('open')).on('error', (e) => console.log('blocked', e.code)).setTimeout(5000, () => { console.log('blocked'); process.exit(); })"`
-  prints `blocked`: there is no route around the proxy.
-
-TLS and proxying:
-
-- [ ] `curl -sI https://<domain>/healthz` answers `200` over a valid
-  certificate, and `http://` redirects to `https://`.
-- [ ] `curl -sI` on `https://<domain>/`, `/api/me`, and a `/assets/` file
-  shows `content-security-policy`, `strict-transport-security`,
-  `x-frame-options`, and no `server` header; `/api/me` also shows
-  `cache-control: no-store`.
-- [ ] The site answers over IPv6: `curl -6 -sI https://<domain>/healthz`
-  from a host with IPv6.
-- [ ] The browser console on the home page and a game page shows no CSP
-  violation.
-- [ ] From one client, after `ulimit -n 4096`, 3,000 idle connections leave Caddy up:
-  `python3 -c "import socket,time;s=[socket.create_connection(('<domain>',443)) for _ in range(3000)];time.sleep(30)"`,
-  then `docker inspect -f '{{.State.OOMKilled}} {{.RestartCount}}' hexo-arena-caddy-1`
-  prints `false 0` and the site still answers.
-- [ ] `curl -s -o /dev/null -w '%{http_code}' -X POST https://<domain>/api/dev/login`
-  prints `404`.
-
-A bot end to end:
-
-- [ ] A Discord sign-in completes and asks for a public name.
-- [ ] On the Connect page (Build a bot), create a bot and copy its token.
-- [ ] `curl -N -H 'authorization: Bearer <bot token>' https://<domain>/api/bot/stream`
-  shows a bare newline every 10 s: nothing buffers.
-- [ ] The Bot API's example bot, from the repository the site's Bot API link
-  opens, plays a game end to end, engine websocket included: after
-  `pip install websockets`, run
-  `HEXO_TOKEN=<bot token> python3 examples/simple_bot.py https://<domain>`
-  and play it from the Play page.
-  The repository's own dev bots refuse any server without the dev login.
-- [ ] `curl -s https://<domain>/bots/<bot name> | grep og:description`
-  shows the bot's owner and rating; with the app stopped the same URL still
-  answers the static shell.
-
-Legal documents:
-
-- [ ] `https://<domain>/legal/privacy` shows the operator's name and email and
-  the host, the server location and the authority where `details.json` names
-  them, and no `<` placeholder anywhere.
-- [ ] With an Impressum, `https://<domain>/legal/imprint` shows the name,
-  address, and email; without one it is not found and the footer links
-  Privacy and Terms only.
-- [ ] With the app stopped, the legal pages still show in full.
-- [ ] `curl -s https://<domain>/legal/details.json` prints the details, and
-  `curl -s https://<domain>/legal/README.md` the site's page, not the file.
-
-Drain and backup:
-
-- [ ] With no live games, `docker compose restart app` finishes in seconds.
-- [ ] With a live test game, `docker compose restart app` logs `draining`,
-  the game ends on its own or at 120 s as `aborted`, and no rating moves.
-- [ ] `hexo-arena-admin backup` answers `backup written to /backup/...`, and
-  the morning after, `docker compose exec app ls -l /backup` lists last
-  night's file.
-- [ ] The restore test passes.
