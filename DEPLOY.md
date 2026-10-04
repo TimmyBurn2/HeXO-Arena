@@ -321,7 +321,7 @@ To take Node's updates, read the tag's current digest on any machine with
 Docker, put it in both `FROM` lines, commit, and deploy as above:
 
 ```sh
-docker buildx imagetools inspect node:24-slim
+docker buildx imagetools inspect node:26-slim
 ```
 
 Its `Digest:` line is the multi-arch index to pin.
@@ -503,8 +503,8 @@ Image:
 
 - [ ] CI is green for the deployed commit and `docker compose pull` fetched
   its tag.
-- [ ] `docker compose exec app node --version` is 24.5 or later, which the
-  proxy variables need.
+- [ ] `docker compose exec app node --version` prints v26, the image's
+  Node; the proxy variables need 24.5 or later.
 - [ ] `docker compose exec app id` shows uid 10001.
 - [ ] `docker compose ps` shows `app` and `caddy` healthy.
 - [ ] `docker compose exec caddy caddy version` shows the version the compose

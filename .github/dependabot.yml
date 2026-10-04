@@ -1,5 +1,5 @@
 # Minor and patch updates arrive as one grouped pull request per ecosystem a
-# week; a major version comes alone, so a breaking upgrade is never hidden in
+# month; a major version comes alone, so a breaking upgrade is never hidden in
 # a bundle.
 version: 2
 updates:
@@ -7,17 +7,21 @@ updates:
       directory: /
       target-branch: develop
       schedule:
-          interval: weekly
+          interval: monthly
       commit-message:
           prefix: build(deps)
       groups:
           dependencies:
               update-types: [minor, patch]
+      ignore:
+          # typescript-eslint supports TypeScript below 6.1 only.
+          - dependency-name: typescript
+            versions: [7.x]
     - package-ecosystem: docker
       directories: [/docker/prod, /docker/dev]
       target-branch: develop
       schedule:
-          interval: weekly
+          interval: monthly
       commit-message:
           prefix: build(deps)
       groups:
@@ -27,7 +31,7 @@ updates:
       directory: /
       target-branch: develop
       schedule:
-          interval: weekly
+          interval: monthly
       commit-message:
           prefix: ci(deps)
       groups:
