@@ -16,6 +16,7 @@ import {
     type TurnReadings,
     undeclaredValues,
     valueDropWords,
+    type ValueView,
     valueWords,
     winChanceCuts,
 } from '../src';
@@ -301,6 +302,25 @@ describe('valueWords', () => {
     it('counts a line\'s own turn when its mover is the winner', () => {
         expect(valueWords({ win_in: -5 }, { kind: `line`, mover: `x`, completesSix: false }, raw)?.shown).toBe(`o wins in 3`);
         expect(valueWords({ win_in: 2 }, { kind: `line`, mover: `x`, completesSix: false }, expected)?.shown).toBe(`x wins in 2`);
+    });
+
+    it('reads a line carrying win_in 1 for its own mover as a win in 1, the six that line completes', () => {
+        expect(valueWords({ win_in: 1 }, { kind: `line`, mover: `x`, completesSix: false }, raw)).toEqual({ shown: `x wins in 1`, spoken: `x wins in 1` });
+        expect(valueWords({ win_in: -1 }, { kind: `line`, mover: `o`, completesSix: false }, expected)?.shown).toBe(`o wins in 1`);
+    });
+
+    it('names the same win length as forcedWin for every count and view', () => {
+        const views: ValueView[] = [
+            board,
+            { kind: `line`, mover: `x`, completesSix: false },
+            { kind: `line`, mover: `o`, completesSix: false },
+        ];
+        for (const view of views) {
+            for (const winIn of [-6, -5, -4, -3, -2, -1, 1, 2, 3, 4, 5, 6]) {
+                const win = forcedWin({ win_in: winIn }, view);
+                expect(valueWords({ win_in: winIn }, view, raw)?.shown).toBe(`${win?.winner ?? ``} wins in ${String(win?.turns)}`);
+            }
+        }
     });
 
     it('reads a line that completes six as a win outright', () => {

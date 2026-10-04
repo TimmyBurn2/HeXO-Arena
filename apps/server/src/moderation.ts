@@ -58,8 +58,7 @@ export function claimPlaceholderName(query: Query): string {
     }
 }
 
-// A game that rates nobody, a guest's, practice at another level, or one
-// started unrated, keeps no bot on the record.
+// A game that rates nobody keeps no bot on the record.
 function hasDecidedGame(query: Query, seat: SQL | undefined): boolean {
     return (
         query

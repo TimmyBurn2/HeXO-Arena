@@ -96,7 +96,7 @@ export const finishedGameEntrySchema = z
         turns: z.number().int().min(0).meta({ description: `Turns on the board at the finish, the opening's included.` }),
         finishedAt: z.iso.datetime(),
         rated: z.boolean().meta({
-            description: `False for a game without a winner, a voided one, a guest's, one with a bot at a level other than its default, one started unrated, alone or in a duel, and a test.`,
+            description: `False for a game without a winner, a voided one, a guest's, one with a bot at a level other than its default, one marked unratedByChoice, and a test.`,
         }),
         voided: z.boolean().meta({ description: `Taken out by the operator: still listed, and counted in no record and no rating.` }),
         unratedByChoice: unratedByChoiceSchema.optional(),

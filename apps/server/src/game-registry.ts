@@ -292,9 +292,8 @@ function humanSide(game: LiveGame): { side: Side; seat: HumanSeat } | null {
     return null;
 }
 
-// A game against a guest rates nobody, nor does one against a bot at a
-// level other than its default, or one started unrated: neither the fold
-// nor a recompute counts it.
+// The live twin of ratesSomebody: neither the fold nor a recompute counts
+// a game that rates nobody.
 function ratesNobody(game: LiveGame): boolean {
     return (
         game.unratedByChoice ||
@@ -1352,8 +1351,7 @@ export class GameRegistry {
         return null;
     }
 
-    // The side is a bot seat in every caller; the missing row would mean
-    // the registry and the store disagree.
+    // Every caller passes a bot's side, so a person seated there is a bug.
     #botIdAt(game: LiveGame, side: Side): string {
         const seat = game.seats[side];
         if (seat.kind !== `bot`) throw new Error(`no bot seated on side ${side}`);

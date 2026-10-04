@@ -71,13 +71,13 @@ export function finishedGameOf(row: SeatRow): FinishedGame {
 
 /**
  * The games of the log that can move a rating, as a condition on the games table.
- * A guest's game, one started unrated, and one against a bot at a level other
- * than its default rate nobody; a level has no rating of its own to count
- * against, and the bot's would flatter a win over a weakened bot.
+ * A guest's game, one carrying the unrated mark, and one against a bot at a
+ * level other than its default rate nobody; a level has no rating of its own
+ * to count against, and the bot's would flatter a win over a weakened bot.
  */
 export const ratable = sql`${games.guestName} is null and ${games.xLevel} is null and ${games.oLevel} is null and ${games.unratedByChoice} = 0`;
 
-/** Whether a game of the log can move a rating: no guest seat, every bot at its default level, and not started unrated. */
+/** Whether a game of the log can move a rating, as {@link ratable} reads it. */
 export function ratesSomebody(row: { guestName: string | null; xLevel: string | null; oLevel: string | null; unratedByChoice: number }): boolean {
     return row.guestName === null && row.xLevel === null && row.oLevel === null && row.unratedByChoice === 0;
 }

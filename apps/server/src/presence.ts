@@ -2,8 +2,8 @@ import { streamBacklogLimitBytes, streamKeepaliveMs, type StreamEvent } from '@h
 
 // Presence is the connection: the registry holds one live stream per bot and
 // nothing else, so online and open-for-challenges can never go stale.
-// The replay source hands back the lines a reconnecting bot must see first:
-// one gameStart per active game, plus a fresh moveRequest on the bot's turn.
+// The replay source hands back, in order, the lines a reconnecting bot must
+// see first.
 export type ReplaySource = (botId: string) => readonly StreamEvent[];
 
 // Presence transitions reach the game layer through this hook: a bot going

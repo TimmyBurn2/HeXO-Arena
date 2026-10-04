@@ -273,11 +273,8 @@ export const bots = sqliteTable(
 // The seats constraint pins exactly one of the three groups.
 // A bot seat played at a level other than its bot's default keeps that
 // level as declared at creation, by side; no person's seat has one.
-// unrated_by_choice is 1 on a game unrated by how it started rather than
-// by its seats: a signed-in person's game started unrated or against their
-// own bot, every game of an unrated duel, and a challenge's game between
-// two bots of one owner. A guest's game and practice at another level are
-// unrated by their seats, and outside a duel never carry the mark.
+// unrated_by_choice is 1 on a game carrying the unrated mark, as the
+// contract's unratedByChoiceSchema defines it.
 // test is 1 on a game one person holds on both sides, as it began: their
 // own bot against them, or two of their bots; such a game is never rated.
 export const games = sqliteTable(

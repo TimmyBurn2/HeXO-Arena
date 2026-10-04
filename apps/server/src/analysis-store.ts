@@ -282,7 +282,7 @@ export function finishAnalysis(query: Query, id: string, turns: readonly Analysi
     });
 }
 
-/** Deletes a reading with its lines; false when there was none. */
+/** Deletes a reading with its lines, answering its game; undefined when there was none. */
 export function deleteAnalysis(query: Query, id: string): { gameId: string } | undefined {
     return query.delete(analyses).where(eq(analyses.id, id)).returning({ gameId: analyses.gameId }).get();
 }

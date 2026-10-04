@@ -211,10 +211,16 @@ export const tournamentWithdrawConflictErrorCodes = [`over`, `not_playing`] as c
 export const tournamentWithdrawRequestSchema = z.strictObject({ bot: nameSyntaxSchema }).meta({ id: `TournamentWithdrawRequest` });
 export type TournamentWithdrawRequest = z.infer<typeof tournamentWithdrawRequestSchema>;
 
-/** The most games one tournament plays: every pair of the weekly's largest field meets twice, more than a round robin a person sets up holds. */
-export const tournamentGamesMax = tournamentMaxEntrants * (tournamentMaxEntrants - 1);
+/**
+ * The most games one tournament plays:
+ * the larger of the weekly's largest field, every pair meeting twice, and a test of the most bots at the most games a pair.
+ */
+export const tournamentGamesMax = Math.max(
+    tournamentMaxEntrants * (tournamentMaxEntrants - 1),
+    ((roundRobinMaxBots * (roundRobinMaxBots - 1)) / 2) * Math.max(...roundRobinTestGamesPerPair),
+);
 
-/** Tournaments the list holds: the running one, the next waiting ones, the latest over. */
+/** Tournaments over that the list holds, the latest first. */
 export const tournamentListPastCap = 20;
 
 // Every reader of one tournament within this window gets the one body

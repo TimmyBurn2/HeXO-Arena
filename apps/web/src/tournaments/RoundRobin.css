@@ -345,12 +345,12 @@
     }
 
     @media (max-width: 44rem) {
-        /* The count and Add keep to the sheet's bottom edge while the rows scroll under them. */
         /* Where the strength takes a line of its own under the name, a plate's notes follow it, the warning first. */
         .rr-plates .slot-hint {
             order: 2;
         }
 
+        /* The count and Add keep to the sheet's bottom edge while the rows scroll under them. */
         .rr-picker-foot {
             position: sticky;
             bottom: calc(-1 * var(--space-4));
