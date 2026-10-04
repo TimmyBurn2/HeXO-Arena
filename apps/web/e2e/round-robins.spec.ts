@@ -33,6 +33,9 @@ for (const width of [1280, 390]) {
         await page.getByRole(`button`, { name: `Start round robin` }).click();
         await expect(page).toHaveURL(/\/tournaments\/t_newrobin0001$/u);
         await expect(page.getByRole(`heading`, { name: `Round robin by ana`, level: 1 })).toBeVisible();
+        // The server answers with every round drawn and the first under way.
+        await expect(page.getByText(`Round 1 of 3 is live.`)).toBeVisible();
+        await expect(page.getByRole(`heading`, { name: `Next: round 2` })).toBeVisible();
         await expect(page.getByRole(`navigation`, { name: `Main` }).first().getByRole(`link`, { name: `Games` })).toHaveAttribute(`aria-current`, `page`);
         await page.goBack();
         await expect(page).toHaveURL(/\/play\/tournament\?bots=hextide%2CPistol1%2Cdevbot-a&games=2&clock=t10&opening=5$/u);
@@ -95,12 +98,20 @@ for (const width of [1280, 390]) {
         await noSidewaysScroll(page);
     });
 
-    test(`its creator stops a round robin, confirmed in place, at ${String(width)} px`, async ({ page }) => {
+    test(`its creator stops a round robin, confirmed in place, focus on a control that is there throughout, at ${String(width)} px`, async ({ page }) => {
         await open(page, `/tournaments/t_quinnrobin01`, width, robins({ me: quinnMe }));
-        await page.getByRole(`button`, { name: `Stop round robin` }).click();
+        await page.getByRole(`button`, { name: `Stop round robin` }).focus();
+        await page.keyboard.press(`Enter`);
         await expect(page.getByText(`Stop the round robin? No further game starts; the live games play on, and the standings stand as they are.`)).toBeVisible();
-        await page.getByRole(`button`, { name: `Stop; no further game starts` }).click();
+        await expect(page.getByRole(`button`, { name: `Keep playing` })).toBeFocused();
+        await page.keyboard.press(`Enter`);
+        await expect(page.getByRole(`button`, { name: `Stop round robin` })).toBeFocused();
+        await page.keyboard.press(`Enter`);
+        await page.keyboard.press(`Shift+Tab`);
+        await expect(page.getByRole(`button`, { name: `Stop; no further game starts` })).toBeFocused();
+        await page.keyboard.press(`Enter`);
         await expect(page.getByText(/^Stopped by quinn after round 2/u)).toBeVisible();
+        await expect(page.getByRole(`link`, { name: `These games in Games` })).toBeFocused();
         await noSidewaysScroll(page);
     });
 
@@ -134,6 +145,40 @@ for (const width of [1280, 390]) {
         await open(page, `/`, width, robins({ me: quinnMe, bots: duelBots.map((bot) => (bot.name === `driftwood` ? { ...bot, ownerName: `quinn` } : bot)) }));
         const block = page.getByRole(`region`, { name: `Tournament` });
         await expect(block.getByRole(`link`, { name: `Enter a bot in Winter cup` })).toBeVisible();
+        await expect(block.locator(`.home-row`).filter({ hasText: `Winter cup` }).getByRole(`link`, { name: `Enter a bot in Winter cup` })).toBeVisible();
         await expect(block.getByRole(`link`, { name: `Set up a round robin` })).toHaveAttribute(`href`, `/play/tournament`);
+    });
+
+    test(`Profile's round robins are rows as on Play when Profile is the first page loaded, at ${String(width)} px`, async ({ page }) => {
+        await open(page, `/profile`, width);
+        const block = page.locator(`section:has(#your-round-robins-title)`);
+        const row = block.locator(`.tournament-row`).first();
+        await expect(row).toHaveCSS(`display`, `flex`);
+        const weights = await row.evaluate((element) => ({ name: getComputedStyle(element.querySelector(`.tournament-row-name`) ?? element).fontWeight, facts: getComputedStyle(element.querySelector(`.tournament-row-facts`) ?? element).fontWeight }));
+        expect(Number(weights.name)).toBeGreaterThan(Number(weights.facts));
+        await expect(row.locator(`.tournament-row-facts`)).not.toHaveCSS(`color`, await row.locator(`.tournament-row-yours`).evaluate((element) => getComputedStyle(element).color));
+    });
+}
+
+// Text at 150 and 200% fills a phone's sheet with the head and the foot; the rows still scroll into reach and Add stays in view.
+for (const [width, height] of [[320, 640], [360, 740], [390, 844]] as const) {
+    test(`the bot list keeps every row within reach and Add in view at 150 and 200% text on a ${String(width)} px phone`, async ({ page }) => {
+        await open(page, `/play/tournament?bots=hextide%2CPistol1%2Cdevbot-a&games=2&clock=t10&opening=5`, width);
+        await page.setViewportSize({ width, height });
+        const devtools = await page.context().newCDPSession(page);
+        for (const size of [24, 32]) {
+            await devtools.send(`Page.setFontSizes`, { fontSizes: { standard: size } });
+            await page.getByRole(`button`, { name: `Add bots to the round robin` }).click();
+            const dialog = page.locator(`dialog.rr-picker[open]`);
+            const last = dialog.locator(`.rr-pick:not([aria-disabled='true'])`).last();
+            const name = (await last.getAttribute(`data-bot`)) ?? ``;
+            await last.click();
+            await expect(last).toHaveAttribute(`aria-pressed`, `true`);
+            const add = dialog.getByRole(`button`, { name: `Add 1 bot` });
+            await expect(add).toBeInViewport({ ratio: 1 });
+            await add.click();
+            await expect(dialog).toHaveCount(0);
+            await page.getByRole(`button`, { name: `Remove ${name}` }).click();
+        }
     });
 }

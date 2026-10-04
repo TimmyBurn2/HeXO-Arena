@@ -279,6 +279,24 @@ export const tournamentListQuerySchema = z.object({
 });
 export type TournamentListQuery = z.infer<typeof tournamentListQuerySchema>;
 
+export const tournamentEndSchema = z
+    .object({
+        reason: z.enum([`creator`, `banned`, `deleted`, `operator`]).meta({
+            description: `Stopped by the person who set it up (creator), or as their account was banned or deleted; or canceled by the operator.`,
+        }),
+        round: z.number().int().min(1).nullable().meta({ description: `The round under way, or the last one begun; null before any.` }),
+    })
+    .meta({ id: `TournamentEnd`, description: `Why a tournament ended before its last game: stopped or canceled.` });
+export type TournamentEnd = z.infer<typeof tournamentEndSchema>;
+
+export const tournamentLeadSchema = z
+    .object({ bot: z.string(), deleted: deletedMarkSchema.optional(), estimate: duelEstimateSchema })
+    .meta({
+        id: `TournamentLead`,
+        description: `A test's bot first in the final standings, once a game was played, and its estimate against all the others together: first is the bot, second the rest.`,
+    });
+export type TournamentLead = z.infer<typeof tournamentLeadSchema>;
+
 // Shared by the list and the detail, so their descriptions live on the
 // two components rather than on fields the document would repeat.
 const tournamentKindFields = {
@@ -312,6 +330,8 @@ export const tournamentSummarySchema = z
             .nullable()
             .meta({ description: `While it runs, the round under way or the next to start, and how many there are; null otherwise.` }),
         endedAt: tournamentTime.optional().meta({ description: `When it ended: finished, called off, or canceled.` }),
+        end: tournamentEndSchema.optional(),
+        lead: tournamentLeadSchema.optional(),
         bot: tournamentPlaceSchema.optional(),
         yours: tournamentYoursSchema.optional(),
     })
@@ -423,16 +443,6 @@ export type TournamentStanding = z.infer<typeof tournamentStandingSchema>;
 
 export const tournamentEntryRequestSchema = z.strictObject({ bot: nameSyntaxSchema }).meta({ id: `TournamentEntryRequest` });
 export type TournamentEntryRequest = z.infer<typeof tournamentEntryRequestSchema>;
-
-export const tournamentEndSchema = z
-    .object({
-        reason: z.enum([`creator`, `banned`, `deleted`, `operator`]).meta({
-            description: `Stopped by the person who set it up (creator), or as their account was banned or deleted; or canceled by the operator.`,
-        }),
-        round: z.number().int().min(1).nullable().meta({ description: `The round under way, or the last one begun; null before any.` }),
-    })
-    .meta({ id: `TournamentEnd`, description: `Why a tournament ended before its last game: stopped or canceled.` });
-export type TournamentEnd = z.infer<typeof tournamentEndSchema>;
 
 export const tournamentWaitingSchema = z
     .object({ key: tournamentKeySchema, until: tournamentTime })

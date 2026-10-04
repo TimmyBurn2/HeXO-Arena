@@ -334,6 +334,7 @@ function FilterFields({ filters, set, tests, named }: FieldsProps & { tests: boo
                 <TournamentPick
                     value={filters.tournament}
                     named={named.tournament}
+                    tests={tests}
                     onChange={(value) => {
                         set(`tournament`, value);
                     }}

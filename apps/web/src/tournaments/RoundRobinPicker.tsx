@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEve
 import { nameKeyOf, roundRobinMaxBots, type BotListing } from '@hexo-arena/contract';
 import { hexPoints } from '../board/geometry';
 import { BotBadge, PresenceDot, Rating, summarizeAccepts } from '../components/player';
+import { useFootRoom } from '../duels/foot-room';
 import { byRating, type DuelReads } from '../duels/setup';
 import { ownedBy } from '../play/setup';
 import { text } from '../text';
@@ -54,6 +55,9 @@ export function RoundRobinPicker({
 }) {
     const ref = useRef<HTMLDialogElement>(null);
     const list = useRef<HTMLDivElement>(null);
+    const body = useRef<HTMLDivElement>(null);
+    const foot = useRef<HTMLDivElement>(null);
+    useFootRoom(body, foot);
     const [opener] = useState(() => document.activeElement);
     const [search, setSearch] = useState(``);
     const [readyOnly, setReadyOnly] = useState(true);
@@ -139,7 +143,7 @@ export function RoundRobinPicker({
                 if (event.target === event.currentTarget) onClose();
             }}
         >
-            <div className="duel-picker-body">
+            <div ref={body} className="duel-picker-body">
                 <div className="duel-picker-head">
                     <h2 id="rr-picker-title">{words.title}</h2>
                     <button type="button" className="topbar-panel-close" aria-label={duelWords.close} onClick={onClose}>
@@ -207,7 +211,7 @@ export function RoundRobinPicker({
                     )}
                 </div>
                 {readyOnly && hidden > 0 ? <p className="note picker-foot">{duelWords.more(hidden)}</p> : null}
-                <div className="rr-picker-foot">
+                <div ref={foot} className="rr-picker-foot">
                     <p>
                         <strong>{words.picked(checked.length)}</strong>
                         <span className="note">{words.fit(room)}</span>

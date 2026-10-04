@@ -11,8 +11,10 @@ import { text } from '../text';
  * A signed-in owner's entry while the tournament waits: one of their bots
  * entered, changed, or withdrawn, with what entering commits the bot to;
  * its heading one level under the block holding it, a page's own by default.
+ * Signed out, it asks for a sign-in, with its own button unless the page
+ * holding it offers one already.
  */
-export function EntryControl({ detail, onChange, level = 2 }: { detail: TournamentDetail; onChange: () => void; level?: 2 | 3 }) {
+export function EntryControl({ detail, onChange, level = 2, signIn = true }: { detail: TournamentDetail; onChange: () => void; level?: 2 | 3; signIn?: boolean }) {
     const me = useMe();
     const self = me.status === `ready` && me.me?.kind === `user` ? me.me : null;
     const Heading = level === 2 ? `h2` : `h3`;
@@ -25,7 +27,7 @@ export function EntryControl({ detail, onChange, level = 2 }: { detail: Tourname
             {me.status === `loading` ? null : self === null ? (
                 <div className="entry-sign-in">
                     <p>{text.tournaments.entry.signIn}</p>
-                    <DiscordButton />
+                    {signIn ? <DiscordButton /> : null}
                 </div>
             ) : (
                 <OwnerEntry detail={detail} owner={self.name} onChange={onChange} />

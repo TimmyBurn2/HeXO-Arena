@@ -1184,8 +1184,29 @@ const anaTest: NamedTournament = {
 /** The round robins people set up: bruno's live, played out, and stopped, quinn's own live, and ana's test. */
 export const roundRobins: TournamentDetail[] = [brunoLive, brunoFinished, brunoStopped, quinnLive, anaTest].map(keyed);
 
+// The circle method over a field's keys, a rest for each bot of an odd field, as the server draws a round robin.
+function circleRounds(size: number): { pairings: (readonly [number, number])[]; rest: number | null }[] {
+    const seats: (number | null)[] = Array.from({ length: size }, (_, index) => index + 1);
+    if (size % 2 === 1) seats.push(null);
+    const rounds: { pairings: (readonly [number, number])[]; rest: number | null }[] = [];
+    for (let round = 0; round < seats.length - 1; round++) {
+        const pairings: (readonly [number, number])[] = [];
+        let rest: number | null = null;
+        for (let index = 0; index < seats.length / 2; index++) {
+            const top = seats[index] ?? null;
+            const bottom = seats[seats.length - 1 - index] ?? null;
+            if (top === null || bottom === null) rest = top ?? bottom;
+            else pairings.push([top, bottom]);
+        }
+        rounds.push({ pairings, rest });
+        seats.splice(1, 0, seats.pop() ?? null);
+    }
+    return rounds;
+}
+
 function summaryOf(detail: TournamentDetail): TournamentSummary {
     const top = detail.standings[0];
+    const lead = top === undefined ? undefined : detail.estimates?.find((each) => each.key === top.key)?.estimate;
     return {
         id: detail.id,
         name: detail.name,
@@ -1203,6 +1224,8 @@ function summaryOf(detail: TournamentDetail): TournamentSummary {
         winner: detail.status === `finished` && top !== undefined ? { name: top.bot, ownerName: top.ownerName } : null,
         round: detail.status === `running` && detail.rounds.length > 0 ? { current: 1 + detail.rounds.findIndex((round) => round.pairings.some((pairing) => pairing.games.some((game) => game.outcome === `pending` || game.outcome === `live`))), of: detail.rounds.length } : null,
         ...(detail.endedAt === null ? {} : { endedAt: detail.endedAt }),
+        ...(detail.end === undefined ? {} : { end: detail.end }),
+        ...(lead === undefined || top === undefined || detail.status === `running` ? {} : { lead: { bot: top.bot, estimate: lead } }),
     };
 }
 
@@ -2266,6 +2289,22 @@ export async function serve(page: Page, state: World): Promise<void> {
             const asked = createRoundRobinRequestSchema.parse(request.postDataJSON());
             const field = asked.bots.map((picked) => state.bots.find((listed) => listed.name === picked.name));
             const owners = new Set(field.map((listed) => listed?.ownerName ?? null));
+            // As the server answers: every round drawn at once, the first under way with each pair's first game live.
+            const rounds = circleRounds(asked.bots.length).map((round, index) => ({
+                round: index + 1,
+                pairings: round.pairings.map(([first, second], pair) => ({
+                    first: { key: first, name: asked.bots[first - 1]?.name ?? `` },
+                    second: { key: second, name: asked.bots[second - 1]?.name ?? `` },
+                    games: Array.from({ length: asked.gamesPerPair }, (_, game) => ({
+                        x: game % 2 === 0 ? first : second,
+                        gameId: index === 0 && game === 0 ? `t_newrobin0001-${String(pair + 1)}` : null,
+                        outcome: index === 0 && game === 0 ? (`live` as const) : (`pending` as const),
+                        point: null,
+                        missing: [],
+                    })),
+                })),
+                rest: round.rest === null ? null : { key: round.rest, name: asked.bots[round.rest - 1]?.name ?? `` },
+            }));
             const created: TournamentDetail = {
                 id: `t_newrobin0001`,
                 name: `Round robin by ${viewer}`,
@@ -2282,7 +2321,7 @@ export async function serve(page: Page, state: World): Promise<void> {
                 openingPlies: asked.openingPlies,
                 maxEntrants: asked.bots.length,
                 entries: asked.bots.map((picked, index) => ({ key: index + 1, bot: picked.name, ownerName: field[index]?.ownerName ?? `nobody`, online: true, ratingAtStart: field[index]?.rating ?? 1500, state: `playing` as const })),
-                rounds: [],
+                rounds,
                 standings: asked.bots.map((picked, index) => ({ rank: 1, key: index + 1, bot: picked.name, ownerName: field[index]?.ownerName ?? `nobody`, points: 0, asX: 0, asO: 0, withdrawn: false })),
                 live: [],
                 waiting: [],

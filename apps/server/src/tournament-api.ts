@@ -417,19 +417,26 @@ function summaryOf(query: Query, row: TournamentRow): TournamentSummary {
             .from(tournamentEntries)
             .where(and(eq(tournamentEntries.tournamentId, row.id), counted === undefined ? undefined : inArray(tournamentEntries.state, counted)))
             .get()?.n ?? 0;
-    let winner: TournamentSummary[`winner`] = null;
-    if (row.status === `finished`) {
-        const entries = entryRows(query, row.id);
-        const top = standingsOf(entries.filter(inField).map((entry) => entry.botId), scoredOf(pairingViews(query, row.id, entries)))[0];
-        const entry = entries.find((candidate) => candidate.botId === top?.bot);
-        winner = entry === undefined ? null : { name: entry.bot, ownerName: entry.ownerName, ...(entry.deleted ? { deleted: true as const } : {}) };
-    }
+    // Only a tournament that started has pairings to read.
+    const begun = row.status === `running` || row.status === `finished` || row.status === `stopped` || row.status === `canceled`;
+    const entries = begun ? entryRows(query, row.id) : [];
+    const pairings = begun ? pairingViews(query, row.id, entries) : [];
+    const field = entries.filter(inField);
+    const top = row.status === `finished` || (row.test === 1 && row.status === `stopped`) ? standingsOf(field.map((entry) => entry.botId), scoredOf(pairings))[0] : undefined;
+    const first = entries.find((candidate) => candidate.botId === top?.bot);
+    const deleted = first?.deleted === true ? { deleted: true as const } : {};
+    const winner = row.status === `finished` && first !== undefined ? { name: first.bot, ownerName: first.ownerName, ...deleted } : null;
+    // A test's verdict on the bot first in it, against the rest, as its page leads with.
+    const estimate = row.test === 1 && first !== undefined ? estimatesOf(field, pairings).find((each) => each.key === first.key)?.estimate : undefined;
+    const end = endOf(row, pairings);
     return {
         ...summaryBase(row),
         entrants,
         winner,
-        round: row.status === `running` ? roundOf(pairingViews(query, row.id, entryRows(query, row.id))) : null,
+        round: row.status === `running` ? roundOf(pairings) : null,
         ...(row.endedAt === null ? {} : { endedAt: isoOf(row.endedAt) }),
+        ...(end === undefined ? {} : { end }),
+        ...(estimate === undefined || first === undefined ? {} : { lead: { bot: first.bot, ...deleted, estimate } }),
     };
 }
 

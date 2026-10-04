@@ -99,7 +99,7 @@ export function FilledSlot({
     const words = text.duels.slot;
     const presence = !bot.online ? words.offline : bot.openForChallenges ? words.onlineOpen : words.onlineClosed;
     return (
-        <div className={marked ? `slot slot-filled slot-marked` : `slot slot-filled`}>
+        <div className={`slot slot-filled${marked ? ` slot-marked` : warning === null ? `` : ` slot-warned`}`}>
             <div className="slot-who">
                 <p className="slot-name">
                     <PlayerName name={bot.name} kind="bot" />

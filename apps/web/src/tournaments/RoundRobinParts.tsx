@@ -1,5 +1,5 @@
-import { useState, type CSSProperties } from 'react';
-import { clockText, tournamentRoundGapMs, type DuelEstimate, type TournamentDetail } from '@hexo-arena/contract';
+import { useEffect, useRef, useState, type CSSProperties } from 'react';
+import { clockText, tournamentRoundGapMs, type TournamentDetail } from '@hexo-arena/contract';
 import { createRoundRobin, stopTournament, tournamentExportUrl, withdrawFromTournament } from '../api/client';
 import { BotBadge, PlayerName } from '../components/player';
 import { pointsText, signed } from '../duels/words';
@@ -11,6 +11,7 @@ import { text } from '../text';
 import { againSetupOf, roundRobinSetupPath, scheduleOf } from './round-robin';
 import { roundRobinRefusal } from './NewRoundRobin';
 import { currentRound, roundBegun, tournamentPagePath } from './view';
+import { verdictOf } from './words';
 import '../duels/Duels.css';
 import './RoundRobin.css';
 
@@ -25,6 +26,9 @@ export function anyGameOver(detail: TournamentDetail): boolean {
 const secondsLeft = (seconds: number) => (seconds < 60 ? text.play.seconds(seconds) : text.time.until(seconds));
 
 const over = (detail: TournamentDetail) => detail.status !== `running` && detail.status !== `scheduled`;
+
+/** The id of a tournament page's status sentence, where focus lands once a change leaves no action to hold it. */
+export const tournamentStatusId = `tournament-status`;
 
 // The bots first in the standings with a point, and their points; none before a point is scored.
 function leaders(detail: TournamentDetail): { bots: string[]; points: number } | null {
@@ -49,12 +53,6 @@ function playedGames(detail: TournamentDetail): number {
     return detail.rounds.reduce((sum, round) => sum + round.pairings.reduce((count, pairing) => count + pairing.games.filter((game) => game.outcome === `played`).length, 0), 0);
 }
 
-// A bot's verdict on its own side: the estimate favoring the rest reads weaker.
-function verdictOf(estimate: DuelEstimate): keyof typeof text.roundRobins.estimates.verdicts {
-    if (estimate.favored === `second`) return estimate.verdict === `stronger` ? `weaker` : estimate.verdict === `likely_stronger` ? `likely_weaker` : `too_close`;
-    return estimate.verdict;
-}
-
 /** A person's round robin's status in one sentence: the round and who leads, how it ended, or a test's estimate. */
 export function RoundRobinStatus({ detail, readAt }: { detail: TournamentDetail; readAt: number }) {
     const words = text.roundRobins.page.status;
@@ -75,7 +73,7 @@ export function RoundRobinStatus({ detail, readAt }: { detail: TournamentDetail;
     switch (detail.status) {
         case `running`: {
             const round = currentRound(detail) ?? detail.rounds.length;
-            if (roundBegun(detail) || round === 1) return <>{words.live(round, detail.rounds.length, leadNow)}</>;
+            if (roundBegun(detail)) return <>{words.live(round, detail.rounds.length, leadNow)}</>;
             const at = detail.nextRoundAt === null ? null : Date.parse(detail.nextRoundAt);
             const wait = at === null ? tournamentRoundGapMs / 1000 : Math.max(0, Math.ceil((at - readAt) / 1000));
             return <>{words.gap(round, detail.rounds.length, secondsLeft(wait), leadNow)}</>;
@@ -120,32 +118,59 @@ export function RoundRobinTerms({ detail }: { detail: TournamentDetail }) {
 
 type Asking = { kind: `none` } | { kind: `stop` } | { kind: `withdraw`; bot: string };
 
+// Where focus goes after a render: the confirm's Keep playing once it opens,
+// the control that opened it once kept, or past the change once confirmed,
+// since each time the control that held focus is gone.
+type Landing = `keep` | `stop` | `withdraw` | `changed` | null;
+
 /**
  * The actions beside a round robin's crumb: its games under Games and as
  * one download once one is over; Stop for the person who set it up and
- * Withdraw for a bot's owner while it runs, each confirmed in place with
- * its consequence; and once over, Set up again for anyone signed in and a
- * test's Run more for the person who set it up.
+ * Withdraw for a bot's owner while it runs, one control choosing among
+ * several bots, each confirmed in place with its consequence; and once
+ * over, Set up again for anyone signed in and a test's Run more for the
+ * person who set it up.
  */
-export function RoundRobinActions({ detail, viewer, onChange }: { detail: TournamentDetail; viewer: string | null; onChange: () => void }) {
+export function RoundRobinActions({ detail, viewer, onChange }: { detail: TournamentDetail; viewer: string | null; onChange: (detail: TournamentDetail) => void }) {
     const [asking, setAsking] = useState<Asking>({ kind: `none` });
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const actions = useRef<HTMLDivElement>(null);
+    const keep = useRef<HTMLButtonElement>(null);
+    const stopper = useRef<HTMLButtonElement>(null);
+    const withdrawer = useRef<HTMLButtonElement>(null);
+    const landing = useRef<Landing>(null);
+    useEffect(() => {
+        const to = landing.current;
+        landing.current = null;
+        if (to === `keep`) keep.current?.focus();
+        if (to === `stop`) stopper.current?.focus();
+        if (to === `withdraw`) withdrawer.current?.focus();
+        if (to === `changed`) (actions.current?.querySelector<HTMLElement>(`a, button`) ?? document.getElementById(tournamentStatusId))?.focus();
+    });
     const words = text.roundRobins.page;
     const running = detail.status === `running`;
     const person = detail.origin === `person`;
     const creator = person && viewer !== null && detail.createdBy === viewer;
-    const owned = running && person && viewer !== null ? detail.entries.filter((entry) => entry.state === `playing` && entry.ownerName === viewer).map((entry) => entry.bot) : [];
+    // A test's creator owns every bot, and Stop test ends the whole.
+    const owned = running && person && viewer !== null && !(detail.test && creator) ? detail.entries.filter((entry) => entry.state === `playing` && entry.ownerName === viewer).map((entry) => entry.bot) : [];
     const gamesOver = anyGameOver(detail);
     const schedule = scheduleOf(detail.standings.length, detail.gamesPerPair);
 
-    async function act(run: () => Promise<unknown>) {
+    function ask(next: Asking) {
+        landing.current = next.kind !== `none` ? `keep` : asking.kind === `stop` ? `stop` : `withdraw`;
+        setAsking(next);
+        setError(null);
+    }
+
+    async function act(run: () => Promise<TournamentDetail>) {
         setBusy(true);
         setError(null);
         try {
-            await run();
+            const next = await run();
+            landing.current = `changed`;
             setAsking({ kind: `none` });
-            onChange();
+            onChange(next);
         } catch {
             setError(words.failed);
         } finally {
@@ -172,9 +197,10 @@ export function RoundRobinActions({ detail, viewer, onChange }: { detail: Tourna
         }
     }
 
+    const [only] = owned;
     return (
         <>
-            <div className="duel-actions rr-actions">
+            <div ref={actions} className="duel-actions rr-actions">
                 {gamesOver ? (
                     <Link to={tournamentGamesPath(detail.id)} className="btn btn-ghost">
                         {text.tournaments.theseGames}
@@ -187,17 +213,15 @@ export function RoundRobinActions({ detail, viewer, onChange }: { detail: Tourna
                     </a>
                 ) : null}
                 {creator && running && asking.kind === `none` ? (
-                    <button type="button" className="btn btn-ghost" onClick={() => { setAsking({ kind: `stop` }); }}>
+                    <button ref={stopper} type="button" className="btn btn-ghost" onClick={() => { ask({ kind: `stop` }); }}>
                         {detail.test ? words.stopTest : words.stop}
                     </button>
                 ) : null}
-                {asking.kind === `none`
-                    ? owned.map((bot) => (
-                          <button key={bot} type="button" className="btn btn-ghost" onClick={() => { setAsking({ kind: `withdraw`, bot }); }}>
-                              {words.withdraw(bot)}
-                          </button>
-                      ))
-                    : null}
+                {asking.kind === `none` && only !== undefined ? (
+                    <button ref={withdrawer} type="button" className="btn btn-ghost" onClick={() => { ask({ kind: `withdraw`, bot: only }); }}>
+                        {owned.length === 1 ? words.withdraw(only) : words.withdrawABot}
+                    </button>
+                ) : null}
                 {person && over(detail) && viewer !== null ? (
                     <Link to={roundRobinSetupPath(againSetupOf(detail))} className="btn btn-ghost">
                         {words.setUpAgain}
@@ -210,7 +234,16 @@ export function RoundRobinActions({ detail, viewer, onChange }: { detail: Tourna
                 ) : null}
             </div>
             {asking.kind === `none` ? null : (
-                <div className="rr-confirm" role="group" aria-label={asking.kind === `stop` ? words.stop : words.withdraw(asking.bot)}>
+                <div className="rr-confirm" role="group" aria-label={asking.kind === `stop` ? (detail.test ? words.stopTest : words.stop) : owned.length > 1 ? words.withdrawABot : words.withdraw(asking.bot)}>
+                    {asking.kind === `withdraw` && owned.length > 1 ? (
+                        <div className="pills" role="group" aria-label={words.whichBot}>
+                            {owned.map((bot) => (
+                                <button key={bot} type="button" className={asking.bot === bot ? `pill active` : `pill`} aria-pressed={asking.bot === bot} onClick={() => { setAsking({ kind: `withdraw`, bot }); }}>
+                                    {bot}
+                                </button>
+                            ))}
+                        </div>
+                    ) : null}
                     <p>{asking.kind === `stop` ? words.stopAsk : words.withdrawAsk(asking.bot)}</p>
                     <div className="actions">
                         <button
@@ -224,7 +257,7 @@ export function RoundRobinActions({ detail, viewer, onChange }: { detail: Tourna
                         >
                             {asking.kind === `stop` ? words.stopYes : words.withdrawYes(asking.bot)}
                         </button>
-                        <button type="button" className="btn btn-ghost" onClick={() => { setAsking({ kind: `none` }); }}>
+                        <button ref={keep} type="button" className="btn btn-ghost" onClick={() => { ask({ kind: `none` }); }}>
                             {words.keepPlaying}
                         </button>
                     </div>
@@ -276,7 +309,7 @@ export function NextRound({ detail }: { detail: TournamentDetail }) {
     const words = text.roundRobins.page;
     const round = currentRound(detail);
     if (round === null) return null;
-    const begun = roundBegun(detail) || round === 1;
+    const begun = roundBegun(detail);
     const shown = begun ? round + 1 : round;
     const pairs = detail.rounds.find((each) => each.round === shown);
     if (pairs === undefined) return null;
@@ -392,7 +425,6 @@ export function Estimates({ detail }: { detail: TournamentDetail }) {
         const entry = detail.entries.find((each) => each.key === line.key);
         return estimate === undefined ? [] : [{ line, estimate, version: entry?.version }];
     });
-    const narrowed = rows.flatMap((row) => (row.estimate.narrowed === null ? [] : [row.estimate.narrowed]));
     return (
         <section className="rr-estimates" aria-labelledby="rr-estimates-title">
             <h2 id="rr-estimates-title" className="estimate-title">
@@ -449,17 +481,14 @@ export function Estimates({ detail }: { detail: TournamentDetail }) {
                                 </span>
                                 <span className="rr-est-verdict">
                                     <span className={verdict === `too_close` ? `tag muted` : `tag`}>{words.verdicts[verdict]}</span>
-                                    <span className="note">{duelWords.percent(estimate.chance)}</span>
+                                    <span className="note">{words.percent(estimate.chance)}</span>
                                 </span>
                             </li>
                         );
                     })}
                 </ul>
             )}
-            <p className="note">
-                {words.note}
-                {narrowed.length === 0 ? null : ` ${words.narrowed(Math.min(...narrowed), Math.max(...narrowed))}`}
-            </p>
+            <p className="note">{words.note}</p>
         </section>
     );
 }

@@ -166,7 +166,8 @@ function Next({ detail, at, onEntry }: { detail: TournamentDetail; at: number; o
                 <span className="tag">{text.roundRobins.tags.rated}</span>
             </p>
             <p className="note">{wait > 0 ? words.when(text.time.until(wait), detail.entries.length, detail.maxEntrants, clock) : words.whenSoon(detail.entries.length, detail.maxEntrants, clock)}</p>
-            <EntryControl detail={detail} onChange={onEntry} level={3} />
+            {/* The setup beside it holds the page's one sign-in. */}
+            <EntryControl detail={detail} onChange={onEntry} level={3} signIn={false} />
         </div>
     );
 }

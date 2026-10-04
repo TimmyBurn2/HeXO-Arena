@@ -1293,7 +1293,7 @@ export const en = {
         results: { won: `won`, lost: `lost`, none: `no winner` },
         noGames: `No games yet`,
         practice: `practice, unrated`,
-        unratedBy: { choice: `unrated by choice`, duel: `unrated duel`, test: `test, unrated` },
+        unratedBy: { choice: `unrated by choice`, duel: `unrated duel`, roundRobin: `unrated round robin`, test: `test, unrated` },
         firstMeeting: (x: ReactNode, o: ReactNode): ReactNode => rich`${x} and ${o} have not met yet`,
     },
     replay: {
@@ -1339,6 +1339,9 @@ export const en = {
         ratedNoDuelChoice: (starter: string) => `No; ${starter} started the duel unrated`,
         ratedNoDuel: `No; an unrated duel`,
         ratedNoRoundRobin: (creator: string) => `No; a round robin ${creator} set up`,
+        tournamentStanding: (place: ReactNode, standing: string): ReactNode => rich`${place}; ${standing}`,
+        tournamentWon: (bots: readonly string[], points: number) =>
+            bots.length === 1 ? `${bots[0] ?? ``} won with ${String(points)} ${plural(points, `point`, `points`)}` : `${andList(bots)} shared first with ${String(points)} ${plural(points, `point`, `points`)}`,
         duelPlace: (first: string, second: string, game: number, of: number) => `${first} vs ${second}, game ${String(game)} of ${String(of)}`,
         duelStanding: (place: ReactNode, standing: string): ReactNode => rich`${place}; ${standing}`,
         testSoFar: (lead: string, score: string, drawn: string, rating: string) => `${lead} leads ${score}${drawn}; about ${rating} so far`,
@@ -1742,7 +1745,7 @@ export const en = {
         },
         errors: {
             round_robin_busy: `You have a round robin running; stop it or wait for it to end.`,
-            daily_round_robin_cap: (time: string) => `You set up ${String(roundRobinDailyCap)} round robins today; the next can start at ${time}.`,
+            daily_round_robin_cap: (time: string) => `You set up ${String(roundRobinDailyCap)} round robins today; the next can start at ${time} (00:00 UTC).`,
             duel_refused: (bot: string) => `${bot} takes no duels or round robins set up by others now; remove it.`,
             not_open: (bot: string) => `${bot} went offline; remove it, or wait and try again.`,
             bot_busy: (bot: string) => `${bot} is busy: at its game cap, in ${String(duelPerBotCap)} duels or round robins, or in a tournament; remove it, or try again shortly.`,
@@ -1778,6 +1781,8 @@ export const en = {
             stopAsk: `Stop the round robin? No further game starts; the live games play on, and the standings stand as they are.`,
             stopYes: `Stop; no further game starts`,
             withdraw: (bot: string) => `Withdraw ${bot}`,
+            withdrawABot: `Withdraw a bot`,
+            whichBot: `Which bot`,
             withdrawAsk: (bot: string) => `Withdraw ${bot}? Its live game plays on; its games still to come score for its opponents.`,
             withdrawYes: (bot: string) => `Withdraw; ${bot} plays no further game`,
             keepPlaying: `Keep playing`,
@@ -1842,10 +1847,8 @@ export const en = {
             open: `open`,
             verdicts: { stronger: `stronger`, likely_stronger: `likely stronger`, too_close: `too close to call`, likely_weaker: `likely weaker`, weaker: `weaker` },
             note: `Counted by openings, since an opening's two games share their stones; a test moves no rating.`,
-            narrowed: (low: number, high: number) =>
-                low === high
-                    ? `Another ${String(estimateMoreGames)} games each would narrow the ranges to about ${String(low)} points either way.`
-                    : `Another ${String(estimateMoreGames)} games each would narrow the ranges to about ${String(low)} to ${String(high)} points either way.`,
+            // Rounded down as a duel's chance is; one short of a whole percent is said as such, never as none.
+            percent: (chance: number) => (chance < 0.01 ? `under 1%` : Math.floor(chance * 100) >= 100 ? `Near certain` : `${String(Math.floor(chance * 100))}%`),
             none: `The estimates show once a game is over.`,
             axis: (bot: string, value: string) => `${bot} on a scale of rating points: ${value}`,
         },
@@ -1860,9 +1863,8 @@ export const en = {
             noPast: { all: `No tournament has ended yet.`, yours: `None of your round robins has ended yet.`, tests: `No test has ended yet.` },
             signIn: `Sign in to see your round robins and your bots' tournaments.`,
             testsNote: `Tests, round robins where one person owns every bot, are listed under Tests.`,
-            setUpBy: (by: string) => `set up by ${by}`,
             stoppedBy: (by: string, round: number | null) => (round === null ? `stopped by ${by}` : `stopped by ${by} after round ${String(round)}`),
-            stopped: `stopped`,
+            stopped: (round: number | null) => (round === null ? `stopped` : `stopped after round ${String(round)}`),
             bots: (count: number) => `${String(count)} bots`,
             testLead: (bot: string, rating: string, verdict: string) => `${bot} ${rating}, ${verdict}`,
             yourRole: `Yours: set up by you`,

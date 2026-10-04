@@ -95,21 +95,6 @@
         width: var(--sb-hex-w);
     }
 
-    /* A tournament's row names the reader's part, and offers an owner the entry. */
-    .tournament-row-live {
-        color: var(--c-accent);
-        font-weight: var(--weight-strong);
-    }
-
-    .tournament-row-yours {
-        color: var(--c-text);
-    }
-
-    .tournament-row-enter {
-        margin-left: auto;
-        font-weight: var(--weight-strong);
-    }
-
     /* A place under Play: what it starts, beside the reader's own. */
     .events-columns {
         display: grid;

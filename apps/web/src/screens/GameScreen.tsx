@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from 'react';
-import { clockText, gameMeta, levelFacts, turnsOnBoard, type DuelDetail, type FinishedGamesRecord, type GameHeadline, type GameSnapshot } from '@hexo-arena/contract';
+import { clockText, gameMeta, levelFacts, turnsOnBoard, type DuelDetail, type FinishedGamesRecord, type GameHeadline, type GameSnapshot, type GameTournament, type TournamentDetail } from '@hexo-arena/contract';
 import { useSeatBroadcast } from '../analysis/seat-channel';
 import { gameLink } from '../analysis/links';
-import { fetchDuel, fetchFinishedGames } from '../api/client';
+import { fetchDuel, fetchFinishedGames, fetchTournament } from '../api/client';
 import { duelPagePath } from '../duels/setup';
 import { noWinnerCount, pointsText, signed, standingText, sweptBy } from '../duels/words';
 import { BotBadge, PlayerName, seatName, seatsRateNobody, Swatch } from '../components/player';
@@ -13,7 +13,8 @@ import { useBorrowFrame } from '../frame';
 import { routeMeta } from '../route-meta';
 import { useRoute } from '../router/use-route';
 import { text } from '../text';
-import { gameCaption } from '../tournaments/words';
+import { tournamentPagePath } from '../tournaments/view';
+import { gameCaption, leadText } from '../tournaments/words';
 import { useDocumentMeta } from '../use-document-meta';
 import { GameBoard, type TurnStatus } from '../game/GameBoard';
 import { FeedLabel, GameDrawer } from '../game/GameDrawer';
@@ -214,6 +215,7 @@ function GameView({ snapshot, send, link }: { snapshot: GameSnapshot; send: Game
     const host = useResultReach(!running);
     const meetings = useMeetings(snapshot);
     const duel = useDuelOf(snapshot);
+    const tournament = useTournamentOf(snapshot);
     const rundown = useRundown(snapshot.players, running);
     const [rundownHidden, setRundownHidden] = useState(false);
     // Before the first turn only the opening stands on the board.
@@ -470,11 +472,7 @@ function GameView({ snapshot, send, link }: { snapshot: GameSnapshot; send: Game
                     meetings={meetingsLine}
                     rundown={running && !rundownShown ? <Rundown players={snapshot.players} unratedBy={unratedByOf(snapshot)} data={rundown} meetings={null} /> : null}
                     duel={duelRowOf(snapshot, duel)}
-                    tournament={snapshot.tournament === undefined ? null : (
-                        <Link to={`/tournaments/${encodeURIComponent(snapshot.tournament.id)}`}>
-                            {gameCaption(snapshot.tournament)}
-                        </Link>
-                    )}
+                    tournament={snapshot.tournament === undefined ? null : tournamentRowOf(snapshot.tournament, tournament)}
                     analysis={running ? null : gameLink(snapshot.gameId, turnOf(replay.shown))}
                     running={running}
                     timed={snapshot.clock !== undefined && snapshot.clock.mode !== `unlimited`}
@@ -595,6 +593,35 @@ function duelRowOf(snapshot: GameSnapshot, duel: DuelDetail | null): { term: str
     }
     const scored = duel.games.some((game) => game.state === `played`);
     return { term, place: scored ? text.drawer.duelStanding(place, standingText(duel, duel.games)) : place };
+}
+
+// A tournament's game names its place in the tournament and who leads it, once the tournament is read.
+function tournamentRowOf(tag: GameTournament, tournament: TournamentDetail | null): ReactNode {
+    const place = <Link to={tournamentPagePath(tag.id)}>{gameCaption(tag)}</Link>;
+    const lead = tournament === null ? null : leadText(tournament);
+    return lead === null ? place : text.drawer.tournamentStanding(place, lead);
+}
+
+// The tournament a game belongs to, read once and again as the game ends; null until it is, or for any other game.
+function useTournamentOf(snapshot: GameSnapshot): TournamentDetail | null {
+    const id = snapshot.tournament?.id ?? null;
+    const finished = snapshot.status === `finished`;
+    const [held, setHeld] = useState<TournamentDetail | null>(null);
+    useEffect(() => {
+        if (id === null) return;
+        let cancelled = false;
+        fetchTournament(id).then(
+            (read) => {
+                if (!cancelled) setHeld(read);
+            },
+            // The standing is extra; a read that fails leaves the caption alone.
+            () => undefined,
+        );
+        return () => {
+            cancelled = true;
+        };
+    }, [id, finished]);
+    return held !== null && held.id === id ? held : null;
 }
 
 // The duel a game belongs to, read once and again as the game ends; null until it is, or for any other game.

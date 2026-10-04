@@ -1,6 +1,6 @@
 import { nameKeyOf, type DuelGames, type DuelSummary, type TimeControl } from '@hexo-arena/contract';
 import { setTimeout as sleep } from 'node:timers/promises';
-import { ApiError, type ArenaClient } from './client';
+import { waitingOut, type ArenaClient } from './client';
 import type { PersonaName } from './personas';
 
 /** A duel the seed starts: who starts it, between which bots, how long, and whether rated. */
@@ -19,10 +19,10 @@ export interface DevDuelPlans {
     readonly test?: DevDuelPlan;
 }
 
-/** What the seed left: each duel's id, or null where none could start. */
+/** What the seed left: each duel's id, the played ones null where they ended early or, for the test, where the plan holds none. */
 export interface DevDuels {
     readonly finished: string | null;
-    readonly live: string | null;
+    readonly live: string;
     readonly test: string | null;
 }
 
@@ -57,41 +57,28 @@ const pairKey = (one: string, two: string) => [nameKeyOf(one), nameKeyOf(two)].s
 
 const between = (duel: DuelSummary, plan: DevDuelPlan) => duel.startedBy === plan.starter && pairKey(duel.first.name, duel.second.name) === pairKey(plan.first, plan.second);
 
-// A refusal that leaves the seed's other work standing: a bot not online,
-// busy, or capped is named in the log, and no duel is left.
-async function start(options: DevDuelOptions, plan: DevDuelPlan): Promise<string | null> {
-    try {
-        const created = await options.client.createDuel(await options.cookieOf(plan.starter), {
-            first: plan.first,
-            second: plan.second,
-            games: plan.games,
-            timeControl: duelClock,
-            rated: plan.rated,
-        });
-        return created.id;
-    } catch (error) {
-        if (!(error instanceof ApiError) || error.status >= 500) throw error;
-        options.log(`no duel of ${plan.first} and ${plan.second}: ${error.message}`);
-        return null;
-    }
+// A refusal that clears by itself is waited out; any other stops the seed with its code.
+async function start(options: DevDuelOptions, plan: DevDuelPlan): Promise<string> {
+    const cookie = await options.cookieOf(plan.starter);
+    const request = { first: plan.first, second: plan.second, games: plan.games, timeControl: duelClock, rated: plan.rated };
+    const created = await waitingOut(async () => options.client.createDuel(cookie, request), options.log, options.pollMs);
+    return created.id;
 }
 
 // Finds the duel a plan already left finished or running, else starts it,
-// and plays it to its end; null where it could not start or ended early.
+// and plays it to its end; null where it ended early.
 async function playOut(options: DevDuelOptions, plan: DevDuelPlan): Promise<string | null> {
     const { client, log } = options;
     const pollMs = options.pollMs ?? 1_000;
     const done = await client.listDuels(plan.first);
-    let id =
+    const id =
         done.past.find((duel) => duel.status === `finished` && between(duel, plan))?.id ?? done.running.find((duel) => between(duel, plan))?.id ?? (await start(options, plan));
-    if (id === null) return null;
     const deadline = Date.now() + playDeadlineMs;
     for (;;) {
         const duel = await client.duel(id);
         if (duel.status !== `running`) {
             log(`${duel.kind} ${duel.id}: ${duel.first.name} ${String(duel.score.first)}, ${duel.second.name} ${String(duel.score.second)}, ${duel.status}`);
-            if (duel.status !== `finished`) id = null;
-            return id;
+            return duel.status === `finished` ? id : null;
         }
         if (Date.now() > deadline) throw new Error(`duel ${id} did not finish in time`);
         await sleep(pollMs);
@@ -110,6 +97,6 @@ export async function seedDevDuels(options: DevDuelOptions): Promise<DevDuels> {
     const test = plans.test === undefined ? null : await playOut(options, plans.test);
     const running = await client.listDuels(plans.live.first);
     const live = running.running.find((duel) => between(duel, plans.live))?.id ?? (await start(options, plans.live));
-    if (live !== null) log(`duel ${live} runs: ${plans.live.first} and ${plans.live.second}, ${String(plans.live.games)} games`);
+    log(`duel ${live} runs: ${plans.live.first} and ${plans.live.second}, ${String(plans.live.games)} games`);
     return { finished, live, test };
 }

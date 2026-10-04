@@ -20,13 +20,20 @@ const glyphBox = `${String(-halfWidth)} ${String(-cellSize)} ${String(2 * halfWi
  * rating belongs to its default; nor does a game its player started
  * unrated, which says so.
  */
-/** How a game was started unrated: a person's choice, a duel's, or a test, where one person holds both sides. */
-export type UnratedBy = `choice` | `duel` | `test`;
+/** How a game was started unrated: a person's choice, a duel's, a round robin a person set up, or a test, where one person holds both sides. */
+export type UnratedBy = `choice` | `duel` | `roundRobin` | `test`;
 
 /** The mark a snapshot carries, as the rundown says it. */
-export function unratedByOf(snapshot: { readonly unratedByChoice?: true | undefined; readonly test?: true | undefined; readonly duel?: unknown }): UnratedBy | null {
+export function unratedByOf(snapshot: {
+    readonly unratedByChoice?: true | undefined;
+    readonly test?: true | undefined;
+    readonly duel?: unknown;
+    readonly tournament?: { readonly createdBy?: string | undefined } | undefined;
+}): UnratedBy | null {
     if (snapshot.test === true) return `test`;
     if (snapshot.unratedByChoice !== true) return null;
+    // A person's round robin names who set it up; the weekly's games are rated.
+    if (snapshot.tournament?.createdBy !== undefined) return `roundRobin`;
     return snapshot.duel === undefined ? `choice` : `duel`;
 }
 

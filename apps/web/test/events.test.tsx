@@ -250,6 +250,15 @@ describe('the Tournament place under Play', () => {
         expect(screen.getByRole(`navigation`, { name: `Play` }).querySelector(`[aria-current="page"]`)?.textContent).toBe(`Tournament`);
     });
 
+    it('offer a signed-out reader one sign-in, in the setup, the weekly\'s entry asking for it in words alone', async () => {
+        serve({ '/api/tournaments': list, [`/api/tournaments/${waiting.id}`]: waiting, '/api/bots': [listing(`sealbot`, `quinn`)], '/api/duels/bots': [] });
+        render(<PlayTournamentScreen />);
+        expect(await screen.findByText(`Sign in to enter a bot.`)).toBeTruthy();
+        expect(await screen.findByText(`Sign in to set up a round robin; anyone can watch one.`)).toBeTruthy();
+        expect(document.querySelectorAll(`.discord-button`)).toHaveLength(1);
+        expect(document.querySelector(`.rr-card .discord-button`)).not.toBe(null);
+    });
+
     it('say no weekly is coming up, and ask a signed-out reader to sign in to set one up and to see their own', async () => {
         serve({ '/api/tournaments': { ...list, scheduled: [] }, '/api/bots': [listing(`sealbot`, `quinn`)], '/api/duels/bots': [] });
         render(<PlayTournamentScreen />);
@@ -296,6 +305,16 @@ describe('Home\'s tournament block', () => {
         expect(screen.getByRole(`link`, { name: `Enter a bot in Winter cup` }).getAttribute(`href`)).toBe(`/play/tournament`);
         expect(screen.getByRole(`link`, { name: `Set up a round robin` }).getAttribute(`href`)).toBe(`/play/tournament`);
         expect(screen.getByRole(`link`, { name: `All tournaments` }).getAttribute(`href`)).toBe(`/games/tournaments`);
+    });
+
+    it('place the entry in the row of the tournament it enters, apart from the weekly running', () => {
+        const running = summary(`t_autumnrobin1`, { name: `Autumn round robin`, status: `running`, round: { current: 2, of: 3 } });
+        render(<TournamentBlock list={{ running: [running], scheduled: [far], past: [] }} now={now} owner signedIn />);
+        const rows = [...document.querySelectorAll(`.home-row`)];
+        expect(rows.map((row) => row.querySelector(`.player-name`)?.textContent)).toEqual([`Autumn round robin`, `Winter cup`]);
+        expect(rows[0]?.querySelector(`a[aria-label^='Enter a bot']`)).toBe(null);
+        expect(within(rows[1] as HTMLElement).getByRole(`link`, { name: `Enter a bot in Winter cup` }).getAttribute(`href`)).toBe(`/play/tournament`);
+        expect(document.querySelector(`.home-block-foot`)?.textContent).toBe(`Set up a round robin`);
     });
 
     it('name the owner\'s own part once entered, and show nothing far off to anyone else', () => {

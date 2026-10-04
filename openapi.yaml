@@ -4453,6 +4453,20 @@ components:
         means nothing outside the tournament.
       minimum: 1
       type: integer
+    TournamentLead:
+      description: "A test's bot first in the final standings, once a game was played, and its estimate
+        against all the others together: first is the bot, second the rest."
+      properties:
+        bot:
+          type: string
+        deleted:
+          $ref: "#/components/schemas/Deleted"
+        estimate:
+          $ref: "#/components/schemas/DuelEstimate"
+      required:
+        - bot
+        - estimate
+      type: object
     TournamentList:
       properties:
         past:
@@ -4656,6 +4670,8 @@ components:
         createdBy:
           nullable: true
           type: string
+        end:
+          $ref: "#/components/schemas/TournamentEnd"
         endedAt:
           description: "When it ended: finished, called off, or canceled."
           format: date-time
@@ -4669,6 +4685,8 @@ components:
         id:
           pattern: ^t_[a-z0-9]{12}$
           type: string
+        lead:
+          $ref: "#/components/schemas/TournamentLead"
         maxEntrants:
           maximum: 12
           minimum: 3
@@ -4931,7 +4949,7 @@ components:
       type: apiKey
 info:
   title: HeXO Arena
-  version: 0.48.0
+  version: 0.49.0
 openapi: 3.0.3
 paths:
   /api/analysis/check:

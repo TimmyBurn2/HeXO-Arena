@@ -64,6 +64,28 @@ test('on a phone a double press adds only the bot pressed, however the list move
     }
 });
 
+// Text at 150 and 200% fills a phone's sheet with the head and the foot; the rows still scroll into reach and Add stays in view.
+for (const [width, height] of [[320, 640], [360, 740], [390, 844]] as const) {
+    test(`the picker keeps every row within reach and Add in view at 150 and 200% text on a ${String(width)} px phone`, async ({ page }) => {
+        const devtools = await page.context().newCDPSession(page);
+        for (const size of [24, 32]) {
+            await open(page, `/play/duels`, dueling(), width);
+            await page.setViewportSize({ width, height });
+            await devtools.send(`Page.setFontSizes`, { fontSizes: { standard: size } });
+            await page.getByRole(`button`, { name: `Add a bot, First bot` }).click();
+            const last = picker(page).locator(`.pick:not([aria-disabled='true'])`).last();
+            const name = (await last.getAttribute(`data-bot`)) ?? ``;
+            await last.click();
+            await expect(last).toHaveAttribute(`aria-pressed`, `true`);
+            const add = picker(page).getByRole(`button`, { name: `Add ${name}` });
+            await expect(add).toBeInViewport({ ratio: 1 });
+            await add.click();
+            await expect(picker(page)).toHaveCount(0);
+            await expect(page.getByRole(`button`, { name: `Change ${name}` })).toBeAttached();
+        }
+    });
+}
+
 test('the picker takes the keyboard: its rows are one Tab stop, the arrows move the pick, Enter adds, and focus goes on to the next slot', async ({ page }) => {
     await open(page, `/play/duels`, dueling());
     await page.getByRole(`button`, { name: `Add a bot, First bot` }).focus();

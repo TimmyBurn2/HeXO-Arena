@@ -47,6 +47,7 @@ import {
     type TournamentDetail,
     type TournamentList,
 } from '@hexo-arena/contract';
+import { setTimeout as sleep } from 'node:timers/promises';
 import { z } from 'zod';
 
 const errorCodeSchema = z.object({ code: z.string() });
@@ -63,6 +64,32 @@ export class ApiError extends Error {
         message: string,
     ) {
         super(message);
+    }
+}
+
+// Refusals that clear by themselves: the caller over its request rate, a
+// bot busy with a game or with other duels and round robins, or a bot not
+// yet online and open.
+const passing = new Set([`rate_limited`, `bot_busy`, `not_open`]);
+
+/** How long a create call waits out a refusal that clears by itself before it gives up. */
+export const refusalWaitMs = 60_000;
+
+/**
+ * Makes a create call until it is answered, waiting out a refusal that
+ * clears by itself, by its Retry-After where it names one; any other
+ * refusal, or one that outlasts the wait, fails with its code.
+ */
+export async function waitingOut<T>(create: () => Promise<T>, log: (line: string) => void, pollMs = 1_000): Promise<T> {
+    const deadline = Date.now() + refusalWaitMs;
+    for (;;) {
+        try {
+            return await create();
+        } catch (error) {
+            if (!(error instanceof ApiError) || error.code === null || !passing.has(error.code) || Date.now() >= deadline) throw error;
+            log(`${error.message}; trying again`);
+            await sleep(error.retryAfter === null ? pollMs : error.retryAfter * 1_000);
+        }
     }
 }
 

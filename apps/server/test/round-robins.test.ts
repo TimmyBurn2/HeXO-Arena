@@ -437,6 +437,10 @@ describe('round robins people set up', () => {
                 expect(each.estimate.games).toBe(4);
                 expect(each.estimate.points.first).toBe(line?.points);
             }
+            const top = over.standings[0];
+            const listed = tournamentListSchema.parse((await world.app.inject({ method: `GET`, url: `/api/tournaments` })).json()).past;
+            expect(listed.find((each) => each.id === test.id)?.lead).toEqual({ bot: top?.bot, estimate: over.estimates?.find((each) => each.key === top?.key)?.estimate });
+            expect(listed.find((each) => each.id === mixed.id)?.lead).toBeUndefined();
         });
 
         it('plays a bot at the strength picked for it, and shows no rating at the start for it', async () => {
@@ -563,6 +567,8 @@ describe('round robins people set up', () => {
             expect(over.standings.reduce((sum, line) => sum + line.points, 0)).toBe(2);
             expect(over.rounds[0]?.pairings.flatMap((pairing) => pairing.games.map((game) => game.outcome))).toEqual([`played`, `not_played`, `played`, `not_played`]);
             expect((await post(`eve`, `/api/tournaments/${detail.id}/stop`)).json()).toMatchObject({ code: `over` });
+            const listed = tournamentListSchema.parse((await world.app.inject({ method: `GET`, url: `/api/tournaments` })).json());
+            expect(listed.past.find((each) => each.id === detail.id)?.end).toEqual({ reason: `creator`, round: 1 });
             expect((await create(`eve`, [`alpha`, `beta`, `gamma`])).statusCode).toBe(201);
         });
 

@@ -4,6 +4,7 @@ import { BotBadge, PresenceDot, Rating, summarizeAccepts } from '../components/p
 import { turnWindowOf } from '../play/accepts';
 import { ownedBy } from '../play/setup';
 import { text } from '../text';
+import { useFootRoom } from './foot-room';
 import { byRating, kindOf, notReady, pickReason, type DuelReads, type PickReason, type SlotKey } from './setup';
 import './Duels.css';
 
@@ -67,6 +68,8 @@ export function Picker({
     const [picked, setPicked] = useState<string | null>(current?.name ?? null);
     const list = useRef<HTMLDivElement>(null);
     const foot = useRef<HTMLDivElement>(null);
+    const body = useRef<HTMLDivElement>(null);
+    useFootRoom(body, foot);
     // The foot's tallest height while the list is open: a shorter pick would let the list grow and move its rows under a second press.
     const tallest = useRef(0);
     const words = text.duels.picker;
@@ -157,7 +160,7 @@ export function Picker({
                 if (event.target === event.currentTarget) onClose();
             }}
         >
-            <div className="duel-picker-body">
+            <div ref={body} className="duel-picker-body">
                 <div className="duel-picker-head">
                     <h2 id="picker-title">{slot === `first` ? words.first : words.second}</h2>
                     <button type="button" className="topbar-panel-close" aria-label={words.close} onClick={onClose}>
