@@ -168,7 +168,7 @@ for (const width of [1280, 390]) {
             expect(captionBox.y).toBeGreaterThanOrEqual(rowBox.y + rowBox.height - 1);
             expect(Math.abs(captionBox.x - resultBox.x)).toBeLessThanOrEqual(1);
         }
-        await expect(page.getByRole(`link`, { name: `Duel, game 3 of 10` })).toHaveAttribute(`href`, /^\/play\/duels\/d_/u);
+        await expect(page.getByRole(`link`, { name: `Duel, game 3 of 10` })).toHaveAttribute(`href`, /^\/duels\/d_/u);
         expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
         await caption.click();
         await expect(page).toHaveURL(/\/tournaments\/t_autumnrobin1$/u);

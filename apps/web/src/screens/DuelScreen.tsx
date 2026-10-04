@@ -8,8 +8,9 @@ import { Estimate } from '../duels/Estimate';
 import { OpeningStones } from '../duels/OpeningStones';
 import { namesABot, refusalLine, refusalReads, refusedBot, type Refused } from '../duels/refusal';
 import { pairsOf, Scoreboard, sideIn } from '../duels/Scoreboard';
-import { againPath, duelPagePath, duelsPath } from '../duels/setup';
+import { againPath, duelPagePath, gamesDuelsPath } from '../duels/setup';
 import { scoreText, statusSentence, termsLine, waitingQuiet } from '../duels/words';
+import { duelGamesPath } from '../games/filters';
 import { FeaturedBoard } from '../home/FeaturedBoard';
 import { useMe } from '../me';
 import { Link } from '../router/Link';
@@ -93,7 +94,7 @@ export function DuelScreen({ id }: { id: string }) {
                 <h1>{text.duels.page.notFound.heading}</h1>
                 <p>{text.duels.page.notFound.body}</p>
                 <div className="actions">
-                    <Link to={duelsPath()} className="btn btn-ghost">
+                    <Link to={gamesDuelsPath()} className="btn btn-ghost">
                         {text.duels.page.notFound.back}
                     </Link>
                 </div>
@@ -130,7 +131,7 @@ function DuelPage({ duel, at, onStopped }: { duel: DuelDetail; at: number; onSto
         <>
             <div className="duel-title-row">
                 <p className="duel-kicker">
-                    <Link to={duelsPath()}>{words.crumb}</Link>
+                    <Link to={gamesDuelsPath()}>{words.crumb}</Link>
                     <span>{test ? words.test : words.duel}</span>
                     <span className="tag muted">{test ? words.neverRated : duel.terms.rated ? words.rated : words.unrated}</span>
                 </p>
@@ -336,11 +337,16 @@ function Games({ duel }: { duel: DuelDetail }) {
     const tail = apart ? range(at, at + 2) : [];
     const earlier = apart ? at - pairsShown : 0;
     const later = all ? 0 : pairs.length - (apart ? Math.min(pairs.length, at + 2) : head.length);
+    // Games over show under Games too, where the other filters narrow them.
+    const over = duel.games.some((game) => game.state === `played` || game.state === `aborted`);
     return (
         <section className="duel-section" aria-labelledby="duel-games">
-            <h2 id="duel-games" className="section-title">
-                {words.games}
-            </h2>
+            <div className="duel-section-head">
+                <h2 id="duel-games" className="section-title">
+                    {words.games}
+                </h2>
+                {over ? <Link to={duelGamesPath(duel.id)}>{words.theseGames}</Link> : null}
+            </div>
             {head.map(pairView)}
             {earlier > 0 ? <p className="note">{words.earlierPairs(earlier, showAll)}</p> : null}
             {tail.map(pairView)}

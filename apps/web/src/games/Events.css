@@ -1,0 +1,189 @@
+@layer screens {
+    /* What a place holds and where one starts, above its lists. */
+    .events-lead {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        justify-content: space-between;
+        gap: var(--space-3) var(--space-5);
+        margin: 0 0 var(--space-4);
+    }
+
+    .events-lead .note {
+        margin: 0;
+        max-width: var(--measure);
+    }
+
+    .events-section > .section-title {
+        margin: var(--space-6) 0 var(--space-3);
+    }
+
+    .events-section > .note {
+        margin: 0;
+    }
+
+    /* A live duel: its live game's board beside where the duel stands. */
+    .live-duels {
+        display: grid;
+        gap: var(--space-4);
+        margin: 0;
+        padding: 0;
+        list-style: none;
+    }
+
+    .live-duel {
+        display: grid;
+        grid-template-columns: var(--play-card-min) minmax(0, 1fr);
+        align-items: stretch;
+        background: var(--c-bg-raised);
+        color: var(--c-text);
+        text-decoration: none;
+    }
+
+    .live-duel:hover {
+        background: var(--c-bg-hover);
+        color: var(--c-text);
+    }
+
+    .live-duel-waiting {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .live-duel-board {
+        min-width: 0;
+    }
+
+    .live-duel-body {
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: flex-start;
+        gap: var(--space-2);
+        min-width: 0;
+        padding: var(--space-4) var(--space-5);
+    }
+
+    .live-duel-body p {
+        margin: 0;
+    }
+
+    .live-duel-who {
+        font-size: var(--text-lg);
+    }
+
+    .live-duel-status {
+        display: flex;
+        flex-wrap: wrap;
+        gap: var(--space-1) var(--space-3);
+        font-weight: var(--weight-strong);
+    }
+
+    .live-duel-terms {
+        color: var(--c-text-dim);
+        font-size: var(--text-sm);
+    }
+
+    .live-duel-body .duel-glyphs {
+        margin-top: var(--space-2);
+    }
+
+    .live-duel-body .duel-glyphs .xt-hex {
+        width: var(--sb-hex-w);
+    }
+
+    /* A tournament's row names the reader's part, and offers an owner the entry. */
+    .tournament-row-live {
+        color: var(--c-accent);
+        font-weight: var(--weight-strong);
+    }
+
+    .tournament-row-yours {
+        color: var(--c-text);
+    }
+
+    .tournament-row-enter {
+        margin-left: auto;
+        font-weight: var(--weight-strong);
+    }
+
+    /* A place under Play: what it starts, beside the reader's own. */
+    .events-columns {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) var(--duel-side-w);
+        align-items: start;
+        gap: var(--space-6);
+    }
+
+    .events-main,
+    .events-side {
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-6);
+        min-width: 0;
+    }
+
+    .events-side .duel-row {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    /* The next tournament, whose entry follows it. */
+    .next-tournament {
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-2);
+        padding: var(--space-5);
+        background: var(--c-bg-raised);
+        box-shadow: inset 0 var(--border-w) 0 var(--surface-edge-hi);
+    }
+
+    .next-tournament p {
+        margin: 0;
+    }
+
+    .next-tournament .note {
+        max-width: var(--measure);
+    }
+
+    .next-tournament-kicker {
+        color: var(--c-text-dim);
+        font-size: var(--text-sm);
+        font-weight: var(--weight-strong);
+    }
+
+    .next-tournament-name {
+        margin: 0;
+        font-size: var(--text-xl);
+        font-weight: var(--weight-display);
+        overflow-wrap: anywhere;
+    }
+
+    /* The entry stands inside the card, under a rule of its own. */
+    .next-tournament .entry-control {
+        margin: var(--space-3) 0 0;
+        padding-top: var(--space-4);
+        box-shadow: inset 0 var(--border-w) 0 var(--c-border);
+    }
+
+    .next-tournament .entry-control .section-title {
+        margin: 0 0 var(--space-2);
+        font-size: var(--text-base);
+    }
+
+    @media (max-width: 44rem) {
+        .live-duel {
+            grid-template-columns: minmax(0, 1fr);
+        }
+
+        .live-duel-body {
+            padding: var(--space-3) var(--space-4) var(--space-4);
+        }
+
+        .live-duel-body .duel-glyphs .xt-hex {
+            width: var(--sb-hex-w-sm);
+        }
+
+        .events-columns {
+            grid-template-columns: minmax(0, 1fr);
+        }
+    }
+}

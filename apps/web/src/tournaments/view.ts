@@ -95,3 +95,8 @@ export function absentees(detail: TournamentDetail): Record<`never` | `withdrew`
     const withdrew = (entry: (typeof gone)[number]) => entry.state === `withdrawn` && playedAny(detail, entry.key);
     return { never: gone.filter((entry) => !withdrew(entry)), withdrew: gone.filter(withdrew) };
 }
+
+/** A tournament's page. */
+export function tournamentPagePath(id: string): string {
+    return `/tournaments/${encodeURIComponent(id)}`;
+}

@@ -134,6 +134,42 @@ describe('AppShell', () => {
         expect(topbar().querySelectorAll(`[aria-current="page"]`)).toHaveLength(1);
     });
 
+    it('light Games on its duels and tournaments and on each duel\'s and tournament\'s page, Play on its three places, and the ladder on its own alone', async () => {
+        stubHealthOk();
+        window.history.replaceState(null, ``, `/games/duels`);
+        render(<AppShell />);
+        const lit = async (path: string, item: string) => {
+            navigate(path);
+            await waitFor(() => {
+                expect(topLink(item).getAttribute(`aria-current`)).toBe(`page`);
+            });
+            expect(topbar().querySelectorAll(`[aria-current="page"]`)).toHaveLength(1);
+        };
+        for (const path of [`/games/duels`, `/games/tournaments`, `/duels/d_abcdefghijkl`, `/tournaments/t_autumnrobin1`]) await lit(path, `Games`);
+        for (const path of [`/play`, `/play/duels`, `/play/tournament`]) await lit(path, `Play`);
+        await lit(`/ladder`, `Ladder`);
+    });
+
+    it('take an old address of a duel, a tournament, or their lists on to the new one in place, its query kept', async () => {
+        stubHealthOk();
+        for (const [from, to] of [
+            [`/play/duels/d_abcdefghijkl`, `/duels/d_abcdefghijkl`],
+            [`/tournaments`, `/games/tournaments`],
+            [`/duels`, `/games/duels`],
+            [`/play/duels?list=tests&bot=hextide`, `/games/duels?bot=hextide&list=tests`],
+            [`/play/duels?list=yours`, `/games/duels?list=yours`],
+        ] as const) {
+            window.history.replaceState(null, ``, from);
+            const before = window.history.length;
+            const { unmount } = render(<AppShell />);
+            await waitFor(() => {
+                expect(window.location.pathname + window.location.search).toBe(to);
+            });
+            expect(window.history.length).toBe(before);
+            unmount();
+        }
+    });
+
     it('give the phone tabs the entries of the nav, with profile left to who is here', async () => {
         stubHealthOk();
         window.history.replaceState(null, ``, `/bots/sealbot`);
@@ -260,7 +296,7 @@ describe('AppShell', () => {
             const footer = document.querySelector(`footer.site-footer`) as HTMLElement;
             expect(footer.querySelector(`.site-tagline`)?.textContent).toBe(`HeXO Arena, one ladder for bots and humans`);
             expect([...footer.querySelectorAll(`a`)].map((a) => [a.textContent, a.getAttribute(`href`), a.getAttribute(`target`)])).toEqual([
-                [`Tournaments`, `/tournaments`, null],
+                [`Tournaments`, `/games/tournaments`, null],
                 [`Build a bot`, `/connect`, null],
                 [`Credits`, `/credits`, null],
                 [`Bot API`, `https://github.com/TimmyBurn2/Hexo-Bot-Api`, null],

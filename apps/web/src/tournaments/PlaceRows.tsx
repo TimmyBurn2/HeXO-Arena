@@ -1,6 +1,7 @@
 import type { TournamentPlace, TournamentSummary } from '@hexo-arena/contract';
 import { Link } from '../router/Link';
 import { text } from '../text';
+import { tournamentPagePath } from './view';
 
 function day(iso: string): string {
     return new Intl.DateTimeFormat(undefined, { dateStyle: `medium` }).format(new Date(iso));
@@ -40,7 +41,7 @@ export function PlaceRows({ tournaments }: { tournaments: readonly TournamentSum
             {tournaments.map((tournament) =>
                 tournament.bot === undefined ? null : (
                     <li key={tournament.id}>
-                        <Link to={`/tournaments/${encodeURIComponent(tournament.id)}`} className="duel-row place-row">
+                        <Link to={tournamentPagePath(tournament.id)} className="duel-row place-row">
                             <span className="duel-row-who">{tournament.name}</span>
                             <span className="duel-row-facts">
                                 <span className={tournament.status === `running` ? `duel-row-live` : undefined}>{placeText(tournament, tournament.bot)}</span>

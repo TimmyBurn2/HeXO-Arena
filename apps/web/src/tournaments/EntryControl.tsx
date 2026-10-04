@@ -9,16 +9,18 @@ import { text } from '../text';
 
 /**
  * A signed-in owner's entry while the tournament waits: one of their bots
- * entered, changed, or withdrawn, with what entering commits the bot to.
+ * entered, changed, or withdrawn, with what entering commits the bot to;
+ * its heading one level under the block holding it, a page's own by default.
  */
-export function EntryControl({ detail, onChange }: { detail: TournamentDetail; onChange: () => void }) {
+export function EntryControl({ detail, onChange, level = 2 }: { detail: TournamentDetail; onChange: () => void; level?: 2 | 3 }) {
     const me = useMe();
     const self = me.status === `ready` && me.me?.kind === `user` ? me.me : null;
+    const Heading = level === 2 ? `h2` : `h3`;
     return (
         <section className="tournament-block entry-control" aria-labelledby="tournament-entry-title">
-            <h2 id="tournament-entry-title" className="section-title">
+            <Heading id="tournament-entry-title" className="section-title">
                 {text.tournaments.entry.title}
-            </h2>
+            </Heading>
             <p className="note">{text.tournaments.entry.note}</p>
             {me.status === `loading` ? null : self === null ? (
                 <div className="entry-sign-in">

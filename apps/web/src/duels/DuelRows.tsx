@@ -7,8 +7,8 @@ import { GameGlyph, pairsOf } from './Scoreboard';
 import { estimatePoints, estimateRow, noWinnerCount, rowState, scoreText } from './words';
 import './Duels.css';
 
-// A list row draws each game while the pairs fit a glance; past it, the score alone.
-const glyphPairs = 5;
+/** A list row draws each game while the pairs fit a glance; past it, the score alone. */
+export const glyphPairs = 5;
 
 /**
  * Duels as rows, each one link to its page: the two bots, where it stands,
@@ -61,8 +61,8 @@ function DuelRow({ duel, now, starter }: { duel: DuelSummary; now: number; start
     );
 }
 
-// The duel's games as cells, a row per bot with its points, inside the row's one link.
-function Glyphs({ duel }: { duel: DuelSummary }) {
+/** A duel's games as cells, a row per bot with its points, inside the one link of a row or a card. */
+export function Glyphs({ duel }: { duel: DuelSummary }) {
     const pairs = pairsOf(duel.results.map(asGame));
     const label = text.duels.row.glyphs(duel.first.name, duel.second.name, scoreText(duel));
     return (

@@ -115,14 +115,37 @@ function eventFilter(event: Filters[`event`]): SQL | undefined {
     }
 }
 
+// One duel's games, or one tournament's or one round's through the
+// pairings of that round.
+function oneEvent(filters: Filters): SQL | undefined {
+    if (filters.duel !== undefined) return sql`${games.duelId} = ${filters.duel}`;
+    if (filters.tournament === undefined) return undefined;
+    const round = filters.round === undefined ? undefined : eq(tournamentPairings.round, Number(filters.round));
+    return sql`${games.pairingId} in (select ${tournamentPairings.id} from ${tournamentPairings} where ${and(eq(tournamentPairings.tournamentId, filters.tournament), round)})`;
+}
+
+// One duel's or one tournament's games are read through that event's
+// index whatever else the filters name, so a read never walks past them;
+// a duel holds at most a test's games, and a tournament two a pairing,
+// so sorting them all stays small.
+// A source other than the table itself takes its columns as expressions,
+// which the builder does not check.
+function sourceOf(filters: Filters): typeof games | SQL {
+    if (filters.duel !== undefined) return sql`${games} indexed by games_duel_idx`;
+    if (filters.tournament !== undefined) return sql`${games} indexed by games_pairing_idx`;
+    return games;
+}
+
 // Tests are left out unless asked. With nothing else to narrow the list,
 // the term is written as the partial index of the games shown writes it,
 // a literal the planner can match; beside a filter with an index of its own,
 // the unary plus keeps the term from matching, so that filter's index is read.
+// A duel named is asked for whole, so a test's games stay in.
 function testsLeftOut(filters: Filters, named: boolean): SQL | undefined {
-    if (filters.tests !== undefined) return undefined;
+    if (filters.tests !== undefined || filters.duel !== undefined) return undefined;
     const narrowed =
-        named || [filters.kind, filters.event, filters.result, filters.reason, filters.clock, filters.opening, filters.before, filters.analyzed].some((value) => value !== undefined);
+        named ||
+        [filters.kind, filters.event, filters.tournament, filters.result, filters.reason, filters.clock, filters.opening, filters.before, filters.analyzed].some((value) => value !== undefined);
     return narrowed ? sql`+${games.test} = 0` : sql`${games.test} = 0`;
 }
 
@@ -133,7 +156,7 @@ function shared(filters: Filters, before: Bound | null, named: boolean): (SQL | 
         isNotNull(games.finishSeq),
         before === null ? undefined : and(lte(games.finishSeq, before.seq), lt(games.finishedAt, before.at)),
         kindFilter(filters.kind),
-        eventFilter(filters.event),
+        filters.duel === undefined && filters.tournament === undefined ? eventFilter(filters.event) : oneEvent(filters),
         filters.result === `none` ? isNull(games.winner) : undefined,
         filters.reason === undefined ? undefined : eq(games.finishReason, filters.reason),
         filters.clock === undefined ? undefined : sql`${games.timeControl} ->> '$.mode' = ${filters.clock}`,
@@ -173,8 +196,8 @@ function pageQuery(query: Query, resolved: Extract<Resolved, { kind: `page` }>, 
     const skipped = (page - 1) * finishedGamesPageSize;
     const arm = (conditions: (SQL | undefined)[], limit: number) =>
         query
-            .select({ id: games.id, seq: sql<number>`${games.finishSeq}`.as(`seq`) })
-            .from(games)
+            .select({ id: sql<string>`${games.id}`.as(`id`), seq: sql<number>`${games.finishSeq}`.as(`seq`) })
+            .from(sourceOf(filters))
             .where(and(...common, ...conditions))
             .orderBy(desc(games.finishSeq))
             .limit(limit);
@@ -191,7 +214,7 @@ function pageQuery(query: Query, resolved: Extract<Resolved, { kind: `page` }>, 
  * A named player's total is their record's games and voided ones.
  */
 function totalQuery(query: Query, resolved: Extract<Resolved, { kind: `page` }>, before: Bound | null): SQL {
-    return sql`select count(*) as total from ${query.select({ id: games.id }).from(games).where(and(...shared(resolved.filters, before, false)))}`;
+    return sql`select count(*) as total from ${query.select({ id: sql<string>`${games.id}`.as(`id`) }).from(sourceOf(resolved.filters)).where(and(...shared(resolved.filters, before, false)))}`;
 }
 
 const noRecord: FinishedGamesRecord = {
@@ -216,8 +239,8 @@ function recordQuery(query: Query, resolved: Extract<Resolved, { kind: `page` }>
     const arms = seatArms(resolved, player)
         .map((seat) => {
             const arm = query
-                .select({ side: sql<Side>`${seat.side}`.as(`side`), winner: games.winner, voided: sql<number>`${games.voidedAt} is not null`.as(`voided`) })
-                .from(games)
+                .select({ side: sql<Side>`${seat.side}`.as(`side`), winner: sql<Side | null>`${games.winner}`.as(`winner`), voided: sql<number>`${games.voidedAt} is not null`.as(`voided`) })
+                .from(sourceOf(filters))
                 .where(and(...common, ...seatConditions(seat, player, vs, filters)));
             return sql`select side, winner, voided from ${arm}`;
         });

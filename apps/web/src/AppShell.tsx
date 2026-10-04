@@ -6,6 +6,7 @@ import { spansWindow, useFramed } from './frame';
 import { Identity } from './identity/Identity';
 import { useLegalSlots } from './legal/links';
 import { Link } from './router/Link';
+import { Moved } from './router/Moved';
 import { loadScreen, RouteBoundary } from './RouteBoundary';
 import { routePath, type Route } from './router/route';
 import { landingOf, subscribe, useRoute } from './router/use-route';
@@ -26,6 +27,14 @@ const PlayScreen = lazy(async () => {
 const DuelsScreen = lazy(async () => {
     const module = await loadScreen(async () => import(`./screens/DuelsScreen`));
     return { default: module.DuelsScreen };
+});
+const PlayTournamentScreen = lazy(async () => {
+    const module = await loadScreen(async () => import(`./screens/PlayTournamentScreen`));
+    return { default: module.PlayTournamentScreen };
+});
+const GamesDuelsScreen = lazy(async () => {
+    const module = await loadScreen(async () => import(`./screens/GamesDuelsScreen`));
+    return { default: module.GamesDuelsScreen };
 });
 const DuelScreen = lazy(async () => {
     const module = await loadScreen(async () => import(`./screens/DuelScreen`));
@@ -114,10 +123,10 @@ interface NavEntry {
 // wordmark is the way home, so Home is a phone tab alone.
 const nav: readonly NavEntry[] = [
     { route: { name: `home` }, label: text.shell.nav.home, screens: [`home`], bar: false, phoneTab: true },
-    { route: { name: `play` }, label: text.shell.nav.play, screens: [`play`, `duels`, `duel`], bar: true, phoneTab: true },
-    { route: { name: `games` }, label: text.shell.nav.games, screens: [`games`, `live-games`], bar: true, phoneTab: true },
+    { route: { name: `play` }, label: text.shell.nav.play, screens: [`play`, `bot-duel`, `play-tournament`], bar: true, phoneTab: true },
+    { route: { name: `games` }, label: text.shell.nav.games, screens: [`games`, `live-games`, `games-duels`, `games-tournaments`, `duel`, `tournament`], bar: true, phoneTab: true },
     { route: { name: `analysis` }, label: text.shell.nav.analysis, screens: [`analysis`], bar: true, phoneTab: true },
-    { route: { name: `ladder` }, label: text.shell.nav.ladder, screens: [`ladder`, `tournaments`, `tournament`], bar: true, phoneTab: true },
+    { route: { name: `ladder` }, label: text.shell.nav.ladder, screens: [`ladder`], bar: true, phoneTab: true },
     { route: { name: `bots` }, label: text.shell.nav.bots, screens: [`bots`, `bot`], bar: true, phoneTab: true },
     { route: { name: `connect` }, label: text.shell.nav.build, screens: [`connect`], bar: true, phoneTab: false },
 ];
@@ -247,14 +256,18 @@ function RouteView({ route }: { route: Route }) {
             return <HomeScreen />;
         case `play`:
             return <PlayScreen />;
-        case `duels`:
+        case `bot-duel`:
             return <DuelsScreen />;
+        case `play-tournament`:
+            return <PlayTournamentScreen />;
         case `duel`:
             return <DuelScreen id={route.id} />;
         case `ladder`:
             return <LadderScreen />;
-        case `tournaments`:
+        case `games-tournaments`:
             return <TournamentsScreen />;
+        case `games-duels`:
+            return <GamesDuelsScreen />;
         case `player`:
             return <PlayerScreen name={route.player} />;
         case `tournament`:
@@ -283,6 +296,8 @@ function RouteView({ route }: { route: Route }) {
             return <ReportScreen />;
         case `game`:
             return <GameScreen gameId={route.gameId} />;
+        case `moved`:
+            return <Moved to={`${route.to}${window.location.search}${window.location.hash}`} />;
         case `not-found`:
             return <NotFoundScreen />;
     }

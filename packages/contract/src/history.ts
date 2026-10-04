@@ -1,9 +1,11 @@
 import { z } from 'zod';
 import { analysesPerGame } from './analysis';
+import { duelIdSchema } from './duels';
 import { gameDuelSchema, gamePlayersSchema, gameTournamentSchema, testMarkSchema, unratedByChoiceSchema } from './games';
 import { rankableDeviation } from './leaderboard';
 import { nameKeyOf, nameMaxLength } from './names';
 import { finishReasonSchema, openingPliesSchema, sideSchema, timeControlSchema } from './stream';
+import { tournamentIdSchema } from './tournaments';
 
 export const finishedGamesPath = `/api/games/finished`;
 
@@ -22,6 +24,9 @@ export const finishedGamesMemoMs = 5_000;
 const pagePattern = /^(?:[1-9]|10)$/;
 
 const playerName = z.string().min(1).max(nameMaxLength);
+
+// A round number from 1, written without a leading zero.
+const roundPattern = /^[1-9]\d?$/;
 
 export const finishedGamesQuerySchema = z
     .strictObject({
@@ -43,6 +48,15 @@ export const finishedGamesQuerySchema = z
             .enum([`duel`, `tournament`, `none`])
             .optional()
             .meta({ param: { description: `Games of a duel, tests among them while tests are listed; of a tournament; or of neither.` } }),
+        duel: duelIdSchema
+            .optional()
+            .meta({ param: { description: `One duel's games, none for an unknown one; a test's are listed whatever tests says, since naming it asks for them.` } }),
+        tournament: tournamentIdSchema.optional().meta({ param: { description: `One tournament's games, none for an unknown one.` } }),
+        round: z
+            .string()
+            .regex(roundPattern)
+            .optional()
+            .meta({ param: { description: `One round of the tournament, from 1; needs tournament.` } }),
         opening: z.enum([`1`, `3`, `5`, `7`, `9`]).optional().meta({ param: { description: `The opening's plies.` } }),
         before: z.iso.date().optional().meta({ param: { description: `Only games finished before this UTC date, YYYY-MM-DD.` } }),
         analyzed: z.literal(`1`).optional().meta({ param: { description: `Present as 1, only games a community analyzer has read whole.` } }),
@@ -61,7 +75,14 @@ export const finishedGamesQuerySchema = z
     })
     .refine((query) => query.player === undefined || query.vs === undefined || nameKeyOf(query.player) !== nameKeyOf(query.vs), {
         message: `vs names a player other than player`,
-    });
+    })
+    .refine((query) => query.round === undefined || query.tournament !== undefined, { message: `round needs tournament` })
+    .refine(
+        (query) =>
+            (query.duel === undefined || (query.tournament === undefined && (query.event ?? `duel`) === `duel`)) &&
+            (query.tournament === undefined || (query.event ?? `tournament`) === `tournament`),
+        { message: `duel and tournament exclude each other, and event, when given, is the kind named` },
+    );
 export type FinishedGamesQuery = z.infer<typeof finishedGamesQuerySchema>;
 
 export const finishedGameEntrySchema = z

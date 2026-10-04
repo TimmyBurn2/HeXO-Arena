@@ -13,7 +13,12 @@
         max-width: var(--measure);
     }
 
-    .tournament-export {
+    .tournament-title {
+        margin: var(--space-2) 0 var(--space-4);
+        overflow-wrap: anywhere;
+    }
+
+    .tournament-games {
         margin: var(--space-3) 0 0;
     }
 

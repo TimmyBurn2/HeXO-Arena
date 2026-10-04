@@ -5,7 +5,7 @@ import { liveRefreshMs } from '../api/refresh';
 import { noReservations, reservedBots } from '../play/reserved';
 
 /** Runs `read` on the beat while the page is in view, and whenever it comes back into view; the caller reads first. */
-function useBeat(read: () => Promise<void>, ms: number): void {
+export function useBeat(read: () => Promise<void>, ms: number): void {
     const latest = useRef(read);
     useEffect(() => {
         latest.current = read;
@@ -90,6 +90,32 @@ export function useSetupReads(): SetupReads {
             duelStates.reload();
         },
     };
+}
+
+/** The reader's own duels and tests, read again on a running duel's beat; none while signed out. */
+export interface MineRead {
+    readonly list: DuelList | null;
+    readonly failed: boolean;
+}
+
+/** The duels and tests the signed-in reader started or whose bots play them, with their quota. */
+export function useMineDuels(signedIn: boolean): MineRead {
+    const [list, setList] = useState<DuelList | null>(null);
+    const [failed, setFailed] = useState(false);
+    const read = useCallback(async () => {
+        if (!signedIn) return;
+        try {
+            setList(await fetchDuels({ mine: `1` }));
+            setFailed(false);
+        } catch {
+            setFailed(true);
+        }
+    }, [signedIn]);
+    useEffect(() => {
+        void read();
+    }, [read]);
+    useBeat(read, duelRunningPollMs);
+    return { list, failed };
 }
 
 /** Which duels a list shows: every one, the reader's, or tests alone. */

@@ -94,7 +94,7 @@ describe('BotEvents', () => {
         expect(rows[0]?.textContent).toMatch(/^Running cup1st so far, 3 pointsRound 2 of 5/u);
         expect(rows[1]?.textContent).toMatch(/^Next cupEntered; starts /u);
         expect(rows[2]?.textContent).toMatch(/^Autumn round robin6th of 6, 1 point; withdrawn: missed two pairings in a row/u);
-        expect(within(section).getByRole(`link`, { name: `All tournaments` }).getAttribute(`href`)).toBe(`/tournaments`);
+        expect(within(section).getByRole(`link`, { name: `All tournaments` }).getAttribute(`href`)).toBe(`/games/tournaments`);
         expect(screen.getByRole(`heading`, { name: `Duels` })).toBeTruthy();
         expect(screen.queryByRole(`heading`, { name: `Tests` })).toBe(null);
         expect(reads).toContain(`/api/tournaments?bot=sealbot`);
@@ -131,16 +131,16 @@ describe('BotEvents', () => {
 });
 
 describe('YourDuels', () => {
-    it('list the reader\'s latest duels and tests as Bot duels does under Yours, live first, then lead to the rest', async () => {
+    it('list the reader\'s latest duels and tests as Games does under Yours, live first, then lead to the rest', async () => {
         const running = duel(`d_runningrun01`, { status: `running`, endedAt: null, played: 1 });
         const test = duel(`d_testtesttest`, { kind: `test`, first: bot(`sealbot`, `quinn`), second: bot(`marsh`, `quinn`) });
         const reads = serve({ '/api/duels?mine=1': { running: [running], past: [test, duel(`d_pastpast0001`), duel(`d_pastpast0002`)], quota: { live: 1, today: 3 } } });
         render(<YourDuels />);
         const section = (await screen.findByRole(`heading`, { name: `Your duels and tests` })).closest(`section`) as HTMLElement;
         const rows = within(section).getAllByRole(`link`).filter((link) => link.classList.contains(`duel-row`));
-        expect(rows.map((row) => row.getAttribute(`href`))).toEqual([`/play/duels/d_runningrun01`, `/play/duels/d_testtesttest`, `/play/duels/d_pastpast0001`]);
+        expect(rows.map((row) => row.getAttribute(`href`))).toEqual([`/duels/d_runningrun01`, `/duels/d_testtesttest`, `/duels/d_pastpast0001`]);
         expect(rows[1]?.querySelector(`.tag`)?.textContent).toBe(`test`);
-        expect(within(section).getByRole(`link`, { name: `All your duels and tests` }).getAttribute(`href`)).toBe(`/play/duels?list=yours`);
+        expect(within(section).getByRole(`link`, { name: `All your duels and tests` }).getAttribute(`href`)).toBe(`/games/duels?list=yours`);
         expect(reads).toEqual([`/api/duels?mine=1`]);
     });
 

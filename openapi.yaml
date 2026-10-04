@@ -4407,6 +4407,8 @@ components:
             - name
             - ownerName
           type: object
+        yours:
+          $ref: "#/components/schemas/TournamentYours"
       required:
         - id
         - name
@@ -4418,6 +4420,20 @@ components:
         - maxEntrants
         - winner
         - round
+      type: object
+    TournamentYours:
+      description: The bot a signed-in caller entered, one per owner, and where it stands; on the list of
+        every bot alone.
+      properties:
+        bot:
+          type: string
+        deleted:
+          $ref: "#/components/schemas/Deleted"
+        place:
+          $ref: "#/components/schemas/TournamentPlace"
+      required:
+        - bot
+        - place
       type: object
     UnauthorizedError:
       properties:
@@ -4545,7 +4561,7 @@ components:
       type: apiKey
 info:
   title: HeXO Arena
-  version: 0.46.0
+  version: 0.47.0
 openapi: 3.0.3
 paths:
   /api/analysis/check:
@@ -5780,6 +5796,28 @@ paths:
               - tournament
               - none
             type: string
+        - description: One duel's games, none for an unknown one; a test's are listed whatever tests says,
+            since naming it asks for them.
+          in: query
+          name: duel
+          required: false
+          schema:
+            pattern: ^d_[a-z0-9]{12}$
+            type: string
+        - description: One tournament's games, none for an unknown one.
+          in: query
+          name: tournament
+          required: false
+          schema:
+            pattern: ^t_[a-z0-9]{12}$
+            type: string
+        - description: One round of the tournament, from 1; needs tournament.
+          in: query
+          name: round
+          required: false
+          schema:
+            pattern: ^[1-9]\d?$
+            type: string
         - description: The opening's plies.
           in: query
           name: opening
@@ -6406,8 +6444,9 @@ paths:
   /api/tournaments:
     get:
       description: "The running tournament, up to 3 waiting, and the latest 20 over, of every bot or of
-        the one named, an unknown bot answering not_found. The operator schedules each one: a paired
-        round robin of bots, one per owner."
+        the one named, an unknown bot answering not_found. For a signed-in caller, the list of every
+        bot names under yours the bot they entered in each, and its place. The operator schedules
+        each one: a paired round robin of bots, one per owner."
       operationId: listTournaments
       parameters:
         - description: "A bot's name, matched case-folded: only the tournaments it entered, each with its
@@ -6432,7 +6471,9 @@ paths:
           $ref: "#/components/responses/NotFound"
         "429":
           $ref: "#/components/responses/RateLimited"
-      security: []
+      security:
+        - sessionCookie: []
+        - {}
       summary: List tournaments.
       tags:
         - Tournaments

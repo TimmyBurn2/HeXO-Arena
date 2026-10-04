@@ -10,11 +10,34 @@ describe('parseRoute', () => {
         expect(parseRoute(`/ladder/`)).toEqual({ name: `ladder` });
     });
 
-    it('route the tournaments under the ladder', () => {
-        expect(parseRoute(`/tournaments`)).toEqual({ name: `tournaments` });
+    it('route the duel and tournament pages at addresses of their own, and their lists under Games', () => {
         expect(parseRoute(`/tournaments/t_abcdefghijk2`)).toEqual({ name: `tournament`, id: `t_abcdefghijk2` });
         expect(routePath({ name: `tournament`, id: `t_abcdefghijk2` })).toBe(`/tournaments/t_abcdefghijk2`);
         expect(parseRoute(`/tournaments/a/b`)).toEqual({ name: `not-found` });
+        expect(parseRoute(`/duels/d_abcdefghijkl`)).toEqual({ name: `duel`, id: `d_abcdefghijkl` });
+        expect(routePath({ name: `duel`, id: `d_abcdefghijkl` })).toBe(`/duels/d_abcdefghijkl`);
+        expect(parseRoute(`/duels/a/b`)).toEqual({ name: `not-found` });
+        expect(parseRoute(`/games/duels`)).toEqual({ name: `games-duels` });
+        expect(routePath({ name: `games-duels` })).toBe(`/games/duels`);
+        expect(parseRoute(`/games/tournaments/`)).toEqual({ name: `games-tournaments` });
+        expect(routePath({ name: `games-tournaments` })).toBe(`/games/tournaments`);
+    });
+
+    it('route the starts under Play: a bot, a duel between two bots, and a tournament', () => {
+        expect(parseRoute(`/play`)).toEqual({ name: `play` });
+        expect(parseRoute(`/play/duels`)).toEqual({ name: `bot-duel` });
+        expect(routePath({ name: `bot-duel` })).toBe(`/play/duels`);
+        expect(parseRoute(`/play/tournament`)).toEqual({ name: `play-tournament` });
+        expect(routePath({ name: `play-tournament` })).toBe(`/play/tournament`);
+        expect(parseRoute(`/play/tournaments`)).toEqual({ name: `not-found` });
+    });
+
+    it('send the addresses that moved on to the new ones', () => {
+        expect(parseRoute(`/play/duels/d_abcdefghijkl`)).toEqual({ name: `moved`, to: `/duels/d_abcdefghijkl` });
+        expect(parseRoute(`/play/duels/a%20b`)).toEqual({ name: `moved`, to: `/duels/a%20b` });
+        expect(parseRoute(`/duels`)).toEqual({ name: `moved`, to: `/games/duels` });
+        expect(parseRoute(`/tournaments`)).toEqual({ name: `moved`, to: `/games/tournaments` });
+        expect(parseRoute(`/tournaments/`)).toEqual({ name: `moved`, to: `/games/tournaments` });
     });
 
     it('route the four surfaces', () => {

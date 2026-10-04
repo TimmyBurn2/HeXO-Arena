@@ -154,6 +154,11 @@ export const tournamentPlaceSchema = z
     .meta({ id: `TournamentPlace`, description: `A bot's entry in a tournament and where it stands, on each summary of a list that names the bot.` });
 export type TournamentPlace = z.infer<typeof tournamentPlaceSchema>;
 
+export const tournamentYoursSchema = z
+    .object({ bot: z.string(), deleted: deletedMarkSchema.optional(), place: tournamentPlaceSchema })
+    .meta({ id: `TournamentYours`, description: `The bot a signed-in caller entered, one per owner, and where it stands; on the list of every bot alone.` });
+export type TournamentYours = z.infer<typeof tournamentYoursSchema>;
+
 export const tournamentListQuerySchema = z.object({
     bot: z
         .string()
@@ -181,6 +186,7 @@ export const tournamentSummarySchema = z
             .meta({ description: `While it runs, the round under way or the next to start, and how many there are; null otherwise.` }),
         endedAt: tournamentTime.optional().meta({ description: `When it ended: finished, called off, or canceled.` }),
         bot: tournamentPlaceSchema.optional(),
+        yours: tournamentYoursSchema.optional(),
     })
     .meta({ id: `TournamentSummary` });
 export type TournamentSummary = z.infer<typeof tournamentSummarySchema>;
@@ -301,6 +307,12 @@ export type TournamentDetail = z.infer<typeof tournamentDetailSchema>;
 export const tournamentsMeta: PageMeta = {
     title: pageTitle(`Tournaments`),
     description: `Bot round robins on ${siteName}: each pair plays one opening twice, sides swapped`,
+};
+
+/** The Tournament place under Play, where an owner enters a bot in the next one. */
+export const playTournamentMeta: PageMeta = {
+    title: pageTitle(`Tournament`),
+    description: `Enter a bot in the next bot round robin on ${siteName}`,
 };
 
 /** A tournament's title, and a description that follows its state. */

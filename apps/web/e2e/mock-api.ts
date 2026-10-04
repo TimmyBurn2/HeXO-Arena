@@ -1537,7 +1537,11 @@ function finishedPage(state: World, params: URLSearchParams): { status: 200; bod
         if (query.event === `duel` && game.duel === undefined) return false;
         if (query.event === `tournament` && game.tournament === undefined) return false;
         if (query.event === `none` && (game.duel !== undefined || game.tournament !== undefined)) return false;
-        if (query.tests === undefined && game.test === true) return false;
+        if (query.duel !== undefined && game.duel?.id !== query.duel) return false;
+        if (query.tournament !== undefined && game.tournament?.id !== query.tournament) return false;
+        if (query.round !== undefined && String(game.tournament?.round) !== query.round) return false;
+        // A duel named is asked for whole, a test's games among them.
+        if (query.tests === undefined && query.duel === undefined && game.test === true) return false;
         return query.before === undefined || Date.parse(game.finishedAt) < Date.parse(`${query.before}T00:00:00Z`);
     });
     const page = query.page === undefined ? 1 : Number(query.page);
@@ -2055,8 +2059,14 @@ export async function serve(page: Page, state: World): Promise<void> {
         }
         if (path === `/api/tournaments` && method === `GET`) {
             const bot = url.searchParams.get(`bot`);
+            const viewer = state.me?.kind === `user` ? state.me.name : null;
             const listed = state.tournaments.flatMap((detail): TournamentSummary[] => {
-                if (bot === null) return [summaryOf(detail)];
+                if (bot === null) {
+                    // The list of every bot names the signed-in owner's own entry.
+                    const own = viewer === null ? undefined : detail.entries.find((entry) => entry.ownerName === viewer);
+                    const place = own === undefined ? null : placeOf(detail, own.bot);
+                    return [{ ...summaryOf(detail), ...(own === undefined || place === null ? {} : { yours: { bot: own.bot, place } }) }];
+                }
                 const place = placeOf(detail, bot);
                 return place === null ? [] : [{ ...summaryOf(detail), bot: place }];
             });

@@ -1,25 +1,40 @@
+import { useCallback } from 'react';
 import { clockText, deletedPlayerName, type TournamentSummary } from '@hexo-arena/contract';
-import { fetchTournaments } from '../api/client';
+import { fetchBots, fetchTournaments } from '../api/client';
 import { useAsync } from '../api/use-async';
 import { BotBadge, PlayerName } from '../components/player';
 import { ErrorFrame, SkeletonRows } from '../components/states';
-import { LadderHead } from '../ladder/LadderHead';
+import { GamesHead } from '../games/GamesHead';
+import { useMe } from '../me';
 import { Link } from '../router/Link';
 import { text } from '../text';
+import { tournamentPagePath } from '../tournaments/view';
+import { yoursText } from '../tournaments/words';
+import '../games/Events.css';
 import './TournamentScreen.css';
 
 function when(iso: string): string {
     return new Intl.DateTimeFormat(undefined, { dateStyle: `medium`, timeStyle: `short` }).format(new Date(iso));
 }
 
-/** The tournaments: the one running, those coming up, and the latest past ones. */
+/**
+ * The tournaments under Games: the one live, those coming up, and the
+ * latest past ones, each naming the reader's own bot's part; an owner who
+ * has not entered one coming up is offered its entry.
+ */
 export function TournamentsScreen() {
     const { data, error, limited, reload } = useAsync(fetchTournaments);
+    const me = useMe();
+    const viewer = me.status === `ready` && me.me?.kind === `user` ? me.me.name : null;
+    const loadRoster = useCallback(async () => (viewer === null ? [] : fetchBots(false)), [viewer]);
+    const roster = useAsync(loadRoster);
+    const owner = viewer !== null && (roster.data ?? []).some((bot) => bot.ownerName === viewer);
     return (
         <>
-            <LadderHead view="tournaments" title={text.tournaments.title}>
+            <GamesHead view="tournaments" />
+            <div className="events-lead">
                 <p className="note">{text.tournaments.lead}</p>
-            </LadderHead>
+            </div>
             {data === null ? (
                 error ? (
                     <ErrorFrame sentence={text.tournaments.failed} onRetry={reload} wait={limited} />
@@ -33,30 +48,36 @@ export function TournamentsScreen() {
                 </div>
             ) : (
                 <>
-                    {data.running === null ? null : <Listed title={text.tournaments.running} id="running" tournaments={[data.running]} />}
-                    {data.scheduled.length === 0 ? null : <Listed title={text.tournaments.waiting} id="waiting" tournaments={data.scheduled} />}
-                    {data.past.length === 0 ? null : <Listed title={text.tournaments.past} id="past" tournaments={data.past} />}
+                    {data.running === null ? null : <Listed title={text.tournaments.running} id="running" tournaments={[data.running]} owner={owner} />}
+                    {data.scheduled.length === 0 ? null : <Listed title={text.tournaments.waiting} id="waiting" tournaments={data.scheduled} owner={owner} />}
+                    {data.past.length === 0 ? null : <Listed title={text.tournaments.past} id="past" tournaments={data.past} owner={owner} />}
                 </>
             )}
         </>
     );
 }
 
-function Listed({ title, id, tournaments }: { title: string; id: string; tournaments: readonly TournamentSummary[] }) {
+function Listed({ title, id, tournaments, owner }: { title: string; id: string; tournaments: readonly TournamentSummary[]; owner: boolean }) {
     return (
-        <section className="tournament-block" aria-labelledby={`tournaments-${id}`}>
+        <section className="tournament-block events-section" aria-labelledby={`tournaments-${id}`}>
             <h2 id={`tournaments-${id}`} className="section-title">
                 {title}
             </h2>
             <ul className="tournament-list">
                 {tournaments.map((tournament) => (
                     <li key={tournament.id} className="tournament-row">
-                        <Link to={`/tournaments/${encodeURIComponent(tournament.id)}`} className="tournament-row-name">
+                        <Link to={tournamentPagePath(tournament.id)} className="tournament-row-name">
                             {tournament.name}
                         </Link>
                         <span className="tournament-row-facts">
                             <Facts tournament={tournament} />
                         </span>
+                        {tournament.yours === undefined ? null : <span className="tournament-row-yours">{yoursText(tournament, tournament.yours)}</span>}
+                        {owner && tournament.status === `scheduled` && tournament.yours === undefined ? (
+                            <Link to={tournamentPagePath(tournament.id)} className="tournament-row-enter" ariaLabel={text.tournaments.enterBotIn(tournament.name)}>
+                                {text.tournaments.enterBot}
+                            </Link>
+                        ) : null}
                     </li>
                 ))}
             </ul>
@@ -76,7 +97,11 @@ function Facts({ tournament }: { tournament: TournamentSummary }) {
         case `running`:
             return (
                 <>
-                    {tournament.round === null ? null : <>{text.tournaments.roundOf(tournament.round.current, tournament.round.of)}; </>}
+                    {tournament.round === null ? null : (
+                        <>
+                            <span className="tournament-row-live">{text.tournaments.roundLive(tournament.round.current, tournament.round.of)}</span>;{` `}
+                        </>
+                    )}
                     {text.tournaments.played(tournament.entrants)}; {clock}
                 </>
             );

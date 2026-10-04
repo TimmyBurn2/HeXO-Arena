@@ -19,7 +19,7 @@ const screens: readonly { name: string; path: string; world?: Partial<World>; th
     { name: `the root`, path: `/` },
     { name: `play`, path: `/play`, world: { bots: playBots } },
     { name: `play with a limited bot`, path: `/play?bot=quietlake`, world: { bots: playBots } },
-    { name: `bot duels`, path: `/play/duels?first=Pistol1`, world: { bots: duelBots, duels: Object.values(duelFixtures).filter((duel) => duel.id !== duelFixtures.testLive.id) } },
+    { name: `bot duel`, path: `/play/duels?first=Pistol1`, world: { bots: duelBots, duels: Object.values(duelFixtures).filter((duel) => duel.id !== duelFixtures.testLive.id) } },
     {
         name: `a new test with its picker`,
         path: `/play/duels?first=pebble`,
@@ -29,9 +29,21 @@ const screens: readonly { name: string; path: string; world?: Partial<World>; th
             await page.locator(`dialog.duel-picker[open] .pick-detail`).waitFor();
         },
     },
-    { name: `a duel`, path: `/play/duels/${duelFixtures.live.id}`, world: { bots: duelBots, duels: [duelFixtures.live] } },
-    { name: `a test`, path: `/play/duels/${duelFixtures.test.id}`, world: { bots: duelBots, duels: [duelFixtures.test] } },
-    { name: `a duel over, its games to export`, path: `/play/duels/${duelFixtures.rated.id}`, world: { bots: duelBots, duels: [duelFixtures.rated] } },
+    { name: `a duel`, path: `/duels/${duelFixtures.live.id}`, world: { bots: duelBots, duels: [duelFixtures.live] } },
+    { name: `a test`, path: `/duels/${duelFixtures.test.id}`, world: { bots: duelBots, duels: [duelFixtures.test] } },
+    { name: `a duel over, its games to export`, path: `/duels/${duelFixtures.rated.id}`, world: { bots: duelBots, duels: [duelFixtures.rated] } },
+    { name: `the duels under Games`, path: `/games/duels`, world: { bots: duelBots, duels: Object.values(duelFixtures), live: [...duelFixtures.live.live, ...duelFixtures.testLive.live] } },
+    { name: `the tournament place under Play`, path: `/play/tournament`, world: { tournaments } },
+    {
+        name: `games narrowed to one duel, its pick open`,
+        path: `/games?event=duel&duel=${duelFixtures.live.id}`,
+        world: { bots: duelBots, duels: Object.values(duelFixtures), finished: [...duelGameRows, ...keptNames] },
+        then: async (page) => {
+            await page.getByRole(`button`, { name: /^Filters/u }).click();
+            await page.locator(`#games-duel`).waitFor();
+        },
+    },
+    { name: `games narrowed to one round of a tournament`, path: `/games?event=tournament&tournament=t_autumnrobin1&round=2`, world: { tournaments, finished: [...tournamentGameRows, ...keptNames] } },
     { name: `games`, path: `/games` },
     { name: `games of duels and tournaments`, path: `/games`, world: { finished: [...tournamentGameRows, ...duelGameRows, ...keptNames] } },
     { name: `a head-to-head`, path: `/games?player=hextide&vs=quietlake`, world: { finished: rivalry(30) } },
@@ -54,7 +66,7 @@ const screens: readonly { name: string; path: string; world?: Partial<World>; th
         },
     },
     { name: `the ladder`, path: `/ladder` },
-    { name: `tournaments`, path: `/tournaments` },
+    { name: `tournaments`, path: `/games/tournaments`, world: { tournaments } },
     { name: `a running tournament`, path: `/tournaments/t_autumnrobin1`, world: { tournaments } },
     { name: `a waiting tournament`, path: `/tournaments/t_wintercup202` },
     { name: `bots`, path: `/bots` },

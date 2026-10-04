@@ -248,7 +248,7 @@ export interface DuelSetup {
 /** A setup with both slots empty and every default. */
 export const emptySetup: DuelSetup = { first: null, second: null, levels: { first: null, second: null }, games: null, clock: null, opening: null };
 
-/** The Bot duels place, its setup opened as given. */
+/** The Bot duel place, its setup opened as given. */
 export function setupPath(setup: DuelSetup): string {
     const params = new URLSearchParams();
     if (setup.first !== null) params.set(`first`, setup.first);
@@ -287,22 +287,35 @@ export function againPath(duel: Pick<DuelDetail, `first` | `second` | `terms`>):
     });
 }
 
-/** The Bot duels place, opened on a bot when one is named. */
+/** The Bot duel place, opened on a bot when one is named. */
 export function duelsPath(first: string | null = null): string {
     return setupPath({ ...emptySetup, first });
 }
 
-/** The lists a link may open Bot duels on, past every duel: the reader's own, or tests. */
+/** The lists a link may open the duels under Games on, past every duel: the reader's own, or tests. */
 export const duelListViews = [`yours`, `tests`] as const;
 
-/** Bot duels with its recent list on one view. */
-export function duelListPath(view: (typeof duelListViews)[number]): string {
-    return `/play/duels?${new URLSearchParams({ list: view }).toString()}`;
+/** The duels under Games, on one view and for one bot when named. */
+export function gamesDuelsPath(view: (typeof duelListViews)[number] | null = null, bot: string | null = null): string {
+    const params = new URLSearchParams();
+    if (bot !== null) params.set(`bot`, bot);
+    if (view !== null) params.set(`list`, view);
+    return params.size === 0 ? `/games/duels` : `/games/duels?${params.toString()}`;
+}
+
+/**
+ * Where an old link to the duel lists under Play goes now, its view and bot
+ * kept; null for a link to the setup itself.
+ */
+export function movedListPath(search: string): string | null {
+    const params = new URLSearchParams(search);
+    if (!params.has(`list`) && !params.has(`bot`)) return null;
+    return gamesDuelsPath(duelListViews.find((view) => view === params.get(`list`)) ?? null, params.get(`bot`));
 }
 
 /** A duel's page. */
 export function duelPagePath(id: string): string {
-    return `/play/duels/${encodeURIComponent(id)}`;
+    return `/duels/${encodeURIComponent(id)}`;
 }
 
 /** The bots a picker lists for a slot: by rating, the highest first, then by name. */

@@ -176,18 +176,24 @@ describe('TournamentScreen', () => {
         expect(screen.getByText(`delta`).closest(`li`)?.textContent).toBe(`deltaBOTby deenot online at the start`);
     });
 
-    it('offer the games over so far as one download once a game is over, and nothing to download before', async () => {
+    it('offer the games over so far as one download beside the crumb, and under Games, once a game is over, and neither before', async () => {
         serve(() => running);
         render(<TournamentScreen id={running.id} />);
         const exported = await screen.findByRole(`link`, { name: `Export games` });
         expect(exported.getAttribute(`href`)).toBe(`/api/tournaments/${running.id}/export`);
         expect(exported.hasAttribute(`download`)).toBe(true);
+        const crumb = screen.getByRole(`link`, { name: `Tournaments` });
+        expect(crumb.getAttribute(`href`)).toBe(`/games/tournaments`);
+        expect(crumb.closest(`.duel-title-row`)?.contains(exported)).toBe(true);
+        expect(screen.getByRole(`link`, { name: `These games in Games` }).getAttribute(`href`)).toBe(`/games?event=tournament&tournament=${running.id}`);
+        expect(screen.queryByRole(`navigation`, { name: /Ladder/u })).toBe(null);
         cleanup();
         const begun = { ...running, rounds: running.rounds.map((round) => ({ ...round, pairings: round.pairings.map((pairing) => ({ ...pairing, games: pairing.games.map((entry) => ({ ...entry, outcome: `pending` as const, gameId: null })) })) })) };
         serve(() => begun);
         render(<TournamentScreen id={running.id} />);
         await screen.findByRole(`heading`, { level: 1, name: `Autumn round robin` });
         expect(screen.queryByRole(`link`, { name: `Export games` })).toBe(null);
+        expect(screen.queryByRole(`link`, { name: `These games in Games` })).toBe(null);
     });
 
     it('stand a finished tournament\'s top three on the podium with their points', async () => {
@@ -302,10 +308,10 @@ describe('TournamentsScreen', () => {
         );
         render(<TournamentsScreen />);
         const sections = await screen.findAllByRole(`heading`, { level: 2 });
-        expect(sections.map((heading) => heading.textContent)).toEqual([`Running now`, `Coming up`, `Past`]);
+        expect(sections.map((heading) => heading.textContent)).toEqual([`Live`, `Coming up`, `Past`]);
         expect(screen.getByRole(`link`, { name: `Autumn round robin` }).getAttribute(`href`)).toBe(`/tournaments/${base.id}`);
         expect(screen.getByText(/4 of 12 entered; turn clock 10 s$/u)).toBeTruthy();
-        expect(screen.getByRole(`link`, { name: `Autumn round robin` }).closest(`li`)?.querySelector(`.tournament-row-facts`)?.textContent).toBe(`Round 2 of 3; 3 bots; turn clock 10 s`);
+        expect(screen.getByRole(`link`, { name: `Autumn round robin` }).closest(`li`)?.querySelector(`.tournament-row-facts`)?.textContent).toBe(`Round 2 of 3 live; 3 bots; turn clock 10 s`);
         const won = screen.getByRole(`link`, { name: `Summer cup` }).closest(`li`)?.querySelector(`.tournament-row-facts`);
         expect(won?.textContent).toMatch(/; winner hextideBOT by ana$/u);
         expect(within(won as HTMLElement).getByRole(`link`, { name: `hextide` }).getAttribute(`href`)).toBe(`/bots/hextide`);

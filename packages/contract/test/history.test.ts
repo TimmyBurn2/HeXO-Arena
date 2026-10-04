@@ -49,6 +49,28 @@ describe('finishedGamesQuerySchema', () => {
         for (const event of [`duel`, `tournament`, `none`] as const) expect(finishedGamesQuerySchema.parse({ event })).toEqual({ event });
     });
 
+    it('takes one duel, or one tournament and one of its rounds, beside the kind named and every other filter', () => {
+        expect(finishedGamesQuerySchema.parse({ duel: `d_abcdefghijkl` })).toEqual({ duel: `d_abcdefghijkl` });
+        expect(finishedGamesQuerySchema.parse({ event: `duel`, duel: `d_abcdefghijkl`, player: `hextide`, result: `won`, tests: `1` })).toMatchObject({ duel: `d_abcdefghijkl` });
+        expect(finishedGamesQuerySchema.parse({ tournament: `t_autumnrobin1`, round: `2` })).toEqual({ tournament: `t_autumnrobin1`, round: `2` });
+        expect(finishedGamesQuerySchema.parse({ event: `tournament`, tournament: `t_autumnrobin1`, round: `12`, side: `x`, player: `hextide` })).toMatchObject({ round: `12` });
+    });
+
+    it.each([
+        [{ round: `2` }],
+        [{ duel: `d_abcdefghijkl`, tournament: `t_autumnrobin1` }],
+        [{ duel: `d_abcdefghijkl`, event: `tournament` }],
+        [{ duel: `d_abcdefghijkl`, event: `none` }],
+        [{ tournament: `t_autumnrobin1`, event: `duel` }],
+        [{ tournament: `t_autumnrobin1`, round: `0` }],
+        [{ tournament: `t_autumnrobin1`, round: `02` }],
+        [{ tournament: `t_autumnrobin1`, round: `100` }],
+        [{ duel: `s_abcdefghijkl` }],
+        [{ tournament: `autumn` }],
+    ])('refuses %j, an event that is not one or a round of no tournament', (filters) => {
+        expect(finishedGamesQuerySchema.safeParse(filters).success).toBe(false);
+    });
+
     it.each([
         [{ vs: `quietlake` }],
         [{ result: `won` }],
@@ -120,7 +142,7 @@ describe('listFinishedGames in the document', () => {
         expect(operation?.operationId).toBe(`listFinishedGames`);
         expect(operation?.security).toEqual([]);
         const names = (operation?.parameters ?? []).map((parameter) => (`name` in parameter ? parameter.name : ``));
-        expect(names.sort()).toEqual([`analyzed`, `before`, `clock`, `event`, `kind`, `opening`, `page`, `player`, `reason`, `result`, `side`, `tests`, `vs`]);
+        expect(names.sort()).toEqual([`analyzed`, `before`, `clock`, `duel`, `event`, `kind`, `opening`, `page`, `player`, `reason`, `result`, `round`, `side`, `tests`, `tournament`, `vs`]);
         expect(Object.keys(operation?.responses ?? {}).sort()).toEqual([`200`, `400`, `404`, `429`]);
     });
 });

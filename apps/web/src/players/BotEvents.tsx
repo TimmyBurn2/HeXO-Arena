@@ -3,6 +3,7 @@ import type { DuelSummary, TournamentList } from '@hexo-arena/contract';
 import { fetchBotTournaments, fetchDuels } from '../api/client';
 import { useAsync } from '../api/use-async';
 import { DuelRows } from '../duels/DuelRows';
+import { gamesDuelsPath } from '../duels/setup';
 import { Link } from '../router/Link';
 import { text } from '../text';
 import { PlaceRows } from '../tournaments/PlaceRows';
@@ -33,7 +34,6 @@ export function BotEvents({ bot, owner }: { bot: string; owner: string | null })
     const shownTests = latest(tests);
     if (shownDuels.length === 0 && shownTests.length === 0 && tournaments.length === 0) return null;
     const words = text.duels.bot;
-    const all = `/play/duels?${new URLSearchParams({ bot }).toString()}`;
     return (
         <div className="bot-duels">
             {shownDuels.length === 0 ? null : (
@@ -42,7 +42,7 @@ export function BotEvents({ bot, owner }: { bot: string; owner: string | null })
                         <h2 id="bot-duels-title" className="section-title">
                             {words.duels}
                         </h2>
-                        <Link to={all}>{words.allDuels}</Link>
+                        <Link to={gamesDuelsPath(null, bot)}>{words.allDuels}</Link>
                     </div>
                     <DuelRows duels={shownDuels} now={now} starter />
                 </section>
@@ -53,7 +53,7 @@ export function BotEvents({ bot, owner }: { bot: string; owner: string | null })
                         <h2 id="bot-tests-title" className="section-title">
                             {words.tests}
                         </h2>
-                        <Link to={all}>{words.allTests}</Link>
+                        <Link to={gamesDuelsPath(`tests`, bot)}>{words.allTests}</Link>
                     </div>
                     <DuelRows duels={shownTests} now={now} />
                     {owner === null ? null : <p className="note">{words.testsNote(owner)}</p>}
@@ -65,7 +65,7 @@ export function BotEvents({ bot, owner }: { bot: string; owner: string | null })
                         <h2 id="bot-tournaments-title" className="section-title">
                             {text.tournaments.bot.title}
                         </h2>
-                        <Link to="/tournaments">{text.tournaments.bot.all}</Link>
+                        <Link to="/games/tournaments">{text.tournaments.bot.all}</Link>
                     </div>
                     <PlaceRows tournaments={tournaments} />
                 </section>

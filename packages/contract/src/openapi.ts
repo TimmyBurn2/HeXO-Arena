@@ -1169,8 +1169,12 @@ function registerTournamentPaths(registry: OpenAPIRegistry, shared: SharedCompon
         summary: 'List tournaments.',
         operationId: 'listTournaments',
         tags: ['Tournaments'],
-        security: [],
-        description: `The running tournament, up to ${String(tournamentWaitingCap)} waiting, and the latest ${String(tournamentListPastCap)} over, of every bot or of the one named, an unknown bot answering not_found. The operator schedules each one: a paired round robin of bots, one per owner.`,
+        security: [{ sessionCookie: [] }, {}],
+        description: [
+            `The running tournament, up to ${String(tournamentWaitingCap)} waiting, and the latest ${String(tournamentListPastCap)} over, of every bot or of the one named, an unknown bot answering not_found.`,
+            `For a signed-in caller, the list of every bot names under yours the bot they entered in each, and its place.`,
+            `The operator schedules each one: a paired round robin of bots, one per owner.`,
+        ].join(` `),
         request: { query: tournamentListQuerySchema },
         responses: {
             200: { description: `The tournaments.`, content: { 'application/json': { schema: tournamentListSchema } } },

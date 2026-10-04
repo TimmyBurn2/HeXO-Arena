@@ -154,7 +154,7 @@ const legalLinks = [
     [`Licenses`, `/third-party-licenses.txt`],
 ];
 
-const framedScreens = [`/`, `/games`, `/ladder`, `/bots`, `/bots/sealbot`, `/connect`, `/profile`, `/credits`, `/report`, `/legal/imprint`, `/legal/privacy`, `/legal/terms`, `/nowhere`, `/game/nope`];
+const framedScreens = [`/`, `/play/duels`, `/play/tournament`, `/games`, `/games/duels`, `/games/tournaments`, `/tournaments/t_wintercup202`, `/ladder`, `/bots`, `/bots/sealbot`, `/connect`, `/profile`, `/credits`, `/report`, `/legal/imprint`, `/legal/privacy`, `/legal/terms`, `/nowhere`, `/game/nope`];
 
 // The legal links are the footer's last group: at the bottom right where
 // the footer is a row, at its end where it stacks, signed in or out.

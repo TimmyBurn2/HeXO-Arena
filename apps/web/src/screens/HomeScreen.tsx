@@ -76,7 +76,7 @@ export function HomeScreen() {
             {others.length === 0 ? null : <LiveNow games={others} />}
             <div className="home-lower">
                 <div className="home-column">
-                    {tournaments.data === null ? null : <TournamentBlock list={tournaments.data} now={now} />}
+                    {tournaments.data === null ? null : <TournamentBlock list={tournaments.data} now={now} owner={signedInAs !== null && (roster.data ?? []).some((bot) => bot.ownerName === signedInAs)} />}
                     {ladder.data === null && !ladder.error ? null : <LadderBlock ladder={ladder.data?.entries ?? []} allTime={ladder.data?.allTime ?? false} roster={roster.data} failed={ladder.data === null} retry={ladder.reload} />}
                     {recent.data === null && !recent.error ? null : <RecentResults games={recent.data?.games ?? []} failed={recent.data === null} now={now} retry={recent.reload} />}
                 </div>

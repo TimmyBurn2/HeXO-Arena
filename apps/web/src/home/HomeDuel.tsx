@@ -8,7 +8,7 @@ import { useDuelStates } from '../duels/use-duels';
 import { siteStatusStore } from '../site-status';
 
 /**
- * Home's bot duel: two slots that open the same bot list as Bot duels, and
+ * Home's bot duel: two slots that open the same bot list as Bot duel, and
  * Start, which plays a duel or a test with the defaults; with fewer than
  * two bots ready, nothing.
  */

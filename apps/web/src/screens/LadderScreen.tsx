@@ -47,7 +47,7 @@ export function LadderScreen() {
     const [find, setFind] = useState(``);
     return (
         <>
-            <LadderHead view="ladder" title={text.ladder.title}>
+            <LadderHead title={text.ladder.title}>
                 <p className="note">{text.ladder.lead}</p>
             </LadderHead>
             <div className="ladder-filters">

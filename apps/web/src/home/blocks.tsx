@@ -8,6 +8,8 @@ import type { LiveView } from '../live/use-live-replay';
 import { Link } from '../router/Link';
 import { botApiRepository } from '../site-links';
 import { text } from '../text';
+import { tournamentPagePath } from '../tournaments/view';
+import { yoursText } from '../tournaments/words';
 
 /** How many games Live now draws as boards; the rest are rows. */
 const liveMinis = 2;
@@ -271,19 +273,24 @@ const tournamentSoonMs = 86_400_000;
 /**
  * The tournament worth a look: the one running, else the next one starting
  * within a day; nothing otherwise.
+ * An owner who has not entered the next one is offered its entry while it
+ * waits, however far off it starts, and sees their own bot's part in the
+ * one shown.
  */
-export function TournamentBlock({ list, now }: { list: TournamentList; now: number }) {
+export function TournamentBlock({ list, now, owner }: { list: TournamentList; now: number; owner: boolean }) {
+    const next = list.scheduled[0];
+    const open = owner && next !== undefined && next.yours === undefined ? next : null;
     const soon = list.scheduled.find((entry) => Date.parse(entry.startsAt) - now <= tournamentSoonMs);
-    const shown = list.running ?? soon ?? null;
+    const shown = list.running ?? soon ?? open;
     if (shown === null) return null;
     const wait = Math.max(0, Math.floor((Date.parse(shown.startsAt) - now) / 1000));
     return (
         <section className="home-block" aria-labelledby="tournament-block-title">
-            <Heading id="tournament-block-title" title={text.home.tournament} link={{ to: `/tournaments`, label: text.home.allTournaments }} />
+            <Heading id="tournament-block-title" title={text.home.tournament} link={{ to: `/games/tournaments`, label: text.home.allTournaments }} />
             <ul className="home-rows">
                 <li className="home-row">
                     <span className="home-row-who">
-                        <Link to={`/tournaments/${encodeURIComponent(shown.id)}`} className="player-name">
+                        <Link to={tournamentPagePath(shown.id)} className="player-name">
                             {shown.name}
                         </Link>
                         <span className="note">
@@ -291,12 +298,20 @@ export function TournamentBlock({ list, now }: { list: TournamentList; now: numb
                                 ? text.home.tournamentRunning(shown.entrants, clockText(shown.timeControl))
                                 : text.home.tournamentStarts(shown.entrants, shown.maxEntrants)}
                         </span>
+                        {shown.yours === undefined ? null : <span className="note home-row-yours">{yoursText(shown, shown.yours)}</span>}
                     </span>
                     <span className="home-row-figure">
                         {shown.status === `running` ? <span className="tag">{text.home.tournamentLive}</span> : <span>{text.home.tournamentIn(text.time.until(wait))}</span>}
                     </span>
                 </li>
             </ul>
+            {open === null ? null : (
+                <p className="home-block-foot">
+                    <Link to="/play/tournament" ariaLabel={text.tournaments.enterBotIn(open.name)}>
+                        {text.tournaments.enterBot}
+                    </Link>
+                </p>
+            )}
         </section>
     );
 }

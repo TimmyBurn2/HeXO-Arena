@@ -23,6 +23,7 @@ import {
     type TournamentList,
     type TournamentPlace,
     type TournamentSummary,
+    type TournamentYours,
 } from '@hexo-arena/contract';
 import { and, asc, desc, eq, inArray, isNull, ne, sql } from 'drizzle-orm';
 import type { FastifyInstance } from 'fastify';
@@ -64,6 +65,7 @@ const tournamentColumns = {
 
 interface EntryRow {
     readonly botId: string;
+    readonly ownerId: string;
     /** The bot's number in this tournament, which its pages name it by. */
     readonly key: number;
     /** The bot as the tournament's pages name it. */
@@ -81,6 +83,7 @@ function entryRows(query: Query, tournamentId: string): EntryRow[] {
     const rows = query
         .select({
             botId: tournamentEntries.botId,
+            ownerId: tournamentEntries.ownerId,
             bot: bots.name,
             botDeletedAt: bots.deletedAt,
             ownerName: users.name,
@@ -281,14 +284,26 @@ function summaryOf(query: Query, row: TournamentRow): TournamentSummary {
 // A bot in the field has a place once the pairings are drawn; one that
 // never joined the field has none.
 function placeOf(query: Query, row: TournamentRow, botId: string): TournamentPlace | null {
+    return entryPlace(query, row, (entry) => entry.botId === botId)?.place ?? null;
+}
+
+// The owner's entry, one per owner, with the bot as the tournament names it.
+function yoursOf(query: Query, row: TournamentRow, ownerId: string): TournamentYours | null {
+    const found = entryPlace(query, row, (entry) => entry.ownerId === ownerId);
+    return found === null ? null : { bot: found.entry.bot, ...(found.entry.deleted ? { deleted: true as const } : {}), place: found.place };
+}
+
+function entryPlace(query: Query, row: TournamentRow, wanted: (entry: EntryRow) => boolean): { entry: EntryRow; place: TournamentPlace } | null {
     const entries = entryRows(query, row.id);
-    const entry = entries.find((candidate) => candidate.botId === botId);
+    const entry = entries.find(wanted);
     if (entry === undefined) return null;
     const state = tournamentEntryStateSchema.parse(entry.state);
     const reason = entry.reason === null ? {} : { reason: tournamentEntryReasonSchema.parse(entry.reason) };
     const field = entries.filter((candidate) => candidate.state === `playing` || candidate.state === `withdrawn`).map((candidate) => candidate.botId);
-    const line = field.includes(botId) ? standingsOf(field, pairingViews(query, row.id, entries).map((pairing) => pairing.scored)).find((standing) => standing.bot === botId) : undefined;
-    return { state, ...reason, rank: line?.rank ?? null, points: line?.points ?? null };
+    const line = field.includes(entry.botId)
+        ? standingsOf(field, pairingViews(query, row.id, entries).map((pairing) => pairing.scored)).find((standing) => standing.bot === entry.botId)
+        : undefined;
+    return { entry, place: { state, ...reason, rank: line?.rank ?? null, points: line?.points ?? null } };
 }
 
 // The first round with a game still to finish, or the last once none has.
@@ -309,9 +324,10 @@ export function tournamentSummary(query: Query, id: string): TournamentSummary |
 
 /**
  * The tournament list: the running one, those waiting, and the latest over;
- * for a bot, only those it entered, each with its place.
+ * for a bot, only those it entered, each with its place; for a signed-in
+ * owner, each one they entered names their bot and its place.
  */
-export function tournamentList(query: Query, botId: string | null = null): TournamentList {
+export function tournamentList(query: Query, botId: string | null = null, ownerId: string | null = null): TournamentList {
     const all = (statuses: string[], order: `asc` | `desc`, limit: number) =>
         query
             .select(tournamentColumns)
@@ -329,7 +345,8 @@ export function tournamentList(query: Query, botId: string | null = null): Tourn
             .all();
     const summary = (row: TournamentRow): TournamentSummary => {
         const place = botId === null ? null : placeOf(query, row, botId);
-        return { ...summaryOf(query, row), ...(place === null ? {} : { bot: place }) };
+        const yours = ownerId === null ? null : yoursOf(query, row, ownerId);
+        return { ...summaryOf(query, row), ...(place === null ? {} : { bot: place }), ...(yours === null ? {} : { yours }) };
     };
     const [running] = all([`running`], `asc`, 1);
     return {
@@ -371,8 +388,10 @@ export function registerTournamentApi(app: FastifyInstance, deps: TournamentApiD
         const parsed = tournamentListQuerySchema.safeParse(request.query);
         if (!parsed.success) return reply.code(400).send({ error: `the query fails validation`, code: `bad_request` });
         const name = parsed.data.bot;
+        // The list of one bot is shared by every caller through its memo, so only the list of every bot names the caller's own.
         if (name === undefined) {
-            return reply.header(`content-type`, `application/json; charset=utf-8`).send(JSON.stringify(tournamentListSchema.parse(tournamentList(query))));
+            const owner = sessionUser(query, request)?.id ?? null;
+            return reply.header(`content-type`, `application/json; charset=utf-8`).send(JSON.stringify(tournamentListSchema.parse(tournamentList(query, null, owner))));
         }
         const bot = nameSyntaxSchema.safeParse(name).success
             ? query.select({ id: bots.id }).from(bots).where(and(eq(bots.nameKey, nameKeyOf(name)), isNull(bots.deletedAt))).get()

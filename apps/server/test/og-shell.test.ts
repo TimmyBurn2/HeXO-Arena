@@ -5,6 +5,7 @@ import {
     botsMeta,
     connectMeta,
     creditsMeta,
+    duelListMeta,
     duelsMeta,
     gamesMeta,
     gamesPath,
@@ -14,6 +15,7 @@ import {
     legalPagePath,
     legalPages,
     liveGamesMeta,
+    playTournamentMeta,
     tournamentsMeta,
     logoutPath,
     notFoundMeta,
@@ -128,7 +130,7 @@ describe('the og shell routes', () => {
     });
 
     it('carries the site icon at its size and the site name on every shell route, found or not', async () => {
-        for (const url of [`/`, `/play`, `/play?bot=nobody`, `/analysis`, `/analysis?game=g_nothing`, `/ladder`, `/bots`, `/bots/nobody`, `/game/g_nothing`, `/games`, `/games/live`, `/tournaments`, `/tournaments/t_aaaaaaaaaaaa`, `/play/duels`, `/play/duels/d_aaaaaaaaaaaa`, `/connect`, `/profile`, `/credits`, `/welcome`, ...legalPages.map(legalPagePath)]) {
+        for (const url of [`/`, `/play`, `/play?bot=nobody`, `/analysis`, `/analysis?game=g_nothing`, `/ladder`, `/bots`, `/bots/nobody`, `/game/g_nothing`, `/games`, `/games/live`, `/games/duels`, `/games/tournaments`, `/tournaments/t_aaaaaaaaaaaa`, `/play/duels`, `/play/tournament`, `/duels/d_aaaaaaaaaaaa`, `/connect`, `/profile`, `/credits`, `/welcome`, ...legalPages.map(legalPagePath)]) {
             const response = await arena.app.inject({ method: `GET`, url });
             expect(response.body).toContain(`<meta property="og:image" content="https://arena.example/icon-512.png" />`);
             expect(response.body).toContain(`<meta property="og:image:width" content="512" />`);
@@ -160,8 +162,10 @@ describe('the og shell routes', () => {
             [`/bots`, botsMeta],
             [`/games`, gamesMeta],
             [`/games/live`, liveGamesMeta],
+            [`/games/duels`, duelListMeta],
+            [`/games/tournaments`, tournamentsMeta],
             [`/play/duels`, duelsMeta],
-            [`/tournaments`, tournamentsMeta],
+            [`/play/tournament`, playTournamentMeta],
             [`/connect`, connectMeta],
             [`/profile`, profileMeta],
             [`/credits`, creditsMeta],
@@ -365,12 +369,26 @@ describe('the og shell routes', () => {
                 `insert into duels (id, bot_a_id, bot_b_id, a_first, a_x, test, games, time_control, opening_plies, a_rating, b_rating, rated, status, created_at) values ('d_aaaaaaaaaaaa', ?, ?, 1, 1, 0, 4, '{"mode":"turn","turnTimeMs":10000}', 5, 1500, 1500, 0, 'running', 1)`,
             )
             .run(...ids);
-        const running = await shell(`/play/duels/d_aaaaaaaaaaaa`);
+        const running = await shell(`/duels/d_aaaaaaaaaaaa`);
         expect(running.status).toBe(200);
         expect(running.meta.ogTitle).toMatch(/^(sealbot vs otterbot|otterbot vs sealbot) - HeXO Arena$/u);
         expect(running.meta.ogDescription).toBe(`Duel of 4 games between two bots, turn clock 10 s; running, level at 0-0`);
-        expect((await shell(`/play/duels/d_bbbbbbbbbbbb`)).status).toBe(404);
-        expect((await shell(`/play/duels/nope`)).status).toBe(404);
+        expect((await shell(`/duels/d_bbbbbbbbbbbb`)).status).toBe(404);
+        expect((await shell(`/duels/nope`)).status).toBe(404);
+    });
+
+    it('sends a page that moved on to its new address for good, a duel by its id', async () => {
+        for (const [from, to] of [
+            [`/play/duels/d_aaaaaaaaaaaa`, `/duels/d_aaaaaaaaaaaa`],
+            [`/play/duels/d_aaaaaaaaaaaa?from=old`, `/duels/d_aaaaaaaaaaaa`],
+            [`/play/duels/a%20b`, `/duels/a%20b`],
+            [`/duels`, `/games/duels`],
+            [`/tournaments`, `/games/tournaments`],
+        ] as const) {
+            const response = await arena.app.inject({ method: `GET`, url: from });
+            expect(response.statusCode, from).toBe(301);
+            expect(response.headers.location, from).toBe(to);
+        }
     });
 });
 

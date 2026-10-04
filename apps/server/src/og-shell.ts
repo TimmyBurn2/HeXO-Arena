@@ -5,6 +5,7 @@ import {
     botsMeta,
     connectMeta,
     creditsMeta,
+    duelListMeta,
     duelMeta,
     duelsMeta,
     welcomeMeta,
@@ -20,6 +21,7 @@ import {
     nameSyntaxSchema,
     notFoundMeta,
     playMeta,
+    playTournamentMeta,
     profileMeta,
     playerMeta,
     reportFormMetaName,
@@ -104,8 +106,10 @@ const fixedPages: readonly (readonly [string, PageMeta])[] = [
     [`/bots`, botsMeta],
     [`/games`, gamesMeta],
     [`/games/live`, liveGamesMeta],
+    [`/games/duels`, duelListMeta],
+    [`/games/tournaments`, tournamentsMeta],
     [`/play/duels`, duelsMeta],
-    [`/tournaments`, tournamentsMeta],
+    [`/play/tournament`, playTournamentMeta],
     [`/connect`, connectMeta],
     [`/profile`, profileMeta],
     [`/credits`, creditsMeta],
@@ -114,15 +118,36 @@ const fixedPages: readonly (readonly [string, PageMeta])[] = [
     ...legalPages.map((page) => [legalPagePath(page), legalPageMeta[page]] as const),
 ];
 
+// Pages that moved, each answering with its new address so an old link
+// still lands; the old duel lists stay on the setup's path, which the app
+// sends on to Games.
+const movedPages: readonly (readonly [string, (id: string) => string])[] = [
+    [`/play/duels/:id`, (id) => `/duels/${encodeURIComponent(id)}`],
+    [`/duels`, () => `/games/duels`],
+    [`/tournaments`, () => `/games/tournaments`],
+];
+
 // The ids a game takes, so a query never reaches a read with arbitrary text.
 const gameIdPattern = /^[A-Za-z0-9_-]{1,100}$/u;
 
 /**
  * Every route the shell answers, in the order the proxy lists them: every
  * page of the site, so a pasted link to any of them previews with an
- * absolute image.
+ * absolute image, and every page that moved, so an old link reaches the app.
  */
-export const shellRoutes: readonly string[] = [`/`, `/play`, analysisPagePath, `/ladder`, `/bots/:name`, `/players/:name`, `/game/:gameId`, `/tournaments/:id`, `/play/duels/:id`, ...fixedPages.map(([path]) => path)];
+export const shellRoutes: readonly string[] = [
+    `/`,
+    `/play`,
+    analysisPagePath,
+    `/ladder`,
+    `/bots/:name`,
+    `/players/:name`,
+    `/game/:gameId`,
+    `/tournaments/:id`,
+    `/duels/:id`,
+    ...movedPages.map(([path]) => path),
+    ...fixedPages.map(([path]) => path),
+];
 
 /**
  * Serves the SPA shell for every page of the site, with meta from live
@@ -220,8 +245,13 @@ export function registerOgShell(app: FastifyInstance, deps: OgShellDeps): void {
         return tournament === null ? sendShell(reply, 404, notFoundMeta) : sendShell(reply, 200, tournamentMeta(tournament));
     });
 
-    app.get<{ Params: { id: string } }>(`/play/duels/:id`, { config: { limit: `shell` } }, async (request, reply) => {
+    app.get<{ Params: { id: string } }>(`/duels/:id`, { config: { limit: `shell` } }, async (request, reply) => {
         const duel = duelSummary(query, request.params.id);
         return duel === null ? sendShell(reply, 404, notFoundMeta) : sendShell(reply, 200, duelMeta(duel));
     });
+
+    // Permanent, so a preview or a search follows the move once; the query is dropped, as no moved page reads one.
+    for (const [path, target] of movedPages) {
+        app.get<{ Params: { id?: string } }>(path, { config: { limit: `shell` } }, async (request, reply) => reply.redirect(target(request.params.id ?? ``), 301));
+    }
 }

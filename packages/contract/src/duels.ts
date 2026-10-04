@@ -4,7 +4,7 @@ import { estimateMoreGames, likelyStrongerChance, strongerChance } from './duel-
 import { duelGamesMax, gameCellSchema, liveGameEntrySchema, scheduledClockSchema } from './games';
 import { provisionalSchema } from './leaderboard';
 import { levelIdSchema, seatLevelSchema } from './levels';
-import { clockText, pageTitle, plural, type PageMeta } from './meta';
+import { clockText, pageTitle, plural, siteName, type PageMeta } from './meta';
 import { deletedBotName, deletedMarkSchema, deletedPlayerName, nameKeyOf, nameMaxLength, nameSyntaxSchema } from './names';
 import { finishReasonSchema, openingPliesRequestSchema, openingPliesSchema, timeControlSchema } from './stream';
 
@@ -357,5 +357,8 @@ export function duelMeta(duel: DuelSummary): PageMeta {
     return { title: pageTitle(pair), description: `${kind} of ${length} between two bots, ${clockText(duel.terms.timeControl)}; ${state}` };
 }
 
-/** The Bot duels page, where duels start and are listed. */
-export const duelsMeta: PageMeta = { title: pageTitle(`Bot duels`), description: `Put two bots on the board and watch them play, or test two of your own` };
+/** The Bot duel place under Play, where a duel or a test starts. */
+export const duelsMeta: PageMeta = { title: pageTitle(`Bot duel`), description: `Put two bots on the board and watch them play, or test two of your own` };
+
+/** The duels under Games, live and past. */
+export const duelListMeta: PageMeta = { title: pageTitle(`Duels`), description: `Duels between two bots on ${siteName}, live and past` };

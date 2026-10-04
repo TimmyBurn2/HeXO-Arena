@@ -64,4 +64,24 @@ describe('the tournament list for one bot', () => {
         expect(tournamentSummarySchema.parse({ ...summary, bot: { state: `absent`, rank: null, points: null } }).bot).toEqual({ state: `absent`, rank: null, points: null });
         expect(tournamentSummarySchema.safeParse({ ...summary, bot: { state: `won`, rank: 1, points: 9 } }).success).toBe(false);
     });
+
+    it('carries the caller\'s own bot and its place, which a list for a signed-in owner adds', () => {
+        const summary = {
+            id: `t_autumnrobin1`,
+            name: `Autumn round robin`,
+            status: `running`,
+            startsAt: `2026-10-01T18:00:00Z`,
+            timeControl: { mode: `turn`, turnTimeMs: 10_000 },
+            openingPlies: 5,
+            entrants: 4,
+            maxEntrants: 12,
+            winner: null,
+            round: { current: 2, of: 3 },
+            yours: { bot: `hextide`, place: { state: `playing`, rank: 1, points: 3 } },
+        };
+        expect(tournamentSummarySchema.parse(summary)).toEqual(summary);
+        expect(tournamentSummarySchema.parse({ ...summary, yours: { bot: `deleted bot`, deleted: true, place: { state: `entered`, rank: null, points: null } } }).yours?.deleted).toBe(true);
+        expect(tournamentSummarySchema.safeParse({ ...summary, yours: { place: { state: `playing`, rank: 1, points: 3 } } }).success).toBe(false);
+        expect(document.paths[tournamentsPath]?.get?.security).toEqual([{ sessionCookie: [] }, {}]);
+    });
 });

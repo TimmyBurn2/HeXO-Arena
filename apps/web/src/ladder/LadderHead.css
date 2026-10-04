@@ -13,8 +13,4 @@
         min-width: 0;
         overflow-wrap: anywhere;
     }
-
-    .ladder-views .pill {
-        text-decoration: none;
-    }
 }

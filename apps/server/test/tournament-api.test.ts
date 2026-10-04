@@ -87,6 +87,25 @@ describe('the tournament reads and entries', () => {
         ]);
     });
 
+    it('names the signed-in caller\'s own entry and its place on the list of every bot, and on no one else\'s', async () => {
+        const list = async (owner: string | null, search = ``) =>
+            tournamentListSchema.parse(
+                (await world.app.inject({ method: `GET`, url: `/api/tournaments${search}`, ...(owner === null ? {} : { cookies: { hexo_arena_session: sessions.get(owner) ?? `` } }) })).json(),
+            );
+        for (const [owner, bot] of people.slice(0, 3)) await enter(owner, bot);
+        expect((await list(`ann`)).scheduled[0]?.yours).toEqual({ bot: `alpha`, place: { state: `entered`, rank: null, points: null } });
+        expect((await list(`dee`)).scheduled[0]?.yours).toBeUndefined();
+        expect((await list(null)).scheduled[0]?.yours).toBeUndefined();
+        online(`alpha`, `beta`, `gamma`);
+        clock += 120_000;
+        world.tournaments.tick();
+        clock += 1_000;
+        expect((await list(`bob`)).running?.yours).toEqual({ bot: `beta`, place: { state: `playing`, rank: 1, points: 0 } });
+        const forBot = (await list(`bob`, `?bot=gamma`)).running;
+        expect(forBot?.bot).toMatchObject({ state: `playing` });
+        expect(forBot?.yours).toBeUndefined();
+    });
+
     it('enters an owner\'s bot, replaces it with another of theirs, and withdraws it', async () => {
         const first = await enter(`ann`, `alpha`);
         expect(tournamentEntrySchema.parse(first.json())).toEqual({ key: 1, bot: `alpha`, ownerName: `ann`, online: false, ratingAtStart: null, state: `entered` });

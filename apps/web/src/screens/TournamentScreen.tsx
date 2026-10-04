@@ -3,7 +3,7 @@ import { clockText, deletedPlayerName, tournamentMeta, tournamentMinPresent, tou
 import { ApiError, fetchTournament, limitedFor, tournamentExportUrl } from '../api/client';
 import { BotBadge, PlayerName, PresenceDot } from '../components/player';
 import { ErrorFrame, SkeletonRows } from '../components/states';
-import { LadderHead } from '../ladder/LadderHead';
+import { tournamentGamesPath } from '../games/filters';
 import { PodiumStand } from '../ladder/Podium';
 import { LiveGameGrid } from '../live/LiveGameCard';
 import { Link } from '../router/Link';
@@ -16,6 +16,7 @@ import { Rounds } from '../tournaments/Rounds';
 import { Standings } from '../tournaments/Standings';
 import { absentees, currentRound, roundBegun } from '../tournaments/view';
 import { useDocumentMeta } from '../use-document-meta';
+import './DuelScreen.css';
 import './TournamentScreen.css';
 
 type Load = { kind: `loading` } | { kind: `ready`; detail: TournamentDetail; at: number } | { kind: `missing` } | { kind: `failed`; limited: number | null };
@@ -84,16 +85,33 @@ function utcTime(iso: string): string {
     return `${iso.slice(0, 10)} ${iso.slice(11, 16)} UTC`;
 }
 
-/** One tournament: what it is, where it stands, and everything played in it. */
+/**
+ * One tournament under Games: a crumb to the list with the export beside
+ * it, what it is, where it stands, and everything played in it.
+ */
 export function TournamentScreen({ id }: { id: string }) {
     const route = useRoute();
     const { load, retry } = useTournament(id);
     const meta = load.kind === `ready` ? tournamentMeta(summaryOf(load.detail)) : undefined;
     useDocumentMeta(route, meta?.title, meta?.description);
     const title = load.kind === `ready` ? load.detail.name : text.tournaments.title;
+    const over = load.kind === `ready` && anyGameOver(load.detail);
     return (
         <>
-            <LadderHead view="tournaments" title={title} />
+            <div className="duel-title-row">
+                <p className="duel-kicker">
+                    <Link to="/games/tournaments">{text.tournaments.crumb}</Link>
+                </p>
+                {/* The export holds the games over; before the first, it would hold none. */}
+                {over ? (
+                    <div className="duel-actions">
+                        <a href={tournamentExportUrl(id)} download className="btn btn-ghost">
+                            {text.games.exportGames}
+                        </a>
+                    </div>
+                ) : null}
+            </div>
+            <h1 className="screen-title tournament-title">{title}</h1>
             {load.kind === `loading` ? <SkeletonRows /> : null}
             {load.kind === `failed` ? <ErrorFrame sentence={text.tournaments.detailFailed} onRetry={retry} wait={load.limited} /> : null}
             {load.kind === `missing` ? (
@@ -101,7 +119,7 @@ export function TournamentScreen({ id }: { id: string }) {
                     <h2>{text.tournaments.notFound}</h2>
                     <p>{text.tournaments.notFoundBody}</p>
                     <div className="actions">
-                        <Link to="/tournaments" className="btn btn-primary">
+                        <Link to="/games/tournaments" className="btn btn-primary">
                             {text.tournaments.title}
                         </Link>
                     </div>
@@ -124,11 +142,10 @@ function Tournament({ detail, readAt, onEntry }: { detail: TournamentDetail; rea
                     {text.tournaments.rules(field, clockText(detail.timeControl), detail.openingPlies)} {text.tournaments.pairing(detail.openingPlies)}
                 </p>
                 {detail.rounds.length > 0 ? <RoundSteps detail={detail} /> : null}
+                {/* Games over show under Games too, where the other filters narrow them. */}
                 {anyGameOver(detail) ? (
-                    <p className="tournament-export">
-                        <a href={tournamentExportUrl(detail.id)} download className="btn btn-ghost">
-                            {text.games.exportGames}
-                        </a>
+                    <p className="tournament-games">
+                        <Link to={tournamentGamesPath(detail.id)}>{text.tournaments.theseGames}</Link>
                     </p>
                 ) : null}
             </div>
@@ -141,7 +158,7 @@ function Tournament({ detail, readAt, onEntry }: { detail: TournamentDetail; rea
     );
 }
 
-// The export holds the games over; before the first, it would hold none.
+// Whether a game is over, so the export and the games under Games hold one.
 function anyGameOver(detail: TournamentDetail): boolean {
     return detail.rounds.some((round) => round.pairings.some((pairing) => pairing.games.some((game) => game.gameId !== null && (game.outcome === `played` || game.outcome === `aborted`))));
 }

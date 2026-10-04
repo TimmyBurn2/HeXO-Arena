@@ -367,6 +367,15 @@
         margin-left: 0;
     }
 
+    .home-row-yours {
+        flex-basis: 100%;
+    }
+
+    .home-block-foot {
+        margin: 0;
+        font-weight: var(--weight-strong);
+    }
+
     .home-row-figure {
         display: inline-flex;
         align-items: center;

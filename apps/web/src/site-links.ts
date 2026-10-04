@@ -32,7 +32,7 @@ export const sourceLink: SiteLink = { kind: `external`, label: text.shell.links.
  * in its drawer; a new standing link is one more row.
  */
 export const siteLinks: readonly SiteLink[] = [
-    { kind: `page`, label: text.shell.links.tournaments, to: `/tournaments` },
+    { kind: `page`, label: text.shell.links.tournaments, to: `/games/tournaments` },
     { kind: `page`, label: text.shell.links.build, to: `/connect` },
     { kind: `page`, label: text.shell.links.credits, to: `/credits` },
     { kind: `external`, label: text.shell.links.botApi, href: botApiRepository },

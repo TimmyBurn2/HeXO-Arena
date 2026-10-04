@@ -3,6 +3,7 @@ import {
     botsMeta,
     connectMeta,
     creditsMeta,
+    duelListMeta,
     duelsMeta,
     gamesMeta,
     ladderMeta,
@@ -12,6 +13,7 @@ import {
     pageTitle,
     playerMeta,
     playMeta,
+    playTournamentMeta,
     profileMeta,
     reportMeta,
     siteDescription,
@@ -20,7 +22,7 @@ import {
     welcomeMeta,
     type PageMeta,
 } from '@hexo-arena/contract';
-import type { Route } from './router/route';
+import { parseRoute, type Route } from './router/route';
 import { text } from './text';
 
 /** The root's meta: the site's own title, as the server shell renders it. */
@@ -37,14 +39,14 @@ export function routeMeta(route: Route): PageMeta {
             return rootMeta;
         case `play`:
             return playMeta();
-        case `duels`:
+        case `bot-duel`:
             return duelsMeta;
+        case `play-tournament`:
+            return playTournamentMeta;
         case `duel`:
-            return { title: pageTitle(text.meta.duel), description: duelsMeta.description };
+            return { title: pageTitle(text.meta.duel), description: duelListMeta.description };
         case `ladder`:
             return ladderMeta();
-        case `tournaments`:
-            return tournamentsMeta;
         case `tournament`:
             return { title: pageTitle(text.meta.tournament), description: tournamentsMeta.description };
         case `bots`:
@@ -57,6 +59,10 @@ export function routeMeta(route: Route): PageMeta {
             return gamesMeta;
         case `live-games`:
             return liveGamesMeta;
+        case `games-duels`:
+            return duelListMeta;
+        case `games-tournaments`:
+            return tournamentsMeta;
         case `analysis`:
             return analysisMeta();
         case `connect`:
@@ -73,6 +79,8 @@ export function routeMeta(route: Route): PageMeta {
             return legalPageMeta[route.page];
         case `game`:
             return { title: pageTitle(text.meta.game), description: siteDescription };
+        case `moved`:
+            return routeMeta(parseRoute(route.to));
         case `not-found`:
             return notFoundMeta;
     }

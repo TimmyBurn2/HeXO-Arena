@@ -76,6 +76,7 @@ for (const width of [1280, 390]) {
         const block = page.locator(`section`, { has: page.getByRole(`heading`, { name: `Tournaments`, exact: true }) });
         await expect(block.locator(`.place-row`)).toHaveText([/^Autumn round robin4th so far, 0 pointsRound 2 of 3/u, /^Winter cupEntered; starts /u, /^Summer cup2nd of 4, 3 points/u]);
         await expect(page.getByRole(`heading`, { name: `Tournaments`, exact: true })).toHaveCount(1);
+        await expect(block.getByRole(`link`, { name: `All tournaments` })).toHaveAttribute(`href`, `/games/tournaments`);
         expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
         await block.getByRole(`link`, { name: /^Summer cup/u }).click();
         await expect(page).toHaveURL(/\/tournaments\/t_summercup202$/u);

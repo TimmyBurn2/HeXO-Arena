@@ -163,6 +163,8 @@ const duelViewports: readonly Viewport[] = [
     { name: `phone`, width: 390, height: 844 },
 ];
 const laptopOnly: readonly Viewport[] = [{ name: `laptop`, width: 1280, height: 900 }];
+// The matrix's widths and a laptop's, for a screen the duel and tournament mockups show at 1280.
+const withLaptop: readonly Viewport[] = [...laptopOnly, ...viewports];
 const allDuels = Object.values(duelFixtures).filter((duel) => duel.id !== duelFixtures.testLive.id);
 // ana's bots and everyone else's, the live duel and the past ones listed.
 const dueling = (overrides: Partial<World> = {}) => world({ me: anaMe, bots: duelBots, duels: structuredClone(allDuels), live: [], ...overrides });
@@ -251,27 +253,28 @@ export const shots: readonly Shot[] = [
         framed: true,
         viewports: duelViewports,
     },
+    { name: `duels-signed-in-side`, path: `/play/duels`, world: dueling(), ready: `.duels-side .duel-row`, framed: true, viewports: duelViewports },
+    { name: `duel-list`, path: `/games/duels`, world: dueling({ live: structuredClone([...duelFixtures.live.live, ...duelFixtures.testLive.live]), duels: structuredClone(Object.values(duelFixtures)) }), ready: `.live-duel-board svg`, framed: true, viewports: duelViewports, fullPage: true },
+    { name: `duel-list-tests`, path: `/games/duels?list=tests`, world: dueling(), ready: `.duel-row`, framed: true, viewports: duelViewports },
+    { name: `duel-list-bot`, path: `/games/duels?bot=hextide`, world: dueling(), ready: `.duel-row`, framed: true, viewports: duelViewports },
+    { name: `duel-list-none`, path: `/games/duels`, world: dueling({ duels: [] }), ready: `#past-duels ~ .note`, framed: true, viewports: duelViewports },
+    { name: `duel-list-yours-signed-out`, path: `/games/duels?list=yours`, world: dueling({ me: null }), ready: `#live-duels ~ .note`, framed: true, viewports: duelViewports },
     {
-        name: `duels-tests`,
-        path: `/play/duels`,
-        world: dueling(),
-        ready: `.duel-card`,
+        name: `duel-list-rows`,
+        path: `/games/duels`,
+        world: dueling({ duels: structuredClone([duelFixtures.live, duelFixtures.testLive, ...[`a`, `b`].map((tag) => ({ ...duelFixtures.live, id: `d_devbotlive0${tag}` }))]) }),
+        ready: `#live-duels ~ .duel-rows .duel-row`,
         framed: true,
         viewports: duelViewports,
-        after: async (page) => {
-            await page.getByRole(`button`, { name: `Tests` }).click();
-            await page.locator(`#recent-duels`).waitFor();
-            await page.getByText(`hextide won all 20; stronger`).waitFor();
-        },
     },
-    duelPage(`duel-live`, `/play/duels/${duelFixtures.live.id}`, dueling({ me: brunoMe }), `.duel-head .score-hex`),
-    duelPage(`duel-finished`, `/play/duels/${duelFixtures.rated.id}`, dueling(), `.duel-head .score-hex`),
-    duelPage(`duel-test`, `/play/duels/${duelFixtures.test.id}`, dueling(), `.estimate`),
-    duelPage(`duel-test-live`, `/play/duels/${duelFixtures.testLive.id}`, dueling({ duels: [structuredClone(duelFixtures.testLive)] }), `.estimate`),
-    duelPage(`duel-cut-short`, `/play/duels/${duelFixtures.cutShort.id}`, dueling(), `.duel-head .score-hex`),
+    duelPage(`duel-live`, `/duels/${duelFixtures.live.id}`, dueling({ me: brunoMe }), `.duel-head .score-hex`),
+    duelPage(`duel-finished`, `/duels/${duelFixtures.rated.id}`, dueling(), `.duel-head .score-hex`),
+    duelPage(`duel-test`, `/duels/${duelFixtures.test.id}`, dueling(), `.estimate`),
+    duelPage(`duel-test-live`, `/duels/${duelFixtures.testLive.id}`, dueling({ duels: [structuredClone(duelFixtures.testLive)] }), `.estimate`),
+    duelPage(`duel-cut-short`, `/duels/${duelFixtures.cutShort.id}`, dueling(), `.duel-head .score-hex`),
     {
         name: `duel-stopping`,
-        path: `/play/duels/${duelFixtures.live.id}`,
+        path: `/duels/${duelFixtures.live.id}`,
         world: dueling({ me: brunoMe }),
         ready: `.duel-head`,
         framed: true,
@@ -281,8 +284,9 @@ export const shots: readonly Shot[] = [
             await page.getByRole(`button`, { name: `Keep playing` }).waitFor();
         },
     },
-    { name: `duel-missing`, path: `/play/duels/d_nothingthere`, world: dueling(), ready: `.empty`, framed: true, viewports: duelViewports },
+    { name: `duel-missing`, path: `/duels/d_nothingthere`, world: dueling(), ready: `.empty`, framed: true, viewports: duelViewports },
     { name: `home-duel`, path: `/`, world: dueling({ live: liveGames.slice(1, 2) }), ready: `.home-duel`, framed: true, viewports: duelViewports },
+    { name: `home-tournament`, path: `/`, world: world({ live: liveGames.slice(1, 2) }), ready: `.home-block-foot`, framed: true, viewports: duelViewports, fullPage: true },
     { name: `bot-page-duels`, path: `/bots/Pistol1`, world: dueling(), ready: `.bot-duels`, framed: true, viewports: duelViewports },
     {
         name: `games-duels`,
@@ -309,7 +313,7 @@ export const shots: readonly Shot[] = [
             await page.keyboard.press(`m`);
             await page.locator(`#drawer-body:not([hidden])`).waitFor();
             await page.getByRole(`tab`, { name: `Game` }).click();
-            await page.locator(`.facts a[href^="/play/duels/"]`).waitFor();
+            await page.locator(`.facts a[href^="/duels/"]`).waitFor();
         },
     })),
     { name: `bot-page-duels-owner`, path: `/bots/Pistol1`, world: dueling({ me: brunoMe }), ready: `#duels-by-others`, framed: true, viewports: duelViewports, fullPage: true },
@@ -327,15 +331,44 @@ export const shots: readonly Shot[] = [
     },
     { name: `home-loading`, path: `/`, world: world({ stall: true }), ready: `.featured-skeleton`, framed: true },
     { name: `home-error`, path: `/`, world: world({ broken: true }), ready: `.build-band.wide`, framed: true },
-    { name: `ladder`, path: `/ladder`, world: world(), ready: `.podium-plate`, framed: true, board: true },
+    { name: `ladder`, path: `/ladder`, world: world(), ready: `.podium-plate`, framed: true, board: true, viewports: withLaptop },
     { name: `ladder-all-time`, path: `/ladder?active=all`, world: world(), ready: `.podium-plate`, framed: true },
-    { name: `tournaments`, path: `/tournaments`, world: world({ tournaments }), ready: `.tournament-row`, framed: true },
-    { name: `tournaments-none`, path: `/tournaments`, world: world({ tournaments: [] }), ready: `.empty`, framed: true },
-    { name: `tournament-waiting`, path: `/tournaments/t_wintercup202`, world: world(), ready: `.entry-pick`, framed: true },
-    { name: `tournament-waiting-signed-out`, path: `/tournaments/t_wintercup202`, world: signedOut, ready: `.entry-sign-in`, framed: true },
-    { name: `tournament-running`, path: `/tournaments/t_autumnrobin1`, world: world({ live: liveGames, tournaments }), ready: `.xt`, framed: true, board: true },
-    { name: `tournament-finished`, path: `/tournaments/t_summercup202`, world: world(), ready: `.podium-plate`, framed: true, board: true },
-    { name: `tournament-called-off`, path: `/tournaments/t_raincup20261`, world: world(), ready: `.tournament-status`, framed: true },
+    { name: `tournaments`, path: `/games/tournaments`, world: world({ tournaments }), ready: `.tournament-row-enter`, framed: true, viewports: duelViewports },
+    { name: `tournaments-signed-out`, path: `/games/tournaments`, world: world({ me: null, tournaments }), ready: `.tournament-row`, framed: true, viewports: duelViewports },
+    { name: `tournaments-none`, path: `/games/tournaments`, world: world({ tournaments: [] }), ready: `.empty`, framed: true, viewports: duelViewports },
+    { name: `play-tournament`, path: `/play/tournament`, world: world({ tournaments }), ready: `.next-tournament .entry-pick`, framed: true, viewports: duelViewports, fullPage: true },
+    { name: `play-tournament-signed-out`, path: `/play/tournament`, world: world({ me: null, tournaments }), ready: `.next-tournament .entry-sign-in`, framed: true, viewports: duelViewports, fullPage: true },
+    { name: `play-tournament-none`, path: `/play/tournament`, world: world({ tournaments: tournaments.filter((entry) => entry.status !== `scheduled`) }), ready: `.empty`, framed: true, viewports: duelViewports },
+    {
+        name: `games-one-duel`,
+        path: `/games?event=duel&duel=${duelFixtures.live.id}`,
+        world: dueling({ finished: [...duelGameRows, ...tournamentGameRows, ...keptNames] }),
+        ready: `.chip`,
+        framed: true,
+        viewports: duelViewports,
+        after: async (page) => {
+            await page.getByRole(`button`, { name: `Remove duel devbot-b vs devbot-c` }).waitFor();
+            await page.getByRole(`button`, { name: /^Filters/u }).click();
+            await page.locator(`#games-duel option:checked`).waitFor({ state: `attached` });
+        },
+    },
+    {
+        name: `games-one-round`,
+        path: `/games?event=tournament&tournament=t_autumnrobin1&round=2`,
+        world: world({ tournaments, finished: [...tournamentGameRows, ...keptNames] }),
+        ready: `.game-row`,
+        framed: true,
+        viewports: duelViewports,
+        after: async (page) => {
+            await page.getByRole(`button`, { name: `Remove round 2` }).waitFor();
+            await page.getByRole(`button`, { name: `Remove Autumn round robin` }).waitFor();
+        },
+    },
+    { name: `tournament-waiting`, path: `/tournaments/t_wintercup202`, world: world(), ready: `.entry-pick`, framed: true, viewports: withLaptop },
+    { name: `tournament-waiting-signed-out`, path: `/tournaments/t_wintercup202`, world: signedOut, ready: `.entry-sign-in`, framed: true, viewports: withLaptop },
+    { name: `tournament-running`, path: `/tournaments/t_autumnrobin1`, world: world({ live: liveGames, tournaments }), ready: `.xt`, framed: true, board: true, viewports: withLaptop },
+    { name: `tournament-finished`, path: `/tournaments/t_summercup202`, world: world(), ready: `.podium-plate`, framed: true, board: true, viewports: withLaptop },
+    { name: `tournament-called-off`, path: `/tournaments/t_raincup20261`, world: world(), ready: `.tournament-status`, framed: true, viewports: withLaptop },
     { name: `ladder-two`, path: `/ladder`, world: world({ leaderboard: leaderboard.slice(0, 2) }), ready: `.podium-plate`, framed: true },
     { name: `ladder-one`, path: `/ladder`, world: world({ leaderboard: leaderboard.slice(0, 1) }), ready: `.podium-plate`, framed: true },
     {

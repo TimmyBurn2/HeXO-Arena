@@ -22,6 +22,7 @@ import {
     pickReason,
     ratedReason,
     readChoices,
+    setupPath,
     writeChoices,
     type DuelChoices,
     type DuelReads,
@@ -92,7 +93,7 @@ export function NewDuel({
     paused: boolean;
     initial: DuelSetup;
     compact?: boolean;
-    // The duels live now, which Home's card names beside its way to Bot duels.
+    // The duels live now, which Home's card names beside its way to every duel.
     liveCount?: number | null;
     onRefused: () => void;
 }) {
@@ -184,6 +185,8 @@ export function NewDuel({
                 levels: { ...(picked.first === null ? {} : { first: picked.first.id }), ...(picked.second === null ? {} : { second: picked.second.id }) },
                 rated,
             });
+            // Back from the duel's page finds the setup as it was left; Home's card keeps no setup to return to.
+            if (!compact) navigate(setupPath({ first: first.name, second: second.name, levels: { first: picked.first?.id ?? null, second: picked.second?.id ?? null }, games, clock, opening: plies }), { replace: true });
             navigate(duelPagePath(created.id));
         } catch (cause) {
             // The reads beside the list may lag the server's, so a refusal naming a bot reads them again to tell which bot and why.
@@ -266,8 +269,8 @@ export function NewDuel({
                     {compact ? (
                         <p className="note">
                             {liveCount === null || liveCount === 0
-                                ? words.home.place((place) => <Link to="/play/duels">{place}</Link>)
-                                : words.home.live(liveCount, (place) => <Link to="/play/duels">{place}</Link>)}
+                                ? words.home.place((place) => <Link to="/games/duels">{place}</Link>)
+                                : words.home.live(liveCount, (place) => <Link to="/games/duels">{place}</Link>)}
                         </p>
                     ) : (
                         <p className="note">{first === null && second === null ? words.cardNote : note}</p>
