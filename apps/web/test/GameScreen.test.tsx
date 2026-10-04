@@ -2,7 +2,7 @@
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { onlyLegal } from './legal-deploy';
-import type { GameSnapshot } from '@hexo-arena/contract';
+import type { GameSnapshot, TournamentDetail } from '@hexo-arena/contract';
 import { boardSettingsStore, defaultBoardSettings } from '../src/board/board-settings';
 import { meStore } from '../src/me';
 import { GameScreen } from '../src/screens/GameScreen';
@@ -886,6 +886,15 @@ describe('GameScreen for a watcher', () => {
         expect(card.querySelectorAll(`.rundown-expected`)).toHaveLength(0);
     });
 
+    it('say in the rundown that a game of a round robin a person set up is an unrated round robin', async () => {
+        const tournament = { id: `t_brunorobin01`, name: `Round robin by bruno`, round: 1, game: 1, createdBy: `bruno` };
+        stubRundown(watched({ ...freshSnapshot, unratedByChoice: true, tournament } as GameSnapshot));
+        render(<GameScreen gameId="g-new" />);
+        const card = await screen.findByRole(`region`, { name: `Rundown` });
+        await within(card).findByText(`deviation 96`);
+        expect(card.querySelector(`.rundown-unrated`)?.textContent).toBe(`unrated round robin`);
+    });
+
     it('tag the person who started a game unrated beside their rating, and tell a watcher why it is unrated', async () => {
         stubGame(watched({ ...runningSnapshot, unratedByChoice: true }));
         render(<GameScreen gameId="g-run" />);
@@ -1104,6 +1113,45 @@ describe('GameScreen for a watcher', () => {
         const line = await screen.findByRole(`link`, { name: `Autumn round robin, round 4, game 2 of 2` });
         expect(line.getAttribute(`href`)).toBe(`/tournaments/t_autumnrobin1`);
         expect(line.closest(`.facts-row`)?.querySelector(`dt`)?.textContent).toBe(`Tournament`);
+    });
+
+    it('name who leads the tournament beside a tournament game\'s place, once the tournament is read', async () => {
+        const tournamentGame = { ...watched(finishedSnapshot), tournament: { id: `t_autumnrobin1`, name: `Autumn round robin`, round: 4, game: 2 } } as GameSnapshot;
+        const autumn: TournamentDetail = {
+            id: `t_autumnrobin1`,
+            name: `Autumn round robin`,
+            origin: `operator`,
+            createdBy: null,
+            rated: true,
+            test: false,
+            gamesPerPair: 2,
+            status: `running`,
+            startsAt: `2026-10-04T12:00:00Z`,
+            startedAt: `2026-10-04T12:00:00Z`,
+            endedAt: null,
+            timeControl: { mode: `turn`, turnTimeMs: 10_000 },
+            openingPlies: 5,
+            maxEntrants: 12,
+            entries: [],
+            rounds: [],
+            standings: [
+                { rank: 1, key: 1, bot: `hextide`, ownerName: `ana`, points: 4, asX: 2, asO: 2, withdrawn: false },
+                { rank: 2, key: 2, bot: `sealbot`, ownerName: `quinn`, points: 3, asX: 2, asO: 1, withdrawn: false },
+            ],
+            live: [],
+            waiting: [],
+            nextRoundAt: null,
+        };
+        vi.stubGlobal(`fetch`, vi.fn((url: string) => Promise.resolve(new Response(JSON.stringify(url === `/api/tournaments/t_autumnrobin1` ? autumn : tournamentGame)))));
+        stubEventSource(tournamentGame);
+        render(<GameScreen gameId="g-end" />);
+        await screen.findByRole(`heading`, { name: `hextide vs quinn` });
+        await openWithM();
+        fireEvent.click(screen.getByRole(`tab`, { name: `Game` }));
+        const line = await screen.findByRole(`link`, { name: `Autumn round robin, round 4, game 2 of 2` });
+        await waitFor(() => {
+            expect(line.closest(`dd`)?.textContent).toBe(`Autumn round robin, round 4, game 2 of 2; hextide leads with 4 points`);
+        });
     });
 
     it('name a deleted player by the label, set apart and unlinked, and read no head-to-head for it', async () => {

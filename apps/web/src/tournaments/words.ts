@@ -1,4 +1,4 @@
-import type { GameTournament, TournamentSummary, TournamentYours } from '@hexo-arena/contract';
+import type { DuelEstimate, GameTournament, TournamentDetail, TournamentSummary, TournamentYours } from '@hexo-arena/contract';
 import { text } from '../text';
 
 /**
@@ -28,4 +28,31 @@ export function yoursText(tournament: Pick<TournamentSummary, `status`>, yours: 
 export function gameCaption(tournament: GameTournament): string {
     const game = tournament.leg === undefined ? tournament.game : (tournament.leg - 1) * 2 + tournament.game;
     return text.roundRobins.caption(tournament.name, tournament.round, game, tournament.of ?? 2);
+}
+
+/** A bot's verdict from its own side of a test's estimate: the estimate favoring the rest reads weaker. */
+export function verdictOf(estimate: DuelEstimate): keyof typeof text.roundRobins.estimates.verdicts {
+    if (estimate.favored === `second`) return estimate.verdict === `stronger` ? `weaker` : estimate.verdict === `likely_stronger` ? `likely_weaker` : `too_close`;
+    return estimate.verdict;
+}
+
+/** Who leads a tournament, won it, or led it when it stopped, in a few words; null before a point is scored. */
+export function leadText(detail: Pick<TournamentDetail, `status` | `standings`>): string | null {
+    const top = detail.standings.filter((line) => line.rank === 1);
+    const points = top[0]?.points ?? 0;
+    if (points === 0) return null;
+    const bots = top.map((line) => line.bot);
+    const words = text.roundRobins.page.status;
+    switch (detail.status) {
+        case `running`:
+            return words.leads(bots, points);
+        case `finished`:
+            return text.drawer.tournamentWon(bots, points);
+        case `stopped`:
+        case `canceled`:
+            return words.led(bots, points);
+        case `scheduled`:
+        case `called_off`:
+            return null;
+    }
 }

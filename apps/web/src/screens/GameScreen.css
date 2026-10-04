@@ -314,9 +314,9 @@
         font-size: var(--text-sm);
     }
 
-    /* Four legal links stand two to a row, so none is left on a line of
-       its own at any drawer width. */
-    .drawer-foot .legal-links {
+    /* The standing links and the legal ones stand two to a row, so none
+       is left on a line of its own at any drawer width. */
+    .drawer-foot .site-links {
         display: grid;
         grid-template-columns: repeat(2, auto);
         justify-content: start;
@@ -325,7 +325,7 @@
     /* Where two labels no longer fit side by side, as with large text on
        a phone, they stand one to a row. */
     @media (width < 12rem) {
-        .drawer-foot .legal-links {
+        .drawer-foot .site-links {
             grid-template-columns: auto;
         }
     }

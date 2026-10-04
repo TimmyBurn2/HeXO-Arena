@@ -1,4 +1,4 @@
-import type { BotListing, FinishedGameEntry, GamePlayer, LeaderboardEntry, Side, TournamentList } from '@hexo-arena/contract';
+import type { BotListing, FinishedGameEntry, GamePlayer, LeaderboardEntry, Side, TournamentList, TournamentSummary } from '@hexo-arena/contract';
 import { clockText, resultSentence } from '@hexo-arena/contract';
 import { BotBadge, OpenTag, PlayerName, PresenceDot, Rating, seatLevelFacts, seatName, Swatch } from '../components/player';
 import { Rungs } from '../components/Rungs';
@@ -273,9 +273,10 @@ const tournamentSoonMs = 86_400_000;
 /**
  * The tournament worth a look: the weekly running, else the next one
  * starting within a day; nothing otherwise.
- * An owner who has not entered the next one is offered its entry while it
- * waits, however far off it starts, and sees their own bot's part in the
- * one shown; anyone signed in is offered a round robin of their own.
+ * An owner who has not entered the next one is offered its entry in its
+ * own row while it waits, however far off it starts, and sees their own
+ * bot's part in the one shown; anyone signed in is offered a round robin
+ * of their own.
  */
 export function TournamentBlock({ list, now, owner, signedIn }: { list: TournamentList; now: number; owner: boolean; signedIn: boolean }) {
     const next = list.scheduled[0];
@@ -283,38 +284,48 @@ export function TournamentBlock({ list, now, owner, signedIn }: { list: Tourname
     const soon = list.scheduled.find((entry) => Date.parse(entry.startsAt) - now <= tournamentSoonMs);
     const shown = list.running.find((tournament) => tournament.origin === `operator`) ?? soon ?? open;
     if (shown === null) return null;
-    const wait = Math.max(0, Math.floor((Date.parse(shown.startsAt) - now) / 1000));
     return (
         <section className="home-block" aria-labelledby="tournament-block-title">
             <Heading id="tournament-block-title" title={text.home.tournament} link={{ to: `/games/tournaments`, label: text.home.allTournaments }} />
             <ul className="home-rows">
-                <li className="home-row">
-                    <span className="home-row-who">
-                        <Link to={tournamentPagePath(shown.id)} className="player-name">
-                            {shown.name}
-                        </Link>
-                        <span className="note">
-                            {shown.status === `running`
-                                ? text.home.tournamentRunning(shown.entrants, clockText(shown.timeControl))
-                                : text.home.tournamentStarts(shown.entrants, shown.maxEntrants)}
-                        </span>
-                        {shown.yours === undefined ? null : <span className="note home-row-yours">{yoursText(shown, shown.yours)}</span>}
-                    </span>
-                    <span className="home-row-figure">
-                        {shown.status === `running` ? <span className="tag">{text.home.tournamentLive}</span> : <span>{text.home.tournamentIn(text.time.until(wait))}</span>}
-                    </span>
-                </li>
+                <TournamentHomeRow tournament={shown} now={now} enter={open?.id === shown.id} />
+                {open === null || open.id === shown.id ? null : <TournamentHomeRow tournament={open} now={now} enter />}
             </ul>
-            {open === null && !signedIn ? null : (
+            {signedIn ? (
                 <p className="home-block-foot">
-                    {open === null ? null : (
-                        <Link to="/play/tournament" ariaLabel={text.tournaments.enterBotIn(open.name)}>
+                    <Link to="/play/tournament">{text.roundRobins.home.setUp}</Link>
+                </p>
+            ) : null}
+        </section>
+    );
+}
+
+// One tournament: its name, how far it got or how many entered, the reader's part, and the entry an owner may still make.
+function TournamentHomeRow({ tournament, now, enter }: { tournament: TournamentSummary; now: number; enter: boolean }) {
+    const wait = Math.max(0, Math.floor((Date.parse(tournament.startsAt) - now) / 1000));
+    return (
+        <li className="home-row">
+            <span className="home-row-who">
+                <Link to={tournamentPagePath(tournament.id)} className="player-name">
+                    {tournament.name}
+                </Link>
+                <span className="note">
+                    {tournament.status === `running`
+                        ? text.home.tournamentRunning(tournament.entrants, clockText(tournament.timeControl))
+                        : text.home.tournamentStarts(tournament.entrants, tournament.maxEntrants)}
+                </span>
+                {tournament.yours === undefined ? null : <span className="note home-row-yours">{yoursText(tournament, tournament.yours)}</span>}
+                {enter ? (
+                    <span className="home-row-enter">
+                        <Link to="/play/tournament" ariaLabel={text.tournaments.enterBotIn(tournament.name)}>
                             {text.tournaments.enterBot}
                         </Link>
-                    )}
-                    {signedIn ? <Link to="/play/tournament">{text.roundRobins.home.setUp}</Link> : null}
-                </p>
-            )}
-        </section>
+                    </span>
+                ) : null}
+            </span>
+            <span className="home-row-figure">
+                {tournament.status === `running` ? <span className="tag">{text.home.tournamentLive}</span> : <span>{text.home.tournamentIn(text.time.until(wait))}</span>}
+            </span>
+        </li>
     );
 }

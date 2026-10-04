@@ -1,6 +1,6 @@
 import { nameKeyOf, type TimeControl, type TournamentDetail, type TournamentGamesPerPair } from '@hexo-arena/contract';
 import { setTimeout as sleep } from 'node:timers/promises';
-import { ApiError, type ArenaClient } from './client';
+import { waitingOut, type ArenaClient } from './client';
 import type { PersonaName } from './personas';
 
 /** A round robin the seed sets up: who sets it up, its bots, and the games each pair plays. */
@@ -17,11 +17,11 @@ export interface DevRoundRobinPlans {
     readonly live: DevRoundRobinPlan;
 }
 
-/** What the seed left: each round robin's id, or null where none could start. */
+/** What the seed left: each round robin's id, the played ones null where they ended early. */
 export interface DevRoundRobins {
     readonly finished: string | null;
     readonly test: string | null;
-    readonly live: string | null;
+    readonly live: string;
 }
 
 /**
@@ -67,29 +67,19 @@ async function findLeft(client: ArenaClient, plan: DevRoundRobinPlan, wanted: (s
     return null;
 }
 
-// A refusal that leaves the seed's other work standing: a bot not online,
-// busy, or a cap is named in the log, and no round robin is left.
-async function start(options: DevRoundRobinOptions, plan: DevRoundRobinPlan): Promise<string | null> {
-    try {
-        const created = await options.client.createRoundRobin(await options.cookieOf(plan.creator), {
-            bots: plan.bots.map((name) => ({ name })),
-            gamesPerPair: plan.gamesPerPair,
-            timeControl: roundRobinClock,
-        });
-        return created.id;
-    } catch (error) {
-        if (!(error instanceof ApiError) || error.status >= 500) throw error;
-        options.log(`no round robin of ${plan.bots.join(`, `)}: ${error.message}`);
-        return null;
-    }
+// A refusal that clears by itself is waited out; any other stops the seed with its code.
+async function start(options: DevRoundRobinOptions, plan: DevRoundRobinPlan): Promise<string> {
+    const cookie = await options.cookieOf(plan.creator);
+    const request = { bots: plan.bots.map((name) => ({ name })), gamesPerPair: plan.gamesPerPair, timeControl: roundRobinClock };
+    const created = await waitingOut(async () => options.client.createRoundRobin(cookie, request), options.log, options.pollMs);
+    return created.id;
 }
 
 // Finds the round robin a plan already left finished or running, else sets
-// it up, and plays it to its end; null where it could not start or ended early.
+// it up, and plays it to its end; null where it ended early.
 async function playOut(options: DevRoundRobinOptions, plan: DevRoundRobinPlan): Promise<string | null> {
     const pollMs = options.pollMs ?? 1_000;
     const id = (await findLeft(options.client, plan, (status) => status === `finished` || status === `running`)) ?? (await start(options, plan));
-    if (id === null) return null;
     const deadline = Date.now() + playDeadlineMs;
     for (;;) {
         const detail = await options.client.tournament(id);
@@ -113,6 +103,6 @@ export async function seedDevRoundRobins(options: DevRoundRobinOptions): Promise
     const { plans, log } = options;
     const [finished, test] = await Promise.all([playOut(options, plans.finished), playOut(options, plans.test)]);
     const live = (await findLeft(options.client, plans.live, (status) => status === `running`)) ?? (await start(options, plans.live));
-    if (live !== null) log(`round robin ${live} runs: ${plans.live.bots.join(`, `)}, ${String(plans.live.gamesPerPair)} games a pair`);
+    log(`round robin ${live} runs: ${plans.live.bots.join(`, `)}, ${String(plans.live.gamesPerPair)} games a pair`);
     return { finished, test, live };
 }

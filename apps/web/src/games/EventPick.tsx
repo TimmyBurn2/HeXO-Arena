@@ -137,14 +137,15 @@ export function DuelPick({ value, named, tests, onChange }: { value: string | un
 
 /**
  * One tournament to narrow the list to, recent first: the one live, then
- * those over that played; searched by name.
+ * those over that played; tests among them while the list shows tests;
+ * searched by name.
  * The tournament chosen stays an option whatever the search.
  */
-export function TournamentPick({ value, named, onChange }: { value: string | undefined; named: EventNames[`tournament`]; onChange: (tournament: string | undefined) => void }) {
+export function TournamentPick({ value, named, tests, onChange }: { value: string | undefined; named: EventNames[`tournament`]; tests: boolean; onChange: (tournament: string | undefined) => void }) {
     const pick = text.games.pick;
     const read = useAsync(fetchTournaments);
     const [find, setFind] = useState<string | null>(null);
-    const all = read.data === null ? [] : [...read.data.running, ...read.data.past.filter((tournament) => tournament.status !== `called_off`)];
+    const all = read.data === null ? [] : [...read.data.running, ...read.data.past.filter((tournament) => tournament.status !== `called_off`)].filter((tournament) => tests || !tournament.test);
     const listed = find === null ? all : all.filter((tournament) => tournament.name.toLowerCase().includes(find.toLowerCase()));
     const options: (readonly [string, string])[] = listed.map((tournament) => [tournament.id, pick.tournamentOption(tournament.name, tournament.status === `running` ? pick.live : tournamentWhen(tournament.endedAt ?? tournament.startsAt))] as const);
     if (value !== undefined && !listed.some((tournament) => tournament.id === value)) options.unshift([value, tournamentWords(named)]);

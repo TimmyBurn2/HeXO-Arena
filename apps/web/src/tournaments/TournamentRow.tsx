@@ -1,9 +1,11 @@
 import { clockText, deletedPlayerName, type TournamentSummary } from '@hexo-arena/contract';
 import { BotBadge, PlayerName } from '../components/player';
+import { signed } from '../duels/words';
+import { useMe } from '../me';
 import { Link } from '../router/Link';
 import { text } from '../text';
 import { tournamentPagePath } from './view';
-import { yoursText } from './words';
+import { verdictOf, yoursText } from './words';
 import './RoundRobin.css';
 
 /** A tournament's date and time as its list row writes them. */
@@ -21,11 +23,14 @@ export function TournamentTag({ tournament }: { tournament: Pick<TournamentSumma
 
 /**
  * One tournament as a list row: its name linking its page, its tag, the
- * facts its state calls for, the reader's own bot's part, and an owner's
- * way to enter one coming up; compact, as Play's side holds it, the parts
- * stack under the name.
+ * facts its state calls for, the reader's own bot's part or that they set
+ * it up, and an owner's way to enter one coming up; compact, as Play's
+ * side holds it, the parts stack under the name.
  */
 export function TournamentRow({ tournament, owner = false, compact = false }: { tournament: TournamentSummary; owner?: boolean; compact?: boolean }) {
+    const me = useMe();
+    const viewer = me.status === `ready` && me.me?.kind === `user` ? me.me.name : null;
+    const setUp = tournament.origin === `person` && viewer !== null && tournament.createdBy === viewer;
     return (
         <div className={compact ? `tournament-row tournament-row-compact` : `tournament-row`}>
             <span className="tournament-tag-row">
@@ -37,7 +42,11 @@ export function TournamentRow({ tournament, owner = false, compact = false }: { 
             <span className="tournament-row-facts">
                 <Facts tournament={tournament} />
             </span>
-            {tournament.yours === undefined ? null : <span className="tournament-row-yours">{yoursText(tournament, tournament.yours)}</span>}
+            {tournament.yours !== undefined ? (
+                <span className="tournament-row-yours">{yoursText(tournament, tournament.yours)}</span>
+            ) : setUp ? (
+                <span className="tournament-row-yours">{text.roundRobins.lists.yourRole}</span>
+            ) : null}
             {owner && tournament.status === `scheduled` && tournament.yours === undefined ? (
                 <Link to={tournamentPagePath(tournament.id)} className="tournament-row-enter" ariaLabel={text.tournaments.enterBotIn(tournament.name)}>
                     {text.tournaments.enterBot}
@@ -59,9 +68,19 @@ function Winner({ tournament }: { tournament: TournamentSummary }) {
     );
 }
 
+// A test over reads as its page leads: the bot first in it against the rest, and the verdict.
+function TestLead({ lead }: { lead: NonNullable<TournamentSummary[`lead`]> }) {
+    const verdict = text.roundRobins.estimates.verdicts[verdictOf(lead.estimate)];
+    return <>{text.roundRobins.lists.testLead(lead.bot, signed(lead.estimate.rating), verdict)}</>;
+}
+
 function Facts({ tournament }: { tournament: TournamentSummary }) {
     const clock = clockText(tournament.timeControl);
     const lists = text.roundRobins.lists;
+    const lead = tournament.test ? tournament.lead : undefined;
+    // Who stopped it: its creator, unless the operator or the creator's ban or deletion did.
+    const stopper = (tournament.end?.reason ?? `creator`) === `creator` ? tournament.createdBy : null;
+    const round = tournament.end?.round ?? null;
     switch (tournament.status) {
         case `scheduled`:
             return (
@@ -83,13 +102,14 @@ function Facts({ tournament }: { tournament: TournamentSummary }) {
         case `finished`:
             return (
                 <>
-                    {when(tournament.endedAt ?? tournament.startsAt)}; <Winner tournament={tournament} />
+                    {when(tournament.endedAt ?? tournament.startsAt)}; {lead === undefined ? <Winner tournament={tournament} /> : <TestLead lead={lead} />}
                 </>
             );
         case `stopped`:
             return (
                 <>
-                    {when(tournament.endedAt ?? tournament.startsAt)}; {text.tournaments.played(tournament.entrants)}; {tournament.createdBy === null ? lists.stopped : lists.stoppedBy(tournament.createdBy, null)}
+                    {when(tournament.endedAt ?? tournament.startsAt)}; {lead === undefined ? text.tournaments.played(tournament.entrants) : <TestLead lead={lead} />};{` `}
+                    {stopper === null ? lists.stopped(round) : lists.stoppedBy(stopper, round)}
                 </>
             );
         case `called_off`:

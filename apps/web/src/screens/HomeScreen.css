@@ -371,6 +371,12 @@
         flex-basis: 100%;
     }
 
+    /* The entry stands in the row of the tournament it enters. */
+    .home-row-enter {
+        flex-basis: 100%;
+        font-weight: var(--weight-strong);
+    }
+
     .home-block-foot {
         display: flex;
         flex-wrap: wrap;

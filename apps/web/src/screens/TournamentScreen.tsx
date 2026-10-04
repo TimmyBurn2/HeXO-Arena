@@ -11,7 +11,7 @@ import { useRoute } from '../router/use-route';
 import { text } from '../text';
 import { Crosstable } from '../tournaments/Crosstable';
 import { EntryControl } from '../tournaments/EntryControl';
-import { Estimates, NextRound, PairsTable, RoundRobinActions, RoundRobinStatus, RoundRobinTerms, Waits } from '../tournaments/RoundRobinParts';
+import { Estimates, NextRound, PairsTable, RoundRobinActions, RoundRobinStatus, RoundRobinTerms, tournamentStatusId, Waits } from '../tournaments/RoundRobinParts';
 import { RoundSteps } from '../tournaments/RoundSteps';
 import { TournamentTag } from '../tournaments/TournamentRow';
 import { Rounds } from '../tournaments/Rounds';
@@ -25,7 +25,7 @@ type Load = { kind: `loading` } | { kind: `ready`; detail: TournamentDetail; at:
 
 // A running tournament is read again every few seconds while its page is in
 // view, a waiting one every minute, and one that is over never.
-function useTournament(id: string): { load: Load; retry: () => void } {
+function useTournament(id: string): { load: Load; retry: () => void; replace: (detail: TournamentDetail) => void } {
     const [load, setLoad] = useState<Load>({ kind: `loading` });
     const [attempt, setAttempt] = useState(0);
     const status = load.kind === `ready` ? load.detail.status : null;
@@ -60,7 +60,11 @@ function useTournament(id: string): { load: Load; retry: () => void } {
         setLoad({ kind: `loading` });
         setAttempt((count) => count + 1);
     }, []);
-    return { load, retry };
+    // A change the reader made answers with the tournament as it now stands, which takes the old one's place without a reload.
+    const replace = useCallback((detail: TournamentDetail) => {
+        setLoad({ kind: `ready`, detail, at: Date.now() });
+    }, []);
+    return { load, retry, replace };
 }
 
 function summaryOf(detail: TournamentDetail): TournamentSummary {
@@ -98,7 +102,7 @@ function utcTime(iso: string): string {
  */
 export function TournamentScreen({ id }: { id: string }) {
     const route = useRoute();
-    const { load, retry } = useTournament(id);
+    const { load, retry, replace } = useTournament(id);
     const me = useMe();
     const viewer = me.status === `ready` && me.me?.kind === `user` ? me.me.name : null;
     const meta = load.kind === `ready` ? tournamentMeta(summaryOf(load.detail)) : load.kind === `missing` ? notFoundMeta : undefined;
@@ -130,7 +134,7 @@ export function TournamentScreen({ id }: { id: string }) {
                         </>
                     ) : null}
                 </p>
-                {detail === null ? null : <RoundRobinActions detail={detail} viewer={viewer} onChange={retry} />}
+                {detail === null ? null : <RoundRobinActions detail={detail} viewer={viewer} onChange={replace} />}
             </div>
             <h1 className="screen-title tournament-title">{title}</h1>
             {load.kind === `loading` ? <SkeletonRows /> : null}
@@ -146,7 +150,9 @@ function Tournament({ detail, readAt, onEntry }: { detail: TournamentDetail; rea
     return (
         <div className={`tournament tournament-${detail.status}`}>
             <div className="tournament-intro">
-                <p className="tournament-status">{person ? <RoundRobinStatus detail={detail} readAt={readAt} /> : <StatusSentence detail={detail} readAt={readAt} />}</p>
+                <p id={tournamentStatusId} className="tournament-status" tabIndex={-1}>
+                    {person ? <RoundRobinStatus detail={detail} readAt={readAt} /> : <StatusSentence detail={detail} readAt={readAt} />}
+                </p>
                 <p className="note">
                     {person ? (
                         <RoundRobinTerms detail={detail} />
@@ -221,10 +227,11 @@ function Running({ detail, readAt }: { detail: TournamentDetail; readAt: number 
     );
     return (
         <>
-            {/* A person's round robin draws its round's boards across the page, its standings beside the round to come. */}
+            {/* A person's round robin draws its round's boards across the page, its standings beside the round to come;
+                between rounds nothing is live, and the round to come is that block's alone. */}
             {detail.origin === `person` ? (
                 <>
-                    {liveRound}
+                    {round !== null && !roundBegun(detail) ? null : liveRound}
                     <div className="tournament-columns">
                         <Standings detail={detail} />
                         <NextRound detail={detail} />

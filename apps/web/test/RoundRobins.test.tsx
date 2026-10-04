@@ -272,7 +272,7 @@ describe('setting a round robin up', () => {
         setup(bruno);
         pick(`hextide`, `quietlake`, `devbot-a`);
         fireEvent.click(screen.getByRole(`button`, { name: `Start round robin` }));
-        expect(await screen.findByText(/^You set up 3 round robins today; the next can start at /u)).toBeTruthy();
+        expect(await screen.findByText(/^You set up 3 round robins today; the next can start at .+ \(00:00 UTC\)\.$/u)).toBeTruthy();
     });
 });
 
@@ -294,18 +294,51 @@ describe('a round robin\'s page', () => {
         expect(calls.find((call) => call.method === `POST`)?.body).toEqual({ bot: `hextide` });
     });
 
-    it('lets its creator stop it, confirmed in place, and keeps playing on a second thought', async () => {
+    it('lets its creator stop it, confirmed in place, and keeps playing on a second thought, focus staying on a control that is there', async () => {
         const calls = openTournament(live, bruno, { 'POST /api/tournaments/t_brunorobin01/stop': { status: 200, body: { ...live, status: `stopped`, end: { reason: `creator`, round: 2 } } } });
         fireEvent.click(await screen.findByRole(`button`, { name: `Stop round robin` }));
         expect(screen.getByText(`Stop the round robin? No further game starts; the live games play on, and the standings stand as they are.`)).toBeTruthy();
+        expect(document.activeElement).toBe(screen.getByRole(`button`, { name: `Keep playing` }));
         fireEvent.click(screen.getByRole(`button`, { name: `Keep playing` }));
         expect(screen.queryByText(/^Stop the round robin\?/u)).toBeNull();
+        expect(document.activeElement).toBe(screen.getByRole(`button`, { name: `Stop round robin` }));
         fireEvent.click(screen.getByRole(`button`, { name: `Stop round robin` }));
         fireEvent.click(screen.getByRole(`button`, { name: `Stop; no further game starts` }));
         await waitFor(() => {
             expect(calls.some((call) => call.method === `POST` && call.url === `/api/tournaments/t_brunorobin01/stop`)).toBe(true);
         });
+        expect(await screen.findByText(/^Stopped by bruno after round 2/u)).toBeTruthy();
+        expect(document.activeElement).toBe(screen.getByRole(`link`, { name: `These games in Games` }));
         expect(screen.queryByRole(`button`, { name: /^Withdraw/u })).toBeNull();
+    });
+
+    it('lands focus on the status once a change leaves no action to hold it', async () => {
+        const fresh: TournamentDetail = { ...live, rounds: live.rounds.map((round) => ({ ...round, pairings: round.pairings.map((pairing) => ({ ...pairing, games: pairing.games.map((game) => ({ ...game, outcome: `pending` as const, point: null, gameId: null })) })) })) };
+        openTournament(fresh, ana, { 'POST /api/tournaments/t_brunorobin01/withdraw': { status: 200, body: { ...fresh, entries: fresh.entries.map((entry) => (entry.bot === `hextide` ? { ...entry, state: `withdrawn`, reason: `owner` } : entry)) } } });
+        fireEvent.click(await screen.findByRole(`button`, { name: `Withdraw hextide` }));
+        expect(document.activeElement).toBe(screen.getByRole(`button`, { name: `Keep playing` }));
+        fireEvent.click(screen.getByRole(`button`, { name: `Keep playing` }));
+        expect(document.activeElement).toBe(screen.getByRole(`button`, { name: `Withdraw hextide` }));
+        fireEvent.click(screen.getByRole(`button`, { name: `Withdraw hextide` }));
+        fireEvent.click(screen.getByRole(`button`, { name: `Withdraw; hextide plays no further game` }));
+        await waitFor(() => {
+            expect(screen.queryByRole(`group`, { name: `Withdraw hextide` })).toBeNull();
+        });
+        expect(screen.queryByRole(`button`, { name: `Withdraw hextide` })).toBeNull();
+        expect(document.activeElement?.id).toBe(`tournament-status`);
+    });
+
+    it('gives a viewer with several bots playing one Withdraw, its confirm naming the bot chosen', async () => {
+        const calls = openTournament({ ...live, entries: live.entries.map((entry) => (entry.bot === `quietlake` ? { ...entry, ownerName: `ana` } : entry)) }, ana, { 'POST /api/tournaments/t_brunorobin01/withdraw': { status: 200, body: live } });
+        fireEvent.click(await screen.findByRole(`button`, { name: `Withdraw a bot` }));
+        expect(screen.queryByRole(`button`, { name: `Withdraw hextide` })).toBeNull();
+        expect(screen.getByText(`Withdraw hextide? Its live game plays on; its games still to come score for its opponents.`)).toBeTruthy();
+        fireEvent.click(within(screen.getByRole(`group`, { name: `Which bot` })).getByRole(`button`, { name: `quietlake` }));
+        expect(screen.getByText(`Withdraw quietlake? Its live game plays on; its games still to come score for its opponents.`)).toBeTruthy();
+        fireEvent.click(screen.getByRole(`button`, { name: `Withdraw; quietlake plays no further game` }));
+        await waitFor(() => {
+            expect(calls.find((call) => call.method === `POST`)?.body).toEqual({ bot: `quietlake` });
+        });
     });
 
     it('says the round to come starts after the gap, with its pairs', async () => {
@@ -315,6 +348,21 @@ describe('a round robin\'s page', () => {
         openTournament(between, null);
         expect(await screen.findByText(/^Round 3 of 3 starts in \d+ s; hextide leads with 2 points\.$/u)).toBeTruthy();
         expect(screen.getByText(`The round's pairs, about to start.`)).toBeTruthy();
+        expect(screen.getByRole(`heading`, { name: `Next: round 3` })).toBeTruthy();
+        expect(screen.queryByRole(`heading`, { name: `Round 3` })).toBeNull();
+        expect(screen.getAllByText(`hextide vs devbot-a`)).toHaveLength(1);
+    });
+
+    it('reads round 1 live on the page the server answers a new round robin with, every round drawn and none begun', async () => {
+        const pending = (round: TournamentDetail[`rounds`][number]) => ({ ...round, pairings: round.pairings.map((pairing) => ({ ...pairing, games: pairing.games.map((game) => ({ ...game, outcome: `pending` as const, point: null, gameId: null })) })) });
+        const created: TournamentDetail = { ...live, id: `t_newrobin0001`, rounds: live.rounds.map(pending), standings: live.standings.map((line) => ({ ...line, rank: 1, points: 0, asX: 0, asO: 0 })), waiting: [], live: [] };
+        openTournament(created, bruno);
+        expect(await screen.findByText(`Round 1 of 3 is live.`)).toBeTruthy();
+        expect(screen.getByRole(`list`, { name: `Round progress` }).querySelector(`[aria-label='Round 1, live']`)).not.toBeNull();
+        expect(screen.getByRole(`heading`, { name: `Round 1` })).toBeTruthy();
+        expect(screen.getByRole(`heading`, { name: `Next: round 2` })).toBeTruthy();
+        const pair = screen.getByText(`hextide vs quietlake`).closest(`li`) as HTMLElement;
+        expect(within(pair).getAllByText(`to play`)).toHaveLength(1);
     });
 
     it('names the winner once over, and offers anyone signed in the same round robin set up again', async () => {
@@ -324,10 +372,14 @@ describe('a round robin\'s page', () => {
         expect(screen.getByText(`withdrawn`)).toBeTruthy();
     });
 
-    it('says who stopped it and after which round, and who led then', async () => {
-        openTournament({ ...finished, status: `stopped`, end: { reason: `creator`, round: 1 }, standings: live.standings }, null);
+    it('says who stopped it and after which round, and who led then, each game never played said once a pair', async () => {
+        const [first, ...rest] = live.rounds;
+        if (first === undefined) throw new Error(`a first round`);
+        const unplayed = rest.map((round) => ({ ...round, pairings: round.pairings.map((pairing) => ({ ...pairing, games: pairing.games.map((game) => ({ ...game, outcome: `not_played` as const, point: null, gameId: null })) })) }));
+        openTournament({ ...finished, status: `stopped`, end: { reason: `creator`, round: 1 }, standings: live.standings, rounds: [over(first), ...unplayed] }, null);
         expect(await screen.findByText(`Stopped by bruno after round 1; hextide led with 2 points.`)).toBeTruthy();
         expect(screen.queryByRole(`link`, { name: `Set up again` })).toBeNull();
+        expect(screen.getAllByText(`not played`)).toHaveLength(4);
     });
 
     it('leads a test with each bot against the others, its pairs as scores, and offers its creator another run', async () => {
@@ -342,6 +394,14 @@ describe('a round robin\'s page', () => {
         expect(screen.getAllByText(`4 games, 2 openings`)).toHaveLength(3);
         expect(screen.getByRole(`button`, { name: `Run 12 more` })).toBeTruthy();
         expect(screen.queryByRole(`heading`, { name: `Crosstable` })).toBeNull();
+        expect(within(estimates).getByText(`under 1%`)).toBeTruthy();
+        expect(within(estimates).queryByText(/Another \d+ games/u)).toBeNull();
+    });
+
+    it('gives a live test\'s creator Stop test alone, never a Withdraw for each bot', async () => {
+        openTournament({ ...test, status: `running`, endedAt: null }, ana);
+        expect(await screen.findByRole(`button`, { name: `Stop test` })).toBeTruthy();
+        expect(screen.queryByRole(`button`, { name: /^Withdraw/u })).toBeNull();
     });
 });
 
@@ -351,6 +411,20 @@ describe('the tournaments under Games', () => {
         return { ...fields, ...(endedAt === null ? {} : { endedAt }), entrants: detail.standings.length, winner: null, round: detail.status === `running` ? { current: 2, of: 3 } : null };
     };
     const every: TournamentList = { running: [summaryOf(live)], scheduled: [], past: [summaryOf(finished), summaryOf(test)] };
+    const lead = test.estimates?.[0]?.estimate;
+    if (lead === undefined) throw new Error(`a test with an estimate`);
+
+    it('lists a test over by its verdict, a stopped one by the round it stopped after, and one the reader set up as theirs', async () => {
+        const stopped = { ...summaryOf({ ...finished, id: `t_brunorobin03`, status: `stopped` }), end: { reason: `creator` as const, round: 2 } };
+        const tests = { running: [], scheduled: [], past: [{ ...summaryOf(test), lead: { bot: `hextide`, estimate: lead } }] };
+        serve({ 'GET /api/tournaments?mine=1': { running: [summaryOf(live)], scheduled: [], past: [stopped] }, 'GET /api/tournaments?kind=test': tests }, bruno);
+        window.history.replaceState(null, ``, `/games/tournaments?list=yours`);
+        render(<TournamentsScreen />);
+        expect(await screen.findByText(/; stopped by bruno after round 2$/u)).toBeTruthy();
+        expect(screen.getAllByText(`Yours: set up by you`)).toHaveLength(2);
+        fireEvent.click(screen.getByRole(`button`, { name: `Tests` }));
+        expect(await screen.findByText(/; hextide \+191, stronger$/u)).toBeTruthy();
+    });
 
     it('lists every round robin but tests, tagged, with a way to set one up, and tests alone under Tests', async () => {
         serve({ 'GET /api/tournaments': every, 'GET /api/tournaments?kind=test': { running: [], scheduled: [], past: [summaryOf(test)] } });

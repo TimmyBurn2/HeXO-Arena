@@ -191,6 +191,11 @@
         font-size: var(--text-sm);
     }
 
+    /* A bot that can no longer start carries the warning on its edge too. */
+    .slot-warned {
+        box-shadow: inset var(--focus-w) 0 0 var(--c-warn);
+    }
+
     /* A strength select: a native select laid over its own face, so the
        face shows the chosen strength with its rated tag. */
     .slot-select {
@@ -609,6 +614,13 @@
     .pick[aria-pressed='true'] {
         background: var(--c-bg-hover);
         box-shadow: inset 0 0 0 var(--focus-w) var(--c-accent);
+    }
+
+    /* The cut clips a ring drawn outside, and a picked row already wears
+       an accent frame, so focus shows a gap inside the edge. */
+    .pick:focus-visible {
+        outline: var(--focus-w) solid var(--c-focus);
+        outline-offset: calc(-3 * var(--focus-w));
     }
 
     .pick-detail {
@@ -1169,20 +1181,33 @@
             margin: 0;
         }
 
+        /* The sheet scrolls as one, so text large enough to fill it with
+           the head and the foot still reaches every row; the foot with its
+           button keeps to the sheet's bottom edge, and a row focus scrolls
+           to stops above it. */
         .duel-picker-body {
             min-height: 100dvh;
             max-height: 100dvh;
             padding: var(--space-4);
+            overflow-y: auto;
+            scroll-padding-bottom: var(--foot-room, 0);
             clip-path: none;
         }
 
         .picker-list {
-            flex: 1 1 auto;
+            flex: 1 0 auto;
             max-height: none;
+            overflow-y: visible;
         }
 
         .pick-detail {
+            position: sticky;
+            bottom: calc(-1 * var(--space-4));
+            flex: none;
             grid-template-columns: minmax(0, 1fr);
+            margin-bottom: calc(-1 * var(--space-4));
+            padding-bottom: var(--space-4);
+            background: var(--c-bg-overlay);
         }
 
         /* A filled slot keeps the rating on the name's line, the strength on its own line under them. */

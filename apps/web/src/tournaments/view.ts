@@ -13,11 +13,12 @@ export interface HexView {
 
 const over = (game: TournamentGame) => game.outcome !== `pending` && game.outcome !== `live`;
 
-/** Each round's state, in order. */
+/** Each round's state, in order; the first is live from the start, as a running tournament begins with it, and every later one once a game of it has begun. */
 export function roundStates(detail: TournamentDetail): { round: number; state: RoundState }[] {
-    return detail.rounds.map((round) => {
+    return detail.rounds.map((round, index) => {
         const games = round.pairings.flatMap((pairing) => pairing.games);
-        const state: RoundState = games.every(over) ? `done` : games.some((game) => game.outcome !== `pending`) ? `live` : `next`;
+        const begun = games.some((game) => game.outcome !== `pending`) || (index === 0 && detail.status === `running`);
+        const state: RoundState = games.every(over) ? `done` : begun ? `live` : `next`;
         return { round: round.round, state };
     });
 }

@@ -48,21 +48,6 @@
         list-style: none;
     }
 
-    .tournament-row {
-        display: flex;
-        flex-wrap: wrap;
-        align-items: baseline;
-        gap: var(--space-1) var(--space-4);
-        padding: var(--space-3) 0;
-        box-shadow: inset 0 calc(-1 * var(--border-w)) 0 var(--c-border);
-    }
-
-    .tournament-row-name {
-        font-weight: var(--weight-strong);
-    }
-
-    .tournament-row-facts,
-    .tournament-owner,
     .tournament-reason,
     .standings-owner {
         color: var(--c-text-dim);

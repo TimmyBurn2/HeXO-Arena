@@ -168,6 +168,11 @@ for (const layout of [
         expect(legal.map((link) => link.left)).toEqual(legal.map((_link, index) => legal[index % 2]?.left));
         expect(legal.map((link) => link.top)).toEqual(legal.map((_link, index) => legal[index - (index % 2)]?.top));
         expect(legal[2]?.top).toBeGreaterThan(legal[0]?.top ?? Infinity);
+        // The standing links stand two to a row too, so Source never sits alone.
+        const standing = await foot.locator(`.site-links:not(.legal-links) a`).evaluateAll((links) => links.map((link) => ({ left: Math.round(link.getBoundingClientRect().left), top: Math.round(link.getBoundingClientRect().top) })));
+        expect(standing).toHaveLength(4);
+        expect(standing.map((link) => link.left)).toEqual(standing.map((_link, index) => standing[index % 2]?.left));
+        expect(standing.map((link) => link.top)).toEqual(standing.map((_link, index) => standing[index - (index % 2)]?.top));
         // The new tab has no mocked world; its reads stop at the browser.
         await context.route((url) => url.pathname.startsWith(`/api/`) || url.pathname === `/healthz`, (route) => route.abort());
         const opened = context.waitForEvent(`page`);

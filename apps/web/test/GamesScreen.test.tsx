@@ -122,6 +122,7 @@ afterEach(() => {
     cleanup();
     vi.unstubAllGlobals();
     window.history.replaceState(null, ``, `/`);
+    window.localStorage.clear();
 });
 
 describe('GamesScreen', () => {
@@ -279,6 +280,40 @@ describe('GamesScreen', () => {
         const when = (iso: string) => new Intl.DateTimeFormat(undefined, { dateStyle: `medium`, timeStyle: `short` }).format(new Date(iso));
         await waitFor(() => {
             expect([...pick.options].map((option) => option.textContent)).toEqual([`Any`, `Dev round robin, live`, `Dev round robin, ${when(`2026-10-03T10:15:00Z`)}`, `Dev round robin, ${when(`2026-10-03T14:40:00Z`)}`]);
+        });
+    });
+
+    it('offer a test among the tournaments to pick only while Show tests is on', async () => {
+        const summary = (id: string, test: boolean): TournamentSummary => ({
+            id,
+            name: test ? `Round robin by ana` : `Round robin by bruno`,
+            origin: `person`,
+            createdBy: test ? `ana` : `bruno`,
+            rated: false,
+            test,
+            gamesPerPair: 2,
+            status: `finished`,
+            startsAt: `2026-10-03T09:00:00Z`,
+            endedAt: `2026-10-03T10:15:00Z`,
+            timeControl: { mode: `turn`, turnTimeMs: 10_000 },
+            openingPlies: 5,
+            maxEntrants: 3,
+            entrants: 3,
+            winner: null,
+            round: null,
+        });
+        serveEvents({ '/api/tournaments': { running: [], scheduled: [], past: [summary(`t_brunorobin02`, false), summary(`t_anatest00001`, true)] } });
+        open(`/games?event=tournament`);
+        await screen.findAllByRole(`link`, { name: /hextide/u });
+        const panel = openFilters();
+        const pick = await within(panel).findByLabelText<HTMLSelectElement>(`Tournament`);
+        const names = () => [...pick.options].map((option) => option.textContent.split(`,`)[0]);
+        await waitFor(() => {
+            expect(names()).toEqual([`Any`, `Round robin by bruno`]);
+        });
+        fireEvent.click(screen.getByRole(`switch`, { name: `Show tests` }));
+        await waitFor(() => {
+            expect(names()).toEqual([`Any`, `Round robin by bruno`, `Round robin by ana`]);
         });
     });
 
