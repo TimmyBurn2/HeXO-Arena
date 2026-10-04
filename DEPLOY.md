@@ -59,7 +59,8 @@ account or organization in lowercase.
 ### In CI
 
 `.github/workflows/ci.yml` checks, tests, and builds the image on every push
-and on a run started by hand, and publishes it to GHCR from `main` only,
+to `main` or `develop`, on every pull request, and on a run started by hand,
+and publishes it to GHCR from `main` only,
 tagged `sha-<full commit sha>` and `latest`, for x86-64 servers
 (`linux/amd64`).
 Deploy a `sha-` tag, never `latest`: the previous tag is the rollback.
@@ -447,6 +448,8 @@ Its `Digest:` line is the multi-arch index to pin.
 `compose.yml` pins Caddy the same way: put the digest of the new
 `caddy:<version>` in its `image:` line, commit, copy the file to the server,
 and update.
+Dependabot proposes both pins' updates monthly; a merged Caddy update still
+needs the file copied to the server.
 
 ## Backup and restore
 

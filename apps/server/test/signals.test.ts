@@ -52,7 +52,7 @@ describe('stop signals', () => {
 
 describe('the immediate stop', () => {
     it('ends an open bot stream instead of waiting on it', async () => {
-        const world = await createTestApp({ logger: false });
+        const world = await createTestApp();
         const token = await mintBot(world.app, await loginAs(world.app, `owner`), `stopbot`);
         const port = await world.app.listen({ host: `127.0.0.1`, port: 0 }).then((address) => Number(new URL(address).port));
         // Wrapped, since resolving with a bare promise would wait for the end.

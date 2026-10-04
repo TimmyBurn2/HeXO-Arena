@@ -1,10 +1,12 @@
 // @vitest-environment node
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, readdirSync, readFileSync, rmSync, statSync } from 'node:fs';
+import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { licenseFileName, licenseText } from '../build/licenses';
+import { thirdPartyLicensesPath } from '../src/site-links';
 import { devEn } from '../src/text/dev-en';
 
 const webRoot = fileURLToPath(new URL(`..`, import.meta.url));
@@ -39,6 +41,22 @@ describe('the production build', () => {
         for (const trace of [`dev-pill`, `dev-panel`, `dev-tools`, devEn.title, devEn.empty, devEn.firstSignInNote]) {
             expect(shipped).not.toContain(trace);
         }
+    });
+
+    it('ships the third-party licenses at the root, the font and GitHub\'s mark included, as the dev server serves them', () => {
+        const file = join(outDir, licenseFileName);
+        expect(existsSync(file)).toBe(true);
+        expect(existsSync(join(outDir, `.vite`))).toBe(false);
+        const text = readFileSync(file, `utf8`);
+        for (const name of [`react`, `react-dom`, `scheduler`, `zod`]) {
+            expect(text).toMatch(new RegExp(`^## ${name} - \\S+ \\(MIT\\)$`, `m`));
+        }
+        expect(text).toMatch(/^## Chakra Petch \(OFL-1\.1\)$/m);
+        expect(text).toContain(`SIL OPEN FONT LICENSE Version 1.1`);
+        expect(text).toMatch(/^## Octicons mark-github \(MIT\)$/m);
+        expect(text).toContain(`Copyright (c) 2026 GitHub Inc.`);
+        expect(text).toBe(licenseText());
+        expect(thirdPartyLicensesPath).toBe(`/${licenseFileName}`);
     });
 
     it('links the layer order before every bundled sheet, so no layer is first named out of order', () => {

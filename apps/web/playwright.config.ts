@@ -5,6 +5,8 @@ import { defineConfig, devices } from '@playwright/test';
 // E2E_BUILD=1 runs it against the production build instead, which alone
 // shows what bundling changes, such as the order of the style sheets.
 // E2E_PORT lets two checkouts run the suite side by side.
+// E2E_SHOTS=1 also writes screenshots of the screens to e2e/shots for review.
+// CI's browser job leaves out the tests tagged @sweep.
 const port = Number(process.env.E2E_PORT ?? 5199);
 const vite = `node node_modules/vite/bin/vite.js`;
 const build = process.env.E2E_BUILD === `1`;
@@ -13,6 +15,8 @@ export default defineConfig({
     testDir: `e2e`,
     outputDir: `e2e/results`,
     fullyParallel: true,
+    // A focused test left in would pass CI on that test alone.
+    forbidOnly: process.env.CI !== undefined,
     reporter: [[`list`]],
     use: {
         baseURL: `http://127.0.0.1:${String(port)}`,

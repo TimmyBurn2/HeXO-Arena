@@ -61,7 +61,7 @@ describe('the duel and tournament exports', () => {
 
     beforeEach(async () => {
         clock = Date.UTC(2026, 9, 4, 12);
-        world = await createTestApp({ limits: roomyLimits, now: () => clock, logger: false });
+        world = await createTestApp({ limits: roomyLimits, now: () => clock });
         query = createQuery(world.sqlite);
         for (const [owner, botNames] of [
             [`ann`, [`alpha`, `alpha2`]],
@@ -306,7 +306,7 @@ describe('the export rate limits', () => {
     });
 
     it('hold one client to its burst of exports and every caller together to theirs, refusing as rate_limited', async () => {
-        world = await createTestApp({ logger: false, trustedProxy: `127.0.0.1`, now: () => 1_000_000, limits: { ...defaultLimits, public: roomyLimits.public } });
+        world = await createTestApp({ trustedProxy: `127.0.0.1`, now: () => 1_000_000, limits: { ...defaultLimits, public: roomyLimits.public } });
         const download = (address: string) => world.app.inject({ method: `GET`, url: `/api/duels/d_aaaaaaaaaaaa/export`, headers: { 'x-forwarded-for': address } });
         for (let taken = 0; taken < gameExportLimit.burst; taken += 1) expect((await download(`203.0.113.90`)).statusCode).toBe(404);
         const refused = await download(`203.0.113.90`);

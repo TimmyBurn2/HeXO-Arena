@@ -1,7 +1,7 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type Page } from '@playwright/test';
 import type { AnalysisList } from '@hexo-arena/contract';
-import { looks, wear } from './matrix';
+import { capturing, looks, wear } from './matrix';
 import { longReadings, serve, world, type World } from './mock-api';
 
 // A finished game's Moves head and feed with its readings, in every state a
@@ -44,14 +44,15 @@ async function openPanel(page: Page, width: Width): Promise<void> {
     await expect(page.locator(`#drawer-body`)).toBeVisible();
 }
 
-// Captures the state for review and holds the axe gates on it; an open
-// phone sheet, which scrolls to the line shown, is captured at its head too.
+// Holds the axe gates on the state and, when shots are asked for, captures
+// it for review; an open phone sheet, which scrolls to the line shown, is
+// captured at its head too.
 async function capture(page: Page, name: string): Promise<void> {
     await page.waitForTimeout(250);
-    await page.screenshot({ path: `e2e/shots/drawer-analysis-${name}.png` });
+    if (capturing) await page.screenshot({ path: `e2e/shots/drawer-analysis-${name}.png` });
     const axe = await new AxeBuilder({ page }).withRules([`color-contrast`, `heading-order`, `link-in-text-block`, `aria-allowed-attr`, `aria-progressbar-name`, `label`]).analyze();
     expect(axe.violations.flatMap((violation) => violation.nodes.map((node) => node.target))).toEqual([]);
-    if ((page.viewportSize()?.width ?? 0) > 640 || !(await page.locator(`#drawer-body`).isVisible())) return;
+    if (!capturing || (page.viewportSize()?.width ?? 0) > 640 || !(await page.locator(`#drawer-body`).isVisible())) return;
     await page.locator(`.drawer-panel`).evaluate((panel) => {
         panel.scrollTop = 0;
     });

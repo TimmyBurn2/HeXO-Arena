@@ -112,7 +112,7 @@ describe('the game event stream', () => {
     }
 
     beforeEach(async () => {
-        world = await createTestApp({ logger: false, random: humanCircles });
+        world = await createTestApp({ random: humanCircles });
         const token = await mintBot(world.app, await loginAs(world.app, `owner`), `watchedbot`);
         await world.app.inject({
             method: `PATCH`,

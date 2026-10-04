@@ -42,7 +42,7 @@ describe('the tournament scheduler', () => {
     }
 
     async function setUp(sqlite?: TestApp[`sqlite`]): Promise<void> {
-        world = await createTestApp({ logger: false, now: () => clock, ...(sqlite === undefined ? {} : { sqlite }) });
+        world = await createTestApp({ now: () => clock, ...(sqlite === undefined ? {} : { sqlite }) });
     }
 
     beforeEach(async () => {

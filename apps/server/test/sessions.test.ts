@@ -4,11 +4,10 @@ import { createQuery, nowSeconds } from '../src/db';
 import { sessions } from '../src/db/schema';
 import { createSession, findSessionUser } from '../src/sessions';
 import { createUserWithExactName } from '../src/users';
-import { openDatabase, runMigrations } from '../src/db';
+import { migratedDatabase } from './helpers';
 
 function testQuery() {
-    const sqlite = openDatabase(`:memory:`);
-    runMigrations(sqlite);
+    const sqlite = migratedDatabase();
     return { sqlite, query: createQuery(sqlite) };
 }
 

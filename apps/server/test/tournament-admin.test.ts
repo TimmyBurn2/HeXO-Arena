@@ -17,7 +17,7 @@ describe('tournament admin ops', () => {
 
     beforeEach(async () => {
         clock = Date.UTC(2026, 9, 1, 12);
-        world = await createTestApp({ logger: false, devLogin: false, now: () => clock });
+        world = await createTestApp({ devLogin: false, now: () => clock });
     });
 
     afterEach(async () => {
@@ -71,7 +71,7 @@ describe('tournament admin ops', () => {
     });
 
     it('lets a development server schedule one a minute out', async () => {
-        const dev = await createTestApp({ logger: false, devLogin: true, now: () => clock });
+        const dev = await createTestApp({ devLogin: true, now: () => clock });
         const soon = dev.admin({
             op: `tournament-create`,
             name: `Dev round robin`,
@@ -90,7 +90,7 @@ describe('the tournament tables', () => {
     let world: TestApp;
 
     beforeEach(async () => {
-        world = await createTestApp({ logger: false });
+        world = await createTestApp();
         const query = createQuery(world.sqlite);
         for (const [owner, bot] of [[`ann`, `alpha`], [`bob`, `beta`]] as const) {
             const user = createUserWithExactName(query, `dev:${owner}`, owner);

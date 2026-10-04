@@ -2,6 +2,15 @@ import type { Page } from '@playwright/test';
 import { themes } from '../src/theme/themes';
 import { anaMe, analyzerBots, bots, brunoMe, duelBots, duelFixtures, duelGameRows, duelGameSnapshots, games as gameFixtures, heldBots, keptNames, leaderboard, liveGames, longReadings, playBots, rivalry, roundRobins, signup, tournamentGameRows, tournaments, world, type World } from './mock-api';
 
+/** Screenshots are for a person to look at, so a run takes them only when E2E_SHOTS=1 asks. */
+export const capturing = process.env.E2E_SHOTS === `1`;
+
+/**
+ * Marks a test that sweeps widths, looks, or text sizes past the default
+ * look at a desktop and a phone width; CI's browser job leaves these out.
+ */
+export const sweep = { tag: `@sweep` };
+
 /** A named look the whole site can wear. */
 export interface Look {
     name: string;
@@ -48,12 +57,10 @@ export interface Shot {
     after?: (page: Page) => Promise<void>;
     // Extra preferences this state needs before the app boots.
     storage?: Record<string, string>;
-    // A board or the theme swatches are on screen, so every look is
-    // captured; elsewhere a look changes only surface and text tokens,
-    // which the contrast gate holds pair by pair and step by step, so the
-    // default look stands for all.
-    // A list names the widths the other looks take, the default look taking every one.
-    board?: true | readonly Viewport[];
+    // A board or the theme swatches are on screen, so a capture in every
+    // look shows how each draws them; elsewhere a look changes only surface
+    // and text tokens, so the default look's capture stands for all.
+    board?: true;
     // Widths other than the matrix's own.
     viewports?: readonly Viewport[];
     // A page read top to bottom is captured whole, so one shot shows every part.
@@ -190,9 +197,9 @@ export async function pickBots(page: Page, names: readonly string[]): Promise<vo
 // ana's bots and everyone else's on Play's Tournament place, the weekly waiting beside them.
 const robins = (overrides: Partial<World> = {}) => world({ me: anaMe, bots: duelBots, tournaments: [...structuredClone(tournaments().filter((entry) => entry.status !== `running`)), ...structuredClone(roundRobins())], live: [], ...overrides });
 
-// A duel's page in every look at a laptop's width, since it draws boards, and in the default look on a phone.
+// A duel's page, which draws boards, at a laptop's width and on a phone.
 function duelPage(name: string, path: string, state: World, ready: string): Shot {
-    return { name, path, world: state, ready, framed: true, board: laptopOnly, viewports: duelViewports };
+    return { name, path, world: state, ready, framed: true, board: true, viewports: duelViewports };
 }
 
 export const shots: readonly Shot[] = [
@@ -427,8 +434,8 @@ export const shots: readonly Shot[] = [
             await pickBots(page, [`hextide`, `cinder`, `pebble`]);
         },
     },
-    { name: `rr-live`, path: `/tournaments/t_brunorobin01`, world: robins(), ready: `.rr-wait`, framed: true, board: laptopOnly, viewports: duelViewports, fullPage: true },
-    { name: `rr-finished`, path: `/tournaments/t_brunorobin02`, world: robins(), ready: `.podium-plate`, framed: true, board: laptopOnly, viewports: duelViewports, fullPage: true },
+    { name: `rr-live`, path: `/tournaments/t_brunorobin01`, world: robins(), ready: `.rr-wait`, framed: true, board: true, viewports: duelViewports, fullPage: true },
+    { name: `rr-finished`, path: `/tournaments/t_brunorobin02`, world: robins(), ready: `.podium-plate`, framed: true, board: true, viewports: duelViewports, fullPage: true },
     { name: `rr-stopped`, path: `/tournaments/t_brunorobin03`, world: robins(), ready: `.tournament-status`, framed: true, viewports: duelViewports, fullPage: true },
     { name: `rr-test`, path: `/tournaments/t_anatest00001`, world: robins(), ready: `.rr-estimates`, framed: true, viewports: duelViewports, fullPage: true },
     { name: `rr-tournaments`, path: `/games/tournaments`, world: robins(), ready: `.tournament-row`, framed: true, viewports: duelViewports, fullPage: true },
@@ -484,11 +491,8 @@ export const shots: readonly Shot[] = [
         viewports: panelViewports,
     },
     { name: `menu-guest`, path: `/connect`, world: guest, ready: `h1`, framed: true, after: openIdentity, viewports: panelViewports },
-    { name: `signin-expired`, path: `/?signin=expired`, world: signedOut, ready: `.featured`, framed: true },
+    // The longest sign-in failure, and the one that links, stands for the banner's other lines.
     { name: `signin-banned`, path: `/?signin=banned`, world: signedOut, ready: `.featured`, framed: true },
-    { name: `signin-cancelled`, path: `/connect?signin=cancelled`, world: signedOut, ready: `.site-banner`, framed: true },
-    { name: `signin-rejected`, path: `/bots?signin=rejected`, world: signedOut, ready: `table`, framed: true },
-    { name: `signin-busy`, path: `/play?signin=busy`, world: playing({ me: null }), ready: `.site-banner`, framed: true },
     { name: `ladder-loading`, path: `/ladder`, world: world({ stall: true }), ready: `.skeleton`, framed: true },
     { name: `ladder-error`, path: `/ladder`, world: world({ broken: true }), ready: `.empty`, framed: true },
     { name: `ladder-rate-limited`, path: `/ladder`, world: world({ limited: `reads` }), ready: `.empty .note`, framed: true },
@@ -1148,8 +1152,10 @@ export const shots: readonly Shot[] = [
     { name: `play-loading`, path: `/play`, world: playing({ stall: true }), ready: `.skeleton`, framed: true },
     { name: `play-paused`, path: `/play?bot=devbot-c`, world: playing({ paused: true }), ready: `.play-setup`, framed: true },
     { name: `play-paused-signed-out`, path: `/play?bot=devbot-c`, world: playing({ paused: true, me: null }), ready: `.play-setup`, framed: true },
+    // A refusal stands for every other its kind shows in the same place, by the longest of their lines:
+    // a wait with its countdown, the guest's wait, the cap with its games, a line naming the bot, and the ended session.
+    // The unit tests hold each line's words.
     refusedStart(`play-cooldown`, 429, `game_cooldown`, `/play?bot=devbot-c`, 42),
-    refusedStart(`play-rate-limited`, 429, `rate_limited`, `/play?bot=devbot-c`, 42),
     {
         name: `play-guest-rate-limited`,
         path: `/play?bot=devbot-c`,
@@ -1162,12 +1168,7 @@ export const shots: readonly Shot[] = [
         },
     },
     refusedStart(`play-human-busy`, 400, `human_busy`),
-    refusedStart(`play-bot-busy`, 400, `bot_busy`),
     refusedStart(`play-clock-not-accepted`, 400, `clock_not_accepted`),
-    refusedStart(`play-not-open`, 400, `not_open`),
-    refusedStart(`play-delisted`, 403, `delisted`),
-    refusedStart(`play-not-found`, 404, `not_found`),
-    refusedStart(`play-failed`, 500, `internal`),
     {
         name: `play-stale`,
         path: `/play?bot=devbot-c`,
@@ -1177,17 +1178,6 @@ export const shots: readonly Shot[] = [
         after: async (page) => {
             await page.getByRole(`button`, { name: `Start game` }).click();
             await page.locator(`.start-area .warn`).waitFor();
-        },
-    },
-    {
-        name: `play-guest-limit`,
-        path: `/play?bot=devbot-c`,
-        world: playing({ me: null, guestLimit: true }),
-        ready: `.play-setup`,
-        framed: true,
-        after: async (page) => {
-            await page.getByRole(`button`, { name: `Play as guest` }).click();
-            await page.locator(`.start-lines p`).first().waitFor();
         },
     },
     { name: `credits`, path: `/credits`, world: world(), ready: `h1`, framed: true, board: true },
@@ -1206,6 +1196,8 @@ export const shots: readonly Shot[] = [
         ready: `.field-ok`,
         framed: true,
     },
+    // A refusal under the name stands for the shorter ones there, and the ended sign-in that tried too many names
+    // for the one that expired.
     {
         name: `welcome-invalid`,
         path: `/welcome`,
@@ -1214,27 +1206,6 @@ export const shots: readonly Shot[] = [
         framed: true,
         after: async (page) => {
             await typeName(page, `mira.hex`);
-        },
-    },
-    {
-        name: `welcome-reserved`,
-        path: `/welcome`,
-        world: welcoming(),
-        ready: `.field-ok`,
-        framed: true,
-        after: async (page) => {
-            await typeName(page, `admin`);
-        },
-    },
-    {
-        name: `welcome-taken`,
-        path: `/welcome`,
-        world: welcoming({ create: `name_taken` }),
-        ready: `.field-ok`,
-        framed: true,
-        after: async (page) => {
-            await createAccount(page);
-            await page.getByText(`That name is taken`).waitFor();
         },
     },
     {
@@ -1259,7 +1230,6 @@ export const shots: readonly Shot[] = [
             await page.getByText(`The account was not created; try again`).waitFor();
         },
     },
-    { name: `welcome-expired`, path: `/welcome`, world: welcoming({ signup: null }), ready: `.welcome-ended`, framed: true },
     { name: `welcome-signed-in`, path: `/welcome`, world: world({ signup: null }), ready: `.identity-plate`, framed: true },
     {
         name: `welcome-limit`,

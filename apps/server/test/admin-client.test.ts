@@ -252,7 +252,7 @@ describe('sendAdminRequest', () => {
     it('carries a request to the running app and its answer back', async () => {
         directory = mkdtempSync(join(tmpdir(), `hexo-arena-cli-`));
         const path = join(directory, `admin.sock`);
-        world = await createTestApp({ logger: false });
+        world = await createTestApp();
         server = await listenAdminSocket(path, world.admin, { error: () => undefined });
         expect(await sendAdminRequest(path, { op: `pause`, reason: `incident` })).toEqual({ kind: `done`, summary: `paused` });
         expect(await sendAdminRequest(path, { op: `status` })).toMatchObject({ status: { paused: true } });
@@ -261,7 +261,7 @@ describe('sendAdminRequest', () => {
     it('rejects when the server drops the connection unanswered', async () => {
         directory = mkdtempSync(join(tmpdir(), `hexo-arena-cli-`));
         const path = join(directory, `admin.sock`);
-        world = await createTestApp({ logger: false });
+        world = await createTestApp();
         server = await listenAdminSocket(
             path,
             () => {

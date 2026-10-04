@@ -9,8 +9,7 @@ import { after, describe, it } from 'node:test';
 const gate = resolve(`scripts/check-ascii.mjs`);
 const made = [];
 
-// A repository holding the given files, staged, since the gate reads what
-// git tracks.
+// A repository holding the given files, staged.
 function repository(files, links = {}) {
     const root = mkdtempSync(join(tmpdir(), `check-ascii-`));
     made.push(root);
@@ -46,7 +45,15 @@ describe(`the ASCII gate`, () => {
         const root = repository({ 'ok.txt': `fine\n`, 'bad.txt': `first\ncaf\u00e9 \u001b[31mred\n` }, { 'docs-link': `.` });
         const { status, report } = run(root);
         assert.equal(status, 1);
-        assert.equal(report, `characters outside ASCII in tracked files:\nbad.txt:2:4: caf\\u{e9} \\u{1b}[31mred\n`);
+        assert.equal(report, `characters outside ASCII:\nbad.txt:2:4: caf\\u{e9} \\u{1b}[31mred\n`);
+    });
+
+    it(`reads a new file before it is staged, and leaves an ignored one alone`, () => {
+        const root = repository({ '.gitignore': `local/\n` });
+        mkdirSync(join(root, `local`));
+        writeFileSync(join(root, `new.txt`), `caf\u00e9\n`);
+        writeFileSync(join(root, `local/notes.txt`), `caf\u00e9\n`);
+        assert.deepEqual(run(root), { status: 1, report: `characters outside ASCII:\nnew.txt:1:4: caf\\u{e9}\n` });
     });
 
     it(`names a file whose name is outside ASCII, and a link whose target is`, () => {

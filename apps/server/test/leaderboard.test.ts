@@ -174,7 +174,7 @@ describe('the leaderboard after a finish', () => {
     let world: TestApp;
 
     beforeEach(async () => {
-        world = await createTestApp({ logger: false });
+        world = await createTestApp();
     });
 
     afterEach(async () => {

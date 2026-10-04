@@ -61,7 +61,7 @@ describe('the dev bot runner', () => {
     });
 
     async function boot(devLogin: boolean): Promise<TestApp> {
-        const booted = await createTestApp({ devLogin, logger: false });
+        const booted = await createTestApp({ devLogin });
         world = booted;
         await booted.app.listen({ host: `127.0.0.1`, port: 0 });
         const address = booted.app.server.address();

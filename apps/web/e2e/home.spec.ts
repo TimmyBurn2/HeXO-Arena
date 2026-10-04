@@ -49,9 +49,11 @@ test('the featured board holds its game until it ends, shows the result, then fe
 
 test('Home settles while a live game holds the slot, rendering when a stone lands', async ({ page }) => {
     const errors: string[] = [];
-    // A missing resource, such as the dev routes this mock lacks, is not a render's fault.
+    // A missing resource, such as the dev routes this mock lacks, is not a render's fault,
+    // nor is the dev server's reload socket, which Home does not open.
     page.on(`console`, (message) => {
-        if (message.type() === `error` && !message.text().startsWith(`Failed to load resource`)) errors.push(message.text());
+        const text = message.text();
+        if (message.type() === `error` && !text.startsWith(`Failed to load resource`) && !text.startsWith(`[vite]`) && !text.startsWith(`WebSocket connection to`)) errors.push(text);
     });
     await visit(page, world({ me: null, live: liveGames }));
     await featured(page).waitFor();

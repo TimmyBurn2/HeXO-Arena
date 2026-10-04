@@ -1,6 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 import type { Me } from '@hexo-arena/contract';
-import { looks, wear } from './matrix';
+import { looks, sweep, wear } from './matrix';
 import { analyzerBots, bots, duelBots, duelFixtures, duelGameRows, heldBots, keptNames, liveGames, longReadings, playBots, rivalry, roundRobins, serve, signup, tournamentGameRows, tournaments, world, type World } from './mock-api';
 
 const visitors: readonly { name: string; me: Me }[] = [
@@ -232,25 +232,27 @@ async function faults(page: Page, width: number, longName: boolean): Promise<str
     );
 }
 
+// One load per visitor and screen, the text size changed in the page as a
+// reader changes it in the browser, and every width swept at each size.
 for (const visitor of visitors) {
-    for (const size of sizes) {
-        for (const screen of screens.filter((entry) => entry.then === undefined || visitor.me?.kind === `user`)) {
-            test(`at ${String((size / 16) * 100)}% text the ${visitor.name} bar and ${screen.name} stay inside the window from 320 to 1280 px`, async ({ page }) => {
-                const look = looks[0];
-                if (look === undefined) throw new Error(`no look registered`);
-                await wear(page, look);
-                await serve(page, world({ me: visitor.me, signup, live: liveGames, ...screen.world }));
-                await page.setViewportSize({ width: widths[0] ?? 320, height: 800 });
-                const devtools = await page.context().newCDPSession(page);
+    for (const screen of screens.filter((entry) => entry.then === undefined || visitor.me?.kind === `user`)) {
+        test(`at 100, 150, and 200% text the ${visitor.name} bar and ${screen.name} stay inside the window from 320 to 1280 px`, sweep, async ({ page }) => {
+            const look = looks[0];
+            if (look === undefined) throw new Error(`no look registered`);
+            await wear(page, look);
+            await serve(page, world({ me: visitor.me, signup, live: liveGames, ...screen.world }));
+            await page.setViewportSize({ width: widths[0] ?? 320, height: 800 });
+            const devtools = await page.context().newCDPSession(page);
+            await page.goto(screen.path);
+            await page.locator(`h1`).first().waitFor();
+            if (visitor.me !== null) await page.locator(`header button.identity`).waitFor();
+            await screen.then?.(page);
+            await page.evaluate(async () => {
+                await document.fonts.ready;
+            });
+            const found: string[] = [];
+            for (const size of sizes) {
                 await devtools.send(`Page.setFontSizes`, { fontSizes: { standard: size } });
-                await page.goto(screen.path);
-                await page.locator(`h1`).first().waitFor();
-                if (visitor.me !== null) await page.locator(`header button.identity`).waitFor();
-                await screen.then?.(page);
-                await page.evaluate(async () => {
-                    await document.fonts.ready;
-                });
-                const found: string[] = [];
                 for (const width of widths) {
                     await page.setViewportSize({ width, height: 800 });
                     await page.evaluate(
@@ -263,10 +265,10 @@ for (const visitor of visitors) {
                                 });
                             }),
                     );
-                    found.push(...(await faults(page, width, visitor.name === `long-named`)));
+                    found.push(...(await faults(page, width, visitor.name === `long-named`)).map((fault) => `${String((size / 16) * 100)}% text, ${fault}`));
                 }
-                expect(found).toEqual([]);
-            });
-        }
+            }
+            expect(found).toEqual([]);
+        });
     }
 }
