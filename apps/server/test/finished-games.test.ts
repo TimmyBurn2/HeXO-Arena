@@ -375,7 +375,7 @@ describe('GET /api/games/finished', () => {
             // A second round of the tournament and a second game of the duel, finished after every game above.
             beforeEach(() => {
                 world.sqlite
-                    .prepare(`insert into tournament_pairings (id, tournament_id, round, first_bot_id, second_bot_id, game1, game1_seat) values ('p_round1alpha', ?, 1, ?, ?, 'played', 'first')`)
+                    .prepare(`insert into tournament_pairings (id, tournament_id, round, first_bot_id, second_bot_id, game1, game1_seat, leg) values ('p_round1alpha', ?, 1, ?, ?, 'played', 'first', 2)`)
                     .run(tournamentId, id(`alpha`), id(`beta`));
                 const tagged = (challenger: string, dest: string, tag: NonNullable<Parameters<typeof insertBotGame>[1][`tag`]>) =>
                     insertBotGame(query, { challengerBotId: id(challenger), destBotId: id(dest), challengerSide: `x`, timeControl: turnClock, opening: opening(5), tag, unratedByChoice: tag.kind === `duel` });

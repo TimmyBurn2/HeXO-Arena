@@ -2,6 +2,7 @@ import { clockText, type GamePlayer, type LiveGameEntry, type Side } from '@hexo
 import { BotBadge, seatLevelFacts, seatName, Swatch } from '../components/player';
 import { Link } from '../router/Link';
 import { text } from '../text';
+import { gameCaption } from '../tournaments/words';
 import './LiveGameRow.css';
 
 /** Live games as rows, each one link into watching its game. */
@@ -32,7 +33,7 @@ function LiveGameRow({ entry }: { entry: LiveGameEntry }) {
                 {entry.test === true ? <span className="tag muted">{text.games.test}</span> : entry.rated ? null : <span className="tag muted">{text.ladder.live.unrated}</span>}
                 <span>{clockText(entry.timeControl)}</span>
                 {entry.duel === undefined ? null : <span>{text.duels.caption(entry.test === true ? `test` : `duel`, entry.duel.game, entry.duel.of)}</span>}
-                {entry.tournament === undefined ? null : <span>{text.tournaments.caption(entry.tournament.name, entry.tournament.round)}</span>}
+                {entry.tournament === undefined ? null : <span>{gameCaption(entry.tournament)}</span>}
                 <span>{text.ladder.live.toMove(seatName(entry.players[entry.toMove]))}</span>
             </span>
         </Link>

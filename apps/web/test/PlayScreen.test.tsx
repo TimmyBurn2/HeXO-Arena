@@ -101,12 +101,12 @@ function serve(options: { me?: Me; bots?: BotListing[] | (() => BotListing[]); s
                 return Promise.resolve(answer);
             }
             if (url === `/api/tournaments` && options.tournament !== undefined) {
-                const running = { id: `t_autumnrobin1`, name: `Autumn round robin`, status: `running`, startsAt: `2026-10-01T18:00:00Z`, timeControl: { mode: `turn`, turnTimeMs: 10_000 }, openingPlies: 5, entrants: 3, maxEntrants: 12, winner: null, round: { current: 1, of: 3 } };
-                return Promise.resolve(new Response(JSON.stringify({ running, scheduled: [], past: [] })));
+                const running = { id: `t_autumnrobin1`, name: `Autumn round robin`, origin: `operator`, createdBy: null, rated: true, test: false, gamesPerPair: 2, status: `running`, startsAt: `2026-10-01T18:00:00Z`, timeControl: { mode: `turn`, turnTimeMs: 10_000 }, openingPlies: 5, entrants: 3, maxEntrants: 12, winner: null, round: { current: 1, of: 3 } };
+                return Promise.resolve(new Response(JSON.stringify({ running: [running], scheduled: [], past: [] })));
             }
             if (url === `/api/tournaments/t_autumnrobin1` && options.tournament !== undefined) {
                 const entries = options.tournament.map((name, index) => ({ key: index + 1, bot: name, ownerName: `owner`, online: true, ratingAtStart: 1500, state: `playing` }));
-                const detail = { id: `t_autumnrobin1`, name: `Autumn round robin`, status: `running`, startsAt: `2026-10-01T18:00:00Z`, startedAt: `2026-10-01T18:00:00Z`, endedAt: null, timeControl: { mode: `turn`, turnTimeMs: 10_000 }, openingPlies: 5, maxEntrants: 12, entries, rounds: [], standings: [], live: [] };
+                const detail = { id: `t_autumnrobin1`, name: `Autumn round robin`, origin: `operator`, createdBy: null, rated: true, test: false, gamesPerPair: 2, status: `running`, startsAt: `2026-10-01T18:00:00Z`, startedAt: `2026-10-01T18:00:00Z`, endedAt: null, waiting: [], nextRoundAt: null, timeControl: { mode: `turn`, turnTimeMs: 10_000 }, openingPlies: 5, maxEntrants: 12, entries, rounds: [], standings: [], live: [] };
                 return Promise.resolve(new Response(JSON.stringify(detail)));
             }
             return Promise.resolve(new Response(null, { status: 404 }));

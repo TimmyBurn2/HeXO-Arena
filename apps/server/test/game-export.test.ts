@@ -284,8 +284,8 @@ describe('the duel and tournament exports', () => {
         const answer = await world.app.inject({ method: `GET`, url: `/api/tournaments?bot=ALPHA` });
         expect(answer.statusCode).toBe(200);
         const list = tournamentListSchema.parse(answer.json());
-        expect(list.running).toMatchObject({ id: runningId, bot: { state: `playing`, rank: 1, points: 3 } });
-        expect(list.running?.endedAt).toBeUndefined();
+        expect(list.running).toMatchObject([{ id: runningId, bot: { state: `playing`, rank: 1, points: 3 } }]);
+        expect(list.running[0]?.endedAt).toBeUndefined();
         expect(list.scheduled).toEqual([]);
         expect(list.past.map((tournament) => [tournament.id, tournament.endedAt, tournament.bot])).toEqual([
             [`t_springcup001`, `2026-09-24T13:30:00Z`, { state: `withdrawn`, reason: `missed`, rank: 2, points: 0 }],

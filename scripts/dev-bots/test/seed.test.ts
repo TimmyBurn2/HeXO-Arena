@@ -1,4 +1,4 @@
-import { botListingSchema, botsPath, duelDetailSchema, parseClockArg, tournamentListSchema, tournamentsPath } from '@hexo-arena/contract';
+import { botListingSchema, botsPath, duelDetailSchema, parseClockArg, tournamentDetailSchema, tournamentListSchema, tournamentsPath } from '@hexo-arena/contract';
 import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -10,6 +10,7 @@ import { createTestApp, type TestApp } from '../../../apps/server/test/helpers';
 import type { SeedPlan } from '../src/personas';
 import { NotADevServer } from '../src/runner';
 import type { DevDuelPlans } from '../src/duels';
+import type { DevRoundRobinPlans } from '../src/round-robins';
 import { seedDevData, type SeedReport } from '../src/seed';
 import { devTournamentLeadMs, devTournamentName, devWeeklyRule, type DevWeeklyRule } from '../src/tournament';
 
@@ -48,8 +49,9 @@ describe('the dev seed', () => {
         rmSync(directory, { recursive: true, force: true });
     });
 
+    // Round robins pause between rounds; a short gap keeps a played-out one to seconds.
     async function boot(devLogin: boolean): Promise<TestApp> {
-        const booted = await createTestApp({ devLogin, logger: false });
+        const booted = await createTestApp({ devLogin, logger: false, roundGapMs: 100 });
         world = booted;
         await booted.app.listen({ host: `127.0.0.1`, port: 0 });
         const address = booted.app.server.address();
@@ -97,7 +99,7 @@ describe('the dev seed', () => {
         expect(report.ranked).toEqual([]);
         expect(finishes(booted).map((game) => game.reason).sort()).toEqual([`six-in-a-row`, `six-in-a-row`, `surrender`, `timeout`]);
 
-        expect(Object.keys(tokensSchema.parse(JSON.parse(readFileSync(tokenFile, `utf8`)))).sort()).toEqual([`hextide`, `pebble`, `quietlake`]);
+        expect(Object.keys(tokensSchema.parse(JSON.parse(readFileSync(tokenFile, `utf8`)))).sort()).toEqual([`cinder`, `hextide`, `pebble`, `quietlake`]);
         const listing = botListingSchema.array().parse(await (await fetch(`${origin}${botsPath}`)).json());
         expect(listing.find((bot) => bot.name === `hextide`)).toMatchObject({ version: `1.4.0`, accepts: { unlimited: false } });
         const lantern = listing.find((bot) => bot.name === `lantern`);
@@ -188,6 +190,28 @@ describe('the dev seed', () => {
         expect((await read(first.duels?.live)).status).toBe(`running`);
         const second = await seed(booted, { duels });
         expect(second.duels).toEqual(first.duels);
+    }, 60_000);
+
+    it('plays a round robin and a test out and leaves another round robin running, and a rerun sets none up again', async () => {
+        const booted = await boot(true);
+        // The app under test leaves its scheduler to the caller, which ticks it as a server does.
+        booted.tournaments.start(50);
+        const roundRobins: DevRoundRobinPlans = {
+            finished: { creator: `bruno`, bots: [`hextide`, `pebble`, `quietlake`], gamesPerPair: 2 },
+            test: { creator: `ana`, bots: [`hextide`, `pebble`, `cinder`], gamesPerPair: 2 },
+            live: { creator: `dmitri`, bots: [`quietlake`, `cinder`, `pebble`], gamesPerPair: 4 },
+        };
+        const first = await seed(booted, { roundRobins });
+        const read = async (id: string | null | undefined) => tournamentDetailSchema.parse(await (await fetch(`${origin}/api/tournaments/${id ?? ``}`)).json());
+        const finished = await read(first.roundRobins?.finished);
+        expect(finished).toMatchObject({ origin: `person`, createdBy: `bruno`, test: false, status: `finished`, name: `Round robin by bruno` });
+        expect(finished.standings.reduce((sum, line) => sum + line.points, 0)).toBeGreaterThan(0);
+        const test = await read(first.roundRobins?.test);
+        expect(test).toMatchObject({ test: true, status: `finished`, createdBy: `ana` });
+        expect(test.estimates).toHaveLength(3);
+        expect((await read(first.roundRobins?.live)).status).toBe(`running`);
+        const second = await seed(booted, { roundRobins });
+        expect(second.roundRobins).toEqual(first.roundRobins);
     }, 60_000);
 
     it('refuses a target without the dev routes and creates nothing', async () => {

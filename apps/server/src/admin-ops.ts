@@ -39,7 +39,7 @@ import { countRunningDuels } from './duel-store';
 import { isPaused, setPaused } from './site-state';
 import type { TournamentScheduler } from './tournament-scheduler';
 import { addTournamentRule, adminTournamentRules, nextRuleStart, removeTournamentRule, ruleSlot } from './tournament-rules';
-import { createTournament, openTournaments } from './tournament-store';
+import { countRunningRoundRobins, createTournament, openTournaments } from './tournament-store';
 
 export interface AdminDeps {
     query: Query;
@@ -47,7 +47,7 @@ export interface AdminDeps {
     analysis: Pick<AnalysisService, `withdraw` | `delete`>;
     games: GameRegistry;
     challenges: ChallengeRegistry;
-    tournaments: Pick<TournamentScheduler, `cancel` | `withdraw`>;
+    tournaments: Pick<TournamentScheduler, `cancel` | `withdraw` | `stopSetUpBy`>;
     duels: Pick<DuelRunner, `stopDuel` | `endForBot`>;
     limits: Pick<RequestLimits, `clientCount` | `keys`>;
     ladder: Pick<Ladder, `clear`>;
@@ -77,6 +77,7 @@ function statusOf(deps: AdminDeps): AdminStatus {
         tournaments: openTournaments(deps.query),
         tournamentRules: adminTournamentRules(deps.query, nowOf(deps), deps.tournamentLeadMs),
         liveDuels: countRunningDuels(deps.query),
+        liveRoundRobins: countRunningRoundRobins(deps.query),
         clients: clientCensus(deps.query, Math.floor(nowOf(deps) / 1000) - clientCensusDays * 86_400),
         recentActions: recentAdminActions(deps.query, recentActionCount),
         openReportCount: reports.count,
@@ -337,6 +338,7 @@ export function createAdminHandler(deps: AdminDeps): AdminHandler {
                         // which then forfeit on the clock, rated: a ban
                         // grants no unrated escape.
                         live: (userId) => {
+                            deps.tournaments.stopSetUpBy(userId, `banned`);
                             for (const botId of botIdsOf(deps.query, userId)) {
                                 deps.presence.close(botId);
                                 deps.analysis.withdraw(botId);

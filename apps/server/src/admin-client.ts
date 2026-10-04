@@ -201,6 +201,7 @@ function formatStatus(status: AdminStatus): string {
         `live streams  ${String(status.liveStreams)}`,
         `active games  ${String(status.activeGames)}`,
         `live duels    ${String(status.liveDuels)}`,
+        `round robins  ${String(status.liveRoundRobins)} live`,
         `client keys   ${String(status.clientKeys)}`,
         `keyless       ${String(status.keylessRequests)}`,
         `bot clients, last ${String(clientCensusDays)} days:`,

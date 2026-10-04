@@ -1,6 +1,6 @@
 import type { Page } from '@playwright/test';
 import { themes } from '../src/theme/themes';
-import { anaMe, analyzerBots, bots, brunoMe, duelBots, duelFixtures, duelGameRows, duelGameSnapshots, games as gameFixtures, heldBots, keptNames, leaderboard, liveGames, longReadings, playBots, rivalry, signup, tournamentGameRows, tournaments, world, type World } from './mock-api';
+import { anaMe, analyzerBots, bots, brunoMe, duelBots, duelFixtures, duelGameRows, duelGameSnapshots, games as gameFixtures, heldBots, keptNames, leaderboard, liveGames, longReadings, playBots, rivalry, roundRobins, signup, tournamentGameRows, tournaments, world, type World } from './mock-api';
 
 /** A named look the whole site can wear. */
 export interface Look {
@@ -177,6 +177,19 @@ async function addBot(page: Page, slot: `first` | `second`, name: string): Promi
     await dialog.waitFor({ state: `detached` });
 }
 
+/** Checks bots in the round robin's bot list and adds them, the list closing. */
+export async function pickBots(page: Page, names: readonly string[]): Promise<void> {
+    await page.getByRole(`button`, { name: `Add bots to the round robin` }).click();
+    const dialog = page.locator(`dialog.rr-picker[open]`);
+    await dialog.waitFor();
+    for (const name of names) await dialog.getByRole(`button`, { name: new RegExp(`^${name}\\b`, `u`) }).click();
+    await dialog.getByRole(`button`, { name: /^Add \d+ bots?$/u }).click();
+    await dialog.waitFor({ state: `detached` });
+}
+
+// ana's bots and everyone else's on Play's Tournament place, the weekly waiting beside them.
+const robins = (overrides: Partial<World> = {}) => world({ me: anaMe, bots: duelBots, tournaments: [...structuredClone(tournaments.filter((entry) => entry.status !== `running`)), ...structuredClone(roundRobins)], live: [], ...overrides });
+
 // A duel's page in every look at a laptop's width, since it draws boards, and in the default look on a phone.
 function duelPage(name: string, path: string, state: World, ready: string): Shot {
     return { name, path, world: state, ready, framed: true, board: laptopOnly, viewports: duelViewports };
@@ -335,10 +348,10 @@ export const shots: readonly Shot[] = [
     { name: `ladder-all-time`, path: `/ladder?active=all`, world: world(), ready: `.podium-plate`, framed: true },
     { name: `tournaments`, path: `/games/tournaments`, world: world({ tournaments }), ready: `.tournament-row-enter`, framed: true, viewports: duelViewports },
     { name: `tournaments-signed-out`, path: `/games/tournaments`, world: world({ me: null, tournaments }), ready: `.tournament-row`, framed: true, viewports: duelViewports },
-    { name: `tournaments-none`, path: `/games/tournaments`, world: world({ tournaments: [] }), ready: `.empty`, framed: true, viewports: duelViewports },
+    { name: `tournaments-none`, path: `/games/tournaments`, world: world({ tournaments: [] }), ready: `#tournaments-past + .note`, framed: true, viewports: duelViewports },
     { name: `play-tournament`, path: `/play/tournament`, world: world({ tournaments }), ready: `.next-tournament .entry-pick`, framed: true, viewports: duelViewports, fullPage: true },
     { name: `play-tournament-signed-out`, path: `/play/tournament`, world: world({ me: null, tournaments }), ready: `.next-tournament .entry-sign-in`, framed: true, viewports: duelViewports, fullPage: true },
-    { name: `play-tournament-none`, path: `/play/tournament`, world: world({ tournaments: tournaments.filter((entry) => entry.status !== `scheduled`) }), ready: `.empty`, framed: true, viewports: duelViewports },
+    { name: `play-tournament-none`, path: `/play/tournament`, world: world({ tournaments: tournaments.filter((entry) => entry.status !== `scheduled`) }), ready: `.weekly-block p.note`, framed: true, viewports: duelViewports },
     {
         name: `games-one-duel`,
         path: `/games?event=duel&duel=${duelFixtures.live.id}`,
@@ -364,6 +377,62 @@ export const shots: readonly Shot[] = [
             await page.getByRole(`button`, { name: `Remove Autumn round robin` }).waitFor();
         },
     },
+    { name: `rr-setup-empty`, path: `/play/tournament`, world: robins(), ready: `.rr-card .slot-empty`, framed: true, viewports: duelViewports, fullPage: true },
+    { name: `rr-setup-signed-out`, path: `/play/tournament`, world: robins({ me: null }), ready: `.rr-card .discord-sign-in`, framed: true, viewports: duelViewports, fullPage: true },
+    {
+        name: `rr-setup-picker`,
+        path: `/play/tournament`,
+        world: robins(),
+        ready: `.rr-card .slot-empty`,
+        framed: true,
+        viewports: duelViewports,
+        after: async (page) => {
+            await page.getByRole(`button`, { name: `Add bots to the round robin` }).click();
+            const dialog = page.locator(`dialog.rr-picker[open]`);
+            for (const name of [`hextide`, `Pistol1`, `devbot-a`]) await dialog.getByRole(`button`, { name: new RegExp(`^${name}\\b`, `u`) }).click();
+        },
+    },
+    {
+        name: `rr-setup-ready`,
+        path: `/play/tournament`,
+        world: robins(),
+        ready: `.rr-card .slot-empty`,
+        framed: true,
+        viewports: duelViewports,
+        fullPage: true,
+        after: async (page) => {
+            await pickBots(page, [`hextide`, `Pistol1`, `devbot-b`, `devbot-a`, `quietlake`]);
+        },
+    },
+    {
+        name: `rr-setup-few`,
+        path: `/play/tournament`,
+        world: robins(),
+        ready: `.rr-card .slot-empty`,
+        framed: true,
+        viewports: duelViewports,
+        after: async (page) => {
+            await pickBots(page, [`devbot-a`, `devbot-b`]);
+        },
+    },
+    {
+        name: `rr-setup-test`,
+        path: `/play/tournament`,
+        world: robins(),
+        ready: `.rr-card .slot-empty`,
+        framed: true,
+        viewports: duelViewports,
+        fullPage: true,
+        after: async (page) => {
+            await pickBots(page, [`hextide`, `cinder`, `pebble`]);
+        },
+    },
+    { name: `rr-live`, path: `/tournaments/t_brunorobin01`, world: robins(), ready: `.rr-wait`, framed: true, board: laptopOnly, viewports: duelViewports, fullPage: true },
+    { name: `rr-finished`, path: `/tournaments/t_brunorobin02`, world: robins(), ready: `.podium-plate`, framed: true, board: laptopOnly, viewports: duelViewports, fullPage: true },
+    { name: `rr-stopped`, path: `/tournaments/t_brunorobin03`, world: robins(), ready: `.tournament-status`, framed: true, viewports: duelViewports, fullPage: true },
+    { name: `rr-test`, path: `/tournaments/t_anatest00001`, world: robins(), ready: `.rr-estimates`, framed: true, viewports: duelViewports, fullPage: true },
+    { name: `rr-tournaments`, path: `/games/tournaments`, world: robins(), ready: `.tournament-row`, framed: true, viewports: duelViewports, fullPage: true },
+    { name: `rr-tournaments-tests`, path: `/games/tournaments?list=tests`, world: robins(), ready: `.tournament-row`, framed: true, viewports: duelViewports },
     { name: `tournament-waiting`, path: `/tournaments/t_wintercup202`, world: world(), ready: `.entry-pick`, framed: true, viewports: withLaptop },
     { name: `tournament-waiting-signed-out`, path: `/tournaments/t_wintercup202`, world: signedOut, ready: `.entry-sign-in`, framed: true, viewports: withLaptop },
     { name: `tournament-running`, path: `/tournaments/t_autumnrobin1`, world: world({ live: liveGames, tournaments }), ready: `.xt`, framed: true, board: true, viewports: withLaptop },

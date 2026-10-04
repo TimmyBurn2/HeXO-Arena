@@ -13,6 +13,7 @@ import { useBorrowFrame } from '../frame';
 import { routeMeta } from '../route-meta';
 import { useRoute } from '../router/use-route';
 import { text } from '../text';
+import { gameCaption } from '../tournaments/words';
 import { useDocumentMeta } from '../use-document-meta';
 import { GameBoard, type TurnStatus } from '../game/GameBoard';
 import { FeedLabel, GameDrawer } from '../game/GameDrawer';
@@ -471,7 +472,7 @@ function GameView({ snapshot, send, link }: { snapshot: GameSnapshot; send: Game
                     duel={duelRowOf(snapshot, duel)}
                     tournament={snapshot.tournament === undefined ? null : (
                         <Link to={`/tournaments/${encodeURIComponent(snapshot.tournament.id)}`}>
-                            {text.drawer.tournamentGame(snapshot.tournament.name, snapshot.tournament.round, snapshot.tournament.game)}
+                            {gameCaption(snapshot.tournament)}
                         </Link>
                     )}
                     analysis={running ? null : gameLink(snapshot.gameId, turnOf(replay.shown))}
@@ -568,6 +569,7 @@ function unratedReason(snapshot: GameSnapshot, duel: DuelDetail | null): string 
         return duel === null ? words.ratedNoTestOwner : words.ratedNoTestBots(duel.first.ownerName);
     }
     if (snapshot.unratedByChoice !== true) return null;
+    if (snapshot.tournament?.createdBy !== undefined) return words.ratedNoRoundRobin(snapshot.tournament.createdBy);
     if (snapshot.duel === undefined) return words.ratedNoChoice;
     if (duel === null) return words.ratedNoDuel;
     const owns = duel.startedBy === duel.first.ownerName || duel.startedBy === duel.second.ownerName;

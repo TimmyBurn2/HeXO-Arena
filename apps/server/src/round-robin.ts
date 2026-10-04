@@ -24,9 +24,10 @@ export type SlotResult =
     | { readonly kind: `not_played` }
     | { readonly kind: `aborted` };
 
-/** A pairing with the results of its two games, game 1 first. */
+/** A pairing with the results of its two games, game 1 first; a pair playing several openings meets in one per opening, its leg, 1 when absent. */
 export interface ScoredPairing extends RoundPairing {
     readonly round: number;
+    readonly leg?: number;
     readonly games: readonly [SlotResult, SlotResult];
 }
 
@@ -187,11 +188,13 @@ export function standingsOf(field: readonly string[], pairings: readonly ScoredP
 /**
  * Whether a bot missed two pairings in a row: it showed for none of the
  * games it was due in either, so it is withdrawn.
- * Pairings are taken in round order, rests skipped; the count stops at the
- * first pairing still running.
+ * Pairings are taken in round order and a pair's openings in theirs, rests
+ * skipped; the count stops at the first pairing still running.
  */
 export function missedTwoInARow(bot: string, pairings: readonly ScoredPairing[]): boolean {
-    const own = pairings.filter((pairing) => pairing.first === bot || pairing.second === bot).sort((one, two) => one.round - two.round);
+    const own = pairings
+        .filter((pairing) => pairing.first === bot || pairing.second === bot)
+        .sort((one, two) => one.round - two.round || (one.leg ?? 1) - (two.leg ?? 1));
     let streak = 0;
     for (const pairing of own) {
         if (!pairing.games.every(slotDone)) break;

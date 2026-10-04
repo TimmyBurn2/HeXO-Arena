@@ -100,3 +100,13 @@ export function absentees(detail: TournamentDetail): Record<`never` | `withdrew`
 export function tournamentPagePath(id: string): string {
     return `/tournaments/${encodeURIComponent(id)}`;
 }
+
+/** The lists a link may open the tournaments under Games on, past every one: the reader's own, or tests. */
+export const tournamentListViews = [`yours`, `tests`] as const;
+
+export type TournamentListView = (typeof tournamentListViews)[number];
+
+/** The tournaments under Games, on one view when named. */
+export function gamesTournamentsPath(view: TournamentListView | null = null): string {
+    return view === null ? `/games/tournaments` : `/games/tournaments?list=${view}`;
+}

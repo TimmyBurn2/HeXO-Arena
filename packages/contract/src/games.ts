@@ -118,8 +118,22 @@ export const gamePlayersSchema = z.object({ x: gamePlayerSchema, o: gamePlayerSc
 export type GamePlayers = z.infer<typeof gamePlayersSchema>;
 
 export const gameTournamentSchema = z
-    .object({ id: z.string(), name: z.string(), round: z.number().int().min(1), game: z.union([z.literal(1), z.literal(2)]) })
-    .meta({ id: `GameTournament`, description: `The tournament a game belongs to: its round, and which of the pairing's two games it is.` });
+    .object({
+        id: z.string(),
+        name: z.string(),
+        round: z.number().int().min(1),
+        game: z.union([z.literal(1), z.literal(2)]),
+        leg: z.number().int().min(1).max(5).optional(),
+        of: z.number().int().min(4).max(10).optional(),
+        createdBy: z.string().optional(),
+    })
+    .meta({
+        id: `GameTournament`,
+        description: [
+            `The tournament a game belongs to: its round, and which of its opening's two games it is.`,
+            `Where a pair plays more than one opening, leg numbers the opening and of counts the pair's games; createdBy names who set a person's round robin up.`,
+        ].join(` `),
+    });
 export type GameTournament = z.infer<typeof gameTournamentSchema>;
 
 /** The most games a duel plays, a test's most. */

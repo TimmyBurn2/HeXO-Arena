@@ -24,6 +24,7 @@ import { isProvisional, type PlayerRef } from './rating';
 import { readRating } from './rating-store';
 import { shownBot, shownUser, type ShownName } from './shown-names';
 import { standingsOf, storedSlot } from './round-robin';
+import { creatorJoin, creators, nameColumns, tournamentNameOf } from './tournament-store';
 
 const isoOf = (seconds: number) => new Date(seconds * 1000).toISOString().replace(/\.\d{3}Z$/u, `Z`);
 
@@ -107,9 +108,10 @@ function opponentNames(query: Query, ids: { human: readonly string[]; bot: reado
 // A bot's finished tournaments, newest first, with its place in each.
 function placingsOf(query: Query, botId: string): NonNullable<PlayerRecord[`placings`]> {
     const rows = query
-        .select({ id: tournaments.id, name: tournaments.name, endedAt: tournaments.endedAt })
+        .select({ id: tournaments.id, ...nameColumns, endedAt: tournaments.endedAt })
         .from(tournamentEntries)
         .innerJoin(tournaments, eq(tournaments.id, tournamentEntries.tournamentId))
+        .leftJoin(creators, creatorJoin)
         .where(and(eq(tournamentEntries.botId, botId), eq(tournaments.status, `finished`), inArray(tournamentEntries.state, [`playing`, `withdrawn`])))
         .orderBy(desc(tournaments.endedAt))
         .limit(playerPlacingsCap)
@@ -124,6 +126,7 @@ function placingsOf(query: Query, botId: string): NonNullable<PlayerRecord[`plac
         const pairings = query
             .select({
                 round: tournamentPairings.round,
+                leg: tournamentPairings.leg,
                 first: tournamentPairings.firstBotId,
                 second: tournamentPairings.secondBotId,
                 game1: tournamentPairings.game1,
@@ -137,13 +140,14 @@ function placingsOf(query: Query, botId: string): NonNullable<PlayerRecord[`plac
             .all()
             .map((pairing) => ({
                 round: pairing.round,
+                leg: pairing.leg,
                 first: pairing.first,
                 second: pairing.second,
                 games: [storedSlot(pairing.game1, pairing.game1Seat), storedSlot(pairing.game2, pairing.game2Seat)] as const,
             }));
         const line = standingsOf(field, pairings).find((standing) => standing.bot === botId);
         if (line === undefined || row.endedAt === null) return [];
-        return [{ tournamentId: row.id, name: row.name, rank: line.rank, entrants: field.length, points: line.points, endedAt: isoOf(row.endedAt) }];
+        return [{ tournamentId: row.id, name: tournamentNameOf(row), rank: line.rank, entrants: field.length, points: line.points, endedAt: isoOf(row.endedAt) }];
     });
 }
 

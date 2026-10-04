@@ -1,7 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
 import type { Me } from '@hexo-arena/contract';
 import { looks, wear } from './matrix';
-import { serve, world } from './mock-api';
+import { roundRobins, serve, world, type World } from './mock-api';
 
 const visitors: readonly { name: string; me: Me }[] = [
     { name: `signed-out`, me: null },
@@ -10,7 +10,7 @@ const visitors: readonly { name: string; me: Me }[] = [
     { name: `guest`, me: { kind: `guest`, name: `Guest k3f9`, liveGames: [] } },
 ];
 
-const screens: readonly { name: string; path: string }[] = [
+const screens: readonly { name: string; path: string; world?: Partial<World> }[] = [
     { name: `the root`, path: `/` },
     { name: `play`, path: `/play` },
     { name: `bot duel`, path: `/play/duels` },
@@ -20,6 +20,8 @@ const screens: readonly { name: string; path: string }[] = [
     { name: `the duels under Games`, path: `/games/duels` },
     { name: `the tournaments under Games`, path: `/games/tournaments` },
     { name: `a tournament`, path: `/tournaments/t_wintercup202` },
+    { name: `a round robin`, path: `/tournaments/t_brunorobin01`, world: { tournaments: roundRobins } },
+    { name: `a test of several bots`, path: `/tournaments/t_anatest00001`, world: { tournaments: roundRobins } },
     { name: `analysis`, path: `/analysis` },
     { name: `the ladder`, path: `/ladder` },
     { name: `bots`, path: `/bots` },
@@ -167,7 +169,7 @@ for (const visitor of visitors) {
                 const look = looks[0];
                 if (look === undefined) throw new Error(`no look registered`);
                 await wear(page, look);
-                await serve(page, world({ me: visitor.me }));
+                await serve(page, world({ ...screen.world, me: visitor.me }));
                 await page.goto(screen.path);
                 await page.locator(`h1`).first().waitFor();
                 const signedIn = visitor.me !== null;

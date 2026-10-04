@@ -1,17 +1,19 @@
 import { useCallback, useEffect, useState } from 'react';
 import { clockText, deletedPlayerName, tournamentMeta, tournamentMinPresent, tournamentRunningPollMs, tournamentWaitingPollMs, type TournamentDetail, type TournamentSummary } from '@hexo-arena/contract';
-import { ApiError, fetchTournament, limitedFor, tournamentExportUrl } from '../api/client';
+import { ApiError, fetchTournament, limitedFor } from '../api/client';
 import { BotBadge, PlayerName, PresenceDot } from '../components/player';
 import { ErrorFrame, SkeletonRows } from '../components/states';
-import { tournamentGamesPath } from '../games/filters';
 import { PodiumStand } from '../ladder/Podium';
 import { LiveGameGrid } from '../live/LiveGameCard';
+import { useMe } from '../me';
 import { Link } from '../router/Link';
 import { useRoute } from '../router/use-route';
 import { text } from '../text';
 import { Crosstable } from '../tournaments/Crosstable';
 import { EntryControl } from '../tournaments/EntryControl';
+import { Estimates, NextRound, PairsTable, RoundRobinActions, RoundRobinStatus, RoundRobinTerms, Waits } from '../tournaments/RoundRobinParts';
 import { RoundSteps } from '../tournaments/RoundSteps';
+import { TournamentTag } from '../tournaments/TournamentRow';
 import { Rounds } from '../tournaments/Rounds';
 import { Standings } from '../tournaments/Standings';
 import { absentees, currentRound, roundBegun } from '../tournaments/view';
@@ -66,6 +68,11 @@ function summaryOf(detail: TournamentDetail): TournamentSummary {
     return {
         id: detail.id,
         name: detail.name,
+        origin: detail.origin,
+        createdBy: detail.createdBy,
+        rated: detail.rated,
+        test: detail.test,
+        gamesPerPair: detail.gamesPerPair,
         status: detail.status,
         startsAt: detail.startsAt,
         timeControl: detail.timeControl,
@@ -92,24 +99,25 @@ function utcTime(iso: string): string {
 export function TournamentScreen({ id }: { id: string }) {
     const route = useRoute();
     const { load, retry } = useTournament(id);
+    const me = useMe();
+    const viewer = me.status === `ready` && me.me?.kind === `user` ? me.me.name : null;
     const meta = load.kind === `ready` ? tournamentMeta(summaryOf(load.detail)) : undefined;
     useDocumentMeta(route, meta?.title, meta?.description);
     const title = load.kind === `ready` ? load.detail.name : text.tournaments.title;
-    const over = load.kind === `ready` && anyGameOver(load.detail);
+    const detail = load.kind === `ready` ? load.detail : null;
     return (
         <>
             <div className="duel-title-row">
                 <p className="duel-kicker">
                     <Link to="/games/tournaments">{text.tournaments.crumb}</Link>
+                    {detail?.origin === `person` ? (
+                        <>
+                            <span>{text.roundRobins.kind}</span>
+                            <TournamentTag tournament={detail} />
+                        </>
+                    ) : null}
                 </p>
-                {/* The export holds the games over; before the first, it would hold none. */}
-                {over ? (
-                    <div className="duel-actions">
-                        <a href={tournamentExportUrl(id)} download className="btn btn-ghost">
-                            {text.games.exportGames}
-                        </a>
-                    </div>
-                ) : null}
+                {detail === null ? null : <RoundRobinActions detail={detail} viewer={viewer} onChange={retry} />}
             </div>
             <h1 className="screen-title tournament-title">{title}</h1>
             {load.kind === `loading` ? <SkeletonRows /> : null}
@@ -132,35 +140,30 @@ export function TournamentScreen({ id }: { id: string }) {
 
 function Tournament({ detail, readAt, onEntry }: { detail: TournamentDetail; readAt: number; onEntry: () => void }) {
     const field = detail.startedAt === null ? detail.entries.length : detail.standings.length;
+    const person = detail.origin === `person`;
     return (
         <div className={`tournament tournament-${detail.status}`}>
             <div className="tournament-intro">
-                <p className="tournament-status">
-                    <StatusSentence detail={detail} readAt={readAt} />
-                </p>
+                <p className="tournament-status">{person ? <RoundRobinStatus detail={detail} readAt={readAt} /> : <StatusSentence detail={detail} readAt={readAt} />}</p>
                 <p className="note">
-                    {text.tournaments.rules(field, clockText(detail.timeControl), detail.openingPlies)} {text.tournaments.pairing(detail.openingPlies)}
+                    {person ? (
+                        <RoundRobinTerms detail={detail} />
+                    ) : (
+                        <>
+                            {text.tournaments.rules(field, clockText(detail.timeControl), detail.openingPlies)} {text.tournaments.pairing(detail.openingPlies)}
+                        </>
+                    )}
                 </p>
                 {detail.rounds.length > 0 ? <RoundSteps detail={detail} /> : null}
-                {/* Games over show under Games too, where the other filters narrow them. */}
-                {anyGameOver(detail) ? (
-                    <p className="tournament-games">
-                        <Link to={tournamentGamesPath(detail.id)}>{text.tournaments.theseGames}</Link>
-                    </p>
-                ) : null}
             </div>
+            {person && detail.test ? <Estimates detail={detail} /> : null}
             {detail.status === `scheduled` ? <Waiting detail={detail} onEntry={onEntry} /> : null}
             {detail.status === `running` ? <Running detail={detail} readAt={readAt} /> : null}
-            {detail.status === `finished` ? <Finished detail={detail} /> : null}
+            {detail.status === `finished` || detail.status === `stopped` ? <Finished detail={detail} /> : null}
             {detail.status === `called_off` || (detail.status === `canceled` && detail.rounds.length === 0) ? <Entries detail={detail} /> : null}
             {detail.status === `canceled` && detail.rounds.length > 0 ? <Finished detail={detail} /> : null}
         </div>
     );
-}
-
-// Whether a game is over, so the export and the games under Games hold one.
-function anyGameOver(detail: TournamentDetail): boolean {
-    return detail.rounds.some((round) => round.pairings.some((pairing) => pairing.games.some((game) => game.gameId !== null && (game.outcome === `played` || game.outcome === `aborted`))));
 }
 
 function StatusSentence({ detail, readAt }: { detail: TournamentDetail; readAt: number }) {
@@ -183,6 +186,9 @@ function StatusSentence({ detail, readAt }: { detail: TournamentDetail; readAt: 
         }
         case `canceled`:
             return <>{status.canceled}</>;
+        // The weekly is never stopped, only canceled.
+        case `stopped`:
+            return null;
     }
 }
 
@@ -198,18 +204,36 @@ function Waiting({ detail, onEntry }: { detail: TournamentDetail; onEntry: () =>
 function Running({ detail, readAt }: { detail: TournamentDetail; readAt: number }) {
     const round = currentRound(detail);
     const live = detail.live.map((entry) => ({ entry, cells: entry.cells, toMove: entry.toMove, readAt }));
+    const liveRound = (
+        <section className="tournament-block" aria-labelledby="tournament-live-title">
+            <h2 id="tournament-live-title" className="section-title">
+                {round === null ? text.tournaments.liveGames : text.tournaments.round(round)}
+            </h2>
+            {live.length === 0 && detail.waiting.length === 0 ? null : (
+                <LiveGameGrid games={live} level={3}>
+                    <Waits detail={detail} readAt={readAt} />
+                </LiveGameGrid>
+            )}
+            {round === null ? null : <Rounds detail={detail} only={round} />}
+        </section>
+    );
     return (
         <>
-            <div className="tournament-columns">
-                <section className="tournament-block" aria-labelledby="tournament-live-title">
-                    <h2 id="tournament-live-title" className="section-title">
-                        {round === null ? text.tournaments.liveGames : text.tournaments.round(round)}
-                    </h2>
-                    {live.length === 0 ? null : <LiveGameGrid games={live} level={3} />}
-                    {round === null ? null : <Rounds detail={detail} only={round} />}
-                </section>
-                <Standings detail={detail} />
-            </div>
+            {/* A person's round robin draws its round's boards across the page, its standings beside the round to come. */}
+            {detail.origin === `person` ? (
+                <>
+                    {liveRound}
+                    <div className="tournament-columns">
+                        <Standings detail={detail} />
+                        <NextRound detail={detail} />
+                    </div>
+                </>
+            ) : (
+                <div className="tournament-columns">
+                    {liveRound}
+                    <Standings detail={detail} />
+                </div>
+            )}
             <Crosstables detail={detail} />
             <Rounds detail={detail} except={round} />
             <Absentees detail={detail} />
@@ -222,7 +246,7 @@ function Finished({ detail }: { detail: TournamentDetail }) {
     const places = top.map((line) => ({ name: line.bot, kind: `bot` as const, deleted: line.deleted, figure: String(line.points), meta: text.tournaments.plateMeta(line.points, <PlayerName name={line.ownerName} kind="human" deleted={line.ownerName === deletedPlayerName} />), play: null, rank: line.rank }));
     return (
         <>
-            {detail.status === `finished` && top.length > 0 ? (
+            {detail.status === `finished` && !detail.test && top.length > 0 ? (
                 <PodiumStand places={places} label={text.tournaments.podium(top.map((line) => ({ name: line.bot, points: line.points, rank: line.rank })))} title={text.tournaments.podiumTitle} />
             ) : null}
             <Standings detail={detail} />
@@ -234,6 +258,8 @@ function Finished({ detail }: { detail: TournamentDetail }) {
 }
 
 function Crosstables({ detail }: { detail: TournamentDetail }) {
+    // Past two games a pair, the stones would crowd a cell; each meeting's score says it.
+    if (detail.gamesPerPair > 2) return <PairsTable detail={detail} />;
     return (
         <section className="tournament-block">
             <h2 className="section-title">{text.tournaments.crosstable}</h2>

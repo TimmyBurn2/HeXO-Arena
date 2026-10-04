@@ -151,8 +151,8 @@ describe('the tournament tables', () => {
         const beta = ids(`beta`).bot;
         const pairing = (id: string, game1: string, seat1: string | null, game2 = `pending`) => () =>
             world.sqlite
-                .prepare(`insert into tournament_pairings (id, tournament_id, round, first_bot_id, second_bot_id, game1, game1_seat, game2) values (?, 't_aaaaaaaaaaaa', 1, ?, ?, ?, ?, ?)`)
-                .run(id, alpha, beta, game1, seat1, game2);
+                .prepare(`insert into tournament_pairings (id, tournament_id, round, first_bot_id, second_bot_id, game1, game1_seat, game2, leg) values (?, 't_aaaaaaaaaaaa', 1, ?, ?, ?, ?, ?, ?)`)
+                .run(id, alpha, beta, game1, seat1, game2, Number(id.slice(1)) % 5 + 1);
         expect(pairing(`p1`, `played`, `both`)).toThrow(/CHECK/);
         expect(pairing(`p2`, `no_show`, null)).toThrow(/CHECK/);
         expect(pairing(`p3`, `live`, null, `live`)).toThrow(/CHECK/);

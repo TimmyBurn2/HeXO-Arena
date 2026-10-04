@@ -68,6 +68,7 @@ import type { ClientLimits, CredentialLimits } from './request-limits';
 import { sessionUser } from './sessions';
 import { shownBot, shownUser } from './shown-names';
 import type { StartGate } from './site-state';
+import { countRunningRoundRobinsOfBot } from './tournament-store';
 
 const isoOf = (seconds: number) => new Date(seconds * 1000).toISOString().replace(/\.\d{3}Z$/u, `Z`);
 
@@ -254,7 +255,7 @@ export function duelList(query: Query, filter: DuelListFilter): DuelList {
     return { running: listed(true), past: listed(false) };
 }
 
-/** Every listed bot's switch and the bots it plays a running duel with, as the bot list orders them. */
+/** Every listed bot's switch, the bots it plays a running duel with, and its running round robins, as the bot list orders them. */
 export function duelBotStates(query: Query): DuelBotState[] {
     const pairs = runningPairs(query);
     const listed = listBots(query);
@@ -269,6 +270,7 @@ export function duelBotStates(query: Query): DuelBotState[] {
             const name = other === null ? undefined : names.get(other);
             return name === undefined ? [] : [name];
         }),
+        roundRobins: countRunningRoundRobinsOfBot(query, bot.id),
     }));
 }
 
@@ -354,8 +356,8 @@ export function registerDuelApi(app: FastifyInstance, deps: DuelApiDeps): void {
         const firstLevel = chosenLevel(first, terms.levels?.first);
         const secondLevel = chosenLevel(second, terms.levels?.second);
         if (firstLevel === undefined || secondLevel === undefined) return reply.code(400).send({ error: `a bot declares no such level`, code: `unknown_level` });
-        if (fails(`busy`, `tournament`) || pair.some((bot) => countRunningOfBot(query, bot.id) >= duelPerBotCap)) {
-            return reply.code(400).send({ error: `a bot is at its game cap, in a tournament, or in its most duels`, code: `bot_busy` });
+        if (fails(`busy`, `tournament`) || pair.some((bot) => countRunningOfBot(query, bot.id) + countRunningRoundRobinsOfBot(query, bot.id) >= duelPerBotCap)) {
+            return reply.code(400).send({ error: `a bot is at its game cap, in a tournament, or in its most duels and round robins`, code: `bot_busy` });
         }
         // One person on both sides makes a test, whoever started it.
         const test = first.ownerId === second.ownerId;

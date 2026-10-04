@@ -47,18 +47,17 @@ for (const width of [1280, 390]) {
         await expect(page.getByLabel(`Your bot`)).toBeVisible();
     });
 
-    test(`Play's Tournament place enters a bot in the next one in place, beside the reader's own, at ${String(width)} px`, async ({ page }) => {
+    test(`Play's Tournament place enters a bot in the next weekly in place, beside a round robin's setup, at ${String(width)} px`, async ({ page }) => {
         await open(page, `/play/tournament`, width);
         await expect(page.getByRole(`navigation`, { name: `Play` }).getByRole(`link`, { name: `Tournament` })).toHaveAttribute(`aria-current`, `page`);
-        const card = page.locator(`.next-tournament`);
-        await expect(card.getByRole(`heading`, { name: `Winter cup`, level: 2 })).toBeVisible();
-        await expect(card.getByText(/^Starts in 2 h 5\d min; 2 of 12 entered$/u)).toBeVisible();
-        await card.getByLabel(`Your bot`).selectOption(`sealbot`);
-        await card.getByRole(`button`, { name: `Enter`, exact: true }).click();
-        await expect(card.getByText(`sealbot is entered.`)).toBeVisible();
-        await expect(card.getByText(/; 3 of 12 entered$/u)).toBeVisible();
-        const yours = page.getByRole(`region`, { name: `Your tournaments` });
-        await expect(yours.locator(`.place-row`)).toHaveCount(3);
+        const weekly = page.getByRole(`region`, { name: `Weekly tournament` });
+        await expect(weekly.getByRole(`link`, { name: `Winter cup` })).toBeVisible();
+        await expect(weekly.getByText(/^Starts in 2 h 5\d min; 2 of 12 entered; turn clock 10 s$/u)).toBeVisible();
+        await weekly.getByLabel(`Your bot`).selectOption(`sealbot`);
+        await weekly.getByRole(`button`, { name: `Enter`, exact: true }).click();
+        await expect(weekly.getByText(`sealbot is entered.`)).toBeVisible();
+        await expect(weekly.getByText(/; 3 of 12 entered; turn clock 10 s$/u)).toBeVisible();
+        await expect(page.getByRole(`heading`, { name: `No round robin possible right now` })).toBeVisible();
         expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
     });
 

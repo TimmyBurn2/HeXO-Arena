@@ -3,6 +3,7 @@ import { BotBadge, Rating, seatLevelFacts, seatName, seatsRateNobody, Swatch } f
 import { duelPagePath } from '../duels/setup';
 import { Link } from '../router/Link';
 import { text } from '../text';
+import { gameCaption } from '../tournaments/words';
 import './GameRows.css';
 
 /**
@@ -95,7 +96,7 @@ function GameRow({ game, now }: { game: FinishedGameEntry; now: number }) {
 // The duel or tournament a game belongs to, as its caption names and links it.
 function eventOf(game: FinishedGameEntry): { to: string; words: string } | null {
     if (game.tournament !== undefined) {
-        return { to: `/tournaments/${encodeURIComponent(game.tournament.id)}`, words: text.tournaments.caption(game.tournament.name, game.tournament.round) };
+        return { to: `/tournaments/${encodeURIComponent(game.tournament.id)}`, words: gameCaption(game.tournament) };
     }
     if (game.duel !== undefined) return { to: duelPagePath(game.duel.id), words: text.duels.caption(game.test === true ? `test` : `duel`, game.duel.game, game.duel.of) };
     return null;

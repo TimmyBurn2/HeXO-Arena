@@ -139,7 +139,7 @@ export function TournamentPick({ value, named, onChange }: { value: string | und
     const read = useAsync(fetchTournaments);
     const [find, setFind] = useState<string | null>(null);
     const day = useCallback((iso: string) => new Intl.DateTimeFormat(undefined, { dateStyle: `medium` }).format(new Date(iso)), []);
-    const all = read.data === null ? [] : [...(read.data.running === null ? [] : [read.data.running]), ...read.data.past.filter((tournament) => tournament.status !== `called_off`)];
+    const all = read.data === null ? [] : [...read.data.running, ...read.data.past.filter((tournament) => tournament.status !== `called_off`)];
     const listed = find === null ? all : all.filter((tournament) => tournament.name.toLowerCase().includes(find.toLowerCase()));
     const options: (readonly [string, string])[] = listed.map((tournament) => [tournament.id, pick.tournamentOption(tournament.name, day(tournament.startsAt))] as const);
     if (value !== undefined && !listed.some((tournament) => tournament.id === value)) options.unshift([value, tournamentWords(named)]);

@@ -296,7 +296,9 @@ export function botClientOf(userAgent: string | undefined): BotClient {
 export const botSettingsSchema = z
     .object({
         name: z.string(),
-        duelsByOthers: z.boolean().meta({ description: `True lets any signed-in person start a duel the bot plays; false keeps that to its owner. On until the owner turns it off.` }),
+        duelsByOthers: z.boolean().meta({
+            description: `True lets any signed-in person start a duel or set up a round robin the bot plays; false keeps that to its owner, and takes the bot out of round robins others set up. On until the owner turns it off.`,
+        }),
         about: botAboutSchema.optional().meta({ description: `The owner's text for the bot's pages, absent until set; it shows in place of the declared one.` }),
         repoUrl: botRepoUrlSchema.optional().meta({ description: `The owner's link to the bot's source, absent until set; it shows in place of the declared one.` }),
         declaredAbout: botAboutSchema.optional().meta({ description: `The text the bot declares, which shows while the owner has set none.` }),

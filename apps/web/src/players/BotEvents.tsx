@@ -13,7 +13,7 @@ import '../duels/Duels.css';
 const shownOnPage = 3;
 
 function latestTournaments(list: TournamentList | null) {
-    return list === null ? [] : [...(list.running === null ? [] : [list.running]), ...list.scheduled, ...list.past].slice(0, shownOnPage);
+    return list === null ? [] : [...list.running, ...list.scheduled, ...list.past].slice(0, shownOnPage);
 }
 
 /**

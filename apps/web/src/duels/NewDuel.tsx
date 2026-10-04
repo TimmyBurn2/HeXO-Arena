@@ -304,9 +304,9 @@ export function NewDuel({
                         />
                         {clock === null ? null : (
                             <DuelClock
-                                first={first}
-                                second={second}
+                                field={[first, second]}
                                 clock={clock}
+                                foot={words.clockFoot}
                                 onClock={(next) => {
                                     setPicks(next);
                                     setOutcome({ kind: `idle` });

@@ -19,6 +19,7 @@ import {
     type FinishedGamesQuery,
     type FinishedGamesRecord,
     type GamePlayer,
+    type GameTournament,
     type OpeningPlies,
     type SeatLevel,
     type Side,
@@ -28,7 +29,8 @@ import { alias } from 'drizzle-orm/sqlite-core';
 import type { FastifyInstance } from 'fastify';
 import type { Query } from './db';
 import { bots, duels, gameRatings, games, moves, tournamentPairings, tournaments, users } from './db/schema';
-import { seatLevelsOf } from './game-store';
+import { gameTournamentColumns, gameTournamentFrom, seatLevelsOf } from './game-store';
+import { creatorJoin, creators } from './tournament-store';
 import type { PlayerRef } from './rating';
 import { ratesSomebody } from './rating-store';
 import { shownBot, shownUser, type ShownName } from './shown-names';
@@ -291,6 +293,8 @@ function beforeBound(query: Query, date: string | undefined): Bound | null | `no
     return latest === undefined || latest.seq === null ? `none` : { at, seq: latest.seq };
 }
 
+const tournamentLine = (tournament: GameTournament | undefined) => (tournament === undefined ? {} : { tournament });
+
 const challengerBots = alias(bots, `challenger_bot`);
 const destBots = alias(bots, `dest_bot`);
 const xRatings = alias(gameRatings, `x_rating`);
@@ -337,10 +341,7 @@ export function finishedEntriesOf(query: Query, ids: readonly string[]): Finishe
             duelId: games.duelId,
             duelGame: games.duelGame,
             duelGames: duels.games,
-            tournamentId: tournaments.id,
-            tournamentName: tournaments.name,
-            tournamentRound: tournamentPairings.round,
-            pairingGame: games.pairingGame,
+            ...gameTournamentColumns,
             test: games.test,
             moves: sql<number>`(select count(*) from ${moves} where ${moves.gameId} = ${games.id})`,
             xBefore: xRatings.ratingBefore,
@@ -356,6 +357,7 @@ export function finishedEntriesOf(query: Query, ids: readonly string[]): Finishe
         .leftJoin(duels, eq(duels.id, games.duelId))
         .leftJoin(tournamentPairings, eq(tournamentPairings.id, games.pairingId))
         .leftJoin(tournaments, eq(tournaments.id, tournamentPairings.tournamentId))
+        .leftJoin(creators, creatorJoin)
         .leftJoin(xRatings, and(eq(xRatings.gameId, games.id), eq(xRatings.side, `x`)))
         .leftJoin(oRatings, and(eq(oRatings.gameId, games.id), eq(oRatings.side, `o`)))
         .where(inArray(games.id, [...ids]))
@@ -406,9 +408,7 @@ export function finishedEntriesOf(query: Query, ids: readonly string[]): Finishe
             voided: row.voidedAt !== null,
             ...(row.unratedByChoice === 1 ? { unratedByChoice: true } : {}),
             ...(row.test === 1 ? { test: true as const } : {}),
-            ...(row.tournamentId === null || row.tournamentName === null || row.tournamentRound === null || (row.pairingGame !== 1 && row.pairingGame !== 2)
-                ? {}
-                : { tournament: { id: row.tournamentId, name: row.tournamentName, round: row.tournamentRound, game: row.pairingGame } }),
+            ...tournamentLine(gameTournamentFrom(row)),
             ...(row.duelId === null || row.duelGame === null || row.duelGames === null ? {} : { duel: { id: row.duelId, game: row.duelGame, of: row.duelGames } }),
             analyses: analyzed.get(row.id) ?? 0,
         };

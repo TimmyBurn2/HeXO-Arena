@@ -37,18 +37,25 @@ describe('the game exports in the document', () => {
 });
 
 describe('the tournament list for one bot', () => {
-    it('takes a bot name and lets any other parameter pass, as the list did before it read one', () => {
+    it('takes a bot name, the caller\'s own, and tests alone, and lets any other parameter pass, as the list did before it read one', () => {
         expect(tournamentListQuerySchema.parse({ bot: `hextide` })).toEqual({ bot: `hextide` });
+        expect(tournamentListQuerySchema.parse({ mine: `1`, kind: `test` })).toEqual({ mine: `1`, kind: `test` });
         expect(tournamentListQuerySchema.parse({ page: `2` })).toEqual({});
         expect(tournamentListQuerySchema.safeParse({ bot: `` }).success).toBe(false);
+        expect(tournamentListQuerySchema.safeParse({ kind: `duel` }).success).toBe(false);
         const names = (document.paths[tournamentsPath]?.get?.parameters ?? []).map((parameter) => (`name` in parameter ? parameter.name : ``));
-        expect(names).toEqual([`bot`]);
+        expect(names).toEqual([`bot`, `mine`, `kind`]);
     });
 
     it('carries the bot\'s entry and place on each summary, and when the tournament ended', () => {
         const summary = {
             id: `t_autumnrobin1`,
             name: `Autumn round robin`,
+            origin: `operator`,
+            createdBy: null,
+            rated: true,
+            test: false,
+            gamesPerPair: 2,
             status: `finished`,
             startsAt: `2026-10-01T18:00:00Z`,
             timeControl: { mode: `turn`, turnTimeMs: 10_000 },
@@ -69,6 +76,11 @@ describe('the tournament list for one bot', () => {
         const summary = {
             id: `t_autumnrobin1`,
             name: `Autumn round robin`,
+            origin: `operator`,
+            createdBy: null,
+            rated: true,
+            test: false,
+            gamesPerPair: 2,
             status: `running`,
             startsAt: `2026-10-01T18:00:00Z`,
             timeControl: { mode: `turn`, turnTimeMs: 10_000 },

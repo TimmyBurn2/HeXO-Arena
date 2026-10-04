@@ -1,6 +1,6 @@
 import { OpenApiGeneratorV3, OpenAPIRegistry } from '@asteasolutions/zod-to-openapi';
 import { stringify } from 'yaml';
-import type { ZodType } from 'zod';
+import { z, type ZodType } from 'zod';
 import { errorBodySchema } from './api';
 import {
     analysesMemoMs,
@@ -186,6 +186,20 @@ import {
     duelBotStatesSchema,
     duelGameCounts,
     liveGamesQuerySchema,
+    createRoundRobinRequestSchema,
+    roundRobinCreateErrorCodes,
+    roundRobinDailyCap,
+    roundRobinForbiddenErrorCodes,
+    roundRobinLiveCap,
+    roundRobinQuotaErrorCodes,
+    tournamentRunningListCap,
+    tournamentStopConflictErrorCodes,
+    tournamentStopForbiddenErrorCodes,
+    tournamentStopPath,
+    tournamentWithdrawConflictErrorCodes,
+    tournamentWithdrawForbiddenErrorCodes,
+    tournamentWithdrawPath,
+    tournamentWithdrawRequestSchema,
     tournamentDetailMemoMs,
     tournamentDetailSchema,
     tournamentEntryPath,
@@ -993,6 +1007,18 @@ function registerSiteSurface(registry: OpenAPIRegistry, shared: SharedComponents
 }
 
 const tournamentEntryError = errorBodySchema([...badRequestErrorCodes, `clock_not_accepted`]).meta({ id: `TournamentEntryError` });
+const failingBot = { bot: z.string().optional().meta({ description: `The first bot the refusal names, so the setup marks it.` }) };
+const roundRobinCreateError = errorBodySchema([...badRequestErrorCodes, ...roundRobinCreateErrorCodes])
+    .extend(failingBot)
+    .meta({ id: `RoundRobinCreateError` });
+const roundRobinForbiddenError = errorBodySchema(roundRobinForbiddenErrorCodes)
+    .extend({ bot: z.string().optional().meta({ description: `The bot taken out of play.` }) })
+    .meta({ id: `RoundRobinForbiddenError` });
+const roundRobinQuotaError = errorBodySchema([...roundRobinQuotaErrorCodes, ...rateLimitedErrorCodes]).meta({ id: `RoundRobinQuotaError` });
+const tournamentStopForbiddenError = errorBodySchema(tournamentStopForbiddenErrorCodes).meta({ id: `TournamentStopForbiddenError` });
+const tournamentStopConflictError = errorBodySchema(tournamentStopConflictErrorCodes).meta({ id: `TournamentStopConflictError` });
+const tournamentWithdrawForbiddenError = errorBodySchema(tournamentWithdrawForbiddenErrorCodes).meta({ id: `TournamentWithdrawForbiddenError` });
+const tournamentWithdrawConflictError = errorBodySchema(tournamentWithdrawConflictErrorCodes).meta({ id: `TournamentWithdrawConflictError` });
 const tournamentForbiddenError = errorBodySchema([`not_owner`, `delisted`]).meta({ id: `TournamentForbiddenError` });
 const tournamentClosedError = errorBodySchema([`closed`, `full`]).meta({ id: `TournamentClosedError` });
 
@@ -1171,9 +1197,9 @@ function registerTournamentPaths(registry: OpenAPIRegistry, shared: SharedCompon
         tags: ['Tournaments'],
         security: [{ sessionCookie: [] }, {}],
         description: [
-            `The running tournament, up to ${String(tournamentWaitingCap)} waiting, and the latest ${String(tournamentListPastCap)} over, of every bot or of the one named, an unknown bot answering not_found.`,
-            `For a signed-in caller, the list of every bot names under yours the bot they entered in each, and its place.`,
-            `The operator schedules each one: a paired round robin of bots, one per owner.`,
+            `Up to ${String(tournamentRunningListCap)} running, ${String(tournamentWaitingCap)} waiting, and the latest ${String(tournamentListPastCap)} over: every one, one bot's, an unknown bot answering not_found, the caller's, or tests.`,
+            `For a signed-in caller, the list of every bot names under yours their bot in each, and its place.`,
+            `Each is a paired round robin: the operator's weekly, or one a person set up.`,
         ].join(` `),
         request: { query: tournamentListQuerySchema },
         responses: {
@@ -1184,13 +1210,49 @@ function registerTournamentPaths(registry: OpenAPIRegistry, shared: SharedCompon
     });
 
     registry.registerPath({
+        method: 'post',
+        path: tournamentsPath,
+        summary: 'Set up a round robin of bots.',
+        operationId: 'createRoundRobin',
+        tags: ['Tournaments'],
+        security: [{ sessionCookie: [] }],
+        description: [
+            `The picked bots start at once, every pair meeting, a round's pairs at the same time; never rated.`,
+            `One person's bots alone make a test.`,
+            `A person runs ${String(roundRobinLiveCap)} at once and sets up ${String(roundRobinDailyCap)} a UTC day; a bot plays ${String(duelPerBotCap)} duels and round robins at once.`,
+        ].join(` `),
+        request: {
+            body: { required: true, content: { 'application/json': { schema: createRoundRobinRequestSchema } } },
+        },
+        responses: {
+            201: { description: `The new round robin.`, content: { 'application/json': { schema: tournamentDetailSchema } } },
+            400: {
+                description: `Validation failed (bad_request); a bot is not open (not_open), though the caller's own bot need not be, takes no duels or round robins from others (duel_refused), excludes the clock (clock_not_accepted), declares no such level (unknown_level), or is busy (bot_busy); more than 4 games a pair outside a test (test_only); or the caller runs one (round_robin_busy).`,
+                content: { 'application/json': { schema: roundRobinCreateError } },
+            },
+            401: shared.signedInUser,
+            403: {
+                description: `A picked bot is delisted (delisted), or its owner is banned (banned).`,
+                content: { 'application/json': { schema: roundRobinForbiddenError } },
+            },
+            404: shared.notFound,
+            429: {
+                description: `The caller set up ${String(roundRobinDailyCap)} round robins this UTC day (daily_round_robin_cap), until 00:00 UTC, which Retry-After names; or too many requests (rate_limited).`,
+                headers: { 'Retry-After': shared.retryAfter },
+                content: { 'application/json': { schema: roundRobinQuotaError } },
+            },
+            503: shared.paused,
+        },
+    });
+
+    registry.registerPath({
         method: 'get',
         path: tournamentPath,
         summary: 'Read a tournament.',
         operationId: 'getTournament',
         tags: ['Tournaments'],
         security: [],
-        description: `Its entries, rounds, standings, and live games. Each pairing plays one opening twice, sides swapped, one game after the other; a game waits ${String(presenceGraceMs / 1000)} s for a bot that is not connected. A tournament is read at most once every ${String(tournamentDetailMemoMs / 1000)} s, every caller in that time getting the same body.`,
+        description: `Its entries, rounds, standings, live games, the bots games wait for, and a test's estimates. Each opening is played twice, sides swapped, one game after the other; a game waits ${String(presenceGraceMs / 1000)} s for a bot not ready. A tournament is read at most once every ${String(tournamentDetailMemoMs / 1000)} s, every caller in that time getting the same body.`,
         parameters: [tournamentId],
         responses: {
             200: { description: `The tournament.`, content: { 'application/json': { schema: tournamentDetailSchema } } },
@@ -1211,6 +1273,47 @@ function registerTournamentPaths(registry: OpenAPIRegistry, shared: SharedCompon
             200: shared.gameExport,
             404: shared.notFound,
             429: shared.exportLimited,
+        },
+    });
+
+    registry.registerPath({
+        method: 'post',
+        path: tournamentStopPath,
+        summary: 'Stop a round robin.',
+        operationId: 'stopTournament',
+        tags: ['Tournaments'],
+        security: [{ sessionCookie: [] }],
+        description: `The person who set a round robin up stops it while it runs: no further game starts, the live ones play on to their results, and the standings stand.`,
+        parameters: [tournamentId],
+        responses: {
+            200: { description: `The round robin, stopped.`, content: { 'application/json': { schema: tournamentDetailSchema } } },
+            401: shared.signedInUser,
+            403: { description: `The caller did not set it up (not_yours).`, content: { 'application/json': { schema: tournamentStopForbiddenError } } },
+            404: shared.notFound,
+            409: { description: `It is already over (over).`, content: { 'application/json': { schema: tournamentStopConflictError } } },
+        },
+    });
+
+    registry.registerPath({
+        method: 'post',
+        path: tournamentWithdrawPath,
+        summary: 'Withdraw a bot from a round robin.',
+        operationId: 'withdrawFromTournament',
+        tags: ['Tournaments'],
+        security: [{ sessionCookie: [] }],
+        description: `A bot's owner takes it out of a running round robin a person set up: its live game plays on, and its games still to come score for its opponents. The operator's weekly answers not_found.`,
+        parameters: [tournamentId],
+        request: { body: { required: true, content: { 'application/json': { schema: tournamentWithdrawRequestSchema } } } },
+        responses: {
+            200: { description: `The round robin, the bot withdrawn.`, content: { 'application/json': { schema: tournamentDetailSchema } } },
+            400: shared.badRequest,
+            401: shared.signedInUser,
+            403: { description: `The caller does not own the bot (not_owner).`, content: { 'application/json': { schema: tournamentWithdrawForbiddenError } } },
+            404: shared.notFound,
+            409: {
+                description: `The round robin is over (over), or the bot plays no further game in it: never in its field, or withdrawn already (not_playing).`,
+                content: { 'application/json': { schema: tournamentWithdrawConflictError } },
+            },
         },
     });
 

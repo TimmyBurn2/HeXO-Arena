@@ -79,6 +79,12 @@ import {
     tournamentPath,
     tournamentExportPath,
     tournamentsPath,
+    tournamentStopPath,
+    tournamentWithdrawPath,
+    createRoundRobinRequestSchema,
+    tournamentListQuerySchema,
+    type CreateRoundRobinRequest,
+    type TournamentListQuery,
     type TournamentDetail,
     type TournamentEntry,
     type TournamentList,
@@ -108,6 +114,8 @@ export class ApiError extends Error {
         readonly code: string | null,
         message: string,
         readonly retryAfter: number | null = null,
+        // The bot a refusal names, where the body names one.
+        readonly bot: string | null = null,
     ) {
         super(message);
     }
@@ -137,8 +145,9 @@ async function failureOf(response: Response): Promise<ApiError> {
         typeof body === `object` && body !== null && `code` in body && typeof body.code === `string`
             ? body.code
             : null;
+    const bot = typeof body === `object` && body !== null && `bot` in body && typeof body.bot === `string` ? body.bot : null;
     const wait = Number(response.headers.get(`retry-after`));
-    return new ApiError(response.status, code, `the server answered ${String(response.status)}`, Number.isInteger(wait) && wait > 0 ? wait : null);
+    return new ApiError(response.status, code, `the server answered ${String(response.status)}`, Number.isInteger(wait) && wait > 0 ? wait : null, bot);
 }
 
 async function sendJson<T>(url: string, method: string, body: unknown, schema: ZodType<T>): Promise<T> {
@@ -358,9 +367,26 @@ export function resignGame(gameId: string): Promise<GameSnapshot> {
     return sendJson(`/api/games/${encodeURIComponent(gameId)}/resign`, `POST`, {}, gameSnapshotSchema);
 }
 
-/** The running tournament, those waiting, and the latest over. */
-export function fetchTournaments(): Promise<TournamentList> {
-    return getJson(tournamentsPath, tournamentListSchema);
+/** Every running tournament, those waiting, and the latest over, filtered as the query asks. */
+export function fetchTournaments(query: TournamentListQuery = {}): Promise<TournamentList> {
+    const search = new URLSearchParams(Object.entries(tournamentListQuerySchema.parse(query)).filter((entry): entry is [string, string] => entry[1] !== undefined));
+    const tail = search.size === 0 ? `` : `?${search.toString()}`;
+    return getJson(`${tournamentsPath}${tail}`, tournamentListSchema);
+}
+
+/** Set up a round robin of picked bots; the answer is the round robin. */
+export function createRoundRobin(request: CreateRoundRobinRequest): Promise<TournamentDetail> {
+    return sendJson(tournamentsPath, `POST`, createRoundRobinRequestSchema.parse(request), tournamentDetailSchema);
+}
+
+/** Stop a round robin the reader set up: no further game starts, and the live ones play on. */
+export function stopTournament(id: string): Promise<TournamentDetail> {
+    return sendJson(tournamentStopPath.replace(`{id}`, encodeURIComponent(id)), `POST`, {}, tournamentDetailSchema);
+}
+
+/** Withdraw the reader's bot from a round robin: its live game plays on, and its games to come score for its opponents. */
+export function withdrawFromTournament(id: string, bot: string): Promise<TournamentDetail> {
+    return sendJson(tournamentWithdrawPath.replace(`{id}`, encodeURIComponent(id)), `POST`, { bot }, tournamentDetailSchema);
 }
 
 /** The tournaments a bot entered, each with its place. */

@@ -69,12 +69,17 @@ describe('the tournament reads and entries', () => {
         expect((await enter(`ann`, `alpha`)).statusCode).toBe(200);
         const answer = await world.app.inject({ method: `GET`, url: `/api/tournaments` });
         const list = tournamentListSchema.parse(answer.json());
-        expect(list.running).toBeNull();
+        expect(list.running).toEqual([]);
         expect(list.past).toEqual([]);
         expect(list.scheduled).toEqual([
             {
                 id,
                 name: `Autumn round robin`,
+                origin: `operator`,
+                createdBy: null,
+                rated: true,
+                test: false,
+                gamesPerPair: 2,
                 status: `scheduled`,
                 startsAt: new Date(clock + 120_000).toISOString().replace(`.000`, ``),
                 timeControl: { mode: `turn`, turnTimeMs: 10_000 },
@@ -100,8 +105,8 @@ describe('the tournament reads and entries', () => {
         clock += 120_000;
         world.tournaments.tick();
         clock += 1_000;
-        expect((await list(`bob`)).running?.yours).toEqual({ bot: `beta`, place: { state: `playing`, rank: 1, points: 0 } });
-        const forBot = (await list(`bob`, `?bot=gamma`)).running;
+        expect((await list(`bob`)).running[0]?.yours).toEqual({ bot: `beta`, place: { state: `playing`, rank: 1, points: 0 } });
+        const forBot = (await list(`bob`, `?bot=gamma`)).running[0];
         expect(forBot?.bot).toMatchObject({ state: `playing` });
         expect(forBot?.yours).toBeUndefined();
     });
@@ -158,7 +163,7 @@ describe('the tournament reads and entries', () => {
         ]);
         expect(read.rounds).toHaveLength(3);
         const listed = tournamentListSchema.parse((await world.app.inject({ method: `GET`, url: `/api/tournaments` })).json());
-        expect(listed.running).toMatchObject({ id, status: `running`, round: { current: 1, of: 3 } });
+        expect(listed.running).toMatchObject([{ id, status: `running`, round: { current: 1, of: 3 } }]);
         const [round] = read.rounds;
         const [pairing] = round?.pairings ?? [];
         expect(round?.rest).not.toBeNull();

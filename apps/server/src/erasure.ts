@@ -17,7 +17,7 @@ export interface ErasureDeps {
     games: Pick<GameRegistry, `abortForPerson` | `abortForBot`>;
     presence: Pick<PresenceRegistry, `close`>;
     challenges: Pick<ChallengeRegistry, `withdrawFor`>;
-    tournaments: Pick<TournamentScheduler, `withdraw`>;
+    tournaments: Pick<TournamentScheduler, `withdraw` | `stopSetUpBy`>;
     duels: Pick<DuelRunner, `endForBot`>;
     analysis: { withdraw: (botId: string) => void };
 }
@@ -31,6 +31,7 @@ export interface ErasureDeps {
  */
 export function eraseUser(deps: ErasureDeps, tx: Query, userId: string): UserDeletion & { aborted: number } {
     let aborted = deps.games.abortForPerson({ kind: `user`, id: userId });
+    deps.tournaments.stopSetUpBy(userId, `deleted`);
     for (const botId of liveBotIdsOf(tx, userId)) {
         // Ended before the abort, so the duel names the deletion rather than the abort.
         deps.duels.endForBot(botId, `deleted`);

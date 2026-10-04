@@ -72,9 +72,16 @@ function detailOf(duel: DuelSummary): DuelDetail {
 const autumn: TournamentDetail = {
     id: `t_autumnrobin1`,
     name: `Autumn round robin`,
+    origin: `operator`,
+    createdBy: null,
+    rated: true,
+    test: false,
+    gamesPerPair: 2,
     status: `finished`,
     startsAt: `2026-10-01T18:00:00Z`,
     startedAt: `2026-10-01T18:00:00Z`,
+    waiting: [],
+    nextRoundAt: null,
     endedAt: `2026-10-01T19:00:00Z`,
     timeControl: { mode: `turn`, turnTimeMs: 10_000 },
     openingPlies: 5,
@@ -183,8 +190,8 @@ describe('GamesScreen', () => {
         expect(rows.map((row) => row.getAttribute(`href`))).toEqual([`/game/g-0`, `/game/g-1`, `/game/g-2`, `/game/g-3`]);
         // The row keeps unseen room for its caption, out of what a reader hears of the row.
         const room = rows[0]?.querySelector(`.game-row-event-space`);
-        expect([room?.getAttribute(`aria-hidden`), room?.textContent]).toEqual([`true`, `Tournament Autumn round robin, round 2`]);
-        expect(screen.getByRole(`link`, { name: `Tournament Autumn round robin, round 2` }).getAttribute(`href`)).toBe(`/tournaments/t_autumnrobin1`);
+        expect([room?.getAttribute(`aria-hidden`), room?.textContent]).toEqual([`true`, `Autumn round robin, round 2, game 1 of 2`]);
+        expect(screen.getByRole(`link`, { name: `Autumn round robin, round 2, game 1 of 2` }).getAttribute(`href`)).toBe(`/tournaments/t_autumnrobin1`);
         expect(screen.getByRole(`link`, { name: `Duel, game 3 of 10` }).getAttribute(`href`)).toBe(`/duels/d_abcdefabcdef`);
         expect(screen.getByRole(`link`, { name: `Test, game 22 of 50` }).getAttribute(`href`)).toBe(`/duels/d_testtesttest`);
         const items = [...document.querySelectorAll(`.game-rows > li:not(.game-rows-head)`)];
@@ -243,7 +250,7 @@ describe('GamesScreen', () => {
     });
 
     it('take one tournament and its round from a link, a round picked among those drawn, and the chip clearing the round with the tournament', async () => {
-        const list: TournamentList = { running: null, scheduled: [], past: [] };
+        const list: TournamentList = { running: [], scheduled: [], past: [] };
         const fetch = serveEvents({ '/api/tournaments': list, [`/api/tournaments/${autumn.id}`]: autumn });
         open(`/games?tournament=t_autumnrobin1&round=2`);
         await screen.findAllByRole(`link`, { name: /hextide/u });

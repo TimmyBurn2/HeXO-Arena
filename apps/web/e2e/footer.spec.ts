@@ -1,7 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
 import type { Me } from '@hexo-arena/contract';
 import { looks, wear } from './matrix';
-import { serve, world } from './mock-api';
+import { roundRobins, serve, world } from './mock-api';
 
 // A short screen's footer sits at the foot of the window, clear of the
 // phone tab strip, rather than under the content wherever it ends.
@@ -154,7 +154,7 @@ const legalLinks = [
     [`Licenses`, `/third-party-licenses.txt`],
 ];
 
-const framedScreens = [`/`, `/play/duels`, `/play/tournament`, `/games`, `/games/duels`, `/games/tournaments`, `/tournaments/t_wintercup202`, `/ladder`, `/bots`, `/bots/sealbot`, `/connect`, `/profile`, `/credits`, `/report`, `/legal/imprint`, `/legal/privacy`, `/legal/terms`, `/nowhere`, `/game/nope`];
+const framedScreens = [`/`, `/play/duels`, `/play/tournament`, `/games`, `/games/duels`, `/games/tournaments`, `/tournaments/t_wintercup202`, `/tournaments/t_brunorobin01`, `/tournaments/t_anatest00001`, `/ladder`, `/bots`, `/bots/sealbot`, `/connect`, `/profile`, `/credits`, `/report`, `/legal/imprint`, `/legal/privacy`, `/legal/terms`, `/nowhere`, `/game/nope`];
 
 // The legal links are the footer's last group: at the bottom right where
 // the footer is a row, at its end where it stacks, signed in or out.
@@ -169,7 +169,7 @@ for (const [visitor, me] of visitors) {
             const look = looks[0];
             if (look === undefined) throw new Error(`no look registered`);
             await wear(page, look);
-            await serve(page, world({ me }));
+            await serve(page, world({ me, tournaments: [...world().tournaments, ...roundRobins] }));
             await page.setViewportSize({ width: 1280, height: 900 });
             await page.goto(path);
             await page.locator(`h1`).first().waitFor();

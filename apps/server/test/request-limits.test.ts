@@ -232,6 +232,9 @@ describe('request limits', () => {
         expect(classes).toEqual({
             'GET /healthz': `public`,
             'GET /api/tournaments': `public`,
+            'POST /api/tournaments': `principal`,
+            'POST /api/tournaments/:id/stop': `principal`,
+            'POST /api/tournaments/:id/withdraw': `principal`,
             'GET /api/players/:name': `public`,
             'GET /api/players/:name/rating': `public`,
             'GET /api/tournaments/:id': `public`,

@@ -97,6 +97,7 @@ export async function createTestApp(options?: {
     limits?: LimitTable;
     backup?: { dir: string; keep: number };
     erasures?: { path: string; keepDays: number };
+    roundGapMs?: number;
 }): Promise<TestApp> {
     const discord = options?.discord === undefined ? fakeDiscord({ id: `1`, username: `tester` }).oauth : options.discord;
     const sqlite = options?.sqlite ?? openDatabase(`:memory:`);
@@ -124,6 +125,7 @@ export async function createTestApp(options?: {
         ...(options?.erasures !== undefined && { erasures: options.erasures }),
         // Tests move the scheduler and the duel runner with their own ticks.
         tournamentTickMs: 0,
+        ...(options?.roundGapMs !== undefined && { tournamentRoundGapMs: options.roundGapMs }),
     });
     return { sqlite, app, admin, drain, limits, presence, watchers, tournaments, duels };
 }

@@ -62,17 +62,21 @@ function windowOf(bot: BotListing): readonly [number, number] | null {
     return window === null ? null : [window[0] / 1000, window[1] / 1000];
 }
 
-/** The clocks two bots both take for a duel, or one bot alone when the other slot is empty. */
-export function duelClocks(first: BotListing, second: BotListing | null): DuelClocks {
+/** The clocks every bot of a field takes for a scheduled game: a duel's two, or a round robin's. */
+export function fieldClocks(field: readonly BotListing[]): DuelClocks {
     const bounds: [number, number] = [scheduledTurnMs.min / 1000, scheduledTurnMs.max / 1000];
-    const windows = [first, ...(second === null ? [] : [second])].map(windowOf);
     let turn: [number, number] | null = bounds;
-    for (const window of windows) {
+    for (const window of field.map(windowOf)) {
         turn = window === null || turn === null ? null : [Math.max(turn[0], window[0]), Math.min(turn[1], window[1])];
     }
     if (turn !== null) turn = [Math.ceil(turn[0] / turnStep) * turnStep, Math.floor(turn[1] / turnStep) * turnStep];
-    const match = coveredModes(first.accepts).match && (second === null || coveredModes(second.accepts).match);
+    const match = field.every((bot) => coveredModes(bot.accepts).match);
     return { turn: turn !== null && turn[0] <= turn[1] ? turn : null, match };
+}
+
+/** The clocks two bots both take for a duel, or one bot alone when the other slot is empty. */
+export function duelClocks(first: BotListing, second: BotListing | null): DuelClocks {
+    return fieldClocks(second === null ? [first] : [first, second]);
 }
 
 /** Whether two bots take any clock a duel can run. */
@@ -94,7 +98,7 @@ export function pickReason(bot: BotListing, other: BotListing | null, reads: Due
     if (reads.reserved.has(bot.name)) return `tournament`;
     if (bot.liveGames >= botConcurrentGameCap) return `busy`;
     const state = stateOf(bot, reads);
-    if (state !== undefined && state.dueling.length >= duelPerBotCap) return `duels`;
+    if (state !== undefined && state.dueling.length + state.roundRobins >= duelPerBotCap) return `duels`;
     if (state !== undefined && !state.duelsByOthers && !own) return `refused`;
     if (other !== null && state !== undefined && state.dueling.some((name) => nameKeyOf(name) === nameKeyOf(other.name))) return `pair`;
     if (other !== null && !shareClock(bot, other)) return `clock`;
@@ -112,17 +116,22 @@ export function gameCountsOf(kind: DuelKind): readonly DuelGames[] {
 }
 
 /**
- * A clock a duel can run: the last one started here while both bots take
- * it, else the first preset both take, else the shortest turn clock both
- * take; a match clock both take is always a preset.
+ * A clock a field can run: the last one started here while every bot
+ * takes it, else the first preset every bot takes, else the shortest turn
+ * clock every bot takes; a match clock all take is always a preset.
  */
-export function defaultDuelClock(first: BotListing, second: BotListing, last: TimeControl | null): TimeControl | null {
-    const takes = (clock: TimeControl) => takenByBoth(clock, first, second);
+export function defaultFieldClock(field: readonly BotListing[], last: TimeControl | null): TimeControl | null {
+    const takes = (clock: TimeControl) => takenByAll(clock, field);
     if (last !== null && takes(last)) return last;
     const preset = duelPresets.find((candidate) => takes(candidate.clock));
     if (preset !== undefined) return preset.clock;
-    const turn = duelClocks(first, second).turn;
+    const turn = fieldClocks(field).turn;
     return turn === null ? null : { mode: `turn`, turnTimeMs: turn[0] * 1000 };
+}
+
+/** A clock a duel can run, as a field of its two bots. */
+export function defaultDuelClock(first: BotListing, second: BotListing, last: TimeControl | null): TimeControl | null {
+    return defaultFieldClock([first, second], last);
 }
 
 /** Play's presets but Unlimited, which a duel never runs. */
@@ -137,16 +146,24 @@ export function scheduled(clock: TimeControl): boolean {
     return false;
 }
 
+/** Whether every bot of a field takes a clock a scheduled game may run. */
+export function takenByAll(clock: TimeControl, field: readonly BotListing[]): boolean {
+    return scheduled(clock) && field.every((bot) => acceptsCovers(bot.accepts, clock));
+}
+
 /** Whether both bots take a clock a duel may run. */
 export function takenByBoth(clock: TimeControl, first: BotListing, second: BotListing): boolean {
-    return scheduled(clock) && acceptsCovers(first.accepts, clock) && acceptsCovers(second.accepts, clock);
+    return takenByAll(clock, [first, second]);
+}
+
+/** The bots of a field that refuse a clock, in the field's order. */
+export function refusersOf(clock: TimeControl, field: readonly BotListing[]): BotListing[] {
+    return field.filter((bot) => !acceptsCovers(bot.accepts, clock));
 }
 
 /** The bot that refuses a clock, the first named first; null when both take it. */
 export function refusedBy(clock: TimeControl, first: BotListing, second: BotListing): BotListing | null {
-    if (!acceptsCovers(first.accepts, clock)) return first;
-    if (!acceptsCovers(second.accepts, clock)) return second;
-    return null;
+    return refusersOf(clock, [first, second])[0] ?? null;
 }
 
 /** The clock picked, while both bots take it; else the default for the pair. */

@@ -74,7 +74,7 @@ for (const width of [1280, 390]) {
     test(`a bot page lists the tournaments it entered beside its duels, where it stands in each, each leading to its page, at ${String(width)} px`, async ({ page }) => {
         await open(page, `/bots/hextide`, width);
         const block = page.locator(`section`, { has: page.getByRole(`heading`, { name: `Tournaments`, exact: true }) });
-        await expect(block.locator(`.place-row`)).toHaveText([/^Autumn round robin4th so far, 0 pointsRound 2 of 3/u, /^Winter cupEntered; starts /u, /^Summer cup2nd of 4, 3 points/u]);
+        await expect(block.locator(`.place-row`)).toHaveText([/^Autumn round robinrated4th so far, 0 pointsRound 2 of 3/u, /^Winter cupratedEntered; starts /u, /^Summer cuprated2nd of 4, 3 points/u]);
         await expect(page.getByRole(`heading`, { name: `Tournaments`, exact: true })).toHaveCount(1);
         await expect(block.getByRole(`link`, { name: `All tournaments` })).toHaveAttribute(`href`, `/games/tournaments`);
         expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);

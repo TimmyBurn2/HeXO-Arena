@@ -1,4 +1,5 @@
 import type { TournamentBot, TournamentDetail } from '@hexo-arena/contract';
+import { tournamentGamesPath } from '../games/filters';
 import { Link } from '../router/Link';
 import { text } from '../text';
 import { pairingScore } from './view';
@@ -18,7 +19,7 @@ export function Rounds({ detail, only, except }: { detail: TournamentDetail; onl
             {only === undefined ? <h3 className="round-title">{text.tournaments.round(round.round)}</h3> : null}
             <ul className="round-pairings">
                 {round.pairings.map((pairing) => (
-                    <PairingItem key={`${String(pairing.first.key)} ${String(pairing.second.key)}`} pairing={pairing} />
+                    <PairingItem key={`${String(pairing.first.key)} ${String(pairing.second.key)}`} pairing={pairing} games={tournamentGamesPath(detail.id, round.round)} />
                 ))}
             </ul>
             {round.rest === null ? null : <p className="note round-rest">{text.tournaments.rest(<BotLabel bot={round.rest} />)}</p>}
@@ -43,7 +44,7 @@ export function BotPairings({ detail, bot, id }: { detail: TournamentDetail; bot
     return (
         <ul className="round-pairings bot-pairings" id={id}>
             {met.reverse().map(({ round, pairing }) => (
-                <PairingItem key={round} pairing={pairing} round={round} />
+                <PairingItem key={round} pairing={pairing} round={round} games={tournamentGamesPath(detail.id, round)} />
             ))}
         </ul>
     );
@@ -56,26 +57,35 @@ function BotLabel({ bot }: { bot: TournamentBot }) {
     return bot.deleted === true ? <span className="deleted-name">{bot.name}</span> : <>{bot.name}</>;
 }
 
-function PairingItem({ pairing, round }: { pairing: Pairing; round?: number }) {
+// A pair playing several openings names its games together, linking the round's games under Games; two are each named.
+function PairingItem({ pairing, round, games }: { pairing: Pairing; round?: number; games: string }) {
     const [first, second] = pairingScore(pairing);
     return (
         <li className="round-pairing">
             {round === undefined ? null : <span className="round-of">{text.tournaments.round(round)}</span>}
             <span className="round-names">{text.tournaments.pairingLine(<BotLabel bot={pairing.first} />, <BotLabel bot={pairing.second} />)}</span>
             <span className="round-score">{text.tournaments.score(first, second)}</span>
-            <span className="round-games">
-                {pairing.games.map((game, index) =>
-                    game.gameId === null ? (
-                        <span key={index} className="round-game muted">
-                            {text.tournaments.outcomes[game.outcome === `played` || game.outcome === `aborted` ? `none` : game.outcome]}
-                        </span>
-                    ) : (
-                        <Link key={index} to={`/game/${encodeURIComponent(game.gameId)}`} className="round-game">
-                            {gameWords(pairing, game, index)}
-                        </Link>
-                    ),
-                )}
-            </span>
+            {pairing.games.length > 2 ? (
+                <span className="round-games">
+                    <Link to={games} className="round-game">
+                        {text.roundRobins.page.legs(pairing.games.length, pairing.games.length / 2)}
+                    </Link>
+                </span>
+            ) : (
+                <span className="round-games">
+                    {pairing.games.map((game, index) =>
+                        game.gameId === null ? (
+                            <span key={index} className="round-game muted">
+                                {text.tournaments.outcomes[game.outcome === `played` || game.outcome === `aborted` ? `none` : game.outcome]}
+                            </span>
+                        ) : (
+                            <Link key={index} to={`/game/${encodeURIComponent(game.gameId)}`} className="round-game">
+                                {gameWords(pairing, game, index)}
+                            </Link>
+                        ),
+                    )}
+                </span>
+            )}
         </li>
     );
 }

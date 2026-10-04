@@ -32,6 +32,11 @@ function tournament(id: string, overrides: Partial<TournamentSummary>): Tourname
     return {
         id,
         name: `Autumn round robin`,
+        origin: `operator`,
+        createdBy: null,
+        rated: true,
+        test: false,
+        gamesPerPair: 2,
         status: `finished`,
         startsAt: `2026-10-01T18:00:00Z`,
         timeControl: { mode: `turn`, turnTimeMs: 10_000 },
@@ -45,7 +50,7 @@ function tournament(id: string, overrides: Partial<TournamentSummary>): Tourname
 }
 
 const noDuels: DuelList = { running: [], past: [] };
-const noTournaments: TournamentList = { running: null, scheduled: [], past: [] };
+const noTournaments: TournamentList = { running: [], scheduled: [], past: [] };
 
 // Each read answers by its path and query; any other answers not found.
 function serve(answers: Record<string, unknown>): string[] {
@@ -79,7 +84,7 @@ describe('BotEvents', () => {
             '/api/duels?bot=sealbot&kind=duel': { running: [], past: [duel(`d_aaaaaaaaaaaa`)] },
             '/api/duels?bot=sealbot&kind=test': noDuels,
             '/api/tournaments?bot=sealbot': {
-                running: tournament(`t_runningcup01`, { name: `Running cup`, status: `running`, round: { current: 2, of: 5 }, bot: { state: `playing`, rank: 1, points: 3 } }),
+                running: [tournament(`t_runningcup01`, { name: `Running cup`, status: `running`, round: { current: 2, of: 5 }, bot: { state: `playing`, rank: 1, points: 3 } })],
                 scheduled: [tournament(`t_nextcup00001`, { name: `Next cup`, status: `scheduled`, bot: { state: `entered`, rank: null, points: null } })],
                 past: [
                     tournament(`t_autumncup001`, { endedAt: `2026-10-01T19:30:00Z`, bot: { state: `withdrawn`, reason: `missed`, rank: 6, points: 1 } }),
@@ -91,9 +96,9 @@ describe('BotEvents', () => {
         const section = (await screen.findByRole(`heading`, { name: `Tournaments` })).closest(`section`) as HTMLElement;
         const rows = within(section).getAllByRole(`link`).filter((link) => link.classList.contains(`place-row`));
         expect(rows.map((row) => row.getAttribute(`href`))).toEqual([`/tournaments/t_runningcup01`, `/tournaments/t_nextcup00001`, `/tournaments/t_autumncup001`]);
-        expect(rows[0]?.textContent).toMatch(/^Running cup1st so far, 3 pointsRound 2 of 5/u);
-        expect(rows[1]?.textContent).toMatch(/^Next cupEntered; starts /u);
-        expect(rows[2]?.textContent).toMatch(/^Autumn round robin6th of 6, 1 point; withdrawn: missed two pairings in a row/u);
+        expect(rows[0]?.textContent).toMatch(/^Running cuprated1st so far, 3 pointsRound 2 of 5/u);
+        expect(rows[1]?.textContent).toMatch(/^Next cupratedEntered; starts /u);
+        expect(rows[2]?.textContent).toMatch(/^Autumn round robinrated6th of 6, 1 point; withdrawn: missed two pairings in a row/u);
         expect(within(section).getByRole(`link`, { name: `All tournaments` }).getAttribute(`href`)).toBe(`/games/tournaments`);
         expect(screen.getByRole(`heading`, { name: `Duels` })).toBeTruthy();
         expect(screen.queryByRole(`heading`, { name: `Tests` })).toBe(null);
@@ -115,8 +120,8 @@ describe('BotEvents', () => {
         render(<BotEvents bot="sealbot" owner="quinn" />);
         const section = (await screen.findByRole(`heading`, { name: `Tournaments` })).closest(`section`) as HTMLElement;
         const rows = within(section).getAllByRole(`listitem`).map((row) => row.textContent);
-        expect(rows[0]).toMatch(/^Autumn round robinDid not play: too few bot games left that day/u);
-        expect(rows[1]).toMatch(/^Autumn round robinCalled off/u);
+        expect(rows[0]).toMatch(/^Autumn round robinratedDid not play: too few bot games left that day/u);
+        expect(rows[1]).toMatch(/^Autumn round robinratedCalled off/u);
     });
 
     it('show nothing for a bot with no duel, test, or tournament', async () => {

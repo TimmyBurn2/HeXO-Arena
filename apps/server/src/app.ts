@@ -89,6 +89,8 @@ export interface AppDeps {
     limits?: LimitTable;
     // How often the tournament scheduler and the duel runner look for work; 0 leaves them to the caller's ticks.
     tournamentTickMs?: number;
+    // The pause between a round robin's rounds, the contract's unless a test shortens it.
+    tournamentRoundGapMs?: number;
     // Where backups go and how many stay; without it the admin socket writes none.
     backup?: Pick<BackupPolicy, `dir` | `keep`>;
     // The erasure journal's file, and how long an entry stays: a day past the oldest backup.
@@ -226,6 +228,7 @@ export async function buildApp(deps: AppDeps): Promise<BuiltApp> {
         draining: () => gate.draining,
         leadMs,
         actor: deps.adminActor,
+        ...(deps.tournamentRoundGapMs === undefined ? {} : { roundGapMs: deps.tournamentRoundGapMs }),
         ...(deps.now === undefined ? {} : { now: deps.now }),
     });
     const duels = new DuelRunner({
@@ -302,8 +305,8 @@ export async function buildApp(deps: AppDeps): Promise<BuiltApp> {
     registerGameApi(app, { query, presence, games, watchers, gate, guests, limits, reservations: tournaments });
     registerFinishedGamesApi(app, { query, now: deps.now ?? Date.now });
     registerLeaderboardApi(app, { ladder, presence, now: deps.now ?? Date.now });
-    registerTournamentApi(app, { query, presence, games, limits, now: deps.now ?? Date.now });
-    registerBotSettingsApi(app, { query, limits });
+    registerTournamentApi(app, { query, presence, games, gate, limits, tournaments, now: deps.now ?? Date.now });
+    registerBotSettingsApi(app, { query, limits, tournaments });
     registerDuelApi(app, { query, presence, games, gate, limits, reservations: tournaments, duels, random: deps.random ?? randomFloat, now: deps.now ?? Date.now });
     const playerReads = createPlayerReads({ query, ladder, now: deps.now ?? Date.now });
     registerPlayerApi(app, { reads: playerReads });

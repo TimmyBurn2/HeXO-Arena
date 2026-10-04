@@ -1,6 +1,7 @@
 import type { TournamentPlace, TournamentSummary } from '@hexo-arena/contract';
 import { Link } from '../router/Link';
 import { text } from '../text';
+import { TournamentTag } from './TournamentRow';
 import { tournamentPagePath } from './view';
 
 function day(iso: string): string {
@@ -22,7 +23,8 @@ function placeText(tournament: TournamentSummary, place: TournamentPlace): strin
         case `canceled`:
             return text.tournaments.outcome[tournament.status];
         case `running`:
-        case `finished`: {
+        case `finished`:
+        case `stopped`: {
             if (place.rank === null || place.points === null) return words.didNotPlay(place.reason === undefined ? reasons.absent : reasons[place.reason]);
             const standing = tournament.status === `running` ? words.soFar(place.rank, place.points) : words.final(place.rank, tournament.entrants, place.points);
             return place.state === `withdrawn` && place.reason !== undefined ? `${standing}; ${words.withdrawn(reasons[place.reason])}` : standing;
@@ -42,7 +44,10 @@ export function PlaceRows({ tournaments }: { tournaments: readonly TournamentSum
                 tournament.bot === undefined ? null : (
                     <li key={tournament.id}>
                         <Link to={tournamentPagePath(tournament.id)} className="duel-row place-row">
-                            <span className="duel-row-who">{tournament.name}</span>
+                            <span className="duel-row-who tournament-tag-row">
+                                {tournament.name}
+                                <TournamentTag tournament={tournament} />
+                            </span>
                             <span className="duel-row-facts">
                                 <span className={tournament.status === `running` ? `duel-row-live` : undefined}>{placeText(tournament, tournament.bot)}</span>
                                 {tournament.round === null ? null : <span>{text.tournaments.roundOf(tournament.round.current, tournament.round.of)}</span>}

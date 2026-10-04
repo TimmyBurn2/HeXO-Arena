@@ -173,6 +173,7 @@ export const adminStatusSchema = z.object({
     tournaments: z.array(adminTournamentSchema),
     tournamentRules: z.array(adminTournamentRuleSchema),
     liveDuels: z.number().int().min(0),
+    liveRoundRobins: z.number().int().min(0),
     clients: z.array(adminClientCountSchema),
     recentActions: z.array(adminActionSchema).max(10),
     openReportCount: z.number().int().min(0),

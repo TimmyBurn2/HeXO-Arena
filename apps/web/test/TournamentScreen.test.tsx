@@ -22,9 +22,16 @@ function game(x: string, outcome: TournamentGame[`outcome`], point: string | nul
 const base: TournamentDetail = {
     id: `t_abcdefghijk2`,
     name: `Autumn round robin`,
+    origin: `operator`,
+    createdBy: null,
+    rated: true,
+    test: false,
+    gamesPerPair: 2,
     status: `scheduled`,
     startsAt: new Date(Date.now() + 2 * hour + 30_000).toISOString().replace(/\.\d{3}Z$/u, `Z`),
     startedAt: null,
+    waiting: [],
+    nextRoundAt: null,
     endedAt: null,
     timeControl: { mode: `turn`, turnTimeMs: 10_000 },
     openingPlies: 5,
@@ -44,6 +51,8 @@ const running: TournamentDetail = {
     ...base,
     status: `running`,
     startedAt: `2026-10-01T18:00:00Z`,
+    waiting: [],
+    nextRoundAt: null,
     entries: [playing(`alpha`, `ann`, 1600), playing(`beta`, `bob`, 1550), playing(`gamma`, `cid`, 1500), { key: 4, bot: `delta`, ownerName: `dee`, online: false, ratingAtStart: null, state: `absent` }],
     rounds: [
         { round: 1, pairings: [{ first: seat(`alpha`), second: seat(`beta`), games: [game(`alpha`, `played`, `alpha`, `g_1`), game(`beta`, `played`, `beta`, `g_2`)] }], rest: seat(`gamma`) },
@@ -296,9 +305,9 @@ describe('TournamentScreen', () => {
 
 describe('TournamentsScreen', () => {
     it('list the running tournament, those coming up, and the past ones with their winner', async () => {
-        const summary = { id: base.id, name: `Autumn round robin`, status: `running` as const, startsAt: base.startsAt, timeControl: base.timeControl, openingPlies: 5 as const, entrants: 3, maxEntrants: 12, winner: null, round: null };
+        const summary = { id: base.id, name: `Autumn round robin`, origin: `operator` as const, createdBy: null, rated: true, test: false, gamesPerPair: 2 as const, status: `running` as const, startsAt: base.startsAt, timeControl: base.timeControl, openingPlies: 5 as const, entrants: 3, maxEntrants: 12, winner: null, round: null };
         const list: TournamentList = {
-            running: { ...summary, round: { current: 2, of: 3 } },
+            running: [{ ...summary, round: { current: 2, of: 3 } }],
             scheduled: [{ ...summary, id: `t_bcdefghijk23`, name: `Winter cup`, status: `scheduled`, entrants: 4 }],
             past: [{ ...summary, id: `t_cdefghijk234`, name: `Summer cup`, status: `finished`, winner: { name: `hextide`, ownerName: `ana` } }, { ...summary, id: `t_defghijk2345`, name: `Rain cup`, status: `called_off` }],
         };

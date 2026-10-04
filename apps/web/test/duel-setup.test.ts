@@ -44,7 +44,7 @@ describe('a duel setup', () => {
     });
 
     it('takes a ready bot, and says why it cannot take one offline, closed to others, busy, held, or refusing others', () => {
-        const ana = reads(`ana`, [{ name: `quietlake`, duelsByOthers: false, dueling: [] }, { name: `devbot-b`, duelsByOthers: true, dueling: [`devbot-c`, `devbot-a`] }], [`sealbot`]);
+        const ana = reads(`ana`, [{ name: `quietlake`, duelsByOthers: false, dueling: [], roundRobins: 0 }, { name: `devbot-b`, duelsByOthers: true, dueling: [`devbot-c`, `devbot-a`], roundRobins: 0 }], [`sealbot`]);
         expect(pickReason(bot(`hextide`, `ana`), null, ana)).toBeNull();
         expect(pickReason(bot(`lantern`, `ana`, { online: false }), null, ana)).toBe(`offline`);
         expect(pickReason(bot(`pebble`, `bruno`, { openForChallenges: false }), null, ana)).toBe(`closed`);
@@ -55,11 +55,11 @@ describe('a duel setup', () => {
         expect(pickReason(bot(`busy`, `bruno`, { liveGames: 4 }), null, ana)).toBe(`busy`);
         expect(pickReason(bot(`devbot-b`, `devowner-b`), null, ana)).toBe(`duels`);
         expect(pickReason(bot(`quietlake`, `dmitri`), null, ana)).toBe(`refused`);
-        expect(pickReason(bot(`quietlake`, `dmitri`), null, reads(`dmitri`, [{ name: `quietlake`, duelsByOthers: false, dueling: [] }]))).toBeNull();
+        expect(pickReason(bot(`quietlake`, `dmitri`), null, reads(`dmitri`, [{ name: `quietlake`, duelsByOthers: false, dueling: [], roundRobins: 0 }]))).toBeNull();
     });
 
     it('refuses a pair already in a duel, and a bot with no clock in common with the other', () => {
-        const states = [{ name: `devbot-c`, duelsByOthers: true, dueling: [`devbot-b`] }];
+        const states = [{ name: `devbot-c`, duelsByOthers: true, dueling: [`devbot-b`], roundRobins: 0 }];
         expect(pickReason(bot(`devbot-c`, `c`), bot(`devbot-b`, `b`), reads(null, states))).toBe(`pair`);
         const turnOnly = bot(`cinder`, `ana`, { accepts: { turnMs: [5000, 20000], match: false, unlimited: true } });
         const matchOnly = bot(`slow`, `bruno`, { accepts: { turnMs: null, match: true, unlimited: false } });

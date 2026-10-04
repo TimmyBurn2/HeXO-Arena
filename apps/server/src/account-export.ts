@@ -1,6 +1,8 @@
 import {
     acceptsSchema,
     levelsSchema,
+    tournamentGamesPerPairSchema,
+    tournamentStatusSchema,
     challengeStatusSchema,
     firstPlayerSchema,
     nameKeyOf,
@@ -22,6 +24,7 @@ import { requestsOf } from './analysis-store';
 import { storedAnalyzer, storedClient } from './bots';
 import { namedTargetActions } from './moderation';
 import { shownBot } from './shown-names';
+import { creatorJoin, creators, nameColumns, tournamentNameOf } from './tournament-store';
 
 const isoOf = (seconds: number) => new Date(seconds * 1000).toISOString().replace(/\.\d{3}Z$/u, `Z`);
 const isoOrNull = (seconds: number | null) => (seconds === null ? null : isoOf(seconds));
@@ -140,6 +143,33 @@ function duelsOf(query: Query, userId: string): AccountExport[`duels`] {
         });
 }
 
+// The round robins the account set up, each with its bots as they read now.
+function roundRobinsOf(query: Query, userId: string): AccountExport[`roundRobins`] {
+    const rows = query
+        .select({ id: tournaments.id, gamesPerPair: tournaments.gamesPerPair, test: tournaments.test, status: tournaments.status, createdAt: tournaments.createdAt, endedAt: tournaments.endedAt })
+        .from(tournaments)
+        .where(eq(tournaments.createdBy, userId))
+        .orderBy(asc(tournaments.createdAt), asc(tournaments.id))
+        .all();
+    return rows.map((row) => ({
+        id: row.id,
+        bots: query
+            .select({ name: bots.name, deletedAt: bots.deletedAt })
+            .from(tournamentEntries)
+            .innerJoin(bots, eq(bots.id, tournamentEntries.botId))
+            .where(eq(tournamentEntries.tournamentId, row.id))
+            .orderBy(asc(bots.nameKey))
+            .all()
+            .map((bot) => shownBot(bot.name, bot.deletedAt).name),
+        gamesPerPair: tournamentGamesPerPairSchema.parse(row.gamesPerPair),
+        test: row.test === 1,
+        // The status check admits only the contract's statuses.
+        status: tournamentStatusSchema.parse(row.status),
+        createdAt: isoOf(row.createdAt),
+        endedAt: isoOrNull(row.endedAt),
+    }));
+}
+
 /**
  * Every row tied to one account, as its owner downloads it: never a token,
  * a token's hash, or a sign-in's state; other players named as the site
@@ -185,7 +215,7 @@ export function accountExport(query: Query, userId: string, nowMs: number): Acco
         tournamentEntries: query
             .select({
                 tournamentId: tournamentEntries.tournamentId,
-                tournament: tournaments.name,
+                ...nameColumns,
                 bot: bots.name,
                 botDeletedAt: bots.deletedAt,
                 state: tournamentEntries.state,
@@ -195,19 +225,22 @@ export function accountExport(query: Query, userId: string, nowMs: number): Acco
             })
             .from(tournamentEntries)
             .innerJoin(tournaments, eq(tournaments.id, tournamentEntries.tournamentId))
+            .leftJoin(creators, creatorJoin)
             .innerJoin(bots, eq(bots.id, tournamentEntries.botId))
             .where(eq(tournamentEntries.ownerId, userId))
             .orderBy(asc(tournamentEntries.enteredAt))
             .all()
             // The state and reason checks admit only the contract's values.
-            .map(({ botDeletedAt, ...entry }) => ({
+            .map(({ botDeletedAt, name, creatorName, creatorDeletedAt, ...entry }) => ({
                 ...entry,
+                tournament: tournamentNameOf({ name, creatorName, creatorDeletedAt }),
                 bot: shownBot(entry.bot, botDeletedAt).name,
                 state: tournamentEntryStateSchema.parse(entry.state),
                 reason: entry.reason === null ? null : tournamentEntryReasonSchema.parse(entry.reason),
                 enteredAt: isoOf(entry.enteredAt),
             })),
         duels: duelsOf(query, userId),
+        roundRobins: roundRobinsOf(query, userId),
         challenges:
             botIds.length === 0
                 ? []

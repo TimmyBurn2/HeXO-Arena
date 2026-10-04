@@ -38,13 +38,27 @@ export function VsCell() {
 }
 
 /** An empty slot: the add button, its hint under it; the next to fill carries the accent. */
-export function EmptySlot({ hint, target, disabled = false, onAdd, label }: { hint: string; target: boolean; disabled?: boolean; onAdd: () => void; label: string }) {
+export function EmptySlot({
+    hint,
+    target,
+    disabled = false,
+    onAdd,
+    label,
+    title = text.duels.slot.add,
+}: {
+    hint: string;
+    target: boolean;
+    disabled?: boolean;
+    onAdd: () => void;
+    label: string;
+    title?: string;
+}) {
     return (
         <div className={`slot slot-empty${target ? ` slot-target` : ``}`}>
             <button type="button" className="slot-empty-add" aria-label={label} disabled={disabled} onClick={onAdd}>
                 <Socket />
                 <span>
-                    <strong>{text.duels.slot.add}</strong>
+                    <strong>{title}</strong>
                     {hint === `` ? null : <span className="note">{hint}</span>}
                 </span>
             </button>
@@ -55,8 +69,9 @@ export function EmptySlot({ hint, target, disabled = false, onAdd, label }: { hi
 /**
  * A bot in a slot: its name, presence, owner, clocks, and in a test its
  * version; its strength as a select when it offers more than one, the
- * rated one tagged; its rating, Change, and Remove; and a warning when it
- * can no longer start.
+ * rated one tagged; its rating, Change where a slot swaps its bot, and
+ * Remove; a warning when it can no longer start, a hint on what comes, and
+ * a mark when a refusal names it.
  */
 export function FilledSlot({
     bot,
@@ -64,6 +79,8 @@ export function FilledSlot({
     level,
     showVersion,
     warning,
+    hint = null,
+    marked = false,
     onLevel,
     onChange,
     onRemove,
@@ -73,14 +90,16 @@ export function FilledSlot({
     level: Level | null;
     showVersion: boolean;
     warning: string | null;
+    hint?: string | null;
+    marked?: boolean;
     onLevel: (id: string) => void;
-    onChange: () => void;
+    onChange: (() => void) | null;
     onRemove: () => void;
 }) {
     const words = text.duels.slot;
     const presence = !bot.online ? words.offline : bot.openForChallenges ? words.onlineOpen : words.onlineClosed;
     return (
-        <div className="slot slot-filled">
+        <div className={marked ? `slot slot-filled slot-marked` : `slot slot-filled`}>
             <div className="slot-who">
                 <p className="slot-name">
                     <PlayerName name={bot.name} kind="bot" />
@@ -104,9 +123,11 @@ export function FilledSlot({
                     <Rating value={bot.rating} provisional={bot.provisional} />
                 </span>
                 <span className="slot-tools">
-                    <button type="button" className="btn btn-ghost btn-sm slot-change" aria-label={words.changeLabel(bot.name)} onClick={onChange}>
-                        {words.change}
-                    </button>
+                    {onChange === null ? null : (
+                        <button type="button" className="btn btn-ghost btn-sm slot-change" aria-label={words.changeLabel(bot.name)} onClick={onChange}>
+                            {words.change}
+                        </button>
+                    )}
                     <button type="button" className="slot-remove" aria-label={words.remove(bot.name)} onClick={onRemove}>
                         <svg viewBox="0 0 24 24" aria-hidden="true">
                             <path d="M6 6l12 12M18 6L6 18" />
@@ -115,6 +136,7 @@ export function FilledSlot({
                 </span>
             </div>
             {warning === null ? null : <p className="slot-warn">{warning}</p>}
+            {hint === null ? null : <p className="note slot-hint">{hint}</p>}
         </div>
     );
 }

@@ -271,17 +271,17 @@ export function BuildBand({ wide, signedInAs }: { wide: boolean; signedInAs: str
 const tournamentSoonMs = 86_400_000;
 
 /**
- * The tournament worth a look: the one running, else the next one starting
- * within a day; nothing otherwise.
+ * The tournament worth a look: the weekly running, else the next one
+ * starting within a day; nothing otherwise.
  * An owner who has not entered the next one is offered its entry while it
  * waits, however far off it starts, and sees their own bot's part in the
- * one shown.
+ * one shown; anyone signed in is offered a round robin of their own.
  */
-export function TournamentBlock({ list, now, owner }: { list: TournamentList; now: number; owner: boolean }) {
+export function TournamentBlock({ list, now, owner, signedIn }: { list: TournamentList; now: number; owner: boolean; signedIn: boolean }) {
     const next = list.scheduled[0];
     const open = owner && next !== undefined && next.yours === undefined ? next : null;
     const soon = list.scheduled.find((entry) => Date.parse(entry.startsAt) - now <= tournamentSoonMs);
-    const shown = list.running ?? soon ?? open;
+    const shown = list.running.find((tournament) => tournament.origin === `operator`) ?? soon ?? open;
     if (shown === null) return null;
     const wait = Math.max(0, Math.floor((Date.parse(shown.startsAt) - now) / 1000));
     return (
@@ -305,11 +305,14 @@ export function TournamentBlock({ list, now, owner }: { list: TournamentList; no
                     </span>
                 </li>
             </ul>
-            {open === null ? null : (
+            {open === null && !signedIn ? null : (
                 <p className="home-block-foot">
-                    <Link to="/play/tournament" ariaLabel={text.tournaments.enterBotIn(open.name)}>
-                        {text.tournaments.enterBot}
-                    </Link>
+                    {open === null ? null : (
+                        <Link to="/play/tournament" ariaLabel={text.tournaments.enterBotIn(open.name)}>
+                            {text.tournaments.enterBot}
+                        </Link>
+                    )}
+                    {signedIn ? <Link to="/play/tournament">{text.roundRobins.home.setUp}</Link> : null}
                 </p>
             )}
         </section>

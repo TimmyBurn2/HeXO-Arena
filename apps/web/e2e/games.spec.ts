@@ -151,7 +151,7 @@ for (const width of [1280, 390]) {
         await wear(page, look);
         await serve(page, world({ finished: [...tournamentGameRows, ...duelGameRows, ...keptNames] }));
         await page.goto(`/games`);
-        const caption = page.getByRole(`link`, { name: `Tournament Autumn round robin, round 2` });
+        const caption = page.getByRole(`link`, { name: `Autumn round robin, round 2, game 1 of 2` });
         const item = page.locator(`.game-row-evented`).first();
         const row = item.locator(`.game-row`);
         const [itemBox, rowBox, captionBox, resultBox] = await Promise.all([item.boundingBox(), row.boundingBox(), caption.boundingBox(), row.locator(`.game-row-result`).boundingBox()]);

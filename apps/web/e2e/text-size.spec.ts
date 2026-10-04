@@ -1,7 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
 import type { Me } from '@hexo-arena/contract';
 import { looks, wear } from './matrix';
-import { analyzerBots, bots, duelBots, duelFixtures, duelGameRows, heldBots, keptNames, liveGames, longReadings, playBots, rivalry, serve, signup, tournamentGameRows, tournaments, world, type World } from './mock-api';
+import { analyzerBots, bots, duelBots, duelFixtures, duelGameRows, heldBots, keptNames, liveGames, longReadings, playBots, rivalry, roundRobins, serve, signup, tournamentGameRows, tournaments, world, type World } from './mock-api';
 
 const visitors: readonly { name: string; me: Me }[] = [
     { name: `signed-out`, me: null },
@@ -66,6 +66,24 @@ const screens: readonly { name: string; path: string; world?: Partial<World>; th
         },
     },
     { name: `the ladder`, path: `/ladder` },
+    {
+        name: `a round robin set up on Play`,
+        path: `/play/tournament?bots=hextide%2Ccinder%2CPistol1%2Cdevbot-b%2Cquietlake`,
+        world: { bots: duelBots.map((bot) => ({ ...bot, ownerName: bot.ownerName === `ana` ? `quinn` : bot.ownerName })), tournaments: tournaments.filter((entry) => entry.status !== `running`) },
+    },
+    {
+        name: `a round robin's bot list`,
+        path: `/play/tournament?bots=hextide`,
+        world: { bots: duelBots.map((bot) => ({ ...bot, ownerName: bot.ownerName === `ana` ? `quinn` : bot.ownerName })), tournaments: tournaments.filter((entry) => entry.status !== `running`) },
+        then: async (page) => {
+            await page.getByRole(`button`, { name: `Add bots to the round robin` }).click();
+            await page.locator(`dialog.rr-picker[open] .rr-pick`).first().waitFor();
+        },
+    },
+    { name: `the round robins under Games`, path: `/games/tournaments`, world: { tournaments: [...tournaments, ...roundRobins] } },
+    { name: `a live round robin`, path: `/tournaments/t_brunorobin01`, world: { tournaments: roundRobins } },
+    { name: `a test of several bots`, path: `/tournaments/t_anatest00001`, world: { tournaments: roundRobins } },
+    { name: `a round robin over`, path: `/tournaments/t_brunorobin02`, world: { tournaments: roundRobins } },
     { name: `tournaments`, path: `/games/tournaments`, world: { tournaments } },
     { name: `a running tournament`, path: `/tournaments/t_autumnrobin1`, world: { tournaments } },
     { name: `a waiting tournament`, path: `/tournaments/t_wintercup202` },

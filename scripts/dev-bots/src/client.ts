@@ -24,8 +24,10 @@ import {
     duelPath,
     sessionCookieName,
     streamEventSchema,
+    tournamentDetailSchema,
     tournamentEntryPath,
     tournamentListSchema,
+    tournamentPath,
     tournamentsPath,
     type AccountDeclaration,
     type createDuelRequestSchema,
@@ -41,6 +43,8 @@ import {
     type DuelList,
     type StreamEvent,
     type TimeControl,
+    type CreateRoundRobinRequest,
+    type TournamentDetail,
     type TournamentList,
 } from '@hexo-arena/contract';
 import { z } from 'zod';
@@ -215,10 +219,28 @@ export class ArenaClient {
         return finishedGamesPageSchema.parse(await response.json()).record?.games ?? 0;
     }
 
-    async tournaments(): Promise<TournamentList> {
-        const response = await fetch(this.#url(tournamentsPath));
+    async tournaments(query: { bot?: string } = {}): Promise<TournamentList> {
+        const response = await fetch(this.#url(`${tournamentsPath}${query.bot === undefined ? `` : `?${new URLSearchParams({ bot: query.bot }).toString()}`}`));
         if (response.status !== 200) throw await refusal(response, `listing the tournaments`);
         return tournamentListSchema.parse(await response.json());
+    }
+
+    /** One tournament as its page reads it. */
+    async tournament(id: string): Promise<TournamentDetail> {
+        const response = await fetch(this.#url(tournamentPath.replace(`{id}`, id)));
+        if (response.status !== 200) throw await refusal(response, `reading tournament ${id}`);
+        return tournamentDetailSchema.parse(await response.json());
+    }
+
+    /** Sets a round robin of bots up as the signed-in person; the answer is the round robin. */
+    async createRoundRobin(cookie: string, request: Partial<CreateRoundRobinRequest> & Pick<CreateRoundRobinRequest, `bots` | `timeControl`>): Promise<TournamentDetail> {
+        const response = await fetch(this.#url(tournamentsPath), {
+            method: `POST`,
+            headers: { cookie, ...json },
+            body: JSON.stringify(request),
+        });
+        if (response.status !== 201) throw await refusal(response, `setting up a round robin of ${request.bots.map((bot) => bot.name).join(`, `)}`);
+        return tournamentDetailSchema.parse(await response.json());
     }
 
     /** Enters the owner's bot in a waiting tournament. */

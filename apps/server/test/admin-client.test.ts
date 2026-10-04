@@ -160,6 +160,7 @@ describe('formatAdminResponse', () => {
                 liveStreams: 3,
                 activeGames: 1,
                 liveDuels: 2,
+                liveRoundRobins: 1,
                 clientKeys: 12,
                 keylessRequests: 5,
                 clients: [
@@ -183,6 +184,7 @@ describe('formatAdminResponse', () => {
                 `live streams  3`,
                 `active games  1`,
                 `live duels    2`,
+                `round robins  1 live`,
                 `client keys   12`,
                 `keyless       5`,
                 `bot clients, last 14 days:`,

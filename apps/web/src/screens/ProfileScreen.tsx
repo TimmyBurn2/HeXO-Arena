@@ -5,6 +5,7 @@ import { useAsync } from '../api/use-async';
 import { AccountPanel } from '../components/AccountPanel';
 import { DiscordSignIn } from '../components/DiscordButton';
 import { YourDuels } from '../duels/YourDuels';
+import { YourRoundRobins } from '../tournaments/YourRoundRobins';
 import { PlayerHistory } from '../games/PlayerHistory';
 import { PlayerBlocks } from '../players/PlayerBlocks';
 import { BotBadge, OpenTag, PresenceDot, Rating, provisionalNote } from '../components/player';
@@ -48,6 +49,7 @@ export function ProfileScreen() {
                 <>
                     <YourBots owner={state.me.name} />
                     <YourDuels />
+                    <YourRoundRobins />
                     <PlayerBlocks name={state.me.name} />
                     <PlayerHistory player={state.me.name} title={text.games.yours} />
                     <AccountPanel

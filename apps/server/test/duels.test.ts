@@ -634,10 +634,10 @@ describe('duels', () => {
             await started(`ann`, { first: `alpha`, second: `aster` });
             const states = duelBotStatesSchema.parse((await world.app.inject({ method: `GET`, url: `/api/duels/bots` })).json());
             expect(states).toEqual([
-                { name: `alpha`, duelsByOthers: true, dueling: [`aster`] },
-                { name: `aster`, duelsByOthers: true, dueling: [`alpha`] },
-                { name: `beta`, duelsByOthers: false, dueling: [] },
-                { name: `gamma`, duelsByOthers: true, dueling: [] },
+                { name: `alpha`, duelsByOthers: true, dueling: [`aster`], roundRobins: 0 },
+                { name: `aster`, duelsByOthers: true, dueling: [`alpha`], roundRobins: 0 },
+                { name: `beta`, duelsByOthers: false, dueling: [], roundRobins: 0 },
+                { name: `gamma`, duelsByOthers: true, dueling: [], roundRobins: 0 },
             ]);
         });
 

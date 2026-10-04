@@ -1,8 +1,10 @@
+import type { ReactNode } from 'react';
 import { clockText, type GamePlayer, type LiveGameEntry, type Side } from '@hexo-arena/contract';
 import { BotBadge, seatLevelFacts, seatName, Swatch } from '../components/player';
 import { Clock } from '../game/Clock';
 import { Link } from '../router/Link';
 import { text } from '../text';
+import { gameCaption } from '../tournaments/words';
 import { MiniBoard } from './MiniBoard';
 import type { LiveView } from './use-live-replay';
 import './LiveGameCard.css';
@@ -11,7 +13,7 @@ import './LiveGameCard.css';
  * Live games as a grid of boards, each card a way into its game;
  * the cards' headings sit one level under the section holding them.
  */
-export function LiveGameGrid({ games, level }: { games: readonly LiveView[]; level: 2 | 3 }) {
+export function LiveGameGrid({ games, level, children }: { games: readonly LiveView[]; level: 2 | 3; children?: ReactNode }) {
     return (
         <ul className="live-grid">
             {games.map((game) => (
@@ -19,6 +21,7 @@ export function LiveGameGrid({ games, level }: { games: readonly LiveView[]; lev
                     <LiveGameCard game={game} level={level} />
                 </li>
             ))}
+            {children}
         </ul>
     );
 }
@@ -52,7 +55,7 @@ function LiveGameCard({ game, level }: { game: LiveView; level: 2 | 3 }) {
                     {entry.test === true ? <span className="tag muted">{text.games.test}</span> : entry.rated ? null : <span className="tag muted">{text.ladder.live.unrated}</span>}
                     <span>{clockText(entry.timeControl)}</span>
                     {entry.duel === undefined ? null : <span>{text.duels.caption(entry.test === true ? `test` : `duel`, entry.duel.game, entry.duel.of)}</span>}
-                    {entry.tournament === undefined ? null : <span>{text.tournaments.caption(entry.tournament.name, entry.tournament.round)}</span>}
+                    {entry.tournament === undefined ? null : <span>{gameCaption(entry.tournament)}</span>}
                 </p>
             </div>
             <MiniBoard game={game} />

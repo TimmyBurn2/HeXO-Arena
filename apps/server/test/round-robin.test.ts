@@ -154,3 +154,15 @@ describe('missedTwoInARow', () => {
         expect(missedTwoInARow(`b`, pairings)).toBe(expected);
     });
 });
+
+describe('missedTwoInARow over a pair\'s openings', () => {
+    it('counts a pair\'s openings in their order within a round, whatever order they come in', () => {
+        const legs: ScoredPairing[] = [
+            { ...pairing(1, `a`, `b`, [noShow(`second`), noShow(`second`)]), leg: 2 },
+            { ...pairing(1, `a`, `b`, [won(`first`), won(`second`)]), leg: 1 },
+            { ...pairing(1, `a`, `b`, [noShow(`second`), noShow(`second`)]), leg: 3 },
+        ];
+        expect(missedTwoInARow(`b`, legs)).toBe(true);
+        expect(missedTwoInARow(`b`, [legs[1], legs[0], { ...pairing(1, `a`, `b`, [won(null), won(null)]), leg: 3 }].filter((each) => each !== undefined))).toBe(false);
+    });
+});

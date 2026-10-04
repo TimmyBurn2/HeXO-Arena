@@ -96,9 +96,9 @@ test('a refusal says why by its code, naming the bot and the cause the server fo
     await open(page, `/play/duels?first=hextide&second=Pistol1`, state);
     await expect(page.getByRole(`button`, { name: `Start duel` })).toBeVisible();
     // Pistol1 meets its most duels after the page read the duel states.
-    state.duelStates = duelBots.map((bot) => ({ name: bot.name, duelsByOthers: true, dueling: bot.name === `Pistol1` ? [`devbot-a`, `devbot-b`] : [] }));
+    state.duelStates = duelBots.map((bot) => ({ name: bot.name, duelsByOthers: true, dueling: bot.name === `Pistol1` ? [`devbot-a`, `devbot-b`] : [], roundRobins: 0 }));
     await page.getByRole(`button`, { name: `Start duel` }).click();
-    await expect(page.getByText(`Pistol1 is in 2 duels already; try again after one ends.`)).toBeVisible();
+    await expect(page.getByText(`Pistol1 is in 2 duels or round robins already; try again after one ends.`)).toBeVisible();
     await expect(page).toHaveURL(/\/play\/duels\?/u);
 });
 
@@ -215,7 +215,7 @@ test('the scoreboards\' game links are large enough to press, and a test\'s comp
 });
 
 test('Start a duel on a bot page stands disabled with the picker\'s reason where the bot cannot be added', async ({ page }) => {
-    const states = duelBots.map((bot) => ({ name: bot.name, duelsByOthers: bot.name !== `quietlake`, dueling: [] }));
+    const states = duelBots.map((bot) => ({ name: bot.name, duelsByOthers: bot.name !== `quietlake`, dueling: [], roundRobins: 0 }));
     await open(page, `/bots/quietlake`, dueling({ duelStates: states }));
     await expect(page.getByRole(`button`, { name: `Start a duel` })).toBeDisabled();
     await expect(page.getByRole(`button`, { name: `Start a duel` })).toHaveAccessibleDescription(`Duels by others are off`);

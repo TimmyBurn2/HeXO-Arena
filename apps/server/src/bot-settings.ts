@@ -6,10 +6,13 @@ import type { Query } from './db';
 import { bots } from './db/schema';
 import type { CredentialLimits } from './request-limits';
 import { sessionUser } from './sessions';
+import type { TournamentScheduler } from './tournament-scheduler';
 
 export interface BotSettingsDeps {
     query: Query;
     limits: CredentialLimits;
+    // Turning duels by others off takes the bot out of the round robins others set up.
+    tournaments: Pick<TournamentScheduler, `withdrawRefused`>;
 }
 
 const settingsColumns = {
@@ -79,6 +82,10 @@ export function registerBotSettingsApi(app: FastifyInstance, deps: BotSettingsDe
         const { name } = request.params as { name: string };
         const held = nameSyntaxSchema.safeParse(name).success ? updateBotSettings(query, user.id, nameKeyOf(name), parsed) : undefined;
         if (held === undefined) return reply.code(404).send({ error: `no such bot of yours`, code: `not_found` });
+        if (parsed.duelsByOthers === false) {
+            const bot = query.select({ id: bots.id }).from(bots).where(and(eq(bots.nameKey, nameKeyOf(name)), isNull(bots.deletedAt))).get();
+            if (bot !== undefined) deps.tournaments.withdrawRefused(bot.id);
+        }
         return reply.code(200).send(held);
     };
 

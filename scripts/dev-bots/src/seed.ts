@@ -7,6 +7,7 @@ import { playHumanGame } from './human';
 import { personaBots, type BotRun, type PersonaName, type SeedPlan } from './personas';
 import { NotADevServer, saveTokens } from './runner';
 import { seedDevDuels, type DevDuels, type DevDuelPlans } from './duels';
+import { seedDevRoundRobins, type DevRoundRobinPlans, type DevRoundRobins } from './round-robins';
 import { devWeeklyRule, seedDevTournament, type Candidate, type DevTournament, type DevWeeklyRule } from './tournament';
 
 /** How the seed reaches its target, what it plays, and how it bans. */
@@ -33,6 +34,8 @@ export interface SeedOptions {
     addWeeklyRule?: (rule: DevWeeklyRule) => Promise<void>;
     // The duels to leave: one played out, one running, and a test played out; without them the seed starts none.
     duels?: DevDuelPlans;
+    // The round robins to leave: one played out, a test played out, and one running; without them the seed sets none up.
+    roundRobins?: DevRoundRobinPlans;
     now?: () => number;
 }
 
@@ -45,6 +48,7 @@ export interface SeedReport {
     readonly capped: readonly string[];
     readonly tournament: DevTournament | null;
     readonly duels: DevDuels | null;
+    readonly roundRobins: DevRoundRobins | null;
 }
 
 // A challenge waits on these and tries again; a daily cap ends its run.
@@ -194,6 +198,7 @@ export async function seedDevData(options: SeedOptions): Promise<SeedReport> {
     }
 
     let duels: DevDuels | null = null;
+    let roundRobins: DevRoundRobins | null = null;
     try {
         await opened;
         await Promise.all([...personas.map(playHumans), ...plan.runs.map(playRun)]);
@@ -202,6 +207,14 @@ export async function seedDevData(options: SeedOptions): Promise<SeedReport> {
             duels = await seedDevDuels({
                 client,
                 plans: options.duels,
+                cookieOf: async (person) => cookies.get(person) ?? (await client.devLogin(person)),
+                log,
+            });
+        }
+        if (options.roundRobins !== undefined) {
+            roundRobins = await seedDevRoundRobins({
+                client,
+                plans: options.roundRobins,
                 cookieOf: async (person) => cookies.get(person) ?? (await client.devLogin(person)),
                 log,
             });
@@ -217,9 +230,10 @@ export async function seedDevData(options: SeedOptions): Promise<SeedReport> {
     }
 
     // The personas' online bots first, one per owner, then the others offered;
-    // a bot playing the live duel stays out, as the tournament's start would cut the duel short.
+    // a bot playing the live duel or round robin stays out, as the tournament's start would cut the duel short and take the bot out of the round robin.
     const live = duels?.live == null ? undefined : options.duels?.live;
-    const busy = new Set(live === undefined ? [] : [live.first, live.second]);
+    const liveField = roundRobins?.live == null ? [] : (options.roundRobins?.live.bots ?? []);
+    const busy = new Set([...(live === undefined ? [] : [live.first, live.second]), ...liveField]);
     const candidates: Candidate[] = [];
     for (const bot of personaBots) {
         if (bot.online && cookies.has(bot.owner) && !busy.has(bot.name) && !candidates.some((candidate) => candidate.owner === bot.owner)) {
@@ -244,5 +258,5 @@ export async function seedDevData(options: SeedOptions): Promise<SeedReport> {
 
     const accounts = await client.devAccounts();
     const ranked = accounts.flatMap((account) => account.bots).filter((bot) => !bot.provisional).map((bot) => bot.name);
-    return { accounts, ranked, played, capped, tournament, duels };
+    return { accounts, ranked, played, capped, tournament, duels, roundRobins };
 }

@@ -65,6 +65,11 @@ function summary(id: string, overrides: Partial<TournamentSummary>): TournamentS
     return {
         id,
         name: `Autumn round robin`,
+        origin: `operator`,
+        createdBy: null,
+        rated: true,
+        test: false,
+        gamesPerPair: 2,
         status: `finished`,
         startsAt: new Date(Date.now() - 48 * hour).toISOString().replace(/\.\d{3}Z$/u, `Z`),
         timeControl: { mode: `turn`, turnTimeMs: 10_000 },
@@ -82,9 +87,16 @@ const later = new Date(Date.now() + 3 * hour + 30_000).toISOString().replace(/\.
 const waiting: TournamentDetail = {
     id: `t_wintercup202`,
     name: `Winter cup`,
+    origin: `operator`,
+    createdBy: null,
+    rated: true,
+    test: false,
+    gamesPerPair: 2,
     status: `scheduled`,
     startsAt: later,
     startedAt: null,
+    waiting: [],
+    nextRoundAt: null,
     endedAt: null,
     timeControl: { mode: `turn`, turnTimeMs: 10_000 },
     openingPlies: 5,
@@ -96,7 +108,7 @@ const waiting: TournamentDetail = {
 };
 
 const list: TournamentList = {
-    running: summary(`t_autumnrobin1`, { status: `running`, round: { current: 2, of: 3 }, yours: { bot: `sealbot`, place: { state: `playing`, rank: 1, points: 2 } } }),
+    running: [summary(`t_autumnrobin1`, { status: `running`, round: { current: 2, of: 3 }, yours: { bot: `sealbot`, place: { state: `playing`, rank: 1, points: 2 } } })],
     scheduled: [summary(waiting.id, { name: waiting.name, status: `scheduled`, startsAt: later, entrants: 1 })],
     past: [summary(`t_summercup202`, { name: `Summer cup`, yours: { bot: `sealbot`, place: { state: `playing`, rank: 2, points: 3 } } }), summary(`t_raincup20261`, { name: `Rain cup`, status: `called_off` })],
 };
@@ -209,33 +221,40 @@ describe('the tournaments under Games', () => {
 });
 
 describe('the Tournament place under Play', () => {
-    it('enter a bot in the next tournament in place, beside the tournaments the reader\'s bots entered', async () => {
-        serve({ '/api/tournaments': list, [`/api/tournaments/${waiting.id}`]: waiting, '/api/bots': [listing(`sealbot`, `quinn`)] }, quinn);
+    it('set a round robin up beside the weekly, entered in place, and the reader\'s own round robins', async () => {
+        const mine = summary(`t_brunorobin01`, { name: `Round robin by quinn`, origin: `person`, createdBy: `quinn`, rated: false, status: `running`, round: { current: 1, of: 3 } });
+        const accepts = { turnMs: [5_000, 60_000] as [number, number], match: true, unlimited: true };
+        const bots = [`sealbot`, `hextide`, `pebble`].map((name) => ({ ...listing(name, name === `sealbot` ? `quinn` : `ana`), accepts }));
+        serve({ '/api/tournaments': list, '/api/tournaments?mine=1': { running: [mine], scheduled: [], past: [], quota: { live: 1, today: 1 } }, [`/api/tournaments/${waiting.id}`]: waiting, '/api/bots': bots, '/api/duels/bots': [] }, quinn);
         render(<PlayTournamentScreen />);
-        const card = (await screen.findByRole(`heading`, { level: 2, name: `Winter cup` })).closest(`section`) as HTMLElement;
-        expect(within(card).getByRole(`link`, { name: `Winter cup` }).getAttribute(`href`)).toBe(`/tournaments/t_wintercup202`);
-        expect(within(card).getByText(/^Starts in 3 h 0 min; 1 of 12 entered$/u)).toBeTruthy();
-        expect(within(card).getByRole(`heading`, { level: 3, name: `Enter a bot` })).toBeTruthy();
-        expect(await within(card).findByLabelText(`Your bot`)).toBeTruthy();
-        const yours = screen.getByRole(`heading`, { name: `Your tournaments` }).closest(`section`) as HTMLElement;
+        expect(await screen.findByRole(`heading`, { level: 2, name: `New round robin` })).toBeTruthy();
+        expect(screen.getByRole(`button`, { name: `Add bots to the round robin` })).toBeTruthy();
+        const weekly = screen.getByRole(`heading`, { name: `Weekly tournament` }).closest(`section`) as HTMLElement;
+        expect((await within(weekly).findByRole(`link`, { name: `Winter cup` })).getAttribute(`href`)).toBe(`/tournaments/t_wintercup202`);
+        expect(within(weekly).getByText(/^Starts in 3 h 0 min; 1 of 12 entered; turn clock 10 s$/u)).toBeTruthy();
+        expect(within(weekly).getByText(`rated`)).toBeTruthy();
+        expect(await within(weekly).findByLabelText(`Your bot`)).toBeTruthy();
+        const yours = screen.getByRole(`heading`, { name: `Your round robins` }).closest(`section`) as HTMLElement;
         await waitFor(() => {
-            expect(within(yours).getAllByRole(`link`).map((link) => link.getAttribute(`href`))).toEqual([`/games/tournaments`, `/tournaments/t_autumnrobin1`, `/tournaments/t_summercup202`]);
+            expect(within(yours).getAllByRole(`link`).map((link) => link.getAttribute(`href`))).toEqual([`/games/tournaments?list=yours`, `/tournaments/t_brunorobin01`]);
         });
-        expect(within(yours).getByText(`Yours: sealbot, 1st so far`)).toBeTruthy();
+        expect(within(yours).getByText(`unrated`)).toBeTruthy();
         expect(screen.getByRole(`navigation`, { name: `Play` }).querySelector(`[aria-current="page"]`)?.textContent).toBe(`Tournament`);
     });
 
-    it('say none is coming up, and ask a signed-out reader to sign in for their own', async () => {
-        serve({ '/api/tournaments': { ...list, scheduled: [] } });
+    it('say no weekly is coming up, and ask a signed-out reader to sign in to set one up and to see their own', async () => {
+        serve({ '/api/tournaments': { ...list, scheduled: [] }, '/api/bots': [listing(`sealbot`, `quinn`)], '/api/duels/bots': [] });
         render(<PlayTournamentScreen />);
-        expect(await screen.findByRole(`heading`, { name: `No tournament coming up` })).toBeTruthy();
-        expect(await screen.findByText(`Sign in to see your bots' tournaments.`)).toBeTruthy();
+        expect(await screen.findByText(`No weekly tournament is coming up; the operator schedules each one.`)).toBeTruthy();
+        expect(await screen.findByText(`Sign in to set up a round robin; anyone can watch one.`)).toBeTruthy();
+        expect(screen.getByText(`Sign in to see your round robins.`)).toBeTruthy();
+        expect(screen.queryByRole(`button`, { name: `Add bots to the round robin` })).toBeNull();
     });
 });
 
 describe('the Bot duel place under Play', () => {
     it('stand the reader\'s own duels beside the setup, and lead to every one of them', async () => {
-        serve({ '/api/duels?mine=1': { running: [], past: [duel(`d_pastpast0001`)], quota: { live: 0, today: 1 } }, '/api/bots': [], '/api/duels/bots': [], '/api/tournaments': { running: null, scheduled: [], past: [] } }, quinn);
+        serve({ '/api/duels?mine=1': { running: [], past: [duel(`d_pastpast0001`)], quota: { live: 0, today: 1 } }, '/api/bots': [], '/api/duels/bots': [], '/api/tournaments': { running: [], scheduled: [], past: [] } }, quinn);
         open(`/play/duels`, () => <DuelsScreen />);
         const all = await screen.findByRole(`link`, { name: `All your duels` });
         expect(all.getAttribute(`href`)).toBe(`/games/duels?list=yours`);
@@ -253,18 +272,20 @@ describe('Home\'s tournament block', () => {
     const far = summary(waiting.id, { name: `Winter cup`, status: `scheduled`, startsAt: new Date(now + 72 * hour).toISOString(), entrants: 1 });
 
     it('offer an owner who has not entered the next tournament its entry, however far off it starts', () => {
-        render(<TournamentBlock list={{ running: null, scheduled: [far], past: [] }} now={now} owner />);
+        render(<TournamentBlock list={{ running: [], scheduled: [far], past: [] }} now={now} owner signedIn />);
         expect(screen.getByRole(`link`, { name: `Winter cup` }).getAttribute(`href`)).toBe(`/tournaments/t_wintercup202`);
         expect(screen.getByRole(`link`, { name: `Enter a bot in Winter cup` }).getAttribute(`href`)).toBe(`/play/tournament`);
+        expect(screen.getByRole(`link`, { name: `Set up a round robin` }).getAttribute(`href`)).toBe(`/play/tournament`);
         expect(screen.getByRole(`link`, { name: `All tournaments` }).getAttribute(`href`)).toBe(`/games/tournaments`);
     });
 
     it('name the owner\'s own part once entered, and show nothing far off to anyone else', () => {
-        const { container, rerender } = render(<TournamentBlock list={{ running: null, scheduled: [far], past: [] }} now={now} owner={false} />);
+        const { container, rerender } = render(<TournamentBlock list={{ running: [], scheduled: [far], past: [] }} now={now} owner={false} signedIn={false} />);
         expect(container.innerHTML).toBe(``);
         const soon = { ...far, startsAt: new Date(now + 2 * hour).toISOString(), yours: { bot: `sealbot`, place: { state: `entered` as const, rank: null, points: null } } };
-        rerender(<TournamentBlock list={{ running: null, scheduled: [soon], past: [] }} now={now} owner />);
+        rerender(<TournamentBlock list={{ running: [], scheduled: [soon], past: [] }} now={now} owner signedIn />);
         expect(screen.getByText(`Yours: sealbot entered`)).toBeTruthy();
         expect(screen.queryByRole(`link`, { name: /^Enter a bot/u })).toBe(null);
+        expect(screen.getByRole(`link`, { name: `Set up a round robin` })).toBeTruthy();
     });
 });
