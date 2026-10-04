@@ -7,7 +7,7 @@ export type GameFilters = Omit<FinishedGamesQuery, `page` | `tests`>;
 export type FilterKey = keyof GameFilters;
 
 /** The filters in the order an address, the chips, and a sentence name them. */
-export const filterKeys = [`player`, `vs`, `result`, `side`, `reason`, `clock`, `kind`, `opening`, `analyzed`, `before`] as const satisfies readonly FilterKey[];
+export const filterKeys = [`player`, `vs`, `result`, `side`, `reason`, `clock`, `kind`, `event`, `opening`, `analyzed`, `before`] as const satisfies readonly FilterKey[];
 
 /** The filters that mean nothing without a player. */
 const needPlayer = [`vs`, `side`] as const satisfies readonly FilterKey[];

@@ -112,6 +112,47 @@ describe('GamesScreen', () => {
         expect(within(screen.getByRole(`group`, { name: `Active filters` })).getAllByRole(`button`)[0]?.getAttribute(`aria-label`)).toBe(`Remove guest vs bot`);
     });
 
+    it('name a game\'s tournament or duel on a line of its own under the row, a link to its page beside the game\'s', async () => {
+        serve(() => ({
+            games: [
+                game(0, { tournament: { id: `t_autumnrobin1`, name: `Autumn round robin`, round: 2, game: 1 } }),
+                game(1, { duel: { id: `d_abcdefabcdef`, game: 3, of: 10 }, rated: false, unratedByChoice: true }),
+                game(2, { duel: { id: `d_testtesttest`, game: 22, of: 50 }, rated: false, unratedByChoice: true, test: true }),
+                game(3),
+            ],
+            page: 1,
+            pages: 1,
+            total: 4,
+        }));
+        open(`/games`);
+        const rows = await screen.findAllByRole(`link`, { name: /hextide/u });
+        expect(rows.map((row) => row.getAttribute(`href`))).toEqual([`/game/g-0`, `/game/g-1`, `/game/g-2`, `/game/g-3`]);
+        // The row keeps unseen room for its caption, out of what a reader hears of the row.
+        const room = rows[0]?.querySelector(`.game-row-event-space`);
+        expect([room?.getAttribute(`aria-hidden`), room?.textContent]).toEqual([`true`, `Tournament Autumn round robin, round 2`]);
+        expect(screen.getByRole(`link`, { name: `Tournament Autumn round robin, round 2` }).getAttribute(`href`)).toBe(`/tournaments/t_autumnrobin1`);
+        expect(screen.getByRole(`link`, { name: `Duel, game 3 of 10` }).getAttribute(`href`)).toBe(`/play/duels/d_abcdefabcdef`);
+        expect(screen.getByRole(`link`, { name: `Test, game 22 of 50` }).getAttribute(`href`)).toBe(`/play/duels/d_testtesttest`);
+        const items = [...document.querySelectorAll(`.game-rows > li:not(.game-rows-head)`)];
+        expect(items.map((item) => item.classList.contains(`game-row-evented`))).toEqual([true, true, true, false]);
+        expect(items.every((item) => item.querySelectorAll(`a a`).length === 0)).toBe(true);
+    });
+
+    it('narrow the list to a duel\'s, a tournament\'s, or neither\'s games under Played in, its chip naming it', async () => {
+        const fetch = serve(() => ({ games: [game(0)], page: 1, pages: 1, total: 1 }));
+        open(`/games`);
+        await screen.findAllByRole(`link`, { name: /hextide/u });
+        const panel = openFilters();
+        const event = within(panel).getByLabelText<HTMLSelectElement>(`Played in`);
+        expect([...event.options].map((option) => option.textContent)).toEqual([`Any`, `A duel`, `A tournament`, `Neither`]);
+        fireEvent.change(event, { target: { value: `tournament` } });
+        expect(window.location.search).toBe(`?event=tournament`);
+        await waitFor(() => {
+            expect(reads(fetch).at(-1)).toBe(`/api/games/finished?event=tournament`);
+        });
+        expect(within(screen.getByRole(`group`, { name: `Active filters` })).getAllByRole(`button`)[0]?.getAttribute(`aria-label`)).toBe(`Remove in a tournament`);
+    });
+
     it('tag a game its player started unrated, aborted or decided, and leave a rated one untagged', async () => {
         const quinn: GamePlayer = { name: `quinn`, rating: null, provisional: false, kind: `user` };
         const chosen = { players: { x: hextide, o: quinn }, rated: false, unratedByChoice: true } as const;
@@ -134,7 +175,7 @@ describe('GamesScreen', () => {
         expect(screen.queryByLabelText(`Against`)).toBe(null);
         const panel = openFilters();
         expect(within(panel).getByText(`Against, Side, Won, and Lost wait for a name in Player.`)).toBeTruthy();
-        expect([...panel.querySelectorAll(`label`)].map((label) => label.textContent)).toEqual([`Against`, `Result`, `Side`, `Ending`, `Clock`, `Opening`, `Who played`, `Analysis`, `Before`]);
+        expect([...panel.querySelectorAll(`label`)].map((label) => label.textContent)).toEqual([`Against`, `Result`, `Side`, `Ending`, `Clock`, `Opening`, `Who played`, `Played in`, `Analysis`, `Before`]);
         expect(within(panel).getByLabelText(`Opening`).getAttribute(`aria-describedby`)).toBe(`games-opening-note`);
         expect(document.getElementById(`games-opening-note`)?.textContent).toBe(`Opening counts the stones on the board before the first turn, the origin and random ones near it.`);
         for (const name of [`Against`, `Side`]) expect(within(panel).getByLabelText<HTMLInputElement>(name).disabled).toBe(true);

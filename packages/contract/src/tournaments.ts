@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { liveGameEntrySchema } from './games';
 import { clockText, pageTitle, plural, siteName, type PageMeta } from './meta';
-import { deletedBotName, deletedMarkSchema, deletedPlayerName, nameSyntaxSchema } from './names';
+import { deletedBotName, deletedMarkSchema, deletedPlayerName, nameMaxLength, nameSyntaxSchema } from './names';
 import { openingPliesSchema, timeControlSchema, type TimeControl } from './stream';
 
 /** Bots that must be connected at the start, or the tournament is called off. */
@@ -111,6 +111,10 @@ export function parseClockArg(text: string): TimeControl | null {
 export const tournamentsPath = `/api/tournaments`;
 export const tournamentPath = `/api/tournaments/{id}`;
 export const tournamentEntryPath = `/api/tournaments/{id}/entry`;
+export const tournamentExportPath = `/api/tournaments/{id}/export`;
+
+/** The most games one tournament plays: every pair of its largest field meets twice. */
+export const tournamentGamesMax = tournamentMaxEntrants * (tournamentMaxEntrants - 1);
 
 /** Tournaments the list holds: the running one, the next waiting ones, the latest over. */
 export const tournamentListPastCap = 20;
@@ -127,6 +131,39 @@ const tournamentTime = z.iso.datetime();
 
 export const tournamentWinnerSchema = z.object({ name: z.string(), ownerName: z.string(), deleted: deletedMarkSchema.optional() }).meta({ id: `TournamentWinner` });
 
+export const tournamentEntryStateSchema = z.enum([`entered`, `playing`, `absent`, `left_out`, `withdrawn`]);
+export type TournamentEntryState = z.infer<typeof tournamentEntryStateSchema>;
+
+export const tournamentEntryReasonSchema = z.enum([`daily_cap`, `clock`, `missed`, `banned`, `delisted`, `deleted`]);
+export type TournamentEntryReason = z.infer<typeof tournamentEntryReasonSchema>;
+
+const entryReasonDescription = `Why a bot was left out at the start (daily_cap: too few bot games left that day; clock: it does not accept the clock) or withdrawn (missed: two pairings missed in a row; banned, delisted, deleted).`;
+
+export const tournamentPlaceSchema = z
+    .object({
+        state: tournamentEntryStateSchema,
+        reason: tournamentEntryReasonSchema.optional(),
+        rank: z
+            .number()
+            .int()
+            .min(1)
+            .nullable()
+            .meta({ description: `Its place in the standings, so far while it runs; null for a bot outside the field: before the start, absent, or left out.` }),
+        points: z.number().int().min(0).nullable(),
+    })
+    .meta({ id: `TournamentPlace`, description: `A bot's entry in a tournament and where it stands, on each summary of a list that names the bot.` });
+export type TournamentPlace = z.infer<typeof tournamentPlaceSchema>;
+
+export const tournamentListQuerySchema = z.object({
+    bot: z
+        .string()
+        .min(1)
+        .max(nameMaxLength)
+        .optional()
+        .meta({ param: { description: `A bot's name, matched case-folded: only the tournaments it entered, each with its place.` } }),
+});
+export type TournamentListQuery = z.infer<typeof tournamentListQuerySchema>;
+
 export const tournamentSummarySchema = z
     .object({
         id: tournamentIdSchema,
@@ -142,6 +179,8 @@ export const tournamentSummarySchema = z
             .object({ current: z.number().int().min(1), of: z.number().int().min(1) })
             .nullable()
             .meta({ description: `While it runs, the round under way or the next to start, and how many there are; null otherwise.` }),
+        endedAt: tournamentTime.optional().meta({ description: `When it ended: finished, called off, or canceled.` }),
+        bot: tournamentPlaceSchema.optional(),
     })
     .meta({ id: `TournamentSummary` });
 export type TournamentSummary = z.infer<typeof tournamentSummarySchema>;
@@ -154,12 +193,6 @@ export const tournamentListSchema = z
     })
     .meta({ id: `TournamentList` });
 export type TournamentList = z.infer<typeof tournamentListSchema>;
-
-export const tournamentEntryStateSchema = z.enum([`entered`, `playing`, `absent`, `left_out`, `withdrawn`]);
-export type TournamentEntryState = z.infer<typeof tournamentEntryStateSchema>;
-
-export const tournamentEntryReasonSchema = z.enum([`daily_cap`, `clock`, `missed`, `banned`, `delisted`, `deleted`]);
-export type TournamentEntryReason = z.infer<typeof tournamentEntryReasonSchema>;
 
 // A bot's number within one tournament, by which its pages name it; a
 // deleted bot reads as its label alone, so two deleted bots stay apart only
@@ -185,9 +218,7 @@ export const tournamentEntrySchema = z
         online: z.boolean(),
         ratingAtStart: z.number().int().nullable(),
         state: tournamentEntryStateSchema,
-        reason: tournamentEntryReasonSchema.optional().meta({
-            description: `Why a bot was left out at the start (daily_cap: too few bot games left that day; clock: it does not accept the clock) or withdrawn (missed: two pairings missed in a row; banned, delisted, deleted).`,
-        }),
+        reason: tournamentEntryReasonSchema.optional().meta({ description: entryReasonDescription }),
     })
     .meta({ id: `TournamentEntry` });
 export type TournamentEntry = z.infer<typeof tournamentEntrySchema>;

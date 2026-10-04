@@ -98,16 +98,45 @@
         grid-area: result;
     }
 
-    .game-row-result .tag {
+    .game-row-result .tag,
+    .game-row-event .tag {
         margin-left: var(--space-2);
     }
 
-    /* A game's place in its duel or test, under the result. */
-    .game-row-cap {
+    /* A game of a duel or a tournament names it on a line under the card,
+       a link of its own; the item wears the row's surface around both. */
+    .game-row-evented {
+        background: var(--c-bg-raised);
+        box-shadow: inset 0 var(--border-w) 0 var(--surface-edge-hi);
+        transition: background var(--dur-fast) var(--ease);
+    }
+
+    .game-row-evented:has(> .game-row:hover) {
+        background: var(--c-bg-hover);
+    }
+
+    .game-row-evented > .game-row,
+    .game-row-evented > .game-row:hover {
+        padding-bottom: var(--space-1);
+        background: none;
+        box-shadow: none;
+    }
+
+    .game-row-event {
+        margin: 0;
+        padding: 0 var(--space-4) var(--space-3);
+    }
+
+    .game-row-event a,
+    .game-row-result > .game-row-event-space {
         display: block;
-        color: var(--c-text-dim);
         font-size: var(--text-xs);
         font-weight: var(--weight-regular);
+    }
+
+    .game-row-result > .game-row-event-space,
+    .game-row-event > .game-row-event-space {
+        display: none;
     }
 
     .game-row-facts {
@@ -166,6 +195,44 @@
         .game-row-result,
         .game-row-when {
             grid-area: auto;
+        }
+
+        /* The caption lies over the row in the result's column, under an
+           unseen copy of the result.
+           With the item's gaps set to the row's, the copy and the row's own
+           result center alike, so the caption lands on the room the row
+           keeps for it; only the caption takes the pointer. */
+        .game-rows > .game-row-evented {
+            column-gap: var(--space-4);
+        }
+
+        .game-row-evented > .game-row,
+        .game-row-evented > .game-row:hover {
+            grid-row: 1;
+            padding-bottom: var(--space-2);
+        }
+
+        .game-row-event {
+            position: relative;
+            grid-row: 1;
+            grid-column: 2;
+            align-self: center;
+            padding: 0;
+            pointer-events: none;
+        }
+
+        .game-row-event a {
+            pointer-events: auto;
+        }
+
+        .game-row-result > .game-row-event-space {
+            display: block;
+            visibility: hidden;
+        }
+
+        .game-row-event > .game-row-event-space {
+            display: inline;
+            visibility: hidden;
         }
 
         .game-row-seats {

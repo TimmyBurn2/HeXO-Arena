@@ -1,13 +1,13 @@
 import { Fragment, useCallback, useId } from 'react';
 import { analysisPagePath, botMeta, levelFacts, nameKeyOf, notFoundMeta, type Accepts, type Analyzer, type BotListing, type Levels, type LiveGameEntry } from '@hexo-arena/contract';
 import { fetchBots } from '../api/client';
-import { BotDuels } from '../duels/BotDuels';
 import { duelsPath, pickReason } from '../duels/setup';
 import { useDuelStates } from '../duels/use-duels';
 import { useAsync } from '../api/use-async';
 import { OwnerPanel } from '../components/OwnerPanel';
 import { ReportLine } from '../components/ReportLine';
 import { PlayerHistory } from '../games/PlayerHistory';
+import { BotEvents } from '../players/BotEvents';
 import { PendingPlate } from '../players/PendingPlate';
 import { PlayerBlocks } from '../players/PlayerBlocks';
 import { LiveGameGrid } from '../live/LiveGameCard';
@@ -150,7 +150,7 @@ function BotProfile({ bot, onChanged }: { bot: BotListing; onChanged: () => void
             {bot.levels === null ? null : <StrengthRows bot={bot.name} levels={bot.levels} readiness={readiness} />}
             <BotDetails bot={bot} />
             <PlayingNow bot={bot.name} />
-            <BotDuels bot={bot.name} owner={bot.ownerName} />
+            <BotEvents bot={bot.name} owner={bot.ownerName} />
             <PlayerBlocks name={bot.name} />
             <PlayerHistory player={bot.name} title={text.games.recent} />
             {owned ? <OwnerPanel bot={bot.name} onChanged={onChanged} /> : null}

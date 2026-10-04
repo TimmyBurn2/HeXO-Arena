@@ -292,6 +292,14 @@ export function duelsPath(first: string | null = null): string {
     return setupPath({ ...emptySetup, first });
 }
 
+/** The lists a link may open Bot duels on, past every duel: the reader's own, or tests. */
+export const duelListViews = [`yours`, `tests`] as const;
+
+/** Bot duels with its recent list on one view. */
+export function duelListPath(view: (typeof duelListViews)[number]): string {
+    return `/play/duels?${new URLSearchParams({ list: view }).toString()}`;
+}
+
 /** A duel's page. */
 export function duelPagePath(id: string): string {
     return `/play/duels/${encodeURIComponent(id)}`;

@@ -318,7 +318,7 @@ describe('the guest games migration', () => {
         expect(() => guest.run(`g4`, null, `Guest k3f9 and more`)).toThrow(/CHECK/);
         expect(() => guest.run(`g5`, null, null)).toThrow(/CHECK/);
         const indexes = sqlite.prepare(`select name from sqlite_master where type = 'index' and tbl_name = 'games' and name like 'games_%' order by name`).all();
-        expect(indexes).toHaveLength(16);
+        expect(indexes).toHaveLength(19);
     });
 });
 

@@ -28,6 +28,7 @@ import {
     duelListQuerySchema,
     duelListSchema,
     duelPath,
+    duelExportPath,
     duelStopPath,
     type CreateDuelRequest,
     type DuelBotState,
@@ -76,6 +77,7 @@ import {
     tournamentEntrySchema,
     tournamentListSchema,
     tournamentPath,
+    tournamentExportPath,
     tournamentsPath,
     type TournamentDetail,
     type TournamentEntry,
@@ -361,6 +363,16 @@ export function fetchTournaments(): Promise<TournamentList> {
     return getJson(tournamentsPath, tournamentListSchema);
 }
 
+/** The tournaments a bot entered, each with its place. */
+export function fetchBotTournaments(bot: string): Promise<TournamentList> {
+    return getJson(`${tournamentsPath}?${new URLSearchParams({ bot }).toString()}`, tournamentListSchema);
+}
+
+/** Where a tournament's finished games download, as one zip. */
+export function tournamentExportUrl(id: string): string {
+    return tournamentExportPath.replace(`{id}`, encodeURIComponent(id));
+}
+
 /** One tournament in full. */
 export function fetchTournament(id: string): Promise<TournamentDetail> {
     return getJson(tournamentPath.replace(`{id}`, encodeURIComponent(id)), tournamentDetailSchema);
@@ -396,6 +408,11 @@ export function fetchDuels(query: DuelListQuery = {}): Promise<DuelList> {
 /** One duel as its page reads it. */
 export function fetchDuel(id: string): Promise<DuelDetail> {
     return getJson(duelPath.replace(`{id}`, encodeURIComponent(id)), duelDetailSchema);
+}
+
+/** Where a duel's or a test's finished games download, as one zip. */
+export function duelExportUrl(id: string): string {
+    return duelExportPath.replace(`{id}`, encodeURIComponent(id));
 }
 
 /** Every listed bot's switch for duels by others and the bots it duels now. */

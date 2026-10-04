@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import { duelMeta, duelRunningPollMs, estimateMoreGames, nameKeyOf, notFoundMeta, resultSentence, turnsOnBoard, type DuelBot, type DuelDetail, type DuelGame, type DuelSide } from '@hexo-arena/contract';
-import { ApiError, createDuel, fetchDuel, limitedFor, stopDuel } from '../api/client';
+import { ApiError, createDuel, duelExportUrl, fetchDuel, limitedFor, stopDuel } from '../api/client';
 import { hexPoints } from '../board/geometry';
 import { BotBadge, PlayerName, Rating, seatName, Swatch } from '../components/player';
 import { ErrorFrame, SkeletonRows } from '../components/states';
@@ -145,6 +145,12 @@ function DuelPage({ duel, at, onStopped }: { duel: DuelDetail; at: number; onSto
                         />
                     ) : mayAgain ? (
                         <Again duel={duel} viewer={viewer} />
+                    ) : null}
+                    {/* The export holds the games over; before the first, it would hold none. */}
+                    {duel.games.some((game) => game.state === `played` || game.state === `aborted`) ? (
+                        <a href={duelExportUrl(duel.id)} download className="btn btn-ghost">
+                            {text.games.exportGames}
+                        </a>
                     ) : null}
                 </div>
             </div>

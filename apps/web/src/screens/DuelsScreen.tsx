@@ -3,7 +3,7 @@ import { duelsMeta, type DuelSummary } from '@hexo-arena/contract';
 import { ErrorFrame, SkeletonRows } from '../components/states';
 import { DuelRows } from '../duels/DuelRows';
 import { NewDuel } from '../duels/NewDuel';
-import { pickReason, setupFromParams, type DuelSetup } from '../duels/setup';
+import { duelListViews, pickReason, setupFromParams, type DuelSetup } from '../duels/setup';
 import { useDuelLists, useSetupReads, type DuelFilter } from '../duels/use-duels';
 import { useMe } from '../me';
 import { PlayHead } from '../play/PlayHead';
@@ -19,22 +19,23 @@ import './DuelsScreen.css';
 // The recent list shows this many until the reader asks for the rest.
 const recentShown = 5;
 
-function readParams(): { setup: DuelSetup; bot: string | null } {
+function readParams(): { setup: DuelSetup; bot: string | null; list: DuelFilter } {
     const params = new URLSearchParams(window.location.search);
-    return { setup: setupFromParams(params), bot: params.get(`bot`) };
+    const list = duelListViews.find((view) => view === params.get(`list`)) ?? `all`;
+    return { setup: setupFromParams(params), bot: params.get(`bot`), list };
 }
 
 /**
  * Bot duels: a new duel's setup beside the duels live now and those just
  * over, filtered to every one, the reader's own, or tests; a link may set
- * the setup up, as a duel's Duel again does, or narrow the lists to one
- * bot's duels.
+ * the setup up, as a duel's Duel again does, narrow the lists to one
+ * bot's duels, or open the recent list on the reader's own or on tests.
  */
 export function DuelsScreen() {
     const route = useRoute();
     useDocumentMeta(route, duelsMeta.title, duelsMeta.description);
     const [params] = useState(readParams);
-    const [filter, setFilter] = useState<DuelFilter>(`all`);
+    const [filter, setFilter] = useState<DuelFilter>(params.list);
     const [more, setMore] = useState(false);
     const [now] = useState(() => Date.now());
     const me = useMe();

@@ -331,6 +331,12 @@ export const games = sqliteTable(
         index(`games_clock_finish_idx`).on(sql`${table.timeControl} ->> '$.mode'`, table.finishSeq),
         index(`games_opening_finish_idx`).on(sql`json_array_length(${table.openingCells})`, table.finishSeq),
         index(`games_finished_at_idx`).on(table.finishedAt),
+        // A tournament's or a duel's games, or games of neither, newest first.
+        // The unary plus on games of neither keeps the planner from reading
+        // a null through the pairing and duel indexes and sorting every hit.
+        index(`games_tournament_finish_idx`).on(table.finishSeq).where(sql`${table.pairingId} is not null`),
+        index(`games_duels_finish_idx`).on(table.finishSeq).where(sql`${table.duelId} is not null`),
+        index(`games_no_event_finish_idx`).on(table.finishSeq).where(sql`+${table.duelId} is null and +${table.pairingId} is null`),
         index(`games_pairing_idx`).on(table.pairingId, table.pairingGame),
         index(`games_duel_idx`).on(table.duelId, table.duelGame),
         // A null makes an in-list unknown, which a check lets pass, so the

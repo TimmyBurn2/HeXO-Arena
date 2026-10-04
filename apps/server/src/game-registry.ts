@@ -729,6 +729,7 @@ export class GameRegistry {
             rated: !ratesNobody(game),
             cells: boardCells(game.position),
             clock: liveClockView(game),
+            ...(game.tournament === undefined ? {} : { tournament: game.tournament }),
             ...(game.duel === undefined ? {} : { duel: game.duel }),
             ...(game.test ? { test: true as const } : {}),
         };

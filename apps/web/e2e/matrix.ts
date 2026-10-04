@@ -1,6 +1,6 @@
 import type { Page } from '@playwright/test';
 import { themes } from '../src/theme/themes';
-import { anaMe, analyzerBots, bots, brunoMe, duelBots, duelFixtures, duelGameRows, duelGameSnapshots, games as gameFixtures, heldBots, keptNames, leaderboard, liveGames, longReadings, playBots, rivalry, signup, tournaments, world, type World } from './mock-api';
+import { anaMe, analyzerBots, bots, brunoMe, duelBots, duelFixtures, duelGameRows, duelGameSnapshots, games as gameFixtures, heldBots, keptNames, leaderboard, liveGames, longReadings, playBots, rivalry, signup, tournamentGameRows, tournaments, world, type World } from './mock-api';
 
 /** A named look the whole site can wear. */
 export interface Look {
@@ -287,12 +287,14 @@ export const shots: readonly Shot[] = [
     {
         name: `games-duels`,
         path: `/games`,
-        world: dueling({ finished: [...duelGameRows, ...keptNames] }),
-        ready: `.game-row-cap`,
+        world: dueling({ finished: [...duelGameRows, ...tournamentGameRows, ...keptNames] }),
+        ready: `.game-row-event`,
         framed: true,
         viewports: duelViewports,
         storage: { 'hexo-arena.tests.v1': `on` },
     },
+    { name: `profile-duels`, path: `/profile`, world: dueling(), ready: `.your-duels .duel-row`, framed: true, viewports: duelViewports, fullPage: true },
+    { name: `bot-page-tournaments`, path: `/bots/hextide`, world: world(), ready: `.place-row`, framed: true, viewports: duelViewports, fullPage: true },
     ...([
         [`game-drawer-duel`, `duel-game`],
         [`game-drawer-test`, `test-game`],

@@ -13,6 +13,10 @@
         max-width: var(--measure);
     }
 
+    .tournament-export {
+        margin: var(--space-3) 0 0;
+    }
+
     .tournament-block {
         margin-bottom: var(--space-6);
         min-width: 0;

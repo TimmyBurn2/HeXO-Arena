@@ -40,8 +40,9 @@ function useRatingHistory(name: string): { points: RatingPoint[] | `failed` | nu
 
 /**
  * What a page about a player shows of their play: the rating chart, the
- * record, the opponents met most, and a bot's tournament places; each
- * block stands while it loads and leaves out what it cannot read.
+ * record, and the opponents met most; each block stands while it loads
+ * and leaves out what it cannot read. A bot page lists its tournaments
+ * beside its duels.
  */
 export function PlayerBlocks({ name }: { name: string }) {
     const history = useRatingHistory(name);
@@ -61,7 +62,6 @@ export function PlayerBlocks({ name }: { name: string }) {
                 <div className="player-columns">
                     <Record record={record.data} />
                     <MostPlayed record={record.data} />
-                    {record.data.placings === undefined ? null : <Placings record={record.data} />}
                 </div>
             )}
         </div>
@@ -155,30 +155,6 @@ function MostPlayed({ record }: { record: PlayerRecord }) {
                                     {words.meetings(opponent.games, opponent.won, opponent.lost)}
                                 </Link>
                             )}
-                        </li>
-                    ))}
-                </ul>
-            )}
-        </section>
-    );
-}
-
-function Placings({ record }: { record: PlayerRecord }) {
-    const words = text.players.placings;
-    const placings = record.placings ?? [];
-    return (
-        <section className="card player-placings" aria-labelledby="player-placings-title">
-            <h2 id="player-placings-title" className="card-title">
-                {words.title}
-            </h2>
-            {placings.length === 0 ? (
-                <p className="note">{words.none}</p>
-            ) : (
-                <ul className="player-opponent-list">
-                    {placings.map((placing) => (
-                        <li key={placing.tournamentId}>
-                            <Link to={`/tournaments/${encodeURIComponent(placing.tournamentId)}`}>{placing.name}</Link>
-                            <span className="note">{words.line(placing.rank, placing.entrants, placing.points, dateOf(placing.endedAt))}</span>
                         </li>
                     ))}
                 </ul>

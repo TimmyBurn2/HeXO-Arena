@@ -39,9 +39,14 @@ describe('finishedGamesQuerySchema', () => {
             opening: `5`,
             before: `2026-10-01`,
             analyzed: `1`,
+            event: `duel`,
             page: `3`,
         });
-        expect(parsed).toMatchObject({ player: `hextide`, opening: `5`, page: `3` });
+        expect(parsed).toMatchObject({ player: `hextide`, opening: `5`, event: `duel`, page: `3` });
+    });
+
+    it('takes games of a duel, of a tournament, or of neither, with no player needed', () => {
+        for (const event of [`duel`, `tournament`, `none`] as const) expect(finishedGamesQuerySchema.parse({ event })).toEqual({ event });
     });
 
     it.each([
@@ -69,6 +74,7 @@ describe('finishedGamesQuerySchema', () => {
         [{ page: `02` }],
         [{ page: `2.5` }],
         [{ cursor: `2.40` }],
+        [{ event: `series` }],
     ])('refuses %j', (filters) => {
         expect(finishedGamesQuerySchema.safeParse(filters).success).toBe(false);
     });
@@ -93,6 +99,12 @@ describe('finishedGamesPageSchema', () => {
         expect(finishedGamesPageSchema.safeParse({ ...page, record: { ...record, asO: { games: 20, won: 10 } } }).success).toBe(false);
     });
 
+    it('names the tournament a game belongs to, its round, and which of the pairing\'s two games it is', () => {
+        const tournament = { id: `t_autumnrobin1`, name: `Autumn round robin`, round: 2, game: 1 };
+        expect(finishedGameEntrySchema.parse({ ...entry, tournament }).tournament).toEqual(tournament);
+        expect(finishedGameEntrySchema.safeParse({ ...entry, tournament: { ...tournament, game: 3 } }).success).toBe(false);
+    });
+
     it('counts the finished community readings of a game, at most two', () => {
         expect(finishedGameEntrySchema.parse({ ...entry, analyses: 2 }).analyses).toBe(2);
         expect(finishedGameEntrySchema.safeParse({ ...entry, analyses: 3 }).success).toBe(false);
@@ -108,7 +120,7 @@ describe('listFinishedGames in the document', () => {
         expect(operation?.operationId).toBe(`listFinishedGames`);
         expect(operation?.security).toEqual([]);
         const names = (operation?.parameters ?? []).map((parameter) => (`name` in parameter ? parameter.name : ``));
-        expect(names.sort()).toEqual([`analyzed`, `before`, `clock`, `kind`, `opening`, `page`, `player`, `reason`, `result`, `side`, `tests`, `vs`]);
+        expect(names.sort()).toEqual([`analyzed`, `before`, `clock`, `event`, `kind`, `opening`, `page`, `player`, `reason`, `result`, `side`, `tests`, `vs`]);
         expect(Object.keys(operation?.responses ?? {}).sort()).toEqual([`200`, `400`, `404`, `429`]);
     });
 });

@@ -176,6 +176,20 @@ describe('TournamentScreen', () => {
         expect(screen.getByText(`delta`).closest(`li`)?.textContent).toBe(`deltaBOTby deenot online at the start`);
     });
 
+    it('offer the games over so far as one download once a game is over, and nothing to download before', async () => {
+        serve(() => running);
+        render(<TournamentScreen id={running.id} />);
+        const exported = await screen.findByRole(`link`, { name: `Export games` });
+        expect(exported.getAttribute(`href`)).toBe(`/api/tournaments/${running.id}/export`);
+        expect(exported.hasAttribute(`download`)).toBe(true);
+        cleanup();
+        const begun = { ...running, rounds: running.rounds.map((round) => ({ ...round, pairings: round.pairings.map((pairing) => ({ ...pairing, games: pairing.games.map((entry) => ({ ...entry, outcome: `pending` as const, gameId: null })) })) })) };
+        serve(() => begun);
+        render(<TournamentScreen id={running.id} />);
+        await screen.findByRole(`heading`, { level: 1, name: `Autumn round robin` });
+        expect(screen.queryByRole(`link`, { name: `Export games` })).toBe(null);
+    });
+
     it('stand a finished tournament\'s top three on the podium with their points', async () => {
         serve(() => finished);
         render(<TournamentScreen id={finished.id} />);

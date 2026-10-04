@@ -12,6 +12,7 @@ export const duelListPath = `/api/duels`;
 export const duelPath = `/api/duels/{id}`;
 export const duelStopPath = `/api/duels/{id}/stop`;
 export const duelBotsPath = `/api/duels/bots`;
+export const duelExportPath = `/api/duels/{id}/export`;
 
 // zod takes a numeric enum as an object, so the keys are names only; an
 // enum renders as an integer enum in OpenAPI, where a literal list does not.

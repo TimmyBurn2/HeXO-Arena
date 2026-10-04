@@ -63,7 +63,8 @@ import { countBotBotGamesSince, countPairBotGamesSince, type OpeningCell } from 
 import type { PresenceRegistry } from './presence';
 import { isProvisional } from './rating';
 import { readRating } from './rating-store';
-import type { CredentialLimits } from './request-limits';
+import { duelExport } from './game-export';
+import type { ClientLimits, CredentialLimits } from './request-limits';
 import { sessionUser } from './sessions';
 import { shownBot, shownUser } from './shown-names';
 import type { StartGate } from './site-state';
@@ -276,7 +277,7 @@ export interface DuelApiDeps {
     presence: PresenceRegistry;
     games: GameRegistry;
     gate: StartGate;
-    limits: CredentialLimits;
+    limits: CredentialLimits & ClientLimits;
     reservations: { isReserved: (botId: string) => boolean };
     duels: DuelRunner;
     random: () => number;
@@ -447,6 +448,16 @@ export function registerDuelApi(app: FastifyInstance, deps: DuelApiDeps): void {
         });
         if (body === null) return reply.code(404).send({ error: `no such duel`, code: `not_found` });
         return reply.header(`content-type`, `application/json; charset=utf-8`).send(body);
+    });
+
+    app.get(`/api/duels/:id/export`, { config: { limit: `public` } }, async (request, reply) => {
+        const { id } = request.params as { id: string };
+        if (!duelIdSchema.safeParse(id).success) return reply.code(404).send({ error: `no such duel`, code: `not_found` });
+        if (limits.refuseExport(reply, request)) return reply;
+        const detail = duelDetail(query, deps, id);
+        if (detail === null) return reply.code(404).send({ error: `no such duel`, code: `not_found` });
+        const file = duelExport(query, detail, deps.now());
+        return reply.header(`content-type`, `application/zip`).header(`content-disposition`, `attachment; filename="${file.fileName}"`).send(file.body);
     });
 
     app.post(`/api/duels/:id/stop`, { config: { limit: `principal` } }, async (request, reply) => {

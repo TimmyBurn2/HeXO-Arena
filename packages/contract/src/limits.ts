@@ -85,6 +85,12 @@ export const archiveReadLimit: RateLimit = { burst: 10, refillMs: 1_000 };
 /** Finished games read across every caller. */
 export const archiveReadGlobalLimit: RateLimit = { burst: 20, refillMs: 100 };
 
+/** Exports of a duel's or a tournament's games one client may download: each reads up to a tournament's every game. */
+export const gameExportLimit: RateLimit = { burst: 4, refillMs: 15_000 };
+
+/** Exports downloaded across every caller. */
+export const gameExportGlobalLimit: RateLimit = { burst: 20, refillMs: 1_000 };
+
 /** Challenges one bot may send in a UTC day, taken or not. */
 export const challengeDailyCap = 200;
 

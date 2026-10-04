@@ -204,6 +204,13 @@
       "when": 1791041940322,
       "tag": "0028_duels",
       "breakpoints": true
+    },
+    {
+      "idx": 29,
+      "version": "6",
+      "when": 1791122000213,
+      "tag": "0029_event_indexes",
+      "breakpoints": true
     }
   ]
 }

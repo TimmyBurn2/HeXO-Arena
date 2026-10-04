@@ -3,14 +3,14 @@ import { activeKeys, gamesPathOf, pagePathOf, searchOf, viewOf, withFilter } fro
 
 describe('viewOf', () => {
     it('read every filter and the page from an address', () => {
-        expect(viewOf(`?player=hextide&vs=quietlake&result=won&side=x&reason=timeout&clock=turn&kind=bot-bot&opening=5&analyzed=1&before=2026-09-01&page=2`)).toEqual({
-            filters: { player: `hextide`, vs: `quietlake`, result: `won`, side: `x`, reason: `timeout`, clock: `turn`, kind: `bot-bot`, opening: `5`, analyzed: `1`, before: `2026-09-01` },
+        expect(viewOf(`?player=hextide&vs=quietlake&result=won&side=x&reason=timeout&clock=turn&kind=bot-bot&event=duel&opening=5&analyzed=1&before=2026-09-01&page=2`)).toEqual({
+            filters: { player: `hextide`, vs: `quietlake`, result: `won`, side: `x`, reason: `timeout`, clock: `turn`, kind: `bot-bot`, event: `duel`, opening: `5`, analyzed: `1`, before: `2026-09-01` },
             page: 2,
         });
     });
 
     it('drop each value its filter does not take, and keep the rest, on the first page', () => {
-        expect(viewOf(`?clock=blitz&opening=4&before=yesterday&analyzed=yes&page=11&reason=timeout&utm=x`)).toEqual({ filters: { reason: `timeout` }, page: 1 });
+        expect(viewOf(`?clock=blitz&opening=4&before=yesterday&analyzed=yes&event=series&page=11&reason=timeout&utm=x`)).toEqual({ filters: { reason: `timeout` }, page: 1 });
         expect(viewOf(`?cursor=2.40`)).toEqual({ filters: {}, page: 1 });
     });
 
@@ -28,7 +28,7 @@ describe('searchOf', () => {
     it('write the filters in a fixed order with the page last, the first page and no filter writing nothing', () => {
         expect(searchOf({ filters: { clock: `match`, player: `ana` }, page: 3 })).toBe(`?player=ana&clock=match&page=3`);
         expect(searchOf({ filters: { clock: `match` }, page: 1 })).toBe(`?clock=match`);
-        expect(searchOf({ filters: { before: `2026-09-01`, analyzed: `1`, kind: `bot-bot` }, page: 1 })).toBe(`?kind=bot-bot&analyzed=1&before=2026-09-01`);
+        expect(searchOf({ filters: { before: `2026-09-01`, analyzed: `1`, event: `none`, kind: `bot-bot` }, page: 1 })).toBe(`?kind=bot-bot&event=none&analyzed=1&before=2026-09-01`);
         expect(searchOf({ filters: {}, page: 1 })).toBe(``);
     });
 });

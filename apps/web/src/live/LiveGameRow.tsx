@@ -32,6 +32,7 @@ function LiveGameRow({ entry }: { entry: LiveGameEntry }) {
                 {entry.test === true ? <span className="tag muted">{text.games.test}</span> : entry.rated ? null : <span className="tag muted">{text.ladder.live.unrated}</span>}
                 <span>{clockText(entry.timeControl)}</span>
                 {entry.duel === undefined ? null : <span>{text.duels.caption(entry.test === true ? `test` : `duel`, entry.duel.game, entry.duel.of)}</span>}
+                {entry.tournament === undefined ? null : <span>{text.tournaments.caption(entry.tournament.name, entry.tournament.round)}</span>}
                 <span>{text.ladder.live.toMove(seatName(entry.players[entry.toMove]))}</span>
             </span>
         </Link>

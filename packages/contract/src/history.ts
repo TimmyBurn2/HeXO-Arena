@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { analysesPerGame } from './analysis';
-import { gameDuelSchema, gamePlayersSchema, testMarkSchema, unratedByChoiceSchema } from './games';
+import { gameDuelSchema, gamePlayersSchema, gameTournamentSchema, testMarkSchema, unratedByChoiceSchema } from './games';
 import { rankableDeviation } from './leaderboard';
 import { nameKeyOf, nameMaxLength } from './names';
 import { finishReasonSchema, openingPliesSchema, sideSchema, timeControlSchema } from './stream';
@@ -39,6 +39,10 @@ export const finishedGamesQuerySchema = z
         // The bare values, so the parameter does not repeat the component's description.
         reason: z.enum(finishReasonSchema.options).optional().meta({ param: { description: `How the game ended.` } }),
         clock: z.enum([`turn`, `match`, `unlimited`]).optional().meta({ param: { description: `The time control's mode.` } }),
+        event: z
+            .enum([`duel`, `tournament`, `none`])
+            .optional()
+            .meta({ param: { description: `Games of a duel, tests among them while tests are listed; of a tournament; or of neither.` } }),
         opening: z.enum([`1`, `3`, `5`, `7`, `9`]).optional().meta({ param: { description: `The opening's plies.` } }),
         before: z.iso.date().optional().meta({ param: { description: `Only games finished before this UTC date, YYYY-MM-DD.` } }),
         analyzed: z.literal(`1`).optional().meta({ param: { description: `Present as 1, only games a community analyzer has read whole.` } }),
@@ -76,6 +80,7 @@ export const finishedGameEntrySchema = z
         voided: z.boolean().meta({ description: `Taken out by the operator: still listed, and counted in no record and no rating.` }),
         unratedByChoice: unratedByChoiceSchema.optional(),
         test: testMarkSchema.optional(),
+        tournament: gameTournamentSchema.optional(),
         duel: gameDuelSchema.optional(),
         analyses: z
             .number()

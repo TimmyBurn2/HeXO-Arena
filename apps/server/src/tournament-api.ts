@@ -12,13 +12,16 @@ import {
     tournamentEntryReasonSchema,
     tournamentIdSchema,
     tournamentListPastCap,
+    tournamentListQuerySchema,
     tournamentListSchema,
     tournamentStatusSchema,
+    tournamentWaitingCap,
     type TournamentBot,
     type TournamentDetail,
     type TournamentEntry,
     type TournamentGame,
     type TournamentList,
+    type TournamentPlace,
     type TournamentSummary,
 } from '@hexo-arena/contract';
 import { and, asc, desc, eq, inArray, isNull, ne, sql } from 'drizzle-orm';
@@ -27,7 +30,8 @@ import { nowSeconds, type Query } from './db';
 import { bots, games, tournamentEntries, tournamentPairings, tournaments, users } from './db/schema';
 import type { GameRegistry } from './game-registry';
 import type { PresenceRegistry } from './presence';
-import type { CredentialLimits } from './request-limits';
+import { tournamentExport } from './game-export';
+import type { ClientLimits, CredentialLimits } from './request-limits';
 import { pointOf, standingsOf, storedSlot, xSeatOf, type PairingSeat, type ScoredPairing } from './round-robin';
 import { sessionUser } from './sessions';
 import { shownBot, shownUser } from './shown-names';
@@ -265,7 +269,26 @@ function summaryOf(query: Query, row: TournamentRow): TournamentSummary {
         const entry = entries.find((candidate) => candidate.botId === top?.bot);
         winner = entry === undefined ? null : { name: entry.bot, ownerName: entry.ownerName, ...(entry.deleted ? { deleted: true as const } : {}) };
     }
-    return { ...summaryBase(row), entrants, winner, round: row.status === `running` ? roundOf(pairingViews(query, row.id, entryRows(query, row.id))) : null };
+    return {
+        ...summaryBase(row),
+        entrants,
+        winner,
+        round: row.status === `running` ? roundOf(pairingViews(query, row.id, entryRows(query, row.id))) : null,
+        ...(row.endedAt === null ? {} : { endedAt: isoOf(row.endedAt) }),
+    };
+}
+
+// A bot in the field has a place once the pairings are drawn; one that
+// never joined the field has none.
+function placeOf(query: Query, row: TournamentRow, botId: string): TournamentPlace | null {
+    const entries = entryRows(query, row.id);
+    const entry = entries.find((candidate) => candidate.botId === botId);
+    if (entry === undefined) return null;
+    const state = tournamentEntryStateSchema.parse(entry.state);
+    const reason = entry.reason === null ? {} : { reason: tournamentEntryReasonSchema.parse(entry.reason) };
+    const field = entries.filter((candidate) => candidate.state === `playing` || candidate.state === `withdrawn`).map((candidate) => candidate.botId);
+    const line = field.includes(botId) ? standingsOf(field, pairingViews(query, row.id, entries).map((pairing) => pairing.scored)).find((standing) => standing.bot === botId) : undefined;
+    return { state, ...reason, rank: line?.rank ?? null, points: line?.points ?? null };
 }
 
 // The first round with a game still to finish, or the last once none has.
@@ -284,21 +307,35 @@ export function tournamentSummary(query: Query, id: string): TournamentSummary |
     return row === undefined ? null : summaryOf(query, row);
 }
 
-/** The tournament list: the running one, those waiting, and the latest over. */
-export function tournamentList(query: Query): TournamentList {
+/**
+ * The tournament list: the running one, those waiting, and the latest over;
+ * for a bot, only those it entered, each with its place.
+ */
+export function tournamentList(query: Query, botId: string | null = null): TournamentList {
     const all = (statuses: string[], order: `asc` | `desc`, limit: number) =>
         query
             .select(tournamentColumns)
             .from(tournaments)
-            .where(inArray(tournaments.status, statuses))
+            .where(
+                and(
+                    inArray(tournaments.status, statuses),
+                    botId === null
+                        ? undefined
+                        : sql`${tournaments.id} in (select ${tournamentEntries.tournamentId} from ${tournamentEntries} where ${tournamentEntries.botId} = ${botId})`,
+                ),
+            )
             .orderBy(order === `asc` ? asc(tournaments.startsAt) : desc(sql`coalesce(${tournaments.endedAt}, ${tournaments.startsAt})`))
             .limit(limit)
             .all();
+    const summary = (row: TournamentRow): TournamentSummary => {
+        const place = botId === null ? null : placeOf(query, row, botId);
+        return { ...summaryOf(query, row), ...(place === null ? {} : { bot: place }) };
+    };
     const [running] = all([`running`], `asc`, 1);
     return {
-        running: running === undefined ? null : summaryOf(query, running),
-        scheduled: all([`scheduled`], `asc`, 3).map((row) => summaryOf(query, row)),
-        past: all([`finished`, `called_off`, `canceled`], `desc`, tournamentListPastCap).map((row) => summaryOf(query, row)),
+        running: running === undefined ? null : summary(running),
+        scheduled: all([`scheduled`], `asc`, tournamentWaitingCap).map(summary),
+        past: all([`finished`, `called_off`, `canceled`], `desc`, tournamentListPastCap).map(summary),
     };
 }
 
@@ -306,7 +343,7 @@ export interface TournamentApiDeps {
     query: Query;
     presence: PresenceRegistry;
     games: GameRegistry;
-    limits: CredentialLimits;
+    limits: CredentialLimits & ClientLimits;
     now: () => number;
 }
 
@@ -318,24 +355,53 @@ export function registerTournamentApi(app: FastifyInstance, deps: TournamentApiD
     const { query, limits } = deps;
     const memo = new Map<string, { at: number; body: string }>();
 
-    app.get(`/api/tournaments`, { config: { limit: `public` } }, async (_request, reply) => {
-        return reply.header(`content-type`, `application/json; charset=utf-8`).send(JSON.stringify(tournamentListSchema.parse(tournamentList(query))));
+    // Every reader of one key within the window gets the one body; a clock
+    // that steps back starts a new window.
+    const memoized = (key: string, build: () => string | null): string | null => {
+        const now = deps.now();
+        const held = memo.get(key);
+        if (held !== undefined && now >= held.at && now - held.at < tournamentDetailMemoMs) return held.body;
+        const body = build();
+        if (body !== null) memo.set(key, { at: now, body });
+        for (const [stale, entry] of memo) if (now - entry.at >= tournamentDetailMemoMs) memo.delete(stale);
+        return body;
+    };
+
+    app.get(`/api/tournaments`, { config: { limit: `public` } }, async (request, reply) => {
+        const parsed = tournamentListQuerySchema.safeParse(request.query);
+        if (!parsed.success) return reply.code(400).send({ error: `the query fails validation`, code: `bad_request` });
+        const name = parsed.data.bot;
+        if (name === undefined) {
+            return reply.header(`content-type`, `application/json; charset=utf-8`).send(JSON.stringify(tournamentListSchema.parse(tournamentList(query))));
+        }
+        const bot = nameSyntaxSchema.safeParse(name).success
+            ? query.select({ id: bots.id }).from(bots).where(and(eq(bots.nameKey, nameKeyOf(name)), isNull(bots.deletedAt))).get()
+            : undefined;
+        if (bot === undefined) return reply.code(404).send({ error: `no such bot`, code: `not_found` });
+        // A bot's list reads the standings of every tournament it entered, so it shares the detail's window.
+        const body = memoized(`bot:${bot.id}`, () => JSON.stringify(tournamentListSchema.parse(tournamentList(query, bot.id))));
+        return reply.header(`content-type`, `application/json; charset=utf-8`).send(body);
     });
 
     app.get(`/api/tournaments/:id`, { config: { limit: `public` } }, async (request, reply) => {
         const { id } = request.params as { id: string };
         if (!tournamentIdSchema.safeParse(id).success) return reply.code(404).send({ error: `no such tournament`, code: `not_found` });
-        const now = deps.now();
-        let held = memo.get(id);
-        // A clock that steps back starts a new window.
-        if (held === undefined || now < held.at || now - held.at >= tournamentDetailMemoMs) {
+        const body = memoized(id, () => {
             const detail = tournamentDetail(query, deps, id);
-            if (detail === null) return reply.code(404).send({ error: `no such tournament`, code: `not_found` });
-            held = { at: now, body: JSON.stringify(tournamentDetailSchema.parse(detail)) };
-            memo.set(id, held);
-            for (const [key, entry] of memo) if (now - entry.at >= tournamentDetailMemoMs) memo.delete(key);
-        }
-        return reply.header(`content-type`, `application/json; charset=utf-8`).send(held.body);
+            return detail === null ? null : JSON.stringify(tournamentDetailSchema.parse(detail));
+        });
+        if (body === null) return reply.code(404).send({ error: `no such tournament`, code: `not_found` });
+        return reply.header(`content-type`, `application/json; charset=utf-8`).send(body);
+    });
+
+    app.get(`/api/tournaments/:id/export`, { config: { limit: `public` } }, async (request, reply) => {
+        const { id } = request.params as { id: string };
+        if (!tournamentIdSchema.safeParse(id).success) return reply.code(404).send({ error: `no such tournament`, code: `not_found` });
+        if (limits.refuseExport(reply, request)) return reply;
+        const detail = tournamentDetail(query, deps, id);
+        if (detail === null) return reply.code(404).send({ error: `no such tournament`, code: `not_found` });
+        const file = tournamentExport(query, detail, deps.now());
+        return reply.header(`content-type`, `application/zip`).header(`content-disposition`, `attachment; filename="${file.fileName}"`).send(file.body);
     });
 
     app.put(`/api/tournaments/:id/entry`, { config: { limit: `principal` } }, async (request, reply) => {

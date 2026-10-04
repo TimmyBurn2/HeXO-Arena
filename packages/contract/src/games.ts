@@ -180,6 +180,7 @@ export const liveGameEntrySchema = z
         rated: z.boolean(),
         cells: z.array(gameCellSchema).min(1).meta({ description: `Every stone in ply order, the opening included.` }),
         clock: gameClockSchema,
+        tournament: gameTournamentSchema.optional(),
         duel: gameDuelSchema.optional(),
         test: testMarkSchema.optional(),
     })

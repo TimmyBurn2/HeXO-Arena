@@ -1,4 +1,4 @@
-import { gameSnapshotSchema, tournamentDetailSchema, tournamentEntrySchema, tournamentListSchema } from '@hexo-arena/contract';
+import { gameSnapshotSchema, liveGameEntrySchema, tournamentDetailSchema, tournamentEntrySchema, tournamentListSchema } from '@hexo-arena/contract';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { findBot } from '../src/bots';
 import { createQuery } from '../src/db';
@@ -155,6 +155,10 @@ describe('the tournament reads and entries', () => {
         expect(pairing?.first.name).toBe(read.entries.find((entry) => entry.key === pairing?.first.key)?.bot);
         const gameId = pairing?.games[0]?.gameId ?? ``;
         expect(read.live.map((game) => game.gameId)).toEqual([gameId]);
+        const tag = { id, name: `Autumn round robin`, round: 1, game: 1 };
+        expect(read.live[0]?.tournament).toEqual(tag);
+        const liveList = liveGameEntrySchema.array().parse((await world.app.inject({ method: `GET`, url: `/api/games` })).json());
+        expect(liveList.find((game) => game.gameId === gameId)?.tournament).toEqual(tag);
         expect(read.standings.map((line) => [line.rank, line.points])).toEqual([
             [1, 0],
             [1, 0],

@@ -29,6 +29,7 @@ const resultOptions = [`won`, `lost`, `none`] as const;
 const sideOptions = [`x`, `o`] as const;
 const clockOptions = [`turn`, `match`, `unlimited`] as const;
 const kindOptions = [`bot-bot`, `human-bot`, `guest-bot`] as const;
+const eventOptions = [`duel`, `tournament`, `none`] as const;
 const openingOptions = [`1`, `3`, `5`, `7`, `9`] as const;
 
 /** A list's page, a name no player holds, or a read that failed. */
@@ -307,6 +308,15 @@ function FilterFields({ filters, set }: FieldsProps) {
                 }}
             />
             <Choice
+                id="games-event"
+                label={text.games.event}
+                value={filters.event}
+                options={eventOptions.map((value) => [value, text.games.events[value]] as const)}
+                onChange={(value) => {
+                    set(`event`, value);
+                }}
+            />
+            <Choice
                 id="games-analyzed"
                 label={text.games.analysis}
                 value={filters.analyzed}
@@ -425,6 +435,8 @@ function chipOf(key: FilterKey, filters: GameFilters): string {
             return filters.clock === undefined ? `` : chips.clocks[filters.clock];
         case `kind`:
             return filters.kind === undefined ? `` : chips.kinds[filters.kind];
+        case `event`:
+            return filters.event === undefined ? `` : chips.events[filters.event];
         case `opening`:
             return chips.opening(Number(filters.opening));
         case `analyzed`:

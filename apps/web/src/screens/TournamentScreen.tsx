@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { clockText, deletedPlayerName, tournamentMeta, tournamentMinPresent, tournamentRunningPollMs, tournamentWaitingPollMs, type TournamentDetail, type TournamentSummary } from '@hexo-arena/contract';
-import { ApiError, fetchTournament, limitedFor } from '../api/client';
+import { ApiError, fetchTournament, limitedFor, tournamentExportUrl } from '../api/client';
 import { BotBadge, PlayerName, PresenceDot } from '../components/player';
 import { ErrorFrame, SkeletonRows } from '../components/states';
 import { LadderHead } from '../ladder/LadderHead';
@@ -124,6 +124,13 @@ function Tournament({ detail, readAt, onEntry }: { detail: TournamentDetail; rea
                     {text.tournaments.rules(field, clockText(detail.timeControl), detail.openingPlies)} {text.tournaments.pairing(detail.openingPlies)}
                 </p>
                 {detail.rounds.length > 0 ? <RoundSteps detail={detail} /> : null}
+                {anyGameOver(detail) ? (
+                    <p className="tournament-export">
+                        <a href={tournamentExportUrl(detail.id)} download className="btn btn-ghost">
+                            {text.games.exportGames}
+                        </a>
+                    </p>
+                ) : null}
             </div>
             {detail.status === `scheduled` ? <Waiting detail={detail} onEntry={onEntry} /> : null}
             {detail.status === `running` ? <Running detail={detail} readAt={readAt} /> : null}
@@ -132,6 +139,11 @@ function Tournament({ detail, readAt, onEntry }: { detail: TournamentDetail; rea
             {detail.status === `canceled` && detail.rounds.length > 0 ? <Finished detail={detail} /> : null}
         </div>
     );
+}
+
+// The export holds the games over; before the first, it would hold none.
+function anyGameOver(detail: TournamentDetail): boolean {
+    return detail.rounds.some((round) => round.pairings.some((pairing) => pairing.games.some((game) => game.gameId !== null && (game.outcome === `played` || game.outcome === `aborted`))));
 }
 
 function StatusSentence({ detail, readAt }: { detail: TournamentDetail; readAt: number }) {

@@ -352,6 +352,7 @@ export const en = {
         live: `Live`,
         note: `Newest first; a guest's games show under the guest's label, unrated.`,
         testsNote: `Tests show while Show tests is on.`,
+        exportGames: `Export games`,
         showTests: `Show tests`,
         test: `test`,
         search: `Filter games`,
@@ -365,6 +366,7 @@ export const en = {
         reason: `Ending`,
         clock: `Clock`,
         kind: `Who played`,
+        event: `Played in`,
         opening: `Opening`,
         analysis: `Analysis`,
         analyzed: `Analyzed`,
@@ -373,6 +375,7 @@ export const en = {
         results: { won: `Won`, lost: `Lost`, none: `No winner` },
         clocks: { turn: `Turn clock`, match: `Match clock`, unlimited: `Unlimited` },
         kinds: { 'bot-bot': `Bot vs bot`, 'human-bot': `Human vs bot`, 'guest-bot': `Guest vs bot` },
+        events: { duel: `A duel`, tournament: `A tournament`, none: `Neither` },
         openingValue: (stones: number) => (stones === 1 ? `Origin only` : `${String(stones)} stones`),
         chips: {
             vs: (name: string) => `against ${name}`,
@@ -380,6 +383,7 @@ export const en = {
             side: (side: string) => `as ${side}`,
             clocks: { turn: `turn clock`, match: `match clock`, unlimited: `unlimited` },
             kinds: { 'bot-bot': `bot vs bot`, 'human-bot': `human vs bot`, 'guest-bot': `guest vs bot` },
+            events: { duel: `in a duel`, tournament: `in a tournament`, none: `no duel or tournament` },
             opening: (stones: number) => (stones === 1 ? `origin only` : `${String(stones)}-stone opening`),
             analyzed: `analyzed`,
             before: (date: string) => `before ${date}`,
@@ -647,6 +651,10 @@ export const en = {
         offline: `offline`,
         analyzer: `analyzer`,
         strengths: (count: number) => `${String(count)} ${plural(count, `strength`, `strengths`)}`,
+        duels: {
+            title: `Your duels and tests`,
+            all: `All your duels and tests`,
+        },
         account: {
             title: `Your account`,
             data: `Your data`,
@@ -1491,12 +1499,6 @@ export const en = {
             none: `No games yet.`,
             meetings: (games: number, won: number, lost: number) => `${String(games)} ${plural(games, `game`, `games`)}: ${String(won)} won, ${String(lost)} lost`,
         },
-        placings: {
-            title: `Tournaments`,
-            none: `No finished tournament yet.`,
-            line: (rank: number, of: number, points: number, date: string) =>
-                `${ordinal(rank)} of ${String(of)}, ${String(points)} ${plural(points, `point`, `points`)}, ${date}`,
-        },
     },
     tournaments: {
         title: `Tournaments`,
@@ -1541,6 +1543,16 @@ export const en = {
         round: (round: number) => `Round ${String(round)}`,
         roundOf: (round: number, rounds: number) => `Round ${String(round)} of ${String(rounds)}`,
         rest: (bot: ReactNode): ReactNode => rich`${bot} rests`,
+        caption: (name: string, round: number) => `Tournament ${name}, round ${String(round)}`,
+        bot: {
+            title: `Tournaments`,
+            all: `All tournaments`,
+            entered: (when: string) => `Entered; starts ${when}`,
+            soFar: (rank: number, points: number) => `${ordinal(rank)} so far, ${String(points)} ${plural(points, `point`, `points`)}`,
+            final: (rank: number, of: number, points: number) => `${ordinal(rank)} of ${String(of)}, ${String(points)} ${plural(points, `point`, `points`)}`,
+            didNotPlay: (reason: string) => `Did not play: ${reason}`,
+            withdrawn: (reason: string) => `withdrawn: ${reason}`,
+        },
         standings: `Standings`,
         standingsNote: `One point per game won; a no-show scores for the opponent. Ties go to the points between the tied bots, then Sonneborn-Berger.`,
         columns: { rank: `Rank`, bot: `Bot`, rating: `Rating at start`, points: `Points`, sides: `As x, as o` },

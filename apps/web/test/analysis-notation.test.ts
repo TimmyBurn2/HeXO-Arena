@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { gameTurnCap } from '@hexo-arena/contract';
+import { gameTurnCap, writeHtttx } from '@hexo-arena/contract';
 import { originSetup, type Setup } from '@hexo-arena/rules';
 import { cellText, playLine, readGame, writeGame, writeTurns, type NotationRead, type PlayedLine } from '../src/analysis/notation';
 import { drawLine, workedText, workedTurns } from './analysis-lines';
@@ -66,6 +66,28 @@ describe('the HTTTX writer', () => {
 
     it('writes an empty line as the header alone', () => {
         expect(writeGame([])).toBe(`version[1];\n`);
+    });
+});
+
+describe('a game export\'s HTTTX text', () => {
+    it('reads back to the turns written, the opening\'s and a six on the first stone of the last turn among them, its header passed over', () => {
+        const won = read(firstStoneWin);
+        const text = writeHtttx(won.turns, {
+            name: `Autumn [round] robin; round 2, game 1 of 2`,
+            platform: `HeXO Arena`,
+            startedAt: new Date(`2026-10-01T12:00:00Z`),
+            cross: `devbot-b`,
+            circle: `deleted bot`,
+            timeControl: { mode: `match`, mainTimeMs: 300_000, incrementMs: 3_000 },
+            result: { winner: `x`, reason: `six-in-a-row` },
+        });
+        expect(text.split(`\n`)[0]).toBe(
+            `version[1]name[Autumn (round) robin, round 2, game 1 of 2]platform[HeXO Arena]utcdatetime[2026-10-01 12:00:00]playercross[devbot-b]playercircle[deleted bot]timecontrol[300+3]endreason[win]winner[cross];`,
+        );
+        const line = read(text);
+        expect(line.turns).toEqual(won.turns);
+        expect(line.win?.player).toBe(0);
+        expect(writeGame(line.turns)).toBe(firstStoneWin);
     });
 });
 

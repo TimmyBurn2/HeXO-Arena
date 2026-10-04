@@ -179,6 +179,10 @@ import {
     duelStopForbiddenErrorCodes,
     duelStopPath,
     duelBotsPath,
+    duelExportPath,
+    duelGamesMax,
+    gameExportGlobalLimit,
+    gameExportLimit,
     duelBotStatesSchema,
     duelGameCounts,
     liveGamesQuerySchema,
@@ -187,7 +191,10 @@ import {
     tournamentEntryPath,
     tournamentEntryRequestSchema,
     tournamentEntrySchema,
+    tournamentExportPath,
+    tournamentGamesMax,
     tournamentListPastCap,
+    tournamentListQuerySchema,
     tournamentListSchema,
     tournamentPath,
     presenceGraceMs,
@@ -341,6 +348,19 @@ function registerSharedComponents(registry: OpenAPIRegistry, surface: `site` | `
             `The body is larger than ${kib(requestBodyLimitBytes)} KiB (payload_too_large).`,
             payloadTooLargeError,
         ),
+        exportLimited: registry.registerComponent('responses', 'ExportLimited', {
+            description: `Exports are downloaded at most ${rateText(gameExportLimit)} per client, and ${rateText(gameExportGlobalLimit)} across callers (rate_limited); or too many requests. Retry after Retry-After.`,
+            headers: { 'Retry-After': retryAfter },
+            content: json(rateLimitedError),
+        }).ref,
+        gameExport: registry.registerComponent('responses', 'GameExport', {
+            description: [
+                `A zip archive, stored without compression: one HTTTX v1 file per finished game, numbered in play order and named for its sides (01-x-vs-o.htttx), and games.csv, a row per game.`,
+                `Each file carries the HTTTX v1 header (name, platform, utcdatetime as the game's start, playercross, playercircle, timecontrol for a match clock, endreason and winner where v1 defines them), then the turns from the origin, the opening's stones among them.`,
+            ].join(` `),
+            headers: { 'Content-Disposition': { description: `An attachment with a plain ASCII file name.`, schema: { type: 'string' } } },
+            content: { 'application/zip': { schema: { type: 'string', format: 'binary' } } },
+        }).ref,
         archiveLimited: registry.registerComponent('responses', 'ArchiveLimited', {
             description: `A finished game is read at most ${rateText(archiveReadLimit)} per client, and ${rateText(archiveReadGlobalLimit)} across callers (rate_limited); or too many requests. Retry after Retry-After.`,
             headers: { 'Retry-After': retryAfter },
@@ -1150,9 +1170,12 @@ function registerTournamentPaths(registry: OpenAPIRegistry, shared: SharedCompon
         operationId: 'listTournaments',
         tags: ['Tournaments'],
         security: [],
-        description: `The running tournament, up to ${String(tournamentWaitingCap)} waiting, and the latest ${String(tournamentListPastCap)} over. The operator schedules each one: a paired round robin of bots, one per owner.`,
+        description: `The running tournament, up to ${String(tournamentWaitingCap)} waiting, and the latest ${String(tournamentListPastCap)} over, of every bot or of the one named, an unknown bot answering not_found. The operator schedules each one: a paired round robin of bots, one per owner.`,
+        request: { query: tournamentListQuerySchema },
         responses: {
             200: { description: `The tournaments.`, content: { 'application/json': { schema: tournamentListSchema } } },
+            400: shared.badRequest,
+            404: shared.notFound,
         },
     });
 
@@ -1168,6 +1191,22 @@ function registerTournamentPaths(registry: OpenAPIRegistry, shared: SharedCompon
         responses: {
             200: { description: `The tournament.`, content: { 'application/json': { schema: tournamentDetailSchema } } },
             404: shared.notFound,
+        },
+    });
+
+    registry.registerPath({
+        method: 'get',
+        path: tournamentExportPath,
+        summary: `Download a tournament's games.`,
+        operationId: 'exportTournament',
+        tags: ['Tournaments'],
+        security: [],
+        description: `Every game over so far, at most ${String(tournamentGamesMax)}, numbered by round, pairing, and game, any game under way left out; games.csv names each game's round, and standings.csv holds the standings as they stand.`,
+        parameters: [tournamentId],
+        responses: {
+            200: shared.gameExport,
+            404: shared.notFound,
+            429: shared.exportLimited,
         },
     });
 
@@ -1302,6 +1341,22 @@ function registerDuelPaths(registry: OpenAPIRegistry, shared: SharedComponents) 
         responses: {
             200: { description: `The duel.`, content: { 'application/json': { schema: duelDetailSchema } } },
             404: shared.notFound,
+        },
+    });
+
+    registry.registerPath({
+        method: 'get',
+        path: duelExportPath,
+        summary: `Download a duel's games.`,
+        operationId: 'exportDuel',
+        tags: ['Duels'],
+        security: [],
+        description: `Every game over so far, at most ${String(duelGamesMax)}, numbered as the duel numbers them, the one under way left out; games.csv names each game's pair, and a test's adds each bot's version as the test began.`,
+        parameters: [duelId],
+        responses: {
+            200: shared.gameExport,
+            404: shared.notFound,
+            429: shared.exportLimited,
         },
     });
 

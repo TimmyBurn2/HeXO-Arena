@@ -88,6 +88,7 @@ import {
     type TournamentEntry,
     type TournamentGame,
     type TournamentStanding,
+    type TournamentPlace,
     type TournamentSummary,
 } from '@hexo-arena/contract';
 
@@ -769,6 +770,38 @@ export const duelGameRows: FinishedGameEntry[] = [
     },
 ];
 
+/** Games of the running and the finished tournament as the history lists them. */
+export const tournamentGameRows: FinishedGameEntry[] = [
+    {
+        gameId: `finished`,
+        players: { x: seat.driftwood, o: seat.ember },
+        winner: `o`,
+        reason: `six-in-a-row`,
+        timeControl: { mode: `turn`, turnTimeMs: 10_000 },
+        openingPlies: 5,
+        turns: 31,
+        finishedAt: hoursAgo(0.05),
+        rated: true,
+        voided: false,
+        tournament: { id: `t_autumnrobin1`, name: `Autumn round robin`, round: 2, game: 1 },
+        analyses: 0,
+    },
+    {
+        gameId: `summer-final`,
+        players: { x: seat.sealbot, o: seat.hextide },
+        winner: `x`,
+        reason: `timeout`,
+        timeControl: { mode: `turn`, turnTimeMs: 10_000 },
+        openingPlies: 5,
+        turns: 44,
+        finishedAt: hoursAgo(199),
+        rated: true,
+        voided: false,
+        tournament: { id: `t_summercup202`, name: `Summer cup`, round: 3, game: 1 },
+        analyses: 0,
+    },
+];
+
 /** A duel's live game and a test's, as their pages read them. */
 export const duelGameSnapshots: Record<string, GameSnapshot> = {
     'duel-game': {
@@ -980,7 +1013,16 @@ function summaryOf(detail: TournamentDetail): TournamentSummary {
         maxEntrants: detail.maxEntrants,
         winner: detail.status === `finished` && top !== undefined ? { name: top.bot, ownerName: top.ownerName } : null,
         round: detail.status === `running` ? { current: 1 + detail.rounds.findIndex((round) => round.pairings.some((pairing) => pairing.games.some((game) => game.outcome === `pending` || game.outcome === `live`))), of: detail.rounds.length } : null,
+        ...(detail.endedAt === null ? {} : { endedAt: detail.endedAt }),
     };
+}
+
+// A bot's entry and where it stands, as the list for that bot names it.
+function placeOf(detail: TournamentDetail, bot: string): TournamentPlace | null {
+    const entry = detail.entries.find((each) => each.bot === bot);
+    if (entry === undefined) return null;
+    const line = detail.standings.find((each) => each.bot === bot);
+    return { state: entry.state, ...(entry.reason === undefined ? {} : { reason: entry.reason }), rank: line?.rank ?? null, points: line?.points ?? null };
 }
 
 const midCells: GameSnapshot[`board`][`cells`] = [
@@ -1492,6 +1534,9 @@ function finishedPage(state: World, params: URLSearchParams): { status: 200; bod
         if (query.clock !== undefined && game.timeControl.mode !== query.clock) return false;
         if (query.opening !== undefined && String(game.openingPlies) !== query.opening) return false;
         if (query.analyzed === `1` && game.analyses === 0) return false;
+        if (query.event === `duel` && game.duel === undefined) return false;
+        if (query.event === `tournament` && game.tournament === undefined) return false;
+        if (query.event === `none` && (game.duel !== undefined || game.tournament !== undefined)) return false;
         if (query.tests === undefined && game.test === true) return false;
         return query.before === undefined || Date.parse(game.finishedAt) < Date.parse(`${query.before}T00:00:00Z`);
     });
@@ -2009,7 +2054,12 @@ export async function serve(page: Page, state: World): Promise<void> {
             return;
         }
         if (path === `/api/tournaments` && method === `GET`) {
-            const listed = state.tournaments.map(summaryOf);
+            const bot = url.searchParams.get(`bot`);
+            const listed = state.tournaments.flatMap((detail): TournamentSummary[] => {
+                if (bot === null) return [summaryOf(detail)];
+                const place = placeOf(detail, bot);
+                return place === null ? [] : [{ ...summaryOf(detail), bot: place }];
+            });
             await json(
                 route,
                 200,

@@ -1,7 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
 import type { Me } from '@hexo-arena/contract';
 import { looks, wear } from './matrix';
-import { analyzerBots, bots, duelBots, duelFixtures, heldBots, liveGames, longReadings, playBots, rivalry, serve, signup, tournaments, world, type World } from './mock-api';
+import { analyzerBots, bots, duelBots, duelFixtures, duelGameRows, heldBots, keptNames, liveGames, longReadings, playBots, rivalry, serve, signup, tournamentGameRows, tournaments, world, type World } from './mock-api';
 
 const visitors: readonly { name: string; me: Me }[] = [
     { name: `signed-out`, me: null },
@@ -31,7 +31,9 @@ const screens: readonly { name: string; path: string; world?: Partial<World>; th
     },
     { name: `a duel`, path: `/play/duels/${duelFixtures.live.id}`, world: { bots: duelBots, duels: [duelFixtures.live] } },
     { name: `a test`, path: `/play/duels/${duelFixtures.test.id}`, world: { bots: duelBots, duels: [duelFixtures.test] } },
+    { name: `a duel over, its games to export`, path: `/play/duels/${duelFixtures.rated.id}`, world: { bots: duelBots, duels: [duelFixtures.rated] } },
     { name: `games`, path: `/games` },
+    { name: `games of duels and tournaments`, path: `/games`, world: { finished: [...tournamentGameRows, ...duelGameRows, ...keptNames] } },
     { name: `a head-to-head`, path: `/games?player=hextide&vs=quietlake`, world: { finished: rivalry(30) } },
     { name: `live games`, path: `/games/live` },
     { name: `the analysis board`, path: `/analysis` },
@@ -57,9 +59,11 @@ const screens: readonly { name: string; path: string; world?: Partial<World>; th
     { name: `a waiting tournament`, path: `/tournaments/t_wintercup202` },
     { name: `bots`, path: `/bots` },
     { name: `a bot page`, path: `/bots/sealbot` },
+    { name: `a bot page with its tournaments`, path: `/bots/hextide`, world: { tournaments } },
     { name: `an analyzer's page`, path: `/bots/kestrel`, world: { bots: [...bots, ...analyzerBots] } },
     { name: `build a bot`, path: `/connect` },
     { name: `profile`, path: `/profile` },
+    { name: `profile with duels and tests`, path: `/profile`, world: { bots: duelBots, duels: [{ ...duelFixtures.rated, startedBy: `quinn` }, { ...duelFixtures.live, startedBy: `quinn` }] } },
     {
         name: `profile at the bot cap, or with no bots for the long name`,
         path: `/profile`,

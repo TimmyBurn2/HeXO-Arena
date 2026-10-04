@@ -27,7 +27,7 @@ import { and, desc, eq, inArray, isNotNull, isNull, lt, lte, sql, type SQL, type
 import { alias } from 'drizzle-orm/sqlite-core';
 import type { FastifyInstance } from 'fastify';
 import type { Query } from './db';
-import { bots, duels, gameRatings, games, moves, users } from './db/schema';
+import { bots, duels, gameRatings, games, moves, tournamentPairings, tournaments, users } from './db/schema';
 import { seatLevelsOf } from './game-store';
 import type { PlayerRef } from './rating';
 import { ratesSomebody } from './rating-store';
@@ -101,13 +101,28 @@ function kindFilter(kind: Filters[`kind`]): SQL | undefined {
     }
 }
 
+// Each event reads through its own partial index, written as the index writes it.
+function eventFilter(event: Filters[`event`]): SQL | undefined {
+    switch (event) {
+        case `duel`:
+            return sql`${games.duelId} is not null`;
+        case `tournament`:
+            return sql`${games.pairingId} is not null`;
+        case `none`:
+            return sql`+${games.duelId} is null and +${games.pairingId} is null`;
+        case undefined:
+            return undefined;
+    }
+}
+
 // Tests are left out unless asked. With nothing else to narrow the list,
 // the term is written as the partial index of the games shown writes it,
 // a literal the planner can match; beside a filter with an index of its own,
 // the unary plus keeps the term from matching, so that filter's index is read.
 function testsLeftOut(filters: Filters, named: boolean): SQL | undefined {
     if (filters.tests !== undefined) return undefined;
-    const narrowed = named || [filters.kind, filters.result, filters.reason, filters.clock, filters.opening, filters.before, filters.analyzed].some((value) => value !== undefined);
+    const narrowed =
+        named || [filters.kind, filters.event, filters.result, filters.reason, filters.clock, filters.opening, filters.before, filters.analyzed].some((value) => value !== undefined);
     return narrowed ? sql`+${games.test} = 0` : sql`${games.test} = 0`;
 }
 
@@ -118,6 +133,7 @@ function shared(filters: Filters, before: Bound | null, named: boolean): (SQL | 
         isNotNull(games.finishSeq),
         before === null ? undefined : and(lte(games.finishSeq, before.seq), lt(games.finishedAt, before.at)),
         kindFilter(filters.kind),
+        eventFilter(filters.event),
         filters.result === `none` ? isNull(games.winner) : undefined,
         filters.reason === undefined ? undefined : eq(games.finishReason, filters.reason),
         filters.clock === undefined ? undefined : sql`${games.timeControl} ->> '$.mode' = ${filters.clock}`,
@@ -268,7 +284,8 @@ function seatOf(shown: ShownName, kind: GamePlayer[`kind`], before: number | nul
     };
 }
 
-function entriesOf(query: Query, ids: readonly string[]): FinishedGameEntry[] {
+/** Finished games by id as the history lists them, newest first. */
+export function finishedEntriesOf(query: Query, ids: readonly string[]): FinishedGameEntry[] {
     if (ids.length === 0) return [];
     const rows = query
         .select({
@@ -297,6 +314,10 @@ function entriesOf(query: Query, ids: readonly string[]): FinishedGameEntry[] {
             duelId: games.duelId,
             duelGame: games.duelGame,
             duelGames: duels.games,
+            tournamentId: tournaments.id,
+            tournamentName: tournaments.name,
+            tournamentRound: tournamentPairings.round,
+            pairingGame: games.pairingGame,
             test: games.test,
             moves: sql<number>`(select count(*) from ${moves} where ${moves.gameId} = ${games.id})`,
             xBefore: xRatings.ratingBefore,
@@ -310,6 +331,8 @@ function entriesOf(query: Query, ids: readonly string[]): FinishedGameEntry[] {
         .leftJoin(challengerBots, eq(games.challengerBotId, challengerBots.id))
         .leftJoin(destBots, eq(games.destBotId, destBots.id))
         .leftJoin(duels, eq(duels.id, games.duelId))
+        .leftJoin(tournamentPairings, eq(tournamentPairings.id, games.pairingId))
+        .leftJoin(tournaments, eq(tournaments.id, tournamentPairings.tournamentId))
         .leftJoin(xRatings, and(eq(xRatings.gameId, games.id), eq(xRatings.side, `x`)))
         .leftJoin(oRatings, and(eq(oRatings.gameId, games.id), eq(oRatings.side, `o`)))
         .where(inArray(games.id, [...ids]))
@@ -360,6 +383,9 @@ function entriesOf(query: Query, ids: readonly string[]): FinishedGameEntry[] {
             voided: row.voidedAt !== null,
             ...(row.unratedByChoice === 1 ? { unratedByChoice: true } : {}),
             ...(row.test === 1 ? { test: true as const } : {}),
+            ...(row.tournamentId === null || row.tournamentName === null || row.tournamentRound === null || (row.pairingGame !== 1 && row.pairingGame !== 2)
+                ? {}
+                : { tournament: { id: row.tournamentId, name: row.tournamentName, round: row.tournamentRound, game: row.pairingGame } }),
             ...(row.duelId === null || row.duelGame === null || row.duelGames === null ? {} : { duel: { id: row.duelId, game: row.duelGame, of: row.duelGames } }),
             analyses: analyzed.get(row.id) ?? 0,
         };
@@ -383,7 +409,7 @@ export function listFinishedGames(query: Query, request: FinishedGamesQuery): Fi
     const statement = pageQuery(query, resolved, before);
     const rows = statement === null ? [] : query.all<{ id: string; seq: number }>(statement);
     return {
-        games: entriesOf(query, rows.map((row) => row.id)),
+        games: finishedEntriesOf(query, rows.map((row) => row.id)),
         page: resolved.page,
         pages: Math.min(finishedGamesPageCap, Math.ceil(total / finishedGamesPageSize)),
         total,

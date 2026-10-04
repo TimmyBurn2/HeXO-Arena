@@ -231,10 +231,42 @@ test('Home counts the live duels and leaves tests out, and Bot duels narrowed to
 
 test('Games shows a duel\'s games with their caption, and a test\'s only while Show tests is on', async ({ page }) => {
     await open(page, `/games`, dueling({ finished: [...duelGameRows, ...keptNames] }));
-    await expect(page.getByText(`Duel, game 3 of 10`)).toBeVisible();
-    await expect(page.getByText(`Test, game 22 of 50`)).toHaveCount(0);
+    await expect(page.getByRole(`link`, { name: `Duel, game 3 of 10` })).toBeVisible();
+    await expect(page.getByRole(`link`, { name: `Test, game 22 of 50` })).toHaveCount(0);
     await page.getByRole(`switch`, { name: `Show tests` }).check();
-    await expect(page.getByText(`Test, game 22 of 50`)).toBeVisible();
+    await expect(page.getByRole(`link`, { name: `Test, game 22 of 50` })).toBeVisible();
     await page.getByRole(`switch`, { name: `Show tests` }).uncheck();
-    await expect(page.getByText(`Test, game 22 of 50`)).toHaveCount(0);
+    await expect(page.getByRole(`link`, { name: `Test, game 22 of 50` })).toHaveCount(0);
+});
+
+for (const width of [1280, 390]) {
+    test(`a duel's page offers its games over so far as one download, and none before the first is over, at ${String(width)} px`, async ({ page }) => {
+        await open(page, `/play/duels/${duelFixtures.rated.id}`, dueling(), width);
+        const exported = page.getByRole(`link`, { name: `Export games` });
+        await expect(exported).toHaveAttribute(`href`, `/api/duels/${duelFixtures.rated.id}/export`);
+        // The browser downloads past the page's routes, so the server's own tests read the archive.
+        await expect(exported).toHaveAttribute(`download`, ``);
+        const fresh = duelFixture({ id: `d_freshduel001`, first: duelBotOf(listed(`hextide`)), second: duelBotOf(listed(`devbot-a`)), kind: `duel`, startedBy: `ana`, games: 2, rated: false, outcomes: [`live`], live: true, status: `running` });
+        await open(page, `/play/duels/${fresh.id}`, dueling({ duels: [fresh] }), width);
+        await expect(page.locator(`.duel-head`)).toBeVisible();
+        await expect(page.getByRole(`link`, { name: `Export games` })).toHaveCount(0);
+    });
+
+    test(`Profile lists the reader's latest duels and tests, and its link opens Bot duels on Yours, at ${String(width)} px`, async ({ page }) => {
+        await open(page, `/profile`, dueling(), width);
+        const block = page.locator(`.your-duels`);
+        await expect(block.getByRole(`heading`, { name: `Your duels and tests` })).toBeVisible();
+        await expect(block.locator(`.duel-row`)).toHaveCount(3);
+        expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+        await block.getByRole(`link`, { name: `All your duels and tests` }).click();
+        await expect(page).toHaveURL(/\/play\/duels\?list=yours$/u);
+        await expect(page.getByRole(`button`, { name: `Yours` })).toHaveAttribute(`aria-pressed`, `true`);
+    });
+}
+
+test('Profile leaves the duels block out for a reader with no duel or test', async ({ page }) => {
+    await open(page, `/profile`, world());
+    await expect(page.getByRole(`heading`, { name: `Your bots` })).toBeVisible();
+    await expect(page.locator(`.rating-chart-plot`)).toBeVisible();
+    await expect(page.locator(`.your-duels`)).toHaveCount(0);
 });

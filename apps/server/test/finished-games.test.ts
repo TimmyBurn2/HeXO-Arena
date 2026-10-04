@@ -6,6 +6,7 @@ import { insertBotGame, insertGame, insertMove, recordFinish, type OpeningCell }
 import { deleteUser, voidGames } from '../src/moderation';
 import { explainFinishedGames } from '../src/finished-games';
 import { createUserWithExactName } from '../src/users';
+import { seedDuel, seedTournament } from './event-fixtures';
 import { createTestApp, roomyLimits, type TestApp } from './helpers';
 
 const turnClock = { mode: `turn` as const, turnTimeMs: 20_000 };
@@ -310,6 +311,69 @@ describe('GET /api/games/finished', () => {
         });
     });
 
+    describe('events', () => {
+        let games: Record<string, string>;
+        let tournamentId: string;
+        let duelId: string;
+
+        beforeEach(() => {
+            tournamentId = `t_autumnrobin1`;
+            seedTournament(query, {
+                id: tournamentId,
+                name: `Autumn round robin`,
+                status: `running`,
+                startsAt: Date.UTC(2026, 9, 1, 10) / 1000,
+                entries: [
+                    { botId: id(`alpha`), ownerId: id(`ann`), state: `playing` },
+                    { botId: id(`beta`), ownerId: id(`bob`), state: `playing` },
+                ],
+                pairings: [{ id: `p_round2alpha`, round: 2, first: id(`alpha`), second: id(`beta`), game1: `played`, game1Seat: `second`, game2: `live` }],
+            });
+            duelId = seedDuel(query, { startedBy: id(`ann`), first: id(`alpha`), second: id(`gamma`) });
+            const testId = seedDuel(query, { startedBy: id(`bob`), first: id(`beta`), second: id(`gamma`), test: true, games: 20 });
+            const tagged = (challenger: string, dest: string, tag: NonNullable<Parameters<typeof insertBotGame>[1][`tag`]>, marks: { unratedByChoice?: boolean; test?: boolean } = {}) =>
+                insertBotGame(query, { challengerBotId: id(challenger), destBotId: id(dest), challengerSide: `x`, timeControl: turnClock, opening: opening(5), tag, ...marks });
+            games = {
+                plain: finish(bots(`alpha`, `beta`, `x`), `x`),
+                tournament: finish(tagged(`alpha`, `beta`, { kind: `pairing`, id: `p_round2alpha`, game: 1 }), `o`),
+                duel: finish(tagged(`alpha`, `gamma`, { kind: `duel`, id: duelId, game: 1 }, { unratedByChoice: true }), `x`),
+                test: finish(tagged(`beta`, `gamma`, { kind: `duel`, id: testId, game: 1 }, { unratedByChoice: true, test: true }), `o`),
+                human: finish(human(`ann`, `alpha`, `x`), `x`),
+            };
+        });
+
+        function named(...keys: string[]): string[] {
+            return keys.map((key) => games[key] ?? ``);
+        }
+
+        it('names a tournament game\'s tournament, its round, and which game of the pairing it is, and a duel game\'s duel', async () => {
+            const listed = new Map((await page(`?tests=1`)).games.map((game) => [game.gameId, game]));
+            expect(listed.get(games.tournament ?? ``)?.tournament).toEqual({ id: tournamentId, name: `Autumn round robin`, round: 2, game: 1 });
+            expect(listed.get(games.duel ?? ``)).toMatchObject({ duel: { id: duelId, game: 1, of: 2 } });
+            expect(listed.get(games.duel ?? ``)?.tournament).toBeUndefined();
+            expect(listed.get(games.plain ?? ``)?.tournament).toBeUndefined();
+            expect(listed.get(games.plain ?? ``)?.duel).toBeUndefined();
+        });
+
+        it.each([
+            [`?event=tournament`, [`tournament`]],
+            [`?event=duel`, [`duel`]],
+            [`?event=duel&tests=1`, [`test`, `duel`]],
+            [`?event=none`, [`human`, `plain`]],
+            [`?event=none&player=alpha`, [`human`, `plain`]],
+            [`?event=duel&player=gamma&tests=1`, [`test`, `duel`]],
+            [`?event=tournament&player=beta&result=won`, [`tournament`]],
+            [`?event=tournament&kind=human-bot`, []],
+        ])('%s', async (search, expected) => {
+            expect(await gameIds(search)).toEqual(named(...expected));
+        });
+
+        it('counts the record of the player named over the event\'s games alone', async () => {
+            expect((await page(`?player=alpha&event=tournament`)).record).toMatchObject({ games: 1, won: 0, lost: 1 });
+            expect((await page(`?player=alpha&event=none`)).record).toMatchObject({ games: 2, won: 1, lost: 1 });
+        });
+    });
+
     it('answers an identical query from memory for five seconds', async () => {
         finish(bots(`alpha`, `beta`, `x`), `x`);
         const first = await page(`?player=alpha`);
@@ -339,6 +403,11 @@ describe('GET /api/games/finished', () => {
         [{ clock: `match` }, [`games_clock_finish_idx`]],
         [{ opening: `5` }, [`games_opening_finish_idx`]],
         [{ before: `2026-10-01` }, [`games_finished_at_idx`, `games_finish_seq_idx`]],
+        [{ event: `duel` }, [`games_duels_finish_idx`]],
+        [{ event: `duel`, tests: `1` }, [`games_duels_finish_idx`]],
+        [{ event: `tournament` }, [`games_tournament_finish_idx`]],
+        [{ event: `none` }, [`games_no_event_finish_idx`]],
+        [{ event: `tournament`, player: `alpha` }, [`games_bot_finish_idx`, `games_challenger_finish_idx`, `games_dest_finish_idx`]],
     ] as const)('reads %j through its index, sorting no more than a page per seat and nothing for the record', (filters, indexes) => {
         const plan = explainFinishedGames(query, filters);
         expect(plan.filter((line) => /(?:SCAN|SEARCH) games\b/u.test(line) && !line.includes(`USING`))).toEqual([]);

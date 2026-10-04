@@ -50,3 +50,16 @@ test('a standings row opens its pairings from a 44 px target on a phone', async 
     expect(Math.round(box?.width ?? 0)).toBeGreaterThanOrEqual(44);
     expect(Math.round(box?.height ?? 0)).toBeGreaterThanOrEqual(44);
 });
+
+for (const width of [1280, 390]) {
+    test(`a running tournament offers its games over so far as one download, and a waiting one nothing to download, at ${String(width)} px`, async ({ page }) => {
+        await open(page, `/tournaments/t_autumnrobin1`, width);
+        const exported = page.getByRole(`link`, { name: `Export games` });
+        await expect(exported).toHaveAttribute(`href`, `/api/tournaments/t_autumnrobin1/export`);
+        // The browser downloads past the page's routes, so the server's own tests read the archive.
+        await expect(exported).toHaveAttribute(`download`, ``);
+        await open(page, `/tournaments/t_wintercup202`, width);
+        await expect(page.getByRole(`heading`, { name: `Entered (2 of 12)` })).toBeVisible();
+        await expect(page.getByRole(`link`, { name: `Export games` })).toHaveCount(0);
+    });
+}
