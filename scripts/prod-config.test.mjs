@@ -30,6 +30,8 @@ describe(`the production Caddyfile`, () => {
         assert.match(headers, /Content-Security-Policy "default-src 'none'; script-src 'self';/u);
         assert.doesNotMatch(headers, /unsafe-/u);
         for (const name of [`Strict-Transport-Security`, `X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy`, `frame-ancestors 'none'`]) assert.ok(headers.includes(name), name);
+        // The privacy policy says a link to another site carries no address of the page it left.
+        assert.match(headers, /Referrer-Policy "(?:same-origin|no-referrer)"/u);
         assert.match(block(caddyfile, `{$HEXO_ARENA_DOMAIN} {`), /^\{\$HEXO_ARENA_DOMAIN\} \{\n\timport security_headers\n/u);
         assert.match(block(caddyfile, `handle_errors 500 502 503 504 {`), /\n\t\timport security_headers\n/u);
     });

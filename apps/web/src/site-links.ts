@@ -32,6 +32,7 @@ export const siteLinks: readonly SiteLink[] = [
     { kind: `page`, label: text.shell.links.credits, to: `/credits` },
     { kind: `external`, label: text.shell.links.botApi, href: botApiRepository },
     sourceLink,
+    { kind: `external`, label: text.shell.links.feedback, href: `${siteRepository}/issues/new/choose` },
 ];
 
 /** The licenses of the code and the font the site ships, a file the build writes at the site's root. */

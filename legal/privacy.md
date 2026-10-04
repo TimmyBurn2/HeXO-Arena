@@ -6,7 +6,7 @@ The site never shows this note.
 
 # Privacy policy
 
-Last updated 3 October 2026
+Last updated 4 October 2026
 
 ## Who is responsible
 
@@ -39,6 +39,18 @@ After that, the user ID stays with your account, and your username and display n
 
 Legal basis: Art. 6(1)(b) GDPR.
 Source: Discord (Art. 14(2)(f) GDPR).
+
+## Feedback on GitHub
+
+The Feedback link leads to the site's public repository on GitHub, where [GitHub's privacy statement](https://docs.github.com/en/site-policy/privacy-policies/github-general-privacy-statement) applies; GitHub (GitHub, Inc. or GitHub B.V.) is a separate controller.
+
+What you post there, such as an issue or a comment, is public under your GitHub name.
+The operator reads it to fix and improve the site.
+Like every link to another site, it carries no address of the page you came from.
+
+Requests about your data go to the operator, never into a public issue; for your GitHub account itself, ask GitHub.
+
+Legal basis: Art. 6(1)(f) GDPR; legitimate interest: a working site.
 
 ## Your account and public name
 
