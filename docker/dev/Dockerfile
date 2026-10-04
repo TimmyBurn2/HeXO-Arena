@@ -1,4 +1,4 @@
-FROM node:24-slim
+FROM node:26-slim
 
 RUN npm install --global pnpm@12.6.0
 

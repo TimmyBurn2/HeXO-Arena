@@ -75,7 +75,7 @@ describe(`the production Dockerfile`, () => {
     it(`starts both stages from one base pinned by digest`, () => {
         const bases = [...dockerfile.matchAll(/^FROM (\S+)/gmu)].map((match) => match[1]);
         assert.equal(bases.length, 2);
-        assert.match(bases[0] ?? ``, /^node:24-slim@sha256:[\da-f]{64}$/u);
+        assert.match(bases[0] ?? ``, /^node:26-slim@sha256:[\da-f]{64}$/u);
         assert.equal(bases[1], bases[0]);
     });
 
