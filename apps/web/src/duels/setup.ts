@@ -9,6 +9,7 @@ import {
     duelPerBotCap,
     nameKeyOf,
     openingPliesSchema,
+    pagePath,
     scheduledIncrementMs,
     scheduledMainMs,
     scheduledTurnMs,
@@ -276,7 +277,8 @@ export function setupPath(setup: DuelSetup): string {
     if (setup.clock !== null) params.set(`clock`, clockParam(setup.clock));
     if (setup.opening !== null) params.set(`opening`, String(setup.opening));
     const query = params.toString();
-    return query === `` ? `/play/duels` : `/play/duels?${query}`;
+    const path = pagePath(`bot-duel`, {});
+    return query === `` ? path : `${path}?${query}`;
 }
 
 /** The setup a link names; what it names wrongly falls back to the default, and a bot no longer listed leaves its slot empty later. */
@@ -317,7 +319,8 @@ export function gamesDuelsPath(view: (typeof duelListViews)[number] | null = nul
     const params = new URLSearchParams();
     if (bot !== null) params.set(`bot`, bot);
     if (view !== null) params.set(`list`, view);
-    return params.size === 0 ? `/games/duels` : `/games/duels?${params.toString()}`;
+    const path = pagePath(`games-duels`, {});
+    return params.size === 0 ? path : `${path}?${params.toString()}`;
 }
 
 /**
@@ -332,7 +335,7 @@ export function movedListPath(search: string): string | null {
 
 /** A duel's page. */
 export function duelPagePath(id: string): string {
-    return `/duels/${encodeURIComponent(id)}`;
+    return pagePath(`duel`, { id });
 }
 
 /** The bots a picker lists for a slot: by rating, the highest first, then by name. */

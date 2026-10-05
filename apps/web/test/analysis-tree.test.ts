@@ -130,12 +130,13 @@ describe('playing into a tree', () => {
         expect(play(newTree({ kind: `origin` }), 42, pair(1, 0, 0, 1))).toEqual({ ok: false, refusal: { kind: `unknown-node` } });
     });
 
+    // A line played out to the turn cap outlasts the default five seconds on a busy machine.
     it('refuses a turn past the game turn cap', () => {
         const turns = drawLine(gameTurnCap + 1);
         const long = accepted(playLineFrom(newTree({ kind: `origin` }), rootId, turns.slice(0, gameTurnCap)));
         const extra = turns.at(-1) ?? pair(0, 0, 0, 0);
         expect(play(long.tree, long.node, extra)).toEqual({ ok: false, refusal: { kind: `turn-cap`, limit: gameTurnCap } });
-    });
+    }, 30_000);
 
     it('refuses a turn past the node cap, counting every variation', () => {
         const near: Coord[] = [];

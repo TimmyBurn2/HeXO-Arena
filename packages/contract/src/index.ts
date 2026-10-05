@@ -30,6 +30,7 @@ export * from './limits';
 export * from './meta';
 export * from './names';
 export * from './notation';
+export * from './pages';
 export * from './players';
 export * from './rating';
 export * from './reports';

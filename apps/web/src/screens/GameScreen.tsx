@@ -2,6 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, typ
 import { clockText, gameMeta, levelFacts, turnsOnBoard, type DuelDetail, type FinishedGamesRecord, type GameHeadline, type GameSnapshot, type GameTournament, type TournamentDetail } from '@hexo-arena/contract';
 import { gameLink } from '../analysis/links';
 import { fetchDuel, fetchFinishedGames, fetchTournament } from '../api/client';
+import { useAsync } from '../api/use-async';
 import { duelPagePath } from '../duels/setup';
 import { noWinnerCount, pointsText, signed, standingText, sweptBy } from '../duels/words';
 import { BotBadge, PlayerName, seatName, seatsRateNobody, Swatch } from '../components/player';
@@ -502,30 +503,17 @@ interface Meetings {
 
 // A guest or a deleted player is no name the history takes, so neither
 // seat has a record to read; the record is read again at the finish,
-// which adds this game to it.
+// which adds this game to it, and a read that fails leaves the line out.
 function useMeetings(snapshot: GameSnapshot): Meetings | null {
     const { x, o } = snapshot.players;
-    const seated = (player: typeof x) => ({ name: player.name, kind: player.kind === `bot` ? (`bot` as const) : (`human` as const) });
     const kept = [x, o].every((player) => player.kind !== `guest` && player.deleted !== true);
     const finished = snapshot.status === `finished`;
     const test = snapshot.test === true;
-    const [meetings, setMeetings] = useState<Meetings | null>(null);
-    useEffect(() => {
-        if (!kept) return;
-        let cancelled = false;
-        // A test meets only in tests, which the list leaves out unless asked.
-        fetchFinishedGames({ player: x.name, vs: o.name, ...(test ? { tests: `1` as const } : {}) }).then(
-            (page) => {
-                if (!cancelled && page.record !== undefined) setMeetings({ x: seated(x), o: seated(o), record: page.record });
-            },
-            // The line is extra; a read that fails leaves it out.
-            () => undefined,
-        );
-        return () => {
-            cancelled = true;
-        };
-    }, [kept, x.name, o.name, finished, test]);
-    return meetings;
+    // A test meets only in tests, which the list leaves out unless asked.
+    const load = useCallback(async () => (await fetchFinishedGames({ player: x.name, vs: o.name, ...(test ? { tests: `1` as const } : {}) })).record ?? null, [x.name, o.name, test, finished]);
+    const record = useAsync(load, { enabled: kept }).data;
+    const seated = (player: typeof x) => ({ name: player.name, kind: player.kind === `bot` ? (`bot` as const) : (`human` as const) });
+    return record === null ? null : { x: seated(x), o: seated(o), record };
 }
 
 function factsOf(snapshot: GameSnapshot, duel: DuelDetail | null): (readonly [string, string])[] {
@@ -601,47 +589,21 @@ function tournamentRowOf(tag: GameTournament, tournament: TournamentDetail | nul
 }
 
 // The tournament a game belongs to, read once and again as the game ends; null until it is, or for any other game.
+// The standing is extra, so a read that fails leaves the caption alone.
 function useTournamentOf(snapshot: GameSnapshot): TournamentDetail | null {
     const id = snapshot.tournament?.id ?? null;
     const finished = snapshot.status === `finished`;
-    const [held, setHeld] = useState<TournamentDetail | null>(null);
-    useEffect(() => {
-        if (id === null) return;
-        let cancelled = false;
-        fetchTournament(id).then(
-            (read) => {
-                if (!cancelled) setHeld(read);
-            },
-            // The standing is extra; a read that fails leaves the caption alone.
-            () => undefined,
-        );
-        return () => {
-            cancelled = true;
-        };
-    }, [id, finished]);
-    return held !== null && held.id === id ? held : null;
+    const load = useCallback(async () => (id === null ? null : fetchTournament(id)), [id, finished]);
+    return useAsync(load).data;
 }
 
 // The duel a game belongs to, read once and again as the game ends; null until it is, or for any other game.
+// The row is extra, so a read that fails leaves the caption alone.
 function useDuelOf(snapshot: GameSnapshot): DuelDetail | null {
     const id = snapshot.duel?.id ?? null;
     const finished = snapshot.status === `finished`;
-    const [duel, setDuel] = useState<DuelDetail | null>(null);
-    useEffect(() => {
-        if (id === null) return;
-        let cancelled = false;
-        fetchDuel(id).then(
-            (read) => {
-                if (!cancelled) setDuel(read);
-            },
-            // The row is extra; a read that fails leaves the caption alone.
-            () => undefined,
-        );
-        return () => {
-            cancelled = true;
-        };
-    }, [id, finished]);
-    return id === null ? null : duel;
+    const load = useCallback(async () => (id === null ? null : fetchDuel(id)), [id, finished]);
+    return useAsync(load).data;
 }
 
 // The seated player reads the game from their own side; a watcher reads it

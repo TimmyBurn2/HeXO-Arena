@@ -1,5 +1,4 @@
-import { useSyncExternalStore } from 'react';
-import { readStored, writeStored } from '../stored';
+import { persistedStore, useStore } from '../store';
 
 export interface BoardSettings {
     numbers: boolean;
@@ -34,51 +33,28 @@ export function parseBoardSettings(raw: string | null): BoardSettings {
     };
 }
 
-let current: BoardSettings | null = null;
-const listeners = new Set<() => void>();
-
-function read(): BoardSettings {
-    if (current === null) {
-        current = parseBoardSettings(readStored(boardSettingsStorageKey));
-    }
-    return current;
-}
-
 // The glare is off on the root, so every stone on the page, previews
 // included, drops it at once.
 function apply(settings: BoardSettings): void {
     if (typeof document !== `undefined`) document.documentElement.dataset.glare = settings.glare ? `on` : `off`;
 }
 
-function subscribe(listener: () => void): () => void {
-    listeners.add(listener);
-    return () => {
-        listeners.delete(listener);
-    };
-}
-
-function update(changes: Partial<BoardSettings>): void {
-    current = { ...read(), ...changes };
-    writeStored(boardSettingsStorageKey, JSON.stringify(current));
-    apply(current);
-    for (const listener of listeners) listener();
-}
+const stored = persistedStore(boardSettingsStorageKey, parseBoardSettings, (settings) => JSON.stringify(settings), apply);
 
 /**
  * The rendering preferences as a store: the settings panel and the game
  * drawer write, every game board reads, and the API keeps no settings.
+ * `start` puts the stored glare choice on the root before the first render.
  */
 export const boardSettingsStore = {
-    read,
-    subscribe,
-    update,
-    /** Put the stored glare choice on the root before the first render. */
-    start(): void {
-        apply(read());
+    read: stored.read,
+    subscribe: stored.subscribe,
+    update: (changes: Partial<BoardSettings>): void => {
+        stored.set({ ...stored.read(), ...changes });
     },
+    start: stored.start,
 };
 
 export function useBoardSettings(): readonly [BoardSettings, typeof boardSettingsStore.update] {
-    const settings = useSyncExternalStore(boardSettingsStore.subscribe, read, read);
-    return [settings, boardSettingsStore.update];
+    return [useStore(stored), boardSettingsStore.update];
 }

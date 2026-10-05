@@ -196,7 +196,7 @@ describe('request logging', () => {
     it('logs a bot page by its route pattern, never by the name', async () => {
         await request(port, `GET`, `/bots/shellmarker`, {});
 
-        expect(sink.records()).toContainEqual(expect.objectContaining({ req: { method: `GET`, route: `/bots/:name` } }));
+        expect(sink.records()).toContainEqual(expect.objectContaining({ req: { method: `GET`, route: `/bots/:bot` } }));
         expect(sink.text()).not.toContain(`shellmarker`);
     });
 

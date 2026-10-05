@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useState, useSyncExternalStore } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { nameKeyOf, playMeta, type BotListing, type Level, type OpeningPlies, type TimeControl } from '@hexo-arena/contract';
-import { fetchBots, limitedFor } from '../api/client';
+import { fetchBots } from '../api/client';
 import { liveRefreshMs } from '../api/refresh';
+import { useAsync } from '../api/use-async';
 import { BotBadge, Rating } from '../components/player';
 import { ErrorFrame, SkeletonRows } from '../components/states';
 import { useMe } from '../me';
@@ -9,7 +10,7 @@ import { ClockPicker } from '../play/ClockPicker';
 import { useExpectedScore } from '../play/expected';
 import { OpeningRow } from '../play/OpeningRow';
 import { PlayHead } from '../play/PlayHead';
-import { noReservations, reservedBots } from '../play/reserved';
+import { useReserved } from '../play/reserved';
 import { RatedRow } from '../play/RatedRow';
 import { OpponentSheet, RosterList, type PickedBy } from '../play/Roster';
 import { StartArea } from '../play/StartArea';
@@ -32,7 +33,7 @@ import {
 import { Link } from '../router/Link';
 import { routePath } from '../router/route';
 import { subscribe, useRoute } from '../router/use-route';
-import { siteStatusStore } from '../site-status';
+import { useSiteStatus } from '../site-status';
 import { text } from '../text';
 import { useDocumentMeta } from '../use-document-meta';
 import './PlayScreen.css';
@@ -41,43 +42,20 @@ import './PlayScreen.css';
 // so the page reads it again on the bot lists' beat while it is in view,
 // and at once after a refusal on the bot's side.
 function useBotList() {
-    const [bots, setBots] = useState<BotListing[] | null>(null);
-    const [reserved, setReserved] = useState<ReadonlySet<string>>(noReservations);
-    const [holder, setHolder] = useState<Holder | null>(null);
-    const [reads, setReads] = useState(0);
-    const [failed, setFailed] = useState(false);
-    const [limited, setLimited] = useState<number | null>(null);
-    const reload = useCallback(async () => {
-        // The list never waits on the tournament read.
-        void reservedBots().then((held) => {
-            if (held === null) return;
-            setReserved(held.bots);
-            setHolder(held.tournament);
-        });
-        try {
-            setBots(await fetchBots(false));
-            setReads((count) => count + 1);
-            setFailed(false);
-        } catch (cause) {
-            setFailed(true);
-            setLimited(limitedFor(cause));
-        }
+    const reserved = useReserved();
+    // Each list carries how many reads have landed, so a line about the bot's state knows a newer one.
+    const landed = useRef(0);
+    const load = useCallback(async () => {
+        const bots = await fetchBots(false);
+        landed.current += 1;
+        return { bots, reads: landed.current };
     }, []);
-    useEffect(() => {
-        void reload();
-        const timer = setInterval(() => {
-            if (document.visibilityState === `visible`) void reload();
-        }, liveRefreshMs);
-        function onVisible() {
-            if (document.visibilityState === `visible`) void reload();
-        }
-        document.addEventListener(`visibilitychange`, onVisible);
-        return () => {
-            clearInterval(timer);
-            document.removeEventListener(`visibilitychange`, onVisible);
-        };
-    }, [reload]);
-    return { bots, reserved, holder, reads, failed, limited, reload };
+    const list = useAsync(load, { every: liveRefreshMs });
+    const reload = () => {
+        reserved.reload();
+        list.reload();
+    };
+    return { bots: list.data?.bots ?? null, reserved: reserved.bots, holder: reserved.tournament, reads: list.data?.reads ?? 0, failed: list.error, limited: list.limited, reload };
 }
 
 // A level in the address belongs to the bot the address names.
@@ -105,7 +83,7 @@ export function PlayScreen() {
     const [played] = useState(readPlayed);
     const list = useBotList();
     const me = useMe();
-    const paused = useSyncExternalStore(siteStatusStore.subscribe, siteStatusStore.read, siteStatusStore.read) === `paused`;
+    const paused = useSiteStatus() === `paused`;
     const [picked, setPicked] = useState<string | null>(null);
     const [opened, setOpened] = useState<string | null>(null);
     // The bot the card showed that then left the list, named in a line until the person picks.
@@ -215,7 +193,7 @@ export function PlayScreen() {
         return (
             <>
                 <PlayHead view="bot" />
-                {list.failed && bots === null ? <ErrorFrame sentence={text.play.listFailed} onRetry={() => void list.reload()} wait={list.limited} /> : <SkeletonRows />}
+                {list.failed && bots === null ? <ErrorFrame sentence={text.play.listFailed} onRetry={list.reload} wait={list.limited} /> : <SkeletonRows />}
             </>
         );
     }
@@ -273,7 +251,7 @@ export function PlayScreen() {
                     onChange={() => {
                         setSheet(true);
                     }}
-                    onRefused={() => void list.reload()}
+                    onRefused={list.reload}
                 />
             </div>
             {sheet ? (

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useId, useRef, useState, type ReactNode } from 'react';
-import { duelMeta, duelRunningPollMs, estimateMoreGames, nameKeyOf, notFoundMeta, resultSentence, turnsOnBoard, type DuelBot, type DuelDetail, type DuelGame, type DuelSide } from '@hexo-arena/contract';
-import { ApiError, createDuel, duelExportUrl, fetchDuel, limitedFor, stopDuel } from '../api/client';
+import { duelMeta, duelRunningPollMs, estimateMoreGames, nameKeyOf, notFoundMeta, pagePath, resultSentence, turnsOnBoard, type DuelBot, type DuelDetail, type DuelGame, type DuelSide } from '@hexo-arena/contract';
+import { createDuel, duelExportUrl, fetchDuel, limitedFor, stopDuel } from '../api/client';
+import { useAsync } from '../api/use-async';
 import { hexPoints } from '../board/geometry';
 import { BotBadge, PlayerName, Rating, seatName, Swatch } from '../components/player';
 import { ErrorFrame, SkeletonRows } from '../components/states';
@@ -17,6 +18,7 @@ import { Link } from '../router/Link';
 import { navigate, useRoute } from '../router/use-route';
 import { text } from '../text';
 import { useDocumentMeta } from '../use-document-meta';
+import { useNow } from '../use-now';
 import '../duels/Duels.css';
 import './HomeScreen.css';
 import './PlayScreen.css';
@@ -25,55 +27,14 @@ import './DuelScreen.css';
 // The games list shows this many pairs until the reader asks for every game.
 const pairsShown = 3;
 
-// A countdown steps once a second.
-const tickMs = 1000;
-
-type Read = { kind: `loading` } | { kind: `missing` } | { kind: `failed`; wait: number | null } | { kind: `ready`; duel: DuelDetail; at: number };
+// A duel as read, with when, which a countdown between reads counts from.
+interface Read {
+    readonly duel: DuelDetail;
+    readonly at: number;
+}
 
 // A running duel is read again on its beat while the page is in view; one over never changes.
-function useDuel(id: string): { read: Read; reload: () => void; replace: (duel: DuelDetail) => void } {
-    const [read, setRead] = useState<Read>({ kind: `loading` });
-    const load = useCallback(async () => {
-        try {
-            const duel = await fetchDuel(id);
-            setRead({ kind: `ready`, duel, at: Date.now() });
-        } catch (cause) {
-            setRead((held) =>
-                held.kind === `ready` ? held : cause instanceof ApiError && cause.status === 404 ? { kind: `missing` } : { kind: `failed`, wait: limitedFor(cause) },
-            );
-        }
-    }, [id]);
-    useEffect(() => {
-        void load();
-    }, [load]);
-    const running = read.kind === `ready` && read.duel.status === `running`;
-    useEffect(() => {
-        if (!running) return;
-        const timer = setInterval(() => {
-            if (document.visibilityState === `visible`) void load();
-        }, duelRunningPollMs);
-        return () => {
-            clearInterval(timer);
-        };
-    }, [running, load]);
-    return { read, reload: () => void load(), replace: (duel) => { setRead({ kind: `ready`, duel, at: Date.now() }); } };
-}
-
-// The time now, stepping every second while on, so a countdown between two reads still ticks.
-function useTicking(on: boolean, from: number): number {
-    const [now, setNow] = useState(from);
-    useEffect(() => {
-        if (!on) return;
-        setNow(Date.now());
-        const timer = setInterval(() => {
-            setNow(Date.now());
-        }, tickMs);
-        return () => {
-            clearInterval(timer);
-        };
-    }, [on]);
-    return on ? now : from;
-}
+const duelBeat = (read: Read) => (read.duel.status === `running` ? duelRunningPollMs : null);
 
 /**
  * A duel's page: the two bots face each other across the score, then the
@@ -83,12 +44,23 @@ function useTicking(on: boolean, from: number): number {
  */
 export function DuelScreen({ id }: { id: string }) {
     const route = useRoute();
-    const { read, reload, replace } = useDuel(id);
-    const meta = read.kind === `ready` ? duelMeta({ ...read.duel, played: 0, results: read.duel.games }) : read.kind === `missing` ? notFoundMeta : undefined;
+    const load = useCallback(async () => ({ duel: await fetchDuel(id), at: Date.now() }), [id]);
+    const read = useAsync(load, { every: duelBeat });
+    const held = read.data;
+    const meta = held !== null ? duelMeta({ ...held.duel, played: 0, results: held.duel.games }) : read.missing ? notFoundMeta : undefined;
     useDocumentMeta(route, meta?.title, meta?.description);
-    if (read.kind === `loading`) return <SkeletonRows />;
-    if (read.kind === `failed`) return <ErrorFrame sentence={text.duels.page.failed} onRetry={reload} wait={read.wait} />;
-    if (read.kind === `missing`) {
+    if (held !== null) {
+        return (
+            <DuelPage
+                duel={held.duel}
+                at={held.at}
+                onStopped={(duel) => {
+                    read.replace(() => ({ duel, at: Date.now() }));
+                }}
+            />
+        );
+    }
+    if (read.missing) {
         return (
             <div className="empty">
                 <h1>{text.duels.page.notFound.heading}</h1>
@@ -101,7 +73,8 @@ export function DuelScreen({ id }: { id: string }) {
             </div>
         );
     }
-    return <DuelPage duel={read.duel} at={read.at} onStopped={replace} />;
+    if (read.error) return <ErrorFrame sentence={text.duels.page.failed} onRetry={read.reload} wait={read.limited} />;
+    return <SkeletonRows />;
 }
 
 function DuelPage({ duel, at, onStopped }: { duel: DuelDetail; at: number; onStopped: (duel: DuelDetail) => void }) {
@@ -115,7 +88,9 @@ function DuelPage({ duel, at, onStopped }: { duel: DuelDetail; at: number; onSto
     const mayAgain = !running && viewer !== null;
     const live = duel.live[0];
     const liveGame = duel.games.find((game) => game.state === `live`) ?? null;
-    const now = useTicking(running && duel.waiting !== undefined, at);
+    const ticking = running && duel.waiting !== undefined;
+    const tick = useNow(ticking);
+    const now = ticking ? Math.max(tick, at) : at;
     const quiet = waitingQuiet(duel);
     const sentence = statusSentence(duel, now, viewer);
     const actions = useRef<HTMLDivElement>(null);
@@ -400,7 +375,7 @@ function GameRow({ duel, game }: { duel: DuelDetail; game: DuelGame }) {
     return game.gameId === null || game.state === `pending` ? (
         <div className={kind}>{body}</div>
     ) : (
-        <Link to={`/game/${encodeURIComponent(game.gameId)}`} className={kind}>
+        <Link to={pagePath(`game`, { gameId: game.gameId })} className={kind}>
             {body}
         </Link>
     );

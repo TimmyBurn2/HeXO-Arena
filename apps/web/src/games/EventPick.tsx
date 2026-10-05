@@ -1,6 +1,5 @@
-import { useEffect, useState } from 'react';
-import type { DuelSummary } from '@hexo-arena/contract';
-import { ApiError, fetchDuel, fetchDuels, fetchTournament, fetchTournaments } from '../api/client';
+import { useCallback, useState } from 'react';
+import { fetchDuel, fetchDuels, fetchTournament, fetchTournaments } from '../api/client';
 import { useAsync } from '../api/use-async';
 import { scoreText } from '../duels/words';
 import { text } from '../text';
@@ -33,23 +32,9 @@ export interface EventNames {
 
 // A read keyed by the id it answers, so a stale answer never names another event.
 function useNamed<T>(id: string | null, read: (id: string) => Promise<T>): T | `gone` | null {
-    const [held, setHeld] = useState<{ id: string; named: T | `gone` } | null>(null);
-    useEffect(() => {
-        if (id === null) return;
-        let cancelled = false;
-        read(id).then(
-            (named) => {
-                if (!cancelled) setHeld({ id, named });
-            },
-            (cause: unknown) => {
-                if (!cancelled && cause instanceof ApiError && cause.status === 404) setHeld({ id, named: `gone` });
-            },
-        );
-        return () => {
-            cancelled = true;
-        };
-    }, [id, read]);
-    return held !== null && held.id === id ? held.named : null;
+    const load = useCallback(async () => (id === null ? null : read(id)), [id, read]);
+    const named = useAsync(load, { keep: false });
+    return named.missing ? `gone` : named.data;
 }
 
 const readDuel = async (id: string): Promise<NamedDuel> => {
@@ -81,8 +66,6 @@ export function tournamentWords(named: EventNames[`tournament`]): string {
     return named === null ? chips.events.tournament : chips.tournament(named.name);
 }
 
-type DuelsRead = { kind: `loading` } | { kind: `ready`; duels: readonly DuelSummary[] } | { kind: `unknown`; bot: string } | { kind: `failed` };
-
 // A duel lasts minutes, so its day tells repeats of the same pair apart.
 function day(iso: string): string {
     return new Intl.DateTimeFormat(undefined, { dateStyle: `medium` }).format(new Date(iso));
@@ -97,25 +80,16 @@ function day(iso: string): string {
 export function DuelPick({ value, named, tests, onChange }: { value: string | undefined; named: EventNames[`duel`]; tests: boolean; onChange: (duel: string | undefined) => void }) {
     const pick = text.games.pick;
     const [bot, setBot] = useState<string | null>(null);
-    const [read, setRead] = useState<DuelsRead>({ kind: `loading` });
-    useEffect(() => {
-        let cancelled = false;
-        fetchDuels(bot === null ? {} : { bot }).then(
-            (list) => {
-                if (!cancelled) setRead({ kind: `ready`, duels: [...list.running, ...list.past] });
-            },
-            (cause: unknown) => {
-                if (!cancelled) setRead(bot !== null && cause instanceof ApiError && cause.status === 404 ? { kind: `unknown`, bot } : { kind: `failed` });
-            },
-        );
-        return () => {
-            cancelled = true;
-        };
+    const load = useCallback(async () => {
+        const list = await fetchDuels(bot === null ? {} : { bot });
+        return [...list.running, ...list.past];
     }, [bot]);
-    const listed = read.kind === `ready` ? read.duels.filter((duel) => tests || duel.kind !== `test`) : [];
+    const read = useAsync(load);
+    // A failed read lists nothing, rather than the last search's duels under this one's note.
+    const listed = read.error ? [] : (read.data ?? []).filter((duel) => tests || duel.kind !== `test`);
     const options: (readonly [string, string])[] = listed.map((duel) => [duel.id, pick.duelOption(duel.first.name, duel.second.name, scoreText(duel), duel.kind === `test`, duel.status === `running` ? pick.live : day(duel.endedAt ?? duel.createdAt))] as const);
     if (value !== undefined && !listed.some((duel) => duel.id === value)) options.unshift([value, duelWords(named)]);
-    const note = read.kind === `unknown` ? pick.noBot(read.bot) : read.kind === `failed` ? pick.failed : read.kind === `ready` && listed.length === 0 && bot !== null ? pick.noDuel : null;
+    const note = read.missing && bot !== null ? pick.noBot(bot) : read.error ? pick.failed : read.data !== null && listed.length === 0 && bot !== null ? pick.noDuel : null;
     return (
         <>
             <NameField

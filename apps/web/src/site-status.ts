@@ -1,14 +1,14 @@
 import { pausedRetryAfterSeconds, healthzPath } from '@hexo-arena/contract';
+import { createStore, useStore } from './store';
 
 // The health probe is one bit: up, or refusing new starts.
 // The pause retry-after doubles as the poll cadence, so a lifted pause
 // shows within a minute without anyone refreshing.
 type SiteStatus = `up` | `paused`;
 
-let current: SiteStatus = `up`;
+const status = createStore<SiteStatus>(`up`);
 // One probe at a time; a caller during it waits for the same answer.
 let running: Promise<void> | null = null;
-const listeners = new Set<() => void>();
 
 function probe(): Promise<void> {
     running ??= probeHealth()
@@ -28,21 +28,7 @@ async function probeHealth(): Promise<void> {
     // 502 while the backend restarts) keeps the last known status.
     if (response.status !== 503 && !response.ok) return;
     const next: SiteStatus = response.status === 503 ? `paused` : `up`;
-    if (next !== current) {
-        current = next;
-        for (const listener of listeners) listener();
-    }
-}
-
-function read(): SiteStatus {
-    return current;
-}
-
-function subscribe(listener: () => void): () => void {
-    listeners.add(listener);
-    return () => {
-        listeners.delete(listener);
-    };
+    if (next !== status.read()) status.set(next);
 }
 
 function start(): void {
@@ -59,11 +45,16 @@ function start(): void {
  * running, so the banner never blocks navigation.
  */
 export const siteStatusStore = {
-    read,
-    subscribe,
+    read: status.read,
+    subscribe: status.subscribe,
     start,
     /** Ask again now, as when a refusal says the site paused between probes. */
     probe,
 };
 
 let timer: ReturnType<typeof setInterval> | null = null;
+
+/** The site-wide pause state, rendering again when it changes. */
+export function useSiteStatus(): SiteStatus {
+    return useStore(status);
+}

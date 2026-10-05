@@ -5,6 +5,7 @@ import {
     duelPerBotCap,
     nameKeyOf,
     openingPliesSchema,
+    pagePath,
     roundRobinGamesPerPair,
     roundRobinMaxBots,
     roundRobinTestGamesPerPair,
@@ -49,7 +50,8 @@ export function roundRobinSetupPath(setup: RoundRobinSetup): string {
     if (setup.clock !== null) params.set(`clock`, clockParam(setup.clock));
     if (setup.opening !== null) params.set(`opening`, String(setup.opening));
     const query = params.toString();
-    return query === `` ? `/play/tournament` : `/play/tournament?${query}`;
+    const path = pagePath(`play-tournament`, {});
+    return query === `` ? path : `${path}?${query}`;
 }
 
 /** The setup a link names; what it names wrongly falls back to the default, and a bot no longer listed leaves the field later. */

@@ -1,4 +1,4 @@
-import { finishedGamesQuerySchema, nameKeyOf, type FinishedGamesQuery } from '@hexo-arena/contract';
+import { finishedGamesQuerySchema, nameKeyOf, pagePath, type FinishedGamesQuery } from '@hexo-arena/contract';
 
 /** The filters a list of finished games can carry, as its address holds them; whether tests show is the browser's, not the address's. */
 export type GameFilters = Omit<FinishedGamesQuery, `page` | `tests`>;
@@ -83,7 +83,7 @@ export function searchOf(view: GamesView): string {
 
 /** The address of one page of a list. */
 export function pagePathOf(filters: GameFilters, page: number): string {
-    return `/games${searchOf({ filters, page })}`;
+    return `${pagePath(`games`, {})}${searchOf({ filters, page })}`;
 }
 
 /** The list's address with one filter set or cleared, back on the first page; another tournament leaves the last one's round behind. */

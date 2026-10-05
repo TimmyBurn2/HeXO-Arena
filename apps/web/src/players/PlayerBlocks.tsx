@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
 import type { PlayerRecord, RatingPoint, RatingRange } from '@hexo-arena/contract';
 import { fetchPlayerRecord, fetchRatingHistory } from '../api/client';
 import { useAsync } from '../api/use-async';
@@ -13,29 +13,12 @@ function dateOf(iso: string): string {
     return new Intl.DateTimeFormat(undefined, { dateStyle: `medium` }).format(new Date(iso));
 }
 
+// The chart reads each range afresh, its skeleton standing until the range lands.
 function useRatingHistory(name: string): { points: RatingPoint[] | `failed` | null; range: RatingRange; setRange: (range: RatingRange) => void; retry: () => void } {
     const [range, setRange] = useState<RatingRange>(`1y`);
-    const [points, setPoints] = useState<RatingPoint[] | `failed` | null>(null);
-    const [attempt, setAttempt] = useState(0);
-    useEffect(() => {
-        let cancelled = false;
-        setPoints(null);
-        fetchRatingHistory(name, range).then(
-            (history) => {
-                if (!cancelled) setPoints(history);
-            },
-            () => {
-                if (!cancelled) setPoints(`failed`);
-            },
-        );
-        return () => {
-            cancelled = true;
-        };
-    }, [name, range, attempt]);
-    const retry = useCallback(() => {
-        setAttempt((count) => count + 1);
-    }, []);
-    return { points, range, setRange, retry };
+    const load = useCallback(async () => fetchRatingHistory(name, range), [name, range]);
+    const read = useAsync(load, { keep: false });
+    return { points: read.error ? `failed` : read.data, range, setRange, retry: read.reload };
 }
 
 /**

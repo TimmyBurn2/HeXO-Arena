@@ -312,10 +312,10 @@ describe('request limits', () => {
             'GET /legal/imprint': `shell`,
             'GET /legal/privacy': `shell`,
             'GET /legal/terms': `shell`,
-            'GET /bots/:name': `shell`,
+            'GET /bots/:bot': `shell`,
             'GET /game/:gameId': `shell`,
             'GET /tournaments/:id': `shell`,
-            'GET /players/:name': `shell`,
+            'GET /players/:player': `shell`,
         });
     });
 

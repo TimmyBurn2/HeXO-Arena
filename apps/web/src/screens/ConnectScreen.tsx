@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode, type Ref } from 'react';
-import { namePattern, isReservedName, type AccountDeclaration, type AnalyzerDeclaration } from '@hexo-arena/contract';
+import { namePattern, isReservedName, pagePath, type AccountDeclaration, type AnalyzerDeclaration } from '@hexo-arena/contract';
 import { ApiError, createBot, limitedFor } from '../api/client';
 import { useWait, WaitText } from '../components/wait';
 import { CodeBlock } from '../components/CodeBlock';
@@ -139,7 +139,7 @@ export function ConnectScreen() {
                             {created === null ? (
                                 <p>{words.watchLater((bots) => <Link to="/bots">{bots}</Link>)}</p>
                             ) : (
-                                <p>{words.botPage(<Link to={`/bots/${encodeURIComponent(created.name)}`}>{created.name}</Link>)}</p>
+                                <p>{words.botPage(<Link to={pagePath(`bot`, { bot: created.name })}>{created.name}</Link>)}</p>
                             )}
                         </div>
                     </li>

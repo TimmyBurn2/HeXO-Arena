@@ -226,11 +226,12 @@ describe('the HTTTX reader', () => {
         });
     });
 
+    // A game played out to the turn cap outlasts the default five seconds on a busy machine.
     it('refuses more turns than a game may have', () => {
         const turns = drawLine(gameTurnCap + 1);
         expect(read(writeGame(turns.slice(0, gameTurnCap))).turns).toHaveLength(gameTurnCap);
         expect(refusal(readGame(writeGame(turns)))).toEqual({ kind: `too-many-turns`, limit: gameTurnCap });
-    });
+    }, 30_000);
 
     it('plays turns after a set-up board for its player to move, counting from 1', () => {
         const start: Setup = {

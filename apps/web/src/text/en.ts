@@ -2243,12 +2243,6 @@ export const en = {
             failed: `The switch was not saved; try again`,
         },
     },
-    meta: {
-        game: `Game`,
-        tournament: `Tournament`,
-        player: `Player`,
-        duel: `Duel`,
-    },
     report: {
         title: `Report`,
         lead: `Tell the operator about a name, a bot, a game, or anything else here that breaks the law or the Terms. Only the operator reads reports.`,

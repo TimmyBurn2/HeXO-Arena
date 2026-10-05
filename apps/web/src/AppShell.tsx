@@ -1,5 +1,5 @@
-import { lazy, Suspense, useEffect, useRef, useState, useSyncExternalStore } from 'react';
-import { signInFailureParam, signInFailureSchema, siteName, type SignInFailure } from '@hexo-arena/contract';
+import { lazy, Suspense, useEffect, useRef, useState, type ComponentType, type ReactNode } from 'react';
+import { signInFailureParam, signInFailureSchema, siteName, type PageName, type SignInFailure } from '@hexo-arena/contract';
 import { Mark } from './components/Mark';
 import { SiteFooter } from './components/SiteFooter';
 import { spansWindow, useFramed } from './frame';
@@ -8,127 +8,96 @@ import { useLegalSlots } from './legal/links';
 import { Link } from './router/Link';
 import { Moved } from './router/Moved';
 import { loadScreen, RouteBoundary } from './RouteBoundary';
-import { routePath, type Route } from './router/route';
+import { routePath, type PageRoute, type Route } from './router/route';
 import { landingOf, subscribe, useRoute } from './router/use-route';
 import { Settings } from './settings/Settings';
-import { siteStatusStore } from './site-status';
+import { siteStatusStore, useSiteStatus } from './site-status';
 import { text } from './text';
 import { useDocumentMeta } from './use-document-meta';
 import './AppShell.css';
 
-const HomeScreen = lazy(async () => {
-    const module = await loadScreen(async () => import(`./screens/HomeScreen`));
-    return { default: module.HomeScreen };
-});
-const PlayScreen = lazy(async () => {
-    const module = await loadScreen(async () => import(`./screens/PlayScreen`));
-    return { default: module.PlayScreen };
-});
-const DuelsScreen = lazy(async () => {
-    const module = await loadScreen(async () => import(`./screens/DuelsScreen`));
-    return { default: module.DuelsScreen };
-});
-const PlayTournamentScreen = lazy(async () => {
-    const module = await loadScreen(async () => import(`./screens/PlayTournamentScreen`));
-    return { default: module.PlayTournamentScreen };
-});
-const GamesDuelsScreen = lazy(async () => {
-    const module = await loadScreen(async () => import(`./screens/GamesDuelsScreen`));
-    return { default: module.GamesDuelsScreen };
-});
-const DuelScreen = lazy(async () => {
-    const module = await loadScreen(async () => import(`./screens/DuelScreen`));
-    return { default: module.DuelScreen };
-});
-const LadderScreen = lazy(async () => {
-    const module = await loadScreen(async () => import(`./screens/LadderScreen`));
-    return { default: module.LadderScreen };
-});
-const TournamentsScreen = lazy(async () => {
-    const module = await loadScreen(async () => import(`./screens/TournamentsScreen`));
-    return { default: module.TournamentsScreen };
-});
-const TournamentScreen = lazy(async () => {
-    const module = await loadScreen(async () => import(`./screens/TournamentScreen`));
-    return { default: module.TournamentScreen };
-});
-const PlayerScreen = lazy(async () => {
-    const module = await loadScreen(async () => import(`./screens/PlayerScreen`));
-    return { default: module.PlayerScreen };
-});
-const BotsScreen = lazy(async () => {
-    const module = await loadScreen(async () => import(`./screens/BotsScreen`));
-    return { default: module.BotsScreen };
-});
-const BotScreen = lazy(async () => {
-    const module = await loadScreen(async () => import(`./screens/BotScreen`));
-    return { default: module.BotScreen };
-});
-const GamesScreen = lazy(async () => {
-    const module = await loadScreen(async () => import(`./screens/GamesScreen`));
-    return { default: module.GamesScreen };
-});
-const LiveGamesScreen = lazy(async () => {
-    const module = await loadScreen(async () => import(`./screens/LiveGamesScreen`));
-    return { default: module.LiveGamesScreen };
-});
-const AnalysisScreen = lazy(async () => {
-    const module = await loadScreen(async () => import(`./screens/AnalysisScreen`));
-    return { default: module.AnalysisScreen };
-});
-const ConnectScreen = lazy(async () => {
-    const module = await loadScreen(async () => import(`./screens/ConnectScreen`));
-    return { default: module.ConnectScreen };
-});
-const ProfileScreen = lazy(async () => {
-    const module = await loadScreen(async () => import(`./screens/ProfileScreen`));
-    return { default: module.ProfileScreen };
-});
-const CreditsScreen = lazy(async () => {
-    const module = await loadScreen(async () => import(`./screens/CreditsScreen`));
-    return { default: module.CreditsScreen };
-});
-const WelcomeScreen = lazy(async () => {
-    const module = await loadScreen(async () => import(`./screens/WelcomeScreen`));
-    return { default: module.WelcomeScreen };
-});
-const ReportScreen = lazy(async () => {
-    const module = await loadScreen(async () => import(`./screens/ReportScreen`));
-    return { default: module.ReportScreen };
-});
-const LegalScreen = lazy(async () => {
-    const module = await loadScreen(async () => import(`./screens/LegalScreen`));
-    return { default: module.LegalScreen };
-});
-const GameScreen = lazy(async () => {
-    const module = await loadScreen(async () => import(`./screens/GameScreen`));
-    return { default: module.GameScreen };
-});
-const NotFoundScreen = lazy(async () => {
-    const module = await loadScreen(async () => import(`./screens/NotFoundScreen`));
-    return { default: module.NotFoundScreen };
-});
+// A screen's module, loaded on the first visit to its page.
+function lazyScreen<Props extends object>(load: () => Promise<ComponentType<Props>>) {
+    return lazy(async () => ({ default: await loadScreen(load) }));
+}
+
+const HomeScreen = lazyScreen(async () => (await import(`./screens/HomeScreen`)).HomeScreen);
+const PlayScreen = lazyScreen(async () => (await import(`./screens/PlayScreen`)).PlayScreen);
+const DuelsScreen = lazyScreen(async () => (await import(`./screens/DuelsScreen`)).DuelsScreen);
+const PlayTournamentScreen = lazyScreen(async () => (await import(`./screens/PlayTournamentScreen`)).PlayTournamentScreen);
+const GamesDuelsScreen = lazyScreen(async () => (await import(`./screens/GamesDuelsScreen`)).GamesDuelsScreen);
+const DuelScreen = lazyScreen(async () => (await import(`./screens/DuelScreen`)).DuelScreen);
+const LadderScreen = lazyScreen(async () => (await import(`./screens/LadderScreen`)).LadderScreen);
+const TournamentsScreen = lazyScreen(async () => (await import(`./screens/TournamentsScreen`)).TournamentsScreen);
+const TournamentScreen = lazyScreen(async () => (await import(`./screens/TournamentScreen`)).TournamentScreen);
+const PlayerScreen = lazyScreen(async () => (await import(`./screens/PlayerScreen`)).PlayerScreen);
+const BotsScreen = lazyScreen(async () => (await import(`./screens/BotsScreen`)).BotsScreen);
+const BotScreen = lazyScreen(async () => (await import(`./screens/BotScreen`)).BotScreen);
+const GamesScreen = lazyScreen(async () => (await import(`./screens/GamesScreen`)).GamesScreen);
+const LiveGamesScreen = lazyScreen(async () => (await import(`./screens/LiveGamesScreen`)).LiveGamesScreen);
+const AnalysisScreen = lazyScreen(async () => (await import(`./screens/AnalysisScreen`)).AnalysisScreen);
+const ConnectScreen = lazyScreen(async () => (await import(`./screens/ConnectScreen`)).ConnectScreen);
+const ProfileScreen = lazyScreen(async () => (await import(`./screens/ProfileScreen`)).ProfileScreen);
+const CreditsScreen = lazyScreen(async () => (await import(`./screens/CreditsScreen`)).CreditsScreen);
+const WelcomeScreen = lazyScreen(async () => (await import(`./screens/WelcomeScreen`)).WelcomeScreen);
+const ReportScreen = lazyScreen(async () => (await import(`./screens/ReportScreen`)).ReportScreen);
+const LegalScreen = lazyScreen(async () => (await import(`./screens/LegalScreen`)).LegalScreen);
+const GameScreen = lazyScreen(async () => (await import(`./screens/GameScreen`)).GameScreen);
+const NotFoundScreen = lazyScreen(async () => (await import(`./screens/NotFoundScreen`)).NotFoundScreen);
+
+// The main nav's sections: each page names the one it stands under, if any.
+type Section = `home` | `play` | `games` | `analysis` | `ladder` | `bots` | `build`;
+
+// What the shell does with each page of the table: the screen it draws, and
+// the nav section it lights; the type holds every page to one row.
+const screens: { readonly [Name in PageName]: { readonly view: (route: PageRoute<Name>) => ReactNode; readonly section: Section | null } } = {
+    home: { view: () => <HomeScreen />, section: `home` },
+    play: { view: () => <PlayScreen />, section: `play` },
+    'bot-duel': { view: () => <DuelsScreen />, section: `play` },
+    'play-tournament': { view: () => <PlayTournamentScreen />, section: `play` },
+    duel: { view: (route) => <DuelScreen id={route.id} />, section: `games` },
+    ladder: { view: () => <LadderScreen />, section: `ladder` },
+    tournament: { view: (route) => <TournamentScreen id={route.id} />, section: `games` },
+    bots: { view: () => <BotsScreen />, section: `bots` },
+    bot: { view: (route) => <BotScreen name={route.bot} />, section: `bots` },
+    player: { view: (route) => <PlayerScreen name={route.player} />, section: null },
+    games: { view: () => <GamesScreen />, section: `games` },
+    'live-games': { view: () => <LiveGamesScreen />, section: `games` },
+    'games-duels': { view: () => <GamesDuelsScreen />, section: `games` },
+    'games-tournaments': { view: () => <TournamentsScreen />, section: `games` },
+    analysis: { view: () => <AnalysisScreen />, section: `analysis` },
+    connect: { view: () => <ConnectScreen />, section: `build` },
+    profile: { view: () => <ProfileScreen />, section: null },
+    credits: { view: () => <CreditsScreen />, section: null },
+    welcome: { view: () => <WelcomeScreen />, section: null },
+    report: { view: () => <ReportScreen />, section: null },
+    legal: { view: (route) => <LegalScreen page={route.page} />, section: null },
+    game: { view: (route) => <GameScreen gameId={route.gameId} />, section: null },
+};
+
+function viewOf<Name extends PageName>(name: Name, route: PageRoute<Name>): ReactNode {
+    return screens[name].view(route);
+}
 
 interface NavEntry {
+    section: Section;
     route: Route;
     label: string;
-    // The screens the entry stands for: its own and those under it.
-    screens: readonly Route[`name`][];
     bar: boolean;
     phoneTab: boolean;
 }
 
-// The main nav as one table for the bar and the phone tabs: a new page
-// adds a row, and its flags say where it shows. On the desktop the
-// wordmark is the way home, so Home is a phone tab alone.
+// The main nav as one table for the bar and the phone tabs: its flags say
+// where each section shows. On the desktop the wordmark is the way home,
+// so Home is a phone tab alone.
 const nav: readonly NavEntry[] = [
-    { route: { name: `home` }, label: text.shell.nav.home, screens: [`home`], bar: false, phoneTab: true },
-    { route: { name: `play` }, label: text.shell.nav.play, screens: [`play`, `bot-duel`, `play-tournament`], bar: true, phoneTab: true },
-    { route: { name: `games` }, label: text.shell.nav.games, screens: [`games`, `live-games`, `games-duels`, `games-tournaments`, `duel`, `tournament`], bar: true, phoneTab: true },
-    { route: { name: `analysis` }, label: text.shell.nav.analysis, screens: [`analysis`], bar: true, phoneTab: true },
-    { route: { name: `ladder` }, label: text.shell.nav.ladder, screens: [`ladder`], bar: true, phoneTab: true },
-    { route: { name: `bots` }, label: text.shell.nav.bots, screens: [`bots`, `bot`], bar: true, phoneTab: true },
-    { route: { name: `connect` }, label: text.shell.nav.build, screens: [`connect`], bar: true, phoneTab: false },
+    { section: `home`, route: { name: `home` }, label: text.shell.nav.home, bar: false, phoneTab: true },
+    { section: `play`, route: { name: `play` }, label: text.shell.nav.play, bar: true, phoneTab: true },
+    { section: `games`, route: { name: `games` }, label: text.shell.nav.games, bar: true, phoneTab: true },
+    { section: `analysis`, route: { name: `analysis` }, label: text.shell.nav.analysis, bar: true, phoneTab: true },
+    { section: `ladder`, route: { name: `ladder` }, label: text.shell.nav.ladder, bar: true, phoneTab: true },
+    { section: `bots`, route: { name: `bots` }, label: text.shell.nav.bots, bar: true, phoneTab: true },
+    { section: `build`, route: { name: `connect` }, label: text.shell.nav.build, bar: true, phoneTab: false },
 ];
 
 // The reason a sign-in failed, as the server's redirect names it; any
@@ -148,7 +117,7 @@ function dropSignInFailure(): void {
 
 export function AppShell() {
     const route = useRoute();
-    const paused = useSyncExternalStore(siteStatusStore.subscribe, siteStatusStore.read, siteStatusStore.read);
+    const paused = useSiteStatus();
     const mainRef = useRef<HTMLElement | null>(null);
     const firstRender = useRef(true);
     const [signInFailure, setSignInFailure] = useState<SignInFailure | null>(null);
@@ -251,60 +220,13 @@ export function AppShell() {
 }
 
 function RouteView({ route }: { route: Route }) {
-    switch (route.name) {
-        case `home`:
-            return <HomeScreen />;
-        case `play`:
-            return <PlayScreen />;
-        case `bot-duel`:
-            return <DuelsScreen />;
-        case `play-tournament`:
-            return <PlayTournamentScreen />;
-        case `duel`:
-            return <DuelScreen id={route.id} />;
-        case `ladder`:
-            return <LadderScreen />;
-        case `games-tournaments`:
-            return <TournamentsScreen />;
-        case `games-duels`:
-            return <GamesDuelsScreen />;
-        case `player`:
-            return <PlayerScreen name={route.player} />;
-        case `tournament`:
-            return <TournamentScreen id={route.id} />;
-        case `bots`:
-            return <BotsScreen />;
-        case `bot`:
-            return <BotScreen name={route.bot} />;
-        case `games`:
-            return <GamesScreen />;
-        case `live-games`:
-            return <LiveGamesScreen />;
-        case `analysis`:
-            return <AnalysisScreen />;
-        case `connect`:
-            return <ConnectScreen />;
-        case `profile`:
-            return <ProfileScreen />;
-        case `credits`:
-            return <CreditsScreen />;
-        case `welcome`:
-            return <WelcomeScreen />;
-        case `legal`:
-            return <LegalScreen page={route.page} />;
-        case `report`:
-            return <ReportScreen />;
-        case `game`:
-            return <GameScreen gameId={route.gameId} />;
-        case `moved`:
-            return <Moved to={`${route.to}${window.location.search}${window.location.hash}`} />;
-        case `not-found`:
-            return <NotFoundScreen />;
-    }
+    if (route.name === `moved`) return <Moved to={`${route.to}${window.location.search}${window.location.hash}`} />;
+    if (route.name === `not-found`) return <NotFoundScreen />;
+    return viewOf(route.name, route);
 }
 
 function NavLink({ entry, route, className }: { entry: NavEntry; route: Route; className: string }) {
-    const active = entry.screens.includes(route.name);
+    const active = route.name !== `moved` && route.name !== `not-found` && screens[route.name].section === entry.section;
     return (
         <Link to={routePath(entry.route)} className={`${className}${active ? ` active` : ``}`} ariaCurrent={active}>
             {entry.label}

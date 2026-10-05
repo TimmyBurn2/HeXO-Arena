@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback } from 'react';
 import { clockText, deletedPlayerName, notFoundMeta, tournamentMeta, tournamentMinPresent, tournamentRunningPollMs, tournamentWaitingPollMs, type TournamentDetail, type TournamentSummary } from '@hexo-arena/contract';
-import { ApiError, fetchTournament, limitedFor } from '../api/client';
+import { fetchTournament } from '../api/client';
+import { useAsync } from '../api/use-async';
 import { BotBadge, PlayerName, PresenceDot } from '../components/player';
 import { ErrorFrame, SkeletonRows } from '../components/states';
 import { PodiumStand } from '../ladder/Podium';
@@ -21,50 +22,17 @@ import { useDocumentMeta } from '../use-document-meta';
 import './DuelScreen.css';
 import './TournamentScreen.css';
 
-type Load = { kind: `loading` } | { kind: `ready`; detail: TournamentDetail; at: number } | { kind: `missing` } | { kind: `failed`; limited: number | null };
+// A tournament as read, with when, which its waits count from.
+interface Read {
+    readonly detail: TournamentDetail;
+    readonly at: number;
+}
 
 // A running tournament is read again every few seconds while its page is in
 // view, a waiting one every minute, and one that is over never.
-function useTournament(id: string): { load: Load; retry: () => void; replace: (detail: TournamentDetail) => void } {
-    const [load, setLoad] = useState<Load>({ kind: `loading` });
-    const [attempt, setAttempt] = useState(0);
-    const status = load.kind === `ready` ? load.detail.status : null;
-    useEffect(() => {
-        let cancelled = false;
-        const read = async () => {
-            try {
-                const detail = await fetchTournament(id);
-                if (!cancelled) setLoad({ kind: `ready`, detail, at: Date.now() });
-            } catch (cause) {
-                if (cancelled) return;
-                if (cause instanceof ApiError && cause.status === 404) setLoad({ kind: `missing` });
-                else setLoad((held) => (held.kind === `ready` ? held : { kind: `failed`, limited: limitedFor(cause) }));
-            }
-        };
-        if (status === null) void read();
-        const every = status === `running` ? tournamentRunningPollMs : status === `scheduled` ? tournamentWaitingPollMs : null;
-        if (every === null) {
-            return () => {
-                cancelled = true;
-            };
-        }
-        const timer = setInterval(() => {
-            if (document.visibilityState === `visible`) void read();
-        }, every);
-        return () => {
-            cancelled = true;
-            clearInterval(timer);
-        };
-    }, [id, status, attempt]);
-    const retry = useCallback(() => {
-        setLoad({ kind: `loading` });
-        setAttempt((count) => count + 1);
-    }, []);
-    // A change the reader made answers with the tournament as it now stands, which takes the old one's place without a reload.
-    const replace = useCallback((detail: TournamentDetail) => {
-        setLoad({ kind: `ready`, detail, at: Date.now() });
-    }, []);
-    return { load, retry, replace };
+function tournamentBeat(read: Read): number | null {
+    const { status } = read.detail;
+    return status === `running` ? tournamentRunningPollMs : status === `scheduled` ? tournamentWaitingPollMs : null;
 }
 
 function summaryOf(detail: TournamentDetail): TournamentSummary {
@@ -102,12 +70,18 @@ function utcTime(iso: string): string {
  */
 export function TournamentScreen({ id }: { id: string }) {
     const route = useRoute();
-    const { load, retry, replace } = useTournament(id);
+    const load = useCallback(async () => ({ detail: await fetchTournament(id), at: Date.now() }), [id]);
+    const read = useAsync(load, { every: tournamentBeat });
     const me = useMe();
     const viewer = me.status === `ready` && me.me?.kind === `user` ? me.me.name : null;
-    const meta = load.kind === `ready` ? tournamentMeta(summaryOf(load.detail)) : load.kind === `missing` ? notFoundMeta : undefined;
+    const detail = read.data?.detail ?? null;
+    const meta = read.missing ? notFoundMeta : detail === null ? undefined : tournamentMeta(summaryOf(detail));
     useDocumentMeta(route, meta?.title, meta?.description);
-    if (load.kind === `missing`) {
+    // A change the reader made answers with the tournament as it now stands, which takes the old one's place without a read.
+    const replace = (next: TournamentDetail) => {
+        read.replace(() => ({ detail: next, at: Date.now() }));
+    };
+    if (read.missing) {
         return (
             <div className="empty">
                 <h1>{text.tournaments.notFound.heading}</h1>
@@ -120,8 +94,7 @@ export function TournamentScreen({ id }: { id: string }) {
             </div>
         );
     }
-    const title = load.kind === `ready` ? load.detail.name : text.tournaments.title;
-    const detail = load.kind === `ready` ? load.detail : null;
+    const title = detail?.name ?? text.tournaments.title;
     return (
         <>
             <div className="duel-title-row">
@@ -137,9 +110,9 @@ export function TournamentScreen({ id }: { id: string }) {
                 {detail === null ? null : <RoundRobinActions detail={detail} viewer={viewer} onChange={replace} />}
             </div>
             <h1 className="screen-title tournament-title">{title}</h1>
-            {load.kind === `loading` ? <SkeletonRows /> : null}
-            {load.kind === `failed` ? <ErrorFrame sentence={text.tournaments.detailFailed} onRetry={retry} wait={load.limited} /> : null}
-            {load.kind === `ready` ? <Tournament detail={load.detail} readAt={load.at} onEntry={retry} /> : null}
+            {read.loading ? <SkeletonRows /> : null}
+            {detail === null && read.error ? <ErrorFrame sentence={text.tournaments.detailFailed} onRetry={read.reload} wait={read.limited} /> : null}
+            {read.data === null ? null : <Tournament detail={read.data.detail} readAt={read.data.at} onEntry={read.reload} />}
         </>
     );
 }

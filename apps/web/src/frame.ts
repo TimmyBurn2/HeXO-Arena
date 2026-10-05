@@ -1,23 +1,9 @@
-import { useLayoutEffect, useSyncExternalStore } from 'react';
+import { useLayoutEffect } from 'react';
 import type { Route } from './router/route';
+import { createStore, useStore } from './store';
 
-let borrowers = 0;
-const listeners = new Set<() => void>();
-
-function notify(): void {
-    for (const listener of listeners) listener();
-}
-
-function subscribe(listener: () => void): () => void {
-    listeners.add(listener);
-    return () => {
-        listeners.delete(listener);
-    };
-}
-
-function lent(): boolean {
-    return borrowers > 0;
-}
+// How many mounted screens have asked for the frame.
+const borrowers = createStore(0);
 
 /**
  * Put the site's frame around a screen that otherwise owns the viewport,
@@ -28,18 +14,11 @@ function lent(): boolean {
  */
 export function useBorrowFrame(): void {
     useLayoutEffect(() => {
-        borrowers += 1;
-        notify();
+        borrowers.set(borrowers.read() + 1);
         return () => {
-            borrowers -= 1;
-            notify();
+            borrowers.set(borrowers.read() - 1);
         };
     }, []);
-}
-
-// Whether a mounted screen has asked for the frame.
-function useFrameLent(): boolean {
-    return useSyncExternalStore(subscribe, lent, lent);
 }
 
 /** Where a screen sits: inside the site's frame, or alone on the stage. */
@@ -62,6 +41,6 @@ export function spansWindow(route: Route): boolean {
 
 /** Whether the screen at this route sits in the site's frame, its own or lent. */
 export function useFramed(route: Route): boolean {
-    const lentNow = useFrameLent();
-    return layoutOf(route) === `framed` || lentNow;
+    const lent = useStore(borrowers) > 0;
+    return layoutOf(route) === `framed` || lent;
 }

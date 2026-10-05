@@ -1,41 +1,32 @@
 import {
     analysisMeta,
-    analysisPagePath,
     botMeta,
-    botsMeta,
-    connectMeta,
-    creditsMeta,
-    duelListMeta,
     duelMeta,
-    duelsMeta,
-    welcomeMeta,
-    welcomePath,
     gameMeta,
-    gamesMeta,
     ladderMeta,
-    legalPageMeta,
-    legalPagePath,
-    legalPages,
-    liveGamesMeta,
+    movedPages,
+    movedPath,
     nameKeyOf,
     nameSyntaxSchema,
     notFoundMeta,
-    playMeta,
-    playTournamentMeta,
-    profileMeta,
+    pageMeta,
+    pageNames,
     playerMeta,
+    playMeta,
     reportFormMetaName,
     reportMeta,
-    reportPagePath,
     siteMeta,
+    sitePages,
     tournamentIdSchema,
     tournamentMeta,
-    tournamentsMeta,
     type PageMeta,
+    type PageName,
+    type PageParams,
     type Roster,
 } from '@hexo-arena/contract';
 import type { FastifyInstance, FastifyReply } from 'fastify';
 import { readFile } from 'node:fs/promises';
+import { z } from 'zod';
 import { listBots } from './bots';
 import type { Query } from './db';
 import { duelSummary } from './duel-api';
@@ -101,53 +92,63 @@ export function renderShell(template: string, meta: PageMeta, publicOrigin: stri
     return replaceOnce(html, image, `<meta property="og:image" content="${escapeHtml(publicOrigin + path)}" />`);
 }
 
-// Pages whose meta needs no data, each at its own path.
-const fixedPages: readonly (readonly [string, PageMeta])[] = [
-    [`/bots`, botsMeta],
-    [`/games`, gamesMeta],
-    [`/games/live`, liveGamesMeta],
-    [`/games/duels`, duelListMeta],
-    [`/games/tournaments`, tournamentsMeta],
-    [`/play/duels`, duelsMeta],
-    [`/play/tournament`, playTournamentMeta],
-    [`/connect`, connectMeta],
-    [`/profile`, profileMeta],
-    [`/credits`, creditsMeta],
-    [reportPagePath, reportMeta],
-    [welcomePath, welcomeMeta],
-    ...legalPages.map((page) => [legalPagePath(page), legalPageMeta[page]] as const),
-];
-
-// Pages that moved, each answering with its new address so an old link
-// still lands; the old duel lists stay on the setup's path, which the app
-// sends on to Games.
-const movedPages: readonly (readonly [string, (id: string) => string])[] = [
-    [`/play/duels/:id`, (id) => `/duels/${encodeURIComponent(id)}`],
-    [`/duels`, () => `/games/duels`],
-    [`/tournaments`, () => `/games/tournaments`],
-];
-
 // The ids a game takes, so a query never reaches a read with arbitrary text.
 const gameIdPattern = /^[A-Za-z0-9_-]{1,100}$/u;
 
+// One path the shell answers for a page: its pattern, with the parameters a listed value fixes.
+interface ShellPath {
+    readonly name: PageName;
+    readonly path: string;
+    readonly fixed: Readonly<Record<string, string>>;
+}
+
+// A parameter that takes a few listed values is answered at one path per value,
+// so the proxy can tell those pages from files beside them.
+function shellPathsOf(name: PageName): ShellPath[] {
+    let paths: ShellPath[] = [{ name, path: sitePages[name].path, fixed: {} }];
+    for (const [param, values] of Object.entries(sitePages[name].values)) {
+        paths = paths.flatMap((held) => (values ?? []).map((value) => ({ name, path: held.path.replace(`:${param}`, value), fixed: { ...held.fixed, [param]: value } })));
+    }
+    return paths;
+}
+
+const pagePaths: readonly ShellPath[] = pageNames.flatMap(shellPathsOf);
+
 /**
- * Every route the shell answers, in the order the proxy lists them: every
- * page of the site, so a pasted link to any of them previews with an
- * absolute image, and every page that moved, so an old link reaches the app.
+ * Every route the shell answers: every page of the site, so a pasted link
+ * to any of them previews with an absolute image, and every page that
+ * moved, so an old link reaches the app.
  */
-export const shellRoutes: readonly string[] = [
-    `/`,
-    `/play`,
-    analysisPagePath,
-    `/ladder`,
-    `/bots/:name`,
-    `/players/:name`,
-    `/game/:gameId`,
-    `/tournaments/:id`,
-    `/duels/:id`,
-    ...movedPages.map(([path]) => path),
-    ...fixedPages.map(([path]) => path),
-];
+export const shellRoutes: readonly string[] = [...pagePaths.map((held) => held.path), ...movedPages.map((moved) => moved.from)];
+
+const routeParamsSchema = z.record(z.string(), z.string());
+
+function paramsOf<Name extends PageName>(_page: Name, named: unknown, fixed: Readonly<Record<string, string>>): PageParams<Name> {
+    // Fastify names exactly the pattern's parameters, and a listed value fixes the rest.
+    return { ...routeParamsSchema.parse(named), ...fixed } as PageParams<Name>;
+}
+
+// A query parameter given once, as text; any other shape names nothing.
+function queryText(query: unknown, name: string): string | null {
+    if (typeof query !== `object` || query === null) return null;
+    const value: unknown = Reflect.get(query, name);
+    return typeof value === `string` ? value : null;
+}
+
+// What the shell answers for a page: its status, and the meta its preview shows.
+interface ShellAnswer {
+    readonly status: 200 | 404;
+    readonly meta: PageMeta;
+}
+
+const missingPage: ShellAnswer = { status: 404, meta: notFoundMeta };
+
+function found(meta: PageMeta): ShellAnswer {
+    return { status: 200, meta };
+}
+
+// The pages whose preview reads live data, by name; every other page answers with its table meta.
+type LiveAnswers = { readonly [Name in PageName]?: (params: PageParams<Name>, query: unknown) => ShellAnswer };
 
 /**
  * Serves the SPA shell for every page of the site, with meta from live
@@ -158,13 +159,13 @@ export const shellRoutes: readonly string[] = [
 export function registerOgShell(app: FastifyInstance, deps: OgShellDeps): void {
     const { query, presence, games, ladder, indexPath, publicOrigin, reportForm, now } = deps;
 
-    async function sendShell(reply: FastifyReply, status: 200 | 404, meta: PageMeta): Promise<FastifyReply> {
+    async function sendShell(reply: FastifyReply, answer: ShellAnswer): Promise<FastifyReply> {
         const template = await readFile(indexPath, `utf8`);
         return reply
-            .code(status)
+            .code(answer.status)
             .header(`content-type`, `text/html; charset=utf-8`)
             .header(`cache-control`, `no-cache`)
-            .send(renderShell(template, meta, publicOrigin, reportForm));
+            .send(renderShell(template, answer.meta, publicOrigin, reportForm));
     }
 
     function roster(): Roster {
@@ -176,82 +177,74 @@ export function registerOgShell(app: FastifyInstance, deps: OgShellDeps): void {
         };
     }
 
-    app.get(`/`, { config: { limit: `shell` } }, async (_request, reply) => sendShell(reply, 200, siteMeta(roster())));
-
-    app.get(`/ladder`, { config: { limit: `shell` } }, async (_request, reply) => sendShell(reply, 200, ladderMeta(roster())));
-
-    // A link to Play with a bot previews with the bot's name when the
-    // directory lists it; the query is read, never logged.
-    app.get<{ Querystring: { bot?: unknown } }>(`/play`, { config: { limit: `shell` } }, async (request, reply) => {
-        const named = request.query.bot;
-        const key = typeof named === `string` && nameSyntaxSchema.safeParse(named).success ? nameKeyOf(named) : null;
-        const bot = key === null ? undefined : listBots(query).find((row) => nameKeyOf(row.name) === key);
-        return sendShell(reply, 200, playMeta(bot?.name));
-    });
-
-    // A link to the analysis board with a stored game names that game once
-    // it has finished; a live one previews as the plain board, since the
-    // board opens no live game. The query is read, never logged.
-    app.get<{ Querystring: { game?: unknown } }>(analysisPagePath, { config: { limit: `shell` } }, async (request, reply) => {
-        const named = request.query.game;
-        const headline = typeof named === `string` && gameIdPattern.test(named) ? games.headline(named) : null;
-        return sendShell(reply, 200, headline?.status === `finished` ? analysisMeta(headline) : analysisMeta());
-    });
-
-    for (const [path, meta] of fixedPages) {
-        // The proxy sends the form's path here whatever the setting, so
-        // with the form off it is a missing page, as the app shows it.
-        const missing = path === reportPagePath && !reportForm;
-        app.get(path, { config: { limit: `shell` } }, async (_request, reply) => (missing ? sendShell(reply, 404, notFoundMeta) : sendShell(reply, 200, meta)));
+    // The directory's own filter decides visibility, so a hidden bot
+    // previews exactly as an unknown one.
+    function listedBot(name: string | null) {
+        const key = name !== null && nameSyntaxSchema.safeParse(name).success ? nameKeyOf(name) : null;
+        return key === null ? undefined : listBots(query).find((row) => nameKeyOf(row.name) === key);
     }
 
-    app.get<{ Params: { name: string } }>(`/bots/:name`, { config: { limit: `shell` } }, async (request, reply) => {
-        const { name } = request.params;
-        const key = nameSyntaxSchema.safeParse(name).success ? nameKeyOf(name) : null;
-        // The directory's own filter decides visibility, so a hidden bot
-        // previews exactly as an unknown one.
-        const bot = key === null ? undefined : listBots(query).find((row) => nameKeyOf(row.name) === key);
-        if (bot === undefined) return sendShell(reply, 404, notFoundMeta);
-        return sendShell(
-            reply,
-            200,
-            botMeta({
-                name: bot.name,
-                ownerName: bot.ownerName,
-                rating: Math.round(bot.rating.rating),
-                provisional: isProvisional(bot.rating),
-                online: presence.isOnline(bot.id),
-                openForChallenges: presence.isOpenForChallenges(bot.id),
-                about: bot.about,
-            }),
-        );
-    });
+    const live: LiveAnswers = {
+        home: () => found(siteMeta(roster())),
+        ladder: () => found(ladderMeta(roster())),
+        // A link to Play with a bot previews with the bot's name when the
+        // directory lists it; the query is read, never logged.
+        play: (_, asked) => found(playMeta(listedBot(queryText(asked, `bot`))?.name)),
+        // A link to the analysis board with a stored game names that game once
+        // it has finished; a live one previews as the plain board, since the
+        // board opens no live game. The query is read, never logged.
+        analysis: (_, asked) => {
+            const named = queryText(asked, `game`);
+            const headline = named !== null && gameIdPattern.test(named) ? games.headline(named) : null;
+            return found(headline?.status === `finished` ? analysisMeta(headline) : analysisMeta());
+        },
+        // The proxy sends the form's path here whatever the setting, so
+        // with the form off it is a missing page, as the app shows it.
+        report: () => (reportForm ? found(reportMeta) : missingPage),
+        bot: ({ bot: name }) => {
+            const bot = listedBot(name);
+            if (bot === undefined) return missingPage;
+            return found(
+                botMeta({
+                    name: bot.name,
+                    ownerName: bot.ownerName,
+                    rating: Math.round(bot.rating.rating),
+                    provisional: isProvisional(bot.rating),
+                    online: presence.isOnline(bot.id),
+                    openForChallenges: presence.isOpenForChallenges(bot.id),
+                    about: bot.about,
+                }),
+            );
+        },
+        // A bot's name previews as a missing page here, as its own page is under Bots.
+        player: ({ player }) => {
+            const record = deps.players.record(player).value;
+            return record === null || record.kind === `bot` ? missingPage : found(playerMeta(record.name, record));
+        },
+        game: ({ gameId }) => {
+            const headline = games.headline(gameId);
+            return headline === null ? missingPage : found(gameMeta(headline));
+        },
+        tournament: ({ id }) => {
+            const tournament = tournamentIdSchema.safeParse(id).success ? tournamentSummary(query, id) : null;
+            return tournament === null ? missingPage : found(tournamentMeta(tournament));
+        },
+        duel: ({ id }) => {
+            const duel = duelSummary(query, id);
+            return duel === null ? missingPage : found(duelMeta(duel));
+        },
+    };
 
-    // A bot's name previews as a missing page here, as its own page is under Bots.
-    app.get<{ Params: { name: string } }>(`/players/:name`, { config: { limit: `shell` } }, async (request, reply) => {
-        const record = deps.players.record(request.params.name).value;
-        return record === null || record.kind === `bot` ? sendShell(reply, 404, notFoundMeta) : sendShell(reply, 200, playerMeta(record.name, record));
-    });
+    function answer<Name extends PageName>(name: Name, params: PageParams<Name>, asked: unknown): ShellAnswer {
+        return live[name]?.(params, asked) ?? found(pageMeta(name, params));
+    }
 
-    app.get<{ Params: { gameId: string } }>(`/game/:gameId`, { config: { limit: `shell` } }, async (request, reply) => {
-        const { gameId } = request.params;
-        const headline = games.headline(gameId);
-        return headline === null ? sendShell(reply, 404, notFoundMeta) : sendShell(reply, 200, gameMeta(headline));
-    });
-
-    app.get<{ Params: { id: string } }>(`/tournaments/:id`, { config: { limit: `shell` } }, async (request, reply) => {
-        const { id } = request.params;
-        const tournament = tournamentIdSchema.safeParse(id).success ? tournamentSummary(query, id) : null;
-        return tournament === null ? sendShell(reply, 404, notFoundMeta) : sendShell(reply, 200, tournamentMeta(tournament));
-    });
-
-    app.get<{ Params: { id: string } }>(`/duels/:id`, { config: { limit: `shell` } }, async (request, reply) => {
-        const duel = duelSummary(query, request.params.id);
-        return duel === null ? sendShell(reply, 404, notFoundMeta) : sendShell(reply, 200, duelMeta(duel));
-    });
+    for (const { name, path, fixed } of pagePaths) {
+        app.get(path, { config: { limit: `shell` } }, async (request, reply) => sendShell(reply, answer(name, paramsOf(name, request.params, fixed), request.query)));
+    }
 
     // Permanent, so a preview or a search follows the move once; the query is dropped, as no moved page reads one.
-    for (const [path, target] of movedPages) {
-        app.get<{ Params: { id?: string } }>(path, { config: { limit: `shell` } }, async (request, reply) => reply.redirect(target(request.params.id ?? ``), 301));
+    for (const moved of movedPages) {
+        app.get(moved.from, { config: { limit: `shell` } }, async (request, reply) => reply.redirect(movedPath(moved, routeParamsSchema.parse(request.params)), 301));
     }
 }

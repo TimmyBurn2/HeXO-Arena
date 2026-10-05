@@ -1,4 +1,5 @@
 import type { TournamentBot, TournamentDetail } from '@hexo-arena/contract';
+import { pagePath } from '@hexo-arena/contract';
 import { tournamentGamesPath } from '../games/filters';
 import { Link } from '../router/Link';
 import { text } from '../text';
@@ -91,7 +92,7 @@ function PairingItem({ pairing, round, games }: { pairing: Pairing; round?: numb
                                 {text.tournaments.gameLine(index + 1, outcomeWord(game))}
                             </span>
                         ) : (
-                            <Link key={index} to={`/game/${encodeURIComponent(game.gameId)}`} className="round-game">
+                            <Link key={index} to={pagePath(`game`, { gameId: game.gameId })} className="round-game">
                                 {gameWords(pairing, game, index)}
                             </Link>
                         ),

@@ -11,6 +11,7 @@ import {
     type GamePlayer,
 } from '@hexo-arena/contract';
 import { ApiError, fetchFinishedGames, limitedFor } from '../api/client';
+import { useAsync } from '../api/use-async';
 import { BotBadge, PlayerName } from '../components/player';
 import { ErrorFrame, SkeletonRows } from '../components/states';
 import { TopbarPanel, usePanel } from '../components/TopbarPanel';
@@ -68,27 +69,13 @@ async function loadOf(view: GamesView, tests: boolean): Promise<Load> {
     }
 }
 
+const loadingPage: Load = { kind: `loading` };
+
 /** The page an address names; the last one stays on screen while the next loads. */
 function useGamesPage(search: string, tests: boolean): { load: Load; busy: boolean; retry: () => void } {
-    const [load, setLoad] = useState<Load>({ kind: `loading` });
-    const [busy, setBusy] = useState(true);
-    const [attempt, setAttempt] = useState(0);
-    useEffect(() => {
-        let cancelled = false;
-        setBusy(true);
-        void loadOf(viewOf(search), tests).then((next) => {
-            if (cancelled) return;
-            setLoad(next);
-            setBusy(false);
-        });
-        return () => {
-            cancelled = true;
-        };
-    }, [search, tests, attempt]);
-    const retry = useCallback(() => {
-        setAttempt((count) => count + 1);
-    }, []);
-    return { load, busy, retry };
+    const load = useCallback(async () => loadOf(viewOf(search), tests), [search, tests]);
+    const read = useAsync(load);
+    return { load: read.data ?? loadingPage, busy: read.pending, retry: read.reload };
 }
 
 // Every field applies as it changes, so a form's submit goes nowhere.

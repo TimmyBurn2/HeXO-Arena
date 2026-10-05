@@ -4,6 +4,7 @@ import {
     analysisMeta,
     analysisPagePath,
     analysisStoneCap,
+    pagePath,
     resultSentence,
     sideOf,
     turnsOnBoard,
@@ -337,7 +338,7 @@ function OpenedMessage({ opened, retry, newBoard }: {
                 <div role="status">{limited.wait === null ? null : <p className="note"><WaitText wait={limited.wait} line={text.states.tooMany} /></p>}</div>
                 <div className="actions">
                     {opened.kind === `live` ? (
-                        <Link to={`/game/${encodeURIComponent(opened.gameId)}`} className="btn btn-primary">
+                        <Link to={pagePath(`game`, { gameId: opened.gameId })} className="btn btn-primary">
                             {words.watch}
                         </Link>
                     ) : null}
@@ -1076,7 +1077,7 @@ function SourceLines({ tree, game, editing, at }: { tree: Tree; game: OpenedGame
     if (game !== null && game.snapshot.status === `finished`) {
         const { x, o } = game.snapshot.players;
         const turn = isMainLine(tree, at) ? (nodeAt(tree, at)?.turn ?? null) : null;
-        const gamePath = `/game/${encodeURIComponent(game.snapshot.gameId)}${turn === null ? `` : `?turn=${String(turn)}`}`;
+        const gamePath = `${pagePath(`game`, { gameId: game.snapshot.gameId })}${turn === null ? `` : `?turn=${String(turn)}`}`;
         const seat = (side: Side, player: typeof x) => (
             <span className="an-seat">
                 <Swatch side={side} />

@@ -1,3 +1,4 @@
+import { pageNames, sitePages } from '@hexo-arena/contract';
 import { describe, expect, it } from 'vitest';
 import { reportForm } from '../src/report-form';
 import { parseRoute, routePath } from '../src/router/route';
@@ -137,6 +138,19 @@ describe('routePath', () => {
         ] as const;
         for (const route of routes) {
             expect(parseRoute(routePath(route))).toEqual(route);
+        }
+    });
+
+    it('parses every page of the table back from its own path, a listed parameter at each of its values', () => {
+        for (const name of pageNames) {
+            const { path, values } = sitePages[name];
+            // No page lists the values of more than one parameter.
+            for (const sample of Object.values(values)[0] ?? [`x`]) {
+                const address = path.replace(/:\w+/gu, sample);
+                const route = parseRoute(address);
+                expect(route.name).toBe(name);
+                expect(routePath(route)).toBe(address);
+            }
         }
     });
 });

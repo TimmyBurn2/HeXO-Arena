@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState, type MouseEvent, type ReactNode } from 'react';
-import { humanGameCooldownSeconds, type BotListing, type Level, type OpeningPlies, type TimeControl } from '@hexo-arena/contract';
+import { humanGameCooldownSeconds, pagePath, type BotListing, type Level, type OpeningPlies, type TimeControl } from '@hexo-arena/contract';
 import { ApiError, createGame, limitedFor } from '../api/client';
 import { DiscordButton } from '../components/DiscordButton';
 import { seatName } from '../components/player';
-import { WaitText } from '../components/wait';
+import { useWait, WaitText } from '../components/wait';
 import { useLegalSlots } from '../legal/links';
 import { meStore, useMe } from '../me';
 import { Link } from '../router/Link';
@@ -16,14 +16,14 @@ import { ownedBy, readinessOf, writePlayed, type Holder } from './setup';
 // nothing yet, a request in flight,
 // a line to show, with the bot and clock the bot's side refused when it did,
 // the live-game cap, whose line leads to the games that fill it,
-// a wait counting down to a time from the seconds it began with, in its own words,
+// a wait counting down, in its own words,
 // or a session that ended, with who held it.
 type Outcome =
     | { kind: `idle` }
     | { kind: `sending` }
     | { kind: `line`; text: ReactNode; refused: Refused | null }
     | { kind: `capped` }
-    | { kind: `wait`; until: number; seconds: number; line: (seconds: number) => string }
+    | { kind: `wait`; line: (seconds: number) => string }
     | { kind: `stale`; was: `guest` | `user` };
 
 const botSideCodes = [`bot_busy`, `clock_not_accepted`, `unknown_level`, `not_open`, `delisted`, `not_found`] as const;
@@ -91,9 +91,9 @@ export function StartArea({
 }) {
     const me = useMe();
     const legal = useLegalSlots();
-    const held = holder === null ? null : <Link to={`/tournaments/${encodeURIComponent(holder.id)}`}>{holder.name}</Link>;
+    const held = holder === null ? null : <Link to={pagePath(`tournament`, { id: holder.id })}>{holder.name}</Link>;
     const [outcome, setOutcome] = useState<Outcome>({ kind: `idle` });
-    const [now, setNow] = useState(() => Date.now());
+    const limit = useWait();
     const warning = useRef<HTMLParagraphElement>(null);
     // The reads when a refusal arrives, not when Start was pressed, since a read may land while it is out.
     const readsNow = useRef(reads);
@@ -106,18 +106,8 @@ export function StartArea({
     const own = ownedBy(bot, viewer);
     const state = readinessOf(bot, reserved, viewer);
 
-    useEffect(() => {
-        if (outcome.kind !== `wait`) return;
-        const timer = setInterval(() => {
-            const at = Date.now();
-            setNow(at);
-            if (at >= outcome.until) setOutcome({ kind: `idle` });
-        }, 1000);
-        return () => {
-            clearInterval(timer);
-        };
-    }, [outcome]);
-
+    // A wait that ran out leaves the start free.
+    if (outcome.kind === `wait` && limit.wait === null) setOutcome({ kind: `idle` });
     // A pick by the person is a new try; a line about the last one goes.
     const [lastChoices, setLastChoices] = useState(choices);
     if (choices !== lastChoices) {
@@ -142,9 +132,8 @@ export function StartArea({
     }, [warned]);
 
     function wait(seconds: number, line: (seconds: number) => string) {
-        const at = Date.now();
-        setNow(at);
-        setOutcome({ kind: `wait`, until: at + seconds * 1000, seconds, line });
+        limit.start(seconds);
+        setOutcome({ kind: `wait`, line });
     }
 
     async function start(asGuest: boolean) {
@@ -166,7 +155,7 @@ export function StartArea({
         try {
             const snapshot = await createGame({ bot: bot.name, timeControl: clock, openingPlies: opening, ...(level === null ? {} : { level: level.id }), rated });
             writePlayed(bot.name, clock);
-            navigate(`/game/${encodeURIComponent(snapshot.gameId)}`);
+            navigate(pagePath(`game`, { gameId: snapshot.gameId }));
         } catch (cause) {
             if (cause instanceof ApiError && cause.status === 401) {
                 // The session ended on the server;
@@ -226,7 +215,7 @@ export function StartArea({
 
     const unavailable =
         state === `ready` ? null : state === `tournament` ? text.play.unavailable.tournament(bot.name, held) : text.play.unavailable[state](bot.name);
-    const cooling = outcome.kind === `wait` ? Math.max(1, Math.ceil((outcome.until - now) / 1000)) : null;
+    const cooling = outcome.kind === `wait` ? limit.wait : null;
     const blocked = paused || unavailable !== null || cooling !== null || moved || outcome.kind === `sending` || (stale && visitor !== null);
     // Where the list kept the bot and moved its clock, the line says so, whatever the refusal was;
     // a level the bot no longer offers moves the setup to its default, which that refusal's own line says.
@@ -278,7 +267,7 @@ export function StartArea({
                     <ul className="start-yours">
                         {visitor.liveGames.map((game) => (
                             <li key={game.gameId}>
-                                <Link to={`/game/${encodeURIComponent(game.gameId)}`}>
+                                <Link to={pagePath(`game`, { gameId: game.gameId })}>
                                     {text.play.yourGame(seatName(game.players[game.players.x.name === visitor.name ? `o` : `x`]))}
                                 </Link>
                             </li>
@@ -287,7 +276,7 @@ export function StartArea({
                 ) : null}
                 {outcome.kind === `wait` && cooling !== null ? (
                     <p className="field-error">
-                        <WaitText wait={{ seconds: outcome.seconds, left: cooling }} line={outcome.line} />
+                        <WaitText wait={cooling} line={outcome.line} />
                     </p>
                 ) : null}
             </div>
