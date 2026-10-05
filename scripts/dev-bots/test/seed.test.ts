@@ -1,4 +1,4 @@
-import { botListingSchema, botsPath, duelDetailSchema, parseClockArg, tournamentDetailSchema, tournamentListSchema, tournamentsPath } from '@hexo-arena/contract';
+import { botListingSchema, botsPath, parseClockArg, tournamentDetailSchema, tournamentListSchema, tournamentsPath } from '@hexo-arena/contract';
 import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -9,8 +9,7 @@ import { games } from '../../../apps/server/src/db/schema';
 import { createTestApp, type TestApp } from '../../../apps/server/test/helpers';
 import type { SeedPlan } from '../src/personas';
 import { NotADevServer } from '../src/runner';
-import type { DevDuelPlans } from '../src/duels';
-import type { DevRoundRobinPlans } from '../src/round-robins';
+import type { DevEventPlan } from '../src/events';
 import { seedDevData, type SeedReport } from '../src/seed';
 import { devTournamentLeadMs, devTournamentName, devWeeklyRule, type DevWeeklyRule } from '../src/tournament';
 
@@ -89,9 +88,8 @@ interface Seeded {
 const now = Date.now();
 
 // The personas with the dev tournament and the weekly rule.
-// The duels and the round robins each play in a world of their own: their live ones take
-// every persona bot but one, which would leave the tournament one owner's bot to enter,
-// and a live duel stays running only while no other seed holds its bots online.
+// The duels and round robins play in a world of their own: their live ones take
+// every persona bot but one, which would leave the tournament one owner's bot to enter.
 async function seedPersonas() {
     const server = await boot(true);
     const schedule = (name: string, startsAt: Date) => {
@@ -132,22 +130,19 @@ async function seedPersonas() {
     return { server, first, second, firstFinishes, tokens, listing };
 }
 
-const duelPlans: DevDuelPlans = {
-    finished: { starter: `ana`, first: `hextide`, second: `quietlake`, games: 2, rated: true },
-    live: { starter: `bruno`, first: `pebble`, second: `quietlake`, games: 10, rated: false },
-    test: { starter: `ana`, first: `hextide`, second: `pebble`, games: 2, rated: false },
-};
+// The dev plans at the personas' own bots, shorter, in an order that keeps a person and a bot to two running at once.
+const eventPlans: readonly DevEventPlan[] = [
+    { name: `finished duel`, creator: `ana`, bots: [`hextide`, `quietlake`], gamesPerPair: 2, left: `played` },
+    { name: `test duel`, creator: `ana`, bots: [`hextide`, `pebble`], gamesPerPair: 2, left: `played` },
+    { name: `finished round robin`, creator: `bruno`, bots: [`hextide`, `pebble`, `quietlake`], gamesPerPair: 2, left: `played` },
+    { name: `test round robin`, creator: `ana`, bots: [`hextide`, `pebble`, `cinder`], gamesPerPair: 2, left: `played` },
+    { name: `live duel`, creator: `bruno`, bots: [`pebble`, `quietlake`], gamesPerPair: 10, left: `running` },
+    { name: `live round robin`, creator: `dmitri`, bots: [`quietlake`, `cinder`, `pebble`], gamesPerPair: 4, left: `running` },
+];
 
-const roundRobinPlans: DevRoundRobinPlans = {
-    finished: { creator: `bruno`, bots: [`hextide`, `pebble`, `quietlake`], gamesPerPair: 2 },
-    test: { creator: `ana`, bots: [`hextide`, `pebble`, `cinder`], gamesPerPair: 2 },
-    live: { creator: `dmitri`, bots: [`quietlake`, `cinder`, `pebble`], gamesPerPair: 4 },
-};
-
-// The app under test leaves its duel runner and its scheduler to the caller, which ticks them as a server does.
+// The app under test leaves its scheduler to the caller, which ticks it as a server does.
 async function seedMatches(extra: Partial<Parameters<typeof seedDevData>[0]>): Promise<Seeded> {
     const server = await boot(true);
-    server.world.duels.start(50);
     server.world.tournaments.start(50);
     const first = await seed(server, extra);
     const second = await seed(server, extra);
@@ -160,14 +155,13 @@ function settled<T>(result: PromiseSettledResult<T> | undefined): T {
     return result.value;
 }
 
-// Each world is seeded once and then once more, all three side by side, and the tests read what the runs left;
+// Each world is seeded once and then once more, both side by side, and the tests read what the runs left;
 // a seed takes seconds, so a seed per test made this file the slowest in the repo.
 let personas: PromiseSettledResult<Awaited<ReturnType<typeof seedPersonas>>> | undefined;
-let duels: PromiseSettledResult<Seeded> | undefined;
-let roundRobins: PromiseSettledResult<Seeded> | undefined;
+let events: PromiseSettledResult<Seeded> | undefined;
 
 beforeAll(async () => {
-    [personas, duels, roundRobins] = await Promise.allSettled([seedPersonas(), seedMatches({ duels: duelPlans }), seedMatches({ roundRobins: roundRobinPlans })]);
+    [personas, events] = await Promise.allSettled([seedPersonas(), seedMatches({ events: eventPlans })]);
 }, 60_000);
 
 afterAll(async () => {
@@ -228,30 +222,28 @@ describe('the dev seed', () => {
         ]);
     });
 
-    it('plays one duel and a test out and leaves another duel running, and a rerun starts none again', async () => {
-        const { server, first, second } = settled(duels);
-        const duel = (id: string | null | undefined) => read(server, duelDetailSchema, `/api/duels/${id ?? ``}`);
-        const finished = await duel(first.duels?.finished);
-        expect(finished).toMatchObject({ kind: `duel`, status: `finished`, startedBy: `ana`, terms: { games: 2, rated: true } });
-        expect(finished.games.map((game) => game.state)).toEqual([`played`, `played`]);
-        const test = await duel(first.duels?.test);
-        expect(test).toMatchObject({ kind: `test`, status: `finished`, first: { name: `hextide`, version: `1.4.0` }, second: { name: `pebble`, version: `0.3.1` } });
-        expect(test.estimate?.games).toBe(2);
-        expect((await duel(first.duels?.live)).status).toBe(`running`);
-        expect(second.duels).toEqual(first.duels);
-    });
-
-    it('plays a round robin and a test out and leaves another round robin running, and a rerun sets none up again', async () => {
-        const { server, first, second } = settled(roundRobins);
-        const tournament = (id: string | null | undefined) => read(server, tournamentDetailSchema, `/api/tournaments/${id ?? ``}`);
-        const finished = await tournament(first.roundRobins?.finished);
-        expect(finished).toMatchObject({ origin: `person`, createdBy: `bruno`, test: false, status: `finished`, name: `Round robin by bruno` });
-        expect(finished.standings.reduce((sum, line) => sum + line.points, 0)).toBeGreaterThan(0);
-        const test = await tournament(first.roundRobins?.test);
-        expect(test).toMatchObject({ test: true, status: `finished`, createdBy: `ana` });
-        expect(test.estimates).toHaveLength(3);
-        expect((await tournament(first.roundRobins?.live)).status).toBe(`running`);
-        expect(second.roundRobins).toEqual(first.roundRobins);
+    it('plays a duel, a round robin, and a test of each out through the tournaments, leaves a duel and a round robin running, and a rerun sets none up again', async () => {
+        const { server, first, second } = settled(events);
+        const tournament = (name: string) => read(server, tournamentDetailSchema, `/api/tournaments/${first.events?.[name] ?? ``}`);
+        const duel = await tournament(`finished duel`);
+        expect(duel).toMatchObject({ format: `duel`, origin: `person`, createdBy: `ana`, rated: false, test: false, status: `finished`, gamesPerPair: 2 });
+        expect(duel.rounds[0]?.pairings[0]?.games.map((game) => game.outcome)).toEqual([`played`, `played`]);
+        const test = await tournament(`test duel`);
+        expect(test).toMatchObject({ format: `duel`, test: true, status: `finished` });
+        expect(test.entries.map((entry) => [entry.bot, entry.version])).toEqual([
+            [`hextide`, `1.4.0`],
+            [`pebble`, `0.3.1`],
+        ]);
+        expect(test.estimates?.[0]?.estimate.games).toBe(2);
+        const field = await tournament(`finished round robin`);
+        expect(field).toMatchObject({ format: `round_robin`, createdBy: `bruno`, test: false, status: `finished`, name: `Round robin by bruno` });
+        expect(field.standings.reduce((sum, line) => sum + line.points, 0)).toBeGreaterThan(0);
+        const fieldTest = await tournament(`test round robin`);
+        expect(fieldTest).toMatchObject({ test: true, status: `finished`, createdBy: `ana` });
+        expect(fieldTest.estimates).toHaveLength(3);
+        expect((await tournament(`live duel`)).status).toBe(`running`);
+        expect((await tournament(`live round robin`)).status).toBe(`running`);
+        expect(second.events).toEqual(first.events);
     });
 
     it('refuses a target without the dev routes and creates nothing', async () => {

@@ -1061,13 +1061,13 @@ describe('bot-vs-bot games', () => {
     });
 
     it('tells both bots a scheduled game started unrated is unrated, and one started rated is rated', () => {
-        const [a, b] = [challenger.id, bot.id].sort();
+        world.sqlite.exec(
+            `insert into tournaments (id, name, status, starts_at, time_control, opening_plies, max_entrants, created_at, started_at) values ('t_abcdefghjkmn', 'Weekly', 'running', 1, '{"mode":"turn","turnTimeMs":10000}', 1, 3, 1, 1)`,
+        );
         world.sqlite
-            .prepare(
-                `insert into duels (id, bot_a_id, bot_b_id, a_first, a_x, test, games, time_control, opening_plies, a_rating, b_rating, rated, created_at) values ('d_abcdefghjkmn', ?, ?, 1, 1, 0, 2, '{"mode":"turn","turnTimeMs":10000}', 5, 1500, 1500, 0, 1)`,
-            )
-            .run(a, b);
-        const play = (game: number, unratedByChoice: boolean) =>
+            .prepare(`insert into tournament_pairings (id, tournament_id, round, first_bot_id, second_bot_id, games_per_pair) values ('p_scheduled', 't_abcdefghjkmn', 1, ?, ?, 2)`)
+            .run(challenger.id, bot.id);
+        const play = (game: 1 | 2, unratedByChoice: boolean) =>
             world.games.createScheduledGame({
                 x: challenger,
                 o: { id: bot.id, name: bot.name },
@@ -1075,7 +1075,7 @@ describe('bot-vs-bot games', () => {
                 timeControl: turnControl,
                 openingPlies: 1,
                 opening: null,
-                tag: { kind: `duel`, id: `d_abcdefghjkmn`, game },
+                tag: { pairingId: `p_scheduled`, game },
             }).gameId;
         const unrated = play(1, true);
         const rated = play(2, false);
@@ -1084,12 +1084,13 @@ describe('bot-vs-bot games', () => {
             expect(startOf(unrated, botId)).toMatchObject({ type: `gameStart`, rated: false });
             expect(startOf(rated, botId)).toMatchObject({ type: `gameStart`, rated: true });
         }
-        expect(world.games.liveEntriesOf([unrated, rated]).map((entry) => [entry.rated, entry.duel])).toEqual([
-            [false, { id: `d_abcdefghjkmn`, game: 1, of: 2 }],
-            [true, { id: `d_abcdefghjkmn`, game: 2, of: 2 }],
+        const line = { id: `t_abcdefghjkmn`, name: `Weekly`, format: `round_robin`, round: 1, of: 2 };
+        expect(world.games.liveEntriesOf([unrated, rated]).map((entry) => [entry.rated, entry.tournament])).toEqual([
+            [false, { ...line, game: 1 }],
+            [true, { ...line, game: 2 }],
         ]);
         world.games.abort(unrated);
-        expect(world.games.snapshotFor(unrated, null)).toMatchObject({ duel: { id: `d_abcdefghjkmn`, game: 1, of: 2 }, unratedByChoice: true });
+        expect(world.games.snapshotFor(unrated, null)).toMatchObject({ tournament: { ...line, game: 1 }, unratedByChoice: true });
     });
 
     it('publishes each turn to watchers, a first-stone win as that stone alone, then the finish', () => {

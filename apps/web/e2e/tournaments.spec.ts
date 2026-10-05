@@ -39,9 +39,9 @@ test('the tournaments stand under Games, a tournament\'s page lighting Games wit
 for (const width of [1280, 390]) {
     test(`the tournaments name the reader's own part and offer an owner the entry of one coming up, at ${String(width)} px`, async ({ page }) => {
         await open(page, `/games/tournaments`, width);
-        const live = page.locator(`.tournament-row`, { has: page.getByRole(`link`, { name: `Autumn round robin` }) });
-        await expect(live.locator(`.tournament-row-yours`)).toHaveText(`Yours: sealbot, 1st so far`);
-        await expect(live.locator(`.tournament-row-live`)).toHaveText(`Round 2 of 3 live`);
+        const live = page.locator(`a.duel-row`, { hasText: `Autumn round robin` });
+        await expect(live.locator(`.event-row-yours`)).toHaveText(`Yours: sealbot, 1st so far`);
+        await expect(live.locator(`.duel-row-live`)).toHaveText(`Round 2 of 3 live`);
         await page.getByRole(`link`, { name: `Enter a bot in Winter cup` }).click();
         await expect(page).toHaveURL(/\/tournaments\/t_wintercup202$/u);
         await expect(page.getByLabel(`Your bot`)).toBeVisible();

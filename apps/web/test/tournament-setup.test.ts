@@ -52,10 +52,10 @@ describe('a round robin\'s schedule', () => {
     });
 
     it('captions a game by its place among its pair\'s games', () => {
-        expect(gameCaption({ id: `t_abcdefghjkmn`, name: `Round robin by bruno`, format: `round_robin`, round: 3, game: 1 })).toBe(`Round robin by bruno, round 3, game 1 of 2`);
-        expect(gameCaption({ id: `t_abcdefghjkmn`, name: `Round robin by ana`, format: `round_robin`, round: 2, game: 1, leg: 4, of: 10, createdBy: `ana` })).toBe(`Round robin by ana, round 2, game 7 of 10`);
-        expect(gameCaption({ id: `t_abcdefghjkmn`, name: `Duel by ana`, format: `duel`, round: 1, game: 2, leg: 2, of: 10, createdBy: `ana` })).toBe(`Duel, game 4 of 10`);
-        expect(gameCaption({ id: `t_abcdefghjkmn`, name: `Duel by ana`, format: `duel`, round: 1, game: 1, leg: 25, of: 50, createdBy: `ana` }, true)).toBe(`Test, game 49 of 50`);
-        expect(gameCaption({ id: `t_abcdefghjkmn`, name: `Duel by ana`, format: `duel`, round: 1, game: 1, leg: 1, of: 1, createdBy: `ana` })).toBe(`Duel, game 1 of 1`);
+        expect(gameCaption({ id: `t_abcdefghjkmn`, name: `Round robin by bruno`, format: `round_robin`, round: 3, game: 1, of: 2 })).toBe(`Round robin by bruno, round 3, game 1 of 2`);
+        expect(gameCaption({ id: `t_abcdefghjkmn`, name: `Round robin by ana`, format: `round_robin`, round: 2, game: 7, of: 10, createdBy: `ana` })).toBe(`Round robin by ana, round 2, game 7 of 10`);
+        expect(gameCaption({ id: `d_abcdefghjkmn`, name: `Duel by ana`, format: `duel`, round: 1, game: 4, of: 10, createdBy: `ana` })).toBe(`Duel, game 4 of 10`);
+        expect(gameCaption({ id: `t_abcdefghjkmn`, name: `Duel by ana`, format: `duel`, round: 1, game: 49, of: 50, createdBy: `ana` }, true)).toBe(`Test, game 49 of 50`);
+        expect(gameCaption({ id: `t_abcdefghjkmn`, name: `Duel by ana`, format: `duel`, round: 1, game: 1, of: 1, createdBy: `ana` })).toBe(`Duel, game 1 of 1`);
     });
 });

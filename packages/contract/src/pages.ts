@@ -1,5 +1,4 @@
 import { analysisPagePath } from './analysis';
-import { duelListMeta, duelsMeta } from './duels';
 import { legalPageMeta, legalPages } from './legal';
 import {
     analysisMeta,
@@ -61,9 +60,7 @@ function page<const Path extends string, const Values extends ParamValues<Path> 
 export const sitePages = {
     home: page(`/`, () => siteMeta()),
     play: page(`/play`, () => playMeta()),
-    'bot-duel': page(`/play/duels`, () => duelsMeta),
     'play-tournament': page(`/play/tournament`, () => playTournamentMeta),
-    duel: page(`/duels/:id`, () => ({ title: pageTitle(`Duel`), description: duelListMeta.description })),
     ladder: page(`/ladder`, () => ladderMeta()),
     tournament: page(`/tournaments/:id`, () => ({ title: pageTitle(`Tournament`), description: tournamentsMeta.description })),
     bots: page(`/bots`, () => botsMeta),
@@ -71,7 +68,6 @@ export const sitePages = {
     player: page(`/players/:player`, ({ player }) => playerMeta(player)),
     games: page(`/games`, () => gamesMeta),
     'live-games': page(`/games/live`, () => liveGamesMeta),
-    'games-duels': page(`/games/duels`, () => duelListMeta),
     'games-tournaments': page(`/games/tournaments`, () => tournamentsMeta),
     analysis: page(analysisPagePath, () => analysisMeta()),
     connect: page(`/connect`, () => connectMeta),
@@ -108,20 +104,46 @@ export function pageMeta<Name extends PageName>(name: Name, params: PageParams<N
     return (sitePages[name].meta as (params: PageParams<Name>) => PageMeta)(params);
 }
 
-/** An address that moved: the old path, and the page now at it, which takes the parameters the old path held. */
+/** An address that moved: the old path, the page now at it, which takes the parameters the old path held, and how its query reads there. */
 export interface MovedPage {
     readonly from: string;
     readonly to: PageName;
+    /** The query the new page reads for the old one's; the old query as it stands when absent. */
+    readonly query?: (old: URLSearchParams) => URLSearchParams;
+}
+
+// A duel's setup as its old link carried it, its two bots and their
+// strengths, read as the setup of a tournament of those two bots; its
+// games, clock, and opening read alike in both.
+function duelSetupQuery(old: URLSearchParams): URLSearchParams {
+    const query = new URLSearchParams();
+    const picked = [
+        { name: old.get(`first`), level: old.get(`firstLevel`) },
+        { name: old.get(`second`), level: old.get(`secondLevel`) },
+    ].flatMap((bot) => (bot.name === null || bot.name === `` ? [] : [{ name: bot.name, level: bot.level }]));
+    if (picked.length > 0) query.set(`bots`, picked.map((bot) => bot.name).join(`,`));
+    for (const bot of picked) if (bot.level !== null && bot.level !== ``) query.append(`level`, `${bot.name}:${bot.level}`);
+    for (const key of [`games`, `clock`, `opening`]) {
+        const value = old.get(key);
+        if (value !== null) query.set(key, value);
+    }
+    return query;
 }
 
 /** Every address that moved, so an old link still lands. */
 export const movedPages: readonly MovedPage[] = [
-    { from: `/play/duels/:id`, to: `duel` },
-    { from: `/duels`, to: `games-duels` },
+    { from: `/play/duels/:id`, to: `tournament` },
+    { from: `/duels/:id`, to: `tournament` },
+    { from: `/play/duels`, to: `play-tournament`, query: duelSetupQuery },
+    { from: `/games/duels`, to: `games-tournaments` },
+    { from: `/duels`, to: `games-tournaments` },
     { from: `/tournaments`, to: `games-tournaments` },
 ];
 
-/** The new path of a moved address, from the parameters its old path held. */
-export function movedPath(moved: MovedPage, params: Readonly<Record<string, string>>): string {
-    return fillPath(sitePages[moved.to].path, params);
+/** The new address of a moved one, from the parameters its old path held and its query, a leading question mark or none. */
+export function movedPath(moved: MovedPage, params: Readonly<Record<string, string>>, search = ``): string {
+    const path = fillPath(sitePages[moved.to].path, params);
+    const old = new URLSearchParams(search);
+    const query = (moved.query === undefined ? old : moved.query(old)).toString();
+    return query === `` ? path : `${path}?${query}`;
 }

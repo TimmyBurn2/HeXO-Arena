@@ -1,4 +1,4 @@
-import type { DuelEstimate, GameTournament, TournamentDetail, TournamentSummary, TournamentYours } from '@hexo-arena/contract';
+import type { Estimate, GameTournament, TournamentDetail, TournamentSummary, TournamentYours } from '@hexo-arena/contract';
 import { text } from '../text';
 
 /**
@@ -27,14 +27,12 @@ export function yoursText(tournament: Pick<TournamentSummary, `status`>, yours: 
 
 /** A tournament game's caption: a duel's place among its games, else the tournament, the round, and the game within its pair's games. */
 export function gameCaption(tournament: GameTournament, test = false): string {
-    const game = tournament.leg === undefined ? tournament.game : (tournament.leg - 1) * 2 + tournament.game;
-    const of = tournament.of ?? 2;
-    if (tournament.format === `duel`) return text.duels.caption(test ? `test` : `duel`, game, of);
-    return text.roundRobins.caption(tournament.name, tournament.round, game, of);
+    if (tournament.format === `duel`) return text.duels.caption(test ? `test` : `duel`, tournament.game, tournament.of);
+    return text.roundRobins.caption(tournament.name, tournament.round, tournament.game, tournament.of);
 }
 
 /** A bot's verdict from its own side of a test's estimate: the estimate favoring the rest reads weaker. */
-export function verdictOf(estimate: DuelEstimate): keyof typeof text.roundRobins.estimates.verdicts {
+export function verdictOf(estimate: Estimate): keyof typeof text.roundRobins.estimates.verdicts {
     if (estimate.favored === `second`) return estimate.verdict === `stronger` ? `weaker` : estimate.verdict === `likely_stronger` ? `likely_weaker` : `too_close`;
     return estimate.verdict;
 }

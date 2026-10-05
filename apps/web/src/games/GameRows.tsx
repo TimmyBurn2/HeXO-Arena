@@ -1,6 +1,5 @@
 import { clockText, pagePath, resultSentence, type FinishedGameEntry, type GamePlayer, type Side } from '@hexo-arena/contract';
 import { BotBadge, Rating, seatLevelFacts, seatName, seatsRateNobody, Swatch } from '../components/player';
-import { duelPagePath } from '../duels/setup';
 import { Link } from '../router/Link';
 import { text } from '../text';
 import { gameCaption } from '../tournaments/words';
@@ -12,7 +11,7 @@ import './GameRows.css';
  * the opening, the length, and when it ended; never a rating's move.
  * A game the operator voided stays listed, tagged, as it counts in no
  * record; one community analyzers have read whole says how many did.
- * A game of a duel or a tournament names it under the result, a link of
+ * A game of a tournament, a duel among them, names it under the result, a link of
  * its own beside the row's, since a link holds no other: on a narrow
  * window a line under the card, on a wide one laid over the row.
  * A wide window lines them up under a head of columns; a narrow one makes
@@ -93,13 +92,10 @@ function GameRow({ game, now }: { game: FinishedGameEntry; now: number }) {
     );
 }
 
-// The duel or tournament a game belongs to, as its caption names and links it.
+// The tournament a game belongs to, a duel among them, as its caption names and links it.
 function eventOf(game: FinishedGameEntry): { to: string; words: string } | null {
-    if (game.tournament !== undefined) {
-        return { to: pagePath(`tournament`, { id: game.tournament.id }), words: gameCaption(game.tournament, game.test === true) };
-    }
-    if (game.duel !== undefined) return { to: duelPagePath(game.duel.id), words: text.duels.caption(game.test === true ? `test` : `duel`, game.duel.game, game.duel.of) };
-    return null;
+    if (game.tournament === undefined) return null;
+    return { to: pagePath(`tournament`, { id: game.tournament.id }), words: gameCaption(game.tournament, game.test === true) };
 }
 
 function Seat({ side, player }: { side: Side; player: GamePlayer }) {

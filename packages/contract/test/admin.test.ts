@@ -94,10 +94,10 @@ describe('adminRequestSchema', () => {
         expect(adminRequestSchema.safeParse({ op: `recompute-ratings`, exclude: [`g_x y`], reason: `r` }).success).toBe(false);
     });
 
-    it('stops a duel by its id, with a reason', () => {
-        expect(adminRequestSchema.safeParse({ op: `duel-stop`, id: `d_abcdefghjkmn`, reason: `r` }).success).toBe(true);
-        expect(adminRequestSchema.safeParse({ op: `duel-stop`, id: `t_abcdefghjkmn`, reason: `r` }).success).toBe(false);
-        expect(adminRequestSchema.safeParse({ op: `duel-stop`, id: `d_abcdefghjkmn` }).success).toBe(false);
+    it('cancels any tournament by its id, a duel kept from the duels of old by its d_ id, and stops no duel apart', () => {
+        expect(adminRequestSchema.safeParse({ op: `tournament-cancel`, id: `d_abcdefghjkmn`, reason: `r` }).success).toBe(true);
+        expect(adminRequestSchema.safeParse({ op: `tournament-cancel`, id: `t_abcdefghjkmn`, reason: `r` }).success).toBe(true);
+        expect(adminRequestSchema.safeParse({ op: `duel-stop`, id: `d_abcdefghjkmn`, reason: `r` }).success).toBe(false);
     });
 
     it('targets bots by a name that passes the name rules', () => {

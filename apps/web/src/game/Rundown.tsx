@@ -10,21 +10,21 @@ const sides = [`x`, `o`] as const satisfies readonly Side[];
 const halfWidth = (Math.sqrt(3) * cellSize) / 2;
 const glyphBox = `${String(-halfWidth)} ${String(-cellSize)} ${String(2 * halfWidth)} ${String(2 * cellSize)}`;
 
-// How a game was started unrated: a person's choice, a duel's, a round robin a person set up, or a test, where one person holds both sides.
+// How a game was started unrated: a person's choice, a duel or a round robin a person set up, or a test, where one person holds both sides.
 type UnratedBy = `choice` | `duel` | `roundRobin` | `test`;
 
 /** The mark a snapshot carries, as the rundown says it. */
 export function unratedByOf(snapshot: {
     readonly unratedByChoice?: true | undefined;
     readonly test?: true | undefined;
-    readonly duel?: unknown;
-    readonly tournament?: { readonly createdBy?: string | undefined } | undefined;
+    readonly tournament?: { readonly format: `duel` | `round_robin`; readonly createdBy?: string | undefined } | undefined;
 }): UnratedBy | null {
     if (snapshot.test === true) return `test`;
     if (snapshot.unratedByChoice !== true) return null;
-    // A person's round robin names who set it up; the weekly's games are rated.
-    if (snapshot.tournament?.createdBy !== undefined) return `roundRobin`;
-    return snapshot.duel === undefined ? `choice` : `duel`;
+    // A person's duel or round robin names who set it up; the weekly's games are rated.
+    const tournament = snapshot.tournament;
+    if (tournament?.createdBy === undefined) return `choice`;
+    return tournament.format === `duel` ? `duel` : `roundRobin`;
 }
 
 /**

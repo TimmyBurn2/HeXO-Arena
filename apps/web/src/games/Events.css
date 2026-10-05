@@ -14,6 +14,15 @@
         max-width: var(--measure);
     }
 
+    .events-for {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: space-between;
+        gap: var(--space-2) var(--space-3);
+        margin: 0 0 var(--space-3);
+        font-weight: var(--weight-strong);
+    }
+
     .events-sign-in {
         margin: var(--space-5) 0;
     }
@@ -24,75 +33,6 @@
 
     .events-section > .note {
         margin: 0;
-    }
-
-    /* A live duel: its live game's board beside where the duel stands. */
-    .live-duels {
-        display: grid;
-        gap: var(--space-4);
-        margin: 0;
-        padding: 0;
-        list-style: none;
-    }
-
-    .live-duel {
-        display: grid;
-        grid-template-columns: var(--play-card-min) minmax(0, 1fr);
-        align-items: stretch;
-        background: var(--c-bg-raised);
-        color: var(--c-text);
-        text-decoration: none;
-    }
-
-    .live-duel:hover {
-        background: var(--c-bg-hover);
-        color: var(--c-text);
-    }
-
-    .live-duel-waiting {
-        grid-template-columns: minmax(0, 1fr);
-    }
-
-    .live-duel-board {
-        min-width: 0;
-    }
-
-    .live-duel-body {
-        display: flex;
-        flex-direction: column;
-        justify-content: center;
-        align-items: flex-start;
-        gap: var(--space-2);
-        min-width: 0;
-        padding: var(--space-4) var(--space-5);
-    }
-
-    .live-duel-body p {
-        margin: 0;
-    }
-
-    .live-duel-who {
-        font-size: var(--text-lg);
-    }
-
-    .live-duel-status {
-        display: flex;
-        flex-wrap: wrap;
-        gap: var(--space-1) var(--space-3);
-        font-weight: var(--weight-strong);
-    }
-
-    .live-duel-terms {
-        color: var(--c-text-dim);
-        font-size: var(--text-sm);
-    }
-
-    .live-duel-body .duel-glyphs {
-        margin-top: var(--space-2);
-    }
-
-    .live-duel-body .duel-glyphs .xt-hex {
-        width: var(--sb-hex-w);
     }
 
     /* The next tournament, whose entry follows it. */
@@ -130,19 +70,5 @@
     .next-tournament .entry-control .section-title {
         margin: 0 0 var(--space-2);
         font-size: var(--text-base);
-    }
-
-    @media (max-width: 44rem) {
-        .live-duel {
-            grid-template-columns: minmax(0, 1fr);
-        }
-
-        .live-duel-body {
-            padding: var(--space-3) var(--space-4) var(--space-4);
-        }
-
-        .live-duel-body .duel-glyphs .xt-hex {
-            width: var(--sb-hex-w-sm);
-        }
     }
 }

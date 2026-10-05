@@ -66,14 +66,14 @@ export type CreateGameRequest = z.infer<typeof createGameRequestSchema>;
 /**
  * The mark on a game unrated by how it started rather than by its seats.
  * It marks a signed-in person's game at the bot's default level that they started unrated or that faces their own bot,
- * a challenge's game between two bots of one owner, every game of an unrated duel, and every game of a round robin a person set up.
+ * a challenge's game between two bots of one owner, and every game of an unrated duel or round robin a person set up.
  * A guest's game and a person's practice at another level are unrated by their seats and never carry it;
  * a duel's or a round robin's game carries it at any level.
  * A marked game moves no rating and counts toward no daily cap.
  */
 export const unratedByChoiceSchema = z.literal(true).meta({
     id: `UnratedByChoice`,
-    description: `Present when the game was started unrated: a person's game at the bot's default level that they started unrated or that faces their own bot, a challenge between two bots of one owner, and every game of an unrated duel or of a round robin a person set up. It moves no rating and counts toward no daily cap.`,
+    description: `Present when the game was started unrated: a person's game at the bot's default level that they started unrated or that faces their own bot, a challenge between two bots of one owner, and every game of an unrated duel or round robin a person set up. It moves no rating and counts toward no daily cap.`,
 });
 
 /** The mark on a test: a game one person holds on both sides, which is never rated. */
@@ -118,11 +118,11 @@ export type GamePlayer = z.infer<typeof gamePlayerSchema>;
 export const gamePlayersSchema = z.object({ x: gamePlayerSchema, o: gamePlayerSchema }).meta({ id: `GamePlayers` });
 export type GamePlayers = z.infer<typeof gamePlayersSchema>;
 
-/** The most games a duel plays, a test's most. */
-export const duelGamesMax = 50;
+/** The most games one pair plays in a tournament: a test's longest. */
+export const tournamentPairGamesMax = 50;
 
 /** Openings one pair plays at most, each twice with the sides swapped: a test's fifty games. */
-export const tournamentLegsMax = duelGamesMax / 2;
+export const tournamentLegsMax = tournamentPairGamesMax / 2;
 
 export const tournamentFormatSchema = z.enum([`duel`, `round_robin`]).meta({
     id: `TournamentFormat`,
@@ -130,30 +130,23 @@ export const tournamentFormatSchema = z.enum([`duel`, `round_robin`]).meta({
 });
 export type TournamentFormat = z.infer<typeof tournamentFormatSchema>;
 
+const pairGameSchema = z.number().int().min(1).max(tournamentPairGamesMax);
+
 export const gameTournamentSchema = z
     .object({
         id: z.string(),
         name: z.string(),
         format: tournamentFormatSchema,
         round: z.number().int().min(1),
-        game: z.union([z.literal(1), z.literal(2)]),
-        leg: z.number().int().min(1).max(tournamentLegsMax).optional(),
-        of: z.number().int().min(1).max(duelGamesMax).optional(),
+        game: pairGameSchema.meta({ description: `Which of its pair's games it is, from 1: each opening twice, the first bot on x and then the second.` }),
+        of: pairGameSchema.meta({ description: `The games its pair plays, 1 for a single game.` }),
         createdBy: z.string().optional(),
     })
     .meta({
         id: `GameTournament`,
-        description: [
-            `The tournament a game belongs to: its round, and which of its opening's two games it is.`,
-            `Where a pair plays other than one opening, leg numbers the opening and of counts the pair's games, 1 for a single game; createdBy names who set a person's tournament up.`,
-        ].join(` `),
+        description: `The tournament a game belongs to: its round, and which of its pair's games it is; createdBy names who set a person's tournament up.`,
     });
 export type GameTournament = z.infer<typeof gameTournamentSchema>;
-
-export const gameDuelSchema = z
-    .object({ id: z.string(), game: z.number().int().min(1).max(duelGamesMax), of: z.number().int().min(1).max(duelGamesMax) })
-    .meta({ id: `GameDuel`, description: `The duel a game belongs to: which of its games this is, and how many it plays.` });
-export type GameDuel = z.infer<typeof gameDuelSchema>;
 
 const snapshotBase = {
     gameId: z.string(),
@@ -163,7 +156,6 @@ const snapshotBase = {
     board: gameBoardSchema,
     timeControl: timeControlSchema,
     tournament: gameTournamentSchema.optional(),
-    duel: gameDuelSchema.optional(),
     unratedByChoice: unratedByChoiceSchema.optional(),
     test: testMarkSchema.optional(),
 };
@@ -206,7 +198,6 @@ export const liveGameEntrySchema = z
         cells: z.array(gameCellSchema).min(1).meta({ description: `Every stone in ply order, the opening included.` }),
         clock: gameClockSchema,
         tournament: gameTournamentSchema.optional(),
-        duel: gameDuelSchema.optional(),
         test: testMarkSchema.optional(),
     })
     .meta({
@@ -215,7 +206,7 @@ export const liveGameEntrySchema = z
     });
 export type LiveGameEntry = z.infer<typeof liveGameEntrySchema>;
 
-/** The turn clock a game the server schedules between bots takes, a tournament's or a duel's, and its default. */
+/** The turn clock a game the server schedules between bots in a tournament takes, and its default. */
 export const scheduledTurnMs = { min: 5_000, max: 60_000, default: 10_000 } as const;
 
 /** The match clock a scheduled game takes: main time and increment. */

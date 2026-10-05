@@ -52,7 +52,6 @@ function reasonWords(row: Row, mode: PickerMode): string {
     return reasonText(
         row.reason,
         row.clashes.map((bot) => bot.name),
-        mode.kind === `one` ? (mode.other?.name ?? ``) : ``,
     );
 }
 
@@ -107,7 +106,7 @@ export function BotPicker({ bots, reads, mode, onClose }: { bots: readonly BotLi
         const needle = search.trim().toLowerCase();
         const other = mode.kind === `one` ? mode.other : null;
         const placed = mode.kind === `one` ? (other === null ? [] : [other]) : mode.field;
-        // Beside the viewer's own bot, a pick says whether the duel would be a test or may be rated.
+        // Beside the viewer's own bot, a pick says whether the duel would be a test.
         const yourOther = other !== null && ownedBy(other, viewer) ? other : null;
         return bots
             .filter((bot) => needle === `` || bot.name.toLowerCase().includes(needle) || (bot.ownerName ?? ``).toLowerCase().includes(needle))
@@ -117,8 +116,8 @@ export function BotPicker({ bots, reads, mode, onClose }: { bots: readonly BotLi
                 if (has(placed, bot)) return { bot, reason: `placed`, clashes: [], hint: null };
                 // A checked bot is asked beside the field and the other picks; an unchecked one beside all of them.
                 const beside = mode.kind === `one` ? placed : [...placed, ...checkedBots.filter((each) => each.name !== bot.name)];
-                const reason = eventReadiness(bot, beside, reads, mode.kind === `one`);
-                const hint = yourOther === null || reason !== null ? null : kindOf(yourOther, bot) === `test` ? words.bothYours : words.mayBeRated;
+                const reason = eventReadiness(bot, beside, reads);
+                const hint = yourOther === null || reason !== null || kindOf(yourOther, bot) !== `test` ? null : words.bothYours;
                 return { bot, reason, clashes: clockClashes(bot, beside), hint };
             })
             .sort((a, b) => byRating(a.bot, b.bot));

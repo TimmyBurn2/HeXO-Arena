@@ -3,16 +3,21 @@ import {
     createTournamentRequestSchema,
     defaultOpeningPlies,
     defaultTournamentGamesPerPair,
-    duelBotStateSchema,
     gamesPerBot,
     gamesPerPairFits,
     gameTournamentSchema,
     personTournamentName,
+    duelCutReasons,
+    estimateSchema,
     tournamentBotGamesMax,
+    tournamentBotStateSchema,
     tournamentBotsMax,
     tournamentBotsMin,
     tournamentDailyCap,
+    tournamentCutReasons,
     tournamentDetailSchema,
+    tournamentEndReasonSchema,
+    tournamentIdSchema,
     tournamentFormatOf,
     tournamentGameCounts,
     tournamentGamesMax,
@@ -20,6 +25,8 @@ import {
     tournamentLiveCap,
     tournamentMeta,
     tournamentPairingSchema,
+    tournamentPerBotCap,
+    tournamentStopReasons,
     tournamentTestGameCounts,
     type TournamentSummary,
 } from '../src';
@@ -64,8 +71,25 @@ describe('createTournamentRequestSchema', () => {
         expect(createTournamentRequestSchema.safeParse({ ...request, timeControl: { mode: `match`, mainTimeMs: 600_000, incrementMs: 10_000 } }).success).toBe(true);
     });
 
-    it('holds a person to 2 running and 10 a day, of any size', () => {
-        expect([tournamentLiveCap, tournamentDailyCap]).toEqual([2, 10]);
+    it('holds a person to 2 running and 10 a day, and a bot to 2 running, of any size', () => {
+        expect([tournamentLiveCap, tournamentDailyCap, tournamentPerBotCap]).toEqual([2, 10, 2]);
+    });
+});
+
+describe('why a tournament ends early', () => {
+    it('names every stop and cut reason, a duel of old\'s among them, once', () => {
+        const named = [...tournamentStopReasons, ...tournamentCutReasons, ...duelCutReasons];
+        expect([...tournamentEndReasonSchema.options].sort()).toEqual([...new Set(named)].sort());
+        expect(tournamentStopReasons).toEqual([`creator`, `operator`, `banned`, `deleted`]);
+    });
+});
+
+describe('a test\'s estimate', () => {
+    it('counts up to a test\'s most games a bot, a side the first or the rest', () => {
+        const estimate = { games: 70, points: { first: 35.5, second: 34.5 }, rating: 5, low: null, high: null, chance: 0.5, favored: `first`, verdict: `too_close`, narrowed: null };
+        expect(estimateSchema.safeParse(estimate).success).toBe(true);
+        expect(estimateSchema.safeParse({ ...estimate, games: tournamentBotGamesMax.test + 1 }).success).toBe(false);
+        expect(estimateSchema.safeParse({ ...estimate, favored: `third` }).success).toBe(false);
     });
 });
 
@@ -106,13 +130,21 @@ describe('a tournament a person set up as the site reads it', () => {
         for (const count of [0, 52]) expect(tournamentPairingSchema.safeParse(pairing(count)).success, String(count)).toBe(false);
     });
 
-    it('numbers a game within its pair\'s openings, says its format, and names who set it up', () => {
-        const line = { id: `t_abcdefghjkmn`, name: `Round robin by bruno`, format: `round_robin`, round: 3, game: 1, leg: 4, of: 10, createdBy: `bruno` };
+    it('numbers a game within its pair\'s games, says its format, and names who set it up', () => {
+        const line = { id: `t_abcdefghjkmn`, name: `Round robin by bruno`, format: `round_robin`, round: 3, game: 7, of: 10, createdBy: `bruno` };
         expect(gameTournamentSchema.parse(line)).toEqual(line);
-        expect(gameTournamentSchema.safeParse({ ...line, leg: 25, of: 50, format: `duel` }).success).toBe(true);
-        expect(gameTournamentSchema.safeParse({ ...line, leg: 26 }).success).toBe(false);
-        expect(gameTournamentSchema.safeParse({ ...line, game: 3 }).success).toBe(false);
+        expect(gameTournamentSchema.safeParse({ ...line, id: `d_abcdefghjkmn`, game: 50, of: 50, format: `duel` }).success).toBe(true);
+        expect(gameTournamentSchema.safeParse({ ...line, game: 51 }).success).toBe(false);
+        expect(gameTournamentSchema.safeParse({ ...line, game: 0 }).success).toBe(false);
+        expect(gameTournamentSchema.safeParse({ ...line, of: undefined }).success).toBe(false);
         expect(gameTournamentSchema.safeParse({ ...line, format: `league` }).success).toBe(false);
+    });
+
+    it('reads a tournament by its t_ id, or a duel kept from the duels of old by its d_ id', () => {
+        expect(tournamentIdSchema.safeParse(`t_abcdefghjkmn`).success).toBe(true);
+        expect(tournamentIdSchema.safeParse(`d_abcdefghjkmn`).success).toBe(true);
+        expect(tournamentIdSchema.safeParse(`s_abcdefghjkmn`).success).toBe(false);
+        expect(tournamentIdSchema.safeParse(`d_abcdefghjkm`).success).toBe(false);
     });
 
     it('lists every running tournament, and counts a caller\'s duels and round robins when it names them', () => {
@@ -122,9 +154,10 @@ describe('a tournament a person set up as the site reads it', () => {
         expect(tournamentListSchema.safeParse({ running: [], scheduled: [], past: [], quota: { live: 0, today: 11 } }).success).toBe(false);
     });
 
-    it('counts a bot\'s round robins beside its duels, at most two together', () => {
-        expect(duelBotStateSchema.parse({ name: `pebble`, duelsByOthers: true, dueling: [`hextide`], roundRobins: 1 }).roundRobins).toBe(1);
-        expect(duelBotStateSchema.safeParse({ name: `pebble`, duelsByOthers: true, dueling: [], roundRobins: 3 }).success).toBe(false);
+    it('counts a bot\'s running duels and round robins together, at most two', () => {
+        expect(tournamentBotStateSchema.parse({ name: `pebble`, duelsByOthers: true, running: 2 }).running).toBe(2);
+        expect(tournamentBotStateSchema.safeParse({ name: `pebble`, duelsByOthers: true, running: 3 }).success).toBe(false);
+        expect(tournamentBotStateSchema.safeParse({ name: `pebble`, duelsByOthers: true, dueling: [], roundRobins: 1 }).success).toBe(false);
     });
 
     it('says why a tournament ended early and the bot whose leaving cut it short, where its waits stand, and a test\'s estimates', () => {
@@ -132,6 +165,7 @@ describe('a tournament a person set up as the site reads it', () => {
         expect(shape.end.safeParse({ reason: `creator`, round: 3 }).success).toBe(true);
         expect(shape.end.safeParse({ reason: `missed`, round: 1, bot: { key: 2, name: `cinder` } }).success).toBe(true);
         expect(shape.end.safeParse({ reason: `starter`, round: 3 }).success).toBe(false);
+        expect(shape.end.safeParse({ reason: `offline`, round: 1, bot: { key: 1, name: `cinder` } }).success).toBe(true);
         expect(shape.status.safeParse(`cut_short`).success).toBe(true);
         expect(shape.waiting.safeParse([{ key: 2, until: `2026-10-04T12:00:42Z` }]).success).toBe(true);
         expect(shape.status.safeParse(`stopped`).success).toBe(true);

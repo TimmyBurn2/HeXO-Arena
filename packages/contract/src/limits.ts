@@ -28,7 +28,7 @@ export const engineStrayFrameCap = 10;
 /** The largest frame a bot may send on its engine session. */
 export const engineFrameLimitBytes = 16 * 1024;
 
-/** How long a scheduled game, a tournament's or a duel's, waits for a bot that is not ready to play. */
+/** How long a tournament's scheduled game waits for a bot that is not ready to play. */
 export const presenceGraceMs = 60_000;
 
 /** How long a bot's live games wait for its stream to return before it forfeits them. */
@@ -85,7 +85,7 @@ export const archiveReadLimit: RateLimit = { burst: 10, refillMs: 1_000 };
 /** Finished games read across every caller. */
 export const archiveReadGlobalLimit: RateLimit = { burst: 20, refillMs: 100 };
 
-/** Exports of a duel's or a tournament's games one client may download: each reads up to a tournament's every game. */
+/** Exports of a tournament's games one client may download: each reads up to a tournament's every game. */
 export const gameExportLimit: RateLimit = { burst: 4, refillMs: 15_000 };
 
 /** Exports downloaded across every caller. */

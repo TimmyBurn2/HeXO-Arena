@@ -23,13 +23,15 @@ function filterOf(search: string): Filter {
 }
 
 // Every tournament leaves tests to their own view; the reader's own and the tests come from the list narrowed for them.
-function readFor(filter: Filter): () => Promise<TournamentList> {
-    if (filter === `yours`) return async () => fetchTournaments({ mine: `1` });
-    if (filter === `tests`) return async () => fetchTournaments({ kind: `test` });
+// Narrowed to one bot, the list is that bot's, the reader's own then those they set up.
+function readFor(filter: Filter, bot: string | null, viewer: string | null): () => Promise<TournamentList> {
+    const forBot = bot === null ? {} : { bot };
+    if (filter === `tests`) return async () => fetchTournaments({ ...forBot, kind: `test` });
     return async () => {
-        const list = await fetchTournaments();
-        const shown = (tournaments: readonly TournamentSummary[]) => tournaments.filter((tournament) => !tournament.test);
-        return { ...list, running: shown(list.running), past: shown(list.past) };
+        const list = await fetchTournaments(filter === `yours` && bot === null ? { mine: `1` } : forBot);
+        const kept = (tournament: TournamentSummary) => (filter === `yours` ? bot === null || tournament.createdBy === viewer : !tournament.test);
+        const shown = (tournaments: readonly TournamentSummary[]) => tournaments.filter(kept);
+        return { ...list, running: shown(list.running), scheduled: filter === `yours` && bot !== null ? [] : list.scheduled, past: shown(list.past) };
     };
 }
 
@@ -41,10 +43,12 @@ function readFor(filter: Filter): () => Promise<TournamentList> {
  * entered one coming up is offered its entry.
  */
 export function TournamentsScreen() {
-    const filter = filterOf(useSearch());
+    const search = useSearch();
+    const filter = filterOf(search);
+    const bot = new URLSearchParams(search).get(`bot`);
     const me = useMe();
     const viewer = me.status === `ready` && me.me?.kind === `user` ? me.me.name : null;
-    const load = useMemo(() => readFor(filter), [filter]);
+    const load = useMemo(() => readFor(filter, bot, viewer), [filter, bot, viewer]);
     const { data, error, limited, reload } = useAsync(load);
     const loadRoster = useCallback(async () => (viewer === null ? [] : fetchBots(false)), [viewer]);
     const roster = useAsync(loadRoster);
@@ -60,6 +64,12 @@ export function TournamentsScreen() {
                     {words.setUp}
                 </Link>
             </div>
+            {bot === null ? null : (
+                <p className="events-for">
+                    <span>{words.forBot(bot)}</span>
+                    <Link to={gamesTournamentsPath(filter === `all` ? null : filter)}>{words.everyBot}</Link>
+                </p>
+            )}
             <div className="pills" role="group" aria-label={words.filters}>
                 {filters.map((each) => (
                     <button
@@ -68,7 +78,7 @@ export function TournamentsScreen() {
                         className={filter === each ? `pill active` : `pill`}
                         aria-pressed={filter === each}
                         onClick={() => {
-                            navigate(gamesTournamentsPath(each === `all` ? null : each), { replace: true });
+                            navigate(gamesTournamentsPath(each === `all` ? null : each, bot), { replace: true });
                         }}
                     >
                         {words[each]}

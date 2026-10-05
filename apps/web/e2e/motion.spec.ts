@@ -19,7 +19,7 @@ const pages: readonly (readonly [string, Viewport, string])[] = [
     [`game-analysis`, phone, `the game sheet on a phone`],
     [`analysis-reading`, desktop, `the analysis board's lines`],
     [`play-opening`, desktop, `the opening preview`],
-    [`duels-picker`, phone, `the bot picker`],
+    [`home-duel-picker`, phone, `the bot picker`],
 ];
 
 async function durations(page: Page): Promise<{ found: number[]; tokens: number[] }> {

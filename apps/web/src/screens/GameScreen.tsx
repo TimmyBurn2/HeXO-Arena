@@ -1,10 +1,8 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from 'react';
-import { clockText, gameMeta, levelFacts, turnsOnBoard, type DuelDetail, type FinishedGamesRecord, type GameHeadline, type GameSnapshot, type GameTournament, type TournamentDetail } from '@hexo-arena/contract';
+import { clockText, gameMeta, levelFacts, turnsOnBoard, type FinishedGamesRecord, type GameHeadline, type GameSnapshot, type GameTournament, type TournamentDetail } from '@hexo-arena/contract';
 import { gameLink } from '../analysis/links';
-import { fetchDuel, fetchFinishedGames, fetchTournament } from '../api/client';
+import { fetchFinishedGames, fetchTournament } from '../api/client';
 import { useAsync } from '../api/use-async';
-import { duelPagePath } from '../duels/setup';
-import { noWinnerCount, pointsText, signed, standingText, sweptBy } from '../duels/words';
 import { BotBadge, PlayerName, seatName, seatsRateNobody, Swatch } from '../components/player';
 import { useWait, WaitText } from '../components/wait';
 import { gamesPathOf } from '../games/filters';
@@ -13,6 +11,7 @@ import { useBorrowFrame } from '../frame';
 import { routeMeta } from '../route-meta';
 import { useRoute } from '../router/use-route';
 import { text } from '../text';
+import { duelLead } from '../tournaments/DuelParts';
 import { tournamentPagePath } from '../tournaments/view';
 import { gameCaption, leadText } from '../tournaments/words';
 import { useDocumentMeta } from '../use-document-meta';
@@ -213,7 +212,6 @@ function GameView({ snapshot, send, link }: { snapshot: GameSnapshot; send: Game
     const finishedShown = useRef(!running);
     const host = useResultReach(!running);
     const meetings = useMeetings(snapshot);
-    const duel = useDuelOf(snapshot);
     const tournament = useTournamentOf(snapshot);
     const rundown = useRundown(snapshot.players, running);
     const [rundownHidden, setRundownHidden] = useState(false);
@@ -467,11 +465,10 @@ function GameView({ snapshot, send, link }: { snapshot: GameSnapshot; send: Game
                             />
                         )
                     }
-                    facts={factsOf(snapshot, duel)}
+                    facts={factsOf(snapshot, tournament)}
                     meetings={meetingsLine}
                     rundown={running && !rundownShown ? <Rundown players={snapshot.players} unratedBy={unratedByOf(snapshot)} data={rundown} meetings={null} /> : null}
-                    duel={duelRowOf(snapshot, duel)}
-                    tournament={snapshot.tournament === undefined ? null : tournamentRowOf(snapshot.tournament, tournament, snapshot.test === true)}
+                    event={snapshot.tournament === undefined ? null : tournamentRowOf(snapshot.tournament, tournament, snapshot.test === true)}
                     analysis={running ? null : gameLink(snapshot.gameId, turnOf(replay.shown))}
                     running={running}
                     timed={snapshot.clock !== undefined && snapshot.clock.mode !== `unlimited`}
@@ -510,7 +507,7 @@ function useMeetings(snapshot: GameSnapshot): Meetings | null {
     return record === null ? null : { x: seated(x), o: seated(o), record };
 }
 
-function factsOf(snapshot: GameSnapshot, duel: DuelDetail | null): (readonly [string, string])[] {
+function factsOf(snapshot: GameSnapshot, tournament: TournamentDetail | null): (readonly [string, string])[] {
     // A finished game whose clock went with its process has no clock to name.
     const facts: (readonly [string, string])[] =
         snapshot.clock === undefined ? [] : [[text.drawer.clock, text.drawer.clockValue(clockText(snapshot.clock.mode))]];
@@ -522,7 +519,7 @@ function factsOf(snapshot: GameSnapshot, duel: DuelDetail | null): (readonly [st
     const guest = snapshot.players.x.kind === `guest` || snapshot.players.o.kind === `guest`;
     const practice = !guest && seatsRateNobody(snapshot.players);
     // One reason shows, practice first: a duel's or a round robin's practice may carry the mark too.
-    const unrated = practice ? text.drawer.ratedNoPractice : unratedReason(snapshot, duel);
+    const unrated = practice ? text.drawer.ratedNoPractice : unratedReason(snapshot, tournament);
     if (snapshot.you === undefined) {
         const unratedGuest = snapshot.status === `finished` ? text.drawer.ratedNoGuestPlayed : text.drawer.ratedNoGuest;
         facts.push([text.drawer.rated, guest ? unratedGuest : (unrated ?? (voided ? text.drawer.ratedNoVoided : text.drawer.ratedYes))]);
@@ -538,48 +535,28 @@ function factsOf(snapshot: GameSnapshot, duel: DuelDetail | null): (readonly [st
 }
 
 // Why a game started unrated is unrated: a test, one person on both sides;
-// a round robin a person set up; a duel its starter started so; or the person's own choice.
-function unratedReason(snapshot: GameSnapshot, duel: DuelDetail | null): string | null {
+// a duel or round robin a person set up; or the person's own choice.
+function unratedReason(snapshot: GameSnapshot, tournament: TournamentDetail | null): string | null {
     const words = text.drawer;
     const person = [snapshot.players.x, snapshot.players.o].find((player) => player.kind === `user`);
     if (snapshot.test === true) {
         if (person !== undefined) return snapshot.you === undefined ? words.ratedNoTestPerson(person.name) : words.ratedNoTestYours;
-        return duel === null ? words.ratedNoTestOwner : words.ratedNoTestBots(duel.first.ownerName);
+        const owner = tournament?.entries[0]?.ownerName;
+        return owner === undefined ? words.ratedNoTestOwner : words.ratedNoTestBots(owner);
     }
     if (snapshot.unratedByChoice !== true) return null;
-    if (snapshot.tournament?.createdBy !== undefined) return words.ratedNoRoundRobin(snapshot.tournament.createdBy);
-    if (snapshot.duel === undefined) return words.ratedNoChoice;
-    if (duel === null) return words.ratedNoDuel;
-    const owns = duel.startedBy === duel.first.ownerName || duel.startedBy === duel.second.ownerName;
-    return owns ? words.ratedNoDuelChoice(duel.startedBy) : words.ratedNoDuelNeither(duel.startedBy);
+    const line = snapshot.tournament;
+    if (line?.createdBy === undefined) return words.ratedNoChoice;
+    return line.format === `duel` ? words.ratedNoDuel(line.createdBy) : words.ratedNoRoundRobin(line.createdBy);
 }
 
-// A duel's game names its place in the duel and how the duel stands, a test's the estimate so far.
-function duelRowOf(snapshot: GameSnapshot, duel: DuelDetail | null): { term: string; place: ReactNode } | null {
-    const tag = snapshot.duel;
-    if (tag === undefined) return null;
-    const term = snapshot.test === true ? text.duels.page.test : text.duels.page.duel;
-    if (duel === null) return { term, place: <Link to={duelPagePath(tag.id)}>{text.duels.caption(snapshot.test === true ? `test` : `duel`, tag.game, tag.of)}</Link> };
-    const place = <Link to={duelPagePath(tag.id)}>{text.drawer.duelPlace(duel.first.name, duel.second.name, tag.game, tag.of)}</Link>;
-    const estimate = duel.estimate;
-    if (duel.kind === `test` && estimate !== undefined && estimate.favored !== null) {
-        const lead = estimate.favored;
-        if (sweptBy(estimate) === lead) return { term, place: text.drawer.duelStanding(place, text.drawer.testSwept(duel[lead].name, estimate.games)) };
-        const trail = lead === `first` ? `second` : `first`;
-        const rating = lead === `first` ? estimate.rating : -estimate.rating;
-        const score = text.duels.row.score(pointsText(estimate.points[lead]), pointsText(estimate.points[trail]));
-        const drawn = text.duels.noWinner(noWinnerCount(duel.games));
-        return { term, place: text.drawer.duelStanding(place, text.drawer.testSoFar(duel[lead].name, score, drawn, signed(rating))) };
-    }
-    const scored = duel.games.some((game) => game.state === `played`);
-    return { term, place: scored ? text.drawer.duelStanding(place, standingText(duel, duel.games)) : place };
-}
-
-// A tournament's game names its place in the tournament and who leads it, once the tournament is read.
-function tournamentRowOf(tag: GameTournament, tournament: TournamentDetail | null, test: boolean): ReactNode {
+// A tournament's game names its place in it and how it stands once read: a duel's or a test's of two bots its score or
+// estimate so far, any other's leader.
+function tournamentRowOf(tag: GameTournament, tournament: TournamentDetail | null, test: boolean): { term: string; place: ReactNode } {
+    const term = tag.format !== `duel` ? text.drawer.tournament : test ? text.duels.page.test : text.duels.page.duel;
     const place = <Link to={tournamentPagePath(tag.id)}>{gameCaption(tag, test)}</Link>;
-    const lead = tournament === null ? null : leadText(tournament);
-    return lead === null ? place : text.drawer.tournamentStanding(place, lead);
+    const lead = tournament === null ? null : tournament.format === `duel` ? duelLead(tournament) : leadText(tournament);
+    return { term, place: lead === null ? place : text.drawer.tournamentStanding(place, lead) };
 }
 
 // The tournament a game belongs to, read once and again as the game ends; null until it is, or for any other game.
@@ -588,15 +565,6 @@ function useTournamentOf(snapshot: GameSnapshot): TournamentDetail | null {
     const id = snapshot.tournament?.id ?? null;
     const finished = snapshot.status === `finished`;
     const load = useCallback(async () => (id === null ? null : fetchTournament(id)), [id, finished]);
-    return useAsync(load).data;
-}
-
-// The duel a game belongs to, read once and again as the game ends; null until it is, or for any other game.
-// The row is extra, so a read that fails leaves the caption alone.
-function useDuelOf(snapshot: GameSnapshot): DuelDetail | null {
-    const id = snapshot.duel?.id ?? null;
-    const finished = snapshot.status === `finished`;
-    const load = useCallback(async () => (id === null ? null : fetchDuel(id)), [id, finished]);
     return useAsync(load).data;
 }
 

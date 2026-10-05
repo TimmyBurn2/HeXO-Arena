@@ -375,15 +375,6 @@
         font-variant-numeric: tabular-nums;
     }
 
-    /* A count the field cannot take stays in view, outlined out of reach, its reason under the chips. */
-    .count-chip-out,
-    .count-chip-out:hover {
-        background: transparent;
-        box-shadow: inset 0 0 0 var(--border-w) var(--c-border-strong);
-        color: var(--c-text-dim);
-        cursor: not-allowed;
-    }
-
     .count-out-note {
         margin: var(--space-2) 0 0;
     }
@@ -863,7 +854,7 @@
     .duel-glyphs {
         display: grid;
         grid-column: 2;
-        grid-row: 1 / span 2;
+        grid-row: 1 / span 3;
         grid-template-columns: minmax(0, auto) auto;
         max-width: 100%;
         align-items: center;
@@ -900,10 +891,43 @@
 
     .duel-figure {
         grid-column: 2;
-        grid-row: 1 / span 2;
+        grid-row: 1 / span 3;
         font-size: var(--text-lg);
         font-weight: var(--weight-display);
         font-variant-numeric: tabular-nums;
+    }
+
+    /* A round robin's row in the duel row's frame: its name in the accent, the reader's part under its facts, and its leaders' points. */
+    .event-row-name {
+        color: var(--c-accent);
+    }
+
+    .event-row-yours {
+        grid-column: 1;
+        color: var(--c-text);
+        font-size: var(--text-sm);
+    }
+
+    .event-figure {
+        display: grid;
+        grid-column: 2;
+        grid-row: 1 / span 3;
+        justify-items: end;
+        gap: var(--space-half);
+        padding: var(--space-1) var(--space-3);
+        background: var(--c-bg);
+        clip-path: var(--cut-sm-path);
+    }
+
+    .event-figure-main {
+        font-size: var(--text-lg);
+        font-weight: var(--weight-display);
+        font-variant-numeric: tabular-nums;
+    }
+
+    .event-figure-sub {
+        color: var(--c-text-dim);
+        font-size: var(--text-xs);
     }
 
     .duel-list-head {
@@ -1250,6 +1274,12 @@
             grid-template-columns: minmax(0, 1fr);
         }
 
+        /* On a phone the points scroll with the games, so no cell scrolls under them out of reach. */
+        .sb .sb-points,
+        .sb .sb-points-head {
+            position: static;
+        }
+
         .duel-glyphs {
             grid-column: 1;
             grid-row: auto;
@@ -1259,6 +1289,13 @@
         .duel-figure {
             grid-column: 1;
             grid-row: auto;
+        }
+
+        .event-figure {
+            grid-column: 1;
+            grid-row: auto;
+            justify-self: start;
+            justify-items: start;
         }
     }
 }

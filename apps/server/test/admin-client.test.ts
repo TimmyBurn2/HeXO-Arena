@@ -58,7 +58,7 @@ describe('parseAdminArgs', () => {
             },
         ],
         [[`tournament-cancel`, `t_abcdefghijk2`, `--reason`, `rain`], { op: `tournament-cancel`, id: `t_abcdefghijk2`, reason: `rain` }],
-        [[`duel-stop`, `d_abcdefghijk2`, `--reason`, `farming`], { op: `duel-stop`, id: `d_abcdefghijk2`, reason: `farming` }],
+        [[`tournament-cancel`, `d_abcdefghijk2`, `--reason`, `farming`], { op: `tournament-cancel`, id: `d_abcdefghijk2`, reason: `farming` }],
         [
             [`tournament-schedule`, `add`, `--weekday`, `sun`, `--time`, `18:00`, `--name`, `Sunday cup {date}`, `--clock`, `turn:10`, `--reason`, `weekly`],
             {
@@ -142,8 +142,7 @@ describe('parseAdminArgs', () => {
         [`a report closed without a note`, [`report-close`, `12`]],
         [`a report closed by an id that is no number`, [`report-close`, `first`, `--reason`, `r`]],
         [`an analysis deleted by a game's id`, [`delete-analysis`, `g_0f8d2c4e-1b3a-4c5d-8e9f-0a1b2c3d4e5f`, `--reason`, `r`]],
-        [`a duel stopped by a tournament's id`, [`duel-stop`, `t_abcdefghijk2`, `--reason`, `r`]],
-        [`a duel stopped without a reason`, [`duel-stop`, `d_abcdefghijk2`]],
+        [`a duel stopped apart from tournaments`, [`duel-stop`, `d_abcdefghijk2`, `--reason`, `r`]],
         [`a bot looked up without a name`, [`bot`]],
     ])('refuses %s with usage', (_label, argv) => {
         expect(parseAdminArgs(argv).kind).toBe(`usage`);

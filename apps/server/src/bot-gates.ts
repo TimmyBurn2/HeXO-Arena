@@ -16,7 +16,7 @@ import { bots, users } from './db/schema';
 import type { GameRegistry } from './game-registry';
 import type { PresenceRegistry } from './presence';
 
-/** What the gates read of a bot that may play in a duel or a tournament a person set up. */
+/** What the gates read of a bot that may play in a tournament a person set up. */
 export interface BotRecord {
     readonly id: string;
     readonly name: string;
@@ -66,7 +66,7 @@ export function readBot(query: Query, by: { id: string } | { nameKey: string }):
     };
 }
 
-/** A gate a bot fails for a game of a duel or a tournament a person set up: taken out, held by the weekly, or not ready. */
+/** A gate a bot fails for a game of a tournament a person set up: taken out, held by the weekly, or not ready. */
 export type BotGateFailure = `deleted` | `delisted` | `banned` | `offline` | `closed` | `refused` | `clock` | `tournament` | `busy`;
 
 // What the gates read beyond the bot's own row.

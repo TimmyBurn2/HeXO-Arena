@@ -1,4 +1,4 @@
-import { movedPages, movedPath, pageNames, pagePath, sitePages, type PageName, type PageParams } from '@hexo-arena/contract';
+import { movedPages, movedPath, pageNames, pagePath, sitePages, type MovedPage, type PageName, type PageParams } from '@hexo-arena/contract';
 import { reportForm } from '../report-form';
 
 /** One page of the site with its parameters, as the address names it. */
@@ -37,10 +37,8 @@ function matched(pattern: string, segments: readonly string[], values: Readonly<
  */
 export function parseRoute(pathname: string): Route {
     const segments = pathname.split(`/`).filter((segment) => segment !== ``);
-    for (const moved of movedPages) {
-        const params = matched(moved.from, segments, {});
-        if (params !== null) return { name: `moved`, to: movedPath(moved, params) };
-    }
+    const moved = movedOf(segments);
+    if (moved !== null) return { name: `moved`, to: movedPath(moved.page, moved.params) };
     for (const name of pageNames) {
         // The report form is a page only where the site takes reports through it.
         if (name === `report` && !reportForm.on()) continue;
@@ -49,6 +47,21 @@ export function parseRoute(pathname: string): Route {
         if (params !== null) return { name, ...params } as PageRoute;
     }
     return { name: `not-found` };
+}
+
+// The moved address a path's segments name, with the parameters its old path held.
+function movedOf(segments: readonly string[]): { page: MovedPage; params: Record<string, string> } | null {
+    for (const page of movedPages) {
+        const params = matched(page.from, segments, {});
+        if (params !== null) return { page, params };
+    }
+    return null;
+}
+
+/** Where an address that moved goes: its new path, and its query as the new page reads it; null for one that did not move. */
+export function movedTo(pathname: string, search: string): string | null {
+    const moved = movedOf(pathname.split(`/`).filter((segment) => segment !== ``));
+    return moved === null ? null : movedPath(moved.page, moved.params, search);
 }
 
 /** The path a route names; a missing page's is the conventional /404. */

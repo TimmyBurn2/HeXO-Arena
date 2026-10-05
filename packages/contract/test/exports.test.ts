@@ -1,12 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import {
-    duelExportPath,
-    duelGamesMax,
     gameExportGlobalLimit,
     gameExportLimit,
     tournamentExportPath,
     tournamentGamesMax,
     tournamentListQuerySchema,
+    tournamentPairGamesMax,
     tournamentSummarySchema,
     tournamentsPath,
 } from '../src';
@@ -15,10 +14,7 @@ import { buildOpenApiDocument } from '../src/openapi';
 const document = buildOpenApiDocument();
 
 describe('the game exports in the document', () => {
-    it.each([
-        [duelExportPath, `exportDuel`],
-        [tournamentExportPath, `exportTournament`],
-    ])('%s is a public read answering a zip attachment, its own rate limit, or not_found', (path, operationId) => {
+    it.each([[tournamentExportPath, `exportTournament`]])('%s is a public read answering a zip attachment, its own rate limit, or not_found', (path, operationId) => {
         const operation = document.paths[path]?.get;
         expect(operation?.operationId).toBe(operationId);
         expect(operation?.security).toEqual([]);
@@ -29,8 +25,8 @@ describe('the game exports in the document', () => {
         expect(operation?.responses[`429`]).toEqual({ $ref: `#/components/responses/ExportLimited` });
     });
 
-    it('bounds an export by the most games a duel or a tournament plays', () => {
-        expect(duelGamesMax).toBe(50);
+    it('bounds an export by the most games a tournament plays, a pair fifty at most', () => {
+        expect(tournamentPairGamesMax).toBe(50);
         expect(tournamentGamesMax).toBe(280);
         expect(gameExportLimit.burst).toBeLessThan(gameExportGlobalLimit.burst);
     });

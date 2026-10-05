@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { botVersionSchema } from './api';
-import { duelEstimateSchema } from './duels';
-import { duelGamesMax, gameCellSchema, liveGameEntrySchema, scheduledClockSchema, tournamentFormatSchema, tournamentLegsMax, type TournamentFormat } from './games';
+import { estimateMoreGames, likelyStrongerChance, strongerChance } from './estimate';
+import { gameCellSchema, liveGameEntrySchema, scheduledClockSchema, tournamentFormatSchema, tournamentLegsMax, tournamentPairGamesMax, type TournamentFormat } from './games';
 import { provisionalSchema } from './leaderboard';
 import { levelIdSchema, seatLevelSchema } from './levels';
 import { clockText, pageTitle, plural, siteName, type PageMeta } from './meta';
@@ -59,6 +59,9 @@ export function gamesPerPairFits(bots: number, gamesPerPair: number, test: boole
     return counts.includes(gamesPerPair) && gamesPerBot(bots, gamesPerPair) <= (test ? tournamentBotGamesMax.test : tournamentBotGamesMax.event);
 }
 
+/** Running tournaments people set up that one bot plays in at once, so they fill at most half its game slots. */
+export const tournamentPerBotCap = 2;
+
 /** Tournaments one person runs at once, of any size; a live slot each, which a unique index holds. */
 export const tournamentLiveCap = 2;
 
@@ -78,7 +81,8 @@ export const tournamentNameSchema = z
     .max(40)
     .regex(/^[!-~](?:[ -~]*[!-~])?$/);
 
-export const tournamentIdSchema = z.string().regex(/^t_[a-z0-9]{12}$/);
+// A duel kept from the duels of old holds its d_ id, so its links still resolve.
+export const tournamentIdSchema = z.string().regex(/^[td]_[a-z0-9]{12}$/);
 
 export const tournamentStatusSchema = z.enum([`scheduled`, `running`, `finished`, `called_off`, `canceled`, `stopped`, `cut_short`]);
 export type TournamentStatus = z.infer<typeof tournamentStatusSchema>;
@@ -178,6 +182,7 @@ export function parseClockArg(text: string): TimeControl | null {
 }
 
 export const tournamentsPath = `/api/tournaments`;
+export const tournamentBotsPath = `/api/tournaments/bots`;
 export const tournamentPath = `/api/tournaments/{id}`;
 export const tournamentEntryPath = `/api/tournaments/{id}/entry`;
 export const tournamentExportPath = `/api/tournaments/{id}/export`;
@@ -231,6 +236,22 @@ export const tournamentStopConflictErrorCodes = [`over`] as const;
 // Only a bot's owner withdraws it, and only while it plays a running tournament a person set up.
 export const tournamentWithdrawForbiddenErrorCodes = [`not_owner`] as const;
 export const tournamentWithdrawConflictErrorCodes = [`over`, `not_playing`] as const;
+
+export const tournamentBotStateSchema = z
+    .object({
+        name: z.string(),
+        duelsByOthers: z.boolean().meta({ description: `False keeps the bot to the duels and round robins its owner sets up.` }),
+        running: z
+            .number()
+            .int()
+            .min(0)
+            .max(tournamentPerBotCap)
+            .meta({ description: `Running duels and round robins people set up that it plays in, at most ${String(tournamentPerBotCap)}.` }),
+    })
+    .meta({ id: `TournamentBotState`, description: `What a duel's or round robin's setup reads of a listed bot beside the bot list.` });
+export type TournamentBotState = z.infer<typeof tournamentBotStateSchema>;
+
+export const tournamentBotStatesSchema = z.array(tournamentBotStateSchema).meta({ id: `TournamentBotStates` });
 
 export const tournamentWithdrawRequestSchema = z.strictObject({ bot: nameSyntaxSchema }).meta({ id: `TournamentWithdrawRequest` });
 export type TournamentWithdrawRequest = z.infer<typeof tournamentWithdrawRequestSchema>;
@@ -312,13 +333,36 @@ export const tournamentListQuerySchema = z.object({
 });
 export type TournamentListQuery = z.infer<typeof tournamentListQuerySchema>;
 
-/** Why a tournament a person set up was stopped: by its creator, or as their account was banned or deleted. */
-export const tournamentStopReasons = [`creator`, `banned`, `deleted`] as const;
+/** Why a tournament a person set up was stopped: by its creator, by the operator, or as the creator's account was banned or deleted. */
+export const tournamentStopReasons = [`creator`, `operator`, `banned`, `deleted`] as const;
 
 /** Why the bot that left a tournament a person set up, leaving fewer than two to play, was withdrawn. */
 export const tournamentCutReasons = [`owner`, `missed`, `refused`, `tournament`, `banned`, `delisted`, `deleted`] as const;
 
-export const tournamentEndReasonSchema = z.enum([`creator`, `operator`, `owner`, `missed`, `refused`, `tournament`, `banned`, `delisted`, `deleted`]);
+/**
+ * Why a duel kept from the duels of old was cut short, which the scheduler never writes:
+ * a bot offline, connected but not open, outside its clocks, or at its game cap for the whole grace;
+ * a rated game at a daily cap; or a game the operator aborted.
+ */
+export const duelCutReasons = [`offline`, `closed`, `clock`, `busy`, `daily_cap`, `aborted`] as const;
+
+export const tournamentEndReasonSchema = z.enum([
+    `creator`,
+    `operator`,
+    `owner`,
+    `missed`,
+    `refused`,
+    `tournament`,
+    `banned`,
+    `delisted`,
+    `deleted`,
+    `offline`,
+    `closed`,
+    `clock`,
+    `busy`,
+    `daily_cap`,
+    `aborted`,
+]);
 export type TournamentEndReason = z.infer<typeof tournamentEndReasonSchema>;
 
 // A bot's number within one tournament, by which its pages name it; a
@@ -340,19 +384,44 @@ export const tournamentEndSchema = z
     .object({
         reason: tournamentEndReasonSchema.meta({
             description: [
-                `Stopped by the person who set it up (creator), or as their account was banned or deleted; canceled by the operator (operator);`,
+                `Stopped by the person who set it up (creator), or as their account was banned or deleted; canceled or stopped by the operator (operator);`,
                 `or cut short once fewer than two bots still played, for why the last to leave was withdrawn:`,
                 `by its owner (owner), two openings missed in a row (missed), its owner turning duels by others off (refused), the weekly it entered beginning (tournament), or it or its owner taken out (banned, delisted, deleted).`,
+                `A duel kept from the duels of old may also have been cut short with a bot offline, connected but not open (closed), outside its clocks (clock), or at its game cap (busy) for the whole grace, a rated game at a daily cap (daily_cap), or a game aborted (aborted).`,
             ].join(` `),
         }),
         round: z.number().int().min(1).nullable().meta({ description: `The round under way, or the last one begun; null before any.` }),
-        bot: tournamentBotSchema.optional().meta({ description: `The bot whose leaving cut it short.` }),
+        bot: tournamentBotSchema.optional().meta({ description: `The bot whose leaving cut it short, or that a duel's reason names.` }),
     })
     .meta({ id: `TournamentEnd`, description: `Why a tournament ended before its last game: stopped, canceled, or cut short.` });
 export type TournamentEnd = z.infer<typeof tournamentEndSchema>;
 
+const halvesSchema = z.number().min(0).multipleOf(0.5);
+const ratingPointsSchema = z.number().int();
+
+export const estimateSchema = z
+    .object({
+        games: z.number().int().min(1).max(tournamentBotGamesMax.test),
+        points: z.object({ first: halvesSchema, second: halvesSchema }).meta({ description: `Each side's points, a game without a winner a half to each.` }),
+        rating: ratingPointsSchema.meta({ description: `How many rating points stronger the first is; below zero, weaker.` }),
+        low: ratingPointsSchema.nullable().meta({ description: `The 95% range's lower end; null where it runs past any finite difference.` }),
+        high: ratingPointsSchema.nullable().meta({ description: `The 95% range's upper end; null where it runs past any finite difference.` }),
+        chance: z.number().min(0).max(1).meta({ description: `The chance the first is the stronger.` }),
+        favored: z.enum([`first`, `second`]).nullable().meta({ description: `The side the chance favors, null at even.` }),
+        verdict: z.enum([`stronger`, `likely_stronger`, `too_close`]).meta({
+            description: `For the favored side: stronger at a chance of ${String(strongerChance * 100)}% or more, likely_stronger from ${String(likelyStrongerChance * 100)}%, else too_close.`,
+        }),
+        narrowed: ratingPointsSchema.nullable().meta({
+            description: `How far the range would reach either way after another ${String(estimateMoreGames)} games; null where it would still run past any finite difference.`,
+        }),
+    })
+    .meta({
+        id: `Estimate`,
+        description: `A test's estimate over the games played so far, counted by openings since an opening's two games share it, with one opening won and one lost added so a short run or a sweep stays finite.`,
+    });
+
 export const tournamentLeadSchema = z
-    .object({ bot: z.string(), deleted: deletedMarkSchema.optional(), estimate: duelEstimateSchema })
+    .object({ bot: z.string(), deleted: deletedMarkSchema.optional(), estimate: estimateSchema })
     .meta({
         id: `TournamentLead`,
         description: `A test's bot first in the final standings, once a game was played, and its estimate against all the others together: first is the bot, second the rest.`,
@@ -373,7 +442,7 @@ const tournamentKindFields = {
 const kindDescription = [
     `createdBy names who set a person's duel or round robin up, ${deletedPlayerName} once their account is deleted, and is null on the operator's, whose name the operator chose;`,
     `a person's is named for its creator.`,
-    `test: one person owns every bot.`,
+    `rated: the operator's, and a duel rated under the duels of old; test: one person owns every bot.`,
 ].join(` `);
 
 export const tournamentEntrySchema = z
@@ -441,10 +510,19 @@ export const tournamentPairSchema = z
     .object({
         first: tournamentBotSchema.extend({ points: pointsSchema }),
         second: tournamentBotSchema.extend({ points: pointsSchema }),
-        games: z.array(tournamentGameSchema).min(1).max(duelGamesMax),
+        games: z.array(tournamentGameSchema).min(1).max(tournamentPairGamesMax),
     })
     .meta({ id: `TournamentPair`, description: `A duel's two bots, the first named first, with their points, and every game in order.` });
 export type TournamentPair = z.infer<typeof tournamentPairSchema>;
+
+export const tournamentLeadersSchema = z
+    .object({
+        bots: z.array(z.object({ name: z.string(), deleted: deletedMarkSchema.optional() })).min(1),
+        points: z.number().int().min(0),
+        games: z.number().int().min(0).meta({ description: `The games each of them played that scored for someone: played, no-shows, and forfeits.` }),
+    })
+    .meta({ id: `TournamentLeaders`, description: `The bots first in the standings, so far or at the end, and their points.` });
+export type TournamentLeaders = z.infer<typeof tournamentLeadersSchema>;
 
 export const tournamentSummarySchema = z
     .object({
@@ -466,6 +544,7 @@ export const tournamentSummarySchema = z
         end: tournamentEndSchema.optional(),
         lead: tournamentLeadSchema.optional(),
         pair: tournamentPairSchema.optional().meta({ description: `A duel's bots, points, and games, as a row's score cells draw them.` }),
+        leaders: tournamentLeadersSchema.optional().meta({ description: `A round robin's leaders, once a point is scored.` }),
         bot: tournamentPlaceSchema.optional(),
         yours: tournamentYoursSchema.optional(),
     })
@@ -524,7 +603,7 @@ export const tournamentWaitingSchema = z
 export type TournamentWaiting = z.infer<typeof tournamentWaitingSchema>;
 
 export const tournamentEstimateSchema = z
-    .object({ key: tournamentKeySchema, estimate: duelEstimateSchema })
+    .object({ key: tournamentKeySchema, estimate: estimateSchema })
     .meta({
         id: `TournamentEstimate`,
         description: `A test's estimate of one bot against all the others together: first is the bot, second the rest, counted by each pair's openings.`,

@@ -231,8 +231,10 @@ describe('setting a duel or round robin up', () => {
         serve({}, bruno);
         setup(bruno);
         expect(screen.getByRole(`heading`, { name: `New duel` })).toBeTruthy();
-        expect(screen.getByRole(`button`, { name: `Add a second bot` })).toBeTruthy();
+        expect(screen.getByRole(`button`, { name: `Add bots, the second plate` })).toBeTruthy();
         expect(screen.getByText(/^Pick 2 to 8 bots: two play a duel, three or more a round robin\./u)).toBeTruthy();
+        // The empty form says its rule once.
+        expect(screen.getAllByText(/three or more/u)).toHaveLength(1);
         pick(`quietlake`, `devbot-a`);
         expect(screen.getByRole(`heading`, { name: `New duel` })).toBeTruthy();
         expect(screen.getByText(`2 bots; a third makes a round robin`)).toBeTruthy();
@@ -262,7 +264,7 @@ describe('setting a duel or round robin up', () => {
         fireEvent.click(within(dialog).getByRole(`button`, { name: `Add 1 bot` }));
         expect(screen.getByText(`Add 1 more bot; a duel takes 2.`)).toBeTruthy();
         expect(screen.getByRole(`button`, { name: `Start duel` }).getAttribute(`aria-disabled`)).toBe(`true`);
-        fireEvent.click(screen.getByRole(`button`, { name: `Add a second bot` }));
+        fireEvent.click(screen.getByRole(`button`, { name: `Add bots, the second plate` }));
         expect(within(screen.getByRole(`dialog`, { name: `Add bots` })).getAllByText(`added`)).toHaveLength(1);
     });
 
@@ -309,6 +311,18 @@ describe('setting a duel or round robin up', () => {
         fireEvent.click(screen.getByRole(`button`, { name: `Remove pebble` }));
         expect(screen.getByText(`Both bots are yours`)).toBeTruthy();
         expect(counts().at(-1)).toEqual([`50`, false]);
+        expect(screen.getByText(`A test never moves a rating; its result estimates which bot is stronger instead.`)).toBeTruthy();
+    });
+
+    it('keeps the games a pair picked as the field grows, as far as the bigger field takes them', () => {
+        serve({}, bruno);
+        setup(bruno, [...roster, listing(`ember`, `cleo`), listing(`sealbot`, `quinn`)]);
+        pick(`hextide`, `quietlake`);
+        fireEvent.click(screen.getByRole(`radio`, { name: `10` }));
+        pick(`devbot-a`, `Pistol1`, `ember`);
+        expect(screen.getByRole(`radio`, { name: `6` })).toHaveProperty(`checked`, true);
+        fireEvent.click(screen.getByRole(`button`, { name: `Remove ember` }));
+        expect(screen.getByRole(`radio`, { name: `10` })).toHaveProperty(`checked`, true);
     });
 
     it('says why the server refused, naming the bot it names, and marks its plate', async () => {
@@ -362,7 +376,10 @@ describe('a round robin\'s page', () => {
             expect(calls.some((call) => call.method === `POST` && call.url === `/api/tournaments/t_brunorobin01/stop`)).toBe(true);
         });
         expect(await screen.findByText(/^Stopped by bruno after round 2/u)).toBeTruthy();
-        expect(document.activeElement).toBe(screen.getByRole(`link`, { name: `These games in Games` }));
+        // The stopped detail lands focus in a render of its own, which may follow the one that shows it.
+        await waitFor(() => {
+            expect(document.activeElement).toBe(screen.getByRole(`link`, { name: `These games in Games` }));
+        });
         expect(screen.queryByRole(`button`, { name: /^Withdraw/u })).toBeNull();
     });
 
@@ -563,23 +580,23 @@ describe('the tournaments under Games', () => {
         serve({ 'GET /api/tournaments?mine=1': { running: [summaryOf(live)], scheduled: [], past: [stopped] }, 'GET /api/tournaments?kind=test': tests }, bruno);
         window.history.replaceState(null, ``, `/games/tournaments?list=yours`);
         render(<TournamentsScreen />);
-        expect(await screen.findByText(/; stopped by bruno after round 2$/u)).toBeTruthy();
+        expect(await screen.findByText(`stopped by bruno after round 2`)).toBeTruthy();
         expect(screen.getAllByText(`Yours: set up by you`)).toHaveLength(2);
         fireEvent.click(screen.getByRole(`button`, { name: `Tests` }));
-        expect(await screen.findByText(/; hextide \+191, stronger$/u)).toBeTruthy();
+        expect(await screen.findByText(`hextide +191, stronger`)).toBeTruthy();
     });
 
     it('lists every duel and round robin but tests, tagged, with a way to set one up, and tests alone under Tests', async () => {
         serve({ 'GET /api/tournaments': every, 'GET /api/tournaments?kind=test': { running: [], scheduled: [], past: [summaryOf(test)] } });
         window.history.replaceState(null, ``, `/games/tournaments`);
         render(<TournamentsScreen />);
-        expect((await screen.findAllByRole(`link`, { name: `Round robin by bruno` })).length).toBe(2);
-        expect(screen.queryByRole(`link`, { name: `Round robin by ana` })).toBeNull();
+        expect((await screen.findAllByText(`Round robin by bruno`, { selector: `.event-row-name` })).length).toBe(2);
+        expect(screen.queryByText(`Round robin by ana`, { selector: `.event-row-name` })).toBeNull();
         expect(screen.getAllByText(`unrated`)).toHaveLength(2);
         expect(screen.getByRole(`link`, { name: `New duel or round robin` }).getAttribute(`href`)).toBe(`/play/tournament`);
         expect(screen.getByText(`Tests, where one person owns every bot, are listed under Tests.`)).toBeTruthy();
         fireEvent.click(screen.getByRole(`button`, { name: `Tests` }));
-        expect(await screen.findByRole(`link`, { name: `Round robin by ana` })).toBeTruthy();
+        expect(await screen.findByText(`Round robin by ana`, { selector: `.event-row-name` })).toBeTruthy();
         expect(screen.getByText(`No duel or round robin is live right now.`)).toBeTruthy();
         expect(window.location.search).toBe(`?list=tests`);
     });

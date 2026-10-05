@@ -1,10 +1,10 @@
 import { useState, type ReactNode } from 'react';
-import { clockText, pagePath, resultSentence, turnsOnBoard, type DuelSide, type Side, type TournamentDetail, type TournamentEntry, type TournamentGame } from '@hexo-arena/contract';
+import { clockText, pagePath, resultSentence, turnsOnBoard, type Side, type TournamentDetail, type TournamentEntry, type TournamentGame } from '@hexo-arena/contract';
 import { hexPoints } from '../board/geometry';
 import { BotBadge, PlayerName, Rating, seatName, Swatch } from '../components/player';
 import { Estimate } from '../duels/Estimate';
 import { OpeningStones } from '../duels/OpeningStones';
-import { countdown } from '../duels/words';
+import { countdown, otherSide, pointsText, signed, sweptBy, type DuelSide } from '../duels/words';
 import { tournamentGamesPath } from '../games/filters';
 import { FeaturedBoard } from '../home/FeaturedBoard';
 import { Link } from '../router/Link';
@@ -14,7 +14,7 @@ import { hexOf } from './view';
 import '../duels/Duels.css';
 import '../screens/HomeScreen.css';
 import '../screens/PlayScreen.css';
-import '../screens/DuelScreen.css';
+import './DuelParts.css';
 
 // The games list shows this many openings until the reader asks for every game.
 const openingsShown = 3;
@@ -43,8 +43,6 @@ export function duelViewOf(detail: TournamentDetail): DuelView | null {
     const points = (key: number) => games.filter((each) => each.game.point === key).length;
     return { first, second, games, points: { first: points(first.key), second: points(second.key) }, kind: detail.test ? `test` : `duel` };
 }
-
-const otherSide = (side: DuelSide): DuelSide => (side === `first` ? `second` : `first`);
 
 function sideIn(game: TournamentGame, key: number): Side {
     return game.x === key ? `x` : `o`;
@@ -89,11 +87,37 @@ export function cutWhy(detail: Pick<TournamentDetail, `end`>): string {
         case `banned`:
         case `delisted`:
         case `deleted`:
+        case `offline`:
+        case `closed`:
+        case `clock`:
+        case `busy`:
             return words[end.reason](bot);
+        case `daily_cap`:
+        case `aborted`:
+            return words[end.reason]();
         case `creator`:
         case `operator`:
             return ``;
     }
+}
+
+/**
+ * How a duel stands, as a game's drawer says it beside the game's place:
+ * who leads and by how much, or a test's estimate so far; null for any
+ * other tournament, and before a game is over.
+ */
+export function duelLead(detail: TournamentDetail): string | null {
+    const view = duelViewOf(detail);
+    if (view === null || !view.games.some(overGame)) return null;
+    const estimate = detail.estimates?.find((each) => each.key === view.first.key)?.estimate;
+    if (view.kind === `test` && estimate !== undefined && estimate.favored !== null) {
+        const lead = estimate.favored;
+        if (sweptBy(estimate) === lead) return text.drawer.testSwept(view[lead].bot, estimate.games);
+        const rating = lead === `first` ? estimate.rating : -estimate.rating;
+        const score = text.duels.row.score(pointsText(estimate.points[lead]), pointsText(estimate.points[otherSide(lead)]));
+        return text.drawer.testSoFar(view[lead].bot, score, text.duels.noWinner(noWinnerCount(view)), signed(rating));
+    }
+    return standing(view);
 }
 
 /** The status sentence a duel's page leads with, a test over leaving its score to the head and the estimate. */

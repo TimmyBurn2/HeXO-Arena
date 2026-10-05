@@ -1,4 +1,4 @@
-import { boardCellSchema, siteName, turnsOfStones, writeHtttx, type DuelDetail, type TournamentDetail } from '@hexo-arena/contract';
+import { boardCellSchema, siteName, turnsOfStones, writeHtttx, type TournamentDetail } from '@hexo-arena/contract';
 import { replay, type Coord } from '@hexo-arena/rules';
 import { asc, inArray } from 'drizzle-orm';
 import type { Query } from './db';
@@ -12,11 +12,14 @@ interface GameExport {
     readonly body: Buffer;
 }
 
-/** A game an export holds: its number, the pair or round it belongs to, and the name its file gives it. */
+/** A game an export holds: its number in the export, its round, pair, opening, and number within the pair, and the name its file gives it. */
 interface Slot {
     readonly gameId: string;
     readonly number: number;
-    readonly group: number;
+    readonly round: number;
+    readonly pair: string;
+    readonly opening: number;
+    readonly game: number;
     readonly title: string;
     readonly versions?: { readonly x: string; readonly o: string };
 }
@@ -84,13 +87,13 @@ const csvHead = [`x`, `o`, `winner`, `reason`, `turns`, `rated`, `test`, `starte
 
 // Each game's file and its row in games.csv, in the slots' order; a game
 // missing from either read was never finished, which the slots rule out.
-function gameEntries(query: Query, slots: readonly Slot[], group: `pair` | `round`): { files: ZipEntry[]; csv: string } {
+function gameEntries(query: Query, slots: readonly Slot[]): { files: ZipEntry[]; csv: string } {
     const ids = slots.map((slot) => slot.gameId);
     const entries = new Map(finishedEntriesOf(query, ids).map((entry) => [entry.gameId, entry]));
     const played = playedGames(query, ids);
     const width = Math.max(2, String(slots.at(-1)?.number ?? 0).length);
     const versioned = slots.some((slot) => slot.versions !== undefined);
-    const rows: CsvCell[][] = [[`number`, group, ...csvHead, ...(versioned ? [`x_version`, `o_version`] : [])]];
+    const rows: CsvCell[][] = [[`number`, `round`, `pair`, `opening`, `game`, ...csvHead, ...(versioned ? [`x_version`, `o_version`] : [])]];
     const files = slots.map((slot): ZipEntry => {
         const entry = entries.get(slot.gameId);
         const game = played.get(slot.gameId);
@@ -98,7 +101,10 @@ function gameEntries(query: Query, slots: readonly Slot[], group: `pair` | `roun
         const { x, o } = entry.players;
         rows.push([
             slot.number,
-            slot.group,
+            slot.round,
+            slot.pair,
+            slot.opening,
+            slot.game,
             x.name,
             o.name,
             entry.winner ?? ``,
@@ -124,38 +130,15 @@ function gameEntries(query: Query, slots: readonly Slot[], group: `pair` | `roun
     return { files, csv: csvText(rows) };
 }
 
-/** A duel's or a test's finished games, numbered as the duel numbers them, with games.csv. */
-export function duelExport(query: Query, duel: DuelDetail, now: number): GameExport {
-    const kind = duel.kind === `test` ? `Test` : `Duel`;
-    const version = (side: `first` | `second`) => duel[side].version ?? ``;
-    const slots = duel.games.flatMap((game): Slot[] =>
-        game.gameId === null || (game.state !== `played` && game.state !== `aborted`)
-            ? []
-            : [
-                  {
-                      gameId: game.gameId,
-                      number: game.game,
-                      group: Math.ceil(game.game / 2),
-                      title: `${kind}, game ${String(game.game)} of ${String(duel.terms.games)}`,
-                      ...(duel.kind === `test` ? { versions: { x: version(game.x), o: version(game.x === `first` ? `second` : `first`) } } : {}),
-                  },
-              ],
-    );
-    const { files, csv } = gameEntries(query, slots, `pair`);
-    const day = duel.createdAt.slice(0, 10);
-    return {
-        fileName: `hexo-arena-${duel.kind}-${fileSafe(duel.first.name)}-vs-${fileSafe(duel.second.name)}-${day}.zip`,
-        body: zipStore([...files, { name: `games.csv`, data: csv, modified: new Date(now) }]),
-    };
-}
-
 /**
  * A tournament's finished games in the order played, by round, pairing,
- * and game, with games.csv and standings.csv; a duel's titled as its
- * games list counts them, and a test's naming each bot's version.
+ * and game, each numbered within its pair, with games.csv and
+ * standings.csv; a duel's titled and named for its two bots, and a test's
+ * naming each bot's version.
  */
 export function tournamentExport(query: Query, tournament: TournamentDetail, now: number): GameExport {
     const slots: Slot[] = [];
+    const duel = tournament.format === `duel`;
     const kind = tournament.test ? `Test` : `Duel`;
     const version = (key: number) => tournament.entries.find((entry) => entry.key === key)?.version ?? ``;
     for (const round of tournament.rounds) {
@@ -168,21 +151,27 @@ export function tournamentExport(query: Query, tournament: TournamentDetail, now
                 slots.push({
                     gameId: game.gameId,
                     number: slots.length + 1,
-                    group: round.round,
-                    title: tournament.format === `duel` ? `${kind}, ${place}` : `${tournament.name}, round ${String(round.round)}, ${place}`,
+                    round: round.round,
+                    pair: `${pairing.first.name} vs ${pairing.second.name}`,
+                    opening: Math.floor(index / 2) + 1,
+                    game: index + 1,
+                    title: duel ? `${kind}, ${place}` : `${tournament.name}, round ${String(round.round)}, ${place}`,
                     ...(tournament.test ? { versions: { x: version(game.x), o: version(o) } } : {}),
                 });
             }
         }
     }
-    const { files, csv } = gameEntries(query, slots, `round`);
+    const { files, csv } = gameEntries(query, slots);
     const standings = csvText([
         [`rank`, `bot`, `owner`, `points`, `as_x`, `as_o`, `withdrawn`],
         ...tournament.standings.map((line) => [line.rank, line.bot, line.ownerName, line.points, line.asX, line.asO, line.withdrawn]),
     ]);
     const at = new Date(now);
-    return {
-        fileName: `hexo-arena-tournament-${fileSafe(tournament.name)}-${tournament.startsAt.slice(0, 10)}.zip`,
-        body: zipStore([...files, { name: `games.csv`, data: csv, modified: at }, { name: `standings.csv`, data: standings, modified: at }]),
-    };
+    const [first, second] = tournament.entries;
+    const day = tournament.startsAt.slice(0, 10);
+    const fileName =
+        duel && first !== undefined && second !== undefined
+            ? `hexo-arena-${tournament.test ? `test` : `duel`}-${fileSafe(first.bot)}-vs-${fileSafe(second.bot)}-${day}.zip`
+            : `hexo-arena-tournament-${fileSafe(tournament.name)}-${day}.zip`;
+    return { fileName, body: zipStore([...files, { name: `games.csv`, data: csv, modified: at }, { name: `standings.csv`, data: standings, modified: at }]) };
 }

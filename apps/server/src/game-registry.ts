@@ -25,7 +25,6 @@ import {
     type GameClock,
     type GameHeadline,
     type GamePlayer,
-    type GameDuel,
     type GamePlayers,
     type GameSnapshot,
     type LiveGameEntry,
@@ -55,7 +54,6 @@ import {
     insertGame,
     insertMove,
     recordFinish,
-    findGameDuel,
     findGameTournament,
     replayPosition,
     type BotGameTag,
@@ -176,11 +174,10 @@ interface LiveGame {
     clock: Clock;
     wallTimer: Timer | null;
     tournament?: GameTournament;
-    duel?: GameDuel;
 }
 
 // What a creator decides of a game; every other field starts alike.
-type GameStart = Pick<LiveGame, `seats` | `unratedByChoice` | `test` | `timeControl` | `openingPlies` | `tournament` | `duel`>;
+type GameStart = Pick<LiveGame, `seats` | `unratedByChoice` | `test` | `timeControl` | `openingPlies` | `tournament`>;
 
 export type MoveErrorCode = `not_your_turn` | `cell_occupied` | `out_of_range` | `game_over`;
 
@@ -565,8 +562,8 @@ export class GameRegistry {
     }
 
     /**
-     * A game the server schedules between two bots, a tournament's or a
-     * duel's, on their stated sides and levels, from a stored opening, or a
+     * A game the server schedules between two bots in a tournament, on
+     * their stated sides and levels, from a stored opening, or a
      * fresh one drawn to the given length when none is stored yet; answers
      * the opening so a pair's second game reuses it.
      */
@@ -597,8 +594,7 @@ export class GameRegistry {
             unratedByChoice,
             test,
         });
-        const tournament = input.tag.kind === `pairing` ? findGameTournament(this.#query, gameId) : undefined;
-        const duel = input.tag.kind === `duel` ? findGameDuel(this.#query, gameId) : undefined;
+        const tournament = findGameTournament(this.#query, gameId);
         this.#launch(
             gameId,
             {
@@ -608,7 +604,6 @@ export class GameRegistry {
                 timeControl: input.timeControl,
                 openingPlies: input.openingPlies,
                 ...(tournament === undefined ? {} : { tournament }),
-                ...(duel === undefined ? {} : { duel }),
             },
             placed,
         );
@@ -717,7 +712,6 @@ export class GameRegistry {
             cells: boardCells(game.position),
             clock: liveClockView(game),
             ...(game.tournament === undefined ? {} : { tournament: game.tournament }),
-            ...(game.duel === undefined ? {} : { duel: game.duel }),
             ...(game.test ? { test: true as const } : {}),
         };
     }
@@ -735,7 +729,6 @@ export class GameRegistry {
         if (record?.finishReason === undefined || record.finishReason === null) return null;
         const you = viewer === null ? undefined : storedSeatOf(record, viewer);
         const tournament = record.kind === `bots` ? findGameTournament(this.#query, gameId) : undefined;
-        const duel = record.kind === `bots` ? findGameDuel(this.#query, gameId) : undefined;
         return {
             gameId: record.id,
             status: `finished`,
@@ -749,7 +742,6 @@ export class GameRegistry {
             reason: record.finishReason,
             voided: record.voided,
             ...(tournament === undefined ? {} : { tournament }),
-            ...(duel === undefined ? {} : { duel }),
             ...(record.kind !== `guest` && record.unratedByChoice ? { unratedByChoice: true } : {}),
             ...(record.kind !== `guest` && record.test ? { test: true as const } : {}),
         };
@@ -1170,7 +1162,7 @@ export class GameRegistry {
             openingPlies: game.openingPlies,
             // Bots anchor humans: a game against a person moves the bot's
             // rating never, only the person's; and a bot game started
-            // unrated, as a duel may be, moves neither.
+            // unrated, as a duel or round robin a person set up is, moves neither.
             rated: humanSide(game) === null && !ratesNobody(game),
             level: seat.level?.id ?? null,
             engine: {
@@ -1273,7 +1265,6 @@ export class GameRegistry {
             board: { cells: boardCells(game.position) },
             timeControl: game.timeControl,
             ...(game.tournament === undefined ? {} : { tournament: game.tournament }),
-            ...(game.duel === undefined ? {} : { duel: game.duel }),
             ...(game.unratedByChoice ? { unratedByChoice: true as const } : {}),
             ...(game.test ? { test: true as const } : {}),
         };

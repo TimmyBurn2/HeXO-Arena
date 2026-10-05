@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { duelEstimateSchema, estimateMoreGames, estimateOf, ratingOfScore, type EstimateUnit } from '../src';
+import { estimateMoreGames, estimateOf, estimateSchema, ratingOfScore, type EstimateUnit } from '../src';
 
 // Pairs as the first bot's points in each: 2 both won, 1 split, 0 both lost.
 const pairs = (...points: number[]): EstimateUnit[] => points.map((value) => ({ games: 2, points: value }));
@@ -90,9 +90,9 @@ describe('the estimate of a test', () => {
         expect(estimate?.points).toEqual({ first: 4, second: 1 });
     });
 
-    it('fits the estimate the duel pages read', () => {
+    it('fits the estimate the tournament pages read', () => {
         for (const units of [pairs(2), pairs(...repeat(10, 2)), pairs(1, 1.5, 0.5), pairs(...repeat(25, 0))]) {
-            expect(duelEstimateSchema.safeParse(estimateOf(units)).success).toBe(true);
+            expect(estimateSchema.safeParse(estimateOf(units)).success).toBe(true);
         }
     });
 });

@@ -1,66 +1,13 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { BotListing, DuelList, DuelSummary, LiveGameEntry, Me, TournamentDetail, TournamentList, TournamentSummary } from '@hexo-arena/contract';
+import type { BotListing, Me, TournamentDetail, TournamentList, TournamentPair, TournamentSummary } from '@hexo-arena/contract';
 import { TournamentBlock } from '../src/home/blocks';
 import { meStore } from '../src/me';
-import { DuelsScreen } from '../src/screens/DuelsScreen';
-import { GamesDuelsScreen } from '../src/screens/GamesDuelsScreen';
 import { PlayTournamentScreen } from '../src/screens/PlayTournamentScreen';
 import { TournamentsScreen } from '../src/screens/TournamentsScreen';
 
 const hour = 3_600_000;
-const bot = (name: string, ownerName: string) => ({ name, ownerName, ratingAtStart: 1500, now: { rating: 1500, provisional: false } });
-
-function duel(id: string, overrides: Partial<DuelSummary> = {}): DuelSummary {
-    return {
-        id,
-        kind: `duel`,
-        status: `finished`,
-        startedBy: `bruno`,
-        first: bot(`sealbot`, `quinn`),
-        second: bot(`hextide`, `ana`),
-        terms: { games: 2, openingPlies: 5, timeControl: { mode: `turn`, turnTimeMs: 10_000 }, rated: false },
-        score: { first: 2, second: 0 },
-        createdAt: `2026-10-01T12:00:00Z`,
-        endedAt: `2026-10-01T12:20:00Z`,
-        played: 2,
-        results: [
-            { game: 1, x: `first`, gameId: `g-1`, state: `played`, winner: `first` },
-            { game: 2, x: `second`, gameId: `g-2`, state: `played`, winner: `first` },
-        ],
-        ...overrides,
-    };
-}
-
-function running(id: string, first: string, second: string): DuelSummary {
-    return duel(id, {
-        status: `running`,
-        endedAt: null,
-        played: 1,
-        first: bot(first, `quinn`),
-        second: bot(second, `ana`),
-        score: { first: 1, second: 0 },
-        results: [
-            { game: 1, x: `first`, gameId: `g-${id}-1`, state: `played`, winner: `first` },
-            { game: 2, x: `second`, gameId: `g-${id}-2`, state: `live`, winner: null },
-        ],
-    });
-}
-
-function liveOf(duelId: string, x: string, o: string): LiveGameEntry {
-    return {
-        gameId: `g-${duelId}-2`,
-        players: { x: { name: x, rating: 1500, provisional: false, kind: `bot` }, o: { name: o, rating: 1500, provisional: false, kind: `bot` } },
-        timeControl: { mode: `turn`, turnTimeMs: 10_000 },
-        toMove: `x`,
-        rated: false,
-        cells: [{ x: 0, y: 0, side: `x` }],
-        clock: { mode: `turn`, remainingTurnMs: 8_000 },
-        duel: { id: duelId, game: 2, of: 2 },
-    };
-}
-
 function summary(id: string, overrides: Partial<TournamentSummary>): TournamentSummary {
     return {
         id,
@@ -81,6 +28,20 @@ function summary(id: string, overrides: Partial<TournamentSummary>): TournamentS
         round: null,
         ...overrides,
     };
+}
+
+// A duel of sealbot against hextide: game 1 sealbot's, game 2 live.
+const pair: TournamentPair = {
+    first: { key: 1, name: `sealbot`, points: 1 },
+    second: { key: 2, name: `hextide`, points: 0 },
+    games: [
+        { x: 1, gameId: `g-1`, outcome: `played`, point: 1, missing: [] },
+        { x: 2, gameId: `g-2`, outcome: `live`, point: null, missing: [] },
+    ],
+};
+
+function duel(id: string, overrides: Partial<TournamentSummary> = {}): TournamentSummary {
+    return summary(id, { name: `Duel by bruno`, origin: `person`, format: `duel`, createdBy: `bruno`, rated: false, status: `running`, entrants: 2, maxEntrants: 2, round: { current: 1, of: 1 }, pair, ...overrides });
 }
 
 const later = new Date(Date.now() + 3 * hour + 30_000).toISOString().replace(/\.\d{3}Z$/u, `Z`);
@@ -149,74 +110,69 @@ afterEach(() => {
     window.history.replaceState(null, ``, `/`);
 });
 
-describe('the duels under Games', () => {
-    it('draw each live duel with its live game\'s board beside where it stands, then the past ones with who started them', async () => {
-        const live = running(`d_livelivelive`, `devbot-b`, `devbot-c`);
-        const every: DuelList = { running: [live], past: [duel(`d_pastpast0001`)] };
-        serve({ '/api/duels': every, '/api/games?tests=1': [liveOf(live.id, `devbot-c`, `devbot-b`)] });
-        open(`/games/duels`, () => <GamesDuelsScreen />);
-        const card = await waitFor(() => {
-            const found = document.querySelector<HTMLElement>(`a.live-duel`);
-            if (found === null) throw new Error(`no live duel yet`);
+describe('the tournaments under Games', () => {
+    // A row under way or over is one link to its page; one coming up names its tournament in a link of its own.
+    const rowOf = async (id: string) => {
+        const link = await waitFor(() => {
+            const found = document.querySelector<HTMLElement>(`a.duel-row[href="/tournaments/${id}"]`);
+            if (found === null) throw new Error(`no row for ${id} yet`);
             return found;
         });
-        expect(card.getAttribute(`href`)).toBe(`/duels/d_livelivelive`);
-        await waitFor(() => {
-            expect(card.querySelector(`.live-duel-board[aria-hidden="true"] svg`)).toBeTruthy();
-        });
-        expect(card.querySelector(`.live-duel-status`)?.textContent).toBe(`Game 2 of 2 livedevbot-b leads 1-0`);
-        expect(card.querySelector(`.live-duel-terms`)?.textContent).toBe(`turn clock 10 s; unrated; started by bruno`);
-        const past = screen.getByRole(`heading`, { name: `Past` }).closest(`section`) as HTMLElement;
-        const row = within(past).getByRole(`link`);
-        expect(row.getAttribute(`href`)).toBe(`/duels/d_pastpast0001`);
-        expect(row.textContent).toContain(`started by bruno`);
-        expect(screen.getByRole(`link`, { name: `Start a duel` }).getAttribute(`href`)).toBe(`/play/duels`);
+        return link;
+    };
+
+    it('name the reader\'s own bot\'s part on each row, and offer an owner the entry of one coming up', async () => {
+        serve({ '/api/tournaments': list, '/api/bots': [listing(`sealbot`, `quinn`)] }, quinn);
+        render(<TournamentsScreen />);
+        expect((await rowOf(`t_autumnrobin1`)).querySelector(`.event-row-yours`)?.textContent).toBe(`Yours: sealbot, 1st so far`);
+        expect((await rowOf(`t_summercup202`)).querySelector(`.event-row-yours`)?.textContent).toBe(`Yours: sealbot, 2nd`);
+        const enter = await screen.findByRole(`link`, { name: `Enter a bot in Winter cup` });
+        expect(enter.getAttribute(`href`)).toBe(`/tournaments/t_wintercup202`);
+        expect(enter.textContent).toBe(`Enter a bot`);
+        expect((await rowOf(`t_raincup20261`)).querySelector(`.event-row-yours`)).toBe(null);
     });
 
-    it('list more than three live duels as rows, as boards would push the past ones far down', async () => {
-        const duels = [`a`, `b`, `c`, `d`].map((tag) => running(`d_live0000000${tag}`, `bot-${tag}`, `bot-${tag}${tag}`));
-        serve({ '/api/duels': { running: duels, past: [] }, '/api/games?tests=1': [] });
-        open(`/games/duels`, () => <GamesDuelsScreen />);
-        const live = (await screen.findByRole(`heading`, { name: `Live` })).closest(`section`) as HTMLElement;
-        await waitFor(() => {
-            expect(live.querySelectorAll(`.duel-row`)).toHaveLength(4);
+    it('frame a duel and a round robin alike, each dated the same way, a round robin with its leaders\' points', async () => {
+        const field = summary(`t_fieldfield01`, {
+            name: `Round robin by bruno`,
+            origin: `person`,
+            createdBy: `bruno`,
+            rated: false,
+            entrants: 3,
+            gamesPerPair: 4,
+            endedAt: new Date(Date.now() - 9 * hour).toISOString(),
+            leaders: { bots: [{ name: `devbot-b` }], points: 6, games: 8 },
         });
-        expect(live.querySelector(`.live-duel`)).toBe(null);
+        const over = duel(`d_overoverover`, { status: `finished`, endedAt: new Date(Date.now() - 4 * hour).toISOString(), round: null, pair: { ...pair, games: [pair.games[0] ?? { x: 1, gameId: null, outcome: `pending`, point: null, missing: [] }] } });
+        serve({ '/api/tournaments': { running: [duel(`d_livelivelive`)], scheduled: [], past: [field, over] } });
+        render(<TournamentsScreen />);
+        const live = await rowOf(`d_livelivelive`);
+        expect(live.querySelector(`.duel-row-facts`)?.textContent).toBe(`Game 2 of 2 liveunratedset up by bruno`);
+        expect(live.querySelector(`.duel-glyphs`)).not.toBe(null);
+        const row = await rowOf(`t_fieldfield01`);
+        expect(row.querySelector(`.duel-row-facts`)?.textContent).toBe(`3 bots, 4 games a pairset up by bruno9 h ago`);
+        expect(row.querySelector(`.event-figure`)?.textContent).toBe(`6 of 8devbot-b won`);
+        expect((await rowOf(`d_overoverover`)).querySelector(`.duel-row-facts`)?.textContent).toMatch(/4 h ago$/u);
     });
 
     it('keep the reader\'s filter and one bot in the address, and lead back to every bot', async () => {
-        const reads = serve({ '/api/duels?bot=hextide': { running: [], past: [duel(`d_pastpast0001`)] }, '/api/duels?bot=hextide&kind=test': { running: [], past: [] }, '/api/games?tests=1': [] });
-        open(`/games/duels?bot=hextide`, () => <GamesDuelsScreen />);
-        expect(await screen.findByText(`Duels and tests of hextide`)).toBeTruthy();
-        expect(screen.getByRole(`link`, { name: `Every bot` }).getAttribute(`href`)).toBe(`/games/duels`);
+        const reads = serve({ '/api/tournaments?bot=hextide': { running: [], scheduled: [], past: [summary(`t_summercup202`, { name: `Summer cup` })] }, '/api/tournaments?bot=hextide&kind=test': { running: [], scheduled: [], past: [] } });
+        open(`/games/tournaments?bot=hextide`, () => <TournamentsScreen />);
+        expect(await screen.findByText(`Tournaments of hextide`)).toBeTruthy();
+        expect(screen.getByRole(`link`, { name: `Every bot` }).getAttribute(`href`)).toBe(`/games/tournaments`);
         fireEvent.click(screen.getByRole(`button`, { name: `Tests` }));
-        expect(window.location.pathname + window.location.search).toBe(`/games/duels?bot=hextide&list=tests`);
+        expect(window.location.pathname + window.location.search).toBe(`/games/tournaments?bot=hextide&list=tests`);
         await waitFor(() => {
-            expect(reads).toContain(`/api/duels?bot=hextide&kind=test`);
+            expect(reads).toContain(`/api/tournaments?bot=hextide&kind=test`);
         });
         expect(await screen.findByText(`No test has ended yet.`)).toBeTruthy();
     });
 
-    it('ask a signed-out reader on Yours to sign in once, in place of both lists', async () => {
-        serve({ '/api/duels': { running: [], past: [] }, '/api/games?tests=1': [] });
-        open(`/games/duels?list=yours`, () => <GamesDuelsScreen />);
-        expect(await screen.findByText(`Sign in to see your duels and tests.`)).toBeTruthy();
-        expect(screen.queryByRole(`heading`, { name: `Live` })).toBe(null);
+    it('ask a signed-out reader on Yours to sign in once, in place of the lists', async () => {
+        serve({ '/api/tournaments': { running: [], scheduled: [], past: [] } });
+        open(`/games/tournaments?list=yours`, () => <TournamentsScreen />);
+        expect(await screen.findByText(`Sign in to see the duels and round robins you set up and your bots' tournaments.`)).toBeTruthy();
         expect(screen.queryByRole(`heading`, { name: `Past` })).toBe(null);
-    });
-});
-
-describe('the tournaments under Games', () => {
-    it('name the reader\'s own bot\'s part on each row, and offer an owner the entry of one coming up', async () => {
-        serve({ '/api/tournaments': list, '/api/bots': [listing(`sealbot`, `quinn`)] }, quinn);
-        render(<TournamentsScreen />);
-        const live = (await screen.findByRole(`link`, { name: `Autumn round robin` })).closest(`li`) as HTMLElement;
-        expect(live.querySelector(`.tournament-row-yours`)?.textContent).toBe(`Yours: sealbot, 1st so far`);
-        expect(screen.getByRole(`link`, { name: `Summer cup` }).closest(`li`)?.querySelector(`.tournament-row-yours`)?.textContent).toBe(`Yours: sealbot, 2nd`);
-        const enter = await screen.findByRole(`link`, { name: `Enter a bot in Winter cup` });
-        expect(enter.getAttribute(`href`)).toBe(`/tournaments/t_wintercup202`);
-        expect(enter.textContent).toBe(`Enter a bot`);
-        expect(screen.getByRole(`link`, { name: `Rain cup` }).closest(`li`)?.querySelector(`.tournament-row-yours`)).toBe(null);
     });
 
     it('offer no entry to a reader who owns no bot', async () => {
@@ -224,7 +180,7 @@ describe('the tournaments under Games', () => {
         render(<TournamentsScreen />);
         await screen.findByRole(`link`, { name: `Winter cup` });
         await waitFor(() => {
-            expect(document.querySelectorAll(`.tournament-row`)).toHaveLength(4);
+            expect(document.querySelectorAll(`.tournament-row, a.duel-row`)).toHaveLength(4);
         });
         expect(screen.queryByRole(`link`, { name: /^Enter a bot/u })).toBe(null);
     });
@@ -235,7 +191,7 @@ describe('the Tournament place under Play', () => {
         const mine = summary(`t_brunorobin01`, { name: `Round robin by quinn`, origin: `person`, format: `round_robin`, createdBy: `quinn`, rated: false, status: `running`, round: { current: 1, of: 3 } });
         const accepts = { turnMs: [5_000, 60_000] as [number, number], match: true, unlimited: true };
         const bots = [`sealbot`, `hextide`, `pebble`].map((name) => ({ ...listing(name, name === `sealbot` ? `quinn` : `ana`), accepts }));
-        serve({ '/api/tournaments': list, '/api/tournaments?mine=1': { running: [mine], scheduled: [], past: [], quota: { live: 1, today: 1 } }, [`/api/tournaments/${waiting.id}`]: waiting, '/api/bots': bots, '/api/duels/bots': [] }, quinn);
+        serve({ '/api/tournaments': list, '/api/tournaments?mine=1': { running: [mine], scheduled: [], past: [], quota: { live: 1, today: 1 } }, [`/api/tournaments/${waiting.id}`]: waiting, '/api/bots': bots, '/api/tournaments/bots': [] }, quinn);
         render(<PlayTournamentScreen />);
         expect(await screen.findByRole(`heading`, { level: 2, name: `New duel` })).toBeTruthy();
         expect(screen.getByRole(`button`, { name: `Add bots` })).toBeTruthy();
@@ -253,7 +209,7 @@ describe('the Tournament place under Play', () => {
     });
 
     it('offer a signed-out reader one sign-in, in the setup, the weekly\'s entry asking for it in words alone', async () => {
-        serve({ '/api/tournaments': list, [`/api/tournaments/${waiting.id}`]: waiting, '/api/bots': [listing(`sealbot`, `quinn`)], '/api/duels/bots': [] });
+        serve({ '/api/tournaments': list, [`/api/tournaments/${waiting.id}`]: waiting, '/api/bots': [listing(`sealbot`, `quinn`)], '/api/tournaments/bots': [] });
         render(<PlayTournamentScreen />);
         expect(await screen.findByText(`Sign in to enter a bot.`)).toBeTruthy();
         expect(await screen.findByText(`Sign in to set up a duel or round robin; anyone can watch one.`)).toBeTruthy();
@@ -262,7 +218,7 @@ describe('the Tournament place under Play', () => {
     });
 
     it('say no weekly is coming up, and ask a signed-out reader to sign in to set one up and to see their own', async () => {
-        serve({ '/api/tournaments': { ...list, scheduled: [] }, '/api/bots': [listing(`sealbot`, `quinn`)], '/api/duels/bots': [] });
+        serve({ '/api/tournaments': { ...list, scheduled: [] }, '/api/bots': [listing(`sealbot`, `quinn`)], '/api/tournaments/bots': [] });
         render(<PlayTournamentScreen />);
         expect(await screen.findByText(`No weekly tournament is coming up; the operator schedules each one.`)).toBeTruthy();
         expect(await screen.findByText(`Sign in to set up a duel or round robin; anyone can watch one.`)).toBeTruthy();
@@ -271,29 +227,18 @@ describe('the Tournament place under Play', () => {
     });
 });
 
-describe('the Bot duel place under Play', () => {
-    it('stand the reader\'s own duels beside the setup, and lead to every one of them', async () => {
-        serve({ '/api/duels?mine=1': { running: [], past: [duel(`d_pastpast0001`)], quota: { live: 0, today: 1 } }, '/api/bots': [], '/api/duels/bots': [], '/api/tournaments': { running: [], scheduled: [], past: [] } }, quinn);
-        open(`/play/duels`, () => <DuelsScreen />);
-        const all = await screen.findByRole(`link`, { name: `All your duels` });
-        expect(all.getAttribute(`href`)).toBe(`/games/duels?list=yours`);
-        const side = all.closest(`section`) as HTMLElement;
-        expect(within(side).getByRole(`heading`, { name: `Your duels` })).toBeTruthy();
-        await waitFor(() => {
-            expect(within(side).getAllByRole(`link`).map((link) => link.getAttribute(`href`))).toContain(`/duels/d_pastpast0001`);
-        });
-        expect(screen.getByRole(`navigation`, { name: `Play` }).querySelector(`[aria-current="page"]`)?.textContent).toBe(`Bot duel`);
-    });
-});
-
 describe('a tournament row', () => {
-    it('say one called off mid-line in lower case, and the reader\'s bot as entered in the past', async () => {
+    it('say one called off in lower case, and the reader\'s bot as entered in the past', async () => {
         const off = summary(`t_offoffoffoff`, { name: `Spring cup`, status: `called_off`, yours: { bot: `sealbot`, place: { state: `entered`, rank: null, points: null } } });
         serve({ '/api/tournaments': { running: [], scheduled: [], past: [off] } });
         open(`/games/tournaments`, () => <TournamentsScreen />);
-        const row = (await screen.findByRole(`link`, { name: `Spring cup` })).closest(`.tournament-row`) as HTMLElement;
-        expect(row.querySelector(`.tournament-row-facts`)?.textContent).toMatch(/; called off$/u);
-        expect(row.querySelector(`.tournament-row-yours`)?.textContent).toBe(`Yours: sealbot was entered`);
+        const row = await waitFor(() => {
+            const found = document.querySelector<HTMLElement>(`a.duel-row[href="/tournaments/t_offoffoffoff"]`);
+            if (found === null) throw new Error(`no row yet`);
+            return found;
+        });
+        expect(row.querySelector(`.duel-row-facts`)?.textContent).toMatch(/^called off/u);
+        expect(row.querySelector(`.event-row-yours`)?.textContent).toBe(`Yours: sealbot was entered`);
     });
 });
 

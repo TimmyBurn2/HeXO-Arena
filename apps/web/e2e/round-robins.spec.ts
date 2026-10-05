@@ -1,6 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 import { looks, pickBots, wear } from './matrix';
-import { anaMe, duelBots, roundRobins, serve, tournaments, world, type World } from './mock-api';
+import { anaMe, duelBots, quinnRobin, roundRobins, serve, tournaments, world, type World } from './mock-api';
 
 const quinnMe = { kind: `user` as const, name: `quinn`, rating: 1503, provisional: false, discord: null, liveGames: [], analysisOptOut: false, analysisLeft: { positions: 300, games: 10 } };
 
@@ -25,11 +25,13 @@ for (const width of [1280, 390]) {
     test(`a round robin is set up from bots picked several at once and opens its page, Back finding the setup as it was left, at ${String(width)} px`, async ({ page }) => {
         await open(page, `/play/tournament`, width);
         await expect(page.getByRole(`heading`, { name: `New duel` })).toBeVisible();
-        await expect(page.getByText(`Pick 2 to 8 from the bot list, several at once`)).toBeVisible();
+        await expect(page.getByText(`Pick 2 to 8 bots: two play a duel, three or more a round robin.`)).toBeVisible();
+        await expect(page.getByText(/Pick 2 to 8/u)).toHaveCount(1);
+        await expect(page.getByRole(`button`, { name: `Add bots, the second plate` })).toContainText(`Add bots`);
         await pickBots(page, [`hextide`, `Pistol1`, `devbot-a`]);
         await expect(page.getByRole(`heading`, { name: `New round robin` })).toBeVisible();
         await expect(page.getByText(/^Every pair meets once: 3 pairs in 3 rounds\./u)).toBeVisible();
-        await expect(page.getByText(`Entered in the weekly, which starts in 2 h 59 min; it leaves this duel or round robin then.`)).toBeVisible();
+        await expect(page.getByText(`Entered in the weekly, which starts in 2 h 59 min; it leaves this round robin then.`)).toBeVisible();
         await noSidewaysScroll(page);
         await page.getByRole(`button`, { name: `Start round robin` }).click();
         await expect(page).toHaveURL(/\/tournaments\/t_newrobin0001$/u);
@@ -45,10 +47,10 @@ for (const width of [1280, 390]) {
 
     test(`the bot list dims the bots that cannot join with the reason, tags those added, and fills a phone, at ${String(width)} px`, async ({ page }) => {
         const state = robins();
-        state.duelStates = duelBots.map((bot) => ({ name: bot.name, duelsByOthers: bot.name !== `quietlake`, dueling: [], roundRobins: bot.name === `devbot-c` ? 2 : 0 }));
+        state.botStates = duelBots.map((bot) => ({ name: bot.name, duelsByOthers: bot.name !== `quietlake`, running: bot.name === `devbot-c` ? 2 : 0 }));
         await open(page, `/play/tournament`, width, state);
         await pickBots(page, [`hextide`]);
-        await page.getByRole(`button`, { name: `Add a second bot` }).click();
+        await page.getByRole(`button`, { name: `Add bots, the second plate` }).click();
         const dialog = page.locator(`dialog.rr-picker[open]`);
         await expect(dialog.getByRole(`button`, { name: /^hextide\b/u })).toContainText(`added`);
         await expect(dialog.getByRole(`button`, { name: /^quietlake\b/u })).toHaveAttribute(`aria-disabled`, `true`);
@@ -65,7 +67,7 @@ for (const width of [1280, 390]) {
     });
 
     test(`a refusal says why under Start and marks the bot it names, and a test takes up to fifty games a pair while no bot passes 70, at ${String(width)} px`, async ({ page }) => {
-        await open(page, `/play/tournament`, width, robins({ roundRobinStart: { status: 400, code: `bot_busy`, bot: `devbot-a` } }));
+        await open(page, `/play/tournament`, width, robins({ tournamentStart: { status: 400, code: `bot_busy`, bot: `devbot-a` } }));
         await pickBots(page, [`hextide`, `Pistol1`, `devbot-a`]);
         await page.getByRole(`button`, { name: `Start round robin` }).click();
         await expect(page.locator(`.start-refusal`)).toHaveText(/^devbot-a is busy/u);
@@ -103,7 +105,9 @@ for (const width of [1280, 390]) {
     });
 
     test(`its creator stops a round robin, confirmed in place, focus on a control that is there throughout, at ${String(width)} px`, async ({ page }) => {
-        await open(page, `/tournaments/t_quinnrobin01`, width, robins({ me: quinnMe }));
+        const state = robins({ me: quinnMe });
+        state.tournaments.push(quinnRobin());
+        await open(page, `/tournaments/t_quinnrobin01`, width, state);
         await page.getByRole(`button`, { name: `Stop round robin` }).focus();
         await page.keyboard.press(`Enter`);
         await expect(page.getByText(`Stop the round robin? No further game starts; the live games play on, and the standings stand as they are.`)).toBeVisible();
@@ -133,8 +137,8 @@ for (const width of [1280, 390]) {
         await open(page, `/games/tournaments`, width);
         await expect(page.getByRole(`link`, { name: `New duel or round robin` })).toHaveAttribute(`href`, `/play/tournament`);
         const live = page.getByRole(`region`, { name: `Live` });
-        await expect(live.locator(`.tournament-row`)).toHaveCount(2);
-        await expect(live.locator(`.tournament-row`).first()).toContainText(`unrated`);
+        await expect(live.locator(`.duel-row`)).toHaveCount(2);
+        await expect(live.locator(`.duel-row`).first()).toContainText(`unrated`);
         await expect(page.getByRole(`link`, { name: `Round robin by ana` })).toHaveCount(0);
         await page.getByRole(`button`, { name: `Tests` }).click();
         await expect(page).toHaveURL(/\/games\/tournaments\?list=tests$/u);
@@ -153,14 +157,14 @@ for (const width of [1280, 390]) {
         await expect(block.getByRole(`link`, { name: `Set up a round robin` })).toHaveAttribute(`href`, `/play/tournament`);
     });
 
-    test(`Profile's round robins are rows as on Play when Profile is the first page loaded, at ${String(width)} px`, async ({ page }) => {
+    test(`Profile's duels and round robins are rows as under Games when Profile is the first page loaded, at ${String(width)} px`, async ({ page }) => {
         await open(page, `/profile`, width);
-        const block = page.locator(`section:has(#your-round-robins-title)`);
-        const row = block.locator(`.tournament-row`).first();
-        await expect(row).toHaveCSS(`display`, `flex`);
-        const weights = await row.evaluate((element) => ({ name: getComputedStyle(element.querySelector(`.tournament-row-name`) ?? element).fontWeight, facts: getComputedStyle(element.querySelector(`.tournament-row-facts`) ?? element).fontWeight }));
+        const block = page.locator(`section:has(#your-tournaments-title)`);
+        const row = block.locator(`a.duel-row`).first();
+        await expect(row).toHaveCSS(`display`, `grid`);
+        const weights = await row.evaluate((element) => ({ name: getComputedStyle(element.querySelector(`.event-row-name`) ?? element).fontWeight, facts: getComputedStyle(element.querySelector(`.duel-row-facts`) ?? element).fontWeight }));
         expect(Number(weights.name)).toBeGreaterThan(Number(weights.facts));
-        await expect(row.locator(`.tournament-row-facts`)).not.toHaveCSS(`color`, await row.locator(`.tournament-row-yours`).evaluate((element) => getComputedStyle(element).color));
+        await expect(row.locator(`.duel-row-facts`)).not.toHaveCSS(`color`, await row.locator(`.event-row-yours`).evaluate((element) => getComputedStyle(element).color));
     });
 }
 

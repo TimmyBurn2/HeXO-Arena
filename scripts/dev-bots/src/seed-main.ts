@@ -7,8 +7,7 @@ import { ApiError } from './client';
 import { seedPlan } from './personas';
 import { NotADevServer, seats } from './runner';
 import { seedDevData } from './seed';
-import { devDuelPlans } from './duels';
-import { devRoundRobinPlans } from './round-robins';
+import { devEventPlans } from './events';
 import type { DevWeeklyRule } from './tournament';
 
 const envSchema = z.object({
@@ -86,8 +85,7 @@ try {
         log,
         scheduleTournament,
         addWeeklyRule,
-        duels: devDuelPlans,
-        roundRobins: devRoundRobinPlans,
+        events: devEventPlans,
         tournamentCandidates: seats.map((seat) => ({ owner: `devowner-${seat}`, bot: `devbot-${seat}` })),
     });
     log(`played ${String(report.played)} games`);
@@ -104,13 +102,7 @@ try {
     if (report.tournament !== null) {
         log(`dev tournament ${report.tournament.id}, entered: ${report.tournament.entered.join(`, `) || `none`}`);
     }
-    if (report.duels !== null) {
-        log(`finished duel: ${report.duels.finished ?? `none`}; test: ${report.duels.test ?? `none`}; live duel: ${report.duels.live}`);
-    }
-    if (report.roundRobins !== null) {
-        const { finished, test, live } = report.roundRobins;
-        log(`finished round robin: ${finished ?? `none`}; test: ${test ?? `none`}; live round robin: ${live}`);
-    }
+    for (const [name, id] of Object.entries(report.events ?? {})) log(`${name}: ${id ?? `none`}`);
     log(`restart pnpm dev:bots to bring the personas' online bots up`);
 } catch (error) {
     if (error instanceof NotADevServer) {

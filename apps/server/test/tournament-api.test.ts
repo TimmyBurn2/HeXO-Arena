@@ -187,7 +187,7 @@ describe('the tournament reads and entries', () => {
         expect(pairing?.first.name).toBe(read.entries.find((entry) => entry.key === pairing?.first.key)?.bot);
         const gameId = pairing?.games[0]?.gameId ?? ``;
         expect(read.live.map((game) => game.gameId)).toEqual([gameId]);
-        const tag = { id, name: `Autumn round robin`, format: `round_robin`, round: 1, game: 1 };
+        const tag = { id, name: `Autumn round robin`, format: `round_robin`, round: 1, game: 1, of: 2 };
         expect(read.live[0]?.tournament).toEqual(tag);
         const liveList = liveGameEntrySchema.array().parse((await world.app.inject({ method: `GET`, url: `/api/games` })).json());
         expect(liveList.find((game) => game.gameId === gameId)?.tournament).toEqual(tag);

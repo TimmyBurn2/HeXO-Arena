@@ -1,7 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
 import type { Me } from '@hexo-arena/contract';
 import { looks, sweep, wear } from './matrix';
-import { analyzerBots, bots, duelBots, duelFixtures, duelGameRows, heldBots, keptNames, liveGames, longReadings, playBots, rivalry, roundRobins, serve, signup, tournamentGameRows, tournaments, world, type World } from './mock-api';
+import { analyzerBots, bots, duelBots, duelGameRows, heldBots, keptNames, liveGames, longReadings, playBots, rivalry, roundRobins, serve, signup, tournamentGameRows, tournaments, world, type World } from './mock-api';
 
 const visitors: readonly { name: string; me: Me }[] = [
     { name: `signed-out`, me: null },
@@ -19,28 +19,23 @@ const screens: readonly { name: string; path: string; world?: Partial<World>; th
     { name: `the root`, path: `/` },
     { name: `play`, path: `/play`, world: { bots: playBots } },
     { name: `play with a limited bot`, path: `/play?bot=quietlake`, world: { bots: playBots } },
-    { name: `bot duel`, path: `/play/duels?first=Pistol1`, world: { bots: duelBots, duels: Object.values(duelFixtures).filter((duel) => duel.id !== duelFixtures.testLive.id) } },
     {
-        name: `a new test with its picker`,
-        path: `/play/duels?first=pebble`,
+        name: `Home's duel with its bot list`,
+        path: `/`,
         world: { bots: duelBots.map((bot) => ({ ...bot, ownerName: bot.ownerName === `ana` ? `quinn` : bot.ownerName })) },
         then: async (page) => {
-            await page.getByRole(`button`, { name: `Add a bot, Second bot` }).click();
+            await page.getByRole(`button`, { name: `Add a bot, First bot` }).click();
             await page.locator(`dialog.duel-picker[open] .pick-detail`).waitFor();
         },
     },
-    { name: `a duel`, path: `/duels/${duelFixtures.live.id}`, world: { bots: duelBots, duels: [duelFixtures.live] } },
-    { name: `a test`, path: `/duels/${duelFixtures.test.id}`, world: { bots: duelBots, duels: [duelFixtures.test] } },
-    { name: `a duel over, its games to export`, path: `/duels/${duelFixtures.rated.id}`, world: { bots: duelBots, duels: [duelFixtures.rated] } },
-    { name: `the duels under Games`, path: `/games/duels`, world: { bots: duelBots, duels: Object.values(duelFixtures), live: [...duelFixtures.live.live, ...duelFixtures.testLive.live] } },
     { name: `the tournament place under Play`, path: `/play/tournament`, world: { tournaments: tournaments() } },
     {
         name: `games narrowed to one duel, its pick open`,
-        path: `/games?event=duel&duel=${duelFixtures.live.id}`,
-        world: { bots: duelBots, duels: Object.values(duelFixtures), finished: [...duelGameRows, ...keptNames] },
+        path: `/games?event=tournament&tournament=t_brunoduel001`,
+        world: { tournaments: roundRobins(), finished: [...duelGameRows, ...keptNames] },
         then: async (page) => {
             await page.getByRole(`button`, { name: /^Filters/u }).click();
-            await page.locator(`#games-duel`).waitFor();
+            await page.locator(`#games-tournament`).waitFor();
         },
     },
     { name: `games narrowed to one round of a tournament`, path: `/games?event=tournament&tournament=t_autumnrobin1&round=2`, world: { tournaments: tournaments(), finished: [...tournamentGameRows, ...keptNames] } },
@@ -76,7 +71,7 @@ const screens: readonly { name: string; path: string; world?: Partial<World>; th
         path: `/play/tournament?bots=hextide`,
         world: { bots: duelBots.map((bot) => ({ ...bot, ownerName: bot.ownerName === `ana` ? `quinn` : bot.ownerName })), tournaments: tournaments().filter((entry) => entry.status !== `running`) },
         then: async (page) => {
-            await page.getByRole(`button`, { name: `Add a second bot` }).click();
+            await page.getByRole(`button`, { name: `Add bots, the second plate` }).click();
             await page.locator(`dialog.rr-picker[open] .rr-pick`).first().waitFor();
         },
     },
@@ -85,12 +80,14 @@ const screens: readonly { name: string; path: string; world?: Partial<World>; th
         path: `/play/tournament?bots=devbot-b%2Cdevbot-c&games=10`,
         world: { bots: duelBots, tournaments: tournaments().filter((entry) => entry.status !== `running`) },
     },
-    { name: `the round robins under Games`, path: `/games/tournaments`, world: { tournaments: [...tournaments(), ...roundRobins()] } },
+    { name: `the duels and round robins under Games`, path: `/games/tournaments`, world: { tournaments: [...tournaments(), ...roundRobins()] } },
+    { name: `one bot's tournaments under Games`, path: `/games/tournaments?bot=hextide`, world: { tournaments: [...tournaments(), ...roundRobins()] } },
     { name: `a live round robin`, path: `/tournaments/t_brunorobin01`, world: { tournaments: roundRobins() } },
     { name: `a test of several bots`, path: `/tournaments/t_anatest00001`, world: { tournaments: roundRobins() } },
     { name: `a live duel`, path: `/tournaments/t_brunoduel001`, world: { tournaments: roundRobins() } },
     { name: `a test of two bots`, path: `/tournaments/t_anaduel00001`, world: { tournaments: roundRobins() } },
     { name: `a duel cut short`, path: `/tournaments/t_dmitricut001`, world: { tournaments: roundRobins() } },
+    { name: `a bot page with its duels and round robins`, path: `/bots/hextide`, world: { bots: duelBots, tournaments: roundRobins() } },
     { name: `a round robin over`, path: `/tournaments/t_brunorobin02`, world: { tournaments: roundRobins() } },
     { name: `tournaments`, path: `/games/tournaments`, world: { tournaments: tournaments() } },
     { name: `a running tournament`, path: `/tournaments/t_autumnrobin1`, world: { tournaments: tournaments() } },
@@ -101,7 +98,7 @@ const screens: readonly { name: string; path: string; world?: Partial<World>; th
     { name: `an analyzer's page`, path: `/bots/kestrel`, world: { bots: [...bots, ...analyzerBots] } },
     { name: `build a bot`, path: `/connect` },
     { name: `profile`, path: `/profile` },
-    { name: `profile with duels and tests`, path: `/profile`, world: { bots: duelBots, duels: [{ ...duelFixtures.rated, startedBy: `quinn` }, { ...duelFixtures.live, startedBy: `quinn` }] } },
+    { name: `profile with duels and round robins`, path: `/profile`, world: { bots: duelBots, tournaments: roundRobins().map((detail) => (detail.id === `t_brunoduel001` ? { ...detail, createdBy: `quinn` } : detail)) } },
     {
         name: `profile at the bot cap, or with no bots for the long name`,
         path: `/profile`,

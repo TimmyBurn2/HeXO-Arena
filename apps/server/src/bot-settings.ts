@@ -11,7 +11,7 @@ import type { TournamentScheduler } from './tournament-scheduler';
 interface BotSettingsDeps {
     query: Query;
     limits: CredentialLimits;
-    // Turning duels by others off takes the bot out of the round robins others set up.
+    // Turning duels by others off takes the bot out of the duels and round robins others set up.
     tournaments: Pick<TournamentScheduler, `withdrawRefused`>;
 }
 

@@ -2,10 +2,9 @@ import { z } from 'zod';
 import { analysisStatusSchema, analyzerValuesSchema } from './analysis';
 import { acceptsSchema, botClientSchema } from './api';
 import { axialCoordSchema } from './board';
-import { gameCellSchema, unratedByChoiceSchema } from './games';
+import { gameCellSchema, tournamentFormatSchema, unratedByChoiceSchema } from './games';
 import { levelsSchema, seatLevelSchema } from './levels';
 import { nameMaxLength } from './names';
-import { duelKindSchema, duelStatusSchema } from './duels';
 import { finishReasonSchema, firstPlayerSchema, openingPliesSchema, sideSchema, timeControlSchema, challengeStatusSchema } from './stream';
 import { tournamentEntryReasonSchema, tournamentEntryStateSchema, tournamentGamesPerPairSchema, tournamentStatusSchema } from './tournaments';
 
@@ -45,7 +44,7 @@ const exportedRatingSchema = z.object({ rating: z.number(), deviation: z.number(
  * Everything stored about one account: the account and the Discord
  * identity it keeps, its sessions' times and Discord names, its rating,
  * its bots, every game it or its bots played with their moves, its
- * tournament entries, the duels, tests, and round robins it started, its bots' challenges, and the
+ * tournament entries, the duels and round robins it set up, its bots' challenges, and the
  * moderation records naming it or its bots.
  * Never a token, a token's hash, or a sign-in's state.
  */
@@ -116,34 +115,21 @@ export const accountExportSchema = z
                 enteredAt: time,
             }),
         ),
-        duels: z
+        tournaments: z
             .array(
                 z.object({
                     id: z.string(),
-                    first: z.string(),
-                    second: z.string(),
-                    games: z.number().int(),
-                    kind: duelKindSchema,
-                    rated: z.boolean(),
-                    status: duelStatusSchema,
-                    createdAt: time,
-                    endedAt: time.nullable(),
-                }),
-            )
-            .meta({ description: `Duels and tests the account started.` }),
-        roundRobins: z
-            .array(
-                z.object({
-                    id: z.string(),
+                    format: tournamentFormatSchema,
                     bots: z.array(z.string()),
                     gamesPerPair: tournamentGamesPerPairSchema,
                     test: z.boolean(),
+                    rated: z.boolean(),
                     status: tournamentStatusSchema,
                     createdAt: time,
                     endedAt: time.nullable(),
                 }),
             )
-            .meta({ description: `Duels and round robins the account set up as tournaments, tests among them.` }),
+            .meta({ description: `Duels and round robins the account set up, tests among them, each bot in the order it named them.` }),
         challenges: z.array(
             z.object({
                 id: z.string(),

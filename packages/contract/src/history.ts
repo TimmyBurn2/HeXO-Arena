@@ -1,7 +1,6 @@
 import { z } from 'zod';
 import { analysesPerGame } from './analysis';
-import { duelIdSchema } from './duels';
-import { gameDuelSchema, gamePlayersSchema, gameTournamentSchema, testMarkSchema, unratedByChoiceSchema } from './games';
+import { gamePlayersSchema, gameTournamentSchema, testMarkSchema, unratedByChoiceSchema } from './games';
 import { rankableDeviation } from './leaderboard';
 import { nameKeyOf, nameMaxLength } from './names';
 import { finishReasonSchema, openingPliesSchema, sideSchema, timeControlSchema } from './stream';
@@ -45,13 +44,12 @@ export const finishedGamesQuerySchema = z
         reason: z.enum(finishReasonSchema.options).optional().meta({ param: { description: `How the game ended.` } }),
         clock: z.enum([`turn`, `match`, `unlimited`]).optional().meta({ param: { description: `The time control's mode.` } }),
         event: z
-            .enum([`duel`, `tournament`, `none`])
+            .enum([`tournament`, `none`])
             .optional()
-            .meta({ param: { description: `Games of a duel, tests among them while tests are listed; of a tournament; or of neither.` } }),
-        duel: duelIdSchema
+            .meta({ param: { description: `Games of a tournament, a duel or round robin among them; or of none.` } }),
+        tournament: tournamentIdSchema
             .optional()
-            .meta({ param: { description: `One duel's games, none for an unknown one; a test's are listed whatever tests says, since naming it asks for them.` } }),
-        tournament: tournamentIdSchema.optional().meta({ param: { description: `One tournament's games, none for an unknown one.` } }),
+            .meta({ param: { description: `One tournament's games, none for an unknown one; a test's are listed whatever tests says, since naming it asks for them.` } }),
         round: z
             .string()
             .regex(roundPattern)
@@ -77,12 +75,7 @@ export const finishedGamesQuerySchema = z
         message: `vs names a player other than player`,
     })
     .refine((query) => query.round === undefined || query.tournament !== undefined, { message: `round needs tournament` })
-    .refine(
-        (query) =>
-            (query.duel === undefined || (query.tournament === undefined && (query.event ?? `duel`) === `duel`)) &&
-            (query.tournament === undefined || (query.event ?? `tournament`) === `tournament`),
-        { message: `duel and tournament exclude each other, and event, when given, is the kind named` },
-    );
+    .refine((query) => query.tournament === undefined || (query.event ?? `tournament`) === `tournament`, { message: `tournament needs event, when given, to be tournament` });
 export type FinishedGamesQuery = z.infer<typeof finishedGamesQuerySchema>;
 
 export const finishedGameEntrySchema = z
@@ -102,7 +95,6 @@ export const finishedGameEntrySchema = z
         unratedByChoice: unratedByChoiceSchema.optional(),
         test: testMarkSchema.optional(),
         tournament: gameTournamentSchema.optional(),
-        duel: gameDuelSchema.optional(),
         analyses: z
             .number()
             .int()

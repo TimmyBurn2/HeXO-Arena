@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { activeKeys, duelGamesPath, gamesPathOf, pagePathOf, searchOf, shownKeys, tournamentGamesPath, viewOf, withFilter } from '../src/games/filters';
+import { activeKeys, gamesPathOf, pagePathOf, searchOf, shownKeys, tournamentGamesPath, viewOf, withFilter } from '../src/games/filters';
 
 describe('viewOf', () => {
     it('read every filter and the page from an address', () => {
-        expect(viewOf(`?player=hextide&vs=quietlake&result=won&side=x&reason=timeout&clock=turn&kind=bot-bot&event=duel&opening=5&analyzed=1&before=2026-09-01&page=2`)).toEqual({
-            filters: { player: `hextide`, vs: `quietlake`, result: `won`, side: `x`, reason: `timeout`, clock: `turn`, kind: `bot-bot`, event: `duel`, opening: `5`, analyzed: `1`, before: `2026-09-01` },
+        expect(viewOf(`?player=hextide&vs=quietlake&result=won&side=x&reason=timeout&clock=turn&kind=bot-bot&event=none&opening=5&analyzed=1&before=2026-09-01&page=2`)).toEqual({
+            filters: { player: `hextide`, vs: `quietlake`, result: `won`, side: `x`, reason: `timeout`, clock: `turn`, kind: `bot-bot`, event: `none`, opening: `5`, analyzed: `1`, before: `2026-09-01` },
             page: 2,
         });
     });
@@ -23,21 +23,26 @@ describe('viewOf', () => {
         expect(viewOf(`?player=hextide&vs=HexTide`).filters).toEqual({ player: `hextide` });
     });
 
-    it('read one duel, or one tournament and one of its rounds, under the kind of event it is', () => {
-        expect(viewOf(`?event=duel&duel=d_abcdefghijkl&player=hextide`).filters).toEqual({ player: `hextide`, event: `duel`, duel: `d_abcdefghijkl` });
+    it('read one tournament and one of its rounds under the kind of event it is', () => {
         expect(viewOf(`?event=tournament&tournament=t_autumnrobin1&round=2`).filters).toEqual({ event: `tournament`, tournament: `t_autumnrobin1`, round: `2` });
+        expect(viewOf(`?event=tournament&tournament=d_abcdefghijkl&player=hextide`).filters).toEqual({ player: `hextide`, event: `tournament`, tournament: `d_abcdefghijkl` });
     });
 
-    it('take the kind of event from the one a hand-made address names alone', () => {
-        expect(viewOf(`?duel=d_abcdefghijkl`).filters).toEqual({ event: `duel`, duel: `d_abcdefghijkl` });
+    it('read an older address\'s duel as the tournament that duel is', () => {
+        expect(viewOf(`?event=duel&duel=d_abcdefghijkl&player=hextide`).filters).toEqual({ player: `hextide`, event: `tournament`, tournament: `d_abcdefghijkl` });
+        expect(viewOf(`?duel=d_abcdefghijkl`).filters).toEqual({ event: `tournament`, tournament: `d_abcdefghijkl` });
+        expect(viewOf(`?event=duel`).filters).toEqual({ event: `tournament` });
+        expect(viewOf(`?event=duel&duel=nope&tournament=t_autumnrobin1`).filters).toEqual({ event: `tournament`, tournament: `t_autumnrobin1` });
+    });
+
+    it('take the kind of event from the tournament a hand-made address names alone', () => {
         expect(viewOf(`?tournament=t_autumnrobin1&round=3`).filters).toEqual({ event: `tournament`, tournament: `t_autumnrobin1`, round: `3` });
     });
 
-    it('drop a duel or a tournament under another kind of event, a round of no tournament, and an id or a round it cannot be', () => {
-        expect(viewOf(`?event=tournament&duel=d_abcdefghijkl`).filters).toEqual({ event: `tournament` });
+    it('drop a tournament under games of none, a round of no tournament, and an id or a round it cannot be', () => {
         expect(viewOf(`?event=none&tournament=t_autumnrobin1&round=2`).filters).toEqual({ event: `none` });
         expect(viewOf(`?round=2`).filters).toEqual({});
-        expect(viewOf(`?event=duel&duel=nope&tournament=t_autumnrobin1`).filters).toEqual({ event: `duel` });
+        expect(viewOf(`?event=tournament&tournament=nope`).filters).toEqual({ event: `tournament` });
         expect(viewOf(`?tournament=t_autumnrobin1&round=0`).filters).toEqual({ event: `tournament`, tournament: `t_autumnrobin1` });
     });
 });
@@ -68,10 +73,10 @@ describe('withFilter', () => {
         expect(withFilter({ player: `ana`, result: `none` }, `player`, undefined)).toBe(`/games?result=none`);
     });
 
-    it('clear the one event chosen back to its kind, and with another kind or another tournament, what belonged to the last', () => {
-        const duel = { event: `duel`, duel: `d_abcdefghijkl`, clock: `turn` } as const;
-        expect(withFilter(duel, `duel`, undefined)).toBe(`/games?clock=turn&event=duel`);
-        expect(withFilter(duel, `event`, `tournament`)).toBe(`/games?clock=turn&event=tournament`);
+    it('clear the one tournament chosen back to its kind, and with another kind or another tournament, what belonged to the last', () => {
+        const duel = { event: `tournament`, tournament: `d_abcdefghijkl`, clock: `turn` } as const;
+        expect(withFilter(duel, `tournament`, undefined)).toBe(`/games?clock=turn&event=tournament`);
+        expect(withFilter(duel, `event`, `none`)).toBe(`/games?clock=turn&event=none`);
         expect(withFilter(duel, `event`, undefined)).toBe(`/games?clock=turn`);
         const round = { event: `tournament`, tournament: `t_autumnrobin1`, round: `2` } as const;
         expect(withFilter(round, `tournament`, `t_wintercup202`)).toBe(`/games?event=tournament&tournament=t_wintercup202`);
@@ -81,14 +86,14 @@ describe('withFilter', () => {
 });
 
 describe('the games of one event', () => {
-    it('lead to a duel\'s games, a tournament\'s, or one round\'s', () => {
-        expect(duelGamesPath(`d_abcdefghijkl`)).toBe(`/games?event=duel&duel=d_abcdefghijkl`);
+    it('lead to a tournament\'s games, a duel\'s among them, or one round\'s', () => {
+        expect(tournamentGamesPath(`d_abcdefghijkl`)).toBe(`/games?event=tournament&tournament=d_abcdefghijkl`);
         expect(tournamentGamesPath(`t_autumnrobin1`)).toBe(`/games?event=tournament&tournament=t_autumnrobin1`);
         expect(tournamentGamesPath(`t_autumnrobin1`, 2)).toBe(`/games?event=tournament&tournament=t_autumnrobin1&round=2`);
     });
 
     it('show the one event chosen in place of its kind', () => {
-        expect(shownKeys({ player: `ana`, event: `duel`, duel: `d_abcdefghijkl` })).toEqual([`player`, `duel`]);
+        expect(shownKeys({ player: `ana`, event: `tournament`, tournament: `d_abcdefghijkl` })).toEqual([`player`, `tournament`]);
         expect(shownKeys({ event: `tournament`, tournament: `t_autumnrobin1`, round: `2` })).toEqual([`tournament`, `round`]);
         expect(shownKeys({ event: `tournament` })).toEqual([`event`]);
     });

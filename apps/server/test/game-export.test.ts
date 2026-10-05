@@ -2,12 +2,11 @@ import { gameExportGlobalLimit, gameExportLimit, tournamentListSchema, type Side
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { createBot, findBot } from '../src/bots';
 import { createQuery, type Query } from '../src/db';
-import { endDuel } from '../src/duel-store';
 import { csvCell, csvText, fileSafe } from '../src/game-export';
 import { insertBotGame, insertMove, recordFinish, type BotGameTag, type OpeningCell } from '../src/game-store';
 import { defaultLimits } from '../src/request-limits';
 import { createUserWithExactName } from '../src/users';
-import { seedDuel, seedTournament } from './event-fixtures';
+import { duelGame, seedDuel, seedTournament } from './event-fixtures';
 import { createTestApp, roomyLimits, type TestApp } from './helpers';
 import { readZip, type ReadEntry } from './zip-reader';
 
@@ -53,7 +52,7 @@ const opening: OpeningCell[] = [
     { x: 2, y: 0, player: 0 },
 ];
 
-describe('the duel and tournament exports', () => {
+describe('the tournament exports', () => {
     let world: TestApp;
     let query: Query;
     let clock: number;
@@ -100,6 +99,11 @@ describe('the duel and tournament exports', () => {
         world.sqlite.prepare(`update games set finished_at = ? where id = ?`).run(startedAt + minute * 60, gameId);
     }
 
+    // A pairing's slot as the scheduler settles it, and the seat it names.
+    function settle(tag: BotGameTag, state: string, seat: `first` | `second` | null = null): void {
+        world.sqlite.prepare(`update tournament_pairings set game${String(tag.game)} = ?, game${String(tag.game)}_seat = ? where id = ?`).run(state, seat, tag.pairingId);
+    }
+
     // x lines up six along its row from the origin, the sixth on the first stone of its last turn.
     function sixInARow(gameId: string): void {
         const turns: [OpeningCell, OpeningCell][] = [
@@ -127,21 +131,23 @@ describe('the duel and tournament exports', () => {
     }
 
     function finishedDuel(): string {
-        const duelId = seedDuel(query, { startedBy: id(`cid`), first: id(`alpha`), second: id(`beta`), createdAt: startedAt, timeControl: match });
-        const first = played(`alpha`, `beta`, { kind: `duel`, id: duelId, game: 1 }, 0, { unratedByChoice: true });
+        const duel = seedDuel(query, { id: `d_alphavsbeta1`, startedBy: id(`cid`), first: id(`alpha`), second: id(`beta`), createdAt: startedAt, timeControl: match });
+        const first = played(`alpha`, `beta`, duelGame(duel, 1), 0, { unratedByChoice: true });
         sixInARow(first);
         finish(first, `x`, `six-in-a-row`, 9);
-        const second = played(`beta`, `alpha`, { kind: `duel`, id: duelId, game: 2 }, 10, { unratedByChoice: true });
+        settle(duelGame(duel, 1), `played`, `first`);
+        const second = played(`beta`, `alpha`, duelGame(duel, 2), 10, { unratedByChoice: true });
         finish(second, `o`, `surrender`, 11);
-        endDuel(query, duelId, { status: `finished` }, startedAt + 660);
-        return duelId;
+        settle(duelGame(duel, 2), `played`, `first`);
+        world.sqlite.prepare(`update tournaments set status = 'finished', ended_at = ? where id = ?`).run(startedAt + 660, duel.id);
+        return duel.id;
     }
 
-    it('downloads a duel as one HTTTX file per game, the opening written as its turns, beside games.csv', async () => {
+    it('downloads a duel as one HTTTX file per game, the opening written as its turns, beside games.csv and standings.csv', async () => {
         const duelId = finishedDuel();
-        const { fileName, entries } = await exported(`/api/duels/${duelId}/export`);
+        const { fileName, entries } = await exported(`/api/tournaments/${duelId}/export`);
         expect(fileName).toBe(`hexo-arena-duel-alpha-vs-beta-2026-10-01.zip`);
-        expect(entries.map((entry) => entry.name)).toEqual([`01-alpha-vs-beta.htttx`, `02-beta-vs-alpha.htttx`, `games.csv`]);
+        expect(entries.map((entry) => entry.name)).toEqual([`01-alpha-vs-beta.htttx`, `02-beta-vs-alpha.htttx`, `games.csv`, `standings.csv`]);
         expect(entries[0]?.text).toBe(
             [
                 `version[1]name[Duel, game 1 of 2]platform[HeXO Arena]utcdatetime[2026-10-01 12:00:00]playercross[alpha]playercircle[beta]timecontrol[300+3]endreason[win]winner[cross];`,
@@ -159,29 +165,32 @@ describe('the duel and tournament exports', () => {
         );
         expect(entries[2]?.text).toBe(
             [
-                `number,pair,x,o,winner,reason,turns,rated,test,started,finished`,
-                `1,1,alpha,beta,x,six-in-a-row,6,false,false,2026-10-01T12:00:00Z,2026-10-01T12:09:00Z`,
-                `2,1,beta,alpha,o,surrender,2,false,false,2026-10-01T12:10:00Z,2026-10-01T12:11:00Z`,
+                `number,round,pair,opening,game,x,o,winner,reason,turns,rated,test,started,finished`,
+                `1,1,alpha vs beta,1,1,alpha,beta,x,six-in-a-row,6,false,false,2026-10-01T12:00:00Z,2026-10-01T12:09:00Z`,
+                `2,1,alpha vs beta,1,2,beta,alpha,o,surrender,2,false,false,2026-10-01T12:10:00Z,2026-10-01T12:11:00Z`,
                 ``,
             ].join(`\r\n`),
         );
     });
 
     it('downloads a running duel\'s games finished so far, leaving the live one out', async () => {
-        const duelId = seedDuel(query, { startedBy: id(`cid`), first: id(`alpha`), second: id(`gamma`), games: 4, createdAt: startedAt });
-        const first = played(`alpha`, `gamma`, { kind: `duel`, id: duelId, game: 1 }, 0, { unratedByChoice: true });
+        const duel = seedDuel(query, { id: `d_alphavsgamma`, startedBy: id(`cid`), first: id(`alpha`), second: id(`gamma`), games: 4, createdAt: startedAt });
+        const first = played(`alpha`, `gamma`, duelGame(duel, 1), 0, { unratedByChoice: true });
         finish(first, null, `terminated`, 5);
-        played(`gamma`, `alpha`, { kind: `duel`, id: duelId, game: 2 }, 6, { unratedByChoice: true });
-        const { entries } = await exported(`/api/duels/${duelId}/export`);
-        expect(entries.map((entry) => entry.name)).toEqual([`01-alpha-vs-gamma.htttx`, `games.csv`]);
+        settle(duelGame(duel, 1), `played`);
+        played(`gamma`, `alpha`, duelGame(duel, 2), 6, { unratedByChoice: true });
+        settle(duelGame(duel, 2), `live`);
+        const { entries } = await exported(`/api/tournaments/${duel.id}/export`);
+        expect(entries.map((entry) => entry.name)).toEqual([`01-alpha-vs-gamma.htttx`, `games.csv`, `standings.csv`]);
         expect(entries[0]?.text.split(`\n`)[0]).toBe(
             `version[1]name[Duel, game 1 of 4]platform[HeXO Arena]utcdatetime[2026-10-01 12:00:00]playercross[alpha]playercircle[gamma]timecontrol[300+3]endreason[draw];`,
         );
-        expect(entries[1]?.text.split(`\r\n`)[1]).toBe(`1,1,alpha,gamma,,terminated,2,false,false,2026-10-01T12:00:00Z,2026-10-01T12:05:00Z`);
+        expect(entries[1]?.text.split(`\r\n`)[1]).toBe(`1,1,alpha vs gamma,1,1,alpha,gamma,,terminated,2,false,false,2026-10-01T12:00:00Z,2026-10-01T12:05:00Z`);
     });
 
     it('adds each bot\'s version as the test began to a test\'s games.csv, kept as text a spreadsheet will not run', async () => {
-        const duelId = seedDuel(query, {
+        const duel = seedDuel(query, {
+            id: `t_alphatest001`,
             startedBy: id(`ann`),
             first: id(`alpha`),
             second: id(`alpha2`),
@@ -190,14 +199,16 @@ describe('the duel and tournament exports', () => {
             createdAt: startedAt,
             versions: { first: `=1+1`, second: `v2, "fast"` },
         });
-        finish(played(`alpha`, `alpha2`, { kind: `duel`, id: duelId, game: 1 }, 0, { unratedByChoice: true, test: true }), `o`, `timeout`, 2);
-        finish(played(`alpha2`, `alpha`, { kind: `duel`, id: duelId, game: 2 }, 3, { unratedByChoice: true, test: true }), `x`, `six-in-a-row`, 4);
-        const { fileName, entries } = await exported(`/api/duels/${duelId}/export`);
+        finish(played(`alpha`, `alpha2`, duelGame(duel, 1), 0, { unratedByChoice: true, test: true }), `o`, `timeout`, 2);
+        settle(duelGame(duel, 1), `played`, `second`);
+        finish(played(`alpha2`, `alpha`, duelGame(duel, 2), 3, { unratedByChoice: true, test: true }), `x`, `six-in-a-row`, 4);
+        settle(duelGame(duel, 2), `played`, `second`);
+        const { fileName, entries } = await exported(`/api/tournaments/${duel.id}/export`);
         expect(fileName).toBe(`hexo-arena-test-alpha-vs-alpha2-2026-10-01.zip`);
-        expect(entries.at(-1)?.text.split(`\r\n`)).toEqual([
-            `number,pair,x,o,winner,reason,turns,rated,test,started,finished,x_version,o_version`,
-            `1,1,alpha,alpha2,o,timeout,2,false,true,2026-10-01T12:00:00Z,2026-10-01T12:02:00Z,'=1+1,"v2, ""fast"""`,
-            `2,1,alpha2,alpha,x,six-in-a-row,2,false,true,2026-10-01T12:03:00Z,2026-10-01T12:04:00Z,"v2, ""fast""",'=1+1`,
+        expect(entries.find((entry) => entry.name === `games.csv`)?.text.split(`\r\n`)).toEqual([
+            `number,round,pair,opening,game,x,o,winner,reason,turns,rated,test,started,finished,x_version,o_version`,
+            `1,1,alpha vs alpha2,1,1,alpha,alpha2,o,timeout,2,false,true,2026-10-01T12:00:00Z,2026-10-01T12:02:00Z,'=1+1,"v2, ""fast"""`,
+            `2,1,alpha vs alpha2,1,2,alpha2,alpha,x,six-in-a-row,2,false,true,2026-10-01T12:03:00Z,2026-10-01T12:04:00Z,"v2, ""fast""",'=1+1`,
             ``,
         ]);
         expect(entries[0]?.text.split(`\n`)[0]).toContain(`name[Test, game 1 of 20]`);
@@ -222,10 +233,10 @@ describe('the duel and tournament exports', () => {
             ],
         });
         // Game 1 of each pairing seats its first bot on x, game 2 its second.
-        finish(played(`alpha`, `beta`, { kind: `pairing`, id: `p_r1`, game: 1 }, 0), `x`, `six-in-a-row`, 3);
-        finish(played(`beta`, `alpha`, { kind: `pairing`, id: `p_r1`, game: 2 }, 4), `o`, `timeout`, 6);
-        finish(played(`gamma`, `alpha`, { kind: `pairing`, id: `p_r2`, game: 1 }, 7), `o`, `surrender`, 8);
-        played(`alpha`, `gamma`, { kind: `pairing`, id: `p_r2`, game: 2 }, 9);
+        finish(played(`alpha`, `beta`, { pairingId: `p_r1`, game: 1 }, 0), `x`, `six-in-a-row`, 3);
+        finish(played(`beta`, `alpha`, { pairingId: `p_r1`, game: 2 }, 4), `o`, `timeout`, 6);
+        finish(played(`gamma`, `alpha`, { pairingId: `p_r2`, game: 1 }, 7), `o`, `surrender`, 8);
+        played(`alpha`, `gamma`, { pairingId: `p_r2`, game: 2 }, 9);
         return tournamentId;
     }
 
@@ -237,22 +248,22 @@ describe('the duel and tournament exports', () => {
         expect(entries[2]?.text.split(`\n`)[0]).toBe(
             `version[1]name[Autumn (round) robin, round 2, game 1 of 2]platform[HeXO Arena]utcdatetime[2026-10-01 12:07:00]playercross[gamma]playercircle[alpha]timecontrol[300+3]endreason[resign]winner[circle];`,
         );
-        expect(entries[3]?.text.split(`\r\n`).map((line) => line.split(`,`).slice(0, 6).join(`,`))).toEqual([
-            `number,round,x,o,winner,reason`,
-            `1,1,alpha,beta,x,six-in-a-row`,
-            `2,1,beta,alpha,o,timeout`,
-            `3,2,gamma,alpha,o,surrender`,
+        expect(entries[3]?.text.split(`\r\n`).map((line) => line.split(`,`).slice(0, 9).join(`,`))).toEqual([
+            `number,round,pair,opening,game,x,o,winner,reason`,
+            `1,1,alpha vs beta,1,1,alpha,beta,x,six-in-a-row`,
+            `2,1,alpha vs beta,1,2,beta,alpha,o,timeout`,
+            `3,2,gamma vs alpha,1,1,gamma,alpha,o,surrender`,
             ``,
         ]);
-        expect(entries[3]?.text.split(`\r\n`)[1]?.split(`,`)[7]).toBe(`true`);
+        expect(entries[3]?.text.split(`\r\n`)[1]?.split(`,`)[10]).toBe(`true`);
         const [head, leader, ...tied] = entries[4]?.text.split(`\r\n`) ?? [];
         expect([head, leader]).toEqual([`rank,bot,owner,points,as_x,as_o,withdrawn`, `1,alpha,ann,3,1,2,false`]);
         // Two bots tied on nothing share second place, in no order of their own.
         expect(tied.sort()).toEqual([``, `2,beta,bob,0,0,0,false`, `2,gamma,cid,0,0,0,false`]);
     });
 
-    it('answers not_found for an unknown or malformed duel or tournament', async () => {
-        for (const url of [`/api/duels/d_aaaaaaaaaaaa/export`, `/api/duels/nope/export`, `/api/tournaments/t_aaaaaaaaaaaa/export`, `/api/tournaments/nope/export`]) {
+    it('answers not_found for an unknown or malformed tournament, a duel\'s id among them', async () => {
+        for (const url of [`/api/tournaments/d_aaaaaaaaaaaa/export`, `/api/tournaments/t_aaaaaaaaaaaa/export`, `/api/tournaments/nope/export`]) {
             const answer = await download(url);
             expect(answer.statusCode).toBe(404);
             expect(answer.json()).toMatchObject({ code: `not_found` });
@@ -307,7 +318,7 @@ describe('the export rate limits', () => {
 
     it('hold one client to its burst of exports and every caller together to theirs, refusing as rate_limited', async () => {
         world = await createTestApp({ trustedProxy: `127.0.0.1`, now: () => 1_000_000, limits: { ...defaultLimits, public: roomyLimits.public } });
-        const download = (address: string) => world.app.inject({ method: `GET`, url: `/api/duels/d_aaaaaaaaaaaa/export`, headers: { 'x-forwarded-for': address } });
+        const download = (address: string) => world.app.inject({ method: `GET`, url: `/api/tournaments/d_aaaaaaaaaaaa/export`, headers: { 'x-forwarded-for': address } });
         for (let taken = 0; taken < gameExportLimit.burst; taken += 1) expect((await download(`203.0.113.90`)).statusCode).toBe(404);
         const refused = await download(`203.0.113.90`);
         expect(refused.statusCode).toBe(429);

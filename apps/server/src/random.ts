@@ -21,7 +21,7 @@ export function randomIndex(bound: number): number {
 // Lowercase letters and digits without the look-alikes, as an address carries them.
 const idAlphabet = `abcdefghijkmnopqrstuvwxyz0123456789`;
 
-/** A short random id behind its prefix, such as a tournament's `t_` or a duel's `d_`: twelve characters. */
+/** A short random id behind its prefix, such as a tournament's `t_`: twelve characters. */
 export function shortId(prefix: string): string {
     return `${prefix}${Array.from({ length: 12 }, () => idAlphabet[randomIndex(idAlphabet.length)] ?? `a`).join(``)}`;
 }

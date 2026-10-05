@@ -4,7 +4,6 @@ import { botClientSchema } from './api';
 import { scheduledClockSchema } from './games';
 import { nameSyntaxSchema } from './names';
 import { reportReasonSchema } from './reports';
-import { duelIdSchema } from './duels';
 import { openingPliesSchema } from './stream';
 import {
     adminTournamentRuleSchema,
@@ -106,8 +105,6 @@ export const adminRequestSchema = z.discriminatedUnion(`op`, [
     z.strictObject({ op: z.literal(`report-close`), id: z.number().int().min(1), reason: adminReasonSchema }),
     // A reading that lies or misleads goes, with its lines; the audit row keeps why.
     z.strictObject({ op: z.literal(`delete-analysis`), id: analysisIdSchema, reason: adminReasonSchema }),
-    // No further game of the duel starts; a live one plays on.
-    z.strictObject({ op: z.literal(`duel-stop`), id: duelIdSchema, reason: adminReasonSchema }),
 ]);
 export type AdminRequest = z.infer<typeof adminRequestSchema>;
 export type AdminMutation = Exclude<AdminRequest, { op: `status` | `backup` | `bot` | `tournament-schedule-list` }>;
