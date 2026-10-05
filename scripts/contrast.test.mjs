@@ -136,6 +136,24 @@ describe(`measure`, () => {
     });
 });
 
+describe(`text on the active and board grounds`, () => {
+    it(`fails dim text a shade short of the text minimum on the active ground`, () => {
+        const result = check(`dim on active`, `--c-text-dim: #8b8f88; --c-bg-active: #272d2b;`);
+        close(result.paths[0].value, 4.26);
+        assert.equal(result.passedBy, null);
+    });
+
+    it(`fails a brass link on a pale wood board ground`, () => {
+        const result = check(`link on board`, `--board-link: hsl(43 92% 60%); --board-bg: #b58c5e;`);
+        assert.equal(result.minimum, 4.5);
+        assert.equal(result.passedBy, null);
+    });
+
+    it(`passes a link in the black stone's ink on that wood`, () => {
+        assert.equal(check(`link on board`, `--board-link: #141414; --board-bg: #b58c5e;`).passedBy, `fill`);
+    });
+});
+
 describe(`glare`, () => {
     const dark = `--board-stone-o: #141414; --board-number-o: #f3f3f3; --stone-shine-o: #ffffff;`;
 

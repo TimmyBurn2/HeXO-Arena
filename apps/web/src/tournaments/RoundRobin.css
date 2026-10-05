@@ -281,6 +281,20 @@
         font-weight: var(--weight-display);
     }
 
+    /* The scores stand on the board's ground, where the page's link
+       colors can vanish, so a hover underlines rather than recolors. */
+    .rr-pairs .xt-cell a {
+        color: var(--board-link);
+    }
+
+    .rr-pairs .xt-cell a:hover {
+        text-decoration: underline;
+    }
+
+    .rr-pairs .xt-cell a:focus-visible {
+        outline-color: var(--board-link);
+    }
+
     /* A tournament as a list row, wherever a list holds it: the name, its
        facts, the reader's part, and an owner's way to enter one coming up. */
     .tournament-row {

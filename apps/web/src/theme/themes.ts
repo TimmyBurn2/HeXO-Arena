@@ -50,6 +50,7 @@ export const themeVocabulary = [
     `--board-stone-x`,
     `--board-stone-o`,
     `--board-focus`,
+    `--board-link`,
     `--board-number-x`,
     `--board-number-o`,
     `--board-pending`,

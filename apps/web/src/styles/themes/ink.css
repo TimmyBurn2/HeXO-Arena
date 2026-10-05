@@ -34,6 +34,7 @@
         --board-stone-x: hsl(40 30% 91%);
         --board-stone-o: hsl(4 70% 56%);
         --board-focus: hsl(220 25% 90%);
+        --board-link: var(--c-accent);
         --board-number-x: hsl(222 32% 12%);
         --board-number-o: hsl(40 30% 96%);
         --board-pending: var(--c-accent-solid);
