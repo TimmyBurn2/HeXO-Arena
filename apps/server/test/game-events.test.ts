@@ -203,7 +203,7 @@ describe('the game event stream', () => {
         expect((await world.app.inject({ method: `GET`, url: `/api/games/g_unknown/events` })).statusCode).toBe(404);
     });
 
-    it('refuses the 51st watcher of one game with 429 and Retry-After, but never the seated player', async () => {
+    it('refuses the watcher past 200 on one game with 429 and Retry-After, but never the seated player', async () => {
         for (let i = 0; i < gameWatcherCap; i += 1) {
             world.watchers.attach(gameId, new FakeStreamSocket(), false, { event: `finish`, data: { winner: null, reason: `aborted`, voided: false, clock: { mode: `unlimited` } } });
         }
@@ -214,7 +214,7 @@ describe('the game event stream', () => {
         expect((await watch(port, gameId, player)).status).toBe(200);
     });
 
-    it('refuses the 501st watcher across the site with 429', async () => {
+    it('refuses the watcher past 1,500 across the site with 429', async () => {
         for (let i = 0; i < siteWatcherCap; i += 1) {
             world.watchers.attach(`elsewhere-${String(i % 10)}`, new FakeStreamSocket(), false, {
                 event: `finish`,

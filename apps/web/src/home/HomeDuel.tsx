@@ -12,7 +12,7 @@ import { useSiteStatus } from '../site-status';
 import { text } from '../text';
 import { BotPicker } from '../tournaments/BotPicker';
 import { tournamentRefusal } from '../tournaments/NewTournament';
-import { countsInReach, defaultTournamentOpening, readTournamentChoices } from '../tournaments/setup';
+import { countsInReach, defaultTournamentOpening, readTournamentChoices, tournamentSetupPath } from '../tournaments/setup';
 import { useBotStates } from '../tournaments/use-setup-reads';
 import { gamesTournamentsPath, tournamentPagePath } from '../tournaments/view';
 import '../screens/PlayScreen.css';
@@ -193,7 +193,11 @@ function DuelCard({
                 ) : first === null || second === null ? null : (
                     <div className="duel-start">
                         {clock === null ? null : (
-                            <p className="note">{words.terms(games, clockText(clock), test ? words.test : words.unrated, (place) => <Link to="/play/tournament">{place}</Link>)}</p>
+                            <p className="note">
+                                {words.terms(games, clockText(clock), test ? words.test : words.unrated, (place) => (
+                                    <Link to={tournamentSetupPath({ bots: [{ name: first.name, level: picked.first?.id ?? null }, { name: second.name, level: picked.second?.id ?? null }], games: null, clock: null, opening: null })}>{place}</Link>
+                                ))}
+                            </p>
                         )}
                         <button type="button" className="btn btn-primary" aria-disabled={blocked ? `true` : undefined} onClick={() => void start()}>
                             {test ? text.roundRobins.start.test : text.roundRobins.start.duel}

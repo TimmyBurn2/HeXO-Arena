@@ -63,6 +63,7 @@ async function settled(): Promise<void> {
 afterEach(() => {
     cleanup();
     vi.unstubAllGlobals();
+    vi.useRealTimers();
 });
 
 function duel(id: string, overrides: Partial<TournamentSummary> = {}): TournamentSummary {
@@ -70,11 +71,13 @@ function duel(id: string, overrides: Partial<TournamentSummary> = {}): Tournamen
 }
 
 describe('BotEvents', () => {
-    it('lists a bot\'s tournaments in one block, a duel by its pair and score: where it stands or why it did not play, and when', async () => {
+    it('lists a bot\'s tournaments in one block, a duel by its pair and score: where it stands or why it did not play, and how long ago it ended or until it starts, as every list says it', async () => {
+        vi.useFakeTimers({ toFake: [`Date`] });
+        vi.setSystemTime(new Date(`2026-10-01T20:30:00Z`));
         const reads = serve({
             '/api/tournaments?bot=sealbot': {
                 running: [tournament(`t_runningcup01`, { name: `Running cup`, status: `running`, round: { current: 2, of: 5 }, bot: { state: `playing`, rank: 1, points: 3 } })],
-                scheduled: [tournament(`t_nextcup00001`, { name: `Next cup`, status: `scheduled`, bot: { state: `entered`, rank: null, points: null } })],
+                scheduled: [tournament(`t_nextcup00001`, { name: `Next cup`, status: `scheduled`, startsAt: `2026-10-01T23:30:00Z`, bot: { state: `entered`, rank: null, points: null } })],
                 past: [
                     duel(`d_sealduel0001`, { bot: { state: `playing`, rank: 1, points: 2 } }),
                     tournament(`t_autumncup001`, { endedAt: `2026-10-01T19:30:00Z`, bot: { state: `withdrawn`, reason: `missed`, rank: 6, points: 1 } }),
@@ -93,11 +96,11 @@ describe('BotEvents', () => {
             `/tournaments/t_autumncup001`,
             `/tournaments/t_summercup001`,
         ]);
-        expect(rows[0]?.textContent).toMatch(/^Running cuprated1st so far, 3 pointsRound 2 of 5/u);
-        expect(rows[1]?.textContent).toMatch(/^Next cupratedEntered; starts /u);
-        expect(rows[2]?.textContent).toMatch(/^sealbotBOTvshextideBOTunratedsealbot won 2-0/u);
-        expect(rows[2]?.textContent).not.toMatch(/Round/u);
-        expect(rows[3]?.textContent).toMatch(/^Autumn round robinrated6th of 6, 1 point; withdrawn: missed two openings in a row/u);
+        expect(rows[0]?.textContent).toBe(`Running cuprated1st so far, 3 pointsRound 2 of 5`);
+        expect(rows[1]?.textContent).toBe(`Next cupratedEntered; starts in 3 h 0 min`);
+        expect(rows[2]?.textContent).toBe(`sealbotBOTvshextideBOTunratedsealbot won 2-08 h ago`);
+        expect(rows[3]?.textContent).toBe(`Autumn round robinrated6th of 6, 1 point; withdrawn: missed two openings in a row1 h ago`);
+        expect(rows[4]?.textContent).toMatch(/^Summer cuprated2nd of 6, 7 points30 days ago$/u);
         expect(within(section).getByRole(`link`, { name: `All tournaments` }).getAttribute(`href`)).toBe(`/games/tournaments?bot=sealbot`);
         expect(screen.queryByRole(`heading`, { name: `Duels` })).toBe(null);
         expect(reads).toEqual([`/api/tournaments?bot=sealbot`]);

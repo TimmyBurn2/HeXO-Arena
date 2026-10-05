@@ -304,7 +304,7 @@ describe('openapi document', () => {
         expect(dig(document, `paths`, gameResignPath, `post`, `security`)).toEqual([{ sessionCookie: [] }]);
     });
 
-    it('answers a quota with 429 and its wait: the creation cooldown, the pair cap and the challenge caps a day, and a spent sign-up with 410', () => {
+    it('answers a quota with 429 and its wait: the game start rate, the pair cap and the challenge caps a day, and a spent sign-up with 410', () => {
         const document = buildOpenApiDocument();
         const cooldown = dig(document, `paths`, gamesPath, `post`, `responses`, `429`);
         expect(dig(cooldown, `headers`, `Retry-After`)).toBeDefined();

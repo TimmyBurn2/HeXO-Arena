@@ -29,12 +29,6 @@
         justify-self: start;
     }
 
-    .duels-side .duel-figure {
-        grid-column: 1;
-        grid-row: auto;
-        font-size: var(--text-base);
-    }
-
     .duels-side .event-figure {
         grid-column: 1;
         grid-row: auto;

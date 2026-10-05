@@ -5,12 +5,16 @@ import {
     analyzerMaxSecondsCap,
     botVersionMaxLength,
     presenceGraceMs,
+    scheduledIncrementMs,
+    scheduledMainMs,
+    scheduledTurnMs,
     tournamentBotGamesMax,
     tournamentBotsMax,
     tournamentBotsMin,
     tournamentDailyCap,
     tournamentGameCounts,
     tournamentLiveCap,
+    tournamentMissesToWithdraw,
     tournamentPerBotCap,
     tournamentRoundGapMs,
     levelCountMax,
@@ -26,7 +30,7 @@ import {
     botConcurrentGameCap,
     guestRetryAfterSeconds,
     humanConcurrentGameCap,
-    humanGameCooldownSeconds,
+    humanGameStartLimit,
     liveGameListCap,
     minimumAge,
     nameMaxLength,
@@ -35,7 +39,7 @@ import {
     placementRadius,
     plural,
     siteName,
-    unlimitedWallCapMs,
+    gameWallCapMs,
     valueCutMax,
     type AnalysisFailure,
     type DiscordNames,
@@ -49,7 +53,7 @@ import {
 import type { ReactNode } from 'react';
 import { rich, type Slot } from './rich';
 
-const wallCapHours = unlimitedWallCapMs / 3_600_000;
+const wallCapHours = gameWallCapMs / 3_600_000;
 
 // A wait in whole minutes, as a rate and as a delay: "a minute" for one.
 const perMinutes = (minutes: number) => (minutes === 1 ? `a minute` : `every ${String(minutes)} minutes`);
@@ -98,6 +102,12 @@ function spelledWait(seconds: number): string {
 function andList(items: readonly string[]): string {
     if (items.length <= 2) return items.join(` and `);
     return `${items.slice(0, -1).join(`, `)}, and ${items.at(-1) ?? ``}`;
+}
+
+// The same joined with or: "10", "10 or 20", "10, 20, or 60".
+function orList(items: readonly string[]): string {
+    if (items.length <= 2) return items.join(` or `);
+    return `${items.slice(0, -1).join(`, `)}, or ${items.at(-1) ?? ``}`;
 }
 
 // A link to each legal page the deployment has; a page it lacks is null, and its words go with it.
@@ -383,7 +393,7 @@ export const en = {
             findTournament: `Find a tournament: name or bot`,
             pairName: (first: string, second: string, test: boolean) => `${test ? `Test` : `Duel`} ${first} vs ${second}`,
             tournamentOption: (name: string, when: string) => `${name}, ${when}`,
-            live: `live`,
+            live: (when: string) => `live since ${when}`,
             roundOption: (round: number) => `Round ${String(round)}`,
             noTournament: `No tournament matches; clear the search.`,
             failed: `The list did not load; try again.`,
@@ -627,6 +637,16 @@ export const en = {
             values: (code: Slot): ReactNode =>
                 rich`How its heuristic reads: ${code(`scale`)}, above 0 and at most ${String(analysisHeuristicLimit)}, 1 by default, divides it; ${code(`meaning`)} is ${code(`expected`)} when the scaled value estimates x's expected result, or ${code(`raw`)}, the default, when it only orders positions, the honest choice unless your engine was fitted to game results; ${code(`cuts`)}, each above 0 and at most ${String(valueCutMax)} and rising, are the drops in value judged an inaccuracy, a mistake, and a blunder.`,
         },
+        events: {
+            title: `Tournaments and duels`,
+            lead: `Duels, round robins, and tests people set up on Play are never rated; the weekly tournament is. Your bot plays in one when it:`,
+            // No-break spaces keep each number with its unit.
+            clocks: (code: Slot, turns: readonly number[], matches: readonly (readonly [number, number])[]): ReactNode =>
+                rich`accepts a turn or match clock in ${code(`accepts`)}, since these games never run unlimited: Play offers turn ${orList(turns.map(String))}\u00a0s and match ${orList(matches.map(([main, increment]) => `${String(main)}\u00a0min +\u00a0${String(increment)}\u00a0s`))}, or one set by hand in your bot's range, turn ${String(scheduledTurnMs.min / 1000)} to ${String(scheduledTurnMs.max / 1000)}\u00a0s or match ${String(scheduledMainMs.min / 60_000)} to ${String(scheduledMainMs.max / 60_000)}\u00a0min plus ${String(scheduledIncrementMs.min / 1000)} to ${String(scheduledIncrementMs.max / 1000)}\u00a0s;`,
+            open: (code: Slot): ReactNode => rich`is online, and for one someone else sets up, open (${code(`open=1`)}) with its page's Duels by others switch on; your own tests need neither;`,
+            ready: `is ready within ${String(presenceGraceMs / 1000)}\u00a0s of each game's start, or that game scores a no-show, and ${String(tournamentMissesToWithdraw)} openings missed in a row withdraw it;`,
+            cap: `plays in at most ${String(tournamentPerBotCap)} duels, round robins, or tests at once.`,
+        },
         api: {
             title: `Speak the Bot API yourself`,
             lead: (botApi: Slot): ReactNode => rich`hexo-bridge speaks the Bot API for you. Every endpoint and event, with examples: ${botApi(`Bot API`)}.`,
@@ -805,6 +825,7 @@ export const en = {
         yourGame: (opponent: string) => `Your game against ${opponent}`,
         errors: {
             human_busy: () => `You already have ${String(humanConcurrentGameCap)} live ${plural(humanConcurrentGameCap, `game`, `games`)}; finish one first`,
+            pair_busy: (name: string) => `You already play ${name}; finish that game first`,
             bot_busy: (name: string) => `${name} is in ${String(botConcurrentGameCap)} ${plural(botConcurrentGameCap, `game`, `games`)} already; try again shortly`,
             clock_not_accepted: (name: string) => `${name} no longer accepts that clock; pick another`,
             unknown_level: (name: string) => `${name} no longer offers that strength; pick another`,
@@ -815,7 +836,8 @@ export const en = {
                 `You have played ${name} rated ${String(pairDailyCap)} times today, the most one day allows; turn off Rated, pick another bot, or wait until 00:00 UTC`,
             paused: () => `Starting games is paused; live games continue`,
         },
-        cooldown: (seconds: number) => `1 new game ${perMinutes(humanGameCooldownSeconds / 60)}; try again in ${String(seconds)} s`,
+        cooldown: (seconds: number) =>
+            `${String(humanGameStartLimit.burst)} new games at once, then 1 ${perMinutes(humanGameStartLimit.refillMs / 60_000)}; try again in ${String(seconds)} s`,
         guestLimit: `The guest limit is full; try again in ${inMinutes(guestRetryAfterSeconds / 60)}, or sign in`,
         guestLimited: (seconds: number) => `Too many guest sessions from this network; try again in ${inWait(seconds)}, or sign in`,
         guestFailed: `The guest session did not start; try again`,
@@ -1325,11 +1347,15 @@ export const en = {
         ratedNoTestOwner: `No; a test between two bots of one owner`,
         ratedNoDuel: (creator: string) => `No; a duel ${creator} set up`,
         ratedNoRoundRobin: (creator: string) => `No; a round robin ${creator} set up`,
-        tournamentStanding: (place: ReactNode, standing: string): ReactNode => rich`${place}; ${standing}`,
+        tournamentStanding: (place: ReactNode, standing: ReactNode): ReactNode => rich`${place}; ${standing}`,
         tournamentWon: (bots: readonly string[], points: number) =>
             bots.length === 1 ? `${bots[0] ?? ``} won with ${String(points)} ${plural(points, `point`, `points`)}` : `${andList(bots)} shared first with ${String(points)} ${plural(points, `point`, `points`)}`,
         testSoFar: (lead: string, score: string, drawn: string, rating: string) => `${lead} leads ${score}${drawn}; about ${rating} so far`,
         testSwept: (lead: string, games: number) => `${lead} won all ${String(games)} so far`,
+        testOver: (lead: string, score: string, drawn: string, rating: string) => `${lead} scored ${score}${drawn}; about ${rating}`,
+        testSweptOver: (lead: string, games: number) => `${lead} won all ${String(games)}`,
+        duelWon: (bot: string, score: string) => `${bot} won ${score}`,
+        duelLed: (bot: string, score: string) => `${bot} led ${score}`,
         strength: `Strength`,
         strengthValue: (label: string, facts: string) => (facts === `` ? label : `${label}: ${facts}`),
         yourSide: `Your side`,
@@ -1543,6 +1569,7 @@ export const en = {
             final: (bot: string, rank: number) => `Yours: ${bot}, ${ordinal(rank)}`,
             withdrawn: (bot: string) => `Yours: ${bot}, withdrawn`,
             didNotPlay: (bot: string) => `Yours: ${bot} did not play`,
+            every: (bots: number) => (bots === 2 ? `Yours: both bots` : `Yours: all ${String(bots)} bots`),
         },
         waiting: `Coming up`,
         past: `Past`,
@@ -1552,7 +1579,8 @@ export const en = {
         },
         entered: (count: number, max: number) => `${String(count)} of ${String(max)} entered`,
         played: (count: number) => `${String(count)} ${plural(count, `bot`, `bots`)}`,
-        starts: (when: string) => `Starts ${when}`,
+        // A wait ahead, or none once the start is due.
+        startsIn: (wait: string | null) => (wait === null ? `Starts any moment now` : `Starts in ${wait}`),
         winner: (bot: ReactNode): ReactNode => rich`winner ${bot}`,
         outcome: { called_off: `Called off`, canceled: `Canceled` },
         outcomeInLine: { called_off: `called off`, canceled: `canceled` },
@@ -1583,7 +1611,7 @@ export const en = {
         bot: {
             title: `Tournaments`,
             all: `All tournaments`,
-            entered: (when: string) => `Entered; starts ${when}`,
+            entered: (wait: string | null) => (wait === null ? `Entered; starts any moment now` : `Entered; starts in ${wait}`),
             soFar: (rank: number, points: number) => `${ordinal(rank)} so far, ${String(points)} ${plural(points, `point`, `points`)}`,
             final: (rank: number, of: number, points: number) => `${ordinal(rank)} of ${String(of)}, ${String(points)} ${plural(points, `point`, `points`)}`,
             didNotPlay: (reason: string) => `Did not play: ${reason}`,
@@ -1763,8 +1791,6 @@ export const en = {
         side: {
             weekly: `Weekly tournament`,
             noWeekly: `No weekly tournament is coming up; the operator schedules each one.`,
-            when: (wait: string, entered: number, max: number, clock: string) => `Starts in ${wait}; ${String(entered)} of ${String(max)} entered; ${clock}`,
-            whenSoon: (entered: number, max: number, clock: string) => `Starts any moment now; ${String(entered)} of ${String(max)} entered; ${clock}`,
             yours: `Your tournaments`,
             allYours: `All yours`,
             noneYours: `None yet; the duels and round robins you set up, and those your bots play, show here.`,
@@ -1877,7 +1903,8 @@ export const en = {
             leads: (bots: readonly string[]) => `${andList(bots)} ${bots.length === 1 ? `leads` : `lead`}`,
             won: (bots: readonly string[]) => `${andList(bots)} won`,
             led: (bots: readonly string[]) => `${andList(bots)} led`,
-            testLead: (bot: string, rating: string, verdict: string) => `${bot} ${rating}, ${verdict}`,
+            level: `level`,
+            testLead: (bot: string, rating: string, verdict: string) => `${bot} about ${rating}, ${verdict}`,
             yourRole: `Yours: set up by you`,
             forBot: (bot: string) => `Tournaments of ${bot}`,
             everyBot: `Every bot`,
@@ -2001,7 +2028,6 @@ export const en = {
             stopped: (score: string) => `Stopped at ${score}`,
             unrated: `unrated`,
             test: `test`,
-            estimate: (bot: string, rating: string, verdict: string) => `${bot} about ${rating}, ${verdict}`,
             score: (first: string, second: string) => `${first}-${second}`,
             glyphs: (first: string, second: string, score: string) => `${first} and ${second}, ${score}`,
         },
@@ -2044,9 +2070,9 @@ export const en = {
                 openings: (stones: number) => (stones === 1 ? `the origin alone` : `${String(stones)}-stone openings`),
                 strength: (bot: string, label: string) => `${bot} at ${label}`,
                 test: `a test, never rated`,
-                startedBy: (name: string) => `Started by ${name}.`,
-                startedByYou: `Started by you.`,
-                line: (parts: readonly string[], started: string) => `${parts.join(`; `)}. ${started}`,
+                setUpBy: (name: string) => `Set up by ${name}.`,
+                setUpByYou: `Set up by you.`,
+                line: (parts: readonly string[], setUp: string) => `${parts.join(`; `)}. ${setUp}`,
             },
             pair: (pair: number) => `Pair ${String(pair)}`,
             game: `Game`,

@@ -1,24 +1,16 @@
 import type { TournamentPlace, TournamentSummary } from '@hexo-arena/contract';
 import { Link } from '../router/Link';
 import { text } from '../text';
-import { PairWho, pairStanding, pairState, TournamentTag } from './TournamentRow';
+import { PairWho, pairStanding, pairState, tournamentAgo, TournamentTag, waitUntil } from './TournamentRow';
 import { tournamentPagePath } from './view';
 
-function day(iso: string): string {
-    return new Intl.DateTimeFormat(undefined, { dateStyle: `medium` }).format(new Date(iso));
-}
-
-function when(iso: string): string {
-    return new Intl.DateTimeFormat(undefined, { dateStyle: `medium`, timeStyle: `short` }).format(new Date(iso));
-}
-
-// Where the bot stands: its place so far or at the end, or why it played no game.
-function placeText(tournament: TournamentSummary, place: TournamentPlace): string {
+// Where the bot stands: entered in one to come, its place so far or at the end, or why it played no game.
+function placeText(tournament: TournamentSummary, place: TournamentPlace, now: number): string {
     const words = text.tournaments.bot;
     const reasons = text.tournaments.reasons;
     switch (tournament.status) {
         case `scheduled`:
-            return words.entered(when(tournament.startsAt));
+            return words.entered(waitUntil(tournament.startsAt, now));
         case `called_off`:
         case `canceled`:
             return text.tournaments.outcome[tournament.status];
@@ -37,9 +29,11 @@ function placeText(tournament: TournamentSummary, place: TournamentPlace): strin
  * The tournaments one bot entered as rows, each one link to its page: a
  * duel by its pair, where it stands, its score and game; any other by its
  * name, where the bot stands or why it did not play, and the round under
- * way; each with the day it ended or began.
+ * way; each over with how long ago it ended, as every list of tournaments
+ * dates them.
  */
 export function PlaceRows({ tournaments }: { tournaments: readonly TournamentSummary[] }) {
+    const now = Date.now();
     return (
         <ul className="duel-rows">
             {tournaments.map((tournament) =>
@@ -58,11 +52,11 @@ export function PlaceRows({ tournaments }: { tournaments: readonly TournamentSum
                             )}
                             <span className="duel-row-facts">
                                 <span className={tournament.status === `running` ? `duel-row-live` : undefined}>
-                                    {tournament.pair === undefined ? placeText(tournament, tournament.bot) : pairState(tournament, tournament.pair)}
+                                    {tournament.pair === undefined ? placeText(tournament, tournament.bot, now) : pairState(tournament, tournament.pair)}
                                 </span>
                                 {tournament.pair !== undefined && tournament.status === `running` ? <span>{pairStanding(tournament.pair)}</span> : null}
                                 {tournament.round === null || tournament.pair !== undefined ? null : <span>{text.tournaments.roundOf(tournament.round.current, tournament.round.of)}</span>}
-                                {tournament.status === `scheduled` ? null : <span>{day(tournament.endedAt ?? tournament.startsAt)}</span>}
+                                {tournament.status === `scheduled` || tournament.status === `running` ? null : <span>{tournamentAgo(tournament, now)}</span>}
                             </span>
                         </Link>
                     </li>

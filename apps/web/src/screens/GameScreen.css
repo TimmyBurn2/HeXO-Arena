@@ -456,6 +456,10 @@
         margin: 0;
     }
 
+    .facts-whole {
+        display: inline-block;
+    }
+
     /* The head to head line runs as a sentence, so its links need more than their hue. */
     .facts-row dd a:not([class]) {
         text-decoration: underline;

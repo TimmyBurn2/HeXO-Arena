@@ -2,7 +2,7 @@ import { gameExportGlobalLimit, gameExportLimit, tournamentListSchema, type Side
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { createBot, findBot } from '../src/bots';
 import { createQuery, type Query } from '../src/db';
-import { csvCell, csvText, fileSafe } from '../src/game-export';
+import { csvCell, csvText, fileSafe, finishedExportCap } from '../src/game-export';
 import { insertBotGame, insertMove, recordFinish, type BotGameTag, type OpeningCell } from '../src/game-store';
 import { defaultLimits } from '../src/request-limits';
 import { createUserWithExactName } from '../src/users';
@@ -260,6 +260,44 @@ describe('the tournament exports', () => {
         expect([head, leader]).toEqual([`rank,bot,owner,points,as_x,as_o,withdrawn`, `1,alpha,ann,3,1,2,false`]);
         // Two bots tied on nothing share second place, in no order of their own.
         expect(tied.sort()).toEqual([``, `2,beta,bob,0,0,0,false`, `2,gamma,cid,0,0,0,false`]);
+    });
+
+    it('builds a finished tournament\'s export once, the same bytes on every later download', async () => {
+        const duelId = finishedDuel();
+        const first = await download(`/api/tournaments/${duelId}/export`);
+        clock += 3_600_000;
+        const again = await download(`/api/tournaments/${duelId}/export`);
+        expect(again.statusCode).toBe(200);
+        expect(again.rawPayload.equals(first.rawPayload)).toBe(true);
+    });
+
+    it('builds a finished tournament\'s export again once a deletion changes a name it shows', async () => {
+        const duelId = finishedDuel();
+        await download(`/api/tournaments/${duelId}/export`);
+        world.sqlite.prepare(`update bots set deleted_at = 1 where name = 'beta'`).run();
+        const { entries } = await exported(`/api/tournaments/${duelId}/export`);
+        expect(entries.map((entry) => entry.name)).toEqual([`01-alpha-vs-deleted-bot.htttx`, `02-deleted-bot-vs-alpha.htttx`, `games.csv`, `standings.csv`]);
+        expect(entries.map((entry) => entry.text).join(``)).not.toContain(`beta`);
+    });
+
+    it('builds a running tournament\'s export on every download', async () => {
+        const tournamentId = runningTournament();
+        const first = await download(`/api/tournaments/${tournamentId}/export`);
+        clock += 3_600_000;
+        const again = await download(`/api/tournaments/${tournamentId}/export`);
+        expect(again.rawPayload.equals(first.rawPayload)).toBe(false);
+    });
+
+    it(`keeps the exports of the ${String(finishedExportCap)} finished tournaments downloaded last, building an older one again`, async () => {
+        const cups = Array.from({ length: finishedExportCap + 1 }, (_, index) => `t_cup${String(index).padStart(9, `0`)}`);
+        for (const cup of cups) seedTournament(query, { id: cup, name: `Cup`, status: `finished`, startsAt: startedAt, entries: [{ botId: id(`alpha`), ownerId: id(`ann`), state: `playing` }] });
+        const first = new Map<string, Buffer>();
+        for (const cup of cups) first.set(cup, (await download(`/api/tournaments/${cup}/export`)).rawPayload);
+        clock += 3_600_000;
+        const [oldest = ``, ...rest] = cups;
+        const latest = rest.at(-1) ?? ``;
+        expect((await download(`/api/tournaments/${latest}/export`)).rawPayload.equals(first.get(latest) ?? Buffer.alloc(0))).toBe(true);
+        expect((await download(`/api/tournaments/${oldest}/export`)).rawPayload.equals(first.get(oldest) ?? Buffer.alloc(0))).toBe(false);
     });
 
     it('answers not_found for an unknown or malformed tournament, a duel\'s id among them', async () => {

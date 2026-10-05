@@ -442,7 +442,7 @@ describe('PlayScreen', () => {
         const shown = () => document.querySelector(`.start-lines [aria-hidden="true"]`)?.textContent;
         const spoken = () => document.querySelector(`.start-lines .sr-only`)?.textContent;
         await waitFor(() => {
-            expect(shown()).toBe(`1 new game a minute; try again in 3 s`);
+            expect(shown()).toBe(`3 new games at once, then 1 a minute; try again in 3 s`);
         });
         expect(start.getAttribute(`aria-disabled`)).toBe(`true`);
         // The countdown's interval starts in an effect, so it runs before the clock moves.
@@ -450,9 +450,9 @@ describe('PlayScreen', () => {
         act(() => {
             vi.advanceTimersByTime(1000);
         });
-        expect(shown()).toBe(`1 new game a minute; try again in 2 s`);
+        expect(shown()).toBe(`3 new games at once, then 1 a minute; try again in 2 s`);
         // The status region says the wait once, not every second.
-        expect(spoken()).toBe(`1 new game a minute; try again in 3 s`);
+        expect(spoken()).toBe(`3 new games at once, then 1 a minute; try again in 3 s`);
         act(() => {
             vi.advanceTimersByTime(2000);
         });
@@ -508,7 +508,7 @@ describe('PlayScreen', () => {
         await ready();
         fireEvent.click(screen.getByRole(`button`, { name: `Start game` }), { detail: 1 });
         await waitFor(() => {
-            expect(document.querySelector(`.start-lines .sr-only`)?.textContent).toBe(`1 new game a minute; try again in 60 s`);
+            expect(document.querySelector(`.start-lines .sr-only`)?.textContent).toBe(`3 new games at once, then 1 a minute; try again in 60 s`);
         });
     });
 
@@ -581,6 +581,7 @@ describe('PlayScreen', () => {
 
     it.each([
         [400, `human_busy`, `You already have 3 live games; finish one first`, false],
+        [400, `pair_busy`, `You already play devbot-c; finish that game first`, false],
         [400, `bot_busy`, `devbot-c is in 4 games already; try again shortly`, true],
         [400, `clock_not_accepted`, `devbot-c no longer accepts that clock; pick another`, true],
         [400, `not_open`, `devbot-c is closed for challenges right now`, true],
@@ -629,6 +630,27 @@ describe('PlayScreen', () => {
             [`Your game against lantern`, `/game/g3`],
         ]);
         expect(sessionReads()).toBe(before + 1);
+    });
+
+    it('lead to the one game against the bot when a start is refused for already playing it', async () => {
+        const seat = (name: string, kind: `user` | `bot`) => ({ name, rating: 1503, provisional: false, kind });
+        const game = (gameId: string, opponent: string): LiveGameEntry => ({
+            gameId,
+            players: { x: seat(`quinn`, `user`), o: seat(opponent, `bot`) },
+            timeControl: { mode: `unlimited` },
+            toMove: `x`,
+            rated: true,
+            cells: [{ x: 0, y: 0, side: `x` }],
+            clock: { mode: `unlimited` },
+        });
+        const liveGames = [game(`g1`, `hextide`), game(`g2`, `devbot-c`)];
+        serve({ me: { kind: `user`, name: `quinn`, rating: 1503, provisional: false, discord: null, liveGames, analysisOptOut: false, analysisLeft: { positions: 300, games: 10 } }, start: refused(400, `pair_busy`) });
+        render(<PlayScreen />);
+        await ready();
+        fireEvent.click(screen.getByRole(`button`, { name: `Start game` }), { detail: 1 });
+        expect(await screen.findByText(`You already play devbot-c; finish that game first`)).toBeTruthy();
+        const links = await screen.findAllByRole(`link`, { name: /^Your game against/u });
+        expect(links.map((link) => [link.textContent, link.getAttribute(`href`)])).toEqual([[`Your game against devbot-c`, `/game/g2`]]);
     });
 
     it('show the ways in, with a warning that takes focus, once a refused session reads as signed out', async () => {

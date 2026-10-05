@@ -22,13 +22,18 @@ export class RateBuckets {
         return this.#due.size;
     }
 
+    /** Whole seconds until the key's bucket holds a token, or null while it holds one; spends nothing. */
+    wait(key: string): number | null {
+        const now = this.#now();
+        return secondsUntil(this.#dueAfter(key, now) - this.#limit.burst * this.#limit.refillMs, now);
+    }
+
     /** Spends a token of the key's bucket: null when admitted, else whole seconds until one returns. */
     take(key: string): number | null {
         const now = this.#now();
-        const { burst, refillMs } = this.#limit;
-        const due = Math.max(this.#due.get(key) ?? now, now) + refillMs;
-        const allowedAt = due - burst * refillMs;
-        if (allowedAt > now) return Math.max(1, Math.ceil((allowedAt - now) / 1_000));
+        const due = this.#dueAfter(key, now);
+        const wait = secondsUntil(due - this.#limit.burst * this.#limit.refillMs, now);
+        if (wait !== null) return wait;
         // Reinserted, so the map's order is the order keys were last used.
         this.#due.delete(key);
         this.#due.set(key, due);
@@ -39,6 +44,11 @@ export class RateBuckets {
         return null;
     }
 
+    // When the key's next request would be due if it took one now.
+    #dueAfter(key: string, now: number): number {
+        return Math.max(this.#due.get(key) ?? now, now) + this.#limit.refillMs;
+    }
+
     sweep(): void {
         const now = this.#now();
         for (const [key, due] of [...this.#due]) if (due <= now) this.#due.delete(key);
@@ -47,4 +57,8 @@ export class RateBuckets {
     clear(): void {
         this.#due.clear();
     }
+}
+
+function secondsUntil(allowedAt: number, now: number): number | null {
+    return allowedAt > now ? Math.max(1, Math.ceil((allowedAt - now) / 1_000)) : null;
 }

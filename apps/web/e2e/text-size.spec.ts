@@ -14,8 +14,9 @@ const visitors: readonly { name: string; me: Me }[] = [
 // the first sign-in's page shows its form to someone signed out,
 // and hands anyone else on to Profile.
 // Play runs on its roster, once more on a bot whose clock note sits beside Custom clock.
-// A screen that needs a signed-in visitor runs for them alone, its `then` taking it to the state checked.
-const screens: readonly { name: string; path: string; world?: Partial<World>; then?: (page: Page) => Promise<void> }[] = [
+// A screen that needs a signed-in visitor runs for them alone, its `then` taking it to the state checked;
+// one whose late part the sweep must hold names it in `holds`.
+const screens: readonly { name: string; path: string; world?: Partial<World>; then?: (page: Page) => Promise<void>; holds?: string }[] = [
     { name: `the root`, path: `/` },
     { name: `play`, path: `/play`, world: { bots: playBots } },
     { name: `play with a limited bot`, path: `/play?bot=quietlake`, world: { bots: playBots } },
@@ -96,7 +97,7 @@ const screens: readonly { name: string; path: string; world?: Partial<World>; th
     { name: `a bot page`, path: `/bots/sealbot` },
     { name: `a bot page with its tournaments`, path: `/bots/hextide`, world: { tournaments: tournaments() } },
     { name: `an analyzer's page`, path: `/bots/kestrel`, world: { bots: [...bots, ...analyzerBots] } },
-    { name: `build a bot`, path: `/connect` },
+    { name: `build a bot, with what tournaments need`, path: `/connect`, holds: `.event-needs li` },
     { name: `profile`, path: `/profile` },
     { name: `profile with duels and round robins`, path: `/profile`, world: { bots: duelBots, tournaments: roundRobins().map((detail) => (detail.id === `t_brunoduel001` ? { ...detail, createdBy: `quinn` } : detail)) } },
     {
@@ -251,6 +252,7 @@ for (const visitor of visitors) {
             await page.goto(screen.path);
             await page.locator(`h1`).first().waitFor();
             if (visitor.me !== null) await page.locator(`header button.identity`).waitFor();
+            if (screen.holds !== undefined) await page.locator(screen.holds).first().waitFor();
             await screen.then?.(page);
             await page.evaluate(async () => {
                 await document.fonts.ready;

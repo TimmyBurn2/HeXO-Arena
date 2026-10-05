@@ -346,9 +346,7 @@ export function ownValuesOf(query: Query, gameId: string): Record<Side, Analyzer
 export function insertOwnLines(query: Query, turn: { gameId: string; seq: number; side: Side; botId: string }, lines: readonly AnalysisLine[]): void {
     if (lines.length === 0) return;
     query.transaction((tx) => {
-        tx.insert(ownLines)
-            .values(lines.map((line, rank) => ({ gameId: turn.gameId, seq: turn.seq, rank, ...lineColumns(line) })))
-            .run();
+        appendOwnLines(tx, turn, lines);
         const declared = tx.select(analyzerColumns).from(bots).where(eq(bots.id, turn.botId)).get();
         const values = declared === undefined ? null : storedAnalyzer(declared)?.values;
         const columns = valueColumns(values);
@@ -357,6 +355,15 @@ export function insertOwnLines(query: Query, turn: { gameId: string; seq: number
             .onConflictDoNothing()
             .run();
     });
+}
+
+/** Stores a bot's own lines for the turn it played as `seq`, its values already stored with an earlier turn's. */
+export function appendOwnLines(query: Query, turn: { gameId: string; seq: number }, lines: readonly AnalysisLine[]): void {
+    if (lines.length === 0) return;
+    query
+        .insert(ownLines)
+        .values(lines.map((line, rank) => ({ gameId: turn.gameId, seq: turn.seq, rank, ...lineColumns(line) })))
+        .run();
 }
 
 /** The number of finished readings of each game among `gameIds`. */

@@ -129,9 +129,9 @@ type Landing = `keep` | `stop` | `withdraw` | `changed` | null;
  * The actions beside a round robin's crumb: its games under Games and as
  * one download once one is over; Stop for the person who set it up and
  * Withdraw for a bot's owner while it runs, one control choosing among
- * several bots, each confirmed in place with its consequence; and once
- * over, Set up again for anyone signed in and a test's Run more for the
- * person who set it up.
+ * several bots, each confirmed in place with its consequence, a duel's or
+ * a test's creator given Stop alone; and once over, Set up again for
+ * anyone signed in and a test's Run more for the person who set it up.
  */
 export function RoundRobinActions({ detail, viewer, onChange }: { detail: TournamentDetail; viewer: string | null; onChange: (detail: TournamentDetail) => void }) {
     const [asking, setAsking] = useState<Asking>({ kind: `none` });
@@ -157,8 +157,8 @@ export function RoundRobinActions({ detail, viewer, onChange }: { detail: Tourna
     const running = detail.status === `running`;
     const person = detail.origin === `person`;
     const creator = person && viewer !== null && detail.createdBy === viewer;
-    // A test's creator owns every bot, and Stop test ends the whole.
-    const owned = running && person && viewer !== null && !(detail.test && creator) ? detail.entries.filter((entry) => entry.state === `playing` && entry.ownerName === viewer).map((entry) => entry.bot) : [];
+    // Stop is a creator's one way to end a test, whose bots are all theirs, or a duel, which withdrawing either bot would end too.
+    const owned = running && person && viewer !== null && !((detail.test || duel) && creator) ? detail.entries.filter((entry) => entry.state === `playing` && entry.ownerName === viewer).map((entry) => entry.bot) : [];
     const gamesOver = anyGameOver(detail);
     const schedule = scheduleOf(detail.standings.length, detail.gamesPerPair);
 

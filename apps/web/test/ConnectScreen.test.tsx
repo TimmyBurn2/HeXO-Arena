@@ -20,7 +20,7 @@ function sample(name: string): string | null | undefined {
 }
 
 describe('ConnectScreen', () => {
-    it('lead with hexo-bridge, then the steps from sign-in, the declaration, and the Bot API, in that order', () => {
+    it('lead with hexo-bridge, then the steps from sign-in, the declaration, what tournaments need, and the Bot API, in that order', () => {
         window.history.replaceState(null, ``, `/connect`);
         render(<ConnectScreen />);
         const headings = screen.getAllByRole(`heading`).map((heading) => `${heading.tagName} ${heading.textContent}`);
@@ -36,12 +36,25 @@ describe('ConnectScreen', () => {
             `H3 Copy the token`,
             `H3 Watch it play`,
             `H2 What the declaration says`,
+            `H2 Tournaments and duels`,
             `H2 Speak the Bot API yourself`,
         ]);
         const signIn = screen.getByRole(`link`, { name: `Sign in with Discord` });
         expect(signIn.getAttribute(`href`)).toBe(`/api/auth/discord/login?next=%2Fconnect`);
         expect(signIn.classList.contains(`discord-button`)).toBe(true);
         expect(screen.getByText((_content, element) => element?.matches(`.discord-sign-in .note`) === true && element.textContent === `Your email stays with Discord, and a first sign-in asks for your public name; see\u00a0Privacy.`)).toBeTruthy();
+    });
+
+    it('say what a bot needs to play in a duel, round robin, test, or the weekly, by the contract\'s numbers', () => {
+        render(<ConnectScreen />);
+        const section = screen.getByRole(`heading`, { name: `Tournaments and duels` }).closest(`section`);
+        expect(section?.querySelector(`p`)?.textContent).toBe(`Duels, round robins, and tests people set up on Play are never rated; the weekly tournament is. Your bot plays in one when it:`);
+        expect([...(section?.querySelectorAll(`li`) ?? [])].map((item) => item.textContent)).toEqual([
+            `accepts a turn or match clock in accepts, since these games never run unlimited: Play offers turn 10, 20, or 60\u00a0s and match 5\u00a0min +\u00a03\u00a0s or 10\u00a0min +\u00a05\u00a0s, or one set by hand in your bot's range, turn 5 to 60\u00a0s or match 1 to 10\u00a0min plus 0 to 10\u00a0s;`,
+            `is online, and for one someone else sets up, open (open=1) with its page's Duels by others switch on; your own tests need neither;`,
+            `is ready within 60\u00a0s of each game's start, or that game scores a no-show, and 2 openings missed in a row withdraw it;`,
+            `plays in at most 2 duels, round robins, or tests at once.`,
+        ]);
     });
 
     it('install the bridge at its latest tag and link its examples, the Bot API, and the example without it', () => {

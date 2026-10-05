@@ -10,6 +10,7 @@ import { createQuery } from '../src/db';
 import { insertBotGame, insertGame, recordFinish } from '../src/game-store';
 import { foldRatings } from '../src/rating';
 import { finishedGameLog, storedRatings } from '../src/rating-store';
+import { defaultLimits } from '../src/request-limits';
 
 function auditRows(world: TestApp): unknown[] {
     return world.sqlite.prepare(`select actor, action, target, reason from admin_actions order by id`).all();
@@ -95,6 +96,21 @@ describe('admin status', () => {
         if (answer.kind !== `status`) throw new Error(`no status`);
         expect(answer.status.clientKeys).toBe(2);
         expect(answer.status.keylessRequests).toBe(1);
+    });
+
+    it('counts refusals since start by code, and rate_limited by the limit behind it, holding no path, name, or address', async () => {
+        const tight = await createTestApp({ limits: { ...defaultLimits, client: { burst: 2, refillMs: 60_000 } } });
+        const address = `203.0.113.7`;
+        await tight.app.inject({ method: `GET`, url: `/api/bots/nobody-here`, remoteAddress: address });
+        await tight.app.inject({ method: `POST`, url: `/api/games`, payload: {}, remoteAddress: address });
+        await tight.app.inject({ method: `GET`, url: `/bots/nobody-here`, remoteAddress: address });
+        await tight.app.inject({ method: `GET`, url: `/api/bots/nobody-here`, remoteAddress: address });
+        const answer = tight.admin({ op: `status` });
+        if (answer.kind !== `status`) throw new Error(`no status`);
+        expect(answer.status.refusals).toEqual({ rate_limited: 2, not_found: 1, unauthorized: 1 });
+        expect(answer.status.rateLimits).toEqual({ client: 2 });
+        expect(JSON.stringify(answer.status)).not.toMatch(/nobody|203\.0\.113/u);
+        await tight.app.close();
     });
 });
 
