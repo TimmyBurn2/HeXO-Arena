@@ -25,8 +25,8 @@ const analyzerBot = `devbot-a`;
 /** The dev bots' seats: devbot-a, owned by devowner-a, and on. */
 export const seats = [`a`, `b`, `c`] as const;
 
-/** How the runner reaches its target and paces its bots. */
-export interface DevBotsOptions {
+// How the runner reaches its target and paces its bots.
+interface DevBotsOptions {
     origin: string;
     count: number;
     tokenFile: string;
@@ -60,8 +60,8 @@ export function saveTokens(file: string, tokens: ReadonlyMap<string, string>): v
     chmodSync(file, 0o600);
 }
 
-/** The name-to-token map a file holds, empty when there is none. */
-export function loadTokens(file: string): Map<string, string> {
+// The name-to-token map a file holds, empty when there is none.
+function loadTokens(file: string): Map<string, string> {
     if (!existsSync(file)) return new Map();
     return new Map(Object.entries(tokensSchema.parse(JSON.parse(readFileSync(file, `utf8`)))));
 }

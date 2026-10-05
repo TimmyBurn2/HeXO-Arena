@@ -1,6 +1,6 @@
 // The API version is spec semver, decoupled from package versions on
 // purpose.
-export const apiVersion = `0.45.0`;
+export const apiVersion = `0.50.0`;
 
 // The bot surface's own document, which other servers may implement,
 // versions apart from the whole site's.
@@ -16,8 +16,7 @@ export * from './axial';
 export * from './board';
 export * from './challenge';
 export * from './dev';
-export * from './duel-estimate';
-export * from './duels';
+export * from './estimate';
 export * from './game-events';
 export * from './games';
 export * from './history';
@@ -29,6 +28,8 @@ export * from './levels';
 export * from './limits';
 export * from './meta';
 export * from './names';
+export * from './notation';
+export * from './pages';
 export * from './players';
 export * from './rating';
 export * from './reports';

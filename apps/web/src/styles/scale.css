@@ -223,6 +223,19 @@
         --est-mark-inset: 0.2rem;
         --est-tick-top: 3.25rem;
         --est-facts-min: 12rem;
+        /* a round robin: a plate's rating, so the ratings line up, the
+           check cell of a picked bot, the schedule's note beside its
+           table, a live board's empty cell while a game waits for a bot,
+           and the estimate table's score and verdict columns */
+        --rr-rating-w: 3.75rem;
+        --rr-check-w: 1.5rem;
+        --rr-schedule-note-min: 14rem;
+        --rr-wait-hex-w: 3.5rem;
+        --rr-est-score-w: 6rem;
+        --rr-est-value-w: 9rem;
+        --rr-est-verdict-w: 10rem;
+        --rr-est-axis-h: 3.25rem;
+        --rr-est-head-h: 1.25rem;
         --z-sticky: 1;
         --z-hud: 2;
         --z-drawer: 3;

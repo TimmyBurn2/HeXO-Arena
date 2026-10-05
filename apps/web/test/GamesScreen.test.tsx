@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { FinishedGameEntry, FinishedGamesPage, GamePlayer } from '@hexo-arena/contract';
+import type { FinishedGameEntry, FinishedGamesPage, GamePlayer, TournamentDetail, TournamentList, TournamentSummary } from '@hexo-arena/contract';
 import { navigate } from '../src/router/use-route';
 import { GamesScreen } from '../src/screens/GamesScreen';
 
@@ -42,6 +42,72 @@ function serve(answer: (search: string) => Answer): ReturnType<typeof vi.fn> {
     return fetch;
 }
 
+// A finished duel between two bots, as the tournaments list holds it: by its pair, a test when one person owns both.
+function duelOf(id: string, first: string, second: string, test = false, status: TournamentSummary[`status`] = `finished`): TournamentSummary {
+    return {
+        id,
+        name: `Duel by bruno`,
+        origin: `person`,
+        format: `duel`,
+        createdBy: `bruno`,
+        rated: false,
+        test,
+        gamesPerPair: 2,
+        status,
+        startsAt: `2026-10-01T12:00:00Z`,
+        ...(status === `running` ? {} : { endedAt: `2026-10-01T12:20:00Z` }),
+        timeControl: { mode: `turn`, turnTimeMs: 10_000 },
+        openingPlies: 5,
+        maxEntrants: 2,
+        entrants: 2,
+        winner: null,
+        round: status === `running` ? { current: 1, of: 1 } : null,
+        pair: {
+            first: { key: 1, name: first, points: 2 },
+            second: { key: 2, name: second, points: 0 },
+            games: [
+                { x: 1, gameId: `g-1`, outcome: `played`, point: 1, missing: [] },
+                { x: 2, gameId: `g-2`, outcome: `played`, point: 1, missing: [] },
+            ],
+        },
+    };
+}
+
+const autumn: TournamentDetail = {
+    id: `t_autumnrobin1`,
+    name: `Autumn round robin`,
+    origin: `operator`,
+    format: `round_robin`,
+    createdBy: null,
+    rated: true,
+    test: false,
+    gamesPerPair: 2,
+    status: `finished`,
+    startsAt: `2026-10-01T18:00:00Z`,
+    startedAt: `2026-10-01T18:00:00Z`,
+    waiting: [],
+    nextRoundAt: null,
+    endedAt: `2026-10-01T19:00:00Z`,
+    timeControl: { mode: `turn`, turnTimeMs: 10_000 },
+    openingPlies: 5,
+    maxEntrants: 12,
+    entries: [],
+    rounds: [1, 2, 3].map((round) => ({ round, pairings: [], rest: null })),
+    standings: [],
+    live: [],
+};
+
+// The finished games by query, and the tournaments a picker lists, by their paths.
+function serveEvents(events: Record<string, unknown>): ReturnType<typeof vi.fn> {
+    const fetch = vi.fn((url: string) => {
+        if (url.startsWith(`/api/games/finished`)) return Promise.resolve(new Response(JSON.stringify({ games: [game(0)], page: 1, pages: 1, total: 1 })));
+        const body = events[url];
+        return Promise.resolve(body === undefined ? new Response(JSON.stringify({ error: `no`, code: `not_found` }), { status: 404 }) : new Response(JSON.stringify(body)));
+    });
+    vi.stubGlobal(`fetch`, fetch);
+    return fetch;
+}
+
 function open(path: string): void {
     window.history.replaceState(null, ``, path);
     render(<GamesScreen />);
@@ -61,6 +127,7 @@ afterEach(() => {
     cleanup();
     vi.unstubAllGlobals();
     window.history.replaceState(null, ``, `/`);
+    window.localStorage.clear();
 });
 
 describe('GamesScreen', () => {
@@ -112,6 +179,181 @@ describe('GamesScreen', () => {
         expect(within(screen.getByRole(`group`, { name: `Active filters` })).getAllByRole(`button`)[0]?.getAttribute(`aria-label`)).toBe(`Remove guest vs bot`);
     });
 
+    it('name a game\'s tournament, a duel\'s among them, on a line of its own under the row, a link to its page beside the game\'s', async () => {
+        serve(() => ({
+            games: [
+                game(0, { tournament: { id: `t_autumnrobin1`, name: `Autumn round robin`, format: `round_robin`, round: 2, game: 1, of: 2 } }),
+                game(1, { tournament: { id: `d_abcdefabcdef`, name: `Duel by bruno`, format: `duel`, round: 1, game: 3, of: 10, createdBy: `bruno` }, rated: false, unratedByChoice: true }),
+                game(2, { tournament: { id: `t_testtesttest`, name: `Duel by quinn`, format: `duel`, round: 1, game: 22, of: 50, createdBy: `quinn` }, rated: false, unratedByChoice: true, test: true }),
+                game(3),
+            ],
+            page: 1,
+            pages: 1,
+            total: 4,
+        }));
+        open(`/games`);
+        const rows = await screen.findAllByRole(`link`, { name: /hextide/u });
+        expect(rows.map((row) => row.getAttribute(`href`))).toEqual([`/game/g-0`, `/game/g-1`, `/game/g-2`, `/game/g-3`]);
+        // The row keeps unseen room for its caption, out of what a reader hears of the row.
+        const room = rows[0]?.querySelector(`.game-row-event-space`);
+        expect([room?.getAttribute(`aria-hidden`), room?.textContent]).toEqual([`true`, `Autumn round robin, round 2, game 1 of 2`]);
+        expect(screen.getByRole(`link`, { name: `Autumn round robin, round 2, game 1 of 2` }).getAttribute(`href`)).toBe(`/tournaments/t_autumnrobin1`);
+        expect(screen.getByRole(`link`, { name: `Duel, game 3 of 10` }).getAttribute(`href`)).toBe(`/tournaments/d_abcdefabcdef`);
+        expect(screen.getByRole(`link`, { name: `Test, game 22 of 50` }).getAttribute(`href`)).toBe(`/tournaments/t_testtesttest`);
+        const items = [...document.querySelectorAll(`.game-rows > li:not(.game-rows-head)`)];
+        expect(items.map((item) => item.classList.contains(`game-row-evented`))).toEqual([true, true, true, false]);
+        expect(items.every((item) => item.querySelectorAll(`a a`).length === 0)).toBe(true);
+    });
+
+    it('narrow the list to a tournament\'s games or those of none under Played in, its chip naming it', async () => {
+        const fetch = serve(() => ({ games: [game(0)], page: 1, pages: 1, total: 1 }));
+        open(`/games`);
+        await screen.findAllByRole(`link`, { name: /hextide/u });
+        const panel = openFilters();
+        const event = within(panel).getByLabelText<HTMLSelectElement>(`Played in`);
+        expect([...event.options].map((option) => option.textContent)).toEqual([`Any`, `A tournament`, `None`]);
+        fireEvent.change(event, { target: { value: `tournament` } });
+        expect(window.location.search).toBe(`?event=tournament`);
+        await waitFor(() => {
+            expect(reads(fetch).at(-1)).toBe(`/api/games/finished?event=tournament`);
+        });
+        expect(within(screen.getByRole(`group`, { name: `Active filters` })).getAllByRole(`button`)[0]?.getAttribute(`aria-label`)).toBe(`Remove in a tournament`);
+    });
+
+    it('pick one duel among the tournaments by its pair, found by a bot\'s name, each dated or live, its chip naming it and clearing back to every tournament', async () => {
+        const one = duelOf(`d_sealhextide1`, `sealbot`, `hextide`);
+        const test = duelOf(`d_sealmarsh001`, `sealbot`, `marsh`, true);
+        const running = duelOf(`d_ternmarsh001`, `tern`, `marsh`, false, `running`);
+        const when = new Intl.DateTimeFormat(undefined, { dateStyle: `medium`, timeStyle: `short` }).format(new Date(`2026-10-01T12:20:00Z`));
+        const detail: TournamentDetail = { ...autumn, id: one.id, name: one.name, origin: `person`, format: `duel`, createdBy: `bruno`, rated: false, maxEntrants: 2, entries: [
+            { key: 1, bot: `sealbot`, ownerName: `quinn`, online: true, ratingAtStart: 1500, state: `playing` },
+            { key: 2, bot: `hextide`, ownerName: `ana`, online: true, ratingAtStart: 1500, state: `playing` },
+        ], rounds: [{ round: 1, pairings: [], rest: null }] };
+        const fetch = serveEvents({ '/api/tournaments': { running: [running], scheduled: [], past: [one, test, duelOf(`d_otherother01`, `pebble`, `cinder`)] }, [`/api/tournaments/${one.id}`]: detail });
+        open(`/games?event=tournament`);
+        await screen.findAllByRole(`link`, { name: /hextide/u });
+        const panel = openFilters();
+        const pick = await within(panel).findByLabelText<HTMLSelectElement>(`Tournament`);
+        await waitFor(() => {
+            expect([...pick.options].map((option) => option.textContent)).toEqual([`Any`, `Duel tern vs marsh, live`, `Duel sealbot vs hextide, ${when}`, `Duel pebble vs cinder, ${when}`]);
+        });
+        fireEvent.change(within(panel).getByLabelText(`Find a tournament: name or bot`), { target: { value: `sealbot` } });
+        fireEvent.keyDown(within(panel).getByLabelText(`Find a tournament: name or bot`), { key: `Enter` });
+        await waitFor(() => {
+            expect([...pick.options].map((option) => option.textContent)).toEqual([`Any`, `Duel sealbot vs hextide, ${when}`]);
+        });
+        fireEvent.change(pick, { target: { value: one.id } });
+        expect(window.location.search).toBe(`?event=tournament&tournament=d_sealhextide1`);
+        await waitFor(() => {
+            expect(reads(fetch).at(-1)).toBe(`/api/games/finished?event=tournament&tournament=d_sealhextide1`);
+        });
+        const chips = screen.getByRole(`group`, { name: `Active filters` });
+        await waitFor(() => {
+            expect(within(chips).getAllByRole(`button`).map((chip) => chip.getAttribute(`aria-label`) ?? chip.textContent)).toEqual([`Remove duel sealbot vs hextide`, `Clear filters`]);
+        });
+        expect(screen.getByRole(`button`, { name: `Filters (1)` })).toBeTruthy();
+        expect(within(screen.getByRole(`dialog`, { name: `Filters` })).queryByLabelText(`Round`)).toBe(null);
+        fireEvent.click(within(chips).getByRole(`button`, { name: `Remove duel sealbot vs hextide` }));
+        expect(window.location.search).toBe(`?event=tournament`);
+        expect(within(screen.getByRole(`group`, { name: `Active filters` })).getAllByRole(`button`)[0]?.getAttribute(`aria-label`)).toBe(`Remove in a tournament`);
+    });
+
+    it('read an older link to a duel\'s games as the games of the tournament that duel is', async () => {
+        const fetch = serveEvents({ '/api/tournaments': { running: [], scheduled: [], past: [] } });
+        open(`/games?event=duel&duel=d_sealhextide1&clock=turn`);
+        await screen.findAllByRole(`link`, { name: /hextide/u });
+        expect(window.location.search).toBe(`?clock=turn&event=tournament&tournament=d_sealhextide1`);
+        expect(reads(fetch)).toContain(`/api/games/finished?clock=turn&event=tournament&tournament=d_sealhextide1`);
+    });
+
+    it('tell repeats of a tournament apart by the date and time the tournaments list gives them, the live one said live', async () => {
+        const summary = (id: string, status: TournamentSummary[`status`], endedAt?: string): TournamentSummary => ({
+            id,
+            name: `Dev round robin`,
+            origin: `person`,
+            format: `round_robin`,
+            createdBy: `devowner-a`,
+            rated: false,
+            test: false,
+            gamesPerPair: 2,
+            status,
+            startsAt: `2026-10-03T09:00:00Z`,
+            ...(endedAt === undefined ? {} : { endedAt }),
+            timeControl: { mode: `turn`, turnTimeMs: 10_000 },
+            openingPlies: 5,
+            maxEntrants: 3,
+            entrants: 3,
+            winner: null,
+            round: status === `running` ? { current: 1, of: 3 } : null,
+        });
+        const list: TournamentList = { running: [summary(`t_devrobin0001`, `running`)], scheduled: [], past: [summary(`t_devrobin0002`, `finished`, `2026-10-03T10:15:00Z`), summary(`t_devrobin0003`, `finished`, `2026-10-03T14:40:00Z`)] };
+        serveEvents({ '/api/tournaments': list });
+        open(`/games?event=tournament`);
+        await screen.findAllByRole(`link`, { name: /hextide/u });
+        const panel = openFilters();
+        const pick = await within(panel).findByLabelText<HTMLSelectElement>(`Tournament`);
+        const when = (iso: string) => new Intl.DateTimeFormat(undefined, { dateStyle: `medium`, timeStyle: `short` }).format(new Date(iso));
+        await waitFor(() => {
+            expect([...pick.options].map((option) => option.textContent)).toEqual([`Any`, `Dev round robin, live`, `Dev round robin, ${when(`2026-10-03T10:15:00Z`)}`, `Dev round robin, ${when(`2026-10-03T14:40:00Z`)}`]);
+        });
+    });
+
+    it('offer a test among the tournaments to pick only while Show tests is on', async () => {
+        const summary = (id: string, test: boolean): TournamentSummary => ({
+            id,
+            name: test ? `Round robin by ana` : `Round robin by bruno`,
+            origin: `person`,
+            format: `round_robin`,
+            createdBy: test ? `ana` : `bruno`,
+            rated: false,
+            test,
+            gamesPerPair: 2,
+            status: `finished`,
+            startsAt: `2026-10-03T09:00:00Z`,
+            endedAt: `2026-10-03T10:15:00Z`,
+            timeControl: { mode: `turn`, turnTimeMs: 10_000 },
+            openingPlies: 5,
+            maxEntrants: 3,
+            entrants: 3,
+            winner: null,
+            round: null,
+        });
+        serveEvents({ '/api/tournaments': { running: [], scheduled: [], past: [summary(`t_brunorobin02`, false), summary(`t_anatest00001`, true)] } });
+        open(`/games?event=tournament`);
+        await screen.findAllByRole(`link`, { name: /hextide/u });
+        const panel = openFilters();
+        const pick = await within(panel).findByLabelText<HTMLSelectElement>(`Tournament`);
+        const names = () => [...pick.options].map((option) => option.textContent.split(`,`)[0]);
+        await waitFor(() => {
+            expect(names()).toEqual([`Any`, `Round robin by bruno`]);
+        });
+        fireEvent.click(screen.getByRole(`switch`, { name: `Show tests` }));
+        await waitFor(() => {
+            expect(names()).toEqual([`Any`, `Round robin by bruno`, `Round robin by ana`]);
+        });
+    });
+
+    it('take one tournament and its round from a link, a round picked among those drawn, and the chip clearing the round with the tournament', async () => {
+        const list: TournamentList = { running: [], scheduled: [], past: [] };
+        const fetch = serveEvents({ '/api/tournaments': list, [`/api/tournaments/${autumn.id}`]: autumn });
+        open(`/games?tournament=t_autumnrobin1&round=2`);
+        await screen.findAllByRole(`link`, { name: /hextide/u });
+        expect(window.location.search).toBe(`?event=tournament&tournament=t_autumnrobin1&round=2`);
+        expect(reads(fetch)).toContain(`/api/games/finished?event=tournament&tournament=t_autumnrobin1&round=2`);
+        const chips = screen.getByRole(`group`, { name: `Active filters` });
+        await waitFor(() => {
+            expect(within(chips).getAllByRole(`button`).map((chip) => chip.getAttribute(`aria-label`) ?? chip.textContent)).toEqual([`Remove Autumn round robin`, `Remove round 2`, `Clear filters`]);
+        });
+        const panel = openFilters();
+        const round = await within(panel).findByLabelText<HTMLSelectElement>(`Round`);
+        expect([...round.options].map((option) => option.textContent)).toEqual([`Any`, `Round 1`, `Round 2`, `Round 3`]);
+        expect(within(panel).getByLabelText<HTMLSelectElement>(`Tournament`).value).toBe(`t_autumnrobin1`);
+        fireEvent.change(round, { target: { value: `3` } });
+        expect(window.location.search).toBe(`?event=tournament&tournament=t_autumnrobin1&round=3`);
+        fireEvent.click(within(screen.getByRole(`group`, { name: `Active filters` })).getByRole(`button`, { name: `Remove Autumn round robin` }));
+        expect(window.location.search).toBe(`?event=tournament`);
+    });
+
     it('tag a game its player started unrated, aborted or decided, and leave a rated one untagged', async () => {
         const quinn: GamePlayer = { name: `quinn`, rating: null, provisional: false, kind: `user` };
         const chosen = { players: { x: hextide, o: quinn }, rated: false, unratedByChoice: true } as const;
@@ -134,7 +376,7 @@ describe('GamesScreen', () => {
         expect(screen.queryByLabelText(`Against`)).toBe(null);
         const panel = openFilters();
         expect(within(panel).getByText(`Against, Side, Won, and Lost wait for a name in Player.`)).toBeTruthy();
-        expect([...panel.querySelectorAll(`label`)].map((label) => label.textContent)).toEqual([`Against`, `Result`, `Side`, `Ending`, `Clock`, `Opening`, `Who played`, `Analysis`, `Before`]);
+        expect([...panel.querySelectorAll(`label`)].map((label) => label.textContent)).toEqual([`Against`, `Result`, `Side`, `Ending`, `Clock`, `Opening`, `Who played`, `Played in`, `Analysis`, `Before`]);
         expect(within(panel).getByLabelText(`Opening`).getAttribute(`aria-describedby`)).toBe(`games-opening-note`);
         expect(document.getElementById(`games-opening-note`)?.textContent).toBe(`Opening counts the stones on the board before the first turn, the origin and random ones near it.`);
         for (const name of [`Against`, `Side`]) expect(within(panel).getByLabelText<HTMLInputElement>(name).disabled).toBe(true);

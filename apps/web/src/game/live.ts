@@ -8,12 +8,10 @@ export function lastTurnOf(snapshot: GameSnapshot): number {
     return Math.ceil((snapshot.board.cells.length - 1) / 2);
 }
 
-/**
- * A turn event against the board in hand: the next turn applies, one the
- * board already holds is a no-op, and a skipped turn means the stream and
- * the board disagree, which only a fresh snapshot resolves.
- */
-export type TurnFit = { kind: `applied`; snapshot: GameSnapshot } | { kind: `held` } | { kind: `gap` };
+// A turn event against the board in hand: the next turn applies, one the
+// board already holds is a no-op, and a skipped turn means the stream and
+// the board disagree, which only a fresh snapshot resolves.
+type TurnFit = { kind: `applied`; snapshot: GameSnapshot } | { kind: `held` } | { kind: `gap` };
 
 export function applyTurn(snapshot: GameSnapshot, turn: GameTurn): TurnFit {
     if (snapshot.status !== `in-progress`) return { kind: `held` };

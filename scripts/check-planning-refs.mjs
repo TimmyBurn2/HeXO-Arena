@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 
 // Committed files carry no pointers to the untracked decision docs and no
 // planning vocabulary; AGENTS.md, which states the rule, is the one
@@ -15,12 +15,14 @@ const patterns = [
     /(?<!\.)\bslices?\b/i,
 ];
 
-const tracked = execFileSync(`git`, [`ls-files`], { encoding: `utf8` })
+// New files count before they are staged, so a local run sees what a commit would carry;
+// a file deleted but not yet staged has nothing to read.
+const files = execFileSync(`git`, [`ls-files`, `--cached`, `--others`, `--exclude-standard`], { encoding: `utf8` })
     .split(`\n`)
-    .filter((file) => file !== `` && !excluded.has(file));
+    .filter((file) => file !== `` && !excluded.has(file) && existsSync(file));
 
 const hits = [];
-for (const file of tracked) {
+for (const file of files) {
     const lines = readFileSync(file, `utf8`).split(`\n`);
     for (const [index, line] of lines.entries()) {
         if (patterns.some((pattern) => pattern.test(line))) {
@@ -30,7 +32,7 @@ for (const file of tracked) {
 }
 
 if (hits.length > 0) {
-    console.error(`decision-doc or planning references in tracked files:`);
+    console.error(`decision-doc or planning references:`);
     for (const hit of hits) console.error(hit);
     process.exit(1);
 }

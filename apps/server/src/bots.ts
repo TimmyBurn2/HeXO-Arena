@@ -20,12 +20,12 @@ import { bots, nameReservations, ratings, users } from './db/schema';
 import { seedRating, type PlayerRating } from './rating';
 import { randomToken, sha256Hex } from './tokens';
 
-export type CreateBotResult =
+type CreateBotResult =
     | { kind: `created`; name: string; token: string }
     | { kind: `name_taken` }
     | { kind: `bot_limit` };
 
-export interface BotRow {
+interface BotRow {
     id: string;
     name: string;
     ownerId: string;
@@ -87,8 +87,8 @@ const declarationColumns = {
 
 type DeclarationView = Pick<BotRow, `about` | `version` | `repoUrl` | `accepts` | `levels` | `analyzer`>;
 
-/** Values as a table stores them: a scale and a meaning, null where none was declared, and three cuts, set together or not at all. */
-export interface ValueColumns {
+// Values as a table stores them: a scale and a meaning, null where none was declared, and three cuts, set together or not at all.
+interface ValueColumns {
     readonly scale: number | null;
     readonly inaccuracy: number | null;
     readonly mistake: number | null;

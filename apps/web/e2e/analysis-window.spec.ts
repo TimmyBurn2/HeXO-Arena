@@ -1,7 +1,7 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type Page } from '@playwright/test';
 import type { AnalysisList } from '@hexo-arena/contract';
-import { looks, wear } from './matrix';
+import { capturing, looks, wear } from './matrix';
 import { longReadings, serve, world, type World } from './mock-api';
 
 // The analyzer window over the move list: each state it passes through, the
@@ -92,7 +92,7 @@ test('a reading by an analyzer that played in the game says so in the head and u
     await expect(win(page).locator(`.an-bubble-involved`)).toHaveText(`hextide played in this game`);
     // No independent analyzer is online, so nothing offers a second reading.
     await expect(win(page).locator(`.an-win-card`)).toHaveCount(0);
-    await page.screenshot({ path: `e2e/shots/analysis-window-involved--ink--1280.png` });
+    if (capturing) await page.screenshot({ path: `e2e/shots/analysis-window-involved--ink--1280.png` });
     const axe = await new AxeBuilder({ page }).include(`.an-window`).analyze();
     expect(axe.violations.map((violation) => violation.id)).toEqual([]);
     // The opening and the six speak for themselves, whoever read the game.
@@ -108,7 +108,7 @@ test('a reading by an analyzer that played in the game says so in the head and u
     await expect(page.locator(`.an-win-who`)).toBeHidden();
     await expect(page.locator(`.an-bubble-involved`)).toBeVisible();
     await expect(page.locator(`.an-bubble-involved`)).toHaveText(`hextide played in this game`);
-    await page.screenshot({ path: `e2e/shots/analysis-window-involved--ink--390.png` });
+    if (capturing) await page.screenshot({ path: `e2e/shots/analysis-window-involved--ink--390.png` });
 });
 
 test('a game read only by an analyzer whose owner played offers a reading by an independent analyzer, asked for by no name', async ({ page }) => {
@@ -118,7 +118,7 @@ test('a game read only by an analyzer whose owner played offers a reading by an 
     const card = win(page).locator(`.an-win-card`);
     await expect(card.locator(`.dr-card-title`)).toHaveText(`An independent analyzer is online`);
     await expect(card).toContainText(`10 of 10 requests left today.`);
-    await page.screenshot({ path: `e2e/shots/analysis-window-independent--ink--1280.png` });
+    if (capturing) await page.screenshot({ path: `e2e/shots/analysis-window-independent--ink--1280.png` });
     const axe = await new AxeBuilder({ page }).include(`.an-window`).analyze();
     expect(axe.violations.map((violation) => violation.id)).toEqual([]);
     await card.getByRole(`button`, { name: `Ask an independent analyzer` }).click();

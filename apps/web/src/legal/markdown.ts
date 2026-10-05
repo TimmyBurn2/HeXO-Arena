@@ -19,21 +19,21 @@ export type Block =
     | { readonly kind: `rule` }
     | { readonly kind: `table`; readonly head: readonly (readonly Inline[])[]; readonly rows: readonly (readonly (readonly Inline[])[])[] };
 
-/** A part of a legal document under its own second-level heading. */
-export interface LegalSection {
-    /** The heading as a fragment, so a link can name the section. */
+// A part of a legal document under its own second-level heading.
+interface LegalSection {
+    // The heading as a fragment, so a link can name the section.
     readonly id: string;
     readonly heading: readonly Inline[];
     readonly blocks: readonly Block[];
-    /** Written as one quote, which the law wants set apart from the text around it. */
+    // Written as one quote, which the law wants set apart from the text around it.
     readonly standout: boolean;
 }
 
-/** A legal document laid out as its page shows it. */
-export interface LegalLayout {
-    /** The first top-level heading, the page's own title. */
+// A legal document laid out as its page shows it.
+interface LegalLayout {
+    // The first top-level heading, the page's own title.
     readonly title: readonly Inline[] | null;
-    /** What stands under the title before the first section, such as the date. */
+    // What stands under the title before the first section, such as the date.
     readonly lead: readonly Block[];
     readonly sections: readonly LegalSection[];
 }

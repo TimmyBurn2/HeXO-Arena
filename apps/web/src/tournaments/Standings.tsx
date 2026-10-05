@@ -12,6 +12,7 @@ import { BotPairings } from './Rounds';
  */
 export function Standings({ detail }: { detail: TournamentDetail }) {
     const ratings = new Map(detail.entries.map((entry) => [entry.key, entry.ratingAtStart]));
+    const levels = new Map(detail.entries.flatMap((entry) => (entry.level === undefined ? [] : [[entry.key, entry.level.label] as const])));
     const [open, setOpen] = useState<number | null>(null);
     const ids = useId();
     const played = detail.rounds.length > 0;
@@ -53,6 +54,7 @@ export function Standings({ detail }: { detail: TournamentDetail }) {
                                                 <PlayerName name={line.bot} kind="bot" deleted={line.deleted} />
                                                 <BotBadge />
                                                 <span className="standings-owner">{text.ladder.byOwner(<PlayerName name={line.ownerName} kind="human" deleted={line.ownerName === deletedPlayerName} />)}</span>
+                                                {levels.has(line.key) ? <span className="standings-owner">{text.roundRobins.page.atLevel(levels.get(line.key) ?? ``)}</span> : null}
                                                 {line.withdrawn ? <span className="tag muted">{text.tournaments.withdrawn}</span> : null}
                                                 {played ? (
                                                     <button
@@ -89,7 +91,7 @@ export function Standings({ detail }: { detail: TournamentDetail }) {
                     </tbody>
                 </table>
             </div>
-            <p className="note">{text.tournaments.standingsNote}</p>
+            <p className="note">{detail.origin === `person` ? text.roundRobins.page.standingsNote : text.tournaments.standingsNote}</p>
         </section>
     );
 }

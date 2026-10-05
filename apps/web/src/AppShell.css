@@ -194,9 +194,11 @@
         font-size: var(--text-sm);
     }
 
+    /* Above the page's own raised parts, as a sticky column or a score's cell, that scroll under it. */
     .tabbar {
         display: none;
         position: fixed;
+        z-index: 2;
         bottom: 0;
         left: 0;
         right: 0;

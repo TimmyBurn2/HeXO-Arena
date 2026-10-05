@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
 import type { PlayerRecord, RatingPoint, RatingRange } from '@hexo-arena/contract';
 import { fetchPlayerRecord, fetchRatingHistory } from '../api/client';
 import { useAsync } from '../api/use-async';
@@ -13,35 +13,19 @@ function dateOf(iso: string): string {
     return new Intl.DateTimeFormat(undefined, { dateStyle: `medium` }).format(new Date(iso));
 }
 
+// The chart reads each range afresh, its skeleton standing until the range lands.
 function useRatingHistory(name: string): { points: RatingPoint[] | `failed` | null; range: RatingRange; setRange: (range: RatingRange) => void; retry: () => void } {
     const [range, setRange] = useState<RatingRange>(`1y`);
-    const [points, setPoints] = useState<RatingPoint[] | `failed` | null>(null);
-    const [attempt, setAttempt] = useState(0);
-    useEffect(() => {
-        let cancelled = false;
-        setPoints(null);
-        fetchRatingHistory(name, range).then(
-            (history) => {
-                if (!cancelled) setPoints(history);
-            },
-            () => {
-                if (!cancelled) setPoints(`failed`);
-            },
-        );
-        return () => {
-            cancelled = true;
-        };
-    }, [name, range, attempt]);
-    const retry = useCallback(() => {
-        setAttempt((count) => count + 1);
-    }, []);
-    return { points, range, setRange, retry };
+    const load = useCallback(async () => fetchRatingHistory(name, range), [name, range]);
+    const read = useAsync(load, { keep: false });
+    return { points: read.error ? `failed` : read.data, range, setRange, retry: read.reload };
 }
 
 /**
  * What a page about a player shows of their play: the rating chart, the
- * record, the opponents met most, and a bot's tournament places; each
- * block stands while it loads and leaves out what it cannot read.
+ * record, and the opponents met most; each block stands while it loads
+ * and leaves out what it cannot read. A bot page lists its tournaments
+ * beside its duels.
  */
 export function PlayerBlocks({ name }: { name: string }) {
     const history = useRatingHistory(name);
@@ -61,7 +45,6 @@ export function PlayerBlocks({ name }: { name: string }) {
                 <div className="player-columns">
                     <Record record={record.data} />
                     <MostPlayed record={record.data} />
-                    {record.data.placings === undefined ? null : <Placings record={record.data} />}
                 </div>
             )}
         </div>
@@ -155,30 +138,6 @@ function MostPlayed({ record }: { record: PlayerRecord }) {
                                     {words.meetings(opponent.games, opponent.won, opponent.lost)}
                                 </Link>
                             )}
-                        </li>
-                    ))}
-                </ul>
-            )}
-        </section>
-    );
-}
-
-function Placings({ record }: { record: PlayerRecord }) {
-    const words = text.players.placings;
-    const placings = record.placings ?? [];
-    return (
-        <section className="card player-placings" aria-labelledby="player-placings-title">
-            <h2 id="player-placings-title" className="card-title">
-                {words.title}
-            </h2>
-            {placings.length === 0 ? (
-                <p className="note">{words.none}</p>
-            ) : (
-                <ul className="player-opponent-list">
-                    {placings.map((placing) => (
-                        <li key={placing.tournamentId}>
-                            <Link to={`/tournaments/${encodeURIComponent(placing.tournamentId)}`}>{placing.name}</Link>
-                            <span className="note">{words.line(placing.rank, placing.entrants, placing.points, dateOf(placing.endedAt))}</span>
                         </li>
                     ))}
                 </ul>

@@ -36,7 +36,7 @@ function clocked(): Parameters<typeof createTestApp>[0] {
 
 async function start(options: Parameters<typeof createTestApp>[0] = {}): Promise<TestApp> {
     const now = 1_000_000;
-    world = await createTestApp({ logger: false, trustedProxy: `127.0.0.1`, now: () => now, ...options });
+    world = await createTestApp({ trustedProxy: `127.0.0.1`, now: () => now, ...options });
     return world;
 }
 

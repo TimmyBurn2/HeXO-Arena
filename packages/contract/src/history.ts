@@ -1,9 +1,10 @@
 import { z } from 'zod';
 import { analysesPerGame } from './analysis';
-import { gameDuelSchema, gamePlayersSchema, testMarkSchema, unratedByChoiceSchema } from './games';
+import { gamePlayersSchema, gameTournamentSchema, testMarkSchema, unratedByChoiceSchema } from './games';
 import { rankableDeviation } from './leaderboard';
 import { nameKeyOf, nameMaxLength } from './names';
 import { finishReasonSchema, openingPliesSchema, sideSchema, timeControlSchema } from './stream';
+import { tournamentIdSchema } from './tournaments';
 
 export const finishedGamesPath = `/api/games/finished`;
 
@@ -23,6 +24,9 @@ const pagePattern = /^(?:[1-9]|10)$/;
 
 const playerName = z.string().min(1).max(nameMaxLength);
 
+// A round number from 1, written without a leading zero.
+const roundPattern = /^[1-9]\d?$/;
+
 export const finishedGamesQuerySchema = z
     .strictObject({
         player: playerName.optional().meta({ param: { description: `A player's name, matched case-folded, in either seat.` } }),
@@ -39,6 +43,18 @@ export const finishedGamesQuerySchema = z
         // The bare values, so the parameter does not repeat the component's description.
         reason: z.enum(finishReasonSchema.options).optional().meta({ param: { description: `How the game ended.` } }),
         clock: z.enum([`turn`, `match`, `unlimited`]).optional().meta({ param: { description: `The time control's mode.` } }),
+        event: z
+            .enum([`tournament`, `none`])
+            .optional()
+            .meta({ param: { description: `Games of a tournament, a duel or round robin among them; or of none.` } }),
+        tournament: tournamentIdSchema
+            .optional()
+            .meta({ param: { description: `One tournament's games, none for an unknown one; a test's are listed whatever tests says, since naming it asks for them.` } }),
+        round: z
+            .string()
+            .regex(roundPattern)
+            .optional()
+            .meta({ param: { description: `One round of the tournament, from 1; needs tournament.` } }),
         opening: z.enum([`1`, `3`, `5`, `7`, `9`]).optional().meta({ param: { description: `The opening's plies.` } }),
         before: z.iso.date().optional().meta({ param: { description: `Only games finished before this UTC date, YYYY-MM-DD.` } }),
         analyzed: z.literal(`1`).optional().meta({ param: { description: `Present as 1, only games a community analyzer has read whole.` } }),
@@ -57,7 +73,9 @@ export const finishedGamesQuerySchema = z
     })
     .refine((query) => query.player === undefined || query.vs === undefined || nameKeyOf(query.player) !== nameKeyOf(query.vs), {
         message: `vs names a player other than player`,
-    });
+    })
+    .refine((query) => query.round === undefined || query.tournament !== undefined, { message: `round needs tournament` })
+    .refine((query) => query.tournament === undefined || (query.event ?? `tournament`) === `tournament`, { message: `tournament needs event, when given, to be tournament` });
 export type FinishedGamesQuery = z.infer<typeof finishedGamesQuerySchema>;
 
 export const finishedGameEntrySchema = z
@@ -71,12 +89,12 @@ export const finishedGameEntrySchema = z
         turns: z.number().int().min(0).meta({ description: `Turns on the board at the finish, the opening's included.` }),
         finishedAt: z.iso.datetime(),
         rated: z.boolean().meta({
-            description: `False for a game without a winner, a voided one, a guest's, one with a bot at a level other than its default, one started unrated, alone or in a duel, and a test.`,
+            description: `False for a game without a winner, a voided one, a guest's, one with a bot at a level other than its default, one marked unratedByChoice, and a test.`,
         }),
         voided: z.boolean().meta({ description: `Taken out by the operator: still listed, and counted in no record and no rating.` }),
         unratedByChoice: unratedByChoiceSchema.optional(),
         test: testMarkSchema.optional(),
-        duel: gameDuelSchema.optional(),
+        tournament: gameTournamentSchema.optional(),
         analyses: z
             .number()
             .int()

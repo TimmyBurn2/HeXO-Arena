@@ -4,7 +4,6 @@ import { botClientSchema } from './api';
 import { scheduledClockSchema } from './games';
 import { nameSyntaxSchema } from './names';
 import { reportReasonSchema } from './reports';
-import { duelIdSchema } from './duels';
 import { openingPliesSchema } from './stream';
 import {
     adminTournamentRuleSchema,
@@ -106,8 +105,6 @@ export const adminRequestSchema = z.discriminatedUnion(`op`, [
     z.strictObject({ op: z.literal(`report-close`), id: z.number().int().min(1), reason: adminReasonSchema }),
     // A reading that lies or misleads goes, with its lines; the audit row keeps why.
     z.strictObject({ op: z.literal(`delete-analysis`), id: analysisIdSchema, reason: adminReasonSchema }),
-    // No further game of the duel starts; a live one plays on.
-    z.strictObject({ op: z.literal(`duel-stop`), id: duelIdSchema, reason: adminReasonSchema }),
 ]);
 export type AdminRequest = z.infer<typeof adminRequestSchema>;
 export type AdminMutation = Exclude<AdminRequest, { op: `status` | `backup` | `bot` | `tournament-schedule-list` }>;
@@ -143,7 +140,6 @@ export const adminClientCountSchema = z.object({
     client: z.string(),
     bots: z.number().int().min(1),
 });
-export type AdminClientCount = z.infer<typeof adminClientCountSchema>;
 
 // One bot as the operator looks it up: its owner, presence, and the client
 // it last connected with, which only the owner and the operator see.
@@ -173,6 +169,7 @@ export const adminStatusSchema = z.object({
     tournaments: z.array(adminTournamentSchema),
     tournamentRules: z.array(adminTournamentRuleSchema),
     liveDuels: z.number().int().min(0),
+    liveRoundRobins: z.number().int().min(0),
     clients: z.array(adminClientCountSchema),
     recentActions: z.array(adminActionSchema).max(10),
     openReportCount: z.number().int().min(0),
@@ -183,7 +180,6 @@ export type AdminStatus = z.infer<typeof adminStatusSchema>;
 // `unchanged` answers a mutation that would change nothing, which then
 // writes no audit row.
 export const adminErrorCodes = [`bad_request`, `not_found`, `unchanged`] as const;
-export type AdminErrorCode = (typeof adminErrorCodes)[number];
 
 export const adminResponseSchema = z.discriminatedUnion(`kind`, [
     z.object({ kind: z.literal(`status`), status: adminStatusSchema }),

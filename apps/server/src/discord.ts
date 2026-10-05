@@ -12,7 +12,7 @@ export interface DiscordOAuth {
     exchange(code: string): Promise<DiscordIdentity>;
 }
 
-export interface DiscordOAuthConfig {
+interface DiscordOAuthConfig {
     clientId: string;
     clientSecret: string;
     redirectUri: string;
@@ -54,7 +54,7 @@ export function discordNamesOf(id: string, username: string, globalName: string 
     return { username: discordNameOf(username) ?? id.slice(0, discordNameMaxLength), displayName: discordNameOf(globalName) };
 }
 
-export class DiscordError extends Error {}
+class DiscordError extends Error {}
 
 export function createDiscordOAuth(config: DiscordOAuthConfig): DiscordOAuth {
     return {

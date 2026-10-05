@@ -29,7 +29,7 @@ describe('the erasure journal', () => {
 
     async function boot(file: string): Promise<TestApp> {
         const sqlite = openDatabase(join(dir, file));
-        const world = await createTestApp({ sqlite, logger: false, erasures: { path: journal, keepDays: 15 } });
+        const world = await createTestApp({ sqlite, erasures: { path: journal, keepDays: 15 } });
         opened.push({ sqlite, world });
         return world;
     }

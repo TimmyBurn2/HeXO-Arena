@@ -4,9 +4,11 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseEnv as parseEnvFile } from 'node:util';
 import { describe, expect, it } from 'vitest';
+import { adminUsage } from '../src/admin-client';
 import { envKeys } from '../src/env';
 
-const prod = join(dirname(fileURLToPath(import.meta.url)), `../../../docker/prod`);
+const root = join(dirname(fileURLToPath(import.meta.url)), `../../..`);
+const prod = join(root, `docker/prod`);
 const compose = readFileSync(join(prod, `compose.yml`), `utf8`);
 
 // A service's block in the compose file, up to the next top-level entry.
@@ -47,5 +49,27 @@ describe('the production env examples', () => {
         expect(keys.filter((key) => !(envKeys as readonly string[]).includes(key))).toEqual([]);
         expect(keys.filter((key) => setElsewhere.includes(key) || key.startsWith(`DEV_`))).toEqual([]);
         for (const key of [`PUBLIC_ORIGIN`, `DISCORD_CLIENT_ID`, `DISCORD_CLIENT_SECRET`]) expect(example[key]).toMatch(placeholder);
+    });
+});
+
+// An admin op's name: its leading words, before any target, flag, or option.
+function opName(usage: string): string {
+    const words = usage.trim().split(/\s+/u);
+    const end = words.findIndex((word) => !/^[a-z][a-z-]*$/u.test(word));
+    return words.slice(0, end === -1 ? words.length : end).join(` `);
+}
+
+describe('the deploy guide', () => {
+    it('lists in its admin table every op the admin client takes, and no other', () => {
+        const guide = readFileSync(join(root, `DEPLOY.md`), `utf8`);
+        const administration = /\n## Administration\n([\s\S]*?)(?=\n##)/u.exec(guide)?.[1] ?? ``;
+        const firstCells = [...administration.matchAll(/^\| (.+?) \| /gmu)].map((row) => row[1] ?? ``);
+        const listed = firstCells.flatMap((cell) => [...cell.matchAll(/`([^`]+)`/gu)].map((code) => opName(code[1] ?? ``)));
+        const taken = adminUsage
+            .split(`\n`)
+            .slice(1)
+            .filter((line) => line.trim() !== ``)
+            .map(opName);
+        expect(new Set(listed)).toEqual(new Set(taken));
     });
 });

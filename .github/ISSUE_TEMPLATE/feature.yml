@@ -1,0 +1,26 @@
+name: Feature request
+description: An idea for the site or its code.
+labels: [enhancement]
+body:
+    - type: markdown
+      attributes:
+          value: |
+              Issues are public: leave out personal data, tokens, and passwords.
+              A privacy or data request goes to the operator, at the contact in the site's privacy policy.
+    - type: textarea
+      id: idea
+      attributes:
+          label: The idea
+      validations:
+          required: true
+    - type: textarea
+      id: problem
+      attributes:
+          label: The problem it solves
+      validations:
+          required: true
+    - type: textarea
+      id: alternatives
+      attributes:
+          label: Alternatives
+          description: Other ways to solve it, or what you do today instead.

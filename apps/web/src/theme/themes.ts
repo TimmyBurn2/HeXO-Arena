@@ -1,5 +1,4 @@
-import { useSyncExternalStore } from 'react';
-import { readStored, writeStored } from '../stored';
+import { persistedStore, useStore } from '../store';
 import { text } from '../text';
 
 /**
@@ -50,6 +49,7 @@ export const themeVocabulary = [
     `--board-stone-x`,
     `--board-stone-o`,
     `--board-focus`,
+    `--board-link`,
     `--board-number-x`,
     `--board-number-o`,
     `--board-pending`,
@@ -66,47 +66,24 @@ export function parseTheme(stored: string | null): ThemeId {
     return themes.find((theme) => theme.id === stored)?.id ?? defaultTheme;
 }
 
-let current: ThemeId | null = null;
-const listeners = new Set<() => void>();
-
-function read(): ThemeId {
-    current ??= parseTheme(readStored(themeStorageKey));
-    return current;
-}
-
 function apply(theme: ThemeId): void {
     if (typeof document !== `undefined`) document.documentElement.dataset.theme = theme;
 }
 
-function subscribe(listener: () => void): () => void {
-    listeners.add(listener);
-    return () => {
-        listeners.delete(listener);
-    };
-}
-
-function choose(theme: ThemeId): void {
-    current = theme;
-    writeStored(themeStorageKey, theme);
-    apply(theme);
-    for (const listener of listeners) listener();
-}
+const stored = persistedStore(themeStorageKey, parseTheme, (theme) => theme, apply);
 
 /**
  * The look as a store: the root carries the theme attribute, so one
  * attribute swap restyles every surface and board at once.
+ * `start` puts the stored theme on the root before the first render.
  */
 export const themeStore = {
-    read,
-    subscribe,
-    choose,
-    /** Put the stored theme on the root before the first render. */
-    start(): void {
-        apply(read());
-    },
+    read: stored.read,
+    subscribe: stored.subscribe,
+    choose: stored.set,
+    start: stored.start,
 };
 
 export function useTheme(): readonly [ThemeId, typeof themeStore.choose] {
-    const theme = useSyncExternalStore(themeStore.subscribe, read, read);
-    return [theme, themeStore.choose];
+    return [useStore(stored), themeStore.choose];
 }

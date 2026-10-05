@@ -74,8 +74,8 @@ export type TreePlay =
     | { readonly ok: true; readonly tree: MoveTree; readonly node: NodeId }
     | { readonly ok: false; readonly refusal: TreeRefusal };
 
-/** The position a root starts from. */
-export function startOf(root: TreeRoot): Setup {
+// The position a root starts from.
+function startOf(root: TreeRoot): Setup {
     return root.kind === `setup` ? root.start : originSetup;
 }
 

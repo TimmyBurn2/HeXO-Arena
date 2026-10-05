@@ -46,7 +46,7 @@ describe('ConnectScreen', () => {
 
     it('install the bridge at its latest tag and link its examples, the Bot API, and the example without it', () => {
         render(<ConnectScreen />);
-        expect(sample(`Install command`)).toBe(`pip install git+https://github.com/TimmyBurn2/hexo-bridge@v0.4.0`);
+        expect(sample(`Install command`)).toBe(`pip install git+https://github.com/TimmyBurn2/hexo-bridge@v0.4.1`);
         expect(screen.getByRole(`link`, { name: `hexo-bridge` }).getAttribute(`href`)).toBe(`https://github.com/TimmyBurn2/hexo-bridge`);
         expect(screen.getByRole(`link`, { name: `random_engine.py` }).getAttribute(`href`)).toBe(`https://github.com/TimmyBurn2/hexo-bridge/blob/main/examples/random_engine.py`);
         expect(screen.getByRole(`link`, { name: `the bridge's readme` }).getAttribute(`href`)).toBe(`https://github.com/TimmyBurn2/hexo-bridge#readme`);

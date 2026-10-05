@@ -140,6 +140,8 @@ export const pairs = [
     [`bad on overlay`, `--c-bad`, `--c-bg-overlay`, 4.5],
     [`bad on hover`, `--c-bad`, `--c-bg-hover`, 4.5],
     [`text on active`, `--c-text`, `--c-bg-active`, 4.5],
+    // A strength select's label and a found row's owner sit on the active ground.
+    [`dim on active`, `--c-text-dim`, `--c-bg-active`, 4.5],
     [`bad on active`, `--c-bad`, `--c-bg-active`, 4.5],
     [`good on input`, `--c-good`, `--c-bg-input`, 4.5],
     [`dim on input`, `--c-text-dim`, `--c-bg-input`, 4.5],
@@ -184,6 +186,9 @@ export const pairs = [
     [`win line across x`, `--board-win`, `--board-stone-x`, 3, xCasing],
     [`win line across o`, `--board-win`, `--board-stone-o`, 3, oCasing],
     [`focus on cell`, `--board-focus`, `--board-cell`, 3],
+    // Round robin scores are text on the board's ground; the ring of a
+    // link there takes the same color, so the text minimum covers it.
+    [`link on board`, `--board-link`, `--board-bg`, 4.5],
     [`number on x`, `--board-number-x`, `--board-stone-x`, 3],
     [`number on o`, `--board-number-o`, `--board-stone-o`, 3],
     [`number on x in glare`, `--board-number-x`, glaredX, 3],

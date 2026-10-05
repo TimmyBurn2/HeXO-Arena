@@ -1,0 +1,50 @@
+@layer screens {
+    /* The setup beside the weekly and the reader's own tournaments; on
+       phones the setup first, the lists after it. */
+    .duels-layout {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) var(--duel-side-w);
+        align-items: start;
+        gap: var(--space-6);
+    }
+
+    .duels-main {
+        min-width: 0;
+    }
+
+    .duels-side {
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-6);
+        min-width: 0;
+    }
+
+    .duels-side .duel-row {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .duels-side .duel-glyphs {
+        grid-column: 1;
+        grid-row: auto;
+        justify-self: start;
+    }
+
+    .duels-side .duel-figure {
+        grid-column: 1;
+        grid-row: auto;
+        font-size: var(--text-base);
+    }
+
+    .duels-side .event-figure {
+        grid-column: 1;
+        grid-row: auto;
+        justify-self: start;
+        justify-items: start;
+    }
+
+    @media (max-width: 44rem) {
+        .duels-layout {
+            grid-template-columns: minmax(0, 1fr);
+        }
+    }
+}

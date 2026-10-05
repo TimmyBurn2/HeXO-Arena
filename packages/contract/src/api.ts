@@ -116,7 +116,6 @@ export const devLoginRequestSchema = z.union([
     z.object({ name: nameSyntaxSchema }),
     z.object({ discord: discordNamesSchema, next: nextPathSchema.optional() }),
 ]);
-export type DevLoginRequest = z.infer<typeof devLoginRequestSchema>;
 
 // The literal `1` is the only legal value; absence means false.
 export const botStreamQuerySchema = z.object({ open: z.literal(`1`).optional() });
@@ -200,16 +199,6 @@ export const botListingSchema = z
         description: `The declaration fields are absent until the bot declares them, and levels and analyzer are null; about and repoUrl are the owner's from the website where set, else the declared ones.`,
     });
 export type BotListing = z.infer<typeof botListingSchema>;
-
-// The Hexo-Bot-Api error shape: `error` is human-readable prose, `code` is
-// the stable machine-readable half that callers branch on.
-export const botCreateErrorCodes = [
-    `unauthorized`,
-    `invalid_name`,
-    `name_reserved`,
-    `bot_limit`,
-    `name_taken`,
-] as const;
 
 // A declaration is shown on the bot's pages, so its text is cleaned rather
 // than refused: a bot written against an earlier contract keeps declaring,
@@ -296,7 +285,9 @@ export function botClientOf(userAgent: string | undefined): BotClient {
 export const botSettingsSchema = z
     .object({
         name: z.string(),
-        duelsByOthers: z.boolean().meta({ description: `True lets any signed-in person start a duel the bot plays; false keeps that to its owner. On until the owner turns it off.` }),
+        duelsByOthers: z.boolean().meta({
+            description: `True lets any signed-in person set up a duel or round robin the bot plays; false keeps that to its owner, and takes the bot out of those others set up. On until the owner turns it off.`,
+        }),
         about: botAboutSchema.optional().meta({ description: `The owner's text for the bot's pages, absent until set; it shows in place of the declared one.` }),
         repoUrl: botRepoUrlSchema.optional().meta({ description: `The owner's link to the bot's source, absent until set; it shows in place of the declared one.` }),
         declaredAbout: botAboutSchema.optional().meta({ description: `The text the bot declares, which shows while the owner has set none.` }),
@@ -319,7 +310,6 @@ export type BotSettingsUpdate = z.infer<typeof botSettingsUpdateSchema>;
 
 export const unauthorizedErrorCodes = [`unauthorized`] as const;
 export const notFoundErrorCodes = [`not_found`] as const;
-export const devLoginErrorCodes = [`invalid_name`, `name_reserved`, `name_taken`] as const;
 export const badRequestErrorCodes = [`bad_request`] as const;
 export const botForbiddenErrorCodes = [`banned`] as const;
 

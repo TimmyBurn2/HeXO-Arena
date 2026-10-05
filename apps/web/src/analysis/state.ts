@@ -86,8 +86,8 @@ export function floorOf(tree: MoveTree): NodeId {
     return line[Math.min(openingTurns(tree.root), line.length - 1)] ?? rootId;
 }
 
-/** Whether a node lies inside a stored game's opening, before the floor, where nothing is played. */
-export function inOpening(tree: MoveTree, id: NodeId): boolean {
+// Whether a node lies inside a stored game's opening, before the floor, where nothing is played.
+function inOpening(tree: MoveTree, id: NodeId): boolean {
     const floor = floorOf(tree);
     return id !== floor && pathTo(tree, floor).includes(id);
 }
@@ -158,8 +158,8 @@ export function deletable(tree: MoveTree, gameTurns: readonly TurnCells[], id: N
     return nodeAt(tree, id)?.kind === `turn` && !inOpening(tree, id) && !gameLineIds(tree, gameTurns).has(id);
 }
 
-/** A cell's mark: the board after it, and why the cell took no stone, if it did not. */
-export interface Marked {
+// A cell's mark: the board after it, and why the cell took no stone, if it did not.
+interface Marked {
     readonly state: AnalysisState;
     readonly refusal: TreeRefusal | null;
 }
@@ -245,8 +245,8 @@ const storedBoardSchema = z.object({
 /** A board as the browser keeps it. */
 export type StoredBoard = z.infer<typeof storedBoardSchema>;
 
-/** A board's root as the browser keeps it: a stored game by its id alone. */
-export type StoredRoot = StoredBoard[`root`];
+// A board's root as the browser keeps it: a stored game by its id alone.
+type StoredRoot = StoredBoard[`root`];
 
 /**
  * Write a board down for the browser to keep: every node in tree order, parents first and siblings in their order,

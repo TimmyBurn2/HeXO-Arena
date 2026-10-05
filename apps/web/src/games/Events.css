@@ -1,0 +1,74 @@
+@layer screens {
+    /* What a place holds and where one starts, above its lists. */
+    .events-lead {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        justify-content: space-between;
+        gap: var(--space-3) var(--space-5);
+        margin: 0 0 var(--space-4);
+    }
+
+    .events-lead .note {
+        margin: 0;
+        max-width: var(--measure);
+    }
+
+    .events-for {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: space-between;
+        gap: var(--space-2) var(--space-3);
+        margin: 0 0 var(--space-3);
+        font-weight: var(--weight-strong);
+    }
+
+    .events-sign-in {
+        margin: var(--space-5) 0;
+    }
+
+    .events-section > .section-title {
+        margin: var(--space-6) 0 var(--space-3);
+    }
+
+    .events-section > .note {
+        margin: 0;
+    }
+
+    /* The next tournament, whose entry follows it. */
+    .next-tournament {
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-2);
+        padding: var(--space-5);
+        background: var(--c-bg-raised);
+        box-shadow: inset 0 var(--border-w) 0 var(--surface-edge-hi);
+    }
+
+    .next-tournament > p {
+        margin: 0;
+    }
+
+    .next-tournament .note {
+        max-width: var(--measure);
+    }
+
+    .next-tournament-name {
+        margin: 0;
+        font-size: var(--text-xl);
+        font-weight: var(--weight-display);
+        overflow-wrap: anywhere;
+    }
+
+    /* The entry stands inside the card, under a rule of its own. */
+    .next-tournament .entry-control {
+        margin: var(--space-3) 0 0;
+        padding-top: var(--space-4);
+        box-shadow: inset 0 var(--border-w) 0 var(--c-border);
+    }
+
+    .next-tournament .entry-control .section-title {
+        margin: 0 0 var(--space-2);
+        font-size: var(--text-base);
+    }
+}

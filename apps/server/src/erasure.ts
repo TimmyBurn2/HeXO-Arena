@@ -9,37 +9,54 @@ import { users } from './db/schema';
 import type { GameRegistry } from './game-registry';
 import { deleteUser, liveBotIdsOf, type UserDeletion } from './moderation';
 import type { PresenceRegistry } from './presence';
-import type { DuelRunner } from './duel-runner';
 import type { TournamentScheduler } from './tournament-scheduler';
+import { daySeconds } from './utc-day';
 
-/** The registries a deletion ends live play on, the scheduler it withdraws entries from, and the runner whose duels it ends. */
-export interface ErasureDeps {
-    games: Pick<GameRegistry, `abortForPerson` | `abortForBot`>;
+/** The registries a bot leaves live play through. */
+export interface BotWithdrawalDeps {
+    games: Pick<GameRegistry, `abortForBot`>;
     presence: Pick<PresenceRegistry, `close`>;
     challenges: Pick<ChallengeRegistry, `withdrawFor`>;
     tournaments: Pick<TournamentScheduler, `withdraw`>;
-    duels: Pick<DuelRunner, `endForBot`>;
     analysis: { withdraw: (botId: string) => void };
+}
+
+/** Why a bot leaves live play. */
+export type BotWithdrawal = `delisted` | `banned` | `deleted`;
+
+/**
+ * Takes a bot out of its challenges, tournaments, and analysis.
+ * A delisted bot keeps its stream and live games; a banned one loses its
+ * stream, so its live games forfeit on the clock, rated, as a ban grants
+ * no unrated escape; a deleted one's live games end unrated.
+ * Answers how many live games it aborted.
+ */
+export function withdrawBot(deps: BotWithdrawalDeps, botId: string, reason: BotWithdrawal): number {
+    const aborted = reason === `deleted` ? deps.games.abortForBot(botId) : 0;
+    if (reason !== `delisted`) deps.presence.close(botId);
+    deps.analysis.withdraw(botId);
+    deps.challenges.withdrawFor(botId);
+    deps.tournaments.withdraw(botId, reason);
+    return aborted;
+}
+
+/** The registries a deletion ends live play on, and the scheduler that stops what the user set up. */
+export interface ErasureDeps extends BotWithdrawalDeps {
+    games: Pick<GameRegistry, `abortForPerson` | `abortForBot`>;
+    tournaments: Pick<TournamentScheduler, `withdraw` | `stopSetUpBy`>;
 }
 
 /**
  * Deletes a user inside the caller's transaction: their own and their
  * bots' live games end unrated, their bots leave the streams, challenges,
- * tournaments, and duels, and the account goes under the deletion policy.
+ * and tournaments, and the account goes under the deletion policy.
  * An operator's or a person's own deletion is no one's fault at the board,
  * and a clean delete would take the game rows away from under the registry.
  */
 export function eraseUser(deps: ErasureDeps, tx: Query, userId: string): UserDeletion & { aborted: number } {
     let aborted = deps.games.abortForPerson({ kind: `user`, id: userId });
-    for (const botId of liveBotIdsOf(tx, userId)) {
-        // Ended before the abort, so the duel names the deletion rather than the abort.
-        deps.duels.endForBot(botId, `deleted`);
-        aborted += deps.games.abortForBot(botId);
-        deps.presence.close(botId);
-        deps.analysis.withdraw(botId);
-        deps.challenges.withdrawFor(botId);
-        deps.tournaments.withdraw(botId, `deleted`);
-    }
+    deps.tournaments.stopSetUpBy(userId, `deleted`);
+    for (const botId of liveBotIdsOf(tx, userId)) aborted += withdrawBot(deps, botId, `deleted`);
     return { ...deleteUser(tx, userId), aborted };
 }
 
@@ -51,7 +68,7 @@ export function erasureJournalPath(databasePath: string): string {
     return join(dirname(databasePath), `erasures.jsonl`);
 }
 
-export interface JournalLog {
+interface JournalLog {
     warn(fields: object, message: string): void;
     error(fields: object, message: string): void;
 }
@@ -70,7 +87,7 @@ export class ErasureJournal {
 
     constructor(options: { path: string; keepDays: number; log: JournalLog; now?: () => number }) {
         this.#path = options.path;
-        this.#keepSeconds = options.keepDays * 86_400;
+        this.#keepSeconds = options.keepDays * daySeconds;
         this.#log = options.log;
         this.#now = options.now ?? Date.now;
     }
@@ -119,8 +136,8 @@ export class ErasureJournal {
     }
 }
 
-/** The audit actor of a deletion the boot applies again. */
-export const restoreActor = `restore`;
+// The audit actor of a deletion the boot applies again.
+const restoreActor = `restore`;
 
 /**
  * Applies every journaled deletion again to an account a restore brought

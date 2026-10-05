@@ -1,6 +1,15 @@
 import type { Page } from '@playwright/test';
 import { themes } from '../src/theme/themes';
-import { anaMe, analyzerBots, bots, brunoMe, duelBots, duelFixtures, duelGameRows, duelGameSnapshots, games as gameFixtures, heldBots, keptNames, leaderboard, liveGames, longReadings, playBots, rivalry, signup, tournaments, world, type World } from './mock-api';
+import { anaMe, analyzerBots, bots, brunoMe, duelBots, duelGameRows, duelGameSnapshots, games as gameFixtures, heldBots, keptNames, leaderboard, liveGames, longReadings, longTest, playBots, rivalry, roundRobins, signup, tournamentGameRows, tournaments, world, type World } from './mock-api';
+
+/** Screenshots are for a person to look at, so a run takes them only when E2E_SHOTS=1 asks. */
+export const capturing = process.env.E2E_SHOTS === `1`;
+
+/**
+ * Marks a test that sweeps widths, looks, or text sizes past the default
+ * look at a desktop and a phone width; CI's browser job leaves these out.
+ */
+export const sweep = { tag: `@sweep` };
 
 /** A named look the whole site can wear. */
 export interface Look {
@@ -48,12 +57,10 @@ export interface Shot {
     after?: (page: Page) => Promise<void>;
     // Extra preferences this state needs before the app boots.
     storage?: Record<string, string>;
-    // A board or the theme swatches are on screen, so every look is
-    // captured; elsewhere a look changes only surface and text tokens,
-    // which the contrast gate holds pair by pair and step by step, so the
-    // default look stands for all.
-    // A list names the widths the other looks take, the default look taking every one.
-    board?: true | readonly Viewport[];
+    // A board or the theme swatches are on screen, so a capture in every
+    // look shows how each draws them; elsewhere a look changes only surface
+    // and text tokens, so the default look's capture stands for all.
+    board?: true;
     // Widths other than the matrix's own.
     viewports?: readonly Viewport[];
     // A page read top to bottom is captured whole, so one shot shows every part.
@@ -163,30 +170,28 @@ const duelViewports: readonly Viewport[] = [
     { name: `phone`, width: 390, height: 844 },
 ];
 const laptopOnly: readonly Viewport[] = [{ name: `laptop`, width: 1280, height: 900 }];
-const allDuels = Object.values(duelFixtures).filter((duel) => duel.id !== duelFixtures.testLive.id);
-// ana's bots and everyone else's, the live duel and the past ones listed.
-const dueling = (overrides: Partial<World> = {}) => world({ me: anaMe, bots: duelBots, duels: structuredClone(allDuels), live: [], ...overrides });
-
-async function addBot(page: Page, slot: `first` | `second`, name: string): Promise<void> {
-    await page.getByRole(`button`, { name: `Add a bot, ${slot === `first` ? `First` : `Second`} bot` }).click();
-    const dialog = page.locator(`dialog.duel-picker[open]`);
+// The matrix's widths and a laptop's, for a screen the duel and tournament mockups show at 1280.
+const withLaptop: readonly Viewport[] = [...laptopOnly, ...viewports];
+/** Checks bots in the setup's bot list and adds them, the list closing. */
+export async function pickBots(page: Page, names: readonly string[]): Promise<void> {
+    await page.locator(`.rr-card .slot-empty-add`).first().click();
+    const dialog = page.locator(`dialog.rr-picker[open]`);
     await dialog.waitFor();
-    await dialog.getByRole(`button`, { name: new RegExp(`^${name}\\b`, `u`) }).dblclick();
+    for (const name of names) await dialog.getByRole(`button`, { name: new RegExp(`^${name}\\b`, `u`) }).click();
+    await dialog.getByRole(`button`, { name: /^Add \d+ bots?$/u }).click();
     await dialog.waitFor({ state: `detached` });
 }
 
-// A duel's page in every look at a laptop's width, since it draws boards, and in the default look on a phone.
-function duelPage(name: string, path: string, state: World, ready: string): Shot {
-    return { name, path, world: state, ready, framed: true, board: laptopOnly, viewports: duelViewports };
-}
+// ana's bots and everyone else's, the weekly waiting, and the duels and round robins people set up.
+const robins = (overrides: Partial<World> = {}) => world({ me: anaMe, bots: duelBots, tournaments: [...structuredClone(tournaments().filter((entry) => entry.status !== `running`)), ...structuredClone(roundRobins())], live: [], ...overrides });
 
 export const shots: readonly Shot[] = [
-    { name: `duels-empty`, path: `/play/duels`, world: dueling(), ready: `.duel-card`, framed: true, viewports: duelViewports },
+    { name: `home-duel`, path: `/`, world: robins({ live: liveGames.slice(1, 2) }), ready: `.home-duel`, framed: true, viewports: duelViewports },
     {
-        name: `duels-picker`,
-        path: `/play/duels`,
-        world: dueling(),
-        ready: `.duel-card`,
+        name: `home-duel-picker`,
+        path: `/`,
+        world: robins({ live: liveGames.slice(1, 2) }),
+        ready: `.home-duel`,
         framed: true,
         viewports: duelViewports,
         after: async (page) => {
@@ -195,111 +200,42 @@ export const shots: readonly Shot[] = [
         },
     },
     {
-        name: `duels-ready`,
-        path: `/play/duels?first=Pistol1`,
-        world: dueling(),
-        ready: `.slot-filled`,
+        name: `home-duel-ready`,
+        path: `/`,
+        world: robins({ live: liveGames.slice(1, 2) }),
+        ready: `.home-duel`,
         framed: true,
         viewports: duelViewports,
-        fullPage: true,
         after: async (page) => {
-            await page.getByLabel(`Strength`).first().selectOption(`club`);
-            await addBot(page, `second`, `devbot-a`);
+            for (const name of [`hextide`, `devbot-a`]) {
+                await page.locator(`.home-duel .slot-empty-add`).first().click();
+                const dialog = page.locator(`dialog.duel-picker[open]`);
+                await dialog.getByRole(`button`, { name: new RegExp(`^${name}\\b`, `u`) }).dblclick();
+                await dialog.waitFor({ state: `detached` });
+            }
             await page.getByRole(`button`, { name: `Start duel` }).waitFor();
         },
     },
+    { name: `home-tournament`, path: `/`, world: world({ live: liveGames.slice(1, 2) }), ready: `.home-block-foot`, framed: true, viewports: duelViewports, fullPage: true },
+    { name: `bot-page-events`, path: `/bots/devbot-b`, world: robins(), ready: `.bot-duels .place-row`, framed: true, viewports: duelViewports },
     {
-        name: `duels-test`,
-        path: `/play/duels?first=pebble`,
-        world: dueling(),
-        ready: `.slot-filled`,
-        framed: true,
-        viewports: duelViewports,
-        fullPage: true,
-        after: async (page) => {
-            await addBot(page, `second`, `cinder`);
-            await page.getByRole(`button`, { name: `Start test` }).waitFor();
-        },
-    },
-    { name: `duels-signed-out`, path: `/play/duels`, world: dueling({ me: null }), ready: `.discord-button`, framed: true, viewports: duelViewports },
-    {
-        name: `duels-refused`,
-        path: `/play/duels?first=hextide`,
-        world: dueling({ duelStart: { status: 400, code: `duel_busy` } }),
-        ready: `.slot-filled`,
-        framed: true,
-        viewports: duelViewports,
-        after: async (page) => {
-            await addBot(page, `second`, `devbot-a`);
-            await page.getByRole(`button`, { name: `Start duel` }).click();
-            await page.locator(`.start-refusal`).waitFor();
-        },
-    },
-    {
-        name: `duels-gone`,
-        path: `/play/duels?first=driftwood`,
-        world: dueling(),
-        ready: `.slot-warn`,
-        framed: true,
-        viewports: duelViewports,
-    },
-    {
-        name: `duels-none-ready`,
-        path: `/play/duels`,
-        world: dueling({ bots: duelBots.map((bot) => (bot.name === `hextide` ? bot : { ...bot, online: false })) }),
-        ready: `.empty`,
-        framed: true,
-        viewports: duelViewports,
-    },
-    {
-        name: `duels-tests`,
-        path: `/play/duels`,
-        world: dueling(),
-        ready: `.duel-card`,
-        framed: true,
-        viewports: duelViewports,
-        after: async (page) => {
-            await page.getByRole(`button`, { name: `Tests` }).click();
-            await page.locator(`#recent-duels`).waitFor();
-            await page.getByText(`hextide won all 20; stronger`).waitFor();
-        },
-    },
-    duelPage(`duel-live`, `/play/duels/${duelFixtures.live.id}`, dueling({ me: brunoMe }), `.duel-head .score-hex`),
-    duelPage(`duel-finished`, `/play/duels/${duelFixtures.rated.id}`, dueling(), `.duel-head .score-hex`),
-    duelPage(`duel-test`, `/play/duels/${duelFixtures.test.id}`, dueling(), `.estimate`),
-    duelPage(`duel-test-live`, `/play/duels/${duelFixtures.testLive.id}`, dueling({ duels: [structuredClone(duelFixtures.testLive)] }), `.estimate`),
-    duelPage(`duel-cut-short`, `/play/duels/${duelFixtures.cutShort.id}`, dueling(), `.duel-head .score-hex`),
-    {
-        name: `duel-stopping`,
-        path: `/play/duels/${duelFixtures.live.id}`,
-        world: dueling({ me: brunoMe }),
-        ready: `.duel-head`,
-        framed: true,
-        viewports: duelViewports,
-        after: async (page) => {
-            await page.getByRole(`button`, { name: `Stop duel` }).click();
-            await page.getByRole(`button`, { name: `Keep playing` }).waitFor();
-        },
-    },
-    { name: `duel-missing`, path: `/play/duels/d_nothingthere`, world: dueling(), ready: `.empty`, framed: true, viewports: duelViewports },
-    { name: `home-duel`, path: `/`, world: dueling({ live: liveGames.slice(1, 2) }), ready: `.home-duel`, framed: true, viewports: duelViewports },
-    { name: `bot-page-duels`, path: `/bots/Pistol1`, world: dueling(), ready: `.bot-duels`, framed: true, viewports: duelViewports },
-    {
-        name: `games-duels`,
+        name: `games-events`,
         path: `/games`,
-        world: dueling({ finished: [...duelGameRows, ...keptNames] }),
-        ready: `.game-row-cap`,
+        world: robins({ finished: [...duelGameRows, ...tournamentGameRows, ...keptNames] }),
+        ready: `.game-row-event`,
         framed: true,
         viewports: duelViewports,
         storage: { 'hexo-arena.tests.v1': `on` },
     },
+    { name: `profile-events`, path: `/profile`, world: robins(), ready: `.your-duels .duel-row`, framed: true, viewports: duelViewports, fullPage: true },
+    { name: `bot-page-tournaments`, path: `/bots/hextide`, world: world(), ready: `.place-row`, framed: true, viewports: duelViewports, fullPage: true },
     ...([
         [`game-drawer-duel`, `duel-game`],
         [`game-drawer-test`, `test-game`],
     ] as const).map(([name, id]): Shot => ({
         name,
         path: `/game/${id}`,
-        world: dueling({ games: { ...structuredClone(gameFixtures), ...structuredClone(duelGameSnapshots) }, duels: structuredClone(Object.values(duelFixtures)) }),
+        world: robins({ games: { ...structuredClone(gameFixtures), ...structuredClone(duelGameSnapshots) } }),
         ready: `svg polygon.cell`,
         framed: false,
         viewports: laptopOnly,
@@ -307,10 +243,10 @@ export const shots: readonly Shot[] = [
             await page.keyboard.press(`m`);
             await page.locator(`#drawer-body:not([hidden])`).waitFor();
             await page.getByRole(`tab`, { name: `Game` }).click();
-            await page.locator(`.facts a[href^="/play/duels/"]`).waitFor();
+            await page.locator(`.facts a[href^="/tournaments/"]`).waitFor();
         },
     })),
-    { name: `bot-page-duels-owner`, path: `/bots/Pistol1`, world: dueling({ me: brunoMe }), ready: `#duels-by-others`, framed: true, viewports: duelViewports, fullPage: true },
+    { name: `bot-page-duels-owner`, path: `/bots/Pistol1`, world: robins({ me: brunoMe }), ready: `#duels-by-others`, framed: true, viewports: duelViewports, fullPage: true },
 
     { name: `home`, path: `/`, world: world({ live: liveGames, finished: keptNames }), ready: `.featured`, framed: true, board: true },
     { name: `home-few`, path: `/`, world: world({ live: liveGames.slice(1, 2), leaderboard: [] }), ready: `.featured`, framed: true, board: true },
@@ -325,15 +261,157 @@ export const shots: readonly Shot[] = [
     },
     { name: `home-loading`, path: `/`, world: world({ stall: true }), ready: `.featured-skeleton`, framed: true },
     { name: `home-error`, path: `/`, world: world({ broken: true }), ready: `.build-band.wide`, framed: true },
-    { name: `ladder`, path: `/ladder`, world: world(), ready: `.podium-plate`, framed: true, board: true },
+    { name: `ladder`, path: `/ladder`, world: world(), ready: `.podium-plate`, framed: true, board: true, viewports: withLaptop },
     { name: `ladder-all-time`, path: `/ladder?active=all`, world: world(), ready: `.podium-plate`, framed: true },
-    { name: `tournaments`, path: `/tournaments`, world: world({ tournaments }), ready: `.tournament-row`, framed: true },
-    { name: `tournaments-none`, path: `/tournaments`, world: world({ tournaments: [] }), ready: `.empty`, framed: true },
-    { name: `tournament-waiting`, path: `/tournaments/t_wintercup202`, world: world(), ready: `.entry-pick`, framed: true },
-    { name: `tournament-waiting-signed-out`, path: `/tournaments/t_wintercup202`, world: signedOut, ready: `.entry-sign-in`, framed: true },
-    { name: `tournament-running`, path: `/tournaments/t_autumnrobin1`, world: world({ live: liveGames, tournaments }), ready: `.xt`, framed: true, board: true },
-    { name: `tournament-finished`, path: `/tournaments/t_summercup202`, world: world(), ready: `.podium-plate`, framed: true, board: true },
-    { name: `tournament-called-off`, path: `/tournaments/t_raincup20261`, world: world(), ready: `.tournament-status`, framed: true },
+    { name: `tournaments`, path: `/games/tournaments`, world: world({ tournaments: tournaments() }), ready: `.tournament-row-enter`, framed: true, viewports: duelViewports },
+    { name: `tournaments-signed-out`, path: `/games/tournaments`, world: world({ me: null, tournaments: tournaments() }), ready: `.tournament-row`, framed: true, viewports: duelViewports },
+    { name: `tournaments-none`, path: `/games/tournaments`, world: world({ tournaments: [] }), ready: `#tournaments-past + .note`, framed: true, viewports: duelViewports },
+    { name: `play-tournament`, path: `/play/tournament`, world: world({ tournaments: tournaments() }), ready: `.next-tournament .entry-pick`, framed: true, viewports: duelViewports, fullPage: true },
+    { name: `play-tournament-signed-out`, path: `/play/tournament`, world: world({ me: null, tournaments: tournaments() }), ready: `.next-tournament .entry-sign-in`, framed: true, viewports: duelViewports, fullPage: true },
+    { name: `play-tournament-none`, path: `/play/tournament`, world: world({ tournaments: tournaments().filter((entry) => entry.status !== `scheduled`) }), ready: `.weekly-block p.note`, framed: true, viewports: duelViewports },
+    {
+        name: `games-one-duel`,
+        path: `/games?event=tournament&tournament=t_brunoduel001`,
+        world: robins({ finished: [...duelGameRows, ...tournamentGameRows, ...keptNames] }),
+        ready: `.chip`,
+        framed: true,
+        viewports: duelViewports,
+        after: async (page) => {
+            await page.getByRole(`button`, { name: `Remove duel devbot-b vs devbot-c` }).waitFor();
+            await page.getByRole(`button`, { name: /^Filters/u }).click();
+            await page.locator(`#games-tournament option:checked`).waitFor({ state: `attached` });
+        },
+    },
+    {
+        name: `games-one-round`,
+        path: `/games?event=tournament&tournament=t_autumnrobin1&round=2`,
+        world: world({ tournaments: tournaments(), finished: [...tournamentGameRows, ...keptNames] }),
+        ready: `.game-row`,
+        framed: true,
+        viewports: duelViewports,
+        after: async (page) => {
+            await page.getByRole(`button`, { name: `Remove round 2` }).waitFor();
+            await page.getByRole(`button`, { name: `Remove Autumn round robin` }).waitFor();
+        },
+    },
+    { name: `rr-setup-empty`, path: `/play/tournament`, world: robins(), ready: `.rr-card .slot-empty`, framed: true, viewports: duelViewports, fullPage: true },
+    { name: `rr-setup-signed-out`, path: `/play/tournament`, world: robins({ me: null }), ready: `.rr-card .discord-sign-in`, framed: true, viewports: duelViewports, fullPage: true },
+    {
+        name: `rr-setup-picker`,
+        path: `/play/tournament`,
+        world: robins(),
+        ready: `.rr-card .slot-empty`,
+        framed: true,
+        viewports: duelViewports,
+        after: async (page) => {
+            await page.getByRole(`button`, { name: `Add bots`, exact: true }).click();
+            const dialog = page.locator(`dialog.rr-picker[open]`);
+            for (const name of [`hextide`, `Pistol1`, `devbot-a`]) await dialog.getByRole(`button`, { name: new RegExp(`^${name}\\b`, `u`) }).click();
+        },
+    },
+    {
+        name: `rr-setup-ready`,
+        path: `/play/tournament`,
+        world: robins(),
+        ready: `.rr-card .slot-empty`,
+        framed: true,
+        viewports: duelViewports,
+        fullPage: true,
+        after: async (page) => {
+            await pickBots(page, [`hextide`, `Pistol1`, `devbot-c`, `devbot-a`, `quietlake`]);
+        },
+    },
+    {
+        name: `rr-setup-one`,
+        path: `/play/tournament`,
+        world: robins(),
+        ready: `.rr-card .slot-empty`,
+        framed: true,
+        viewports: duelViewports,
+        after: async (page) => {
+            await pickBots(page, [`devbot-a`]);
+        },
+    },
+    {
+        name: `event-duel-setup`,
+        path: `/play/tournament?games=10`,
+        world: robins(),
+        ready: `.rr-card .slot-empty`,
+        framed: true,
+        viewports: duelViewports,
+        fullPage: true,
+        after: async (page) => {
+            await pickBots(page, [`devbot-a`, `devbot-c`]);
+        },
+    },
+    { name: `event-duel-live`, path: `/tournaments/t_brunoduel001`, world: robins(), ready: `.score-hex`, framed: true, board: true, viewports: duelViewports, fullPage: true },
+    { name: `event-duel-test`, path: `/tournaments/t_anaduel00001`, world: robins(), ready: `.estimate`, framed: true, viewports: duelViewports, fullPage: true },
+    { name: `event-duel-test-live`, path: `/tournaments/t_analongtest1`, world: robins({ tournaments: [...roundRobins(), longTest()] }), ready: `.estimate`, framed: true, viewports: duelViewports, fullPage: true },
+    { name: `event-duel-cut`, path: `/tournaments/t_dmitricut001`, world: robins(), ready: `.duel-status`, framed: true, viewports: duelViewports, fullPage: true },
+    {
+        name: `event-duel-stopping`,
+        path: `/tournaments/t_brunoduel001`,
+        world: robins({ me: brunoMe }),
+        ready: `.score-hex`,
+        framed: true,
+        viewports: duelViewports,
+        after: async (page) => {
+            await page.getByRole(`button`, { name: `Stop duel` }).click();
+            await page.getByRole(`button`, { name: `Keep playing` }).waitFor();
+        },
+    },
+    {
+        name: `event-duel-test-setup`,
+        path: `/play/tournament`,
+        world: robins(),
+        ready: `.rr-card .slot-empty`,
+        framed: true,
+        viewports: duelViewports,
+        fullPage: true,
+        after: async (page) => {
+            await pickBots(page, [`pebble`, `cinder`]);
+            await page.getByRole(`button`, { name: `Start test` }).waitFor();
+        },
+    },
+    {
+        name: `event-duel-refused`,
+        path: `/play/tournament?bots=hextide%2Cdevbot-a`,
+        world: robins({ tournamentStart: { status: 400, code: `tournament_busy` } }),
+        ready: `.rr-card .slot-filled`,
+        framed: true,
+        viewports: duelViewports,
+        after: async (page) => {
+            await page.getByRole(`button`, { name: `Start duel` }).click();
+            await page.locator(`.start-refusal`).waitFor();
+        },
+    },
+    { name: `event-missing`, path: `/tournaments/d_nothingthere`, world: robins(), ready: `.empty`, framed: true, viewports: duelViewports },
+    {
+        name: `rr-setup-test`,
+        path: `/play/tournament`,
+        world: robins(),
+        ready: `.rr-card .slot-empty`,
+        framed: true,
+        viewports: duelViewports,
+        fullPage: true,
+        after: async (page) => {
+            await pickBots(page, [`hextide`, `cinder`, `pebble`]);
+        },
+    },
+    { name: `rr-live`, path: `/tournaments/t_brunorobin01`, world: robins(), ready: `.rr-wait`, framed: true, board: true, viewports: duelViewports, fullPage: true },
+    { name: `rr-finished`, path: `/tournaments/t_brunorobin02`, world: robins(), ready: `.podium-plate`, framed: true, board: true, viewports: duelViewports, fullPage: true },
+    { name: `rr-stopped`, path: `/tournaments/t_brunorobin03`, world: robins(), ready: `.tournament-status`, framed: true, viewports: duelViewports, fullPage: true },
+    { name: `rr-test`, path: `/tournaments/t_anatest00001`, world: robins(), ready: `.rr-estimates`, framed: true, viewports: duelViewports, fullPage: true },
+    { name: `rr-tournaments`, path: `/games/tournaments`, world: robins(), ready: `.duel-row .event-figure`, framed: true, viewports: duelViewports, fullPage: true },
+    { name: `rr-tournaments-tests`, path: `/games/tournaments?list=tests`, world: robins(), ready: `.duel-row`, framed: true, viewports: duelViewports },
+    { name: `rr-tournaments-yours`, path: `/games/tournaments?list=yours`, world: robins(), ready: `.duel-row .event-row-yours`, framed: true, viewports: duelViewports, fullPage: true },
+    { name: `rr-tournaments-bot`, path: `/games/tournaments?bot=hextide`, world: robins(), ready: `.events-for`, framed: true, viewports: duelViewports },
+    { name: `rr-tournaments-yours-signed-out`, path: `/games/tournaments?list=yours`, world: robins({ me: null }), ready: `.events-sign-in`, framed: true, viewports: duelViewports },
+    { name: `tournament-waiting`, path: `/tournaments/t_wintercup202`, world: world(), ready: `.entry-pick`, framed: true, viewports: withLaptop },
+    { name: `tournament-waiting-signed-out`, path: `/tournaments/t_wintercup202`, world: signedOut, ready: `.entry-sign-in`, framed: true, viewports: withLaptop },
+    { name: `tournament-running`, path: `/tournaments/t_autumnrobin1`, world: world({ live: liveGames, tournaments: tournaments() }), ready: `.xt`, framed: true, board: true, viewports: withLaptop },
+    { name: `tournament-finished`, path: `/tournaments/t_summercup202`, world: world(), ready: `.podium-plate`, framed: true, board: true, viewports: withLaptop },
+    { name: `tournament-called-off`, path: `/tournaments/t_raincup20261`, world: world(), ready: `.tournament-status`, framed: true, viewports: withLaptop },
     { name: `ladder-two`, path: `/ladder`, world: world({ leaderboard: leaderboard.slice(0, 2) }), ready: `.podium-plate`, framed: true },
     { name: `ladder-one`, path: `/ladder`, world: world({ leaderboard: leaderboard.slice(0, 1) }), ready: `.podium-plate`, framed: true },
     {
@@ -380,11 +458,8 @@ export const shots: readonly Shot[] = [
         viewports: panelViewports,
     },
     { name: `menu-guest`, path: `/connect`, world: guest, ready: `h1`, framed: true, after: openIdentity, viewports: panelViewports },
-    { name: `signin-expired`, path: `/?signin=expired`, world: signedOut, ready: `.featured`, framed: true },
+    // The longest sign-in failure, and the one that links, stands for the banner's other lines.
     { name: `signin-banned`, path: `/?signin=banned`, world: signedOut, ready: `.featured`, framed: true },
-    { name: `signin-cancelled`, path: `/connect?signin=cancelled`, world: signedOut, ready: `.site-banner`, framed: true },
-    { name: `signin-rejected`, path: `/bots?signin=rejected`, world: signedOut, ready: `table`, framed: true },
-    { name: `signin-busy`, path: `/play?signin=busy`, world: playing({ me: null }), ready: `.site-banner`, framed: true },
     { name: `ladder-loading`, path: `/ladder`, world: world({ stall: true }), ready: `.skeleton`, framed: true },
     { name: `ladder-error`, path: `/ladder`, world: world({ broken: true }), ready: `.empty`, framed: true },
     { name: `ladder-rate-limited`, path: `/ladder`, world: world({ limited: `reads` }), ready: `.empty .note`, framed: true },
@@ -1044,8 +1119,10 @@ export const shots: readonly Shot[] = [
     { name: `play-loading`, path: `/play`, world: playing({ stall: true }), ready: `.skeleton`, framed: true },
     { name: `play-paused`, path: `/play?bot=devbot-c`, world: playing({ paused: true }), ready: `.play-setup`, framed: true },
     { name: `play-paused-signed-out`, path: `/play?bot=devbot-c`, world: playing({ paused: true, me: null }), ready: `.play-setup`, framed: true },
+    // A refusal stands for every other its kind shows in the same place, by the longest of their lines:
+    // a wait with its countdown, the guest's wait, the cap with its games, a line naming the bot, and the ended session.
+    // The unit tests hold each line's words.
     refusedStart(`play-cooldown`, 429, `game_cooldown`, `/play?bot=devbot-c`, 42),
-    refusedStart(`play-rate-limited`, 429, `rate_limited`, `/play?bot=devbot-c`, 42),
     {
         name: `play-guest-rate-limited`,
         path: `/play?bot=devbot-c`,
@@ -1058,12 +1135,7 @@ export const shots: readonly Shot[] = [
         },
     },
     refusedStart(`play-human-busy`, 400, `human_busy`),
-    refusedStart(`play-bot-busy`, 400, `bot_busy`),
     refusedStart(`play-clock-not-accepted`, 400, `clock_not_accepted`),
-    refusedStart(`play-not-open`, 400, `not_open`),
-    refusedStart(`play-delisted`, 403, `delisted`),
-    refusedStart(`play-not-found`, 404, `not_found`),
-    refusedStart(`play-failed`, 500, `internal`),
     {
         name: `play-stale`,
         path: `/play?bot=devbot-c`,
@@ -1073,17 +1145,6 @@ export const shots: readonly Shot[] = [
         after: async (page) => {
             await page.getByRole(`button`, { name: `Start game` }).click();
             await page.locator(`.start-area .warn`).waitFor();
-        },
-    },
-    {
-        name: `play-guest-limit`,
-        path: `/play?bot=devbot-c`,
-        world: playing({ me: null, guestLimit: true }),
-        ready: `.play-setup`,
-        framed: true,
-        after: async (page) => {
-            await page.getByRole(`button`, { name: `Play as guest` }).click();
-            await page.locator(`.start-lines p`).first().waitFor();
         },
     },
     { name: `credits`, path: `/credits`, world: world(), ready: `h1`, framed: true, board: true },
@@ -1102,6 +1163,8 @@ export const shots: readonly Shot[] = [
         ready: `.field-ok`,
         framed: true,
     },
+    // A refusal under the name stands for the shorter ones there, and the ended sign-in that tried too many names
+    // for the one that expired.
     {
         name: `welcome-invalid`,
         path: `/welcome`,
@@ -1110,27 +1173,6 @@ export const shots: readonly Shot[] = [
         framed: true,
         after: async (page) => {
             await typeName(page, `mira.hex`);
-        },
-    },
-    {
-        name: `welcome-reserved`,
-        path: `/welcome`,
-        world: welcoming(),
-        ready: `.field-ok`,
-        framed: true,
-        after: async (page) => {
-            await typeName(page, `admin`);
-        },
-    },
-    {
-        name: `welcome-taken`,
-        path: `/welcome`,
-        world: welcoming({ create: `name_taken` }),
-        ready: `.field-ok`,
-        framed: true,
-        after: async (page) => {
-            await createAccount(page);
-            await page.getByText(`That name is taken`).waitFor();
         },
     },
     {
@@ -1155,7 +1197,6 @@ export const shots: readonly Shot[] = [
             await page.getByText(`The account was not created; try again`).waitFor();
         },
     },
-    { name: `welcome-expired`, path: `/welcome`, world: welcoming({ signup: null }), ready: `.welcome-ended`, framed: true },
     { name: `welcome-signed-in`, path: `/welcome`, world: world({ signup: null }), ready: `.identity-plate`, framed: true },
     {
         name: `welcome-limit`,

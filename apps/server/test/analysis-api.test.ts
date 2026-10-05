@@ -290,7 +290,7 @@ describe('clearing a position for an engine in the browser', () => {
 
     it(`holds one client to ${String(positionCheckLimit.burst)} at once, then refuses with the wait, apart from other clients`, async () => {
         // Behind a proxy the forwarded address names the client, as in a deployment.
-        const proxied = await createTestApp({ logger: false, trustedProxy: `127.0.0.1` });
+        const proxied = await createTestApp({ trustedProxy: `127.0.0.1` });
         try {
             const from = (address: string) => proxied.app.inject({ method: `POST`, url: analysisCheckPath, payload: { cells: quiet, toMove: `x` }, headers: { 'x-forwarded-for': address } });
             for (let sent = 0; sent < positionCheckLimit.burst; sent += 1) expect((await from(`203.0.113.9`)).statusCode).toBe(204);

@@ -58,6 +58,12 @@
         text-decoration: none;
     }
 
+    /* A game's ring falls on the board's ground, where the page's focus
+       color can vanish. */
+    .xt-game:focus-visible {
+        outline-color: var(--board-link);
+    }
+
     .xt-hex {
         display: block;
         width: var(--xt-hex-w);

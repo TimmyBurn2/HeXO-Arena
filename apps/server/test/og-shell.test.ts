@@ -5,7 +5,6 @@ import {
     botsMeta,
     connectMeta,
     creditsMeta,
-    duelsMeta,
     gamesMeta,
     gamesPath,
     gameSnapshotSchema,
@@ -14,8 +13,10 @@ import {
     legalPagePath,
     legalPages,
     liveGamesMeta,
+    playTournamentMeta,
     tournamentsMeta,
     logoutPath,
+    movedPages,
     notFoundMeta,
     profileMeta,
     reportFormMetaName,
@@ -127,8 +128,17 @@ describe('the og shell routes', () => {
         expect(response.meta.ogDescription).toBe(`1 bot listed, 1 online`);
     });
 
+    it('answers every page of the table with the shell, and every moved address with its new one', async () => {
+        for (const route of shellRoutes) {
+            const url = route.replace(/:\w+/gu, `x`);
+            const response = await arena.app.inject({ method: `GET`, url });
+            if (movedPages.some((moved) => moved.from === route)) expect(response.statusCode, url).toBe(301);
+            else expect(response.headers[`content-type`], url).toBe(`text/html; charset=utf-8`);
+        }
+    });
+
     it('carries the site icon at its size and the site name on every shell route, found or not', async () => {
-        for (const url of [`/`, `/play`, `/play?bot=nobody`, `/analysis`, `/analysis?game=g_nothing`, `/ladder`, `/bots`, `/bots/nobody`, `/game/g_nothing`, `/games`, `/games/live`, `/tournaments`, `/tournaments/t_aaaaaaaaaaaa`, `/play/duels`, `/play/duels/d_aaaaaaaaaaaa`, `/connect`, `/profile`, `/credits`, `/welcome`, ...legalPages.map(legalPagePath)]) {
+        for (const url of [`/`, `/play`, `/play?bot=nobody`, `/analysis`, `/analysis?game=g_nothing`, `/ladder`, `/bots`, `/bots/nobody`, `/game/g_nothing`, `/games`, `/games/live`, `/games/tournaments`, `/tournaments/t_aaaaaaaaaaaa`, `/tournaments/d_aaaaaaaaaaaa`, `/play/tournament`, `/connect`, `/profile`, `/credits`, `/welcome`, ...legalPages.map(legalPagePath)]) {
             const response = await arena.app.inject({ method: `GET`, url });
             expect(response.body).toContain(`<meta property="og:image" content="https://arena.example/icon-512.png" />`);
             expect(response.body).toContain(`<meta property="og:image:width" content="512" />`);
@@ -160,8 +170,8 @@ describe('the og shell routes', () => {
             [`/bots`, botsMeta],
             [`/games`, gamesMeta],
             [`/games/live`, liveGamesMeta],
-            [`/play/duels`, duelsMeta],
-            [`/tournaments`, tournamentsMeta],
+            [`/games/tournaments`, tournamentsMeta],
+            [`/play/tournament`, playTournamentMeta],
             [`/connect`, connectMeta],
             [`/profile`, profileMeta],
             [`/credits`, creditsMeta],
@@ -356,21 +366,44 @@ describe('the og shell routes', () => {
         expect((await shell(`/tournaments/nope`)).status).toBe(404);
     });
 
-    it('previews a duel by its bots, kind, length, clock, and how it stands, and answers 404 for an unknown one', async () => {
+    it('previews a duel by its bots, kind, length, who set it up, and how it stands, under a duel\'s kept id too, and answers 404 for an unknown one', async () => {
         await openBot(`sealbot`);
         await openBot(`otterbot`);
-        const ids = [`sealbot`, `otterbot`].map((name) => (arena.sqlite.prepare(`select id from bots where name = ?`).get(name) as { id: string }).id).sort();
+        const bot = (name: string) => arena.sqlite.prepare(`select id, owner_id as ownerId from bots where name = ?`).get(name) as { id: string; ownerId: string };
+        const [seal, otter] = [bot(`sealbot`), bot(`otterbot`)];
         arena.sqlite
             .prepare(
-                `insert into duels (id, bot_a_id, bot_b_id, a_first, a_x, test, games, time_control, opening_plies, a_rating, b_rating, rated, status, created_at) values ('d_aaaaaaaaaaaa', ?, ?, 1, 1, 0, 4, '{"mode":"turn","turnTimeMs":10000}', 5, 1500, 1500, 0, 'running', 1)`,
+                `insert into tournaments (id, name, status, starts_at, time_control, opening_plies, max_entrants, created_at, started_at, origin, created_by, rated, games_per_pair, live_slot) values ('d_aaaaaaaaaaaa', null, 'running', 1, '{"mode":"turn","turnTimeMs":10000}', 5, 2, 1, 1, 'person', ?, 0, 4, 1)`,
             )
-            .run(...ids);
-        const running = await shell(`/play/duels/d_aaaaaaaaaaaa`);
+            .run(seal.ownerId);
+        const entry = arena.sqlite.prepare(`insert into tournament_entries (tournament_id, bot_id, owner_id, state, rating_at_start, entered_at, origin, seat) values ('d_aaaaaaaaaaaa', ?, ?, 'playing', 1500, 1, 'person', ?)`);
+        entry.run(seal.id, seal.ownerId, 1);
+        entry.run(otter.id, otter.ownerId, 2);
+        arena.sqlite
+            .prepare(`insert into tournament_pairings (id, tournament_id, round, first_bot_id, second_bot_id, leg, games_per_pair) values ('p_seal1', 'd_aaaaaaaaaaaa', 1, ?, ?, 1, 4), ('p_seal2', 'd_aaaaaaaaaaaa', 1, ?, ?, 2, 4)`)
+            .run(seal.id, otter.id, seal.id, otter.id);
+        const running = await shell(`/tournaments/d_aaaaaaaaaaaa`);
         expect(running.status).toBe(200);
-        expect(running.meta.ogTitle).toMatch(/^(sealbot vs otterbot|otterbot vs sealbot) - HeXO Arena$/u);
-        expect(running.meta.ogDescription).toBe(`Duel of 4 games between two bots, turn clock 10 s; running, level at 0-0`);
-        expect((await shell(`/play/duels/d_bbbbbbbbbbbb`)).status).toBe(404);
-        expect((await shell(`/play/duels/nope`)).status).toBe(404);
+        expect(running.meta.ogTitle).toBe(`sealbot vs otterbot - HeXO Arena`);
+        expect(running.meta.ogDescription).toBe(`Bot duel of 4 games between two bots, set up by sealbotowner; running, level at 0-0; unrated`);
+        expect((await shell(`/tournaments/d_bbbbbbbbbbbb`)).status).toBe(404);
+    });
+
+    it('sends a page that moved on to its new address for good, a duel by its id, its query read as the new page reads it', async () => {
+        for (const [from, to] of [
+            [`/duels/d_aaaaaaaaaaaa`, `/tournaments/d_aaaaaaaaaaaa`],
+            [`/play/duels/d_aaaaaaaaaaaa`, `/tournaments/d_aaaaaaaaaaaa`],
+            [`/play/duels/d_aaaaaaaaaaaa?from=old`, `/tournaments/d_aaaaaaaaaaaa?from=old`],
+            [`/play/duels/a%20b`, `/tournaments/a%20b`],
+            [`/play/duels?first=sealbot&second=otterbot&games=4`, `/play/tournament?bots=sealbot%2Cotterbot&games=4`],
+            [`/games/duels?list=tests`, `/games/tournaments?list=tests`],
+            [`/duels`, `/games/tournaments`],
+            [`/tournaments`, `/games/tournaments`],
+        ] as const) {
+            const response = await arena.app.inject({ method: `GET`, url: from });
+            expect(response.statusCode, from).toBe(301);
+            expect(response.headers.location, from).toBe(to);
+        }
     });
 });
 

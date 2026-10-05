@@ -63,7 +63,7 @@ describe('admin status', () => {
     let world: TestApp;
 
     beforeEach(async () => {
-        world = await createTestApp({ logger: false });
+        world = await createTestApp();
     });
 
     afterEach(async () => {
@@ -122,7 +122,7 @@ describe('pause and resume', () => {
     let world: TestApp;
 
     beforeEach(async () => {
-        world = await createTestApp({ logger: false, random: () => 0.1 });
+        world = await createTestApp({ random: () => 0.1 });
     });
 
     afterEach(async () => {
@@ -144,7 +144,7 @@ describe('pause and resume', () => {
     it('keeps the site paused across a restart on the same database', async () => {
         world.admin({ op: `pause`, reason: `incident` });
         await world.app.close();
-        world = await createTestApp({ logger: false, sqlite: world.sqlite });
+        world = await createTestApp({ sqlite: world.sqlite });
         expect((await world.app.inject({ method: `GET`, url: `/healthz` })).statusCode).toBe(503);
         expect(world.admin({ op: `status` })).toMatchObject({ status: { paused: true } });
     });
@@ -247,7 +247,7 @@ describe('delist and relist', () => {
     let betaToken: string;
 
     beforeEach(async () => {
-        world = await createTestApp({ logger: false });
+        world = await createTestApp();
         alphaToken = await mintBot(world.app, await loginAs(world.app, `ann`), `alpha`);
         betaToken = await mintBot(world.app, await loginAs(world.app, `bob`), `beta`);
     });
@@ -336,7 +336,6 @@ describe('ban and unban', () => {
 
     beforeEach(async () => {
         world = await createTestApp({
-            logger: false,
             random: () => 0.9,
             discord: fakeDiscord({ id: `dev:ann`, username: `ann` }).oauth,
         });
@@ -442,7 +441,7 @@ describe('ban and unban', () => {
 
 describe('revoke-bot', () => {
     it('kills the token and closes the stream, and the owner mints a fresh token', async () => {
-        const world = await createTestApp({ logger: false });
+        const world = await createTestApp();
         const owner = await loginAs(world.app, `ann`);
         const token = await mintBot(world.app, owner, `alpha`);
         const stream = await goOnline(world, token, `alpha`);
@@ -470,7 +469,7 @@ describe('abort-game', () => {
     let stream: FakeStreamSocket;
 
     beforeEach(async () => {
-        world = await createTestApp({ logger: false });
+        world = await createTestApp();
         const token = await mintBot(world.app, await loginAs(world.app, `ann`), `alpha`);
         stream = await goOnline(world, token, `alpha`);
     });
@@ -529,7 +528,7 @@ describe('recompute-ratings', () => {
     let ids: Record<string, string>;
 
     beforeEach(async () => {
-        world = await createTestApp({ logger: false });
+        world = await createTestApp();
         ids = {};
         for (const [owner, bot] of [[`ann`, `alpha`], [`bob`, `beta`], [`cat`, `gamma`]] as const) {
             await mintBot(world.app, await loginAs(world.app, owner), bot);
@@ -617,7 +616,7 @@ describe('delete-user', () => {
     let world: TestApp;
 
     beforeEach(async () => {
-        world = await createTestApp({ logger: false });
+        world = await createTestApp();
     });
 
     afterEach(async () => {

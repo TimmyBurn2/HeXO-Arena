@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { GameCell, LiveGameEntry, Side } from '@hexo-arena/contract';
 import { playerToMove } from '@hexo-arena/rules';
 import { fetchLiveGames, limitedFor } from '../api/client';
+import { useBeat } from '../api/use-beat';
 
 /** How often a page with live boards reads the list again while it is in view. */
 export const liveReplayMs = 5_000;
@@ -15,8 +16,8 @@ export interface LiveView {
     readAt: number;
 }
 
-/** The live list with each game's stones landing between reads. */
-export interface LiveReplay {
+// The live list with each game's stones landing between reads.
+interface LiveReplay {
     games: LiveView[] | null;
     // Whether the latest read failed; the games of the one before stay.
     failed: boolean;
@@ -102,18 +103,8 @@ export function useLiveReplay(tests = false): LiveReplay {
 
     useEffect(() => {
         void read();
-        const timer = setInterval(() => {
-            if (document.visibilityState === `visible`) void read();
-        }, liveReplayMs);
-        function onVisible() {
-            if (document.visibilityState === `visible`) void read();
-        }
-        document.addEventListener(`visibilitychange`, onVisible);
-        return () => {
-            clearInterval(timer);
-            document.removeEventListener(`visibilitychange`, onVisible);
-        };
     }, [read]);
+    useBeat(() => void read(), liveReplayMs);
 
     // One wake per landing, the soonest first, so the page renders only when a stone lands.
     useEffect(() => {

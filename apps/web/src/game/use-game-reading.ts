@@ -1,21 +1,22 @@
 import { useCallback, useMemo, useState } from 'react';
-import { undeclaredValues, type GameSnapshot } from '@hexo-arena/contract';
+import type { GameSnapshot } from '@hexo-arena/contract';
 import { useAnalysisSettings } from '../analysis/analysis-settings';
-import { communityReading, gameLineOf, ownReading, type GameLine, type GameReading } from '../analysis/game-readings';
+import type { GameLine, GameReading } from '../analysis/game-readings';
 import type { BoardStone } from '../board/Board';
 import { boardReading, feedFolds, feedNotes, type BoardReading, type FeedFold, type FeedNote } from './drawer-reading';
-import { headOf, useGameAnalyses, type AnalysesState, type AnalysisHeadState, type ReadingChoice } from './game-analyses';
+import type { AnalysesState, AnalysisHeadState, ReadingChoice } from './game-analyses';
 import { shownAtTurn, turnOf, type Replay } from './replay';
+import { useStoredGameReading } from './use-stored-game-reading';
 
-/** A finished game's readings as the game screen shows them, on the board, in the drawer, and in a phone's peek. */
-export interface GameReadingView {
-    /** The game's main line; null while it runs, when nothing is read. */
+// A finished game's readings as the game screen shows them, on the board, in the drawer, and in a phone's peek.
+interface GameReadingView {
+    // The game's main line; null while it runs, when nothing is read.
     readonly line: GameLine | null;
     readonly state: AnalysesState;
     readonly head: AnalysisHeadState | null;
     readonly active: ReadingChoice | null;
     readonly view: GameReading | null;
-    /** The turn on the board, which the graph's cursor marks. */
+    // The turn on the board, which the graph's cursor marks.
     readonly turn: number;
     readonly board: BoardReading | null;
     readonly notes: readonly (FeedNote | null)[] | null;
@@ -40,19 +41,8 @@ export function useGameReading({ snapshot, replay, shownStones, feedLines, curre
     feedLines: number;
     currentLine: number;
 }): GameReadingView {
-    const finished = snapshot.status === `finished`;
-    const cells = snapshot.board.cells;
-    const opening = snapshot.openingPlies;
-    const line = useMemo(() => (finished ? gameLineOf(cells, opening) : null), [finished, cells, opening]);
-    const analyses = useGameAnalyses(snapshot.gameId, finished);
-    const load = analyses.state.load;
-    const head = useMemo(() => (line !== null && load.kind === `ready` ? headOf(load.list, line) : null), [line, load]);
     const [chosen, setChosen] = useState<string | null>(null);
-    const active = head === null ? null : (head.choices.find((choice) => choice.id === chosen) ?? head.choices[0] ?? null);
-    const view = useMemo(() => {
-        if (active === null || line === null) return null;
-        return active.kind === `community` ? communityReading(line, active.analysis.turns, active.analysis.status === `done`, active.analysis.analyzer?.values ?? undeclaredValues) : ownReading(line, active.views);
-    }, [active, line]);
+    const { line, state, head, active, view, request, retry } = useStoredGameReading(snapshot, (choice) => choice.id === chosen);
     const [pointed, setPointed] = useState<number | null>(null);
     const [settings] = useAnalysisSettings();
     const { range, shown, go } = replay;
@@ -84,7 +74,7 @@ export function useGameReading({ snapshot, replay, shownStones, feedLines, curre
     );
     return {
         line,
-        state: analyses.state,
+        state,
         head,
         active,
         view,
@@ -96,7 +86,7 @@ export function useGameReading({ snapshot, replay, shownStones, feedLines, curre
         point: setPointed,
         goToTurn,
         goToLine,
-        request: analyses.request,
-        retry: analyses.retry,
+        request,
+        retry,
     };
 }

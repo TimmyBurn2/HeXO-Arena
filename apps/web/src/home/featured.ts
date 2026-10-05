@@ -1,6 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import type { FinishedGameEntry, GameSnapshot, LiveGameEntry } from '@hexo-arena/contract';
 import { fetchGameSnapshot } from '../api/client';
+import { useAsync } from '../api/use-async';
 import type { LiveView } from '../live/use-live-replay';
 
 /** How long a featured game that just ended shows its result before the next one takes the slot. */
@@ -59,7 +60,6 @@ type Hold =
  */
 export function useFeatured(live: readonly LiveView[] | null, latest: FinishedGameEntry | null | undefined): Featured {
     const [hold, setHold] = useState<Hold>({ kind: `idle` });
-    const [last, setLast] = useState<{ gameId: string; snapshot: GameSnapshot | null } | null>(null);
     // The held game as last seen, shown while its end is read.
     const [seen, setSeen] = useState<LiveView | null>(null);
 
@@ -78,22 +78,14 @@ export function useFeatured(live: readonly LiveView[] | null, latest: FinishedGa
     }, [live, hold]);
 
     const ending = hold.kind === `ending` ? hold.gameId : null;
+    const loadEnd = useCallback(async () => ({ snapshot: ending === null ? null : await fetchGameSnapshot(ending).catch(() => null) }), [ending]);
+    const end = useAsync(loadEnd, { enabled: ending !== null, keep: false }).data;
+    // A game that left the list without a finished snapshot, such as a
+    // guest game whose session ended, gives the slot up at once.
     useEffect(() => {
-        if (ending === null) return;
-        let cancelled = false;
-        // A game that left the list without a finished snapshot, such as a
-        // guest game whose session ended, gives the slot up at once.
-        fetchGameSnapshot(ending)
-            .then((snapshot) => {
-                if (!cancelled) setHold(snapshot.status === `finished` ? { kind: `ended`, snapshot } : { kind: `idle` });
-            })
-            .catch(() => {
-                if (!cancelled) setHold({ kind: `idle` });
-            });
-        return () => {
-            cancelled = true;
-        };
-    }, [ending]);
+        if (ending === null || end === null) return;
+        setHold(end.snapshot?.status === `finished` ? { kind: `ended`, snapshot: end.snapshot } : { kind: `idle` });
+    }, [ending, end]);
 
     const endedAt = hold.kind === `ended` ? hold.snapshot.gameId : null;
     useEffect(() => {
@@ -108,21 +100,13 @@ export function useFeatured(live: readonly LiveView[] | null, latest: FinishedGa
 
     const quiet = live !== null && live.length === 0;
     const latestId = quiet ? (latest?.gameId ?? null) : null;
-    useEffect(() => {
-        if (latestId === null) return;
-        let cancelled = false;
+    const loadLast = useCallback(async () => {
+        if (latestId === null) return null;
         // A read that fails leaves the slot to the band below.
-        fetchGameSnapshot(latestId)
-            .then((snapshot) => {
-                if (!cancelled) setLast({ gameId: latestId, snapshot: snapshot.status === `finished` ? snapshot : null });
-            })
-            .catch(() => {
-                if (!cancelled) setLast({ gameId: latestId, snapshot: null });
-            });
-        return () => {
-            cancelled = true;
-        };
+        const snapshot = await fetchGameSnapshot(latestId).catch(() => null);
+        return { gameId: latestId, snapshot: snapshot?.status === `finished` ? snapshot : null };
     }, [latestId]);
+    const last = useAsync(loadLast, { enabled: latestId !== null }).data;
 
     if (hold.kind === `holding` || hold.kind === `ending`) {
         const view = live?.find((candidate) => candidate.entry.gameId === hold.gameId) ?? (seen?.entry.gameId === hold.gameId ? seen : undefined);

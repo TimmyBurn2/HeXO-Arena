@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { createQuery, openDatabase, runMigrations } from '../src/db';
+import { createQuery } from '../src/db';
 import { beginGeneration, isCurrentGeneration, retireGeneration } from '../src/site-state';
+import { migratedDatabase } from './helpers';
 
 function freshQuery() {
-    const sqlite = openDatabase(`:memory:`);
-    runMigrations(sqlite);
+    const sqlite = migratedDatabase();
     return createQuery(sqlite);
 }
 

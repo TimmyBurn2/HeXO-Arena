@@ -1,0 +1,412 @@
+@layer components {
+    /* A picked bot's check: the framed cell of a slot, filled in the accent once picked. */
+    .rr-check {
+        display: block;
+        width: var(--rr-check-w);
+        height: auto;
+    }
+
+    .rr-check-cell {
+        fill: var(--board-cell);
+        stroke: var(--c-border-strong);
+        stroke-width: 3;
+    }
+
+    .rr-check-on .rr-check-cell {
+        fill: var(--c-accent);
+        stroke: var(--c-accent);
+    }
+
+    .rr-check-mark {
+        fill: none;
+        stroke: var(--c-text-on-accent);
+        stroke-width: 5;
+        stroke-linecap: square;
+    }
+
+    .rr-pick .pick-presence {
+        padding-top: var(--space-1);
+    }
+
+    /* The filled check marks a pick, so the accent frame stays focus's alone. */
+    .rr-pick[aria-pressed='true'] {
+        box-shadow: none;
+    }
+
+    .rr-picker-foot {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        justify-content: space-between;
+        gap: var(--space-2) var(--space-4);
+        padding-top: var(--space-4);
+        box-shadow: inset 0 var(--border-w) 0 var(--c-border);
+    }
+
+    .rr-picker-foot p {
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-half);
+        margin: 0;
+    }
+
+    /* Plates stack with a hairline between them, as the duel's two slots do
+       around their vs cell; each a tight one-line plate, the rating beside
+       Remove, since eight of them share the card. */
+    .rr-plates {
+        gap: var(--space-1);
+    }
+
+    .rr-plates .slot {
+        min-height: 0;
+    }
+
+    .rr-plates .slot-filled {
+        padding: var(--space-2) var(--space-3) var(--space-2) var(--space-4);
+    }
+
+    .rr-plates .slot-name {
+        font-size: var(--text-base);
+    }
+
+    .rr-plates .slot-side {
+        flex-direction: row;
+        align-items: center;
+        gap: var(--space-2);
+    }
+
+    .rr-plates .slot-rating {
+        min-width: var(--rr-rating-w);
+        font-size: var(--text-base);
+        text-align: right;
+    }
+
+    .rr-plates .slot-select {
+        min-height: var(--control-sm);
+    }
+
+    .slot-marked {
+        box-shadow: inset var(--focus-w) 0 0 var(--c-warn);
+    }
+
+    .slot-hint {
+        flex-basis: 100%;
+        margin: 0;
+        font-size: var(--text-sm);
+    }
+
+    .rr-schedule-body {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: flex-start;
+        gap: var(--space-3) var(--space-5);
+    }
+
+    .rr-schedule-body > .note {
+        flex: 1 1 var(--rr-schedule-note-min);
+        margin: 0;
+    }
+
+    .rr-schedule-body .xt-frame {
+        max-width: 100%;
+    }
+
+    .rr-rated .checkline {
+        display: flex;
+        justify-content: space-between;
+        margin: 0;
+    }
+
+    /* The event page: the actions beside the crumb, the confirm that takes their place, and the waiting card. */
+    .rr-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: var(--space-2);
+    }
+
+    .rr-confirm {
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-2);
+        max-width: var(--measure);
+        margin: 0 0 var(--space-5);
+        padding: var(--space-4);
+        background: var(--c-bg-raised);
+        clip-path: var(--cut-sm-path);
+    }
+
+    .rr-confirm p {
+        margin: 0;
+    }
+
+    .rr-confirm .actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: var(--space-2);
+    }
+
+    .rr-error {
+        margin: 0 0 var(--space-4);
+        color: var(--c-warn);
+    }
+
+    /* A game waiting for a bot stands in the live grid as a card: the empty cell where its board would be, then the pair and the wait. */
+    .rr-wait {
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: flex-start;
+        gap: var(--space-3);
+        padding: var(--space-4);
+        background: var(--c-bg-raised);
+        clip-path: var(--cut-sm-path);
+    }
+
+    .rr-wait .socket {
+        width: var(--rr-wait-hex-w);
+    }
+
+    .rr-wait p {
+        margin: 0;
+    }
+
+    .rr-wait-line {
+        color: var(--c-warn);
+    }
+
+    .rr-next {
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-2);
+    }
+
+    .rr-next ul {
+        margin: 0;
+        padding: 0;
+        list-style: none;
+    }
+
+    .rr-next li {
+        padding: var(--space-2) 0;
+        font-weight: var(--weight-display);
+        box-shadow: inset 0 calc(-1 * var(--border-w)) 0 var(--c-border);
+    }
+
+    /* A test's estimate, one row per bot: its score, the axis with its range and mark, the value, and the verdict. */
+    .rr-estimates {
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-3);
+        margin-bottom: var(--space-6);
+        padding: var(--space-5);
+        background: var(--c-bg-raised);
+        clip-path: var(--cut-md-path);
+    }
+
+    .rr-estimates h2,
+    .rr-estimates p {
+        margin: 0;
+    }
+
+    .rr-est-rows {
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-2);
+        margin: 0;
+        padding: 0;
+        list-style: none;
+    }
+
+    .rr-est-row {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) var(--rr-est-score-w) minmax(0, 2fr) var(--rr-est-value-w) var(--rr-est-verdict-w);
+        align-items: center;
+        gap: var(--space-2) var(--space-4);
+        padding: var(--space-3) var(--space-4);
+        background: var(--c-bg);
+    }
+
+    .rr-est-row .est-axis {
+        min-width: 0;
+        height: var(--rr-est-axis-h);
+    }
+
+    /* The rows draw the line, the range, and the mark; the head alone holds the ticks, at its foot. */
+    .rr-est-head {
+        padding-top: 0;
+        padding-bottom: 0;
+        background: transparent;
+        color: var(--c-text-dim);
+        font-size: var(--text-xs);
+    }
+
+    .rr-est-head .est-axis {
+        height: var(--rr-est-head-h);
+    }
+
+    .rr-est-head .est-tick {
+        top: 0;
+    }
+
+    .rr-est-who,
+    .rr-est-value,
+    .rr-est-verdict {
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-half);
+        min-width: 0;
+    }
+
+    /* A verdict's tag is as wide as its words, not its column. */
+    .rr-est-verdict {
+        align-items: flex-start;
+    }
+
+    .rr-est-value strong {
+        font-size: var(--text-lg);
+        font-variant-numeric: tabular-nums;
+    }
+
+    .rr-est-score {
+        font-variant-numeric: tabular-nums;
+    }
+
+    /* Pairs: a crosstable of scores where each pair plays more than two games. */
+    .rr-pairs td {
+        text-align: center;
+        font-variant-numeric: tabular-nums;
+    }
+
+    .rr-pairs a {
+        font-weight: var(--weight-display);
+    }
+
+    /* The scores stand on the board's ground, where the page's link
+       colors can vanish, so a hover underlines rather than recolors. */
+    .rr-pairs .xt-cell a {
+        color: var(--board-link);
+    }
+
+    .rr-pairs .xt-cell a:hover {
+        text-decoration: underline;
+    }
+
+    .rr-pairs .xt-cell a:focus-visible {
+        outline-color: var(--board-link);
+    }
+
+    /* A tournament as a list row, wherever a list holds it: the name, its
+       facts, the reader's part, and an owner's way to enter one coming up. */
+    .tournament-row {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: baseline;
+        gap: var(--space-1) var(--space-4);
+        padding: var(--space-3) 0;
+        box-shadow: inset 0 calc(-1 * var(--border-w)) 0 var(--c-border);
+    }
+
+    .tournament-row-name {
+        font-weight: var(--weight-strong);
+    }
+
+    .tournament-row-facts,
+    .tournament-owner {
+        color: var(--c-text-dim);
+    }
+
+    .tournament-row-live {
+        color: var(--c-accent);
+        font-weight: var(--weight-strong);
+    }
+
+    .tournament-row-yours {
+        color: var(--c-text);
+    }
+
+    .tournament-row-enter {
+        margin-left: auto;
+        font-weight: var(--weight-strong);
+    }
+
+    /* A tournament row on Play's side: the name over its facts and the reader's part. */
+    .tournament-row-compact {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: var(--space-1);
+        padding: var(--space-3) var(--space-4);
+        background: var(--c-bg-raised);
+        box-shadow: none;
+    }
+
+    .duel-rows .tournament-row-compact {
+        margin-bottom: var(--space-half);
+    }
+
+    .weekly-block .next-tournament {
+        padding: var(--space-4);
+    }
+
+    .weekly-block .next-tournament .next-tournament-name {
+        font-size: var(--text-lg);
+    }
+
+    .tournament-tag-row {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: var(--space-2);
+    }
+
+    @media (max-width: 44rem) {
+        /* Where the strength takes a line of its own under the name, a plate's notes follow it, the warning first. */
+        .rr-plates .slot-hint {
+            order: 2;
+        }
+
+        /* The count and Add keep to the sheet's bottom edge while the rows scroll under them. */
+        .rr-picker-foot {
+            position: sticky;
+            bottom: calc(-1 * var(--space-4));
+            flex: none;
+            margin-bottom: calc(-1 * var(--space-4));
+            padding-bottom: var(--space-4);
+            background: var(--c-bg-overlay);
+        }
+
+        .rr-est-row {
+            grid-template-columns: minmax(0, 1fr) auto;
+        }
+
+        .rr-est-row .est-axis {
+            grid-column: 1 / -1;
+        }
+
+        .rr-est-head span:not(.est-tick) {
+            display: none;
+        }
+
+        .rr-estimates {
+            padding: var(--space-4);
+        }
+    }
+
+    /* Large text on a narrow window leaves a plate's name too little room beside its rating,
+       so the name takes the plate's width and the rating and remove step under it, a duel's two plates as a field's. */
+    @media (max-width: 19.5rem) {
+        .rr-card .slot-filled .slot-who {
+            flex-basis: 100%;
+        }
+    }
+
+    /* At its narrowest, the name steps down a size and the plate gives up some padding to keep a name whole. */
+    @media (max-width: 13rem) {
+        .rr-card .slot-filled {
+            padding: var(--space-2) var(--space-3);
+        }
+
+        .rr-card .slot-name {
+            font-size: var(--text-base);
+        }
+    }
+}

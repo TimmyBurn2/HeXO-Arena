@@ -12,9 +12,6 @@ export type JudgmentSeverity = `inaccuracy` | `mistake` | `blunder`;
  */
 export type ForcedJudgmentReason = `gave-away-win` | `missed-win` | `allowed-win`;
 
-/** Why a turn was judged: a forced win, or a drop of value by the analyzer's own cuts. */
-export type JudgmentReason = ForcedJudgmentReason | `value-drop`;
-
 /**
  * One analyzer's verdict on one played turn.
  * `turns` is the length, in its winner's own turns, of the forced win that grades the turn:
@@ -126,7 +123,8 @@ export type ValueView =
  * htttx counts win_in from the board the evaluation describes, its side to move first:
  * from a board the winner moves on alternate turns, so half the count, rounded up, is its own;
  * a line's evaluation describes the board after it, so the winner's own line adds that line,
- * and a line that completes six, or carries win_in 1 for its own mover, is a win in 1.
+ * and a line that completes six is a win in 1, as is one carrying win_in 1 for its own mover,
+ * the value an analyzer gives a line that completes six.
  */
 export function forcedWin(evaluation: HtttxPositionEvaluation, view: ValueView): ForcedWin | null {
     if (view.kind === `line` && view.completesSix) return { winner: view.mover, turns: 1 };
@@ -234,15 +232,8 @@ export interface ValueText {
  */
 export function valueWords(evaluation: HtttxPositionEvaluation, view: ValueView, values: AnalyzerValues): ValueText | null {
     if (view.kind === `line` && view.completesSix) return said(`${view.mover} wins`);
-    const winner = forcedWinner(evaluation);
-    if (winner !== null) {
-        // The board after a line has the other side to move; from either
-        // board the winner moves on alternate turns, so half the count,
-        // rounded up, is its own, plus the line when it is the winner's.
-        const n = Math.abs(evaluation.win_in ?? 0);
-        const own = Math.ceil(n / 2) + (view.kind === `line` && view.mover === winner ? 1 : 0);
-        return said(`${winner} wins in ${String(own)}`);
-    }
+    const win = forcedWin(evaluation, view);
+    if (win !== null) return said(`${win.winner} wins in ${String(win.turns)}`);
     const value = scaledHeuristic(evaluation, values.scale);
     if (value === null) return null;
     if (values.meaning === `expected`) {

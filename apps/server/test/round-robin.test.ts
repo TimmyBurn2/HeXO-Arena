@@ -1,12 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { missedTwoInARow, pointOf, roundRobin, standingsOf, type ScoredPairing, type SlotResult } from '../src/round-robin';
+import { missedTooManyInARow, pointOf, roundRobin, standingsOf, storedSlots, type ScoredPairing, type SlotResult } from '../src/round-robin';
 
 const field = (size: number) => Array.from({ length: size }, (_, index) => `bot${String(index + 1)}`);
 
 const won = (winner: `first` | `second` | null): SlotResult => ({ kind: `played`, winner });
 const noShow = (missing: `first` | `second` | `both`): SlotResult => ({ kind: `no_show`, missing });
 
-function pairing(round: number, first: string, second: string, games: readonly [SlotResult, SlotResult]): ScoredPairing {
+function pairing(round: number, first: string, second: string, games: readonly SlotResult[]): ScoredPairing {
     return { round, first, second, games };
 }
 
@@ -142,7 +142,7 @@ describe('standingsOf', () => {
     });
 });
 
-describe('missedTwoInARow', () => {
+describe('missedTooManyInARow', () => {
     it.each([
         [`missed both games of two pairings in a row`, [[noShow(`second`), noShow(`second`)], [noShow(`first`), noShow(`both`)]], true],
         [`showed for one game of the second`, [[noShow(`second`), noShow(`second`)], [noShow(`first`), won(`first`)]], false],
@@ -151,6 +151,39 @@ describe('missedTwoInARow', () => {
     ] as const)('%s: %s', (_, rounds, expected) => {
         // b sits second in the first pairing and first in the others.
         const pairings = rounds.map((games, index) => (index === 0 ? pairing(1, `a`, `b`, games) : pairing(index + 1, `b`, `c`, games)));
-        expect(missedTwoInARow(`b`, pairings)).toBe(expected);
+        expect(missedTooManyInARow(`b`, pairings)).toBe(expected);
+    });
+});
+
+describe('missedTooManyInARow over a pair\'s openings', () => {
+    it('counts a pair\'s openings in their order within a round, whatever order they come in', () => {
+        const legs: ScoredPairing[] = [
+            { ...pairing(1, `a`, `b`, [noShow(`second`), noShow(`second`)]), leg: 2 },
+            { ...pairing(1, `a`, `b`, [won(`first`), won(`second`)]), leg: 1 },
+            { ...pairing(1, `a`, `b`, [noShow(`second`), noShow(`second`)]), leg: 3 },
+        ];
+        expect(missedTooManyInARow(`b`, legs)).toBe(true);
+        expect(missedTooManyInARow(`b`, [legs[1], legs[0], { ...pairing(1, `a`, `b`, [won(null), won(null)]), leg: 3 }].filter((each) => each !== undefined))).toBe(false);
+    });
+});
+
+describe('a pair that plays a single game', () => {
+    it('reads its slots as game 1 alone, its second slot none', () => {
+        expect(storedSlots({ game1: `played`, game1Seat: `first`, game2: `none`, game2Seat: null })).toEqual([won(`first`)]);
+        expect(storedSlots({ game1: `played`, game1Seat: `first`, game2: `pending`, game2Seat: null })).toEqual([won(`first`), { kind: `pending` }]);
+    });
+
+    it('scores the game for its side, and withdraws a bot after two single games missed in a row', () => {
+        const legs: ScoredPairing[] = [
+            { ...pairing(1, `a`, `b`, [won(`second`)]), leg: 1 },
+            { ...pairing(1, `a`, `b`, [noShow(`first`)]), leg: 2 },
+            { ...pairing(1, `a`, `b`, [noShow(`first`)]), leg: 3 },
+        ];
+        expect(standingsOf([`a`, `b`], legs)).toEqual([
+            { rank: 1, bot: `b`, points: 3, asX: 0, asO: 3 },
+            { rank: 2, bot: `a`, points: 0, asX: 0, asO: 0 },
+        ]);
+        expect(missedTooManyInARow(`a`, legs)).toBe(true);
+        expect(missedTooManyInARow(`a`, legs.slice(0, 2))).toBe(false);
     });
 });

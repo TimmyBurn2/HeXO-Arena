@@ -6,10 +6,13 @@ import type { Query } from './db';
 import { bots } from './db/schema';
 import type { CredentialLimits } from './request-limits';
 import { sessionUser } from './sessions';
+import type { TournamentScheduler } from './tournament-scheduler';
 
-export interface BotSettingsDeps {
+interface BotSettingsDeps {
     query: Query;
     limits: CredentialLimits;
+    // Turning duels by others off takes the bot out of the duels and round robins others set up.
+    tournaments: Pick<TournamentScheduler, `withdrawRefused`>;
 }
 
 const settingsColumns = {
@@ -48,12 +51,10 @@ function settingsOf(row: SettingsRow): BotSettings {
     });
 }
 
-/**
- * An owned, live bot's settings after any change the update makes; an empty
- * text clears the owner's own, so the declared one shows again.
- * Undefined for a bot the owner does not hold.
- */
-export function updateBotSettings(query: Query, ownerId: string, nameKey: string, changes: BotSettingsUpdate): BotSettings | undefined {
+// An owned, live bot's settings after any change the update makes; an empty
+// text clears the owner's own, so the declared one shows again.
+// Undefined for a bot the owner does not hold.
+function updateBotSettings(query: Query, ownerId: string, nameKey: string, changes: BotSettingsUpdate): BotSettings | undefined {
     const where = and(eq(bots.nameKey, nameKey), eq(bots.ownerId, ownerId), isNull(bots.deletedAt));
     const set: { duelsByOthers?: number; ownerAbout?: string | null; ownerRepoUrl?: string | null } = {};
     if (changes.duelsByOthers !== undefined) set.duelsByOthers = changes.duelsByOthers ? 1 : 0;
@@ -66,25 +67,33 @@ export function updateBotSettings(query: Query, ownerId: string, nameKey: string
     return row === undefined ? undefined : settingsOf(row);
 }
 
+interface NameParams {
+    name: string;
+}
+
 /** The owner reads a bot's settings, or changes some; anyone else finds no such bot. */
 export function registerBotSettingsApi(app: FastifyInstance, deps: BotSettingsDeps): void {
     const { query, limits } = deps;
 
-    const answer = (request: FastifyRequest, reply: FastifyReply, changes: () => BotSettingsUpdate | null) => {
+    const answer = (request: FastifyRequest<{ Params: NameParams }>, reply: FastifyReply, changes: () => BotSettingsUpdate | null) => {
         const user = sessionUser(query, request);
         if (user === null) return reply.code(401).send({ error: `no session`, code: `unauthorized` });
         if (limits.refuse(reply, `principal`, `user:${user.id}`)) return reply;
         const parsed = changes();
         if (parsed === null) return reply.code(400).send({ error: `the request fails validation`, code: `bad_request` });
-        const { name } = request.params as { name: string };
+        const { name } = request.params;
         const held = nameSyntaxSchema.safeParse(name).success ? updateBotSettings(query, user.id, nameKeyOf(name), parsed) : undefined;
         if (held === undefined) return reply.code(404).send({ error: `no such bot of yours`, code: `not_found` });
+        if (parsed.duelsByOthers === false) {
+            const bot = query.select({ id: bots.id }).from(bots).where(and(eq(bots.nameKey, nameKeyOf(name)), isNull(bots.deletedAt))).get();
+            if (bot !== undefined) deps.tournaments.withdrawRefused(bot.id);
+        }
         return reply.code(200).send(held);
     };
 
-    app.get(`/api/bots/:name/settings`, { config: { limit: `principal` } }, async (request, reply) => answer(request, reply, () => ({})));
+    app.get<{ Params: NameParams }>(`/api/bots/:name/settings`, { config: { limit: `principal` } }, async (request, reply) => answer(request, reply, () => ({})));
 
-    app.patch(`/api/bots/:name/settings`, { config: { limit: `principal` } }, async (request, reply) =>
+    app.patch<{ Params: NameParams }>(`/api/bots/:name/settings`, { config: { limit: `principal` } }, async (request, reply) =>
         answer(request, reply, () => {
             const parsed = botSettingsUpdateSchema.safeParse(request.body);
             return parsed.success ? parsed.data : null;

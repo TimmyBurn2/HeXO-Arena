@@ -1,50 +1,59 @@
 import {
     acceptsSchema,
     levelsSchema,
+    tournamentGamesPerPairSchema,
+    tournamentStatusSchema,
     challengeStatusSchema,
     firstPlayerSchema,
     nameKeyOf,
     openingPliesSchema,
-    duelStatusSchema,
     sideOf,
     timeControlSchema,
     tournamentEntryReasonSchema,
     tournamentEntryStateSchema,
+    tournamentFormatOf,
     type AccountExport,
     type Side,
 } from '@hexo-arena/contract';
 import { alias } from 'drizzle-orm/sqlite-core';
 import { and, asc, eq, inArray, isNotNull, or, type SQL } from 'drizzle-orm';
 import type { Query } from './db';
-import { adminActions, bots, challenges, duels, gameRatings, games, moves, ratings, sessions, tournamentEntries, tournaments, users } from './db/schema';
+import { adminActions, bots, challenges, gameRatings, games, moves, ratings, sessions, tournamentEntries, tournaments, users } from './db/schema';
+import { seated } from './game-seats';
 import { findGame, type GameRecord } from './game-store';
 import { requestsOf } from './analysis-store';
 import { storedAnalyzer, storedClient } from './bots';
 import { namedTargetActions } from './moderation';
 import { shownBot } from './shown-names';
+import { creatorJoin, creators, nameColumns, tournamentNameOf } from './tournament-store';
 
 const isoOf = (seconds: number) => new Date(seconds * 1000).toISOString().replace(/\.\d{3}Z$/u, `Z`);
 const isoOrNull = (seconds: number | null) => (seconds === null ? null : isoOf(seconds));
 
-function seatsOf(record: GameRecord, own: (botId: string) => boolean, userId: string): AccountExport[`games`][number][`players`] {
-    type Exported = AccountExport[`games`][number][`players`][`x`];
-    const leveled = (side: Side, seat: Exported): Exported => {
+type ExportedPlayer = AccountExport[`games`][number][`players`][`x`];
+
+function seatedOf(record: GameRecord, own: (botId: string) => boolean, userId: string): Record<Side, ExportedPlayer> {
+    switch (record.kind) {
+        case `human`:
+            return seated(record.userSide, { name: record.user.name, kind: `user`, yours: record.userId === userId }, { name: record.bot.name, kind: `bot`, yours: own(record.botId) });
+        case `guest`:
+            return seated(record.guestSide, { name: record.guestName, kind: `guest`, yours: false }, { name: record.bot.name, kind: `bot`, yours: own(record.botId) });
+        case `bots`:
+            return seated(
+                record.challengerSide,
+                { name: record.challenger.name, kind: `bot`, yours: own(record.challengerBotId) },
+                { name: record.dest.name, kind: `bot`, yours: own(record.destBotId) },
+            );
+    }
+}
+
+function playersOf(record: GameRecord, own: (botId: string) => boolean, userId: string): AccountExport[`games`][number][`players`] {
+    const players = seatedOf(record, own, userId);
+    const leveled = (side: Side): ExportedPlayer => {
         const level = record.levels[side];
-        return level === null ? seat : { ...seat, level };
+        return level === null ? players[side] : { ...players[side], level };
     };
-    const seated = (side: Side, first: Exported, second: Exported) =>
-        side === `x` ? { x: leveled(`x`, first), o: leveled(`o`, second) } : { x: leveled(`x`, second), o: leveled(`o`, first) };
-    if (record.kind === `human`) {
-        return seated(record.userSide, { name: record.user.name, kind: `user`, yours: record.userId === userId }, { name: record.bot.name, kind: `bot`, yours: own(record.botId) });
-    }
-    if (record.kind === `guest`) {
-        return seated(record.guestSide, { name: record.guestName, kind: `guest`, yours: false }, { name: record.bot.name, kind: `bot`, yours: own(record.botId) });
-    }
-    return seated(
-        record.challengerSide,
-        { name: record.challenger.name, kind: `bot`, yours: own(record.challengerBotId) },
-        { name: record.dest.name, kind: `bot`, yours: own(record.destBotId) },
-    );
+    return { x: leveled(`x`), o: leveled(`o`) };
 }
 
 function gamesOf(query: Query, userId: string, botIds: readonly string[]): AccountExport[`games`] {
@@ -63,7 +72,7 @@ function gamesOf(query: Query, userId: string, botIds: readonly string[]): Accou
             return [
                 {
                     id: row.id,
-                    players: seatsOf(record, (botId) => own.has(botId), userId),
+                    players: playersOf(record, (botId) => own.has(botId), userId),
                     timeControl: record.timeControl,
                     openingPlies: openingPliesSchema.parse(record.opening.length),
                     opening: record.opening.map((cell) => ({ x: cell.x, y: cell.y, side: sideOf(cell.player) })),
@@ -73,8 +82,7 @@ function gamesOf(query: Query, userId: string, botIds: readonly string[]): Accou
                         .where(eq(moves.gameId, row.id))
                         .orderBy(asc(moves.seq))
                         .all()
-                        // The side check admits only x and o.
-                        .map((move) => ({ side: move.side as Side, cells: [{ x: move.firstX, y: move.firstY }, { x: move.secondX, y: move.secondY }], at: isoOf(move.createdAt) })),
+                        .map((move) => ({ side: move.side, cells: [{ x: move.firstX, y: move.firstY }, { x: move.secondX, y: move.secondY }], at: isoOf(move.createdAt) })),
                     winner: record.winner,
                     reason: record.finishReason,
                     createdAt: isoOf(row.createdAt),
@@ -86,9 +94,7 @@ function gamesOf(query: Query, userId: string, botIds: readonly string[]): Accou
                         .from(gameRatings)
                         .where(eq(gameRatings.gameId, row.id))
                         .orderBy(asc(gameRatings.side))
-                        .all()
-                        // The side check admits only x and o.
-                        .map((rating) => ({ ...rating, side: rating.side as Side })),
+                        .all(),
                 },
             ];
         });
@@ -96,48 +102,44 @@ function gamesOf(query: Query, userId: string, botIds: readonly string[]): Accou
 
 const challengerBots = alias(bots, `challenger_bot`);
 const destBots = alias(bots, `dest_bot`);
-const duelBotsA = alias(bots, `duel_bot_a`);
-const duelBotsB = alias(bots, `duel_bot_b`);
 
-// The duels and tests the account started, their bots in the order it named them.
-function duelsOf(query: Query, userId: string): AccountExport[`duels`] {
-    return query
+// The duels and round robins the account set up, each with its format and its bots in the order it named them.
+function tournamentsOf(query: Query, userId: string): AccountExport[`tournaments`] {
+    const rows = query
         .select({
-            id: duels.id,
-            aFirst: duels.aFirst,
-            a: duelBotsA.name,
-            aDeletedAt: duelBotsA.deletedAt,
-            b: duelBotsB.name,
-            bDeletedAt: duelBotsB.deletedAt,
-            test: duels.test,
-            games: duels.games,
-            rated: duels.rated,
-            status: duels.status,
-            createdAt: duels.createdAt,
-            endedAt: duels.endedAt,
+            id: tournaments.id,
+            origin: tournaments.origin,
+            maxEntrants: tournaments.maxEntrants,
+            gamesPerPair: tournaments.gamesPerPair,
+            test: tournaments.test,
+            rated: tournaments.rated,
+            status: tournaments.status,
+            createdAt: tournaments.createdAt,
+            endedAt: tournaments.endedAt,
         })
-        .from(duels)
-        .innerJoin(duelBotsA, eq(duelBotsA.id, duels.botAId))
-        .innerJoin(duelBotsB, eq(duelBotsB.id, duels.botBId))
-        .where(eq(duels.startedBy, userId))
-        .orderBy(asc(duels.createdAt), asc(duels.id))
-        .all()
-        .map((row) => {
-            const a = shownBot(row.a, row.aDeletedAt).name;
-            const b = shownBot(row.b, row.bDeletedAt).name;
-            return {
-                id: row.id,
-                first: row.aFirst === 1 ? a : b,
-                second: row.aFirst === 1 ? b : a,
-                kind: row.test === 1 ? (`test` as const) : (`duel` as const),
-                games: row.games,
-                rated: row.rated === 1,
-                // The status check admits only the contract's statuses.
-                status: duelStatusSchema.parse(row.status),
-                createdAt: isoOf(row.createdAt),
-                endedAt: isoOrNull(row.endedAt),
-            };
-        });
+        .from(tournaments)
+        .where(eq(tournaments.createdBy, userId))
+        .orderBy(asc(tournaments.createdAt), asc(tournaments.id))
+        .all();
+    return rows.map((row) => ({
+        id: row.id,
+        format: tournamentFormatOf(row),
+        bots: query
+            .select({ name: bots.name, deletedAt: bots.deletedAt })
+            .from(tournamentEntries)
+            .innerJoin(bots, eq(bots.id, tournamentEntries.botId))
+            .where(eq(tournamentEntries.tournamentId, row.id))
+            .orderBy(asc(tournamentEntries.seat), asc(bots.nameKey))
+            .all()
+            .map((bot) => shownBot(bot.name, bot.deletedAt).name),
+        gamesPerPair: tournamentGamesPerPairSchema.parse(row.gamesPerPair),
+        test: row.test === 1,
+        rated: row.rated === 1,
+        // The status check admits only the contract's statuses.
+        status: tournamentStatusSchema.parse(row.status),
+        createdAt: isoOf(row.createdAt),
+        endedAt: isoOrNull(row.endedAt),
+    }));
 }
 
 /**
@@ -185,7 +187,7 @@ export function accountExport(query: Query, userId: string, nowMs: number): Acco
         tournamentEntries: query
             .select({
                 tournamentId: tournamentEntries.tournamentId,
-                tournament: tournaments.name,
+                ...nameColumns,
                 bot: bots.name,
                 botDeletedAt: bots.deletedAt,
                 state: tournamentEntries.state,
@@ -195,19 +197,21 @@ export function accountExport(query: Query, userId: string, nowMs: number): Acco
             })
             .from(tournamentEntries)
             .innerJoin(tournaments, eq(tournaments.id, tournamentEntries.tournamentId))
+            .leftJoin(creators, creatorJoin)
             .innerJoin(bots, eq(bots.id, tournamentEntries.botId))
             .where(eq(tournamentEntries.ownerId, userId))
             .orderBy(asc(tournamentEntries.enteredAt))
             .all()
             // The state and reason checks admit only the contract's values.
-            .map(({ botDeletedAt, ...entry }) => ({
+            .map(({ botDeletedAt, name, origin, maxEntrants, creatorName, creatorDeletedAt, ...entry }) => ({
                 ...entry,
+                tournament: tournamentNameOf({ name, origin, maxEntrants, creatorName, creatorDeletedAt }),
                 bot: shownBot(entry.bot, botDeletedAt).name,
                 state: tournamentEntryStateSchema.parse(entry.state),
                 reason: entry.reason === null ? null : tournamentEntryReasonSchema.parse(entry.reason),
                 enteredAt: isoOf(entry.enteredAt),
             })),
-        duels: duelsOf(query, userId),
+        tournaments: tournamentsOf(query, userId),
         challenges:
             botIds.length === 0
                 ? []

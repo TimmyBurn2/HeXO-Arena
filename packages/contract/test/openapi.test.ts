@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import {
     botAccountPath,
@@ -28,14 +29,14 @@ import {
     leaderboardPath,
     mePath,
     serverLineLimitBytes,
-    duelBotsPath,
-    duelListPath,
-    duelPath,
-    duelStopPath,
     signupPath,
     streamBacklogLimitBytes,
+    tournamentBotsPath,
+    tournamentPath,
+    tournamentsPath,
+    tournamentStopPath,
 } from '../src';
-import { buildOpenApiDocument } from '../src/openapi';
+import { buildOpenApiDocument, renderOpenApiYaml } from '../src/openapi';
 
 // The generated response types degrade to any (index-signature hack in
 // openapi3-ts), so probes dig structurally instead of trusting the types.
@@ -99,6 +100,14 @@ function arrayOfUnknown(value: unknown): unknown[] {
 }
 
 describe('openapi document', () => {
+    it('is what the committed openapi.yaml holds, so a contract change regenerates it', () => {
+        const committed = readFileSync(new URL(`../../../openapi.yaml`, import.meta.url), `utf8`).split(`\n`);
+        const generated = renderOpenApiYaml(root).split(`\n`);
+        const first = generated.findIndex((line, index) => line !== committed[index]);
+        const stale = first === -1 && committed.length === generated.length ? null : { line: (first === -1 ? generated.length : first) + 1, committed: committed[first], generated: generated[first] };
+        expect(stale, `openapi.yaml is stale; run pnpm openapi`).toBe(null);
+    });
+
     it('lets every operation that takes a body answer 413 payload_too_large', () => {
         const operations = operationsIn(root).filter(([, operation]) => dig(operation, `requestBody`) !== undefined);
         expect(operations.length).toBeGreaterThan(5);
@@ -391,22 +400,24 @@ describe('openapi document', () => {
         }
     });
 
-    it('documents the duel: started behind the session cookie with each refusal, read by anyone, stopped by its starter or owners', () => {
+    it('documents a duel or round robin: set up behind the session cookie with each refusal, read by anyone, stopped by its creator', () => {
         const document = buildOpenApiDocument();
-        const create = dig(document, `paths`, duelListPath, `post`);
+        const create = dig(document, `paths`, tournamentsPath, `post`);
         expect(dig(create, `security`)).toEqual([{ sessionCookie: [] }]);
-        expect(dig(create, `responses`, `201`, `content`, `application/json`, `schema`, `properties`, `games`, `maxItems`)).toBe(50);
         const refusals = (status: string) => arrayOfUnknown(dig(create, `responses`, status, `content`, `application/json`, `schema`, `properties`, `code`, `enum`));
-        expect(refusals(`400`)).toEqual([`bad_request`, `not_open`, `duel_refused`, `clock_not_accepted`, `unknown_level`, `bot_busy`, `duel_live`, `duel_busy`, `unrated_only`, `test_only`]);
+        expect(refusals(`400`)).toEqual([`bad_request`, `not_open`, `duel_refused`, `clock_not_accepted`, `unknown_level`, `bot_busy`, `test_only`, `too_many_games`, `tournament_busy`]);
         expect(refusals(`403`)).toEqual([`delisted`, `banned`]);
-        expect(refusals(`429`)).toEqual([`daily_duel_cap`, `daily_pair_cap`, `daily_bot_cap`, `rate_limited`]);
+        expect(refusals(`429`)).toEqual([`daily_tournament_cap`, `rate_limited`]);
         expect(dig(create, `responses`, `429`, `headers`, `Retry-After`)).toBeDefined();
-        for (const path of [duelListPath, duelPath, duelBotsPath]) expect(dig(document, `paths`, path, `get`, `security`), path).toEqual([]);
-        expect(dig(document, `components`, `schemas`, `DuelBotState`, `properties`, `duelsByOthers`, `type`)).toBe(`boolean`);
-        const stop = dig(document, `paths`, duelStopPath, `post`);
+        for (const path of [tournamentsPath, tournamentPath, tournamentBotsPath]) expect(dig(document, `paths`, path, `get`, `security`), path).not.toContainEqual({ bearerAuth: [] });
+        expect(dig(document, `paths`, tournamentBotsPath, `get`, `security`)).toEqual([]);
+        expect(dig(document, `components`, `schemas`, `TournamentBotState`, `properties`, `duelsByOthers`, `type`)).toBe(`boolean`);
+        const stop = dig(document, `paths`, tournamentStopPath, `post`);
         expect(dig(stop, `security`)).toEqual([{ sessionCookie: [] }]);
         expect(arrayOfUnknown(dig(stop, `responses`, `403`, `content`, `application/json`, `schema`, `properties`, `code`, `enum`))).toEqual([`not_yours`]);
         expect(arrayOfUnknown(dig(stop, `responses`, `409`, `content`, `application/json`, `schema`, `properties`, `code`, `enum`))).toEqual([`over`]);
+        expect(Object.keys(dig(document, `paths`) ?? {}).filter((path) => path.includes(`duel`))).toEqual([]);
+        expect(dig(document, `components`, `schemas`, `Estimate`, `properties`, `verdict`)).toBeDefined();
     });
 
     it('documents a bot\'s settings for its owner on the site alone, never in the bot surface', () => {
@@ -425,7 +436,7 @@ describe('openapi document', () => {
         const starts: [string, string][] = [
             [botStreamPath, `get`],
             [gamesPath, `post`],
-            [duelListPath, `post`],
+            [tournamentsPath, `post`],
             [botChallengePath, `post`],
             [challengeAcceptPath, `post`],
         ];

@@ -1,0 +1,8 @@
+# A contact link needs an address, and a deployment's stays out of the
+# repository, so each form's first note sends privacy and data requests to
+# the operator instead.
+blank_issues_enabled: false
+contact_links:
+    - name: Security problem
+      url: https://github.com/TimmyBurn2/HeXO-Arena/security/advisories/new
+      about: Report a vulnerability privately, never in a public issue.

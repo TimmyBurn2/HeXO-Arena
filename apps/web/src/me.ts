@@ -1,18 +1,13 @@
-import { useSyncExternalStore } from 'react';
 import type { Me, MeUpdateRequest } from '@hexo-arena/contract';
 import { deleteAccount, fetchMe, signOut, startGuest, updateMe } from './api/client';
+import { createStore, useStore } from './store';
 import { text } from './text';
 
 export type MeState = { status: `loading` } | { status: `ready`; me: Me };
 
-let current: MeState = { status: `loading` };
+const session = createStore<MeState>({ status: `loading` });
 let started = false;
-const listeners = new Set<() => void>();
-
-function set(next: MeState): void {
-    current = next;
-    for (const listener of listeners) listener();
-}
+const { set } = session;
 
 async function refresh(): Promise<Me> {
     try {
@@ -27,24 +22,13 @@ async function refresh(): Promise<Me> {
     }
 }
 
-function subscribe(listener: () => void): () => void {
-    listeners.add(listener);
-    return () => {
-        listeners.delete(listener);
-    };
-}
-
-function read(): MeState {
-    return current;
-}
-
 /**
  * Who the browser is, as a store: read once at boot, then again after
  * anything that changes the session.
  */
 export const meStore = {
-    read,
-    subscribe,
+    read: session.read,
+    subscribe: session.subscribe,
     refresh,
     start(): void {
         if (started) return;
@@ -71,6 +55,7 @@ export const meStore = {
     },
     /** The positions the signed-in user may still have read today, as an answer of the server counted them. */
     positionsLeft(left: number): void {
+        const current = session.read();
         if (current.status !== `ready` || current.me?.kind !== `user` || current.me.analysisLeft.positions === left) return;
         set({ status: `ready`, me: { ...current.me, analysisLeft: { ...current.me.analysisLeft, positions: left } } });
     },
@@ -82,12 +67,12 @@ export const meStore = {
     /** Test seam: forget the session so each test starts from boot. */
     reset(): void {
         started = false;
-        current = { status: `loading` };
+        set({ status: `loading` });
     },
 };
 
 export function useMe(): MeState {
-    return useSyncExternalStore(meStore.subscribe, read, read);
+    return useStore(session);
 }
 
 /** The name a person reads for themselves: their account name or guest label. */

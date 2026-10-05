@@ -5,8 +5,8 @@ import { pendingSignups } from './db/schema';
 import type { DiscordIdentity } from './discord';
 import { randomToken, sha256Hex } from './tokens';
 
-/** A first sign-in waiting for its public name. */
-export interface PendingSignup {
+// A first sign-in waiting for its public name.
+interface PendingSignup {
     discordId: string;
     names: DiscordNames;
     next: string;

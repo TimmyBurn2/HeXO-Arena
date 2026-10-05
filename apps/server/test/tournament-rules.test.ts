@@ -1,7 +1,7 @@
 import { adminResponseSchema, type AdminRequest } from '@hexo-arena/contract';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { openDatabase, runMigrations, type Sqlite } from '../src/db';
-import { createTestApp, type TestApp } from './helpers';
+import type { Sqlite } from '../src/db';
+import { createTestApp, migratedDatabase, type TestApp } from './helpers';
 
 const minute = 60_000;
 const hour = 60 * minute;
@@ -39,7 +39,7 @@ describe('weekly tournament rules', () => {
 
     beforeEach(async () => {
         clock = thursdayNoon;
-        world = await createTestApp({ logger: false, devLogin: false, now: () => clock });
+        world = await createTestApp({ devLogin: false, now: () => clock });
     });
 
     afterEach(async () => {
@@ -49,7 +49,7 @@ describe('weekly tournament rules', () => {
     async function restart(): Promise<void> {
         const { sqlite } = world;
         await world.app.close();
-        world = await createTestApp({ logger: false, devLogin: false, now: () => clock, sqlite });
+        world = await createTestApp({ devLogin: false, now: () => clock, sqlite });
     }
 
     function tick(at: number): void {
@@ -240,8 +240,7 @@ describe('the weekly rule tables', () => {
     let sqlite: Sqlite;
 
     beforeEach(() => {
-        sqlite = openDatabase(`:memory:`);
-        runMigrations(sqlite);
+        sqlite = migratedDatabase();
     });
 
     afterEach(() => {

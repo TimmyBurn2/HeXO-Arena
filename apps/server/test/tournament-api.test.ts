@@ -1,4 +1,4 @@
-import { gameSnapshotSchema, tournamentDetailSchema, tournamentEntrySchema, tournamentListSchema } from '@hexo-arena/contract';
+import { gameSnapshotSchema, liveGameEntrySchema, tournamentDetailSchema, tournamentEntrySchema, tournamentListSchema } from '@hexo-arena/contract';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { findBot } from '../src/bots';
 import { createQuery } from '../src/db';
@@ -21,7 +21,7 @@ describe('the tournament reads and entries', () => {
 
     beforeEach(async () => {
         clock = Date.UTC(2026, 9, 1, 12);
-        world = await createTestApp({ logger: false, now: () => clock });
+        world = await createTestApp({ now: () => clock });
         for (const [owner, bot] of people) {
             const session = await loginAs(world.app, owner);
             sessions.set(owner, session);
@@ -69,12 +69,18 @@ describe('the tournament reads and entries', () => {
         expect((await enter(`ann`, `alpha`)).statusCode).toBe(200);
         const answer = await world.app.inject({ method: `GET`, url: `/api/tournaments` });
         const list = tournamentListSchema.parse(answer.json());
-        expect(list.running).toBeNull();
+        expect(list.running).toEqual([]);
         expect(list.past).toEqual([]);
         expect(list.scheduled).toEqual([
             {
                 id,
                 name: `Autumn round robin`,
+                origin: `operator`,
+                format: `round_robin`,
+                createdBy: null,
+                rated: true,
+                test: false,
+                gamesPerPair: 2,
                 status: `scheduled`,
                 startsAt: new Date(clock + 120_000).toISOString().replace(`.000`, ``),
                 timeControl: { mode: `turn`, turnTimeMs: 10_000 },
@@ -87,9 +93,35 @@ describe('the tournament reads and entries', () => {
         ]);
     });
 
+    it('names the signed-in caller\'s own entry and its place on the list of every bot, and on no one else\'s', async () => {
+        const list = async (owner: string | null, search = ``) =>
+            tournamentListSchema.parse(
+                (await world.app.inject({ method: `GET`, url: `/api/tournaments${search}`, ...(owner === null ? {} : { cookies: { hexo_arena_session: sessions.get(owner) ?? `` } }) })).json(),
+            );
+        for (const [owner, bot] of people.slice(0, 3)) await enter(owner, bot);
+        expect((await list(`ann`)).scheduled[0]?.yours).toEqual({ bot: `alpha`, place: { state: `entered`, rank: null, points: null } });
+        expect((await list(`dee`)).scheduled[0]?.yours).toBeUndefined();
+        expect((await list(null)).scheduled[0]?.yours).toBeUndefined();
+        online(`alpha`, `beta`, `gamma`);
+        clock += 120_000;
+        world.tournaments.tick();
+        clock += 1_000;
+        expect((await list(`bob`)).running[0]?.yours).toEqual({ bot: `beta`, place: { state: `playing`, rank: 1, points: 0 } });
+        const forBot = (await list(`bob`, `?bot=gamma`)).running[0];
+        expect(forBot?.bot).toMatchObject({ state: `playing` });
+        expect(forBot?.yours).toBeUndefined();
+    });
+
     it('enters an owner\'s bot, replaces it with another of theirs, and withdraws it', async () => {
         const first = await enter(`ann`, `alpha`);
-        expect(tournamentEntrySchema.parse(first.json())).toEqual({ key: 1, bot: `alpha`, ownerName: `ann`, online: false, ratingAtStart: null, state: `entered` });
+        expect(tournamentEntrySchema.parse(first.json())).toEqual({
+            key: 1,
+            bot: `alpha`,
+            ownerName: `ann`,
+            online: false,
+            ratingAtStart: null,
+            state: `entered`,
+        });
         const token = await mintBot(world.app, sessions.get(`ann`) ?? ``, `alpha2`);
         await world.app.inject({ method: `PATCH`, url: `/api/bot/account`, headers: { authorization: `Bearer ${token}` }, payload: { accepts } });
         expect((await enter(`ann`, `alpha2`)).statusCode).toBe(200);
@@ -139,7 +171,7 @@ describe('the tournament reads and entries', () => {
         ]);
         expect(read.rounds).toHaveLength(3);
         const listed = tournamentListSchema.parse((await world.app.inject({ method: `GET`, url: `/api/tournaments` })).json());
-        expect(listed.running).toMatchObject({ id, status: `running`, round: { current: 1, of: 3 } });
+        expect(listed.running).toMatchObject([{ id, status: `running`, round: { current: 1, of: 3 } }]);
         const [round] = read.rounds;
         const [pairing] = round?.pairings ?? [];
         expect(round?.rest).not.toBeNull();
@@ -155,13 +187,17 @@ describe('the tournament reads and entries', () => {
         expect(pairing?.first.name).toBe(read.entries.find((entry) => entry.key === pairing?.first.key)?.bot);
         const gameId = pairing?.games[0]?.gameId ?? ``;
         expect(read.live.map((game) => game.gameId)).toEqual([gameId]);
+        const tag = { id, name: `Autumn round robin`, format: `round_robin`, round: 1, game: 1, of: 2 };
+        expect(read.live[0]?.tournament).toEqual(tag);
+        const liveList = liveGameEntrySchema.array().parse((await world.app.inject({ method: `GET`, url: `/api/games` })).json());
+        expect(liveList.find((game) => game.gameId === gameId)?.tournament).toEqual(tag);
         expect(read.standings.map((line) => [line.rank, line.points])).toEqual([
             [1, 0],
             [1, 0],
             [1, 0],
         ]);
         const snapshot = gameSnapshotSchema.parse((await world.app.inject({ method: `GET`, url: `/api/games/${gameId}` })).json());
-        expect(snapshot.tournament).toEqual({ id, name: `Autumn round robin`, round: 1, game: 1 });
+        expect(snapshot.tournament).toEqual(tag);
         // The x bot resigns: the point goes to the second bot, as o.
         const start = (streams.get(pairing?.first.name ?? ``)?.writes ?? []).map((line) => line.trim()).filter((line) => line.includes(`gameStart`));
         const token = (JSON.parse(start.at(-1) ?? `{}`) as { engine: { token: string } }).engine.token;
@@ -171,7 +207,7 @@ describe('the tournament reads and entries', () => {
         expect(after.rounds[0]?.pairings[0]?.games[0]).toMatchObject({ outcome: `played`, point: pairing?.second.key, missing: [] });
         expect(after.standings[0]).toMatchObject({ rank: 1, key: pairing?.second.key, bot: pairing?.second.name, points: 1, asX: 0, asO: 1 });
         const finished = gameSnapshotSchema.parse((await world.app.inject({ method: `GET`, url: `/api/games/${gameId}` })).json());
-        expect(finished.tournament).toEqual({ id, name: `Autumn round robin`, round: 1, game: 1 });
+        expect(finished.tournament).toEqual(tag);
     });
 
     it('names every deleted bot and owner by the plain label, told apart by key alone, and never by a placeholder', async () => {

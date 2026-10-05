@@ -6,11 +6,11 @@ import { hostBots, message, type HostedBot, type HostedFinish } from './host';
 import { playHumanGame } from './human';
 import { personaBots, type BotRun, type PersonaName, type SeedPlan } from './personas';
 import { NotADevServer, saveTokens } from './runner';
-import { seedDevDuels, type DevDuels, type DevDuelPlans } from './duels';
+import { seedDevEvents, type DevEventPlan, type DevEvents } from './events';
 import { devWeeklyRule, seedDevTournament, type Candidate, type DevTournament, type DevWeeklyRule } from './tournament';
 
-/** How the seed reaches its target, what it plays, and how it bans. */
-export interface SeedOptions {
+// How the seed reaches its target, what it plays, and how it bans.
+interface SeedOptions {
     origin: string;
     plan: SeedPlan;
     // Where the personas' online bots' tokens land, for pnpm dev:bots.
@@ -31,8 +31,8 @@ export interface SeedOptions {
     // resolves when the rule stands, newly or already.
     // Without it the seed adds none.
     addWeeklyRule?: (rule: DevWeeklyRule) => Promise<void>;
-    // The duels to leave: one played out, one running, and a test played out; without them the seed starts none.
-    duels?: DevDuelPlans;
+    // The duels and round robins to leave, played out or running; without them the seed sets none up.
+    events?: readonly DevEventPlan[];
     now?: () => number;
 }
 
@@ -44,7 +44,7 @@ export interface SeedReport {
     // Runs a daily cap stopped short, with the cap's code.
     readonly capped: readonly string[];
     readonly tournament: DevTournament | null;
-    readonly duels: DevDuels | null;
+    readonly events: DevEvents | null;
 }
 
 // A challenge waits on these and tries again; a daily cap ends its run.
@@ -193,15 +193,15 @@ export async function seedDevData(options: SeedOptions): Promise<SeedReport> {
         }
     }
 
-    let duels: DevDuels | null = null;
+    let events: DevEvents | null = null;
     try {
         await opened;
         await Promise.all([...personas.map(playHumans), ...plan.runs.map(playRun)]);
-        // While the personas' bots are still held online, so the played-out duels can finish.
-        if (options.duels !== undefined) {
-            duels = await seedDevDuels({
+        // While the personas' bots are still held online, so the played-out events can finish.
+        if (options.events !== undefined) {
+            events = await seedDevEvents({
                 client,
-                plans: options.duels,
+                plans: options.events,
                 cookieOf: async (person) => cookies.get(person) ?? (await client.devLogin(person)),
                 log,
             });
@@ -217,9 +217,8 @@ export async function seedDevData(options: SeedOptions): Promise<SeedReport> {
     }
 
     // The personas' online bots first, one per owner, then the others offered;
-    // a bot playing the live duel stays out, as the tournament's start would cut the duel short.
-    const live = duels?.live == null ? undefined : options.duels?.live;
-    const busy = new Set(live === undefined ? [] : [live.first, live.second]);
+    // a bot playing a running duel or round robin stays out, as the tournament's start would take it out of that event.
+    const busy = new Set((options.events ?? []).filter((each) => each.left === `running` && events?.[each.name] != null).flatMap((each) => each.bots));
     const candidates: Candidate[] = [];
     for (const bot of personaBots) {
         if (bot.online && cookies.has(bot.owner) && !busy.has(bot.name) && !candidates.some((candidate) => candidate.owner === bot.owner)) {
@@ -244,5 +243,5 @@ export async function seedDevData(options: SeedOptions): Promise<SeedReport> {
 
     const accounts = await client.devAccounts();
     const ranked = accounts.flatMap((account) => account.bots).filter((bot) => !bot.provisional).map((bot) => bot.name);
-    return { accounts, ranked, played, capped, tournament, duels };
+    return { accounts, ranked, played, capped, tournament, events };
 }

@@ -71,9 +71,25 @@ export interface TestApp {
     drain: BuiltApp[`drain`];
     limits: BuiltApp[`limits`];
     tournaments: BuiltApp[`tournaments`];
-    duels: BuiltApp[`duels`];
     presence: PresenceRegistry;
     watchers: GameWatchers;
+}
+
+let template: Buffer | null = null;
+
+/**
+ * A fresh in-memory database at the latest schema: a clone of one migrated
+ * once per test file, since migrating takes about 90 ms and a clone well
+ * under one.
+ */
+export function migratedDatabase(): Sqlite {
+    if (template === null) {
+        const source = openDatabase(`:memory:`);
+        runMigrations(source);
+        template = source.serialize();
+        source.close();
+    }
+    return openDatabase(template);
 }
 
 /**
@@ -97,13 +113,15 @@ export async function createTestApp(options?: {
     limits?: LimitTable;
     backup?: { dir: string; keep: number };
     erasures?: { path: string; keepDays: number };
+    roundGapMs?: number;
 }): Promise<TestApp> {
     const discord = options?.discord === undefined ? fakeDiscord({ id: `1`, username: `tester` }).oauth : options.discord;
-    const sqlite = options?.sqlite ?? openDatabase(`:memory:`);
-    runMigrations(sqlite);
+    const given = options?.sqlite;
+    if (given !== undefined) runMigrations(given);
+    const sqlite = given ?? migratedDatabase();
     const presence = options?.presence ?? new PresenceRegistry();
     const watchers = new GameWatchers();
-    const { app, admin, drain, limits, tournaments, duels } = await buildApp({
+    const { app, admin, drain, limits, tournaments } = await buildApp({
         sqlite,
         discord,
         secureCookies: options?.secureCookies ?? false,
@@ -113,7 +131,8 @@ export async function createTestApp(options?: {
         adminActor: `operator`,
         publicOrigin: `https://arena.example`,
         ...(options?.random !== undefined && { random: options.random }),
-        ...(options?.logger !== undefined && { logger: options.logger }),
+        // Off unless a test reads the log, so a failure's own lines stand out in the output.
+        logger: options?.logger ?? false,
         ...(options?.webIndexPath !== undefined && { webIndexPath: options.webIndexPath }),
         // On unless a test turns it off, so the form's route and its limits stay under test.
         reportForm: options?.reportForm ?? true,
@@ -122,10 +141,11 @@ export async function createTestApp(options?: {
         ...(options?.limits !== undefined && { limits: options.limits }),
         ...(options?.backup !== undefined && { backup: options.backup }),
         ...(options?.erasures !== undefined && { erasures: options.erasures }),
-        // Tests move the scheduler and the duel runner with their own ticks.
+        // Tests move the scheduler with their own ticks.
         tournamentTickMs: 0,
+        ...(options?.roundGapMs !== undefined && { tournamentRoundGapMs: options.roundGapMs }),
     });
-    return { sqlite, app, admin, drain, limits, presence, watchers, tournaments, duels };
+    return { sqlite, app, admin, drain, limits, presence, watchers, tournaments };
 }
 
 /** A Discord sign-in started in one browser: the state Discord echoes, and the cookies that browser then holds. */

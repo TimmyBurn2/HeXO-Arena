@@ -51,8 +51,8 @@ function clientOf(address: string | undefined): { client: string; prefix: string
     return { client: `${groups.slice(0, 4).join(`:`)}::/64`, prefix: `${groups.slice(0, 3).join(`:`)}::/48` };
 }
 
-/** The keys one request is limited under: its client's, and its IPv6 /48's, null for IPv4. */
-export interface RequestKeys {
+// The keys one request is limited under: its client's, and its IPv6 /48's, null for IPv4.
+interface RequestKeys {
     readonly client: string | null;
     readonly prefix: string | null;
 }

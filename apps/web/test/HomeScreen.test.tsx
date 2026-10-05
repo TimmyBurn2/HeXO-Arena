@@ -80,7 +80,7 @@ function serve(reads: Reads): void {
                           : path === `/api/games/finished`
                             ? { games: reads.finished ?? [], page: 1, pages: 1, total: (reads.finished ?? []).length }
                             : path === `/api/tournaments`
-                              ? (reads.tournaments ?? { running: null, scheduled: [], past: [] })
+                              ? (reads.tournaments ?? { running: [], scheduled: [], past: [] })
                               : undefined;
             return Promise.resolve(body === undefined ? new Response(`{}`, { status: 404 }) : new Response(JSON.stringify(body)));
         }),
@@ -187,19 +187,19 @@ describe('HomeScreen', () => {
     });
 
     it('shows the tournament running now, or one starting within a day, and none further off', async () => {
-        const summary = { id: `t_autumnrobin1`, name: `Autumn round robin`, status: `scheduled` as const, startsAt: new Date(Date.now() + 3 * 3_600_000 + 30_000).toISOString(), timeControl: { mode: `turn` as const, turnTimeMs: 10_000 }, openingPlies: 5 as const, entrants: 4, maxEntrants: 12, winner: null, round: null };
-        serve({ tournaments: { running: null, scheduled: [summary], past: [] } });
+        const summary = { id: `t_autumnrobin1`, name: `Autumn round robin`, origin: `operator` as const, format: `round_robin` as const, createdBy: null, rated: true, test: false, gamesPerPair: 2 as const, status: `scheduled` as const, startsAt: new Date(Date.now() + 3 * 3_600_000 + 30_000).toISOString(), timeControl: { mode: `turn` as const, turnTimeMs: 10_000 }, openingPlies: 5 as const, entrants: 4, maxEntrants: 12, winner: null, round: null };
+        serve({ tournaments: { running: [], scheduled: [summary], past: [] } });
         const { unmount } = render(<HomeScreen />);
         expect((await screen.findByRole(`link`, { name: `Autumn round robin` })).getAttribute(`href`)).toBe(`/tournaments/t_autumnrobin1`);
         expect(screen.getByText(`4 of 12 bots entered`)).toBeTruthy();
         expect(screen.getByText(`in 3 h 0 min`)).toBeTruthy();
         unmount();
-        serve({ tournaments: { running: { ...summary, status: `running`, round: { current: 2, of: 3 } }, scheduled: [], past: [] } });
+        serve({ tournaments: { running: [{ ...summary, status: `running`, round: { current: 2, of: 3 } }], scheduled: [], past: [] } });
         const second = render(<HomeScreen />);
         expect(await screen.findByText(`4 bots; turn clock 10 s`)).toBeTruthy();
         expect(screen.getByText(`live`)).toBeTruthy();
         second.unmount();
-        serve({ tournaments: { running: null, scheduled: [{ ...summary, startsAt: new Date(Date.now() + 30 * 3_600_000).toISOString() }], past: [] } });
+        serve({ tournaments: { running: [], scheduled: [{ ...summary, startsAt: new Date(Date.now() + 30 * 3_600_000).toISOString() }], past: [] } });
         render(<HomeScreen />);
         await screen.findByText(`No bots online right now`);
         expect(screen.queryByRole(`heading`, { name: `Tournament` })).toBeNull();

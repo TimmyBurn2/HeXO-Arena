@@ -30,7 +30,7 @@ export interface BoardLines {
     readonly lines: readonly { readonly letter: string; readonly cells: readonly AxialCoord[] }[];
 }
 
-export interface BoardOverlays {
+interface BoardOverlays {
     pending?: AxialCoord | undefined;
     // The side whose ghost stone previews the pending mark.
     pendingSide?: Side | undefined;
@@ -44,7 +44,7 @@ export interface BoardOverlays {
     judgment?: { readonly cell: AxialCoord; readonly severity: JudgmentSeverity } | undefined;
 }
 
-export interface BoardProps {
+interface BoardProps {
     stones: readonly BoardStone[];
     settings: BoardSettings;
     label: string;

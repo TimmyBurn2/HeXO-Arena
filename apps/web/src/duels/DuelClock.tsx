@@ -4,18 +4,20 @@ import { turnWindowOf } from '../play/accepts';
 import { Stepper } from '../play/ClockPicker';
 import { presetOf, sameClock } from '../play/setup';
 import { text } from '../text';
-import { defaultDuelClock, duelClocks, duelPresets, isPreset, refusedBy, takenByBoth } from './setup';
+import { defaultFieldClock, duelPresets, fieldClocks, isPreset, refusersOf, takenByAll } from './setup';
 
 /**
- * A duel's clock: Play's presets but Unlimited, a preset either bot
- * refuses drawn as an outline naming the bot, or a clock set by hand
- * inside what both bots take and the bounds a duel keeps.
+ * A scheduled game's clock for a field, a duel's two bots or a round
+ * robin's: Play's presets but Unlimited, a preset a bot refuses drawn as an
+ * outline naming the bots, or a clock set by hand inside what every bot
+ * takes and the bounds a scheduled game keeps. The foot says what every
+ * bot takes, unless one limits the presets.
  */
-export function DuelClock({ first, second, clock, onClock }: { first: BotListing; second: BotListing; clock: TimeControl; onClock: (clock: TimeControl) => void }) {
+export function DuelClock({ field, clock, foot, onClock }: { field: readonly BotListing[]; clock: TimeControl; foot: string; onClock: (clock: TimeControl) => void }) {
     const [byHand, setByHand] = useState(() => !isPreset(clock));
     const ids = useId();
-    const out = duelPresets.filter((preset) => !takenByBoth(preset.clock, first, second));
-    const limiting = out.length === 0 ? null : refusedBy(out[0]?.clock ?? clock, first, second);
+    const out = duelPresets.filter((preset) => !takenByAll(preset.clock, field));
+    const limiting = out.length === 0 ? null : (refusersOf(out[0]?.clock ?? clock, field)[0] ?? null);
     const limitingWindow = limiting === null ? null : turnWindowOf(limiting.accepts);
     return (
         <div className="setup-block">
@@ -23,12 +25,12 @@ export function DuelClock({ first, second, clock, onClock }: { first: BotListing
                 {text.play.clock}
             </h3>
             {byHand ? (
-                <HandClock first={first} second={second} clock={clock} onClock={onClock} />
+                <HandClock field={field} clock={clock} onClock={onClock} />
             ) : (
                 <div className="clock-grid clock-grid-duel" role="radiogroup" aria-labelledby={`${ids}-clock`}>
                     {duelPresets.map((preset) => {
-                        const taken = takenByBoth(preset.clock, first, second);
-                        const refuser = taken ? null : refusedBy(preset.clock, first, second);
+                        const taken = takenByAll(preset.clock, field);
+                        const refusers = taken ? [] : refusersOf(preset.clock, field).map((bot) => bot.name);
                         const tile = text.play.tiles[preset.id];
                         return (
                             <label key={preset.id} className="clock-tile">
@@ -53,7 +55,7 @@ export function DuelClock({ first, second, clock, onClock }: { first: BotListing
                                     </span>
                                 ) : (
                                     <span className="clock-out" id={`${ids}-${preset.id}-out`}>
-                                        {text.duels.clockOut(refuser?.name ?? ``, preset.clock.mode === `match` ? tile.kind : `${tile.value} ${tile.kind}`)}
+                                        {text.duels.clockOut(refusers, preset.clock.mode === `match` ? tile.kind : `${tile.value} ${tile.kind}`)}
                                     </span>
                                 )}
                             </label>
@@ -66,7 +68,7 @@ export function DuelClock({ first, second, clock, onClock }: { first: BotListing
                     {byHand
                         ? null
                         : limiting === null || limiting.accepts === undefined
-                          ? text.duels.clockFoot
+                          ? foot
                           : text.play.acceptsLine(limiting.name, {
                                 turn: limitingWindow === null ? null : [limitingWindow[0] / 1000, limitingWindow[1] / 1000],
                                 match: limiting.accepts.match,
@@ -78,7 +80,7 @@ export function DuelClock({ first, second, clock, onClock }: { first: BotListing
                     className="text-button"
                     onClick={() => {
                         if (byHand && !isPreset(clock)) {
-                            const fallback = defaultDuelClock(first, second, null);
+                            const fallback = defaultFieldClock(field, null);
                             if (fallback !== null) onClock(fallback);
                         }
                         setByHand(!byHand);
@@ -91,10 +93,10 @@ export function DuelClock({ first, second, clock, onClock }: { first: BotListing
     );
 }
 
-// A clock by hand: a turn clock in the window both bots take inside a
-// duel's bounds, or a match clock in a duel's bounds when both take one.
-function HandClock({ first, second, clock, onClock }: { first: BotListing; second: BotListing; clock: TimeControl; onClock: (clock: TimeControl) => void }) {
-    const clocks = duelClocks(first, second);
+// A clock by hand: a turn clock in the window every bot takes inside a
+// scheduled game's bounds, or a match clock in them when every bot takes one.
+function HandClock({ field, clock, onClock }: { field: readonly BotListing[]; clock: TimeControl; onClock: (clock: TimeControl) => void }) {
+    const clocks = fieldClocks(field);
     const turnBounds = clocks.turn;
     const mainBounds = { min: scheduledMainMs.min / 60_000, max: scheduledMainMs.max / 60_000 };
     const incrementBounds = { min: scheduledIncrementMs.min / 1000, max: scheduledIncrementMs.max / 1000 };

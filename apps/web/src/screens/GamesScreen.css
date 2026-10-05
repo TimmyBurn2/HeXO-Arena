@@ -74,6 +74,19 @@
         width: 100%;
     }
 
+    .games-panel-fields .games-field-wide {
+        grid-column: 1 / -1;
+    }
+
+    .games-panel-fields .games-pick-note {
+        grid-column: 1 / -1;
+        margin: 0;
+    }
+
+    .games-panel-fields .games-pick-note:empty {
+        display: none;
+    }
+
     .games-panel-foot {
         display: flex;
         justify-content: flex-end;

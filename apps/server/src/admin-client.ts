@@ -35,10 +35,9 @@ export const adminUsage = `usage: hexo-arena-admin <op> [target] [--reason <text
   tournament-schedule list
   tournament-schedule remove <ruleId> --reason <text>
   report-close <reportId> --reason <note>
-  delete-analysis <analysisId> --reason <text>
-  duel-stop <duelId> --reason <text>`;
+  delete-analysis <analysisId> --reason <text>`;
 
-export type ParsedArgs = { kind: `request`; request: AdminRequest } | { kind: `usage`; error: string };
+type ParsedArgs = { kind: `request`; request: AdminRequest } | { kind: `usage`; error: string };
 
 const namedOps = new Set([`ban-user`, `unban-user`, `delete-user`, `delist-bot`, `relist-bot`, `revoke-bot`]);
 
@@ -89,7 +88,7 @@ function requestBody(op: string, target: string | undefined, flags: Flags): Reco
             ...reason,
         };
     }
-    if (op === `tournament-cancel` || op === `delete-analysis` || op === `duel-stop`) return { op, id: target, ...reason };
+    if (op === `tournament-cancel` || op === `delete-analysis`) return { op, id: target, ...reason };
     if (op === `tournament-schedule-add`) {
         const opening = numberFlag(flags.opening);
         const max = numberFlag(flags.max);
@@ -201,6 +200,7 @@ function formatStatus(status: AdminStatus): string {
         `live streams  ${String(status.liveStreams)}`,
         `active games  ${String(status.activeGames)}`,
         `live duels    ${String(status.liveDuels)}`,
+        `round robins  ${String(status.liveRoundRobins)} live`,
         `client keys   ${String(status.clientKeys)}`,
         `keyless       ${String(status.keylessRequests)}`,
         `bot clients, last ${String(clientCensusDays)} days:`,

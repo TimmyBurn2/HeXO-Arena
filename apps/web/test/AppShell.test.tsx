@@ -134,6 +134,43 @@ describe('AppShell', () => {
         expect(topbar().querySelectorAll(`[aria-current="page"]`)).toHaveLength(1);
     });
 
+    it('light Games on its duels and tournaments and on each duel\'s and tournament\'s page, Play on its three places, and the ladder on its own alone', async () => {
+        stubHealthOk();
+        window.history.replaceState(null, ``, `/games/duels`);
+        render(<AppShell />);
+        const lit = async (path: string, item: string) => {
+            navigate(path);
+            await waitFor(() => {
+                expect(topLink(item).getAttribute(`aria-current`)).toBe(`page`);
+            });
+            expect(topbar().querySelectorAll(`[aria-current="page"]`)).toHaveLength(1);
+        };
+        for (const path of [`/games/duels`, `/games/tournaments`, `/duels/d_abcdefghijkl`, `/tournaments/t_autumnrobin1`]) await lit(path, `Games`);
+        for (const path of [`/play`, `/play/duels`, `/play/tournament`]) await lit(path, `Play`);
+        await lit(`/ladder`, `Ladder`);
+    });
+
+    it('take an old address of a duel, a tournament, or their lists on to the new one in place, its query read as the new page reads it', async () => {
+        stubHealthOk();
+        for (const [from, to] of [
+            [`/play/duels/d_abcdefghijkl`, `/tournaments/d_abcdefghijkl`],
+            [`/duels/d_abcdefghijkl`, `/tournaments/d_abcdefghijkl`],
+            [`/tournaments`, `/games/tournaments`],
+            [`/duels`, `/games/tournaments`],
+            [`/games/duels?bot=hextide&list=tests`, `/games/tournaments?bot=hextide&list=tests`],
+            [`/play/duels?first=hextide&second=pebble&games=4`, `/play/tournament?bots=hextide%2Cpebble&games=4`],
+        ] as const) {
+            window.history.replaceState(null, ``, from);
+            const before = window.history.length;
+            const { unmount } = render(<AppShell />);
+            await waitFor(() => {
+                expect(window.location.pathname + window.location.search).toBe(to);
+            });
+            expect(window.history.length).toBe(before);
+            unmount();
+        }
+    });
+
     it('give the phone tabs the entries of the nav, with profile left to who is here', async () => {
         stubHealthOk();
         window.history.replaceState(null, ``, `/bots/sealbot`);
@@ -252,7 +289,24 @@ describe('AppShell', () => {
         stubHealthOk();
         stubEventSource(null);
         render(<AppShell />);
-        for (const path of [`/`, `/ladder`, `/bots`, `/bots/sealbot`, `/connect`, `/profile`, `/credits`, `/legal/imprint`, `/legal/privacy`, `/legal/terms`, `/nowhere`]) {
+        for (const path of [
+            `/`,
+            `/play/tournament`,
+            `/games`,
+            `/games/tournaments`,
+            `/tournaments/t_wintercup202`,
+            `/ladder`,
+            `/bots`,
+            `/bots/sealbot`,
+            `/connect`,
+            `/profile`,
+            `/credits`,
+            `/report`,
+            `/legal/imprint`,
+            `/legal/privacy`,
+            `/legal/terms`,
+            `/nowhere`,
+        ]) {
             navigate(path);
             await waitFor(() => {
                 expect(document.querySelector(`footer.site-footer`)).toBeTruthy();
@@ -260,15 +314,17 @@ describe('AppShell', () => {
             const footer = document.querySelector(`footer.site-footer`) as HTMLElement;
             expect(footer.querySelector(`.site-tagline`)?.textContent).toBe(`HeXO Arena, one ladder for bots and humans`);
             expect([...footer.querySelectorAll(`a`)].map((a) => [a.textContent, a.getAttribute(`href`), a.getAttribute(`target`)])).toEqual([
-                [`Tournaments`, `/tournaments`, null],
                 [`Build a bot`, `/connect`, null],
                 [`Credits`, `/credits`, null],
                 [`Bot API`, `https://github.com/TimmyBurn2/Hexo-Bot-Api`, null],
+                [`Source`, `https://github.com/TimmyBurn2/HeXO-Arena`, null],
+                [`Feedback`, `https://github.com/TimmyBurn2/HeXO-Arena/issues/new/choose`, null],
                 [`Impressum / Legal notice`, `/legal/imprint`, null],
                 [`Privacy`, `/legal/privacy`, null],
                 [`Terms`, `/legal/terms`, null],
                 [`Licenses`, `/third-party-licenses.txt`, null],
-                [`Report`, `/report?subject=${encodeURIComponent(path)}`, null],
+                // The report form's own link names no page; every other names the page it stands on.
+                [`Report`, path === `/report` ? `/report` : `/report?subject=${encodeURIComponent(path)}`, null],
             ]);
             expect([...footer.querySelectorAll(`ul`)].at(-1)?.textContent).toBe(`Impressum / Legal noticePrivacyTermsLicensesReport`);
         }

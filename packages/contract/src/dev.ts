@@ -22,7 +22,6 @@ export const devAccountBotSchema = z.object({
     // Finished games against other bots, which the seed tops up to its plan.
     vsBots: z.number().int().min(0),
 });
-export type DevAccountBot = z.infer<typeof devAccountBotSchema>;
 
 // A seeded persona as it stands now; `games` counts its finished games as a
 // human, whatever their result.

@@ -1,5 +1,6 @@
 import { useId, useRef, useState, type KeyboardEvent, type MouseEvent } from 'react';
 import type { RatingPoint, RatingRange } from '@hexo-arena/contract';
+import { pagePath } from '@hexo-arena/contract';
 import { cellSize, hexPoints } from '../board/geometry';
 import { Rating } from '../components/player';
 import { navigate } from '../router/use-route';
@@ -133,7 +134,7 @@ function Plot({ points }: { points: readonly RatingPoint[] }) {
 
     function open(index: number | null) {
         const point = index === null ? undefined : points[index];
-        if (point !== undefined) navigate(`/game/${encodeURIComponent(point.gameId)}`);
+        if (point !== undefined) navigate(pagePath(`game`, { gameId: point.gameId }));
     }
 
     function onKey(event: KeyboardEvent<HTMLDivElement>) {

@@ -1,7 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
 import type { Me } from '@hexo-arena/contract';
-import { looks, wear } from './matrix';
-import { analyzerBots, bots, duelBots, duelFixtures, heldBots, liveGames, longReadings, playBots, rivalry, serve, signup, tournaments, world, type World } from './mock-api';
+import { looks, sweep, wear } from './matrix';
+import { analyzerBots, bots, duelBots, duelGameRows, heldBots, keptNames, liveGames, longReadings, playBots, rivalry, roundRobins, serve, signup, tournamentGameRows, tournaments, world, type World } from './mock-api';
 
 const visitors: readonly { name: string; me: Me }[] = [
     { name: `signed-out`, me: null },
@@ -19,19 +19,28 @@ const screens: readonly { name: string; path: string; world?: Partial<World>; th
     { name: `the root`, path: `/` },
     { name: `play`, path: `/play`, world: { bots: playBots } },
     { name: `play with a limited bot`, path: `/play?bot=quietlake`, world: { bots: playBots } },
-    { name: `bot duels`, path: `/play/duels?first=Pistol1`, world: { bots: duelBots, duels: Object.values(duelFixtures).filter((duel) => duel.id !== duelFixtures.testLive.id) } },
     {
-        name: `a new test with its picker`,
-        path: `/play/duels?first=pebble`,
+        name: `Home's duel with its bot list`,
+        path: `/`,
         world: { bots: duelBots.map((bot) => ({ ...bot, ownerName: bot.ownerName === `ana` ? `quinn` : bot.ownerName })) },
         then: async (page) => {
-            await page.getByRole(`button`, { name: `Add a bot, Second bot` }).click();
+            await page.getByRole(`button`, { name: `Add a bot, First bot` }).click();
             await page.locator(`dialog.duel-picker[open] .pick-detail`).waitFor();
         },
     },
-    { name: `a duel`, path: `/play/duels/${duelFixtures.live.id}`, world: { bots: duelBots, duels: [duelFixtures.live] } },
-    { name: `a test`, path: `/play/duels/${duelFixtures.test.id}`, world: { bots: duelBots, duels: [duelFixtures.test] } },
+    { name: `the tournament place under Play`, path: `/play/tournament`, world: { tournaments: tournaments() } },
+    {
+        name: `games narrowed to one duel, its pick open`,
+        path: `/games?event=tournament&tournament=t_brunoduel001`,
+        world: { tournaments: roundRobins(), finished: [...duelGameRows, ...keptNames] },
+        then: async (page) => {
+            await page.getByRole(`button`, { name: /^Filters/u }).click();
+            await page.locator(`#games-tournament`).waitFor();
+        },
+    },
+    { name: `games narrowed to one round of a tournament`, path: `/games?event=tournament&tournament=t_autumnrobin1&round=2`, world: { tournaments: tournaments(), finished: [...tournamentGameRows, ...keptNames] } },
     { name: `games`, path: `/games` },
+    { name: `games of duels and tournaments`, path: `/games`, world: { finished: [...tournamentGameRows, ...duelGameRows, ...keptNames] } },
     { name: `a head-to-head`, path: `/games?player=hextide&vs=quietlake`, world: { finished: rivalry(30) } },
     { name: `live games`, path: `/games/live` },
     { name: `the analysis board`, path: `/analysis` },
@@ -52,14 +61,44 @@ const screens: readonly { name: string; path: string; world?: Partial<World>; th
         },
     },
     { name: `the ladder`, path: `/ladder` },
-    { name: `tournaments`, path: `/tournaments` },
-    { name: `a running tournament`, path: `/tournaments/t_autumnrobin1`, world: { tournaments } },
+    {
+        name: `a round robin set up on Play`,
+        path: `/play/tournament?bots=hextide%2Ccinder%2CPistol1%2Cdevbot-b%2Cquietlake`,
+        world: { bots: duelBots.map((bot) => ({ ...bot, ownerName: bot.ownerName === `ana` ? `quinn` : bot.ownerName })), tournaments: tournaments().filter((entry) => entry.status !== `running`) },
+    },
+    {
+        name: `a round robin's bot list`,
+        path: `/play/tournament?bots=hextide`,
+        world: { bots: duelBots.map((bot) => ({ ...bot, ownerName: bot.ownerName === `ana` ? `quinn` : bot.ownerName })), tournaments: tournaments().filter((entry) => entry.status !== `running`) },
+        then: async (page) => {
+            await page.getByRole(`button`, { name: `Add bots, the second plate` }).click();
+            await page.locator(`dialog.rr-picker[open] .rr-pick`).first().waitFor();
+        },
+    },
+    {
+        name: `a duel set up on Play`,
+        path: `/play/tournament?bots=devbot-b%2Cdevbot-c&games=10`,
+        world: { bots: duelBots, tournaments: tournaments().filter((entry) => entry.status !== `running`) },
+    },
+    { name: `the duels and round robins under Games`, path: `/games/tournaments`, world: { tournaments: [...tournaments(), ...roundRobins()] } },
+    { name: `one bot's tournaments under Games`, path: `/games/tournaments?bot=hextide`, world: { tournaments: [...tournaments(), ...roundRobins()] } },
+    { name: `a live round robin`, path: `/tournaments/t_brunorobin01`, world: { tournaments: roundRobins() } },
+    { name: `a test of several bots`, path: `/tournaments/t_anatest00001`, world: { tournaments: roundRobins() } },
+    { name: `a live duel`, path: `/tournaments/t_brunoduel001`, world: { tournaments: roundRobins() } },
+    { name: `a test of two bots`, path: `/tournaments/t_anaduel00001`, world: { tournaments: roundRobins() } },
+    { name: `a duel cut short`, path: `/tournaments/t_dmitricut001`, world: { tournaments: roundRobins() } },
+    { name: `a bot page with its duels and round robins`, path: `/bots/hextide`, world: { bots: duelBots, tournaments: roundRobins() } },
+    { name: `a round robin over`, path: `/tournaments/t_brunorobin02`, world: { tournaments: roundRobins() } },
+    { name: `tournaments`, path: `/games/tournaments`, world: { tournaments: tournaments() } },
+    { name: `a running tournament`, path: `/tournaments/t_autumnrobin1`, world: { tournaments: tournaments() } },
     { name: `a waiting tournament`, path: `/tournaments/t_wintercup202` },
     { name: `bots`, path: `/bots` },
     { name: `a bot page`, path: `/bots/sealbot` },
+    { name: `a bot page with its tournaments`, path: `/bots/hextide`, world: { tournaments: tournaments() } },
     { name: `an analyzer's page`, path: `/bots/kestrel`, world: { bots: [...bots, ...analyzerBots] } },
     { name: `build a bot`, path: `/connect` },
     { name: `profile`, path: `/profile` },
+    { name: `profile with duels and round robins`, path: `/profile`, world: { bots: duelBots, tournaments: roundRobins().map((detail) => (detail.id === `t_brunoduel001` ? { ...detail, createdBy: `quinn` } : detail)) } },
     {
         name: `profile at the bot cap, or with no bots for the long name`,
         path: `/profile`,
@@ -77,6 +116,7 @@ const screens: readonly { name: string; path: string; world?: Partial<World>; th
     { name: `terms`, path: `/legal/terms` },
     { name: `a missing page`, path: `/nowhere` },
     { name: `a missing game`, path: `/game/nope` },
+    { name: `a missing tournament`, path: `/tournaments/t_nosuchthing1` },
 ];
 
 // Text at 100, 150, and 200% of the default size, as a reader sets it in the browser;
@@ -197,25 +237,27 @@ async function faults(page: Page, width: number, longName: boolean): Promise<str
     );
 }
 
+// One load per visitor and screen, the text size changed in the page as a
+// reader changes it in the browser, and every width swept at each size.
 for (const visitor of visitors) {
-    for (const size of sizes) {
-        for (const screen of screens.filter((entry) => entry.then === undefined || visitor.me?.kind === `user`)) {
-            test(`at ${String((size / 16) * 100)}% text the ${visitor.name} bar and ${screen.name} stay inside the window from 320 to 1280 px`, async ({ page }) => {
-                const look = looks[0];
-                if (look === undefined) throw new Error(`no look registered`);
-                await wear(page, look);
-                await serve(page, world({ me: visitor.me, signup, live: liveGames, ...screen.world }));
-                await page.setViewportSize({ width: widths[0] ?? 320, height: 800 });
-                const devtools = await page.context().newCDPSession(page);
+    for (const screen of screens.filter((entry) => entry.then === undefined || visitor.me?.kind === `user`)) {
+        test(`at 100, 150, and 200% text the ${visitor.name} bar and ${screen.name} stay inside the window from 320 to 1280 px`, sweep, async ({ page }) => {
+            const look = looks[0];
+            if (look === undefined) throw new Error(`no look registered`);
+            await wear(page, look);
+            await serve(page, world({ me: visitor.me, signup, live: liveGames, ...screen.world }));
+            await page.setViewportSize({ width: widths[0] ?? 320, height: 800 });
+            const devtools = await page.context().newCDPSession(page);
+            await page.goto(screen.path);
+            await page.locator(`h1`).first().waitFor();
+            if (visitor.me !== null) await page.locator(`header button.identity`).waitFor();
+            await screen.then?.(page);
+            await page.evaluate(async () => {
+                await document.fonts.ready;
+            });
+            const found: string[] = [];
+            for (const size of sizes) {
                 await devtools.send(`Page.setFontSizes`, { fontSizes: { standard: size } });
-                await page.goto(screen.path);
-                await page.locator(`h1`).first().waitFor();
-                if (visitor.me !== null) await page.locator(`header button.identity`).waitFor();
-                await screen.then?.(page);
-                await page.evaluate(async () => {
-                    await document.fonts.ready;
-                });
-                const found: string[] = [];
                 for (const width of widths) {
                     await page.setViewportSize({ width, height: 800 });
                     await page.evaluate(
@@ -228,10 +270,10 @@ for (const visitor of visitors) {
                                 });
                             }),
                     );
-                    found.push(...(await faults(page, width, visitor.name === `long-named`)));
+                    found.push(...(await faults(page, width, visitor.name === `long-named`)).map((fault) => `${String((size / 16) * 100)}% text, ${fault}`));
                 }
-                expect(found).toEqual([]);
-            });
-        }
+            }
+            expect(found).toEqual([]);
+        });
     }
 }

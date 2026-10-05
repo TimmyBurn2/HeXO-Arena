@@ -1,0 +1,406 @@
+@layer screens {
+    .duel-title-row {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        justify-content: space-between;
+        gap: var(--space-3);
+    }
+
+    .duel-kicker {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: var(--space-2);
+        margin: 0;
+        color: var(--c-text-dim);
+        font-size: var(--text-sm);
+        font-weight: var(--weight-strong);
+    }
+
+    .duel-kicker a {
+        color: var(--c-text-dim);
+    }
+
+    .duel-actions {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: flex-start;
+        gap: var(--space-2);
+    }
+
+    /* The two plates face each other across the score. */
+    .duel-head {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+        align-items: center;
+        gap: var(--space-4);
+        margin: var(--space-3) 0 var(--space-5);
+    }
+
+    .duel-plate {
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-1);
+        min-width: 0;
+        padding: var(--space-4) var(--space-5);
+        background: var(--c-bg-raised);
+        box-shadow: inset 0 var(--border-w) 0 var(--surface-edge-hi);
+        clip-path: var(--cut-md-path);
+    }
+
+    .duel-plate-right {
+        align-items: flex-end;
+        text-align: right;
+    }
+
+    .duel-plate-name {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: var(--space-1) var(--space-2);
+        margin: 0;
+        /* A narrow window takes the name down with it, so a name of a few letters keeps one line at large text. */
+        font-size: min(var(--text-2xl), 9vw);
+        font-weight: var(--weight-display);
+        letter-spacing: var(--tracking-display);
+        line-height: var(--leading-tight);
+        overflow-wrap: break-word;
+    }
+
+    .duel-plate-right .duel-plate-name,
+    .duel-plate-right .duel-plate-meta {
+        justify-content: flex-end;
+    }
+
+    .duel-plate-meta {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0 var(--space-3);
+        margin: 0;
+        color: var(--c-text-dim);
+        font-size: var(--text-sm);
+    }
+
+    .duel-plate-rating {
+        margin: var(--space-1) 0 0;
+        font-size: var(--text-lg);
+        font-weight: var(--weight-display);
+        font-variant-numeric: tabular-nums;
+    }
+
+    .duel-plate-rating .note {
+        font-size: var(--text-sm);
+        font-weight: var(--weight-regular);
+    }
+
+    .score-hex {
+        position: relative;
+        display: grid;
+        place-items: center;
+        width: var(--score-hex-w);
+    }
+
+    .score-hex svg {
+        display: block;
+        width: 100%;
+        height: auto;
+    }
+
+    .score-frame {
+        fill: var(--c-accent);
+    }
+
+    /* The score's text stands on the page's ground, which every look keeps dark. */
+    .score-cell {
+        fill: var(--c-bg);
+    }
+
+    .score-hex-over .score-frame {
+        fill: var(--c-border-strong);
+    }
+
+    .score-text {
+        position: absolute;
+        inset: 0;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: var(--space-half);
+    }
+
+    .score-digits {
+        font-size: var(--text-2xl);
+        font-weight: var(--weight-display);
+        font-variant-numeric: tabular-nums;
+        letter-spacing: var(--tracking-display);
+        line-height: 1;
+    }
+
+    .score-of {
+        color: var(--c-text-dim);
+        font-size: var(--text-xs);
+        font-weight: var(--weight-strong);
+    }
+
+    .duel-intro {
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-2);
+        margin-bottom: var(--space-6);
+    }
+
+    .duel-status {
+        margin: 0;
+        font-size: var(--text-lg);
+        font-weight: var(--weight-strong);
+    }
+
+    .duel-terms {
+        margin: 0;
+        max-width: var(--measure);
+        color: var(--c-text-dim);
+        font-size: var(--text-sm);
+    }
+
+    .duel-grid {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) var(--duel-side-w);
+        align-items: start;
+        gap: var(--space-6);
+    }
+
+    .duel-main,
+    .duel-side {
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-6);
+        min-width: 0;
+    }
+
+    .duel-section {
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-3);
+        min-width: 0;
+    }
+
+    .duel-section > .section-title,
+    .duel-section > .note,
+    .duel-section p {
+        margin: 0;
+    }
+
+    /* A section's title with a link beside it, leading out of the page. */
+    .duel-section-head {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: var(--space-2) var(--space-4);
+    }
+
+    .duel-section-head .section-title {
+        margin: 0;
+    }
+
+    .duel-section .featured-chip {
+        font-size: var(--text-xs);
+    }
+
+    /* The side column's board is too small to share with its chips, so they stand above and below it, as on a phone's Home. */
+    .duel-side .featured {
+        display: flex;
+        flex-direction: column;
+    }
+
+    .duel-side .featured-bar {
+        position: static;
+    }
+
+    .duel-side .featured-top {
+        order: -1;
+        padding-bottom: 0;
+    }
+
+    .duel-side .featured-bottom {
+        padding-top: 0;
+    }
+
+    /* The opening beside its sentence, the sentence under it where both do not fit. */
+    .opening-item {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: flex-start;
+        gap: var(--space-3);
+        font-size: var(--text-sm);
+    }
+
+    .opening-item .opening-preview {
+        flex: 0 0 var(--opening-preview-w);
+        max-width: 100%;
+        height: auto;
+    }
+
+    .opening-item .note {
+        flex: 1 1 var(--pair-note-min);
+        min-width: 0;
+    }
+
+    .pair-title {
+        margin: var(--space-2) 0;
+        color: var(--c-text-dim);
+        font-size: var(--text-sm);
+        font-weight: var(--weight-strong);
+    }
+
+    .duel-games {
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-half);
+        margin: 0;
+        padding: 0;
+        list-style: none;
+    }
+
+    /* The number, the seats, the result, and the length share a line while
+       they fit, the result wrapping under the seats where they do not. */
+    .duel-game {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: var(--space-2) var(--space-4);
+        padding: var(--space-2) var(--space-4);
+        background: var(--c-bg-raised);
+        color: var(--c-text);
+        font-size: var(--text-sm);
+        text-decoration: none;
+        clip-path: var(--cut-sm-path);
+    }
+
+    a.duel-game:hover {
+        background: var(--c-bg-hover);
+        color: var(--c-text);
+    }
+
+    .duel-game-n {
+        flex: 0 0 var(--space-5);
+        color: var(--c-text-dim);
+        font-variant-numeric: tabular-nums;
+    }
+
+    .duel-game-seats {
+        display: flex;
+        flex: 0 1 var(--duel-seats-w);
+        flex-direction: column;
+        gap: var(--space-half);
+        min-width: 0;
+        font-weight: var(--weight-strong);
+        overflow-wrap: break-word;
+    }
+
+    .duel-game-seats span {
+        display: flex;
+        align-items: center;
+        gap: var(--space-2);
+    }
+
+    .duel-game-seats .swatch {
+        flex: none;
+        width: var(--swatch-size);
+    }
+
+    .duel-game-live {
+        box-shadow: inset var(--focus-w) 0 0 var(--c-accent);
+    }
+
+    .duel-game-live .duel-game-result strong {
+        color: var(--c-accent);
+    }
+
+    .duel-game-todo {
+        color: var(--c-text-dim);
+    }
+
+    .duel-game-todo .duel-game-seats {
+        font-weight: var(--weight-regular);
+    }
+
+    .duel-game-result {
+        flex: 1 1 var(--pair-note-min);
+    }
+
+    .duel-game > .note {
+        margin: 0 0 0 auto;
+    }
+
+    .duel-all {
+        margin-left: 0;
+    }
+
+    .duel-pairs {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: var(--space-2) var(--space-4);
+        margin: 0;
+        font-size: var(--text-sm);
+    }
+
+    .duel-pairs div {
+        display: contents;
+    }
+
+    .duel-pairs dt {
+        font-weight: var(--weight-strong);
+        overflow-wrap: break-word;
+    }
+
+    .duel-pairs dd {
+        margin: 0;
+        font-variant-numeric: tabular-nums;
+        text-align: right;
+    }
+
+    .duel-pairs .gain {
+        color: var(--c-good);
+    }
+
+    .duel-pairs .loss {
+        color: var(--c-bad);
+    }
+
+    @media (max-width: 44rem) {
+        .duel-head {
+            grid-template-columns: minmax(0, 1fr);
+            justify-items: stretch;
+        }
+
+        /* The score's cell, smaller, overlaps the plates' edges, so the status and a test's estimate rise into the first screen. */
+        .duel-head {
+            gap: 0;
+        }
+
+        .duel-head .score-hex {
+            z-index: 1;
+            justify-self: center;
+            width: var(--score-hex-w-sm);
+            margin-block: calc(-1 * var(--score-hex-overlap));
+        }
+
+        .duel-plate-right {
+            align-items: flex-start;
+            text-align: left;
+        }
+
+        .duel-plate-right .duel-plate-name,
+        .duel-plate-right .duel-plate-meta {
+            justify-content: flex-start;
+        }
+
+        .duel-grid {
+            grid-template-columns: minmax(0, 1fr);
+        }
+
+    }
+}

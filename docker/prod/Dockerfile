@@ -1,6 +1,6 @@
 # Both stages pin the multi-arch index by digest: a moved tag never changes
 # what a build starts from.
-FROM node:24-slim@sha256:0e0ff40c39bc087845bfb27465a0df4ea419520094bc35842ff83dd8cbe6f9b6 AS build
+FROM node:26-slim@sha256:ec7758ee051e457b468b32bde57b0879010b325bb9862718e9615225ce4aaae1 AS build
 
 RUN npm install --global pnpm@12.6.0
 
@@ -21,7 +21,15 @@ COPY . .
 RUN pnpm build \
     && pnpm --filter @hexo-arena/server deploy --prod /out
 
-FROM node:24-slim@sha256:0e0ff40c39bc087845bfb27465a0df4ea419520094bc35842ff83dd8cbe6f9b6
+# better-sqlite3 ships a binary for every platform and the SQLite sources to
+# build one; the image keeps its own platform's binary, which the package
+# loads by name, and proves it loads.
+RUN cd /out/node_modules/better-sqlite3 \
+    && rm -rf deps src binding.gyp \
+    && find prebuilds -type f ! -name "linux-$(node -p process.arch).node" -delete \
+    && cd /out && node -e "new (require('better-sqlite3'))(':memory:').close()"
+
+FROM node:26-slim@sha256:ec7758ee051e457b468b32bde57b0879010b325bb9862718e9615225ce4aaae1
 
 # The app needs node alone; a package manager left in would only serve
 # whoever got a shell.

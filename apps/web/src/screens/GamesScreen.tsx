@@ -5,17 +5,19 @@ import {
     finishedGamesPageCap,
     finishedGamesPageSize,
     nameKeyOf,
-    nameMaxLength,
     type FinishedGameEntry,
     type FinishedGamesPage,
     type FinishedGamesRecord,
     type GamePlayer,
 } from '@hexo-arena/contract';
 import { ApiError, fetchFinishedGames, limitedFor } from '../api/client';
+import { useAsync } from '../api/use-async';
 import { BotBadge, PlayerName } from '../components/player';
 import { ErrorFrame, SkeletonRows } from '../components/states';
 import { TopbarPanel, usePanel } from '../components/TopbarPanel';
-import { activeKeys, gamesPathOf, pagePathOf, searchOf, viewOf, withFilter, type FilterKey, type GameFilters, type GamesView } from '../games/filters';
+import { RoundPick, TournamentPick, tournamentWords, useEventName, type EventName } from '../games/EventPick';
+import { Choice, NameField } from '../games/Fields';
+import { gamesPathOf, pagePathOf, searchOf, shownKeys, viewOf, withFilter, type FilterKey, type GameFilters, type GamesView } from '../games/filters';
 import { useShowTests } from '../games/show-tests';
 import { ShowTests } from '../games/ShowTests';
 import { GameRows } from '../games/GameRows';
@@ -29,6 +31,7 @@ const resultOptions = [`won`, `lost`, `none`] as const;
 const sideOptions = [`x`, `o`] as const;
 const clockOptions = [`turn`, `match`, `unlimited`] as const;
 const kindOptions = [`bot-bot`, `human-bot`, `guest-bot`] as const;
+const eventOptions = [`tournament`, `none`] as const;
 const openingOptions = [`1`, `3`, `5`, `7`, `9`] as const;
 
 /** A list's page, a name no player holds, or a read that failed. */
@@ -66,27 +69,13 @@ async function loadOf(view: GamesView, tests: boolean): Promise<Load> {
     }
 }
 
+const loadingPage: Load = { kind: `loading` };
+
 /** The page an address names; the last one stays on screen while the next loads. */
 function useGamesPage(search: string, tests: boolean): { load: Load; busy: boolean; retry: () => void } {
-    const [load, setLoad] = useState<Load>({ kind: `loading` });
-    const [busy, setBusy] = useState(true);
-    const [attempt, setAttempt] = useState(0);
-    useEffect(() => {
-        let cancelled = false;
-        setBusy(true);
-        void loadOf(viewOf(search), tests).then((next) => {
-            if (cancelled) return;
-            setLoad(next);
-            setBusy(false);
-        });
-        return () => {
-            cancelled = true;
-        };
-    }, [search, tests, attempt]);
-    const retry = useCallback(() => {
-        setAttempt((count) => count + 1);
-    }, []);
-    return { load, busy, retry };
+    const load = useCallback(async () => loadOf(viewOf(search), tests), [search, tests]);
+    const read = useAsync(load);
+    return { load: read.data ?? loadingPage, busy: read.pending, retry: read.reload };
 }
 
 // Every field applies as it changes, so a form's submit goes nowhere.
@@ -144,8 +133,9 @@ export function GamesScreen() {
         setSeekBefore(true);
     }
 
+    const named = useEventName(filters);
     const fields = { filters, set };
-    const counted = activeKeys(filters).filter((key) => key !== `player`).length;
+    const counted = shownKeys(filters).filter((key) => key !== `player`).length;
     return (
         <>
             <GamesHead view="finished" />
@@ -180,7 +170,7 @@ export function GamesScreen() {
                 >
                     {filters.player === undefined ? <p className="note games-panel-note">{text.games.needPlayer}</p> : null}
                     <form className="games-panel-fields" onSubmit={keepHere}>
-                        <FilterFields {...fields} />
+                        <FilterFields {...fields} tests={tests} named={named} />
                     </form>
                     <p id="games-opening-note" className="note games-panel-note">
                         {text.games.openingNote}
@@ -198,13 +188,14 @@ export function GamesScreen() {
                     </div>
                 </TopbarPanel>
             </div>
-            <Chips filters={filters} />
+            <Chips filters={filters} named={named} />
             <p className="note games-note">
                 {text.games.note} {text.games.testsNote}
             </p>
             <div aria-busy={busy}>
                 <Body
                     load={load}
+                    named={named}
                     onRetry={retry}
                     onPickBefore={pickBefore}
                     onTurn={() => {
@@ -236,7 +227,8 @@ function PlayerField({ filters, set }: FieldsProps) {
 
 // Against, Side, and a won or lost result read from a player's seat, so they wait for one;
 // a game without a winner needs none.
-function FilterFields({ filters, set }: FieldsProps) {
+// Once Played in names a tournament, one can be picked, a duel among them, and its round.
+function FilterFields({ filters, set, tests, named }: FieldsProps & { tests: boolean; named: EventName }) {
     const alone = filters.player === undefined;
     const results = alone ? ([`none`] as const) : resultOptions;
     return (
@@ -307,6 +299,34 @@ function FilterFields({ filters, set }: FieldsProps) {
                 }}
             />
             <Choice
+                id="games-event"
+                label={text.games.event}
+                value={filters.event}
+                options={eventOptions.map((value) => [value, text.games.events[value]] as const)}
+                onChange={(value) => {
+                    set(`event`, value);
+                }}
+            />
+            {filters.event === `tournament` ? (
+                <TournamentPick
+                    value={filters.tournament}
+                    named={named}
+                    tests={tests}
+                    onChange={(value) => {
+                        set(`tournament`, value);
+                    }}
+                />
+            ) : null}
+            {filters.tournament !== undefined && named !== null && named !== `gone` && named.rounds > 1 ? (
+                <RoundPick
+                    value={filters.round}
+                    rounds={named.rounds}
+                    onChange={(value) => {
+                        set(`round`, value);
+                    }}
+                />
+            ) : null}
+            <Choice
                 id="games-analyzed"
                 label={text.games.analysis}
                 value={filters.analyzed}
@@ -332,83 +352,8 @@ function FilterFields({ filters, set }: FieldsProps) {
     );
 }
 
-// A name applies on Enter or when the field is left, never mid-word.
-function NameField({ id, label, value, disabled = false, onCommit }: {
-    id: string;
-    label: string;
-    value: string | undefined;
-    disabled?: boolean;
-    onCommit: (name: string | undefined) => void;
-}) {
-    const [draft, setDraft] = useState(value ?? ``);
-    const [shown, setShown] = useState(value);
-    if (shown !== value) {
-        setShown(value);
-        setDraft(value ?? ``);
-    }
-    function commit() {
-        const name = draft.trim();
-        if (name !== (value ?? ``)) onCommit(name === `` ? undefined : name);
-    }
-    return (
-        <div className="games-field">
-            <label htmlFor={id}>{label}</label>
-            <input
-                id={id}
-                type="text"
-                value={draft}
-                maxLength={nameMaxLength}
-                disabled={disabled}
-                autoComplete="off"
-                spellCheck={false}
-                onChange={(event) => {
-                    setDraft(event.target.value);
-                }}
-                onBlur={commit}
-                onKeyDown={(event) => {
-                    if (event.key !== `Enter`) return;
-                    event.preventDefault();
-                    commit();
-                }}
-            />
-        </div>
-    );
-}
-
-function Choice<V extends string>({ id, label, describedBy, value, options, disabled = false, onChange }: {
-    id: string;
-    label: string;
-    describedBy?: string;
-    value: V | undefined;
-    options: readonly (readonly [V, string])[];
-    disabled?: boolean;
-    onChange: (value: V | undefined) => void;
-}) {
-    return (
-        <div className="games-field">
-            <label htmlFor={id}>{label}</label>
-            <select
-                id={id}
-                value={value ?? ``}
-                disabled={disabled}
-                aria-describedby={describedBy}
-                onChange={(event) => {
-                    onChange(options.find(([option]) => option === event.target.value)?.[0]);
-                }}
-            >
-                <option value="">{text.games.any}</option>
-                {options.map(([option, words]) => (
-                    <option key={option} value={option}>
-                        {words}
-                    </option>
-                ))}
-            </select>
-        </div>
-    );
-}
-
 /** A filter as its chip and the no-match sentence name it. */
-function chipOf(key: FilterKey, filters: GameFilters): string {
+function chipOf(key: FilterKey, filters: GameFilters, named: EventName): string {
     const chips = text.games.chips;
     switch (key) {
         case `player`:
@@ -425,6 +370,12 @@ function chipOf(key: FilterKey, filters: GameFilters): string {
             return filters.clock === undefined ? `` : chips.clocks[filters.clock];
         case `kind`:
             return filters.kind === undefined ? `` : chips.kinds[filters.kind];
+        case `event`:
+            return filters.event === undefined ? `` : chips.events[filters.event];
+        case `tournament`:
+            return tournamentWords(named);
+        case `round`:
+            return chips.round(Number(filters.round));
         case `opening`:
             return chips.opening(Number(filters.opening));
         case `analyzed`:
@@ -435,9 +386,9 @@ function chipOf(key: FilterKey, filters: GameFilters): string {
 }
 
 // A removed chip hands the keyboard to the chip that takes its place, or
-// to the player field once none is left.
-function Chips({ filters }: { filters: GameFilters }) {
-    const keys = activeKeys(filters);
+// to the player field once none is left; the one event chosen clears back to its kind.
+function Chips({ filters, named }: { filters: GameFilters; named: EventName }) {
+    const keys = shownKeys(filters);
     const group = useRef<HTMLDivElement>(null);
     const [refocus, setRefocus] = useState<number | null>(null);
     useLayoutEffect(() => {
@@ -451,7 +402,7 @@ function Chips({ filters }: { filters: GameFilters }) {
     return (
         <div className="games-chips" role="group" aria-label={text.games.chipsLabel} ref={group}>
             {keys.map((key, index) => {
-                const words = chipOf(key, filters);
+                const words = chipOf(key, filters, named);
                 return (
                     <button
                         key={key}
@@ -484,7 +435,7 @@ function Chips({ filters }: { filters: GameFilters }) {
     );
 }
 
-function Body({ load, onRetry, onPickBefore, onTurn }: { load: Load; onRetry: () => void; onPickBefore: () => void; onTurn: () => void }) {
+function Body({ load, named, onRetry, onPickBefore, onTurn }: { load: Load; named: EventName; onRetry: () => void; onPickBefore: () => void; onTurn: () => void }) {
     switch (load.kind) {
         case `loading`:
             return <SkeletonRows />;
@@ -499,7 +450,7 @@ function Body({ load, onRetry, onPickBefore, onTurn }: { load: Load; onRetry: ()
                 </div>
             );
         case `ready`:
-            return <Results page={load.page} view={load.view} now={load.at} onPickBefore={onPickBefore} onTurn={onTurn} />;
+            return <Results page={load.page} view={load.view} named={named} now={load.at} onPickBefore={onPickBefore} onTurn={onTurn} />;
     }
 }
 
@@ -513,9 +464,9 @@ function ClearAction({ to = `/games`, label = text.games.clear }: { to?: string;
     );
 }
 
-function Results({ page, view, now, onPickBefore, onTurn }: { page: FinishedGamesPage; view: GamesView; now: number; onPickBefore: () => void; onTurn: () => void }) {
+function Results({ page, view, named, now, onPickBefore, onTurn }: { page: FinishedGamesPage; view: GamesView; named: EventName; now: number; onPickBefore: () => void; onTurn: () => void }) {
     const { filters } = view;
-    const keys = activeKeys(filters);
+    const keys = shownKeys(filters);
     if (page.games.length === 0) {
         if (keys.length === 0 && page.total === 0) {
             return (
@@ -538,7 +489,7 @@ function Results({ page, view, now, onPickBefore, onTurn }: { page: FinishedGame
         return (
             <div className="empty">
                 <h2>{text.games.noMatch.heading}</h2>
-                <p>{text.games.noMatch.body(keys.map((key) => chipOf(key, view.filters)).join(`, `))}</p>
+                <p>{text.games.noMatch.body(keys.map((key) => chipOf(key, view.filters, named)).join(`, `))}</p>
                 <ClearAction />
             </div>
         );

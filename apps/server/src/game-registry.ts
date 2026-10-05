@@ -25,7 +25,6 @@ import {
     type GameClock,
     type GameHeadline,
     type GamePlayer,
-    type GameDuel,
     type GamePlayers,
     type GameSnapshot,
     type LiveGameEntry,
@@ -47,6 +46,7 @@ import {
     type Win,
 } from '@hexo-arena/rules';
 import type { Query } from './db';
+import { otherSide, seated } from './game-seats';
 import {
     findFinishedHeadline,
     findGame,
@@ -54,7 +54,6 @@ import {
     insertGame,
     insertMove,
     recordFinish,
-    findGameDuel,
     findGameTournament,
     replayPosition,
     type BotGameTag,
@@ -133,8 +132,8 @@ interface BotSeat {
     orphanTimer: Timer | null;
 }
 
-/** Who a human-facing action names: an account or an anonymous guest. */
-export interface PersonRef {
+// Who a human-facing action names: an account or an anonymous guest.
+interface PersonRef {
     readonly kind: `user` | `guest`;
     readonly id: string;
 }
@@ -145,14 +144,12 @@ export interface Person extends PersonRef {
     readonly since?: number;
 }
 
-/**
- * Who reads a game.
- * A stored guest game keeps the guest's label alone, so a guest reads its
- * seat there when the label is its own and its session began by the
- * game's start: a label is never minted twice at once, and a later holder
- * of it began after the game.
- */
-export type Viewer = PersonRef & Partial<Pick<Person, `name` | `since`>>;
+// Who reads a game.
+// A stored guest game keeps the guest's label alone, so a guest reads its
+// seat there when the label is its own and its session began by the
+// game's start: a label is never minted twice at once, and a later holder
+// of it began after the game.
+type Viewer = PersonRef & Partial<Pick<Person, `name` | `since`>>;
 
 interface HumanSeat {
     readonly kind: `human`;
@@ -161,7 +158,7 @@ interface HumanSeat {
 
 type Seat = BotSeat | HumanSeat;
 
-export interface LiveGame {
+interface LiveGame {
     readonly id: string;
     readonly seats: { readonly x: Seat; readonly o: Seat };
     readonly unratedByChoice: boolean;
@@ -177,22 +174,24 @@ export interface LiveGame {
     clock: Clock;
     wallTimer: Timer | null;
     tournament?: GameTournament;
-    duel?: GameDuel;
 }
+
+// What a creator decides of a game; every other field starts alike.
+type GameStart = Pick<LiveGame, `seats` | `unratedByChoice` | `test` | `timeControl` | `openingPlies` | `tournament`>;
 
 export type MoveErrorCode = `not_your_turn` | `cell_occupied` | `out_of_range` | `game_over`;
 
-export type HumanMoveResult =
+type HumanMoveResult =
     | { kind: `moved`; snapshot: GameSnapshot }
     | { kind: `rejected`; code: MoveErrorCode }
     | { kind: `unknown` };
 
-export type ResignResult =
+type ResignResult =
     | { kind: `resigned`; snapshot: GameSnapshot }
     | { kind: `rejected`; code: `game_over` }
     | { kind: `unknown` };
 
-export type BotResignResult =
+type BotResignResult =
     | { kind: `resigned` }
     | { kind: `rejected`; code: `game_over` }
     | { kind: `unauthorized` }
@@ -205,7 +204,7 @@ export interface FinishedGameNote {
     readonly reason: FinishReason;
 }
 
-export interface RegistryDeps {
+interface RegistryDeps {
     query: Query;
     presence: PresenceRegistry;
     watchers: GameWatchers;
@@ -244,10 +243,6 @@ function applyTurn(position: Position, cells: readonly [Coord, Coord]): Applied 
     const second = place(first.position, cells[1]);
     if (!second.ok) return second;
     return { ok: true, position: second.position, win: second.win };
-}
-
-function opponentOf(side: Side): Side {
-    return side === `x` ? `o` : `x`;
 }
 
 function humanSeat(person: Person): HumanSeat {
@@ -292,9 +287,8 @@ function humanSide(game: LiveGame): { side: Side; seat: HumanSeat } | null {
     return null;
 }
 
-// A game against a guest rates nobody, nor does one against a bot at a
-// level other than its default, or one started unrated: neither the fold
-// nor a recompute counts it.
+// The live twin of ratesSomebody: neither the fold nor a recompute counts
+// a game that rates nobody.
 function ratesNobody(game: LiveGame): boolean {
     return (
         game.unratedByChoice ||
@@ -322,9 +316,16 @@ function boardCells(position: Position) {
     }));
 }
 
+// An opening placed on the board, and its stones after the origin as the
+// turns an engine session receives.
+interface PlacedOpening {
+    readonly position: Position;
+    readonly turns: readonly TurnEntry[];
+}
+
 // Pairs of plies after the origin are whole turns, so the opening
 // reaches engine sessions as ordinary two-stone turns.
-function openingTurns(position: Position): { position: Position; turns: TurnEntry[] } {
+function openingTurns(position: Position): PlacedOpening {
     const turns: TurnEntry[] = [];
     for (let ply = 1; ply < position.stones.length; ply += 2) {
         const first = position.stones[ply];
@@ -340,6 +341,10 @@ function openingTurns(position: Position): { position: Position; turns: TurnEntr
         });
     }
     return { position, turns };
+}
+
+function openingCells(position: Position): OpeningCell[] {
+    return position.stones.map((stone) => ({ x: stone.x, y: stone.y, player: stone.player }));
 }
 
 function sideToMove(game: LiveGame): Side {
@@ -489,44 +494,26 @@ export class GameRegistry {
         const unratedByChoice = input.unratedByChoice === true;
         const test = input.test === true;
         const userSide: Side = this.#random() < 0.5 ? `x` : `o`;
-        const { position, turns } = this.#placeOpening(input.openingPlies);
+        const opening = this.#placeOpening(input.openingPlies);
         const gameId = insertGame(this.#query, {
             ...(input.person.kind === `guest` ? { guestName: input.person.name } : { userId: input.person.id, unratedByChoice, test }),
             botId: input.bot.id,
             userSide,
             timeControl: input.timeControl,
-            opening: position.stones.map((stone) => ({
-                x: stone.x,
-                y: stone.y,
-                player: stone.player,
-            })),
+            opening: openingCells(opening.position),
             ...(level === null ? {} : { level }),
         });
-        const game: LiveGame = {
-            id: gameId,
-            seats:
-                userSide === `x`
-                    ? { x: humanSeat(input.person), o: botSeat(input.bot, level) }
-                    : { x: botSeat(input.bot, level), o: humanSeat(input.person) },
-            unratedByChoice,
-            test,
-            timeControl: input.timeControl,
-            openingPlies: input.openingPlies,
-            position,
-            turnLog: turns,
-            nextSeq: 1,
-            requestCounter: 0,
-            pending: null,
-            clock: { mode: `unlimited` },
-            wallTimer: null,
-        };
-        this.#games.set(gameId, game);
-        this.#started(game);
-        this.#armClock(game, initialClock(game.timeControl));
-        this.#armWallCap(game);
-        this.#requestBotMove(game);
-        const botSide = opponentOf(userSide);
-        this.#presence.send(this.#botIdAt(game, botSide), this.#gameStartEvent(game, botSide));
+        const game = this.#launch(
+            gameId,
+            {
+                seats: seated<Seat>(userSide, humanSeat(input.person), botSeat(input.bot, level)),
+                unratedByChoice,
+                test,
+                timeControl: input.timeControl,
+                openingPlies: input.openingPlies,
+            },
+            opening,
+        );
         return { gameId, snapshot: this.#liveSnapshot(game, input.person) };
     }
 
@@ -539,62 +526,44 @@ export class GameRegistry {
         firstPlayer: FirstPlayer;
         sameOwner: boolean;
     }): { gameId: string } {
-        const { position, turns } = this.#placeOpening(input.openingPlies);
+        const opening = this.#placeOpening(input.openingPlies);
         // firstPlayer names who takes the first player turn; the placed
         // opening decides which side that is, parity included.
-        const firstMover = sideOf(playerToMove(position));
+        const firstMover = sideOf(playerToMove(opening.position));
         const challengerSide =
             input.firstPlayer === `challenger`
                 ? firstMover
                 : input.firstPlayer === `challenged`
-                  ? opponentOf(firstMover)
+                  ? otherSide(firstMover)
                   : this.#random() < 0.5
                     ? firstMover
-                    : opponentOf(firstMover);
+                    : otherSide(firstMover);
         const gameId = insertBotGame(this.#query, {
             challengerBotId: input.challenger.id,
             destBotId: input.dest.id,
             challengerSide,
             timeControl: input.timeControl,
-            opening: position.stones.map((stone) => ({
-                x: stone.x,
-                y: stone.y,
-                player: stone.player,
-            })),
+            opening: openingCells(opening.position),
             unratedByChoice: input.sameOwner,
             test: input.sameOwner,
         });
-        const game: LiveGame = {
-            id: gameId,
-            seats:
-                challengerSide === `x`
-                    ? { x: botSeat(input.challenger), o: botSeat(input.dest) }
-                    : { x: botSeat(input.dest), o: botSeat(input.challenger) },
-            unratedByChoice: input.sameOwner,
-            test: input.sameOwner,
-            timeControl: input.timeControl,
-            openingPlies: input.openingPlies,
-            position,
-            turnLog: turns,
-            nextSeq: 1,
-            requestCounter: 0,
-            pending: null,
-            clock: { mode: `unlimited` },
-            wallTimer: null,
-        };
-        this.#games.set(gameId, game);
-        this.#started(game);
-        this.#armClock(game, initialClock(game.timeControl));
-        this.#armWallCap(game);
-        this.#requestBotMove(game);
-        this.#presence.send(this.#botIdAt(game, `x`), this.#gameStartEvent(game, `x`));
-        this.#presence.send(this.#botIdAt(game, `o`), this.#gameStartEvent(game, `o`));
+        this.#launch(
+            gameId,
+            {
+                seats: seated(challengerSide, botSeat(input.challenger), botSeat(input.dest)),
+                unratedByChoice: input.sameOwner,
+                test: input.sameOwner,
+                timeControl: input.timeControl,
+                openingPlies: input.openingPlies,
+            },
+            opening,
+        );
         return { gameId };
     }
 
     /**
-     * A game the server schedules between two bots, a tournament's or a
-     * duel's, on their stated sides and levels, from a stored opening, or a
+     * A game the server schedules between two bots in a tournament, on
+     * their stated sides and levels, from a stored opening, or a
      * fresh one drawn to the given length when none is stored yet; answers
      * the opening so a pair's second game reuses it.
      */
@@ -609,9 +578,8 @@ export class GameRegistry {
         opening: readonly OpeningCell[] | null;
         tag: BotGameTag;
     }): { gameId: string; opening: OpeningCell[] } {
-        const { position, turns } =
-            input.opening === null ? this.#placeOpening(input.openingPlies) : openingTurns({ stones: input.opening.map((cell) => ({ ...cell })) });
-        const opening = position.stones.map((stone) => ({ x: stone.x, y: stone.y, player: stone.player }));
+        const placed = input.opening === null ? this.#placeOpening(input.openingPlies) : openingTurns({ stones: input.opening.map((cell) => ({ ...cell })) });
+        const opening = openingCells(placed.position);
         const levels = input.levels ?? { x: null, o: null };
         const unratedByChoice = input.unratedByChoice === true;
         const test = input.test === true;
@@ -626,33 +594,47 @@ export class GameRegistry {
             unratedByChoice,
             test,
         });
+        const tournament = findGameTournament(this.#query, gameId);
+        this.#launch(
+            gameId,
+            {
+                seats: { x: botSeat(input.x, levels.x), o: botSeat(input.o, levels.o) },
+                unratedByChoice,
+                test,
+                timeControl: input.timeControl,
+                openingPlies: input.openingPlies,
+                ...(tournament === undefined ? {} : { tournament }),
+            },
+            placed,
+        );
+        return { gameId, opening };
+    }
+
+    // Every creator stores its game first; from there a game starts alike:
+    // held live, its clocks armed, its first bot asked, and each bot seated
+    // told of the start.
+    #launch(gameId: string, start: GameStart, opening: PlacedOpening): LiveGame {
         const game: LiveGame = {
             id: gameId,
-            seats: { x: botSeat(input.x, levels.x), o: botSeat(input.o, levels.o) },
-            unratedByChoice,
-            test,
-            timeControl: input.timeControl,
-            openingPlies: input.openingPlies,
-            position,
-            turnLog: turns,
+            ...start,
+            position: opening.position,
+            turnLog: opening.turns,
             nextSeq: 1,
             requestCounter: 0,
             pending: null,
             clock: { mode: `unlimited` },
             wallTimer: null,
         };
-        const tournament = input.tag.kind === `pairing` ? findGameTournament(this.#query, gameId) : undefined;
-        if (tournament !== undefined) game.tournament = tournament;
-        const duel = input.tag.kind === `duel` ? findGameDuel(this.#query, gameId) : undefined;
-        if (duel !== undefined) game.duel = duel;
         this.#games.set(gameId, game);
         this.#started(game);
         this.#armClock(game, initialClock(game.timeControl));
         this.#armWallCap(game);
         this.#requestBotMove(game);
-        this.#presence.send(input.x.id, this.#gameStartEvent(game, `x`));
-        this.#presence.send(input.o.id, this.#gameStartEvent(game, `o`));
-        return { gameId, opening };
+        for (const side of [`x`, `o`] as const) {
+            const seat = game.seats[side];
+            if (seat.kind === `bot`) this.#presence.send(seat.botId, this.#gameStartEvent(game, side));
+        }
+        return game;
     }
 
     /** Tells a listener of every start, with the bots seated. */
@@ -671,7 +653,7 @@ export class GameRegistry {
         this.#finishListeners.push(listener);
     }
 
-    #placeOpening(openingPlies: OpeningPlies): { position: Position; turns: TurnEntry[] } {
+    #placeOpening(openingPlies: OpeningPlies): PlacedOpening {
         return openingTurns(drawOpening(openingPlies, this.#randomIndex));
     }
 
@@ -729,7 +711,7 @@ export class GameRegistry {
             rated: !ratesNobody(game),
             cells: boardCells(game.position),
             clock: liveClockView(game),
-            ...(game.duel === undefined ? {} : { duel: game.duel }),
+            ...(game.tournament === undefined ? {} : { tournament: game.tournament }),
             ...(game.test ? { test: true as const } : {}),
         };
     }
@@ -747,7 +729,6 @@ export class GameRegistry {
         if (record?.finishReason === undefined || record.finishReason === null) return null;
         const you = viewer === null ? undefined : storedSeatOf(record, viewer);
         const tournament = record.kind === `bots` ? findGameTournament(this.#query, gameId) : undefined;
-        const duel = record.kind === `bots` ? findGameDuel(this.#query, gameId) : undefined;
         return {
             gameId: record.id,
             status: `finished`,
@@ -761,7 +742,6 @@ export class GameRegistry {
             reason: record.finishReason,
             voided: record.voided,
             ...(tournament === undefined ? {} : { tournament }),
-            ...(duel === undefined ? {} : { duel }),
             ...(record.kind !== `guest` && record.unratedByChoice ? { unratedByChoice: true } : {}),
             ...(record.kind !== `guest` && record.test ? { test: true as const } : {}),
         };
@@ -786,7 +766,7 @@ export class GameRegistry {
         if (game === undefined) return this.#finishedReject(gameId, person);
         const human = humanSide(game);
         if (human === null || !samePerson(human.seat.person, person)) return { kind: `unknown` };
-        this.#finish(game, opponentOf(human.side), `surrender`);
+        this.#finish(game, otherSide(human.side), `surrender`);
         return { kind: `resigned`, snapshot: this.requireSnapshot(gameId, person) };
     }
 
@@ -796,7 +776,7 @@ export class GameRegistry {
             const known = this.#games.has(gameId) || findGame(this.#query, gameId) !== undefined;
             return known ? { kind: `unauthorized` } : { kind: `unknown` };
         }
-        this.#finish(holder.game, opponentOf(holder.side), `surrender`);
+        this.#finish(holder.game, otherSide(holder.side), `surrender`);
         return { kind: `resigned` };
     }
 
@@ -914,12 +894,13 @@ export class GameRegistry {
             stray();
             return;
         }
+        // The move schema holds exactly two pieces.
         const cells = packet.data.move.pieces.map((piece) => wireToInternal(piece)) as [Coord, Coord];
         const applied = applyTurn(game.position, cells);
         if (!applied.ok) {
             // An illegal engine move forfeits server-side; the retry loop of
             // a move POST has no equivalent here by design.
-            this.#finish(game, opponentOf(side), `terminated`);
+            this.#finish(game, otherSide(side), `terminated`);
             return;
         }
         const own = ownLines({ stones: game.position.stones, toMove: playerOf(side) }, packet.data, ownConsiderationsMax);
@@ -952,7 +933,7 @@ export class GameRegistry {
                 turn,
                 side,
                 cells: applied.position.stones.slice(placedBefore).map((stone) => ({ x: stone.x, y: stone.y })),
-                toMove: opponentOf(side),
+                toMove: otherSide(side),
                 clock: liveClockView(game),
             },
         });
@@ -1050,7 +1031,7 @@ export class GameRegistry {
 
     #onTimeout(game: LiveGame): void {
         if (this.#games.get(game.id) !== game) return;
-        this.#finish(game, opponentOf(sideToMove(game)), `timeout`);
+        this.#finish(game, otherSide(sideToMove(game)), `timeout`);
     }
 
     // An abort has no winner, so it leaves every rating alone; both bot
@@ -1101,7 +1082,7 @@ export class GameRegistry {
                 seat.orphanTimer = setTimeout(() => {
                     if (this.#games.get(game.id) !== game) return;
                     if (isCurrentGeneration(this.#query, this.#generation)) {
-                        this.#finish(game, opponentOf(side), `disconnect`);
+                        this.#finish(game, otherSide(side), `disconnect`);
                     } else {
                         this.#finish(game, null, `aborted`);
                     }
@@ -1176,12 +1157,12 @@ export class GameRegistry {
             type: `gameStart`,
             gameId: game.id,
             side,
-            opponent: this.#playerOf(game.seats[opponentOf(side)]),
+            opponent: this.#playerOf(game.seats[otherSide(side)]),
             timeControl: game.timeControl,
             openingPlies: game.openingPlies,
             // Bots anchor humans: a game against a person moves the bot's
             // rating never, only the person's; and a bot game started
-            // unrated, as a duel may be, moves neither.
+            // unrated, as a duel or round robin a person set up is, moves neither.
             rated: humanSide(game) === null && !ratesNobody(game),
             level: seat.level?.id ?? null,
             engine: {
@@ -1284,7 +1265,6 @@ export class GameRegistry {
             board: { cells: boardCells(game.position) },
             timeControl: game.timeControl,
             ...(game.tournament === undefined ? {} : { tournament: game.tournament }),
-            ...(game.duel === undefined ? {} : { duel: game.duel }),
             ...(game.unratedByChoice ? { unratedByChoice: true as const } : {}),
             ...(game.test ? { test: true as const } : {}),
         };
@@ -1318,21 +1298,18 @@ export class GameRegistry {
             ...(shown.deleted === undefined ? {} : { deleted: shown.deleted }),
             ...(level === null ? {} : { level }),
         });
-        const seated = (side: Side, first: GamePlayer, second: GamePlayer): GamePlayers =>
-            side === `x` ? { x: first, o: second } : { x: second, o: first };
-        const other = (side: Side): Side => (side === `x` ? `o` : `x`);
         if (record.kind === `bots`) {
             return seated(
                 record.challengerSide,
                 bot(record.challengerBotId, record.challenger, record.levels[record.challengerSide]),
-                bot(record.destBotId, record.dest, record.levels[other(record.challengerSide)]),
+                bot(record.destBotId, record.dest, record.levels[otherSide(record.challengerSide)]),
             );
         }
         if (record.kind === `guest`) {
             return seated(
                 record.guestSide,
                 { name: record.guestName, rating: null, provisional: false, kind: `guest` },
-                bot(record.botId, record.bot, record.levels[other(record.guestSide)]),
+                bot(record.botId, record.bot, record.levels[otherSide(record.guestSide)]),
             );
         }
         const user: GamePlayer = {
@@ -1340,7 +1317,7 @@ export class GameRegistry {
             kind: `user`,
             ...(record.user.deleted === undefined ? {} : { deleted: record.user.deleted }),
         };
-        return seated(record.userSide, user, bot(record.botId, record.bot, record.levels[other(record.userSide)]));
+        return seated(record.userSide, user, bot(record.botId, record.bot, record.levels[otherSide(record.userSide)]));
     }
 
     #seatsBot(game: LiveGame, botId: string): Side | null {
@@ -1349,13 +1326,5 @@ export class GameRegistry {
             if (seat.kind === `bot` && seat.botId === botId) return side;
         }
         return null;
-    }
-
-    // The side is a bot seat in every caller; the missing row would mean
-    // the registry and the store disagree.
-    #botIdAt(game: LiveGame, side: Side): string {
-        const seat = game.seats[side];
-        if (seat.kind !== `bot`) throw new Error(`no bot seated on side ${side}`);
-        return seat.botId;
     }
 }

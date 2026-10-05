@@ -5,7 +5,7 @@ import { retireGeneration, type StartGate } from './site-state';
 export const drainGraceMs = 120_000;
 const drainPollMs = 1_000;
 
-export interface DrainDeps {
+interface DrainDeps {
     query: Query;
     gate: StartGate;
     games: GameRegistry;

@@ -77,7 +77,6 @@
     }
 
     .rung,
-    .rung-skeleton,
     .games-h2h,
     .podium,
     .podium-plate,
@@ -92,6 +91,8 @@
     .welcome-card,
     .roster,
     .play-setup,
+    .live-duel,
+    .next-tournament,
     .hud-chip,
     .an-window::before,
     .an-intro,
@@ -109,6 +110,7 @@
     .your-game,
     .recent-game,
     .game-row,
+    .game-row-evented,
     .bot-row,
     .featured-chip,
     .stepper button,

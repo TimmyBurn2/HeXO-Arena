@@ -9,6 +9,8 @@ import {
     clientRequestLimit,
     discordExchangeLimit,
     engineDialLimit,
+    gameExportGlobalLimit,
+    gameExportLimit,
     guestMintLimit,
     guestMintPrefixLimit,
     principalRequestLimit,
@@ -25,13 +27,11 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { ClientKeys } from './client-key';
 import { RateBuckets } from './rate-limits';
 
-/**
- * How a route is limited beyond the client bucket every request spends:
- * `public` and `shell` routes need no credential and share one ceiling,
- * a shell route answering a page's plain line where the API answers JSON;
- * the rest carry a credential and are limited by it.
- */
-export type LimitClass = `public` | `shell` | `principal` | `botManagement` | `stream` | `engine`;
+// How a route is limited beyond the client bucket every request spends:
+// `public` and `shell` routes need no credential and share one ceiling,
+// a shell route answering a page's plain line where the API answers JSON;
+// the rest carry a credential and are limited by it.
+type LimitClass = `public` | `shell` | `principal` | `botManagement` | `stream` | `engine`;
 
 declare module 'fastify' {
     interface FastifyContextConfig {
@@ -61,6 +61,8 @@ export interface LimitTable {
     discordExchange: RateLimit;
     archiveRead: RateLimit;
     archiveReadGlobal: RateLimit;
+    gameExport: RateLimit;
+    gameExportGlobal: RateLimit;
     report: RateLimit;
     reportPrefix: RateLimit;
     reportGlobal: RateLimit;
@@ -84,6 +86,8 @@ export const defaultLimits: LimitTable = {
     discordExchange: discordExchangeLimit,
     archiveRead: archiveReadLimit,
     archiveReadGlobal: archiveReadGlobalLimit,
+    gameExport: gameExportLimit,
+    gameExportGlobal: gameExportGlobalLimit,
     report: reportLimit,
     reportPrefix: reportPrefixLimit,
     reportGlobal: reportGlobalLimit,
@@ -108,6 +112,7 @@ export interface CredentialLimits {
 export interface ClientLimits {
     wait(limit: ClientLimit, request: FastifyRequest): number | null;
     refuseArchive(reply: FastifyReply, request: FastifyRequest): boolean;
+    refuseExport(reply: FastifyReply, request: FastifyRequest): boolean;
     takeDiscordExchange(): boolean;
     takeReport(): number | null;
 }
@@ -132,9 +137,10 @@ export class RequestLimits {
     readonly #client: RateBuckets;
     readonly #public: RateBuckets;
     readonly #credential: Record<CredentialLimit, RateBuckets>;
-    readonly #perClient: Record<ClientLimit | `archiveRead`, RateBuckets>;
+    readonly #perClient: Record<ClientLimit | `archiveRead` | `gameExport`, RateBuckets>;
     readonly #perPrefix: Record<ClientLimit, RateBuckets>;
     readonly #archive: RateBuckets;
+    readonly #export: RateBuckets;
     readonly #discordExchange: RateBuckets;
     readonly #reportGlobal: RateBuckets;
 
@@ -156,6 +162,7 @@ export class RequestLimits {
             report: new RateBuckets(deps.table.report, deps.now, clientKeyCap),
             positionCheck: new RateBuckets(deps.table.positionCheck, deps.now, clientKeyCap),
             archiveRead: new RateBuckets(deps.table.archiveRead, deps.now, clientKeyCap),
+            gameExport: new RateBuckets(deps.table.gameExport, deps.now, clientKeyCap),
         };
         this.#perPrefix = {
             guestMint: new RateBuckets(deps.table.guestMintPrefix, deps.now, clientKeyCap),
@@ -164,6 +171,7 @@ export class RequestLimits {
             positionCheck: new RateBuckets(deps.table.positionCheckPrefix, deps.now, clientKeyCap),
         };
         this.#archive = new RateBuckets(deps.table.archiveReadGlobal, deps.now);
+        this.#export = new RateBuckets(deps.table.gameExportGlobal, deps.now);
         this.#discordExchange = new RateBuckets(deps.table.discordExchange, deps.now);
         this.#reportGlobal = new RateBuckets(deps.table.reportGlobal, deps.now);
         this.keys.onRekey(() => {
@@ -183,6 +191,7 @@ export class RequestLimits {
         for (const buckets of Object.values(this.#credential)) buckets.sweep();
         for (const buckets of [...Object.values(this.#perClient), ...Object.values(this.#perPrefix)]) buckets.sweep();
         this.#archive.sweep();
+        this.#export.sweep();
         this.#discordExchange.sweep();
         this.#reportGlobal.sweep();
     }
@@ -213,6 +222,17 @@ export class RequestLimits {
      */
     refuseArchive(reply: FastifyReply, request: FastifyRequest): boolean {
         const wait = (request.clientKey === null ? null : this.#perClient.archiveRead.take(request.clientKey)) ?? this.#archive.take(`all`);
+        if (wait === null) return false;
+        void refuseRate(reply, wait);
+        return true;
+    }
+
+    /**
+     * Spends a tournament's export, the client's and then the one all callers share;
+     * each reads and writes up to a tournament's every game.
+     */
+    refuseExport(reply: FastifyReply, request: FastifyRequest): boolean {
+        const wait = (request.clientKey === null ? null : this.#perClient.gameExport.take(request.clientKey)) ?? this.#export.take(`all`);
         if (wait === null) return false;
         void refuseRate(reply, wait);
         return true;

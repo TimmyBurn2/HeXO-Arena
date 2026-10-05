@@ -27,7 +27,7 @@ import { refuseRate, type ClientLimits, type CredentialLimits } from './request-
 import { streamPlayerOf } from './rating-store';
 import { deleteSession, findSessionUser, sessionUser, type SessionUser } from './sessions';
 
-export interface SessionApiDeps {
+interface SessionApiDeps {
     query: Query;
     guests: GuestSessions;
     games: GameRegistry;
@@ -41,8 +41,8 @@ export interface SessionApiDeps {
     now: () => number;
 }
 
-/** The audit actor of a deletion the person asked for themselves. */
-export const selfActor = `self`;
+// The audit actor of a deletion the person asked for themselves.
+const selfActor = `self`;
 
 function clearSessionCookie(reply: FastifyReply, secure: boolean): void {
     reply.clearCookie(sessionCookieNameFor(secure), { path: `/`, httpOnly: true, sameSite: `lax`, secure });
@@ -50,7 +50,7 @@ function clearSessionCookie(reply: FastifyReply, secure: boolean): void {
 
 // An account session outlives the browser; a guest session ends with it,
 // since nothing of a guest survives anyway.
-export type CookieLife = `account` | `guest`;
+type CookieLife = `account` | `guest`;
 
 declare module 'fastify' {
     interface FastifyRequest {

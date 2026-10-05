@@ -1,10 +1,13 @@
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { describe, it } from 'node:test';
 
 const caddyfile = readFileSync(`docker/prod/Caddyfile`, `utf8`);
 const compose = readFileSync(`docker/prod/compose.yml`, `utf8`);
 const workflow = readFileSync(`.github/workflows/ci.yml`, `utf8`);
+const workflows = readdirSync(`.github/workflows`)
+    .filter((name) => /\.ya?ml$/u.test(name))
+    .map((name) => [name, readFileSync(`.github/workflows/${name}`, `utf8`)]);
 const dockerfile = readFileSync(`docker/prod/Dockerfile`, `utf8`);
 const dockerignore = readFileSync(`.dockerignore`, `utf8`).split(`\n`);
 
@@ -30,6 +33,8 @@ describe(`the production Caddyfile`, () => {
         assert.match(headers, /Content-Security-Policy "default-src 'none'; script-src 'self';/u);
         assert.doesNotMatch(headers, /unsafe-/u);
         for (const name of [`Strict-Transport-Security`, `X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy`, `frame-ancestors 'none'`]) assert.ok(headers.includes(name), name);
+        // The privacy policy says a link to another site carries no address of the page it left.
+        assert.match(headers, /Referrer-Policy "(?:same-origin|no-referrer)"/u);
         assert.match(block(caddyfile, `{$HEXO_ARENA_DOMAIN} {`), /^\{\$HEXO_ARENA_DOMAIN\} \{\n\timport security_headers\n/u);
         assert.match(block(caddyfile, `handle_errors 500 502 503 504 {`), /\n\t\timport security_headers\n/u);
     });
@@ -73,7 +78,7 @@ describe(`the production Dockerfile`, () => {
     it(`starts both stages from one base pinned by digest`, () => {
         const bases = [...dockerfile.matchAll(/^FROM (\S+)/gmu)].map((match) => match[1]);
         assert.equal(bases.length, 2);
-        assert.match(bases[0] ?? ``, /^node:24-slim@sha256:[\da-f]{64}$/u);
+        assert.match(bases[0] ?? ``, /^node:26-slim@sha256:[\da-f]{64}$/u);
         assert.equal(bases[1], bases[0]);
     });
 
@@ -83,6 +88,13 @@ describe(`the production Dockerfile`, () => {
             assert.ok(runtime.includes(` ${path}`), path);
         }
         assert.match(runtime, /\nRUN rm -rf /u);
+    });
+
+    it(`ships better-sqlite3 with its own platform's binary alone, no SQLite sources, and checks it loads`, () => {
+        const build = dockerfile.slice(0, dockerfile.lastIndexOf(`\nFROM `));
+        assert.match(build, /\nRUN cd \/out\/node_modules\/better-sqlite3 \\\n {4}&& rm -rf deps src binding\.gyp \\\n/u);
+        assert.ok(build.includes(`find prebuilds -type f ! -name "linux-$(node -p process.arch).node" -delete`));
+        assert.ok(build.includes(`node -e "new (require('better-sqlite3'))(':memory:').close()"`));
     });
 });
 
@@ -94,11 +106,33 @@ describe(`the docker build context`, () => {
     });
 });
 
+describe(`the workflows`, () => {
+    it(`pin every action by full commit hash, naming its version beside it`, () => {
+        assert.ok(workflows.length > 1);
+        for (const [name, text] of workflows) {
+            const uses = text.split(`\n`).filter((line) => /^\s*(?:- )?uses: /u.test(line));
+            assert.ok(uses.length > 0, name);
+            for (const line of uses) assert.match(line, /uses: [\w.-]+\/[\w.-]+@[\da-f]{40} # v\d+\.\d+\.\d+$/u, `${name}: ${line}`);
+        }
+    });
+});
+
 describe(`the CI workflow`, () => {
-    it(`pins every action by full commit hash, naming its version beside it`, () => {
-        const uses = workflow.split(`\n`).filter((line) => /^\s*- uses: /u.test(line));
-        assert.ok(uses.length > 0);
-        for (const line of uses) assert.match(line, /- uses: [\w.-]+\/[\w.-]+@[\da-f]{40} # v\d+\.\d+\.\d+$/u, line);
+    it(`runs once per commit: on pushes to main and develop, on pull requests, and by hand`, () => {
+        assert.match(workflow, /\non:\n(?: {4}#.*\n)* {4}push:\n {8}branches: \[main, develop\]\n {4}pull_request:\n(?: {4}#.*\n)* {4}workflow_dispatch:\n/u);
+    });
+
+    it(`lets a newer commit cancel the run before it, except on main`, () => {
+        assert.match(workflow, /\nconcurrency:\n {4}group: \$\{\{ github\.workflow \}\}-\$\{\{ github\.ref \}\}\n {4}cancel-in-progress: \$\{\{ github\.ref != 'refs\/heads\/main' \}\}\n/u);
+    });
+
+    it(`passes verify, the check the branch rules require, only when check and test pass, and builds the image after it`, () => {
+        const verify = workflow.slice(workflow.indexOf(`\n    verify:\n`), workflow.indexOf(`\n    image:\n`));
+        assert.match(verify, /\n {8}if: \$\{\{ !cancelled\(\) \}\}\n {8}needs: \[check, test\]\n/u);
+        assert.match(verify, /- run: test "\$CHECK" = success && test "\$TEST" = success\n/u);
+        assert.match(verify, /CHECK: \$\{\{ needs\.check\.result \}\}\n/u);
+        assert.match(verify, /TEST: \$\{\{ needs\.test\.result \}\}\n/u);
+        assert.match(workflow, /\n {4}image:\n {8}needs: verify\n/u);
     });
 
     it(`grants every job read access alone, and package writes to the image job`, () => {
@@ -109,7 +143,6 @@ describe(`the CI workflow`, () => {
     });
 
     it(`publishes the image from main alone, on a push or a run started by hand`, () => {
-        assert.match(workflow, /\non:\n {4}push:\n {4}pull_request:\n(?: {4}#.*\n)* {4}workflow_dispatch:\n/u);
         const main = `(github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/main'`;
         assert.ok(workflow.includes(`if: ${main}\n`));
         assert.ok(workflow.includes(`push: \${{ ${main} }}\n`));

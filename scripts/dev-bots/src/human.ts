@@ -5,8 +5,8 @@ import { ApiError, type ArenaClient } from './client';
 import type { HumanGame } from './personas';
 import { chooseTurn } from './player';
 
-/** How a seeded human plays one game. */
-export interface HumanPlayOptions {
+// How a seeded human plays one game.
+interface HumanPlayOptions {
     client: ArenaClient;
     cookie: string;
     name: string;
@@ -17,8 +17,8 @@ export interface HumanPlayOptions {
     log: (line: string) => void;
 }
 
-/** A finished human game, from the human's seat. */
-export interface HumanResult {
+// A finished human game, from the human's seat.
+interface HumanResult {
     readonly gameId: string;
     readonly you: Side;
     readonly winner: Side | null;
