@@ -1,11 +1,12 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { BotListing, Me, TournamentDetail, TournamentList, TournamentPair, TournamentSummary } from '@hexo-arena/contract';
+import { tournamentPerBotCap, type BotListing, type Me, type TournamentDetail, type TournamentList, type TournamentPair, type TournamentSummary } from '@hexo-arena/contract';
 import { TournamentBlock } from '../src/home/blocks';
 import { meStore } from '../src/me';
 import { PlayTournamentScreen } from '../src/screens/PlayTournamentScreen';
 import { TournamentsScreen } from '../src/screens/TournamentsScreen';
+import { pressAsReadLands } from './press-as-read-lands';
 
 const hour = 3_600_000;
 function summary(id: string, overrides: Partial<TournamentSummary>): TournamentSummary {
@@ -251,6 +252,21 @@ describe('the Tournament place under Play', () => {
         });
         expect(within(yours).getByText(`unrated`)).toBeTruthy();
         expect(screen.getByRole(`navigation`, { name: `Play` }).querySelector(`[aria-current="page"]`)?.textContent).toBe(`Tournament`);
+    });
+
+    it('hand focus to the Add left once bots are added, though a read lands as Add is pressed', async () => {
+        const accepts = { turnMs: [5_000, 60_000] as [number, number], match: true, unlimited: true };
+        const bots = [`sealbot`, `hextide`, `pebble`].map((name) => ({ ...listing(name, name === `sealbot` ? `quinn` : `ana`), accepts }));
+        serve({ '/api/tournaments': list, [`/api/tournaments/${waiting.id}`]: waiting, '/api/bots': bots, '/api/tournaments/bots': [] }, quinn);
+        render(<PlayTournamentScreen />);
+        fireEvent.click(await screen.findByRole(`button`, { name: `Add bots` }));
+        const dialog = screen.getByRole(`dialog`, { name: `Add bots` });
+        fireEvent.click(within(dialog).getByRole(`button`, { name: /^hextide\b/u }));
+        const busy = [{ name: `pebble`, duelsByOthers: true, running: tournamentPerBotCap }];
+        await pressAsReadLands({ path: `/api/tournaments/bots`, answer: busy }, `try again after one ends`, () => within(dialog).getByRole(`button`, { name: `Add 1 bot` }));
+        await waitFor(() => {
+            expect(document.activeElement).toBe(screen.getByRole(`button`, { name: `Add bots, the second plate` }));
+        });
     });
 
     it('offer a signed-out reader one sign-in, in the setup, the weekly\'s entry asking for it in words alone', async () => {

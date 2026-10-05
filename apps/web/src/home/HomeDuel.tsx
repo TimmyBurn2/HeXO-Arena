@@ -70,8 +70,10 @@ function DuelCard({
     const [picking, setPicking] = useState<SlotKey | null>(null);
     const [outcome, setOutcome] = useState<Outcome>({ kind: `idle` });
     const slotList = useRef<HTMLUListElement>(null);
-    // The slot a bot was just added to, whose next control takes focus once the list is gone.
-    const added = useRef<SlotKey | null>(null);
+    // The slot a bot was just added to, whose next control takes focus once the list is gone; a fresh object each add.
+    // State, not a ref: a press can come while a read's render still has its effects to run,
+    // which React runs first, before the slot the add fills is there.
+    const [added, setAdded] = useState<{ readonly slot: SlotKey } | null>(null);
     const find = useCallback((name: string | null) => (name === null ? null : (bots.find((bot) => nameKeyOf(bot.name) === nameKeyOf(name)) ?? null)), [bots]);
     const bot = { first: find(slots.first), second: find(slots.second) };
     const { first, second } = bot;
@@ -102,13 +104,11 @@ function DuelCard({
 
     // A bot added hands focus to the next empty slot's Add, else to the filled slot's Remove, since the button that opened the list may be gone.
     useEffect(() => {
-        const slot = added.current;
         const list = slotList.current;
-        if (slot === null || list === null) return;
-        added.current = null;
-        const next = list.querySelector<HTMLElement>(`[data-slot='${otherSlot(slot)}'] .slot-empty-add`) ?? list.querySelector<HTMLElement>(`[data-slot='${slot}'] .slot-remove`);
+        if (added === null || list === null) return;
+        const next = list.querySelector<HTMLElement>(`[data-slot='${otherSlot(added.slot)}'] .slot-empty-add`) ?? list.querySelector<HTMLElement>(`[data-slot='${added.slot}'] .slot-remove`);
         next?.focus();
-    });
+    }, [added]);
 
     async function start() {
         if (blocked) return;
@@ -220,7 +220,7 @@ function DuelCard({
                         other: bot[otherSlot(picking)],
                         current: bot[picking],
                         onAdd: (next) => {
-                            added.current = picking;
+                            setAdded({ slot: picking });
                             setSlots((held) => ({ ...held, [picking]: next.name }));
                             setLevels((held) => ({ ...held, [picking]: null }));
                             setPicking(null);
