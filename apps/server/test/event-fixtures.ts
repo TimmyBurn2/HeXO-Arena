@@ -1,12 +1,24 @@
 import type { TimeControl } from '@hexo-arena/contract';
+import { eq } from 'drizzle-orm';
 import type { Query } from '../src/db';
-import { tournamentEntries, tournamentPairings, tournaments } from '../src/db/schema';
-import { insertDuel, type DuelKey } from '../src/duel-store';
+import { bots, tournamentEntries, tournamentPairings, tournaments } from '../src/db/schema';
+import type { BotGameTag } from '../src/game-store';
 
-/** A duel stored as the setup stores one, its first bot playing x in game 1. */
+/** A duel as a test seeds it: its id, and its pairings by opening. */
+export interface SeededDuel {
+    readonly id: string;
+    readonly legs: readonly string[];
+}
+
+/**
+ * A duel stored as the setup stores one: a person's tournament of two,
+ * running in a live slot, its first bot seated first and on x in each
+ * opening's first game.
+ */
 export function seedDuel(
     query: Query,
     duel: {
+        id: string;
         startedBy: string;
         first: string;
         second: string;
@@ -15,27 +27,65 @@ export function seedDuel(
         createdAt?: number;
         versions?: { first: string | null; second: string | null };
         timeControl?: TimeControl;
+        liveSlot?: 1 | 2;
     },
-): string {
-    // The pair is stored in one order, its ids sorted.
-    const firstIsA = duel.first < duel.second;
-    const firstKey: DuelKey = firstIsA ? `a` : `b`;
+): SeededDuel {
+    const games = duel.games ?? 2;
+    const createdAt = duel.createdAt ?? 1_790_000_000;
+    query
+        .insert(tournaments)
+        .values({
+            id: duel.id,
+            name: null,
+            origin: `person`,
+            createdBy: duel.startedBy,
+            status: `running`,
+            startsAt: createdAt,
+            startedAt: createdAt,
+            timeControl: JSON.stringify(duel.timeControl ?? { mode: `turn`, turnTimeMs: 10_000 }),
+            openingPlies: 5,
+            maxEntrants: 2,
+            rated: 0,
+            test: duel.test === true ? 1 : 0,
+            gamesPerPair: games,
+            liveSlot: duel.liveSlot ?? 1,
+            createdAt,
+        })
+        .run();
     const versions = duel.versions ?? { first: null, second: null };
-    return insertDuel(query, {
-        startedBy: duel.startedBy,
-        botIds: firstIsA ? { a: duel.first, b: duel.second } : { a: duel.second, b: duel.first },
-        first: firstKey,
-        xInGame1: firstKey,
-        test: duel.test ?? false,
-        games: duel.games ?? 2,
-        timeControl: duel.timeControl ?? { mode: `turn`, turnTimeMs: 10_000 },
-        openingPlies: 5,
-        levels: { a: null, b: null },
-        ratings: { a: 1500, b: 1500 },
-        versions: firstIsA ? { a: versions.first, b: versions.second } : { a: versions.second, b: versions.first },
-        rated: false,
-        createdAt: duel.createdAt ?? 1_790_000_000,
-    });
+    for (const [index, botId] of [duel.first, duel.second].entries()) {
+        const ownerId = query.select({ ownerId: bots.ownerId }).from(bots).where(eq(bots.id, botId)).get()?.ownerId;
+        if (ownerId === undefined) throw new Error(`a duel seats a bot no one holds: ${botId}`);
+        query
+            .insert(tournamentEntries)
+            .values({
+                tournamentId: duel.id,
+                botId,
+                ownerId,
+                origin: `person`,
+                state: `playing`,
+                ratingAtStart: 1500,
+                version: index === 0 ? versions.first : versions.second,
+                seat: index + 1,
+                enteredAt: createdAt,
+            })
+            .run();
+    }
+    const legs = Array.from({ length: Math.max(1, games / 2) }, (_, index) => `p_${duel.id}_${String(index + 1)}`);
+    for (const [index, id] of legs.entries()) {
+        query
+            .insert(tournamentPairings)
+            .values({ id, tournamentId: duel.id, round: 1, firstBotId: duel.first, secondBotId: duel.second, leg: index + 1, gamesPerPair: games, ...(games === 1 ? { game2: `none` } : {}) })
+            .run();
+    }
+    return { id: duel.id, legs };
+}
+
+/** The tag of a duel's game by its number from 1, each opening's two games in turn. */
+export function duelGame(duel: SeededDuel, game: number): BotGameTag {
+    const pairingId = duel.legs[Math.ceil(game / 2) - 1];
+    if (pairingId === undefined) throw new Error(`the duel plays no game ${String(game)}`);
+    return { pairingId, game: game % 2 === 1 ? 1 : 2 };
 }
 
 /** A pairing as stored: its round, its two bots, and each game's state and seat. */

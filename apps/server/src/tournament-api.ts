@@ -3,7 +3,6 @@ import {
     acceptsSchema,
     boardCellSchema,
     createTournamentRequestSchema,
-    duelPerBotCap,
     estimateOf,
     gamesPerPairFits,
     nameKeyOf,
@@ -27,6 +26,8 @@ import {
     tournamentListPastCap,
     tournamentListQuerySchema,
     tournamentListSchema,
+    tournamentBotStatesSchema,
+    tournamentPerBotCap,
     tournamentRunningListCap,
     tournamentStatusSchema,
     tournamentWaitingCap,
@@ -36,11 +37,13 @@ import {
     type FinishReason,
     type SeatLevel,
     type TournamentBot,
+    type TournamentBotState,
     type TournamentDetail,
     type TournamentEnd,
     type TournamentEntry,
     type TournamentEstimate,
     type TournamentGame,
+    type TournamentLeaders,
     type TournamentList,
     type TournamentOrigin,
     type TournamentPair,
@@ -52,9 +55,9 @@ import {
 import { and, asc, desc, eq, inArray, isNull, ne, or, sql, type SQL } from 'drizzle-orm';
 import type { FastifyInstance } from 'fastify';
 import { botGates, busyBot, chosenLevel, gateRefusal, readBot, sendRefusal, type Refusal } from './bot-gates';
+import { listBots } from './bots';
 import { nowSeconds, type Query } from './db';
 import { bots, games, moves, tournamentEntries, tournamentPairings, tournaments, users } from './db/schema';
-import { countRunningOfBot } from './duel-store';
 import type { GameRegistry } from './game-registry';
 import type { PresenceRegistry } from './presence';
 import { tournamentExport } from './game-export';
@@ -348,9 +351,9 @@ function endOf(row: TournamentRow, pairings: readonly PairingView[], entries: re
     return { reason: row.endReason, round: lastBegunRound(pairings), ...(bot === undefined ? {} : { bot: botOf(bot, bot.botId) }) };
 }
 
-// Each bot of a test against all the others together, counted by the
-// pair's openings, as a duel's test is counted by its pairs: its points
-// in the games played, a game without a winner a half to each.
+// Each bot of a test against all the others together, counted by each
+// pair's openings, since an opening's two games share it: its points in
+// the games played, a game without a winner a half to each.
 function estimatesOf(field: readonly EntryRow[], pairings: readonly PairingView[]): TournamentEstimate[] {
     return field.flatMap((entry) => {
         const units: EstimateUnit[] = [];
@@ -492,6 +495,7 @@ function summaryOf(query: Query, row: TournamentRow): TournamentSummary {
     const estimate = row.test === 1 && first !== undefined ? estimatesOf(field, pairings).find((each) => each.key === first.key)?.estimate : undefined;
     const end = endOf(row, pairings, entries);
     const pair = tournamentFormatOf(row) === `duel` ? pairOf(entries, pairings, lines) : undefined;
+    const leaders = pair === undefined ? leadersOf(entries, pairings, lines) : undefined;
     return {
         ...summaryBase(row),
         entrants,
@@ -501,7 +505,27 @@ function summaryOf(query: Query, row: TournamentRow): TournamentSummary {
         ...(end === undefined ? {} : { end }),
         ...(estimate === undefined || first === undefined ? {} : { lead: { bot: first.bot, ...deleted, estimate } }),
         ...(pair === undefined ? {} : { pair }),
+        ...(leaders === undefined ? {} : { leaders }),
     };
+}
+
+// The game slots that score for someone: played, a no-show, or a forfeit.
+const scoring = new Set([`played`, `no_show`, `forfeit`]);
+
+// A round robin's bots first in the standings, their points, and the games each played that scored; none before a point.
+function leadersOf(entries: readonly EntryRow[], pairings: readonly PairingView[], lines: ReturnType<typeof standingsOf>): TournamentLeaders | undefined {
+    const top = lines.filter((line) => line.rank === 1);
+    const first = top[0];
+    if (first === undefined || first.points === 0) return undefined;
+    const games = scoredOf(pairings)
+        .filter((pairing) => pairing.first === first.bot || pairing.second === first.bot)
+        .reduce((sum, pairing) => sum + pairing.games.filter((game) => scoring.has(game.kind)).length, 0);
+    const bots = top.flatMap((line) => {
+        const entry = entries.find((candidate) => candidate.botId === line.bot);
+        return entry === undefined ? [] : [{ name: entry.bot, ...(entry.deleted ? { deleted: true as const } : {}) }];
+    });
+    const [lead, ...rest] = bots;
+    return lead === undefined ? undefined : { bots: [lead, ...rest], points: first.points, games };
 }
 
 // A duel's two bots in the order named, their points, and every game, as a list row's score cells draw them.
@@ -610,6 +634,18 @@ interface TournamentApiDeps {
     now: () => number;
 }
 
+// Every listed bot's switch and its running duels and round robins, as the
+// bot list orders them; a bot kept in more than its cap from before the cap
+// held reads as full.
+function tournamentBotStates(query: Query): TournamentBotState[] {
+    const switches = new Map(query.select({ id: bots.id, on: bots.duelsByOthers }).from(bots).all().map((row) => [row.id, row.on === 1]));
+    return listBots(query).map((bot) => ({
+        name: bot.name,
+        duelsByOthers: switches.get(bot.id) ?? true,
+        running: Math.min(countRunningTournamentsOfBot(query, bot.id), tournamentPerBotCap),
+    }));
+}
+
 const eventLengths: ReadonlySet<number> = new Set(tournamentGameCounts);
 
 const tournamentBusy: Refusal = { status: 400, code: `tournament_busy`, error: `you run your most duels and round robins at once` };
@@ -627,9 +663,9 @@ export function registerTournamentApi(app: FastifyInstance, deps: TournamentApiD
     const { query, limits, gate } = deps;
     const memo = new WindowMemo<string>({ windowMs: tournamentDetailMemoMs, now: deps.now });
 
-    // A change shows on its page and in every bot's list at once.
+    // A change shows on its page, in every bot's list, and in the bots' states at once.
     const forget = (id: string) => {
-        memo.forget((key) => key === id || key.startsWith(`bot:`));
+        memo.forget((key) => key === id || key.startsWith(`bot:`) || key === `bots`);
     };
 
     const detailOf = (id: string) => {
@@ -686,7 +722,7 @@ export function registerTournamentApi(app: FastifyInstance, deps: TournamentApiD
         // The quotas are read where the tournament is written, as the daily caps are.
         const create = () =>
             query.transaction((tx): { id: string } | Refusal => {
-                const busy = busyBot(field, (botId) => countRunningOfBot(tx, botId) + countRunningTournamentsOfBot(tx, botId), duelPerBotCap);
+                const busy = busyBot(field, (botId) => countRunningTournamentsOfBot(tx, botId), tournamentPerBotCap);
                 if (busy !== undefined) return { status: 400, code: `bot_busy`, error: `a bot is at its game cap, in the weekly, or in its most duels and round robins`, bot: busy.name };
                 if (!test && !eventLengths.has(terms.gamesPerPair)) return { status: 400, code: `test_only`, error: `only a test of one person's bots plays that many games a pair` };
                 if (!gamesPerPairFits(found.length, terms.gamesPerPair, test)) return { status: 400, code: `too_many_games`, error: `a bot would play more games than one tournament holds` };
@@ -724,6 +760,11 @@ export function registerTournamentApi(app: FastifyInstance, deps: TournamentApiD
         deps.tournaments.advance(created.id);
         forget(created.id);
         return reply.code(201).send(detailOf(created.id));
+    });
+
+    app.get(`/api/tournaments/bots`, { config: { limit: `public` } }, async (_request, reply) => {
+        const body = memo.read(`bots`, () => JSON.stringify(tournamentBotStatesSchema.parse(tournamentBotStates(query))));
+        return reply.header(`content-type`, `application/json; charset=utf-8`).send(body);
     });
 
     app.get<{ Params: IdParams }>(`/api/tournaments/:id`, { config: { limit: `public` } }, async (request, reply) => {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { BotListing, DuelBotState } from '@hexo-arena/contract';
+import type { BotListing, TournamentBotState } from '@hexo-arena/contract';
 import { clockClashes, eventReadiness, isTest } from '../src/play/readiness';
 
 const wide = { turnMs: [5_000, 60_000] as [number, number], match: true, unlimited: true };
@@ -8,13 +8,13 @@ function bot(name: string, ownerName: string, overrides: Partial<BotListing> = {
     return { name, ownerName, online: true, openForChallenges: true, rating: 1500, provisional: false, liveGames: 0, levels: null, analyzer: null, accepts: wide, ...overrides };
 }
 
-const state = (name: string, changes: Partial<DuelBotState> = {}): DuelBotState => ({ name, duelsByOthers: true, dueling: [], roundRobins: 0, ...changes });
+const state = (name: string, changes: Partial<TournamentBotState> = {}): TournamentBotState => ({ name, duelsByOthers: true, running: 0, ...changes });
 
-const reads = (viewer: string | null, states: readonly DuelBotState[] = [], reserved: readonly string[] = []) => ({ viewer, states, reserved: new Set(reserved) });
+const reads = (viewer: string | null, states: readonly TournamentBotState[] = [], reserved: readonly string[] = []) => ({ viewer, states, reserved: new Set(reserved) });
 
 describe('which bots join a bot event', () => {
     it('takes a ready bot, and says why it cannot take one offline, closed to others, without a clock, held, busy, in its most events, or refusing others', () => {
-        const ana = reads(`ana`, [state(`quietlake`, { duelsByOthers: false }), state(`devbot-b`, { dueling: [`devbot-c`], roundRobins: 1 })], [`sealbot`]);
+        const ana = reads(`ana`, [state(`quietlake`, { duelsByOthers: false }), state(`devbot-b`, { running: 2 }), state(`devbot-c`, { running: 1 })], [`sealbot`]);
         expect(eventReadiness(bot(`hextide`, `ana`), [], ana)).toBeNull();
         expect(eventReadiness(bot(`lantern`, `ana`, { online: false }), [], ana)).toBe(`offline`);
         expect(eventReadiness(bot(`pebble`, `bruno`, { openForChallenges: false }), [], ana)).toBe(`closed`);
@@ -24,6 +24,7 @@ describe('which bots join a bot event', () => {
         expect(eventReadiness(bot(`sealbot`, `bruno`), [], ana)).toBe(`tournament`);
         expect(eventReadiness(bot(`busy`, `bruno`, { liveGames: 4 }), [], ana)).toBe(`busy`);
         expect(eventReadiness(bot(`devbot-b`, `devowner-b`), [], ana)).toBe(`events`);
+        expect(eventReadiness(bot(`devbot-c`, `devowner-c`), [], ana)).toBeNull();
         expect(eventReadiness(bot(`quietlake`, `dmitri`), [], ana)).toBe(`refused`);
         expect(eventReadiness(bot(`quietlake`, `dmitri`), [], reads(`dmitri`, [state(`quietlake`, { duelsByOthers: false })]))).toBeNull();
     });
@@ -41,12 +42,6 @@ describe('which bots join a bot event', () => {
         const field = Array.from({ length: 8 }, (_, index) => bot(`bot${String(index)}`, `owner${String(index)}`));
         expect(eventReadiness(bot(`ninth`, `cid`), field, reads(`cid`))).toBe(`full`);
         expect(eventReadiness(field[0] ?? bot(`none`, `none`), field, reads(`cid`))).toBeNull();
-    });
-
-    it('holds a pair to one running duel only where the duel stack asks for it', () => {
-        const states = [state(`devbot-c`, { dueling: [`devbot-b`] })];
-        expect(eventReadiness(bot(`devbot-c`, `c`), [bot(`devbot-b`, `b`)], reads(null, states), true)).toBe(`pair`);
-        expect(eventReadiness(bot(`devbot-c`, `c`), [bot(`devbot-b`, `b`)], reads(null, states))).toBeNull();
     });
 
     it('makes a test of one person\'s bots alone', () => {

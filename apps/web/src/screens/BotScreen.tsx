@@ -1,9 +1,9 @@
 import { Fragment, useCallback, useId } from 'react';
 import { analysisPagePath, botMeta, levelFacts, nameKeyOf, notFoundMeta, pagePath, type Accepts, type Analyzer, type BotListing, type Levels, type LiveGameEntry } from '@hexo-arena/contract';
 import { fetchBots } from '../api/client';
-import { duelsPath } from '../duels/setup';
 import { eventReadiness, reasonText } from '../play/readiness';
-import { useDuelStates } from '../duels/use-duels';
+import { emptyTournamentSetup, tournamentSetupPath } from '../tournaments/setup';
+import { useBotStates } from '../tournaments/use-setup-reads';
 import { useAsync } from '../api/use-async';
 import { OwnerPanel } from '../components/OwnerPanel';
 import { ReportLine } from '../components/ReportLine';
@@ -74,12 +74,12 @@ function MissingBot({ name }: { name: string }) {
 function BotProfile({ bot, onChanged }: { bot: BotListing; onChanged: () => void }) {
     const me = useMe();
     const ids = useId();
-    const duelStates = useDuelStates();
-    const duelState = duelStates.states.find((state) => nameKeyOf(state.name) === nameKeyOf(bot.name)) ?? null;
+    const botStates = useBotStates();
+    const botState = botStates.states.find((state) => nameKeyOf(state.name) === nameKeyOf(bot.name)) ?? null;
     const viewer = me.status === `ready` && me.me?.kind === `user` ? me.me.name : null;
     const owned = ownedBy(bot, viewer);
     // The owner plays their own bot while it is online, open to others or not.
-    const readiness = readinessOf(bot, duelStates.reserved, viewer);
+    const readiness = readinessOf(bot, botStates.reserved, viewer);
     const blockedReasons = {
         busy: text.play.busy,
         tournament: text.play.inTournament,
@@ -88,9 +88,9 @@ function BotProfile({ bot, onChanged }: { bot: BotListing; onChanged: () => void
         nothing: text.bot.noClockReason,
     };
     // Start a duel opens a setup only for a bot the picker would add, and says why not as the picker does;
-    // beside no other bot, no reason is a pair's.
-    const duelWhy = eventReadiness(bot, [], { reserved: duelStates.reserved, states: duelStates.states, viewer }, true);
-    const duelReason = duelWhy === null || duelWhy === `pair` || duelWhy === `clock` ? null : reasonText(duelWhy, []);
+    // beside no other bot, no reason is a clock's.
+    const duelWhy = eventReadiness(bot, [], { reserved: botStates.reserved, states: botStates.states, viewer });
+    const duelReason = duelWhy === null || duelWhy === `clock` ? null : reasonText(duelWhy, []);
     const reason = readiness !== `ready` ? blockedReasons[readiness] : duelReason;
 
     return (
@@ -128,7 +128,7 @@ function BotProfile({ bot, onChanged }: { bot: BotListing; onChanged: () => void
                                 </button>
                             )}
                             {duelReason === null ? (
-                                <Link to={duelsPath(bot.name)} className="btn btn-ghost">
+                                <Link to={tournamentSetupPath({ ...emptyTournamentSetup, bots: [{ name: bot.name, level: null }] })} className="btn btn-ghost">
                                     {text.duels.bot.start}
                                 </Link>
                             ) : (
@@ -142,7 +142,7 @@ function BotProfile({ bot, onChanged }: { bot: BotListing; onChanged: () => void
                                 </span>
                             )}
                         </div>
-                        <AcceptsLine accepts={bot.accepts} owned={owned} byOthers={duelState?.duelsByOthers ?? null} />
+                        <AcceptsLine accepts={bot.accepts} owned={owned} byOthers={botState?.duelsByOthers ?? null} />
                     </div>
                 </header>
             </div>

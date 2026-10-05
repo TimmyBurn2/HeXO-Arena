@@ -558,24 +558,23 @@ local `pnpm dev`.
 | `bot <name>` | one bot: its owner, presence, live games, declared version, and the client it last connected with, and when; no audit row |
 | `backup [label]` | write the day's backup now; with a label, such as `pre-update`, one named for it and the second instead, kept apart; no audit row, as it changes no data |
 | `pause` / `resume` | new streams, games, and challenges answer `503` with `Retry-After`; open streams and live games run on; the flag survives restarts |
-| `ban-user <name>` / `unban-user <name>` | sessions end, bots are closed and hidden, their duels cut short, their tokens answer `403`; unban relists the bots and kills their old tokens |
+| `ban-user <name>` / `unban-user <name>` | sessions end, bots are closed, hidden, and withdrawn from tournaments, the duels and round robins the user set up stop, their tokens answer `403`; unban relists the bots and kills their old tokens |
 | `delete-user <name>` | live games aborted, bots deleted as below, the user forgotten; rated history stays under a `deleted-<n>` placeholder, which earlier audit rows naming the user or their bots now name instead; the deletion goes to the erasure journal |
-| `delist-bot <name>` / `relist-bot <name>` | hidden from the directory and the ladder, refused from challenges and games both ways, its duels cut short; live play continues |
+| `delist-bot <name>` / `relist-bot <name>` | hidden from the directory and the ladder, refused from challenges and games both ways, withdrawn from tournaments; live play continues |
 | `revoke-bot <name>` | token dead, stream closed; the owner mints a fresh one |
-| `abort-game <gameId>` / `abort-game --bot <name>` | unrated abort of one game, or of every live game of a bot; a duel such a game belongs to is cut short |
+| `abort-game <gameId>` / `abort-game --bot <name>` | unrated abort of one game, or of every live game of a bot; a tournament's such game counts for no one, and play goes on |
 | `recompute-ratings [--exclude <gameId\|name>]...` | re-fold every rating, and the ratings around each game, from the game log; excluded games are voided for good |
 | `tournament-create --name <text> --start <ISO time> --clock turn:<s>\|match:<min>+<s> [--opening <plies>] [--max <bots>]` | schedule a bot round robin 1 hour to 14 days ahead, at most 3 waiting; turn clock 5 to 60 s, or match clock 1 to 10 min plus 0 to 10 s; opening 1, 3, 5, 7, or 9 plies, default 5; 3 to 12 entries, default 12 |
-| `tournament-cancel <tournamentId>` | end a waiting or running tournament as canceled |
+| `tournament-cancel <tournamentId>` | end a waiting or running tournament as canceled, a duel or round robin a person set up among them |
 | `tournament-schedule add --weekday <mon..sun> --time <HH:MM> --name <text> --clock turn:<s>\|match:<min>+<s> [--opening <plies>] [--max <bots>] [--ahead <days>]` | a weekly rule: each week's tournament starts on that weekday at that UTC time and is created `--ahead` days before, 1 to 14, default 7, opening it for entries; `{date}` in the name becomes the start's date, YYYY-MM-DD; clock, opening, and entries as for `tournament-create`; one rule per weekday and time |
 | `tournament-schedule list` | the weekly rules with their ids and next starts |
 | `tournament-schedule remove <ruleId>` | delete a weekly rule; the tournaments it created stay, and `tournament-cancel` ends a waiting one |
 | `report-close <reportId>` | close a report from the site's report form; the reason is the note the report keeps |
 | `delete-analysis <analysisId>` | delete an analyzer's reading of a game, with its lines, for one that lies or misleads; a pending one stops |
-| `duel-stop <duelId>` | stop a duel or test between bots: no further game starts, and a live one plays on to its result |
 
 Every mutation takes `--reason` and writes an audit row.
 `status` lists the running and waiting tournaments with their ids, the
-weekly rules, and counts the running duels.
+weekly rules, and counts the running duels and round robins.
 A weekly rule's tournament counts toward the 3 waiting: while they are full,
 creation waits for a free slot.
 A week whose tournament does not exist an hour before its start, from a full

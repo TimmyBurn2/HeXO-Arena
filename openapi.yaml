@@ -20,13 +20,6 @@ components:
       required: true
       schema:
         type: string
-    DuelId:
-      description: The duel's id.
-      in: path
-      name: id
-      required: true
-      schema:
-        type: string
     GameId:
       description: The game, as carried on gameStart and moveRequest.
       in: path
@@ -42,7 +35,7 @@ components:
       schema:
         type: string
     TournamentId:
-      description: The tournament's id.
+      description: "The tournament's id: t_, or d_ for a duel kept from the duels of old."
       in: path
       name: id
       required: true
@@ -438,43 +431,6 @@ components:
               - decidedAt
             type: object
           type: array
-        duels:
-          description: Duels and tests the account started.
-          items:
-            properties:
-              createdAt:
-                format: date-time
-                type: string
-              endedAt:
-                format: date-time
-                nullable: true
-                type: string
-              first:
-                type: string
-              games:
-                type: integer
-              id:
-                type: string
-              kind:
-                $ref: "#/components/schemas/DuelKind"
-              rated:
-                type: boolean
-              second:
-                type: string
-              status:
-                $ref: "#/components/schemas/DuelStatus"
-            required:
-              - id
-              - first
-              - second
-              - games
-              - kind
-              - rated
-              - status
-              - createdAt
-              - endedAt
-            type: object
-          type: array
         exportedAt:
           format: date-time
           type: string
@@ -635,47 +591,6 @@ components:
             - deviation
             - volatility
           type: object
-        roundRobins:
-          description: Duels and round robins the account set up as tournaments, tests among them.
-          items:
-            properties:
-              bots:
-                items:
-                  type: string
-                type: array
-              createdAt:
-                format: date-time
-                type: string
-              endedAt:
-                format: date-time
-                nullable: true
-                type: string
-              gamesPerPair:
-                $ref: "#/components/schemas/TournamentGamesPerPair"
-              id:
-                type: string
-              status:
-                enum:
-                  - scheduled
-                  - running
-                  - finished
-                  - called_off
-                  - canceled
-                  - stopped
-                  - cut_short
-                type: string
-              test:
-                type: boolean
-            required:
-              - id
-              - bots
-              - gamesPerPair
-              - test
-              - status
-              - createdAt
-              - endedAt
-            type: object
-          type: array
         sessions:
           items:
             properties:
@@ -745,6 +660,54 @@ components:
               - enteredAt
             type: object
           type: array
+        tournaments:
+          description: Duels and round robins the account set up, tests among them, each bot in the order it
+            named them.
+          items:
+            properties:
+              bots:
+                items:
+                  type: string
+                type: array
+              createdAt:
+                format: date-time
+                type: string
+              endedAt:
+                format: date-time
+                nullable: true
+                type: string
+              format:
+                $ref: "#/components/schemas/TournamentFormat"
+              gamesPerPair:
+                $ref: "#/components/schemas/TournamentGamesPerPair"
+              id:
+                type: string
+              rated:
+                type: boolean
+              status:
+                enum:
+                  - scheduled
+                  - running
+                  - finished
+                  - called_off
+                  - canceled
+                  - stopped
+                  - cut_short
+                type: string
+              test:
+                type: boolean
+            required:
+              - id
+              - format
+              - bots
+              - gamesPerPair
+              - test
+              - rated
+              - status
+              - createdAt
+              - endedAt
+            type: object
+          type: array
       required:
         - exportedAt
         - account
@@ -753,8 +716,7 @@ components:
         - bots
         - games
         - tournamentEntries
-        - duels
-        - roundRobins
+        - tournaments
         - challenges
         - analyses
         - moderation
@@ -1334,9 +1296,9 @@ components:
               type: string
           description: The link the bot declares, which shows while the owner has set none.
         duelsByOthers:
-          description: True lets any signed-in person start a duel or set up a round robin the bot plays;
-            false keeps that to its owner, and takes the bot out of round robins others set up. On
-            until the owner turns it off.
+          description: True lets any signed-in person set up a duel or round robin the bot plays; false keeps
+            that to its owner, and takes the bot out of those others set up. On until the owner
+            turns it off.
           type: boolean
         name:
           type: string
@@ -1594,49 +1556,6 @@ components:
         - seconds
         - turns
       type: object
-    CreateDuelRequest:
-      additionalProperties: false
-      description: The clock is a turn clock of 5 to 60 s, or a match clock of 1 to 10 min plus 0 to 10 s,
-        never unlimited. A 1-ply opening allows a single game or one pair, since a bot that plays
-        alike every time would replay the bare origin identically. Two bots of one owner meet in a
-        test, never rated.
-      properties:
-        first:
-          pattern: ^[A-Za-z][A-Za-z0-9_-]{0,28}[A-Za-z0-9]$
-          type: string
-        games:
-          allOf:
-            - $ref: "#/components/schemas/DuelGames"
-            - default: 2
-        levels:
-          additionalProperties: false
-          description: Each bot's declared level, its default when absent; at any other level the duel is
-            unrated.
-          properties:
-            first:
-              $ref: "#/components/schemas/LevelId"
-            second:
-              $ref: "#/components/schemas/LevelId"
-          type: object
-        openingPlies:
-          allOf:
-            - $ref: "#/components/schemas/OpeningPlies"
-            - default: 5
-        rated:
-          default: false
-          description: True asks for a rated duel, which only a starter owning exactly one of the bots gets,
-            at their default levels.
-          type: boolean
-        second:
-          pattern: ^[A-Za-z][A-Za-z0-9_-]{0,28}[A-Za-z0-9]$
-          type: string
-        timeControl:
-          $ref: "#/components/schemas/TimeControl"
-      required:
-        - first
-        - second
-        - timeControl
-      type: object
     CreateTournamentRequest:
       additionalProperties: false
       description: "2 to 8 distinct bots: two play a duel, three or more a round robin. The clock is a
@@ -1697,207 +1616,32 @@ components:
         - username
         - displayName
       type: object
-    DuelBot:
-      description: "A bot as the duel began: its rating then, its level, present when other than its
-        default, whose rating is then null, and its version; and its rating now."
+    EngineSession:
       properties:
-        deleted:
-          $ref: "#/components/schemas/Deleted"
-        level:
-          $ref: "#/components/schemas/SeatLevel"
-        name:
+        socketUrl:
+          description: A path on the API's origin; dial it as wss://, or ws:// where the API is http://.
           type: string
-        now:
-          description: The bot's rating on the ladder now; null for a deleted bot.
-          nullable: true
-          properties:
-            provisional:
-              $ref: "#/components/schemas/Provisional"
-            rating:
-              type: integer
-          required:
-            - rating
-            - provisional
-          type: object
-        ownerName:
-          type: string
-        ratingAtStart:
-          nullable: true
-          type: integer
-        version:
-          description: The version the bot declared as the duel began, absent where it declared none.
-          maxLength: 64
+        token:
+          description: "The game token (hgs_...): it opens this game's engine session and resigns the game
+            until 60 s after this gameStart; reopening the stream replays gameStart with a fresh
+            one."
           type: string
       required:
-        - name
-        - ownerName
-        - ratingAtStart
-        - now
+        - socketUrl
+        - token
       type: object
-    DuelBotState:
-      description: What a duel's setup reads of a listed bot beside the bot list.
-      properties:
-        dueling:
-          description: The bots it plays a running duel with.
-          items:
-            type: string
-          maxItems: 2
-          type: array
-        duelsByOthers:
-          description: False keeps duels with the bot to those its owner starts.
-          type: boolean
-        name:
-          type: string
-        roundRobins:
-          description: Running duels and round robins people set up as tournaments that it plays in; with its
-            duels, at most 2.
-          maximum: 2
-          minimum: 0
-          type: integer
-      required:
-        - name
-        - duelsByOthers
-        - dueling
-        - roundRobins
-      type: object
-    DuelBotStates:
-      items:
-        $ref: "#/components/schemas/DuelBotState"
-      type: array
-    DuelCreateError:
-      properties:
-        bot:
-          description: The bot a gate refused, where the code names one.
-          type: string
-        code:
-          enum:
-            - bad_request
-            - not_open
-            - duel_refused
-            - clock_not_accepted
-            - unknown_level
-            - bot_busy
-            - duel_live
-            - duel_busy
-            - unrated_only
-            - test_only
-          type: string
-        error:
-          type: string
-      required:
-        - error
-        - code
-      type: object
-    DuelDetail:
-      description: A duel as its page reads it, named as the list names it. The games run one at a time,
-        each once both bots are ready; live holds the game under way, which a stopped duel still
-        plays to its result, and waiting is present while the next game waits for a bot.
-      properties:
-        createdAt:
-          format: date-time
-          type: string
-        end:
-          $ref: "#/components/schemas/DuelEnd"
-        endedAt:
-          format: date-time
-          nullable: true
-          type: string
-        estimate:
-          $ref: "#/components/schemas/DuelEstimate"
-        first:
-          $ref: "#/components/schemas/DuelBot"
-        games:
-          items:
-            $ref: "#/components/schemas/DuelGame"
-          maxItems: 50
-          minItems: 1
-          type: array
-        id:
-          pattern: ^d_[a-z0-9]{12}$
-          type: string
-        kind:
-          $ref: "#/components/schemas/DuelKind"
-        live:
-          items:
-            $ref: "#/components/schemas/LiveGameEntry"
-          maxItems: 1
-          type: array
-        score:
-          $ref: "#/components/schemas/DuelScore"
-        second:
-          $ref: "#/components/schemas/DuelBot"
-        startedBy:
-          type: string
-        status:
-          $ref: "#/components/schemas/DuelStatus"
-        terms:
-          $ref: "#/components/schemas/DuelTerms"
-        waiting:
-          $ref: "#/components/schemas/DuelWaiting"
-      required:
-        - id
-        - kind
-        - status
-        - startedBy
-        - first
-        - second
-        - terms
-        - score
-        - createdAt
-        - endedAt
-        - games
-        - live
-      type: object
-    DuelEnd:
-      description: Why a duel ended early.
-      properties:
-        bot:
-          description: The bot the reason names, or whose owner stopped the duel; null when it names neither.
-          enum:
-            - first
-            - second
-            - null
-          nullable: true
-          type: string
-        reason:
-          $ref: "#/components/schemas/DuelEndReason"
-      required:
-        - reason
-        - bot
-      type: object
-    DuelEndReason:
-      description: "Cut short: a bot was offline, connected but not open (closed), outside its accepted
-        clocks (clock), at its game cap (busy), or no longer took duels by others (refused) for the
-        whole grace; a tournament it entered began; it or its owner was taken out (banned, delisted,
-        deleted); a rated game met a daily cap (daily_cap); or the operator aborted a game
-        (aborted). Stopped by the starter, a bot's owner, or the operator."
-      enum:
-        - offline
-        - closed
-        - clock
-        - busy
-        - refused
-        - tournament
-        - banned
-        - delisted
-        - deleted
-        - daily_cap
-        - aborted
-        - starter
-        - owner
-        - operator
-      type: string
-    DuelEstimate:
-      description: A test's estimate over the games over so far, counted by pairs since a pair shares its
-        opening, with one pair won and one lost added so a short run or a sweep stays finite.
+    Estimate:
+      description: A test's estimate over the games played so far, counted by openings since an opening's
+        two games share it, with one opening won and one lost added so a short run or a sweep stays
+        finite.
       properties:
         chance:
-          description: The chance the first bot is the stronger.
+          description: The chance the first is the stronger.
           maximum: 1
           minimum: 0
           type: number
         favored:
-          description: The bot the chance favors, null at even.
+          description: The side the chance favors, null at even.
           enum:
             - first
             - second
@@ -1905,7 +1649,7 @@ components:
           nullable: true
           type: string
         games:
-          maximum: 50
+          maximum: 70
           minimum: 1
           type: integer
         high:
@@ -1922,7 +1666,7 @@ components:
           nullable: true
           type: integer
         points:
-          description: Each bot's points, a game without a winner a half to each.
+          description: Each side's points, a game without a winner a half to each.
           properties:
             first:
               minimum: 0
@@ -1935,10 +1679,10 @@ components:
             - second
           type: object
         rating:
-          description: How many rating points stronger the first bot is; below zero, weaker.
+          description: How many rating points stronger the first is; below zero, weaker.
           type: integer
         verdict:
-          description: "For the favored bot: stronger at a chance of 99% or more, likely_stronger from 95%,
+          description: "For the favored side: stronger at a chance of 99% or more, likely_stronger from 95%,
             else too_close."
           enum:
             - stronger
@@ -1955,349 +1699,6 @@ components:
         - favored
         - verdict
         - narrowed
-      type: object
-    DuelForbiddenError:
-      properties:
-        bot:
-          description: The delisted bot, or the banned owner's.
-          type: string
-        code:
-          enum:
-            - delisted
-            - banned
-          type: string
-        error:
-          type: string
-      required:
-        - error
-        - code
-      type: object
-    DuelGame:
-      properties:
-        game:
-          maximum: 50
-          minimum: 1
-          type: integer
-        gameId:
-          nullable: true
-          type: string
-        opening:
-          description: The opening's stones, the origin included, once drawn at the first game of its pair;
-            the pair's second game replays them.
-          items:
-            properties:
-              side:
-                enum:
-                  - x
-                  - o
-                type: string
-              x:
-                type: integer
-              y:
-                type: integer
-            required:
-              - x
-              - y
-              - side
-            type: object
-          nullable: true
-          type: array
-        reason:
-          description: How the game ended once over; null before.
-          enum:
-            - aborted
-            - disconnect
-            - surrender
-            - timeout
-            - terminated
-            - six-in-a-row
-            - null
-          nullable: true
-          type: string
-        state:
-          enum:
-            - pending
-            - live
-            - played
-            - not_played
-            - aborted
-          type: string
-        turns:
-          description: Turns on the board once the game is over, the opening's included; null before.
-          minimum: 0
-          nullable: true
-          type: integer
-        winner:
-          $ref: "#/components/schemas/DuelSide"
-        x:
-          description: The bot playing x; the sides alternate every game.
-          enum:
-            - first
-            - second
-          type: string
-      required:
-        - game
-        - x
-        - gameId
-        - state
-        - winner
-        - reason
-        - turns
-        - opening
-      type: object
-    DuelGames:
-      description: "How many games a duel plays: a single game with sides drawn by lot, or pairs, each
-        pair one opening played twice with the sides swapped. More than 10 only in a test, between
-        two bots of one owner."
-      enum:
-        - 1
-        - 2
-        - 4
-        - 6
-        - 8
-        - 10
-        - 20
-        - 30
-        - 50
-      type: integer
-    DuelKind:
-      description: "test: one person owns both bots, so it is never rated, may play up to 50 games, and
-        estimates which bot is stronger."
-      enum:
-        - duel
-        - test
-      type: string
-    DuelList:
-      properties:
-        past:
-          description: Duels over, the latest to end first.
-          items:
-            $ref: "#/components/schemas/DuelSummary"
-          maxItems: 20
-          type: array
-        quota:
-          description: Present when mine names a signed-in caller.
-          properties:
-            live:
-              description: Duels and tests the caller started that run now, of 2.
-              maximum: 2
-              minimum: 0
-              type: integer
-            today:
-              description: Duels and tests the caller started this UTC day, of 10.
-              maximum: 10
-              minimum: 0
-              type: integer
-          required:
-            - live
-            - today
-          type: object
-        running:
-          description: Running duels, the newest first.
-          items:
-            $ref: "#/components/schemas/DuelSummary"
-          maxItems: 20
-          type: array
-      required:
-        - running
-        - past
-      type: object
-    DuelQuotaError:
-      properties:
-        code:
-          enum:
-            - daily_duel_cap
-            - daily_pair_cap
-            - daily_bot_cap
-            - rate_limited
-          type: string
-        error:
-          type: string
-      required:
-        - error
-        - code
-      type: object
-    DuelResult:
-      description: "A game of the duel as a list draws it: its sides, how it stands, and who won."
-      properties:
-        game:
-          maximum: 50
-          minimum: 1
-          type: integer
-        gameId:
-          nullable: true
-          type: string
-        state:
-          enum:
-            - pending
-            - live
-            - played
-            - not_played
-            - aborted
-          type: string
-        winner:
-          $ref: "#/components/schemas/DuelSide"
-        x:
-          $ref: "#/components/schemas/DuelSide"
-      required:
-        - game
-        - x
-        - gameId
-        - state
-        - winner
-      type: object
-    DuelScore:
-      description: One point per game won; a game without a winner scores nothing.
-      properties:
-        first:
-          minimum: 0
-          type: integer
-        second:
-          minimum: 0
-          type: integer
-      required:
-        - first
-        - second
-      type: object
-    DuelSide:
-      description: One of the duel's two bots, in the order its starter named them.
-      enum:
-        - first
-        - second
-        - null
-      nullable: true
-      type: string
-    DuelStatus:
-      description: "finished: every game was played. cut_short: a game could not start or was aborted.
-        stopped: the starter, an owner, or the operator stopped it."
-      enum:
-        - running
-        - finished
-        - cut_short
-        - stopped
-      type: string
-    DuelStopConflictError:
-      properties:
-        code:
-          enum:
-            - over
-          type: string
-        error:
-          type: string
-      required:
-        - error
-        - code
-      type: object
-    DuelStopForbiddenError:
-      properties:
-        code:
-          enum:
-            - not_yours
-          type: string
-        error:
-          type: string
-      required:
-        - error
-        - code
-      type: object
-    DuelSummary:
-      description: startedBy names who started the duel, deleted player once their account is deleted; a
-        deleted bot reads as deleted bot. played counts the games over, the live one aside; estimate
-        is present on a test once a game is over; end is present once the duel ended early.
-      properties:
-        createdAt:
-          format: date-time
-          type: string
-        end:
-          $ref: "#/components/schemas/DuelEnd"
-        endedAt:
-          format: date-time
-          nullable: true
-          type: string
-        estimate:
-          $ref: "#/components/schemas/DuelEstimate"
-        first:
-          $ref: "#/components/schemas/DuelBot"
-        id:
-          pattern: ^d_[a-z0-9]{12}$
-          type: string
-        kind:
-          $ref: "#/components/schemas/DuelKind"
-        played:
-          maximum: 50
-          minimum: 0
-          type: integer
-        results:
-          items:
-            $ref: "#/components/schemas/DuelResult"
-          maxItems: 50
-          minItems: 1
-          type: array
-        score:
-          $ref: "#/components/schemas/DuelScore"
-        second:
-          $ref: "#/components/schemas/DuelBot"
-        startedBy:
-          type: string
-        status:
-          $ref: "#/components/schemas/DuelStatus"
-        terms:
-          $ref: "#/components/schemas/DuelTerms"
-      required:
-        - id
-        - kind
-        - status
-        - startedBy
-        - first
-        - second
-        - terms
-        - score
-        - createdAt
-        - endedAt
-        - played
-        - results
-      type: object
-    DuelTerms:
-      properties:
-        games:
-          $ref: "#/components/schemas/DuelGames"
-        openingPlies:
-          $ref: "#/components/schemas/OpeningPlies"
-        rated:
-          type: boolean
-        timeControl:
-          $ref: "#/components/schemas/TimeControl"
-      required:
-        - games
-        - openingPlies
-        - timeControl
-        - rated
-      type: object
-    DuelWaiting:
-      description: The bot the next game waits for, and when the duel is cut short unless it is ready.
-      properties:
-        bot:
-          $ref: "#/components/schemas/DuelSide"
-        until:
-          format: date-time
-          type: string
-      required:
-        - bot
-        - until
-      type: object
-    EngineSession:
-      properties:
-        socketUrl:
-          description: A path on the API's origin; dial it as wss://, or ws:// where the API is http://.
-          type: string
-        token:
-          description: "The game token (hgs_...): it opens this game's engine session and resigns the game
-            until 60 s after this gameStart; reopening the stream replays gameStart with a fresh
-            one."
-          type: string
-      required:
-        - socketUrl
-        - token
       type: object
     ExportedRating:
       nullable: true
@@ -2358,8 +1759,6 @@ components:
           maximum: 2
           minimum: 0
           type: integer
-        duel:
-          $ref: "#/components/schemas/GameDuel"
         finishedAt:
           format: date-time
           type: string
@@ -2594,24 +1993,6 @@ components:
         - error
         - code
       type: object
-    GameDuel:
-      description: "The duel a game belongs to: which of its games this is, and how many it plays."
-      properties:
-        game:
-          maximum: 50
-          minimum: 1
-          type: integer
-        id:
-          type: string
-        of:
-          maximum: 50
-          minimum: 1
-          type: integer
-      required:
-        - id
-        - game
-        - of
-      type: object
     GameEvent:
       description: "One server-sent event: the event field names the kind, and the data field holds the
         payload as one line of JSON."
@@ -2769,8 +2150,6 @@ components:
               $ref: "#/components/schemas/GameBoard"
             clock:
               $ref: "#/components/schemas/GameClock"
-            duel:
-              $ref: "#/components/schemas/GameDuel"
             gameId:
               type: string
             openingPlies:
@@ -2814,8 +2193,6 @@ components:
               $ref: "#/components/schemas/GameBoard"
             clock:
               $ref: "#/components/schemas/GameClock"
-            duel:
-              $ref: "#/components/schemas/GameDuel"
             gameId:
               type: string
             openingPlies:
@@ -2910,31 +2287,25 @@ components:
         - engine
       type: object
     GameTournament:
-      description: "The tournament a game belongs to: its round, and which of its opening's two games it
-        is. Where a pair plays other than one opening, leg numbers the opening and of counts the
-        pair's games, 1 for a single game; createdBy names who set a person's tournament up."
+      description: "The tournament a game belongs to: its round, and which of its pair's games it is;
+        createdBy names who set a person's tournament up."
       properties:
         createdBy:
           type: string
         format:
           $ref: "#/components/schemas/TournamentFormat"
         game:
-          anyOf:
-            - enum:
-                - 1
-              type: number
-            - enum:
-                - 2
-              type: number
-        id:
-          type: string
-        leg:
-          maximum: 25
+          description: "Which of its pair's games it is, from 1: each opening twice, the first bot on x and
+            then the second."
+          maximum: 50
           minimum: 1
           type: integer
+        id:
+          type: string
         name:
           type: string
         of:
+          description: The games its pair plays, 1 for a single game.
           maximum: 50
           minimum: 1
           type: integer
@@ -2947,6 +2318,7 @@ components:
         - format
         - round
         - game
+        - of
       type: object
     GameTurn:
       description: One applied turn, numbered from turn 0 at the origin. cells holds its stones in order;
@@ -3216,8 +2588,6 @@ components:
           type: array
         clock:
           $ref: "#/components/schemas/GameClock"
-        duel:
-          $ref: "#/components/schemas/GameDuel"
         gameId:
           type: string
         players:
@@ -4105,6 +3475,28 @@ components:
         - key
         - name
       type: object
+    TournamentBotState:
+      description: What a duel's or round robin's setup reads of a listed bot beside the bot list.
+      properties:
+        duelsByOthers:
+          description: False keeps the bot to the duels and round robins its owner sets up.
+          type: boolean
+        name:
+          type: string
+        running:
+          description: Running duels and round robins people set up that it plays in, at most 2.
+          maximum: 2
+          minimum: 0
+          type: integer
+      required:
+        - name
+        - duelsByOthers
+        - running
+      type: object
+    TournamentBotStates:
+      items:
+        $ref: "#/components/schemas/TournamentBotState"
+      type: array
     TournamentClosedError:
       properties:
         code:
@@ -4160,8 +3552,9 @@ components:
     TournamentDetail:
       description: "createdBy names who set a person's duel or round robin up, deleted player once their
         account is deleted, and is null on the operator's, whose name the operator chose; a person's
-        is named for its creator. test: one person owns every bot. A deleted bot reads as deleted
-        bot, and a deleted owner as deleted player; each bot's key tells two deleted bots apart."
+        is named for its creator. rated: the operator's, and a duel rated under the duels of old;
+        test: one person owns every bot. A deleted bot reads as deleted bot, and a deleted owner as
+        deleted player; each bot's key tells two deleted bots apart."
       properties:
         createdBy:
           nullable: true
@@ -4187,7 +3580,7 @@ components:
         gamesPerPair:
           $ref: "#/components/schemas/TournamentGamesPerPair"
         id:
-          pattern: ^t_[a-z0-9]{12}$
+          pattern: ^[td]_[a-z0-9]{12}$
           type: string
         live:
           items:
@@ -4274,7 +3667,7 @@ components:
       description: "Why a tournament ended before its last game: stopped, canceled, or cut short."
       properties:
         bot:
-          description: The bot whose leaving cut it short.
+          description: The bot whose leaving cut it short, or that a duel's reason names.
           properties:
             deleted:
               $ref: "#/components/schemas/Deleted"
@@ -4288,11 +3681,14 @@ components:
           type: object
         reason:
           description: "Stopped by the person who set it up (creator), or as their account was banned or
-            deleted; canceled by the operator (operator); or cut short once fewer than two bots
-            still played, for why the last to leave was withdrawn: by its owner (owner), two
-            openings missed in a row (missed), its owner turning duels by others off (refused), the
-            weekly it entered beginning (tournament), or it or its owner taken out (banned,
-            delisted, deleted)."
+            deleted; canceled or stopped by the operator (operator); or cut short once fewer than
+            two bots still played, for why the last to leave was withdrawn: by its owner (owner),
+            two openings missed in a row (missed), its owner turning duels by others off (refused),
+            the weekly it entered beginning (tournament), or it or its owner taken out (banned,
+            delisted, deleted). A duel kept from the duels of old may also have been cut short with
+            a bot offline, connected but not open (closed), outside its clocks (clock), or at its
+            game cap (busy) for the whole grace, a rated game at a daily cap (daily_cap), or a game
+            aborted (aborted)."
           enum:
             - creator
             - operator
@@ -4303,6 +3699,12 @@ components:
             - banned
             - delisted
             - deleted
+            - offline
+            - closed
+            - clock
+            - busy
+            - daily_cap
+            - aborted
           type: string
         round:
           description: The round under way, or the last one begun; null before any.
@@ -4409,7 +3811,7 @@ components:
         the rest, counted by each pair's openings."
       properties:
         estimate:
-          $ref: "#/components/schemas/DuelEstimate"
+          $ref: "#/components/schemas/Estimate"
         key:
           $ref: "#/components/schemas/TournamentKey"
       required:
@@ -4542,7 +3944,7 @@ components:
         deleted:
           $ref: "#/components/schemas/Deleted"
         estimate:
-          $ref: "#/components/schemas/DuelEstimate"
+          $ref: "#/components/schemas/Estimate"
       required:
         - bot
         - estimate
@@ -4770,7 +4172,8 @@ components:
     TournamentSummary:
       description: "createdBy names who set a person's duel or round robin up, deleted player once their
         account is deleted, and is null on the operator's, whose name the operator chose; a person's
-        is named for its creator. test: one person owns every bot."
+        is named for its creator. rated: the operator's, and a duel rated under the duels of old;
+        test: one person owns every bot."
       properties:
         bot:
           $ref: "#/components/schemas/TournamentPlace"
@@ -4792,10 +4195,38 @@ components:
         gamesPerPair:
           $ref: "#/components/schemas/TournamentGamesPerPair"
         id:
-          pattern: ^t_[a-z0-9]{12}$
+          pattern: ^[td]_[a-z0-9]{12}$
           type: string
         lead:
           $ref: "#/components/schemas/TournamentLead"
+        leaders:
+          description: A round robin's leaders, once a point is scored.
+          properties:
+            bots:
+              items:
+                properties:
+                  deleted:
+                    $ref: "#/components/schemas/Deleted"
+                  name:
+                    type: string
+                required:
+                  - name
+                type: object
+              minItems: 1
+              type: array
+            games:
+              description: "The games each of them played that scored for someone: played, no-shows, and
+                forfeits."
+              minimum: 0
+              type: integer
+            points:
+              minimum: 0
+              type: integer
+          required:
+            - bots
+            - points
+            - games
+          type: object
         maxEntrants:
           maximum: 12
           minimum: 2
@@ -4995,8 +4426,8 @@ components:
     UnratedByChoice:
       description: "Present when the game was started unrated: a person's game at the bot's default level
         that they started unrated or that faces their own bot, a challenge between two bots of one
-        owner, and every game of an unrated duel or of a round robin a person set up. It moves no
-        rating and counts toward no daily cap."
+        owner, and every game of an unrated duel or round robin a person set up. It moves no rating
+        and counts toward no daily cap."
       enum:
         - true
       type: boolean
@@ -5884,10 +5315,10 @@ paths:
       tags:
         - Bots
     patch:
-      description: "Each present field replaces the stored one; an empty about or repoUrl clears the
-        owner's, and the declared one shows again. With duels by others off, no game of a duel
-        someone else started begins: one already running waits out its grace for its next game and
-        is cut short."
+      description: Each present field replaces the stored one; an empty about or repoUrl clears the
+        owner's, and the declared one shows again. With duels by others off, the bot leaves every
+        running duel and round robin someone else set up, and one left with fewer than two bots is
+        cut short.
       operationId: updateBotSettings
       parameters:
         - $ref: "#/components/parameters/BotName"
@@ -5943,212 +5374,6 @@ paths:
       summary: Rotate a bot token.
       tags:
         - Bots
-  /api/duels:
-    get:
-      description: Running duels and the latest over, 20 of each at most, across the site, for one bot,
-        for the caller, or of one kind. An unknown bot answers not_found.
-      operationId: listDuels
-      parameters:
-        - description: "A bot's name, matched case-folded: only the duels it plays."
-          in: query
-          name: bot
-          required: false
-          schema:
-            maxLength: 30
-            minLength: 1
-            type: string
-        - description: Present as 1, only duels the signed-in caller started or one of whose bots they own;
-            none for a caller signed out.
-          in: query
-          name: mine
-          required: false
-          schema:
-            enum:
-              - "1"
-            type: string
-        - description: Only duels between two owners' bots, or only tests.
-          in: query
-          name: kind
-          required: false
-          schema:
-            enum:
-              - duel
-              - test
-            type: string
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/DuelList"
-          description: The running and recent duels.
-        "400":
-          $ref: "#/components/responses/BadRequest"
-        "404":
-          $ref: "#/components/responses/NotFound"
-        "429":
-          $ref: "#/components/responses/RateLimited"
-      security: []
-      summary: List duels.
-      tags:
-        - Duels
-    post:
-      description: Two ready bots play one game at a time, each a gameStart with no challenge. Rated only
-        when the caller owns exactly one bot, both at their default level, within the daily caps.
-        Two bots of one owner play a test, never rated. A person runs 2 at once and 10 a UTC day; a
-        bot 2, a pair one.
-      operationId: createDuel
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/CreateDuelRequest"
-        required: true
-      responses:
-        "201":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/DuelDetail"
-          description: The new duel.
-        "400":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/DuelCreateError"
-          description: Validation failed (bad_request); a bot is not open (not_open), though the caller's own
-            bot need not be, takes no duels from others (duel_refused), excludes the clock
-            (clock_not_accepted), declares no such level (unknown_level), or is busy (bot_busy); the
-            pair runs a duel (duel_live); the caller runs its most (duel_busy), asked rated where it
-            may not (unrated_only), or asked more than 10 games outside a test (test_only).
-        "401":
-          $ref: "#/components/responses/SignedInUser"
-        "403":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/DuelForbiddenError"
-          description: A bot is delisted (delisted), or its owner is banned (banned).
-        "404":
-          $ref: "#/components/responses/NotFound"
-        "413":
-          $ref: "#/components/responses/PayloadTooLarge"
-        "429":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/DuelQuotaError"
-          description: The caller started 10 duels and tests this UTC day (daily_duel_cap); a rated duel would
-            pass the pair's or a bot's daily cap (daily_pair_cap, daily_bot_cap), until 00:00 UTC,
-            which Retry-After names; or too many requests (rate_limited).
-          headers:
-            Retry-After:
-              $ref: "#/components/headers/RetryAfter"
-        "503":
-          $ref: "#/components/responses/Paused"
-      security:
-        - sessionCookie: []
-      summary: Start a duel between two bots.
-      tags:
-        - Duels
-  /api/duels/bots:
-    get:
-      description: Every listed bot, as the bot list orders it, with its owner's switch for duels by
-        others and the bots it plays a running duel with. Read at most once every 2 s, every caller
-        in that time getting the same body.
-      operationId: listDuelBots
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/DuelBotStates"
-          description: The listed bots' duel states.
-        "429":
-          $ref: "#/components/responses/RateLimited"
-      security: []
-      summary: Read the bots' duel states.
-      tags:
-        - Duels
-  /api/duels/{id}:
-    get:
-      description: Its bots, terms, score, every game, the live game, the bot the next game waits for, and
-        a test's estimate. A duel is read at most once every 2 s, every caller in that time getting
-        the same body.
-      operationId: getDuel
-      parameters:
-        - $ref: "#/components/parameters/DuelId"
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/DuelDetail"
-          description: The duel.
-        "404":
-          $ref: "#/components/responses/NotFound"
-        "429":
-          $ref: "#/components/responses/RateLimited"
-      security: []
-      summary: Read a duel.
-      tags:
-        - Duels
-  /api/duels/{id}/export:
-    get:
-      description: Every game over so far, at most 50, numbered as the duel numbers them, the one under
-        way left out; games.csv names each game's pair, and a test's adds each bot's version as the
-        test began.
-      operationId: exportDuel
-      parameters:
-        - $ref: "#/components/parameters/DuelId"
-      responses:
-        "200":
-          $ref: "#/components/responses/GameExport"
-        "404":
-          $ref: "#/components/responses/NotFound"
-        "429":
-          $ref: "#/components/responses/ExportLimited"
-      security: []
-      summary: Download a duel's games.
-      tags:
-        - Duels
-  /api/duels/{id}/stop:
-    post:
-      description: "The starter or either bot's owner stops a running duel: no further game starts, and
-        the live one plays on to its result."
-      operationId: stopDuel
-      parameters:
-        - $ref: "#/components/parameters/DuelId"
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/DuelDetail"
-          description: The duel, stopped.
-        "401":
-          $ref: "#/components/responses/SignedInUser"
-        "403":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/DuelStopForbiddenError"
-          description: The caller neither started the duel nor owns one of its bots (not_yours).
-        "404":
-          $ref: "#/components/responses/NotFound"
-        "409":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/DuelStopConflictError"
-          description: The duel is already over (over).
-        "429":
-          $ref: "#/components/responses/RateLimited"
-      security:
-        - sessionCookie: []
-      summary: Stop a duel.
-      tags:
-        - Duels
   /api/games:
     get:
       description: Games in progress, newest first, at most 12, without pagination. Guest games are
@@ -6332,30 +5557,22 @@ paths:
               - match
               - unlimited
             type: string
-        - description: Games of a duel, tests among them while tests are listed; of a tournament; or of neither.
+        - description: Games of a tournament, a duel or round robin among them; or of none.
           in: query
           name: event
           required: false
           schema:
             enum:
-              - duel
               - tournament
               - none
             type: string
-        - description: One duel's games, none for an unknown one; a test's are listed whatever tests says,
-            since naming it asks for them.
-          in: query
-          name: duel
-          required: false
-          schema:
-            pattern: ^d_[a-z0-9]{12}$
-            type: string
-        - description: One tournament's games, none for an unknown one.
+        - description: One tournament's games, none for an unknown one; a test's are listed whatever tests
+            says, since naming it asks for them.
           in: query
           name: tournament
           required: false
           schema:
-            pattern: ^t_[a-z0-9]{12}$
+            pattern: ^[td]_[a-z0-9]{12}$
             type: string
         - description: One round of the tournament, from 1; needs tournament.
           in: query
@@ -7095,6 +6312,25 @@ paths:
       security:
         - sessionCookie: []
       summary: Set up a duel or a round robin of bots.
+      tags:
+        - Tournaments
+  /api/tournaments/bots:
+    get:
+      description: Every listed bot, as the bot list orders it, with its owner's switch for duels by
+        others and the running duels and round robins people set up that it plays in. Read at most
+        once every 2 s, every caller in that time getting the same body.
+      operationId: listTournamentBots
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TournamentBotStates"
+          description: The listed bots' tournament states.
+        "429":
+          $ref: "#/components/responses/RateLimited"
+      security: []
+      summary: Read the bots' tournament states.
       tags:
         - Tournaments
   /api/tournaments/{id}:

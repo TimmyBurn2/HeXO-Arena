@@ -6,21 +6,19 @@ import { text } from '../text';
 import './GamesHead.css';
 
 // One of the places under Games.
-type GamesView = `finished` | `live` | `duels` | `tournaments`;
+type GamesView = `finished` | `live` | `tournaments`;
 
 const places: readonly { view: GamesView; to: string }[] = [
     { view: `finished`, to: `/games` },
     { view: `live`, to: `/games/live` },
-    { view: `duels`, to: `/games/duels` },
     { view: `tournaments`, to: `/games/tournaments` },
 ];
 
 /**
- * The Games heading with its places as links: finished, live, duels, and
- * tournaments.
+ * The Games heading with its places as links: finished, live, and
+ * tournaments, duels among them.
  * Live alone carries a count, every live game's, once known, read here
- * unless the page already holds the live list; one count keeps the four
- * in one row on a phone.
+ * unless the page already holds the live list.
  */
 export function GamesHead({ view, live }: { view: GamesView; live?: number | null }) {
     return (

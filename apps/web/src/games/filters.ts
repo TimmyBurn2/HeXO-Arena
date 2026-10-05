@@ -7,7 +7,7 @@ export type GameFilters = Omit<FinishedGamesQuery, `page` | `tests`>;
 export type FilterKey = keyof GameFilters;
 
 // The filters in the order an address, the chips, and a sentence name them.
-const filterKeys = [`player`, `vs`, `result`, `side`, `reason`, `clock`, `kind`, `event`, `duel`, `tournament`, `round`, `opening`, `analyzed`, `before`] as const satisfies readonly FilterKey[];
+const filterKeys = [`player`, `vs`, `result`, `side`, `reason`, `clock`, `kind`, `event`, `tournament`, `round`, `opening`, `analyzed`, `before`] as const satisfies readonly FilterKey[];
 
 /** The filters that mean nothing without a player. */
 const needPlayer = [`vs`, `side`] as const satisfies readonly FilterKey[];
@@ -27,20 +27,30 @@ function field<K extends keyof FinishedGamesQuery>(key: K, raw: string | null): 
     return parsed.success ? (parsed.data as FinishedGamesQuery[K]) : undefined;
 }
 
+// An older address names a duel's games as event=duel&duel=d_..., which
+// read as the games of the tournament that duel is.
+function movedEvent(params: URLSearchParams): URLSearchParams {
+    const moved = new URLSearchParams(params);
+    const duel = moved.get(`duel`);
+    if (moved.get(`event`) === `duel`) moved.set(`event`, `tournament`);
+    if (duel !== null && !moved.has(`tournament`)) moved.set(`tournament`, duel);
+    moved.delete(`duel`);
+    return moved;
+}
+
 /**
  * The filters an address holds: each value its field does not take is
  * dropped, and so is any filter its player is missing for, so a hand-made
  * or stale link still opens a list rather than a refusal.
  */
 export function viewOf(search: string): GamesView {
-    const params = new URLSearchParams(search);
+    const params = movedEvent(new URLSearchParams(search));
     const filters: { -readonly [K in FilterKey]?: GameFilters[K] } = {};
     for (const key of filterKeys) {
         const value = field(key, params.get(key));
         if (value !== undefined) Object.assign(filters, { [key]: value });
     }
-    // A hand-made address naming one duel or one tournament alone means its kind.
-    if (filters.event === undefined && filters.duel !== undefined) filters.event = `duel`;
+    // A hand-made address naming one tournament alone means its kind.
     if (filters.event === undefined && filters.tournament !== undefined) filters.event = `tournament`;
     const page = field(`page`, params.get(`page`));
     return { filters: withoutOrphans(filters), page: page === undefined ? 1 : Number(page) };
@@ -54,8 +64,8 @@ function pick(filters: GameFilters, keys: readonly FilterKey[]): { -readonly [K 
 }
 
 // The filters with those that need a player dropped while none is set, a
-// second name equal to the first dropped, a duel or a tournament dropped
-// under another kind of event, and a round dropped with its tournament.
+// second name equal to the first dropped, a tournament dropped under games
+// of none, and a round dropped with its tournament.
 function withoutOrphans(filters: GameFilters): GameFilters {
     const dropped: FilterKey[] = [];
     if (filters.player === undefined) {
@@ -64,7 +74,6 @@ function withoutOrphans(filters: GameFilters): GameFilters {
     } else if (filters.vs !== undefined && nameKeyOf(filters.vs) === nameKeyOf(filters.player)) {
         dropped.push(`vs`);
     }
-    if (filters.event !== `duel`) dropped.push(`duel`);
     if (filters.event !== `tournament`) dropped.push(`tournament`, `round`);
     if (filters.tournament === undefined) dropped.push(`round`);
     return pick(filters, filterKeys.filter((key) => !dropped.includes(key)));
@@ -98,18 +107,12 @@ export function activeKeys(filters: GameFilters): FilterKey[] {
     return filterKeys.filter((key) => filters[key] !== undefined);
 }
 
-/** The filters a chip and a sentence name: the kind of event stands behind the one event chosen. */
+/** The filters a chip and a sentence name: the kind of event stands behind the one tournament chosen. */
 export function shownKeys(filters: GameFilters): FilterKey[] {
-    const chosen = filters.duel !== undefined || filters.tournament !== undefined;
-    return activeKeys(filters).filter((key) => key !== `event` || !chosen);
+    return activeKeys(filters).filter((key) => key !== `event` || filters.tournament === undefined);
 }
 
-/** The finished games of one duel. */
-export function duelGamesPath(duel: string): string {
-    return pagePathOf({ event: `duel`, duel }, 1);
-}
-
-/** The finished games of one tournament, or of one of its rounds. */
+/** The finished games of one tournament, a duel among them, or of one of its rounds. */
 export function tournamentGamesPath(tournament: string, round?: number): string {
     return pagePathOf(round === undefined ? { event: `tournament`, tournament } : { event: `tournament`, tournament, round: String(round) }, 1);
 }

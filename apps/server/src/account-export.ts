@@ -7,18 +7,18 @@ import {
     firstPlayerSchema,
     nameKeyOf,
     openingPliesSchema,
-    duelStatusSchema,
     sideOf,
     timeControlSchema,
     tournamentEntryReasonSchema,
     tournamentEntryStateSchema,
+    tournamentFormatOf,
     type AccountExport,
     type Side,
 } from '@hexo-arena/contract';
 import { alias } from 'drizzle-orm/sqlite-core';
 import { and, asc, eq, inArray, isNotNull, or, type SQL } from 'drizzle-orm';
 import type { Query } from './db';
-import { adminActions, bots, challenges, duels, gameRatings, games, moves, ratings, sessions, tournamentEntries, tournaments, users } from './db/schema';
+import { adminActions, bots, challenges, gameRatings, games, moves, ratings, sessions, tournamentEntries, tournaments, users } from './db/schema';
 import { seated } from './game-seats';
 import { findGame, type GameRecord } from './game-store';
 import { requestsOf } from './analysis-store';
@@ -102,70 +102,39 @@ function gamesOf(query: Query, userId: string, botIds: readonly string[]): Accou
 
 const challengerBots = alias(bots, `challenger_bot`);
 const destBots = alias(bots, `dest_bot`);
-const duelBotsA = alias(bots, `duel_bot_a`);
-const duelBotsB = alias(bots, `duel_bot_b`);
 
-// The duels and tests the account started, their bots in the order it named them.
-function duelsOf(query: Query, userId: string): AccountExport[`duels`] {
-    return query
-        .select({
-            id: duels.id,
-            aFirst: duels.aFirst,
-            a: duelBotsA.name,
-            aDeletedAt: duelBotsA.deletedAt,
-            b: duelBotsB.name,
-            bDeletedAt: duelBotsB.deletedAt,
-            test: duels.test,
-            games: duels.games,
-            rated: duels.rated,
-            status: duels.status,
-            createdAt: duels.createdAt,
-            endedAt: duels.endedAt,
-        })
-        .from(duels)
-        .innerJoin(duelBotsA, eq(duelBotsA.id, duels.botAId))
-        .innerJoin(duelBotsB, eq(duelBotsB.id, duels.botBId))
-        .where(eq(duels.startedBy, userId))
-        .orderBy(asc(duels.createdAt), asc(duels.id))
-        .all()
-        .map((row) => {
-            const a = shownBot(row.a, row.aDeletedAt).name;
-            const b = shownBot(row.b, row.bDeletedAt).name;
-            return {
-                id: row.id,
-                first: row.aFirst === 1 ? a : b,
-                second: row.aFirst === 1 ? b : a,
-                kind: row.test === 1 ? (`test` as const) : (`duel` as const),
-                games: row.games,
-                rated: row.rated === 1,
-                // The status check admits only the contract's statuses.
-                status: duelStatusSchema.parse(row.status),
-                createdAt: isoOf(row.createdAt),
-                endedAt: isoOrNull(row.endedAt),
-            };
-        });
-}
-
-// The round robins the account set up, each with its bots as they read now.
-function roundRobinsOf(query: Query, userId: string): AccountExport[`roundRobins`] {
+// The duels and round robins the account set up, each with its format and its bots in the order it named them.
+function tournamentsOf(query: Query, userId: string): AccountExport[`tournaments`] {
     const rows = query
-        .select({ id: tournaments.id, gamesPerPair: tournaments.gamesPerPair, test: tournaments.test, status: tournaments.status, createdAt: tournaments.createdAt, endedAt: tournaments.endedAt })
+        .select({
+            id: tournaments.id,
+            origin: tournaments.origin,
+            maxEntrants: tournaments.maxEntrants,
+            gamesPerPair: tournaments.gamesPerPair,
+            test: tournaments.test,
+            rated: tournaments.rated,
+            status: tournaments.status,
+            createdAt: tournaments.createdAt,
+            endedAt: tournaments.endedAt,
+        })
         .from(tournaments)
         .where(eq(tournaments.createdBy, userId))
         .orderBy(asc(tournaments.createdAt), asc(tournaments.id))
         .all();
     return rows.map((row) => ({
         id: row.id,
+        format: tournamentFormatOf(row),
         bots: query
             .select({ name: bots.name, deletedAt: bots.deletedAt })
             .from(tournamentEntries)
             .innerJoin(bots, eq(bots.id, tournamentEntries.botId))
             .where(eq(tournamentEntries.tournamentId, row.id))
-            .orderBy(asc(bots.nameKey))
+            .orderBy(asc(tournamentEntries.seat), asc(bots.nameKey))
             .all()
             .map((bot) => shownBot(bot.name, bot.deletedAt).name),
         gamesPerPair: tournamentGamesPerPairSchema.parse(row.gamesPerPair),
         test: row.test === 1,
+        rated: row.rated === 1,
         // The status check admits only the contract's statuses.
         status: tournamentStatusSchema.parse(row.status),
         createdAt: isoOf(row.createdAt),
@@ -242,8 +211,7 @@ export function accountExport(query: Query, userId: string, nowMs: number): Acco
                 reason: entry.reason === null ? null : tournamentEntryReasonSchema.parse(entry.reason),
                 enteredAt: isoOf(entry.enteredAt),
             })),
-        duels: duelsOf(query, userId),
-        roundRobins: roundRobinsOf(query, userId),
+        tournaments: tournamentsOf(query, userId),
         challenges:
             botIds.length === 0
                 ? []

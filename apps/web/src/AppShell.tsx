@@ -8,7 +8,7 @@ import { useLegalSlots } from './legal/links';
 import { Link } from './router/Link';
 import { Moved } from './router/Moved';
 import { loadScreen, RouteBoundary } from './RouteBoundary';
-import { routePath, type PageRoute, type Route } from './router/route';
+import { movedTo, routePath, type PageRoute, type Route } from './router/route';
 import { landingOf, subscribe, useRoute } from './router/use-route';
 import { Settings } from './settings/Settings';
 import { siteStatusStore, useSiteStatus } from './site-status';
@@ -23,10 +23,7 @@ function lazyScreen<Props extends object>(load: () => Promise<ComponentType<Prop
 
 const HomeScreen = lazyScreen(async () => (await import(`./screens/HomeScreen`)).HomeScreen);
 const PlayScreen = lazyScreen(async () => (await import(`./screens/PlayScreen`)).PlayScreen);
-const DuelsScreen = lazyScreen(async () => (await import(`./screens/DuelsScreen`)).DuelsScreen);
 const PlayTournamentScreen = lazyScreen(async () => (await import(`./screens/PlayTournamentScreen`)).PlayTournamentScreen);
-const GamesDuelsScreen = lazyScreen(async () => (await import(`./screens/GamesDuelsScreen`)).GamesDuelsScreen);
-const DuelScreen = lazyScreen(async () => (await import(`./screens/DuelScreen`)).DuelScreen);
 const LadderScreen = lazyScreen(async () => (await import(`./screens/LadderScreen`)).LadderScreen);
 const TournamentsScreen = lazyScreen(async () => (await import(`./screens/TournamentsScreen`)).TournamentsScreen);
 const TournamentScreen = lazyScreen(async () => (await import(`./screens/TournamentScreen`)).TournamentScreen);
@@ -53,9 +50,7 @@ type Section = `home` | `play` | `games` | `analysis` | `ladder` | `bots` | `bui
 const screens: { readonly [Name in PageName]: { readonly view: (route: PageRoute<Name>) => ReactNode; readonly section: Section | null } } = {
     home: { view: () => <HomeScreen />, section: `home` },
     play: { view: () => <PlayScreen />, section: `play` },
-    'bot-duel': { view: () => <DuelsScreen />, section: `play` },
     'play-tournament': { view: () => <PlayTournamentScreen />, section: `play` },
-    duel: { view: (route) => <DuelScreen id={route.id} />, section: `games` },
     ladder: { view: () => <LadderScreen />, section: `ladder` },
     tournament: { view: (route) => <TournamentScreen id={route.id} />, section: `games` },
     bots: { view: () => <BotsScreen />, section: `bots` },
@@ -63,7 +58,6 @@ const screens: { readonly [Name in PageName]: { readonly view: (route: PageRoute
     player: { view: (route) => <PlayerScreen name={route.player} />, section: null },
     games: { view: () => <GamesScreen />, section: `games` },
     'live-games': { view: () => <LiveGamesScreen />, section: `games` },
-    'games-duels': { view: () => <GamesDuelsScreen />, section: `games` },
     'games-tournaments': { view: () => <TournamentsScreen />, section: `games` },
     analysis: { view: () => <AnalysisScreen />, section: `analysis` },
     connect: { view: () => <ConnectScreen />, section: `build` },
@@ -220,7 +214,7 @@ export function AppShell() {
 }
 
 function RouteView({ route }: { route: Route }) {
-    if (route.name === `moved`) return <Moved to={`${route.to}${window.location.search}${window.location.hash}`} />;
+    if (route.name === `moved`) return <Moved to={`${movedTo(window.location.pathname, window.location.search) ?? route.to}${window.location.hash}`} />;
     if (route.name === `not-found`) return <NotFoundScreen />;
     return viewOf(route.name, route);
 }

@@ -29,7 +29,27 @@ describe('the page table', () => {
         for (const moved of movedPages) {
             for (const param of paramsOf(sitePages[moved.to].path)) expect(paramsOf(moved.from)).toContain(param);
         }
-        expect(movedPages.map((moved) => movedPath(moved, { id: `a b` }))).toEqual([`/duels/a%20b`, `/games/duels`, `/games/tournaments`]);
+        expect(movedPages.map((moved) => movedPath(moved, { id: `a b` }))).toEqual([
+            `/tournaments/a%20b`,
+            `/tournaments/a%20b`,
+            `/play/tournament`,
+            `/games/tournaments`,
+            `/games/tournaments`,
+            `/games/tournaments`,
+        ]);
+    });
+
+    it('keeps an old address\'s query, and reads a duel\'s setup as a tournament\'s of its two bots', () => {
+        const moved = (from: string) => movedPages.find((page) => page.from === from);
+        const games = moved(`/games/duels`);
+        const setup = moved(`/play/duels`);
+        if (games === undefined || setup === undefined) throw new Error(`a moved page is missing`);
+        expect(movedPath(games, {}, `?list=yours&bot=hextide`)).toBe(`/games/tournaments?list=yours&bot=hextide`);
+        expect(movedPath(setup, {}, `?first=hextide&second=pebble&secondLevel=club&games=10&clock=turn-10&opening=3`)).toBe(
+            `/play/tournament?bots=hextide%2Cpebble&level=pebble%3Aclub&games=10&clock=turn-10&opening=3`,
+        );
+        expect(movedPath(setup, {}, `?second=pebble`)).toBe(`/play/tournament?bots=pebble`);
+        expect(movedPath(setup, {}, ``)).toBe(`/play/tournament`);
     });
 
     it('titles every page with the site suffix, from its parameters where it has any', () => {

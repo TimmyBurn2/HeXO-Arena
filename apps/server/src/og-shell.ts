@@ -1,7 +1,6 @@
 import {
     analysisMeta,
     botMeta,
-    duelMeta,
     gameMeta,
     ladderMeta,
     movedPages,
@@ -29,7 +28,6 @@ import { readFile } from 'node:fs/promises';
 import { z } from 'zod';
 import { listBots } from './bots';
 import type { Query } from './db';
-import { duelSummary } from './duel-api';
 import type { GameRegistry } from './game-registry';
 import type { Ladder } from './ladder';
 import type { PresenceRegistry } from './presence';
@@ -229,10 +227,6 @@ export function registerOgShell(app: FastifyInstance, deps: OgShellDeps): void {
             const tournament = tournamentIdSchema.safeParse(id).success ? tournamentSummary(query, id) : null;
             return tournament === null ? missingPage : found(tournamentMeta(tournament));
         },
-        duel: ({ id }) => {
-            const duel = duelSummary(query, id);
-            return duel === null ? missingPage : found(duelMeta(duel));
-        },
     };
 
     function answer<Name extends PageName>(name: Name, params: PageParams<Name>, asked: unknown): ShellAnswer {
@@ -243,8 +237,11 @@ export function registerOgShell(app: FastifyInstance, deps: OgShellDeps): void {
         app.get(path, { config: { limit: `shell` } }, async (request, reply) => sendShell(reply, answer(name, paramsOf(name, request.params, fixed), request.query)));
     }
 
-    // Permanent, so a preview or a search follows the move once; the query is dropped, as no moved page reads one.
+    // Permanent, so a preview or a search follows the move once; the query goes along, read as the new page reads it.
     for (const moved of movedPages) {
-        app.get(moved.from, { config: { limit: `shell` } }, async (request, reply) => reply.redirect(movedPath(moved, routeParamsSchema.parse(request.params)), 301));
+        app.get(moved.from, { config: { limit: `shell` } }, async (request, reply) => {
+            const at = request.url.indexOf(`?`);
+            return reply.redirect(movedPath(moved, routeParamsSchema.parse(request.params), at === -1 ? `` : request.url.slice(at)), 301);
+        });
     }
 }

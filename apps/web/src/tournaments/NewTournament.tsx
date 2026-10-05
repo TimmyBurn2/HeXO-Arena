@@ -3,7 +3,6 @@ import { nameKeyOf, tournamentBotsMax, tournamentBotsMin, type BotListing, type 
 import { ApiError, createTournament, limitedFor } from '../api/client';
 import { DiscordSignIn } from '../components/DiscordButton';
 import { DuelClock } from '../duels/DuelClock';
-import { GameGlyph } from '../duels/Scoreboard';
 import { defaultFieldClock, takenByAll } from '../duels/setup';
 import { EmptySlot, FilledSlot, VsCell } from '../duels/Slots';
 import { OpeningRow } from '../play/OpeningRow';
@@ -12,6 +11,7 @@ import { ownedBy } from '../play/setup';
 import { navigate } from '../router/use-route';
 import { text } from '../text';
 import { BotPicker } from './BotPicker';
+import { Hex } from './Crosstable';
 import {
     countsInReach,
     defaultTournamentOpening,
@@ -126,16 +126,16 @@ export function NewTournament({
     quota: TournamentQuota | null;
     paused: boolean;
     initial: TournamentSetup;
-    // The line a bot entered in the coming weekly carries, null for any other.
-    weekly: (bot: string) => string | null;
+    // The line a bot entered in the coming weekly carries, naming what it leaves; null for any other.
+    weekly: (bot: string, kind: Kind) => string | null;
     onRefused: () => void;
 }) {
     const ids = useId();
     const [picked, setPicked] = useState<readonly PickedBot[]>(initial.bots);
     const [picking, setPicking] = useState(false);
     const [choices, setChoices] = useState<TournamentChoices>(readTournamentChoices);
-    // The length a link asked for, until the person picks one.
-    const [askedGames, setAskedGames] = useState<TournamentGamesPerPair | null>(initial.games);
+    // The count a link asked for or the person picked here, which a field of another size keeps as far as it fits.
+    const [chosenGames, setChosenGames] = useState<TournamentGamesPerPair | null>(initial.games);
     const [picks, setPicks] = useState<TimeControl | null>(initial.clock);
     const [opening, setOpening] = useState<OpeningPlies>(initial.opening ?? defaultTournamentOpening);
     const [outcome, setOutcome] = useState<Outcome>({ kind: `idle` });
@@ -169,7 +169,7 @@ export function NewTournament({
     const counts = gamesPerPairOf(test);
     const reach = countsInReach(field.length, test);
     const stored = test ? choices.testGames : duel ? choices.duelGames : choices.games;
-    const wanted = askedGames ?? stored;
+    const wanted = chosenGames ?? stored;
     // A count past the field's reach falls to the largest it takes at or under it.
     const games: TournamentGamesPerPair = reach.includes(wanted) ? wanted : ([...reach].reverse().find((count) => count <= wanted) ?? reach[0] ?? 1);
     const clock = field.length === 0 ? null : picks !== null && takenByAll(picks, fieldBots) ? picks : defaultFieldClock(fieldBots, null);
@@ -186,7 +186,8 @@ export function NewTournament({
     const first = fieldBots[0];
     const owner = first?.ownerName ?? ``;
     const yours = first !== undefined && ownedBy(first, viewer);
-    const note = test ? (yours ? words.allYours(field.length) : words.allOwners(owner, field.length)) : words.fieldNote(field.length);
+    // Before two bots, the rule under the plates says what the field makes.
+    const note = test ? (yours ? words.allYours(field.length) : words.allOwners(owner, field.length)) : ready ? words.fieldNote(field.length) : null;
 
     function add(next: readonly BotListing[]) {
         added.current = true;
@@ -232,7 +233,7 @@ export function NewTournament({
             level={entry.level}
             showVersion={test}
             warning={warnings[index] ?? null}
-            hint={weekly(entry.bot.name)}
+            hint={weekly(entry.bot.name, kind)}
             marked={outcome.kind === `refused` && outcome.bot !== null && nameKeyOf(outcome.bot) === nameKeyOf(entry.bot.name)}
             onLevel={(id) => {
                 setPicked(picked.map((each) => (nameKeyOf(each.name) === nameKeyOf(entry.bot.name) ? { ...each, level: id } : each)));
@@ -260,7 +261,7 @@ export function NewTournament({
             <section className="duel-card rr-card" aria-labelledby={`${ids}-title`}>
                 <header className="duel-card-head">
                     <h2 id={`${ids}-title`}>{words.title[kind]}</h2>
-                    <p className="note">{note}</p>
+                    {note === null ? null : <p className="note">{note}</p>}
                 </header>
                 {signedIn ? (
                     duel ? (
@@ -308,7 +309,7 @@ export function NewTournament({
                             reach={reach}
                             bots={field.length}
                             onGames={(next) => {
-                                setAskedGames(null);
+                                setChosenGames(next);
                                 setChoices(writeTournamentChoices(test ? { testGames: next } : duel ? { duelGames: next } : { games: next }));
                                 setOutcome({ kind: `idle` });
                             }}
@@ -334,7 +335,7 @@ export function NewTournament({
                                 <span>{words.rated}</span>
                                 <span>{words.no}</span>
                             </p>
-                            <p className="note rated-line">{test ? words.ratedTest : words.ratedLine}</p>
+                            <p className="note rated-line">{test ? words.ratedTest(field.length) : words.ratedLine}</p>
                         </div>
                     </>
                 ) : null}
@@ -366,14 +367,14 @@ export function NewTournament({
     );
 }
 
-const pendingGame = { game: 1, x: `first` as const, gameId: null, state: `pending` as const, winner: null, reason: null, turns: null, opening: null };
+const pending = { state: `pending`, gameId: null } as const;
 
-// One opening's cells still to play: two, or one for a single game.
+// One opening's cells still to play, as the first bot plays them: two, or one for a single game.
 function PendingOpening({ single }: { single: boolean }) {
     return (
         <span className="xt-pair">
-            <GameGlyph game={pendingGame} side="first" bot="" opponent="" linked={false} />
-            {single ? null : <GameGlyph game={{ ...pendingGame, game: 2, x: `second` }} side="first" bot="" opponent="" linked={false} />}
+            <Hex view={pending} side="x" bot="" opponent="" />
+            {single ? null : <Hex view={pending} side="o" bot="" opponent="" />}
         </span>
     );
 }
@@ -460,7 +461,7 @@ function GamesRow({
                 {counts.map((count) => {
                     const fits = reach.includes(count);
                     return (
-                        <label key={count} className={fits ? `strength-chip count-chip` : `strength-chip count-chip count-chip-out`}>
+                        <label key={count} className="strength-chip count-chip">
                             <input
                                 type="radio"
                                 name={`${ids}-count`}

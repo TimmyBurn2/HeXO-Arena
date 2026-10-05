@@ -66,7 +66,7 @@
 	# live data and an absolute preview image.
 	# The list is the app's page table, then the pages that moved, in order,
 	# as a test of the app holds it.
-	@shell path / /play /play/duels /play/tournament /duels/* /ladder /tournaments/* /bots /bots/* /players/* /games /games/live /games/duels /games/tournaments /analysis /connect /profile /credits /welcome /report /legal/imprint /legal/privacy /legal/terms /game/* /play/duels/* /duels /tournaments
+	@shell path / /play /play/tournament /ladder /tournaments/* /bots /bots/* /players/* /games /games/live /games/tournaments /analysis /connect /profile /credits /welcome /report /legal/imprint /legal/privacy /legal/terms /game/* /play/duels/* /duels/* /play/duels /games/duels /duels /tournaments
 	handle @shell {
 		reverse_proxy app:3000 {
 			# An app that fails a page still leaves it the static shell;
@@ -85,7 +85,7 @@
 	handle_errors 500 502 503 504 {
 		# An error answer starts without the headers set above.
 		import security_headers
-		@shellDown path / /play /play/duels /play/tournament /duels/* /ladder /tournaments/* /bots /bots/* /players/* /games /games/live /games/duels /games/tournaments /analysis /connect /profile /credits /welcome /report /legal/imprint /legal/privacy /legal/terms /game/* /play/duels/* /duels /tournaments
+		@shellDown path / /play /play/tournament /ladder /tournaments/* /bots /bots/* /players/* /games /games/live /games/tournaments /analysis /connect /profile /credits /welcome /report /legal/imprint /legal/privacy /legal/terms /game/* /play/duels/* /duels/* /play/duels /games/duels /duels /tournaments
 		handle @shellDown {
 			root * /srv/web
 			rewrite * /index.html

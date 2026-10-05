@@ -228,7 +228,7 @@ export class RequestLimits {
     }
 
     /**
-     * Spends a duel's or a tournament's export, the client's and then the one all callers share;
+     * Spends a tournament's export, the client's and then the one all callers share;
      * each reads and writes up to a tournament's every game.
      */
     refuseExport(reply: FastifyReply, request: FastifyRequest): boolean {

@@ -3,7 +3,7 @@ import { clockText, nameKeyOf, playTournamentMeta, tournamentBotsMin, tournament
 import { fetchTournament, fetchTournaments } from '../api/client';
 import { useAsync, type AsyncView } from '../api/use-async';
 import { ErrorFrame, SkeletonRows } from '../components/states';
-import { useSetupReads } from '../duels/use-duels';
+import { useSetupReads } from '../tournaments/use-setup-reads';
 import { useMe } from '../me';
 import { PlayHead } from '../play/PlayHead';
 import { eventReadiness } from '../play/readiness';
@@ -12,14 +12,14 @@ import { useRoute } from '../router/use-route';
 import { useSiteStatus } from '../site-status';
 import { text } from '../text';
 import { EntryControl } from '../tournaments/EntryControl';
-import { NewTournament } from '../tournaments/NewTournament';
+import { NewTournament, type Kind } from '../tournaments/NewTournament';
 import { tournamentSetupFromParams } from '../tournaments/setup';
 import { TournamentRow } from '../tournaments/TournamentRow';
 import { gamesTournamentsPath, tournamentPagePath } from '../tournaments/view';
 import { useDocumentMeta } from '../use-document-meta';
 import '../duels/Duels.css';
 import '../games/Events.css';
-import './DuelsScreen.css';
+import './PlayTournamentScreen.css';
 import './TournamentScreen.css';
 
 // The next weekly in full, which its entry control and the setup's hints read, with when it was read.
@@ -58,9 +58,9 @@ export function PlayTournamentScreen() {
     const next = weekly.data?.next ?? null;
     const at = weekly.data?.at ?? 0;
     // A bot entered in the coming weekly leaves a duel or round robin as the weekly starts, which its plate says.
-    const weeklyHint = (bot: string): string | null => {
+    const weeklyHint = (bot: string, kind: Kind): string | null => {
         if (next === null || !next.entries.some((entry) => nameKeyOf(entry.bot) === nameKeyOf(bot))) return null;
-        return text.roundRobins.weekly(text.time.until(Math.max(0, Math.floor((Date.parse(next.startsAt) - at) / 1000))));
+        return text.roundRobins.weekly(text.time.until(Math.max(0, Math.floor((Date.parse(next.startsAt) - at) / 1000))), text.roundRobins.kinds[kind]);
     };
 
     return (

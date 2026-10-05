@@ -34,8 +34,6 @@ import { findGame } from './game-store';
 import type { Ladder } from './ladder';
 import type { PresenceRegistry } from './presence';
 import type { RequestLimits } from './request-limits';
-import type { DuelRunner } from './duel-runner';
-import { countRunningDuels } from './duel-store';
 import { isPaused, setPaused } from './site-state';
 import type { TournamentScheduler } from './tournament-scheduler';
 import { addTournamentRule, adminTournamentRules, nextRuleStart, removeTournamentRule, ruleSlot } from './tournament-rules';
@@ -49,7 +47,6 @@ interface AdminDeps {
     games: GameRegistry;
     challenges: ChallengeRegistry;
     tournaments: Pick<TournamentScheduler, `cancel` | `withdraw` | `stopSetUpBy`>;
-    duels: Pick<DuelRunner, `stopDuel` | `endForBot`>;
     limits: Pick<RequestLimits, `clientCount` | `keys`>;
     ladder: Pick<Ladder, `clear`>;
     actor: string;
@@ -77,7 +74,7 @@ function statusOf(deps: AdminDeps): AdminStatus {
         keylessRequests: deps.limits.keys.keyless,
         tournaments: openTournaments(deps.query),
         tournamentRules: adminTournamentRules(deps.query, nowOf(deps), deps.tournamentLeadMs),
-        liveDuels: countRunningDuels(deps.query) + countRunningPersonTournaments(deps.query, `duel`),
+        liveDuels: countRunningPersonTournaments(deps.query, `duel`),
         liveRoundRobins: countRunningPersonTournaments(deps.query, `round_robin`),
         clients: clientCensus(deps.query, Math.floor(nowOf(deps) / 1000) - clientCensusDays * daySeconds),
         recentActions: recentAdminActions(deps.query, recentActionCount),
@@ -393,17 +390,6 @@ export function createAdminHandler(deps: AdminDeps): AdminHandler {
                             return { response: unchanged(`the report is already closed`) };
                         case `not_found`:
                             return { response: notFound(`no such report`) };
-                    }
-                });
-            case `duel-stop`:
-                return audited(deps, request, request.id, () => {
-                    switch (deps.duels.stopDuel(request.id, { reason: `operator`, bot: null })) {
-                        case `stopped`:
-                            return { response: done(`stopped ${request.id}; no further game starts, and a live one plays on`) };
-                        case `over`:
-                            return { response: unchanged(`the duel is already over`) };
-                        case `not_found`:
-                            return { response: notFound(`no such duel`) };
                     }
                 });
             case `delete-analysis`:

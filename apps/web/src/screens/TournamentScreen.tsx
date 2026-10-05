@@ -21,7 +21,7 @@ import { Standings } from '../tournaments/Standings';
 import { absentees, currentRound, roundBegun } from '../tournaments/view';
 import { useDocumentMeta } from '../use-document-meta';
 import { useNow } from '../use-now';
-import './DuelScreen.css';
+import '../tournaments/DuelParts.css';
 import './TournamentScreen.css';
 
 // A tournament as read, with when, which its waits count from.

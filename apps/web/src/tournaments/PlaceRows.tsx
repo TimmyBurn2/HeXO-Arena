@@ -1,7 +1,7 @@
 import type { TournamentPlace, TournamentSummary } from '@hexo-arena/contract';
 import { Link } from '../router/Link';
 import { text } from '../text';
-import { TournamentTag } from './TournamentRow';
+import { PairWho, pairStanding, pairState, TournamentTag } from './TournamentRow';
 import { tournamentPagePath } from './view';
 
 function day(iso: string): string {
@@ -34,9 +34,10 @@ function placeText(tournament: TournamentSummary, place: TournamentPlace): strin
 }
 
 /**
- * The tournaments one bot entered as rows, each one link to its page: the
- * name, where the bot stands or why it did not play, the round under way,
- * and the day it ended or began.
+ * The tournaments one bot entered as rows, each one link to its page: a
+ * duel by its pair, where it stands, its score and game; any other by its
+ * name, where the bot stands or why it did not play, and the round under
+ * way; each with the day it ended or began.
  */
 export function PlaceRows({ tournaments }: { tournaments: readonly TournamentSummary[] }) {
     return (
@@ -45,13 +46,22 @@ export function PlaceRows({ tournaments }: { tournaments: readonly TournamentSum
                 tournament.bot === undefined ? null : (
                     <li key={tournament.id}>
                         <Link to={tournamentPagePath(tournament.id)} className="duel-row place-row">
-                            <span className="duel-row-who tournament-tag-row">
-                                {tournament.name}
-                                <TournamentTag tournament={tournament} />
-                            </span>
+                            {tournament.pair === undefined ? (
+                                <span className="duel-row-who tournament-tag-row">
+                                    {tournament.name}
+                                    <TournamentTag tournament={tournament} />
+                                </span>
+                            ) : (
+                                <PairWho pair={tournament.pair}>
+                                    <TournamentTag tournament={tournament} />
+                                </PairWho>
+                            )}
                             <span className="duel-row-facts">
-                                <span className={tournament.status === `running` ? `duel-row-live` : undefined}>{placeText(tournament, tournament.bot)}</span>
-                                {tournament.round === null ? null : <span>{text.tournaments.roundOf(tournament.round.current, tournament.round.of)}</span>}
+                                <span className={tournament.status === `running` ? `duel-row-live` : undefined}>
+                                    {tournament.pair === undefined ? placeText(tournament, tournament.bot) : pairState(tournament, tournament.pair)}
+                                </span>
+                                {tournament.pair !== undefined && tournament.status === `running` ? <span>{pairStanding(tournament.pair)}</span> : null}
+                                {tournament.round === null || tournament.pair !== undefined ? null : <span>{text.tournaments.roundOf(tournament.round.current, tournament.round.of)}</span>}
                                 {tournament.status === `scheduled` ? null : <span>{day(tournament.endedAt ?? tournament.startsAt)}</span>}
                             </span>
                         </Link>

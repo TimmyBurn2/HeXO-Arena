@@ -25,7 +25,7 @@ import { and, desc, eq, inArray, isNotNull, isNull, lt, lte, sql, type SQL } fro
 import { alias } from 'drizzle-orm/sqlite-core';
 import type { FastifyInstance } from 'fastify';
 import type { Query } from './db';
-import { bots, duels, gameRatings, games, moves, tournamentPairings, tournaments, users } from './db/schema';
+import { bots, gameRatings, games, moves, tournamentPairings, tournaments, users } from './db/schema';
 import { gameTournamentColumns, gameTournamentFrom, seatLevelsOf } from './game-store';
 import { resolvePlayer, seated, seatsOf, type GameSeat } from './game-seats';
 import { creatorJoin, creators } from './tournament-store';
@@ -73,34 +73,28 @@ function kindFilter(kind: Filters[`kind`]): SQL | undefined {
 // Each event reads through its own partial index, written as the index writes it.
 function eventFilter(event: Filters[`event`]): SQL | undefined {
     switch (event) {
-        case `duel`:
-            return sql`${games.duelId} is not null`;
         case `tournament`:
             return sql`${games.pairingId} is not null`;
         case `none`:
-            return sql`+${games.duelId} is null and +${games.pairingId} is null`;
+            return sql`+${games.pairingId} is null`;
         case undefined:
             return undefined;
     }
 }
 
-// One duel's games, or one tournament's or one round's through the
-// pairings of that round.
+// One tournament's games, or one round's, through the pairings of that round.
 function oneEvent(filters: Filters): SQL | undefined {
-    if (filters.duel !== undefined) return sql`${games.duelId} = ${filters.duel}`;
     if (filters.tournament === undefined) return undefined;
     const round = filters.round === undefined ? undefined : eq(tournamentPairings.round, Number(filters.round));
     return sql`${games.pairingId} in (select ${tournamentPairings.id} from ${tournamentPairings} where ${and(eq(tournamentPairings.tournamentId, filters.tournament), round)})`;
 }
 
-// One duel's or one tournament's games are read through that event's
-// index whatever else the filters name, so a read never walks past them;
-// a duel holds at most a test's games, and a tournament two a pairing,
-// so sorting them all stays small.
+// One tournament's games are read through the pairing index whatever else
+// the filters name, so a read never walks past them; a tournament holds at
+// most its longest test's games, so sorting them all stays small.
 // A source other than the table itself takes its columns as expressions,
 // which the builder does not check.
 function sourceOf(filters: Filters): typeof games | SQL {
-    if (filters.duel !== undefined) return sql`${games} indexed by games_duel_idx`;
     if (filters.tournament !== undefined) return sql`${games} indexed by games_pairing_idx`;
     return games;
 }
@@ -109,9 +103,9 @@ function sourceOf(filters: Filters): typeof games | SQL {
 // the term is written as the partial index of the games shown writes it,
 // a literal the planner can match; beside a filter with an index of its own,
 // the unary plus keeps the term from matching, so that filter's index is read.
-// A duel named is asked for whole, so a test's games stay in.
+// A tournament named is asked for whole, so a test's games stay in.
 function testsLeftOut(filters: Filters, named: boolean): SQL | undefined {
-    if (filters.tests !== undefined || filters.duel !== undefined) return undefined;
+    if (filters.tests !== undefined || filters.tournament !== undefined) return undefined;
     const narrowed =
         named ||
         [filters.kind, filters.event, filters.tournament, filters.result, filters.reason, filters.clock, filters.opening, filters.before, filters.analyzed].some((value) => value !== undefined);
@@ -125,7 +119,7 @@ function shared(filters: Filters, before: Bound | null, named: boolean): (SQL | 
         isNotNull(games.finishSeq),
         before === null ? undefined : and(lte(games.finishSeq, before.seq), lt(games.finishedAt, before.at)),
         kindFilter(filters.kind),
-        filters.duel === undefined && filters.tournament === undefined ? eventFilter(filters.event) : oneEvent(filters),
+        filters.tournament === undefined ? eventFilter(filters.event) : oneEvent(filters),
         filters.result === `none` ? isNull(games.winner) : undefined,
         filters.reason === undefined ? undefined : eq(games.finishReason, filters.reason),
         filters.clock === undefined ? undefined : sql`${games.timeControl} ->> '$.mode' = ${filters.clock}`,
@@ -305,9 +299,6 @@ export function finishedEntriesOf(query: Query, ids: readonly string[]): Finishe
             finishedAt: games.finishedAt,
             finishSeq: games.finishSeq,
             voidedAt: games.voidedAt,
-            duelId: games.duelId,
-            duelGame: games.duelGame,
-            duelGames: duels.games,
             ...gameTournamentColumns,
             test: games.test,
             moves: sql<number>`(select count(*) from ${moves} where ${moves.gameId} = ${games.id})`,
@@ -321,7 +312,6 @@ export function finishedEntriesOf(query: Query, ids: readonly string[]): Finishe
         .leftJoin(bots, eq(games.botId, bots.id))
         .leftJoin(challengerBots, eq(games.challengerBotId, challengerBots.id))
         .leftJoin(destBots, eq(games.destBotId, destBots.id))
-        .leftJoin(duels, eq(duels.id, games.duelId))
         .leftJoin(tournamentPairings, eq(tournamentPairings.id, games.pairingId))
         .leftJoin(tournaments, eq(tournaments.id, tournamentPairings.tournamentId))
         .leftJoin(creators, creatorJoin)
@@ -370,7 +360,6 @@ export function finishedEntriesOf(query: Query, ids: readonly string[]): Finishe
             ...(row.unratedByChoice === 1 ? { unratedByChoice: true } : {}),
             ...(row.test === 1 ? { test: true as const } : {}),
             ...tournamentLine(gameTournamentFrom(row)),
-            ...(row.duelId === null || row.duelGame === null || row.duelGames === null ? {} : { duel: { id: row.duelId, game: row.duelGame, of: row.duelGames } }),
             analyses: analyzed.get(row.id) ?? 0,
         };
     });

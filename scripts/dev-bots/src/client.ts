@@ -18,10 +18,6 @@ import {
     gameResignPath,
     gameSnapshotSchema,
     gamesPath,
-    duelDetailSchema,
-    duelListPath,
-    duelListSchema,
-    duelPath,
     sessionCookieName,
     streamEventSchema,
     tournamentDetailSchema,
@@ -30,7 +26,6 @@ import {
     tournamentPath,
     tournamentsPath,
     type AccountDeclaration,
-    type createDuelRequestSchema,
     type BotListing,
     type AxialCoord,
     type CreateGameRequest,
@@ -39,8 +34,6 @@ import {
     type GameEvent,
     type GameSnapshot,
     type OpeningPlies,
-    type DuelDetail,
-    type DuelList,
     type StreamEvent,
     type TimeControl,
     type CreateTournamentRequest,
@@ -278,31 +271,6 @@ export class ArenaClient {
             body: JSON.stringify({ bot }),
         });
         if (response.status !== 200) throw await refusal(response, `entering ${bot}`);
-    }
-
-    /** Starts a duel between two bots as the signed-in person; the answer is the duel. */
-    async createDuel(cookie: string, request: z.input<typeof createDuelRequestSchema>): Promise<DuelDetail> {
-        const response = await fetch(this.#url(duelListPath), {
-            method: `POST`,
-            headers: { cookie, ...json },
-            body: JSON.stringify(request),
-        });
-        if (response.status !== 201) throw await refusal(response, `starting a duel of ${request.first} and ${request.second}`);
-        return duelDetailSchema.parse(await response.json());
-    }
-
-    /** One duel as its page reads it. */
-    async duel(id: string): Promise<DuelDetail> {
-        const response = await fetch(this.#url(duelPath.replace(`{id}`, id)));
-        if (response.status !== 200) throw await refusal(response, `reading duel ${id}`);
-        return duelDetailSchema.parse(await response.json());
-    }
-
-    /** The running and recent duel one bot plays. */
-    async listDuels(bot: string): Promise<DuelList> {
-        const response = await fetch(this.#url(`${duelListPath}?${new URLSearchParams({ bot }).toString()}`));
-        if (response.status !== 200) throw await refusal(response, `listing the duel of ${bot}`);
-        return duelListSchema.parse(await response.json());
     }
 
     /** The seeded personas as they stand; a target without the dev routes answers 404. */

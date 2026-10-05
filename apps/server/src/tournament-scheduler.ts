@@ -657,7 +657,7 @@ export class TournamentScheduler {
             timeControl: tournament.timeControl,
             openingPlies: tournament.openingPlies,
             opening: stored,
-            tag: { kind: `pairing`, id: pairing.id, game },
+            tag: { pairingId: pairing.id, game },
         });
         if (stored === null) {
             this.#query.update(tournamentPairings).set({ openingCells: JSON.stringify(opening) }).where(eq(tournamentPairings.id, pairing.id)).run();

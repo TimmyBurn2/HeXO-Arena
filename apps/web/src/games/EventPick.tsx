@@ -1,127 +1,74 @@
 import { useCallback, useState } from 'react';
-import { fetchDuel, fetchDuels, fetchTournament, fetchTournaments } from '../api/client';
+import type { TournamentSummary } from '@hexo-arena/contract';
+import { fetchTournament, fetchTournaments } from '../api/client';
 import { useAsync } from '../api/use-async';
-import { scoreText } from '../duels/words';
 import { text } from '../text';
 import { tournamentWhen } from '../tournaments/TournamentRow';
 import { Choice, NameField } from './Fields';
 import type { GameFilters } from './filters';
 
-/** One duel by its bots, and whether it is a test. */
-export interface NamedDuel {
-    readonly first: string;
-    readonly second: string;
-    readonly test: boolean;
-}
-
-/** One tournament by its name, and the rounds drawn for it. */
+/** One tournament by its name, a duel's by its two bots and whether it is a test, and the rounds drawn for it. */
 export interface NamedTournament {
     readonly name: string;
+    readonly pair: { readonly first: string; readonly second: string; readonly test: boolean } | null;
     readonly rounds: number;
 }
 
 /**
- * The one duel or tournament a list is narrowed to, as its chip and its
- * picker name it: null while it loads or when none is chosen, `gone` when
- * its id names none.
+ * The one tournament a list is narrowed to, as its chip and its picker
+ * name it: null while it loads or when none is chosen, `gone` when its id
+ * names none.
  */
-export interface EventNames {
-    readonly duel: NamedDuel | `gone` | null;
-    readonly tournament: NamedTournament | `gone` | null;
+export type EventName = NamedTournament | `gone` | null;
+
+// A tournament as the picker and the chip name it: a duel by its pair, a test said so; any other by its name.
+function nameOf(tournament: Pick<TournamentSummary, `name` | `test` | `pair`>): string {
+    const pair = tournament.pair;
+    return pair === undefined ? tournament.name : text.games.pick.pairName(pair.first.name, pair.second.name, tournament.test);
 }
 
-// A read keyed by the id it answers, so a stale answer never names another event.
-function useNamed<T>(id: string | null, read: (id: string) => Promise<T>): T | `gone` | null {
-    const load = useCallback(async () => (id === null ? null : read(id)), [id, read]);
+const readTournament = async (id: string): Promise<NamedTournament> => {
+    const tournament = await fetchTournament(id);
+    const [first, second] = tournament.entries;
+    const pair = tournament.format === `duel` && first !== undefined && second !== undefined ? { first: first.bot, second: second.bot, test: tournament.test } : null;
+    return { name: tournament.name, pair, rounds: tournament.rounds.length };
+};
+
+/** The name of the tournament the filters choose; a read keyed by its id, so a stale answer never names another. */
+export function useEventName(filters: GameFilters): EventName {
+    const id = filters.tournament ?? null;
+    const load = useCallback(async () => (id === null ? null : readTournament(id)), [id]);
     const named = useAsync(load, { keep: false });
     return named.missing ? `gone` : named.data;
 }
 
-const readDuel = async (id: string): Promise<NamedDuel> => {
-    const duel = await fetchDuel(id);
-    return { first: duel.first.name, second: duel.second.name, test: duel.kind === `test` };
-};
-
-const readTournament = async (id: string): Promise<NamedTournament> => {
-    const tournament = await fetchTournament(id);
-    return { name: tournament.name, rounds: tournament.rounds.length };
-};
-
-/** The names of the duel or the tournament the filters choose. */
-export function useEventNames(filters: GameFilters): EventNames {
-    return { duel: useNamed(filters.duel ?? null, readDuel), tournament: useNamed(filters.tournament ?? null, readTournament) };
-}
-
-/** The chip's words for the duel chosen, its kind until its bots are known. */
-export function duelWords(named: EventNames[`duel`]): string {
-    const chips = text.games.chips;
-    if (named === `gone`) return chips.gone.duel;
-    return named === null ? chips.events.duel : chips.duel(named.first, named.second, named.test);
-}
-
 /** The chip's words for the tournament chosen, its kind until its name is known. */
-export function tournamentWords(named: EventNames[`tournament`]): string {
+export function tournamentWords(named: EventName): string {
     const chips = text.games.chips;
-    if (named === `gone`) return chips.gone.tournament;
-    return named === null ? chips.events.tournament : chips.tournament(named.name);
+    if (named === `gone`) return chips.gone;
+    if (named === null) return chips.events.tournament;
+    return named.pair === null ? chips.tournament(named.name) : chips.duel(named.pair.first, named.pair.second, named.pair.test);
 }
 
-// A duel lasts minutes, so its day tells repeats of the same pair apart.
-function day(iso: string): string {
-    return new Intl.DateTimeFormat(undefined, { dateStyle: `medium` }).format(new Date(iso));
-}
-
-/**
- * One duel to narrow the list to, recent first: running ones, then those
- * over, of every bot or of the one searched for; tests among them while
- * the list shows tests.
- * The duel chosen stays an option whatever the search.
- */
-export function DuelPick({ value, named, tests, onChange }: { value: string | undefined; named: EventNames[`duel`]; tests: boolean; onChange: (duel: string | undefined) => void }) {
-    const pick = text.games.pick;
-    const [bot, setBot] = useState<string | null>(null);
-    const load = useCallback(async () => {
-        const list = await fetchDuels(bot === null ? {} : { bot });
-        return [...list.running, ...list.past];
-    }, [bot]);
-    const read = useAsync(load);
-    // A failed read lists nothing, rather than the last search's duels under this one's note.
-    const listed = read.error ? [] : (read.data ?? []).filter((duel) => tests || duel.kind !== `test`);
-    const options: (readonly [string, string])[] = listed.map((duel) => [duel.id, pick.duelOption(duel.first.name, duel.second.name, scoreText(duel), duel.kind === `test`, duel.status === `running` ? pick.live : day(duel.endedAt ?? duel.createdAt))] as const);
-    if (value !== undefined && !listed.some((duel) => duel.id === value)) options.unshift([value, duelWords(named)]);
-    const note = read.missing && bot !== null ? pick.noBot(bot) : read.error ? pick.failed : read.data !== null && listed.length === 0 && bot !== null ? pick.noDuel : null;
-    return (
-        <>
-            <NameField
-                id="games-duel-find"
-                label={pick.findDuel}
-                value={bot ?? undefined}
-                wide
-                onCommit={(name) => {
-                    setBot(name ?? null);
-                }}
-            />
-            <Choice id="games-duel" label={pick.duel} value={value} options={options} wide onChange={onChange} />
-            <p className="note games-pick-note" role="status">
-                {note}
-            </p>
-        </>
-    );
+// Whether a search matches a tournament: its name or, for a duel, either bot's.
+function matches(tournament: TournamentSummary, find: string): boolean {
+    const names = [tournament.name, ...(tournament.pair === undefined ? [] : [tournament.pair.first.name, tournament.pair.second.name])];
+    return names.some((name) => name.toLowerCase().includes(find.toLowerCase()));
 }
 
 /**
- * One tournament to narrow the list to, recent first: the one live, then
- * those over that played; tests among them while the list shows tests;
- * searched by name.
+ * One tournament to narrow the list to, recent first: those live, then
+ * those over that played, a duel by its pair; tests among them while the
+ * list shows tests; searched by name or by a duel's bot.
  * The tournament chosen stays an option whatever the search.
  */
-export function TournamentPick({ value, named, tests, onChange }: { value: string | undefined; named: EventNames[`tournament`]; tests: boolean; onChange: (tournament: string | undefined) => void }) {
+export function TournamentPick({ value, named, tests, onChange }: { value: string | undefined; named: EventName; tests: boolean; onChange: (tournament: string | undefined) => void }) {
     const pick = text.games.pick;
     const read = useAsync(fetchTournaments);
     const [find, setFind] = useState<string | null>(null);
     const all = read.data === null ? [] : [...read.data.running, ...read.data.past.filter((tournament) => tournament.status !== `called_off`)].filter((tournament) => tests || !tournament.test);
-    const listed = find === null ? all : all.filter((tournament) => tournament.name.toLowerCase().includes(find.toLowerCase()));
-    const options: (readonly [string, string])[] = listed.map((tournament) => [tournament.id, pick.tournamentOption(tournament.name, tournament.status === `running` ? pick.live : tournamentWhen(tournament.endedAt ?? tournament.startsAt))] as const);
+    const listed = find === null ? all : all.filter((tournament) => matches(tournament, find));
+    const options: (readonly [string, string])[] = listed.map((tournament) => [tournament.id, pick.tournamentOption(nameOf(tournament), tournament.status === `running` ? pick.live : tournamentWhen(tournament.endedAt ?? tournament.startsAt))] as const);
     if (value !== undefined && !listed.some((tournament) => tournament.id === value)) options.unshift([value, tournamentWords(named)]);
     const note = read.error ? pick.failed : read.data !== null && listed.length === 0 && find !== null ? pick.noTournament : null;
     return (

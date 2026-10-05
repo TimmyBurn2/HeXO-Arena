@@ -286,7 +286,7 @@ export const botSettingsSchema = z
     .object({
         name: z.string(),
         duelsByOthers: z.boolean().meta({
-            description: `True lets any signed-in person start a duel or set up a round robin the bot plays; false keeps that to its owner, and takes the bot out of round robins others set up. On until the owner turns it off.`,
+            description: `True lets any signed-in person set up a duel or round robin the bot plays; false keeps that to its owner, and takes the bot out of those others set up. On until the owner turns it off.`,
         }),
         about: botAboutSchema.optional().meta({ description: `The owner's text for the bot's pages, absent until set; it shows in place of the declared one.` }),
         repoUrl: botRepoUrlSchema.optional().meta({ description: `The owner's link to the bot's source, absent until set; it shows in place of the declared one.` }),

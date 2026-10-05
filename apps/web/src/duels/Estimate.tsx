@@ -1,8 +1,8 @@
 import type { CSSProperties } from 'react';
-import type { DuelEstimate, DuelSide } from '@hexo-arena/contract';
+import type { Estimate as TestEstimate } from '@hexo-arena/contract';
 import { Rating } from '../components/player';
 import { text } from '../text';
-import { pointsText, signed, sweptBy } from './words';
+import { otherSide, pointsText, signed, sweptBy, type DuelSide } from './words';
 import './Duels.css';
 
 /** What an estimate of two bots says beside its figures: each bot and its rating now, whether games are still to come, how many, and how many ended without a winner. */
@@ -29,8 +29,6 @@ function at(value: number): string {
     return `${String(((clamped + axisReach) / (2 * axisReach)) * 100)}%`;
 }
 
-const otherSide = (side: DuelSide): DuelSide => (side === `first` ? `second` : `first`);
-
 /**
  * A test's estimate, led by the score: how many rating points the leading
  * bot is stronger, with its 95% range on an axis around zero, the chance
@@ -38,7 +36,7 @@ const otherSide = (side: DuelSide): DuelSide => (side === `first` ? `second` : `
  * test moves for neither bot. A sweep's range has no upper end, so it is
  * said as the least the bot is stronger by.
  */
-export function Estimate({ duel, estimate }: { duel: EstimateSubject; estimate: DuelEstimate }) {
+export function Estimate({ duel, estimate }: { duel: EstimateSubject; estimate: TestEstimate }) {
     const words = text.duels.estimate;
     // The bot the estimate favors leads every line; the first named at even.
     const lead: DuelSide = estimate.favored ?? `first`;
@@ -116,9 +114,7 @@ export function Estimate({ duel, estimate }: { duel: EstimateSubject; estimate: 
                     <dd>{words.ladderValue(<LadderBot duel={duel} side={lead} />, <LadderBot duel={duel} side={trail} />)}</dd>
                 </div>
             </dl>
-            <p className="note">
-                {running ? words.toGo(duel.games - estimate.games) : estimate.narrowed === null ? null : words.narrowed(estimate.narrowed)}
-            </p>
+            {running ? <p className="note">{words.toGo(duel.games - estimate.games)}</p> : null}
         </section>
     );
 }

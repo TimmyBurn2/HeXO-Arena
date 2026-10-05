@@ -1,23 +1,10 @@
 import type { Page, Route } from '@playwright/test';
 import {
-    acceptsCovers,
-    botConcurrentGameCap,
-    duelDailyCap,
-    duelGameCounts,
-    duelLiveCap,
-    duelPerBotCap,
-    seatLevelOf,
     analysesPerGame,
     analysisListSchema,
     analysisRequestSchema,
     communityAnalysisSchema,
     createGameRequestSchema,
-    createDuelRequestSchema,
-    duelBotStatesSchema,
-    duelDetailSchema,
-    duelListQuerySchema,
-    duelListSchema,
-    estimateOf,
     meUpdateRequestSchema,
     positionCheckRequestSchema,
     positionReadingRequestSchema,
@@ -63,14 +50,10 @@ import {
     tournamentWithdrawRequestSchema,
     createTournamentRequestSchema,
     tournamentListSchema,
+    tournamentBotStatesSchema,
+    tournamentPerBotCap,
     type BotListing,
     type BotSettings,
-    type DuelBotState,
-    type DuelDetail,
-    type DuelGame,
-    type DuelSide,
-    type DuelSummary,
-    type EstimateUnit,
     type DevAccount,
     type GameSnapshot,
     type LegalDetails,
@@ -86,9 +69,11 @@ import {
     type RatingRange,
     type Side,
     type Signup,
+    type TournamentBotState,
     type TournamentDetail,
     type TournamentEntry,
     type TournamentGame,
+    type TournamentLeaders,
     type TournamentStanding,
     type TournamentPlace,
     type TournamentSummary,
@@ -147,14 +132,10 @@ export interface World {
     requested: { gameId: string; request: AnalysisRequest }[];
     // The settings of bots the signed-in person owns, by name; one not named reads as never set, its declared text as listed.
     settings: Record<string, BotSettings>;
-    // Every duel and test by id, which the lists read too.
-    duels: DuelDetail[];
-    // Each listed bot's duel state; null derives it from the bots and the running duels, every switch on.
-    duelStates: DuelBotState[] | null;
-    // How a duel's start answers: the duel, as the request asks, or a refusal.
-    duelStart: `created` | { status: number; code: string; retryAfter?: number };
-    // How setting a round robin up answers: the round robin, as the request asks, or a refusal naming a bot where the server would.
-    roundRobinStart: `created` | { status: number; code: string; bot?: string; retryAfter?: number };
+    // Each listed bot's tournament state; null derives it from the bots, their owners' switches, and the running tournaments people set up.
+    botStates: TournamentBotState[] | null;
+    // How setting a duel or round robin up answers: the tournament, as the request asks, or a refusal naming a bot where the server would.
+    tournamentStart: `created` | { status: number; code: string; bot?: string; retryAfter?: number };
 }
 
 /**
@@ -483,262 +464,13 @@ export const duelBots: BotListing[] = [
     { name: `driftwood`, ownerName: `bruno`, online: false, openForChallenges: false, rating: 1388, provisional: false, liveGames: 0, levels: null, analyzer: null, accepts: wide },
 ];
 
-/** A bot as a duel names it, at its rating now and then. */
-export function duelBotOf(bot: BotListing, extra: Partial<DuelDetail[`first`]> = {}): DuelDetail[`first`] {
-    return {
-        name: bot.name,
-        ownerName: bot.ownerName ?? `nobody`,
-        ratingAtStart: bot.rating,
-        ...(bot.version === undefined ? {} : { version: bot.version }),
-        now: { rating: bot.rating, provisional: bot.provisional },
-        ...extra,
-    };
-}
-
-const named = (name: string) => duelBots.find((bot) => bot.name === name) ?? duelBots[0] ?? (() => { throw new Error(`no duel bot`); })();
-
-/** How one game of a fixture duel went: who won, no winner, live, or not played. */
-type Outcome = DuelSide | `none` | `live` | `not_played`;
-
-interface DuelPlan {
-    id: string;
-    first: DuelDetail[`first`];
-    second: DuelDetail[`second`];
-    kind: DuelDetail[`kind`];
-    startedBy: string;
-    games: DuelDetail[`terms`][`games`];
-    rated: boolean;
-    timeControl?: DuelDetail[`terms`][`timeControl`];
-    openingPlies?: DuelDetail[`terms`][`openingPlies`];
-    // Each game's outcome in order; the games past them are still to play.
-    outcomes: readonly Outcome[];
-    live: boolean;
-    status: DuelDetail[`status`];
-    end?: DuelDetail[`end`];
-    // When it began and ended, in hours before now.
-    began?: number;
-    ended?: number;
-}
-
 const hoursAgo = (hours: number) => new Date(Date.now() - hours * 3_600_000).toISOString().replace(/\.\d{3}Z$/u, `Z`);
 
-/** A duel as its page reads it, its score, games, openings, and a test's estimate drawn from the plan. */
-export function duelFixture(plan: DuelPlan): DuelDetail {
-    const timeControl = plan.timeControl ?? { mode: `turn`, turnTimeMs: 10_000 };
-    const openingPlies = plan.openingPlies ?? 5;
-    const games: DuelGame[] = Array.from({ length: plan.games }, (_, index) => {
-        const number = index + 1;
-        const outcome = plan.outcomes[index];
-        const pair = Math.ceil(number / 2);
-        const x: DuelSide = number % 2 === 1 ? `first` : `second`;
-        const drawn = outcome !== undefined && outcome !== `not_played`;
-        const opening = drawn || (number % 2 === 0 && plan.outcomes[index - 1] !== undefined) ? playedCells(openingPlies, pair + plan.id.length).slice(0, openingPlies) : null;
-        return {
-            game: number,
-            x,
-            gameId: drawn ? `${plan.id}-${String(number)}` : null,
-            state: outcome === undefined ? (plan.status === `running` ? `pending` : `not_played`) : outcome === `live` ? `live` : outcome === `not_played` ? `not_played` : `played`,
-            winner: outcome === `first` || outcome === `second` ? outcome : null,
-            reason: outcome === `first` || outcome === `second` ? `six-in-a-row` : outcome === `none` ? `terminated` : null,
-            turns: outcome === `first` || outcome === `second` || outcome === `none` ? 20 + ((number * 7) % 23) : null,
-            opening,
-        };
-    });
-    const score = { first: games.filter((game) => game.winner === `first`).length, second: games.filter((game) => game.winner === `second`).length };
-    const units: EstimateUnit[] = [];
-    for (let at = 0; at < games.length; at += 2) {
-        const unit = { games: 0, points: 0 };
-        for (const game of games.slice(at, at + 2)) {
-            if (game.state !== `played`) continue;
-            unit.games += 1;
-            unit.points += game.winner === null ? 0.5 : game.winner === `first` ? 1 : 0;
-        }
-        units.push(unit);
-    }
-    const estimate = plan.kind === `test` ? estimateOf(units) : null;
-    const liveGame = games.find((game) => game.state === `live`);
-    const players = (side: DuelSide) => ({ name: plan[side].name, rating: plan[side].ratingAtStart, provisional: plan[side].now?.provisional ?? false, kind: `bot` as const });
-    const cells = playedCells(37, plan.id.length);
-    const live: LiveGameEntry[] =
-        liveGame === undefined || liveGame.gameId === null
-            ? []
-            : [
-                  {
-                      gameId: liveGame.gameId,
-                      players: liveGame.x === `first` ? { x: players(`first`), o: players(`second`) } : { x: players(`second`), o: players(`first`) },
-                      timeControl,
-                      toMove: sideOfPly(cells.length),
-                      rated: plan.rated,
-                      cells,
-                      clock: { mode: `turn`, remainingTurnMs: 6_000 },
-                      duel: { id: plan.id, game: liveGame.game, of: plan.games },
-                      ...(plan.kind === `test` ? { test: true as const } : {}),
-                  },
-              ];
-    return {
-        id: plan.id,
-        kind: plan.kind,
-        status: plan.status,
-        startedBy: plan.startedBy,
-        first: plan.first,
-        second: plan.second,
-        terms: { games: plan.games, openingPlies, timeControl, rated: plan.rated },
-        score,
-        ...(estimate === null ? {} : { estimate }),
-        ...(plan.end === undefined ? {} : { end: plan.end }),
-        createdAt: hoursAgo(plan.began ?? 1),
-        endedAt: plan.status === `running` ? null : hoursAgo(plan.ended ?? 0.2),
-        games,
-        live,
-    };
-}
-
-/** A duel as a list names it. */
-export function summaryOfDuel(duel: DuelDetail): DuelSummary {
-    const { games, live: _live, waiting: _waiting, ...fields } = duel;
-    return { ...fields, played: games.filter((game) => game.state === `played`).length, results: games.map(({ game, x, gameId, state, winner }) => ({ game, x, gameId, state, winner })) };
-}
-
-// What the server refuses a duel's start for, in the order it checks:
-// each bot's gates, being open and its owner's switch binding only bots the
-// starter does not own, then the pair, the starter's running duels, a rated
-// duel the starter may not have, a length only a test takes, and the day's cap.
-// The server names the first bot a gate refuses, as its refusal's bot.
-function duelRefusal(state: World, viewer: string, pair: readonly [BotListing, BotListing], asked: { games: number; timeControl: DuelDetail[`terms`][`timeControl`]; rated: boolean; levels?: { first?: string | undefined; second?: string | undefined } | undefined }): { status: number; code: string; bot?: string } | null {
-    const states = state.duelStates ?? statesOf(state);
-    const stateOf = (bot: BotListing) => states.find((each) => each.name === bot.name);
-    const own = (bot: BotListing) => bot.ownerName === viewer;
-    const failing = (test: (bot: BotListing) => boolean) => pair.find(test)?.name;
-    const gate = (code: string, test: (bot: BotListing) => boolean) => {
-        const bot = failing(test);
-        return bot === undefined ? null : { status: 400, code, bot };
-    };
-    const [first, second] = pair;
-    const declares = (bot: BotListing, id: string | undefined) => id === undefined || bot.levels?.list.some((level) => level.id === id) === true;
-    const refused =
-        gate(`not_open`, (bot) => !bot.online || (!bot.openForChallenges && !own(bot))) ??
-        gate(`duel_refused`, (bot) => stateOf(bot)?.duelsByOthers === false && !own(bot)) ??
-        gate(`clock_not_accepted`, (bot) => !acceptsCovers(bot.accepts, asked.timeControl)) ??
-        gate(`unknown_level`, (bot) => !declares(bot, bot === first ? asked.levels?.first : asked.levels?.second)) ??
-        gate(`bot_busy`, (bot) => bot.liveGames >= botConcurrentGameCap || (stateOf(bot)?.dueling.length ?? 0) + (stateOf(bot)?.roundRobins ?? 0) >= duelPerBotCap);
-    if (refused !== null) return refused;
-    const running = state.duels.filter((duel) => duel.status === `running`);
-    if (running.some((duel) => [duel.first.name, duel.second.name].every((name) => name === first.name || name === second.name))) return { status: 400, code: `duel_live` };
-    if (running.filter((duel) => duel.startedBy === viewer).length >= duelLiveCap) return { status: 400, code: `duel_busy` };
-    const test = first.ownerName !== null && first.ownerName === second.ownerName;
-    const atDefault = [asked.levels?.first, asked.levels?.second].every((id, index) => id === undefined || id === pair[index]?.levels?.default);
-    if (asked.rated && !(own(first) !== own(second) && atDefault && !test)) return { status: 400, code: `unrated_only` };
-    if (!test && !duelGameCounts.some((count) => count === asked.games)) return { status: 400, code: `test_only` };
-    if (state.duels.filter((duel) => duel.startedBy === viewer).length >= duelDailyCap) return { status: 429, code: `daily_duel_cap` };
-    return null;
-}
-
-// Each listed bot's switch on, and the bots it plays a running duel with.
-function statesOf(state: World): DuelBotState[] {
-    return state.bots.map((bot) => ({
-        name: bot.name,
-        duelsByOthers: state.settings[bot.name]?.duelsByOthers ?? true,
-        dueling: state.duels
-            .filter((duel) => duel.status === `running` && [duel.first.name, duel.second.name].includes(bot.name))
-            .map((duel) => (duel.first.name === bot.name ? duel.second.name : duel.first.name)),
-        roundRobins: 0,
-    }));
-}
-
-const won = (side: DuelSide, count: number): Outcome[] => Array.from({ length: count }, () => side);
-
-/** The duels and tests the mockups show. */
-export const duelFixtures = {
-    live: duelFixture({
-        id: `d_devbotbclive`,
-        first: duelBotOf(named(`devbot-b`), { now: { rating: 1519, provisional: false } }),
-        second: duelBotOf(named(`devbot-c`)),
-        kind: `duel`,
-        startedBy: `bruno`,
-        games: 10,
-        rated: false,
-        outcomes: [`first`, `first`, `first`, `live`],
-        live: true,
-        status: `running`,
-    }),
-    rated: duelFixture({
-        id: `d_hextideqlake`,
-        first: duelBotOf(named(`hextide`), { ratingAtStart: 2110, now: { rating: 2117, provisional: true } }),
-        second: duelBotOf(named(`quietlake`), { ratingAtStart: 1427, now: { rating: 1420, provisional: true } }),
-        kind: `duel`,
-        startedBy: `ana`,
-        games: 2,
-        rated: true,
-        outcomes: [`first`, `first`],
-        live: false,
-        status: `finished`,
-        began: 0.4,
-        ended: 0.2,
-    }),
-    test: duelFixture({
-        id: `d_cinderpebble`,
-        first: duelBotOf(named(`cinder`)),
-        second: duelBotOf(named(`pebble`)),
-        kind: `test`,
-        startedBy: `ana`,
-        games: 50,
-        rated: false,
-        // 31 to 19 by pairs: six pairs won whole, nineteen split.
-        outcomes: [...won(`first`, 12), ...Array.from({ length: 19 }, (): Outcome[] => [`first`, `second`]).flat()],
-        live: false,
-        status: `finished`,
-        began: 1.8,
-        ended: 1,
-    }),
-    testLive: duelFixture({
-        id: `d_cinderpblliv`,
-        first: duelBotOf(named(`cinder`)),
-        second: duelBotOf(named(`pebble`)),
-        kind: `test`,
-        startedBy: `ana`,
-        games: 50,
-        rated: false,
-        outcomes: [...Array.from({ length: 9 }, (): Outcome[] => [`first`, `second`]).flat(), `first`, `first`, `none`, `first`, `live`],
-        live: true,
-        status: `running`,
-        began: 0.3,
-    }),
-    cutShort: duelFixture({
-        id: `d_pistoldevaa1`,
-        first: duelBotOf(named(`Pistol1`)),
-        second: duelBotOf(named(`devbot-a`)),
-        kind: `duel`,
-        startedBy: `ana`,
-        games: 4,
-        rated: false,
-        outcomes: [`first`, `first`],
-        live: false,
-        status: `cut_short`,
-        end: { reason: `offline`, bot: `second` },
-        began: 3.5,
-        ended: 3,
-    }),
-    sweep: duelFixture({
-        id: `d_hextidepbl20`,
-        first: duelBotOf(named(`hextide`)),
-        second: duelBotOf(named(`pebble`)),
-        kind: `test`,
-        startedBy: `ana`,
-        games: 20,
-        rated: false,
-        outcomes: won(`first`, 20),
-        live: false,
-        status: `finished`,
-        began: 26,
-        ended: 25,
-    }),
-};
-
-/** Games of the duels as the history lists them: a duel's, unrated, and a test's, which shows only with tests asked. */
+/** Games of the duels as the history lists them: bruno's, unrated, a test's, which shows only with tests asked, and dmitri's. */
 export const duelGameRows: FinishedGameEntry[] = [
     {
-        gameId: `${duelFixtures.live.id}-3`,
-        players: { x: { name: `devbot-b`, rating: 1519, provisional: false, kind: `bot` }, o: { name: `devbot-c`, rating: 1500, provisional: false, kind: `bot` } },
+        gameId: `t_brunoduel001-3`,
+        players: { x: { name: `devbot-b`, rating: 1529, provisional: false, kind: `bot` }, o: { name: `devbot-c`, rating: 1483, provisional: false, kind: `bot` } },
         winner: `x`,
         reason: `six-in-a-row`,
         timeControl: { mode: `turn`, turnTimeMs: 10_000 },
@@ -748,37 +480,38 @@ export const duelGameRows: FinishedGameEntry[] = [
         rated: false,
         voided: false,
         unratedByChoice: true,
-        duel: { id: duelFixtures.live.id, game: 3, of: 10 },
+        tournament: { id: `t_brunoduel001`, name: `Duel by bruno`, format: `duel`, round: 1, game: 3, of: 10, createdBy: `bruno` },
         analyses: 0,
     },
     {
-        gameId: `${duelFixtures.testLive.id}-22`,
-        players: { x: { name: `pebble`, rating: 1182, provisional: true, kind: `bot` }, o: { name: `cinder`, rating: 1500, provisional: true, kind: `bot` } },
+        gameId: `t_anaduel00001-4`,
+        players: { x: { name: `pebble`, rating: 1182, provisional: true, kind: `bot` }, o: { name: `hextide`, rating: 2117, provisional: true, kind: `bot` } },
         winner: `o`,
         reason: `six-in-a-row`,
         timeControl: { mode: `turn`, turnTimeMs: 10_000 },
         openingPlies: 5,
         turns: 33,
-        finishedAt: hoursAgo(0.03),
+        finishedAt: hoursAgo(4.5),
         rated: false,
         voided: false,
         unratedByChoice: true,
         test: true,
-        duel: { id: duelFixtures.testLive.id, game: 22, of: 50 },
+        tournament: { id: `t_anaduel00001`, name: `Duel by ana`, format: `duel`, round: 1, game: 4, of: 10, createdBy: `ana` },
         analyses: 0,
     },
     {
-        gameId: `${duelFixtures.rated.id}-2`,
-        players: { x: { name: `hextide`, rating: 2114, provisional: true, kind: `bot` }, o: { name: `quietlake`, rating: 1425, provisional: true, kind: `bot` } },
+        gameId: `t_dmitricut001-2`,
+        players: { x: { name: `cinder`, rating: 1500, provisional: true, kind: `bot` }, o: { name: `quietlake`, rating: 1460, provisional: true, kind: `bot` } },
         winner: `x`,
         reason: `six-in-a-row`,
         timeControl: { mode: `turn`, turnTimeMs: 10_000 },
         openingPlies: 5,
-        turns: 6,
-        finishedAt: hoursAgo(0.07),
-        rated: true,
+        turns: 31,
+        finishedAt: hoursAgo(2.5),
+        rated: false,
         voided: false,
-        duel: { id: duelFixtures.rated.id, game: 2, of: 2 },
+        unratedByChoice: true,
+        tournament: { id: `t_dmitricut001`, name: `Duel by dmitri`, format: `duel`, round: 1, game: 2, of: 6, createdBy: `dmitri` },
         analyses: 0,
     },
 ];
@@ -796,7 +529,7 @@ export const tournamentGameRows: FinishedGameEntry[] = [
         finishedAt: hoursAgo(0.05),
         rated: true,
         voided: false,
-        tournament: { id: `t_autumnrobin1`, name: `Autumn round robin`, format: `round_robin`, round: 2, game: 1 },
+        tournament: { id: `t_autumnrobin1`, name: `Autumn round robin`, format: `round_robin`, round: 2, game: 1, of: 2 },
         analyses: 0,
     },
     {
@@ -810,20 +543,20 @@ export const tournamentGameRows: FinishedGameEntry[] = [
         finishedAt: hoursAgo(199),
         rated: true,
         voided: false,
-        tournament: { id: `t_summercup202`, name: `Summer cup`, format: `round_robin`, round: 3, game: 1 },
+        tournament: { id: `t_summercup202`, name: `Summer cup`, format: `round_robin`, round: 3, game: 1, of: 2 },
         analyses: 0,
     },
 ];
 
-/** A duel's live game and a test's, as their pages read them. */
+/** bruno's duel's live game and a game of ana's test, as their pages read them. */
 export const duelGameSnapshots: Record<string, GameSnapshot> = {
     'duel-game': {
         gameId: `duel-game`,
-        players: { x: { name: `devbot-c`, rating: 1500, provisional: false, kind: `bot` }, o: { name: `devbot-b`, rating: 1519, provisional: false, kind: `bot` } },
+        players: { x: { name: `devbot-b`, rating: 1529, provisional: false, kind: `bot` }, o: { name: `devbot-c`, rating: 1483, provisional: false, kind: `bot` } },
         openingPlies: 5,
         board: { cells: playedCells(37, 4) },
         timeControl: { mode: `turn`, turnTimeMs: 10_000 },
-        duel: { id: duelFixtures.live.id, game: 4, of: 10 },
+        tournament: { id: `t_brunoduel001`, name: `Duel by bruno`, format: `duel`, round: 1, game: 7, of: 10, createdBy: `bruno` },
         unratedByChoice: true,
         status: `in-progress`,
         toMove: `o`,
@@ -831,16 +564,17 @@ export const duelGameSnapshots: Record<string, GameSnapshot> = {
     },
     'test-game': {
         gameId: `test-game`,
-        players: { x: { name: `cinder`, rating: 1500, provisional: true, kind: `bot` }, o: { name: `pebble`, rating: 1182, provisional: true, kind: `bot` } },
+        players: { x: { name: `pebble`, rating: 1182, provisional: true, kind: `bot` }, o: { name: `hextide`, rating: 2117, provisional: true, kind: `bot` } },
         openingPlies: 5,
         board: { cells: playedCells(29, 5) },
         timeControl: { mode: `turn`, turnTimeMs: 10_000 },
-        duel: { id: duelFixtures.testLive.id, game: 23, of: 50 },
+        tournament: { id: `t_anaduel00001`, name: `Duel by ana`, format: `duel`, round: 1, game: 4, of: 10, createdBy: `ana` },
         unratedByChoice: true,
         test: true,
-        status: `in-progress`,
-        toMove: `x`,
-        clock: { mode: `turn`, remainingTurnMs: 4_000 },
+        status: `finished`,
+        winner: `o`,
+        reason: `six-in-a-row`,
+        voided: false,
     },
 };
 
@@ -1051,7 +785,7 @@ const robinLive = (id: string, name: string, createdBy: string, round: number): 
     gameId: `${id}-live`,
     players: { x: { name: `hextide`, rating: 2117, provisional: true, kind: `bot` }, o: { name: `Pistol1`, rating: null, provisional: false, kind: `bot`, level: club } },
     rated: false,
-    tournament: { id, name, format: `round_robin`, round, game: 1, createdBy },
+    tournament: { id, name, format: `round_robin`, round, game: 1, of: 2, createdBy },
 });
 
 // bruno's round robin of four, round 2 under way: hextide and Pistol1 at
@@ -1223,15 +957,15 @@ const drawnOpening = (turn: number): TournamentGame[`opening`] => [
 ];
 
 // A duel's games in order: each opening twice, the first bot on x and then the second; points name each winner, null a game to play.
-const duelGames = (first: string, second: string, winners: readonly (string | null)[], total: number): NamedGame[] =>
+const duelGames = (id: string, first: string, second: string, winners: readonly (string | null)[], total: number): NamedGame[] =>
     Array.from({ length: total }, (_, index) => {
         const winner = winners[index];
         const x = index % 2 === 0 ? first : second;
         const opening = Math.floor(index / 2);
         // An opening is drawn as its first game starts, the live one's included, and its second game replays it.
         const drawn = opening <= Math.floor(winners.length / 2) && (index <= winners.length || index % 2 === 1) ? drawnOpening(opening) : null;
-        if (winner === undefined) return { ...tGame(x, index === winners.length ? `live` : `pending`, null, index === winners.length ? `t_brunoduel001-live` : null), opening: drawn };
-        return { ...tGame(x, `played`, winner, `t_brunoduel001-${String(index + 1)}`), opening: drawn, turns: 28 + index };
+        if (winner === undefined) return { ...tGame(x, index === winners.length ? `live` : `pending`, null, index === winners.length ? `${id}-live` : null), opening: drawn };
+        return { ...tGame(x, `played`, winner, `${id}-${String(index + 1)}`), opening: drawn, turns: 28 + index };
     });
 
 // bruno's duel of devbot-b and devbot-c, game 7 of 10 live, devbot-b ahead 4-2.
@@ -1254,7 +988,7 @@ const brunoDuel = (): NamedTournament => ({
     rounds: [
         {
             round: 1,
-            pairings: [{ first: `devbot-b`, second: `devbot-c`, games: duelGames(`devbot-b`, `devbot-c`, [`devbot-b`, `devbot-c`, `devbot-b`, `devbot-b`, `devbot-b`, `devbot-c`], 10) }],
+            pairings: [{ first: `devbot-b`, second: `devbot-c`, games: duelGames(`t_brunoduel001`, `devbot-b`, `devbot-c`, [`devbot-b`, `devbot-c`, `devbot-b`, `devbot-b`, `devbot-b`, `devbot-c`], 10) }],
             rest: null,
         },
     ],
@@ -1268,7 +1002,7 @@ const brunoDuel = (): NamedTournament => ({
             gameId: `t_brunoduel001-live`,
             players: { x: { name: `devbot-b`, rating: 1529, provisional: false, kind: `bot` }, o: { name: `devbot-c`, rating: 1483, provisional: false, kind: `bot` } },
             rated: false,
-            tournament: { id: `t_brunoduel001`, name: `Duel by bruno`, format: `duel`, round: 1, game: 1, leg: 4, of: 10, createdBy: `bruno` },
+            tournament: { id: `t_brunoduel001`, name: `Duel by bruno`, format: `duel`, round: 1, game: 7, of: 10, createdBy: `bruno` },
         },
     ],
     waiting: [],
@@ -1290,7 +1024,7 @@ const anaDuelTest = (): NamedTournament => ({
         { ...playing(`hextide`, `ana`, 2117), version: `1.4.0`, now: { rating: 2117, provisional: true } },
         { ...playing(`pebble`, `ana`, 1182), version: `0.3.1`, now: { rating: 1182, provisional: true } },
     ],
-    rounds: [{ round: 1, pairings: [{ first: `hextide`, second: `pebble`, games: duelGames(`hextide`, `pebble`, Array.from({ length: 10 }, () => `hextide`), 10) }], rest: null }],
+    rounds: [{ round: 1, pairings: [{ first: `hextide`, second: `pebble`, games: duelGames(`t_anaduel00001`, `hextide`, `pebble`, Array.from({ length: 10 }, () => `hextide`), 10) }], rest: null }],
     standings: [
         { rank: 1, bot: `hextide`, ownerName: `ana`, points: 10, asX: 5, asO: 5, withdrawn: false },
         { rank: 2, bot: `pebble`, ownerName: `ana`, points: 0, asX: 0, asO: 0, withdrawn: false },
@@ -1342,9 +1076,66 @@ const dmitriCut = (): NamedTournament => ({
     live: [],
 });
 
-/** The duels and round robins people set up, built on each call as the tournaments are: bruno's live, played out, and stopped, quinn's own live, ana's test, bruno's live duel, ana's test of two, and dmitri's duel cut short. */
+// ana's long test of cinder and pebble, game 23 of 50 live: nine openings split, then cinder 3 to none, a game without a winner among them.
+const anaLongTest = (): NamedTournament => ({
+    ...brunoDuel(),
+    id: `t_analongtest1`,
+    name: `Duel by ana`,
+    createdBy: `ana`,
+    test: true,
+    gamesPerPair: 50,
+    startsAt: hoursFromNow(-0.3),
+    startedAt: hoursFromNow(-0.3),
+    entries: [
+        { ...playing(`cinder`, `ana`, 1500), version: `0.9.2`, now: { rating: 1500, provisional: true } },
+        { ...playing(`pebble`, `ana`, 1182), version: `0.3.1`, now: { rating: 1182, provisional: true } },
+    ],
+    rounds: [
+        {
+            round: 1,
+            pairings: [
+                {
+                    first: `cinder`,
+                    second: `pebble`,
+                    games: duelGames(`t_analongtest1`, `cinder`, `pebble`, [...Array.from({ length: 9 }, () => [`cinder`, `pebble`]).flat(), `cinder`, `cinder`, null, `cinder`], 50),
+                },
+            ],
+            rest: null,
+        },
+    ],
+    standings: [
+        { rank: 1, bot: `cinder`, ownerName: `ana`, points: 12, asX: 10, asO: 2, withdrawn: false },
+        { rank: 2, bot: `pebble`, ownerName: `ana`, points: 9, asX: 9, asO: 0, withdrawn: false },
+    ],
+    live: [
+        {
+            ...structuredClone(liveGames[0] ?? (() => { throw new Error(`no live game`); })()),
+            gameId: `t_analongtest1-live`,
+            players: { x: { name: `cinder`, rating: 1500, provisional: true, kind: `bot` }, o: { name: `pebble`, rating: 1182, provisional: true, kind: `bot` } },
+            rated: false,
+            test: true,
+            tournament: { id: `t_analongtest1`, name: `Duel by ana`, format: `duel`, round: 1, game: 23, of: 50, createdBy: `ana` },
+        },
+    ],
+    estimates: [
+        { key: 1, estimate: estimate(22, 12.5, 52, -96, 204, 0.76, `likely_stronger`, 70) },
+        { key: 2, estimate: estimate(22, 9.5, -52, -204, 96, 0.24, `likely_stronger`, 70) },
+    ],
+});
+
+/** ana's long test, under way, kept out of the other lists so their counts stand. */
+export function longTest(): TournamentDetail {
+    return keyed(anaLongTest());
+}
+
+/** The duels and round robins people set up, built on each call as the tournaments are: bruno's live, played out, and stopped, ana's test, bruno's live duel, ana's test of two, and dmitri's duel cut short. */
 export function roundRobins(): TournamentDetail[] {
-    return [brunoLive(), brunoFinished(), brunoStopped(), quinnLive(), anaTest(), brunoDuel(), anaDuelTest(), dmitriCut()].map(keyed);
+    return [brunoLive(), brunoFinished(), brunoStopped(), anaTest(), brunoDuel(), anaDuelTest(), dmitriCut()].map(keyed);
+}
+
+/** quinn's live round robin on bruno's field, kept out of the other lists, where its bots would meet their cap of running ones. */
+export function quinnRobin(): TournamentDetail {
+    return keyed(quinnLive());
 }
 
 // The circle method over a field's keys, a rest for each bot of an odd field, as the server draws a round robin.
@@ -1376,10 +1167,27 @@ function pairOf(detail: TournamentDetail): TournamentSummary[`pair`] {
     return { first: side(first), second: side(second), games: games.map(({ opening: _, ...game }) => game) };
 }
 
+// The game slots that score for someone, as the server counts a leader's games.
+const scoring: ReadonlySet<TournamentGame[`outcome`]> = new Set([`played`, `no_show`, `forfeit`]);
+
+// A round robin's bots first in the standings, their points, and the games the first of them played that scored; none before a point.
+function leadersOf(detail: TournamentDetail): TournamentLeaders | undefined {
+    const top = detail.standings.filter((line) => line.rank === 1);
+    const first = top[0];
+    if (first === undefined || first.points === 0) return undefined;
+    const games = detail.rounds
+        .flatMap((round) => round.pairings)
+        .filter((pairing) => pairing.first.key === first.key || pairing.second.key === first.key)
+        .reduce((sum, pairing) => sum + pairing.games.filter((game) => scoring.has(game.outcome)).length, 0);
+    const [lead, ...rest] = top.map((line) => ({ name: line.bot, ...(line.deleted === true ? { deleted: true as const } : {}) }));
+    return lead === undefined ? undefined : { bots: [lead, ...rest], points: first.points, games };
+}
+
 function summaryOf(detail: TournamentDetail): TournamentSummary {
     const top = detail.standings[0];
     const lead = top === undefined ? undefined : detail.estimates?.find((each) => each.key === top.key)?.estimate;
     const pair = pairOf(detail);
+    const leaders = pair === undefined ? leadersOf(detail) : undefined;
     return {
         id: detail.id,
         name: detail.name,
@@ -1401,6 +1209,7 @@ function summaryOf(detail: TournamentDetail): TournamentSummary {
         ...(detail.end === undefined ? {} : { end: detail.end }),
         ...(lead === undefined || top === undefined || detail.status === `running` ? {} : { lead: { bot: top.bot, estimate: lead } }),
         ...(pair === undefined ? {} : { pair }),
+        ...(leaders === undefined ? {} : { leaders }),
     };
 }
 
@@ -1922,14 +1731,12 @@ function finishedPage(state: World, params: URLSearchParams): { status: 200; bod
         if (query.clock !== undefined && game.timeControl.mode !== query.clock) return false;
         if (query.opening !== undefined && String(game.openingPlies) !== query.opening) return false;
         if (query.analyzed === `1` && game.analyses === 0) return false;
-        if (query.event === `duel` && game.duel === undefined) return false;
         if (query.event === `tournament` && game.tournament === undefined) return false;
-        if (query.event === `none` && (game.duel !== undefined || game.tournament !== undefined)) return false;
-        if (query.duel !== undefined && game.duel?.id !== query.duel) return false;
+        if (query.event === `none` && game.tournament !== undefined) return false;
         if (query.tournament !== undefined && game.tournament?.id !== query.tournament) return false;
         if (query.round !== undefined && String(game.tournament?.round) !== query.round) return false;
-        // A duel named is asked for whole, a test's games among them.
-        if (query.tests === undefined && query.duel === undefined && game.test === true) return false;
+        // A tournament named is asked for whole, a test's games among them.
+        if (query.tests === undefined && query.tournament === undefined && game.test === true) return false;
         return query.before === undefined || Date.parse(game.finishedAt) < Date.parse(`${query.before}T00:00:00Z`);
     });
     const page = query.page === undefined ? 1 : Number(query.page);
@@ -1949,6 +1756,16 @@ function finishedPage(state: World, params: URLSearchParams): { status: 200; bod
     const won = asX.won + asO.won;
     const lost = asX.lost + asO.lost;
     return { status: 200, body: { ...body, record: { games: counted.length, won, lost, undecided: counted.length - won - lost, voided: matches.length - counted.length, asX, asO } } };
+}
+
+// Each listed bot's switch, and the running tournaments people set up that it plays, as many as the cap.
+function botStatesOf(state: World): TournamentBotState[] {
+    const running = state.tournaments.filter((detail) => detail.origin === `person` && detail.status === `running`);
+    return state.bots.map((bot) => ({
+        name: bot.name,
+        duelsByOthers: state.settings[bot.name]?.duelsByOthers ?? true,
+        running: Math.min(tournamentPerBotCap, running.filter((detail) => detail.entries.some((entry) => entry.bot === bot.name && entry.state === `playing`)).length),
+    }));
 }
 
 // A bot's settings before its owner set any: its listed text as declared, the duel switch on.
@@ -2006,10 +1823,8 @@ export function world(overrides: Partial<World> = {}): World {
         analyses: {},
         requested: [],
         settings: {},
-        duels: [],
-        duelStates: null,
-        duelStart: `created`,
-        roundRobinStart: `created`,
+        botStates: null,
+        tournamentStart: `created`,
         // A world owns its data, so an entry one test makes stays out of the next.
         ...structuredClone(overrides),
     };
@@ -2452,7 +2267,7 @@ export async function serve(page: Page, state: World): Promise<void> {
                 await json(route, 401, { error: `no signed-in user`, code: `unauthorized` });
                 return;
             }
-            const start = state.roundRobinStart;
+            const start = state.tournamentStart;
             if (start !== `created`) {
                 await route.fulfill({
                     status: start.status,
@@ -2557,6 +2372,10 @@ export async function serve(page: Page, state: World): Promise<void> {
                         : {}),
                 }),
             );
+            return;
+        }
+        if (path === `/api/tournaments/bots` && method === `GET`) {
+            await json(route, 200, tournamentBotStatesSchema.parse(state.botStates ?? botStatesOf(state)));
             return;
         }
         const tournamentPath = /^\/api\/tournaments\/([^/]+)(\/entry|\/stop|\/withdraw)?$/u.exec(path);
@@ -2683,104 +2502,6 @@ export async function serve(page: Page, state: World): Promise<void> {
         if (path === `/api/games` && method === `GET`) {
             const tests = url.searchParams.get(`tests`) === `1`;
             await json(route, 200, liveGameEntrySchema.array().parse(state.live.filter((entry) => tests || entry.test !== true)));
-            return;
-        }
-        if (path === `/api/duels/bots` && method === `GET`) {
-            await json(route, 200, duelBotStatesSchema.parse(state.duelStates ?? statesOf(state)));
-            return;
-        }
-        if (path === `/api/duels` && method === `GET`) {
-            const query = duelListQuerySchema.safeParse(Object.fromEntries(url.searchParams));
-            if (!query.success) {
-                await json(route, 400, { error: `refused`, code: `bad_request` });
-                return;
-            }
-            const { bot, mine, kind } = query.data;
-            const viewer = state.me?.kind === `user` ? state.me.name : null;
-            const owners = new Map(state.bots.map((entry) => [entry.name, entry.ownerName]));
-            const listed = state.duels
-                .filter((duel) => bot === undefined || [duel.first.name, duel.second.name].includes(bot))
-                .filter((duel) => mine === undefined || (viewer !== null && (duel.startedBy === viewer || [duel.first.name, duel.second.name].some((name) => owners.get(name) === viewer))))
-                .filter((duel) => kind === undefined || duel.kind === kind)
-                .map(summaryOfDuel);
-            const mineStarted = state.duels.filter((duel) => viewer !== null && duel.startedBy === viewer);
-            await json(
-                route,
-                200,
-                duelListSchema.parse({
-                    running: listed.filter((duel) => duel.status === `running`),
-                    past: listed.filter((duel) => duel.status !== `running`),
-                    ...(mine === undefined || viewer === null ? {} : { quota: { live: mineStarted.filter((duel) => duel.status === `running`).length, today: mineStarted.length } }),
-                }),
-            );
-            return;
-        }
-        const duelRead = /^\/api\/duels\/([^/]+)(\/stop)?$/u.exec(path);
-        if (duelRead !== null) {
-            const id = decodeURIComponent(duelRead[1] ?? ``);
-            const duel = state.duels.find((entry) => entry.id === id);
-            if (duel === undefined) {
-                await json(route, 404, { error: `no such duel`, code: `not_found` });
-                return;
-            }
-            if (duelRead[2] === `/stop` && method === `POST`) {
-                duel.status = `stopped`;
-                duel.end = { reason: `starter`, bot: null };
-                duel.endedAt = new Date().toISOString().replace(/\.\d{3}Z$/u, `Z`);
-                duel.games = duel.games.map((game) => (game.state === `pending` ? { ...game, state: `not_played` } : game));
-            }
-            await json(route, 200, duelDetailSchema.parse(duel));
-            return;
-        }
-        if (path === `/api/duels` && method === `POST`) {
-            const start = state.duelStart;
-            if (start !== `created`) {
-                await route.fulfill({
-                    status: start.status,
-                    contentType: `application/json`,
-                    headers: start.retryAfter === undefined ? {} : { 'retry-after': String(start.retryAfter) },
-                    body: JSON.stringify({ error: `refused`, code: start.code }),
-                });
-                return;
-            }
-            const viewer = state.me?.kind === `user` ? state.me.name : null;
-            if (viewer === null) {
-                await json(route, 401, { error: `no signed-in user`, code: `unauthorized` });
-                return;
-            }
-            const asked = createDuelRequestSchema.parse(request.postDataJSON());
-            const find = (name: string) => state.bots.find((entry) => entry.name === name);
-            const first = find(asked.first);
-            const second = find(asked.second);
-            if (first === undefined || second === undefined) {
-                await json(route, 404, { error: `no such bot`, code: `not_found` });
-                return;
-            }
-            const refused = duelRefusal(state, viewer, [first, second], asked);
-            if (refused !== null) {
-                await json(route, refused.status, { error: `refused`, code: refused.code, ...(refused.bot === undefined ? {} : { bot: refused.bot }) });
-                return;
-            }
-            const levelOf = (bot: BotListing, id: string | undefined) => {
-                const level = bot.levels?.list.find((entry) => entry.id === id && entry.id !== bot.levels?.default);
-                return level === undefined ? {} : { level: seatLevelOf(level), ratingAtStart: null };
-            };
-            const duel = duelFixture({
-                id: `d_started${String(state.duels.length).padStart(5, `0`)}`,
-                first: duelBotOf(first, levelOf(first, asked.levels?.first)),
-                second: duelBotOf(second, levelOf(second, asked.levels?.second)),
-                kind: first.ownerName === second.ownerName ? `test` : `duel`,
-                startedBy: state.me?.kind === `user` ? state.me.name : `quinn`,
-                games: asked.games,
-                rated: asked.rated,
-                timeControl: asked.timeControl,
-                openingPlies: asked.openingPlies,
-                outcomes: [],
-                live: false,
-                status: `running`,
-            });
-            state.duels.push(duel);
-            await json(route, 201, duelDetailSchema.parse(duel));
             return;
         }
         if (path === `/api/games` && method === `POST`) {

@@ -14,10 +14,6 @@ import {
     challengeStatusSchema,
     discordNameMaxLength,
     duelCutReasons,
-    duelGameCounts,
-    duelGamesMax,
-    duelGamesOptions,
-    duelStopReasons,
     finishReasonSchema,
     firstPlayerSchema,
     nextPathMaxLength,
@@ -39,6 +35,7 @@ import {
     reportSubjectMaxLength,
     signupAttemptCap,
     tournamentOriginSchema,
+    tournamentEndReasonSchema,
     tournamentStatusSchema,
     valueCutMax,
 } from '@hexo-arena/contract';
@@ -236,8 +233,8 @@ export const bots = sqliteTable(
         // Set when a bot with rated games is deleted: the row stays so the
         // game log stays whole, under a deleted-<n> placeholder name.
         deletedAt: integer(`deleted_at`),
-        // The owner's switch, on the site alone: 0 keeps duels between
-        // this bot and another to those its owner starts.
+        // The owner's switch, on the site alone: 0 keeps the duels and round
+        // robins this bot plays to those its owner sets up.
         duelsByOthers: integer(`duels_by_others`).notNull().default(1),
         // The owner's text and source link, set on the site, each shown in
         // place of what the bot declares.
@@ -332,10 +329,6 @@ export const games = sqliteTable(
         // games it is; a game the drain cut replays under the same pair.
         pairingId: text(`pairing_id`).references((): AnySQLiteColumn => tournamentPairings.id, { onDelete: `cascade` }),
         pairingGame: integer(`pairing_game`),
-        // A duel game names its duel and its number in it; a game the
-        // drain cut replays under the same number.
-        duelId: text(`duel_id`).references((): AnySQLiteColumn => duels.id, { onDelete: `cascade` }),
-        duelGame: integer(`duel_game`),
     },
     (table) => [
         uniqueIndex(`games_finish_seq_idx`).on(table.finishSeq),
@@ -356,24 +349,17 @@ export const games = sqliteTable(
         index(`games_clock_finish_idx`).on(sql`${table.timeControl} ->> '$.mode'`, table.finishSeq),
         index(`games_opening_finish_idx`).on(sql`json_array_length(${table.openingCells})`, table.finishSeq),
         index(`games_finished_at_idx`).on(table.finishedAt),
-        // A tournament's or a duel's games, or games of neither, newest first.
-        // The unary plus on games of neither keeps the planner from reading
-        // a null through the pairing and duel indexes and sorting every hit.
+        // A tournament's games, or games of none, newest first.
+        // The unary plus on games of none keeps the planner from reading
+        // a null through the pairing index and sorting every hit.
         index(`games_tournament_finish_idx`).on(table.finishSeq).where(sql`${table.pairingId} is not null`),
-        index(`games_duels_finish_idx`).on(table.finishSeq).where(sql`${table.duelId} is not null`),
-        index(`games_no_event_finish_idx`).on(table.finishSeq).where(sql`+${table.duelId} is null and +${table.pairingId} is null`),
+        index(`games_no_event_finish_idx`).on(table.finishSeq).where(sql`+${table.pairingId} is null`),
         index(`games_pairing_idx`).on(table.pairingId, table.pairingGame),
-        index(`games_duel_idx`).on(table.duelId, table.duelGame),
         // A null makes an in-list unknown, which a check lets pass, so the
         // nullable values these checks pin are coalesced first.
         check(
             `games_pairing_check`,
             sql`(${table.pairingId} is null and ${table.pairingGame} is null) or (${table.pairingId} is not null and coalesce(${table.pairingGame}, 0) in (1, 2) and ${table.challengerBotId} is not null)`,
-        ),
-        // A duel game seats two bots and belongs to no tournament.
-        check(
-            `games_duel_check`,
-            sql`(${table.duelId} is null and ${table.duelGame} is null) or (${table.duelId} is not null and coalesce(${table.duelGame}, 0) between 1 and ${sql.raw(String(duelGamesMax))} and ${table.challengerBotId} is not null and ${table.pairingId} is null)`,
         ),
         // The label a guest session is minted with, and nothing that could find the guest again.
         check(`games_guest_name_check`, sql`${table.guestName} is null or ${table.guestName} glob 'Guest [a-z0-9][a-z0-9][a-z0-9][a-z0-9]'`),
@@ -394,7 +380,7 @@ export const games = sqliteTable(
         ),
         check(
             `games_unrated_by_choice_check`,
-            sql`${table.unratedByChoice} in (0, 1) and (${table.unratedByChoice} = 0 or ${table.duelId} is not null or ${table.pairingId} is not null or (${table.xLevel} is null and ${table.oLevel} is null and (${table.userId} is not null or ${table.challengerBotId} is not null)))`,
+            sql`${table.unratedByChoice} in (0, 1) and (${table.unratedByChoice} = 0 or ${table.pairingId} is not null or (${table.xLevel} is null and ${table.oLevel} is null and (${table.userId} is not null or ${table.challengerBotId} is not null)))`,
         ),
         check(
             `games_challenger_side_check`,
@@ -709,6 +695,7 @@ export const adminActions = sqliteTable(
         reason: text(`reason`).notNull(),
         at: integer(`at`).notNull(),
     },
+    // duel-stop names the stops of the duels of old, which older rows keep.
     (table) => [
         check(
             `admin_actions_action_check`,
@@ -761,6 +748,9 @@ const quoted = (values: readonly string[]) => sql.raw(values.map((value) => `'${
 // by the operator; a person's may be stopped, by its creator or as their
 // account goes, or cut short once fewer than two bots still play, which
 // end_reason says, end_bot_id naming the bot whose leaving cut it short.
+// A duel kept from the duels of old holds its d_ id and its ending: stopped
+// by the operator, or cut short for a reason only those duels had; it is
+// the one person's tournament that may be rated.
 // ended_at is set exactly once it is over.
 // A weekly rule's tournament names its rule, unique per start,
 // so no restart or clock step creates a week twice;
@@ -791,7 +781,7 @@ export const tournaments = sqliteTable(
         rated: integer(`rated`).notNull().default(1),
         test: integer(`test`).notNull().default(0),
         gamesPerPair: integer(`games_per_pair`).notNull().default(2),
-        endReason: text(`end_reason`, { enum: [`creator`, `banned`, `deleted`, `owner`, `missed`, `refused`, `tournament`, `delisted`] }),
+        endReason: text(`end_reason`, { enum: valuesOf(tournamentEndReasonSchema) }),
         endBotId: text(`end_bot_id`).references(() => bots.id, { onDelete: `set null` }),
         liveSlot: integer(`live_slot`),
     },
@@ -824,8 +814,11 @@ export const tournaments = sqliteTable(
             `tournaments_origin_check`,
             sql`(${table.origin} = 'operator' and ${table.createdBy} is null and ${table.status} not in ('stopped', 'cut_short')) or (${table.origin} = 'person' and ${table.ruleId} is null and ${table.status} not in ('scheduled', 'called_off'))`,
         ),
-        // Nothing one person picks every bot of is rated.
-        check(`tournaments_rated_check`, sql`${table.rated} in (0, 1) and (${table.origin} = 'operator') = (${table.rated} = 1)`),
+        // Nothing one person picks every bot of is rated; a duel rated under the duels of old stays so, over.
+        check(
+            `tournaments_rated_check`,
+            sql`${table.rated} in (0, 1) and ((${table.origin} = 'operator' and ${table.rated} = 1) or (${table.origin} = 'person' and (${table.rated} = 0 or (${table.maxEntrants} = 2 and ${table.status} in ('finished', 'stopped', 'cut_short')))))`,
+        ),
         check(`tournaments_test_check`, sql`${table.test} in (0, 1) and (${table.test} = 0 or ${table.origin} = 'person')`),
         check(
             `tournaments_games_per_pair_check`,
@@ -833,7 +826,7 @@ export const tournaments = sqliteTable(
         ),
         check(
             `tournaments_end_check`,
-            sql`(${table.status} in ('stopped', 'cut_short')) = (${table.endReason} is not null) and (${table.status} <> 'stopped' or ${table.endReason} in (${quoted(tournamentStopReasons)})) and (${table.status} <> 'cut_short' or ${table.endReason} in (${quoted(tournamentCutReasons)}))`,
+            sql`(${table.status} in ('stopped', 'cut_short')) = (${table.endReason} is not null) and (${table.status} <> 'stopped' or ${table.endReason} in (${quoted(tournamentStopReasons)})) and (${table.status} <> 'cut_short' or ${table.endReason} in (${quoted(tournamentCutReasons)}) or (${table.maxEntrants} = 2 and ${table.endReason} in (${quoted(duelCutReasons)})))`,
         ),
         check(`tournaments_end_bot_check`, sql`${table.endBotId} is null or ${table.status} = 'cut_short'`),
         check(
@@ -949,87 +942,6 @@ export const tournamentPairings = sqliteTable(
         check(`tournament_pairings_single_check`, sql`(${table.gamesPerPair} = 1) = (${table.game2} = 'none')`),
         // Game 2 waits for game 1 to be over.
         check(`tournament_pairings_order_check`, sql`${table.game2} in ('pending', 'none') or ${table.game1} not in ('pending', 'live')`),
-    ],
-);
-
-// Bots meet in a duel one game at a time: a single game, or pairs of one
-// opening played twice with the sides swapped. The pair is stored in one
-// fixed order, a below b, so one unique index over the two columns holds
-// a pair to one running duel; a_first keeps the order its starter named
-// them in. a_x is the lot: a plays x in game 1, and the sides alternate.
-// test is 1 when one person owns both bots: never rated, and alone in
-// taking more than ten games.
-// A level is a bot's declared level as it stood at the start, null at its
-// default; a rated duel has none.
-// The ratings and versions are each bot's at the start, for display; a
-// version is null for a bot that declared none.
-// A duel runs until every game is played, it is stopped, or a game cannot
-// start; end_reason says why it ended early, and end_bot which bot that names.
-export const duels = sqliteTable(
-    `duels`,
-    {
-        id: text(`id`).primaryKey(),
-        startedBy: text(`started_by`).references(() => users.id, { onDelete: `set null` }),
-        botAId: text(`bot_a_id`)
-            .notNull()
-            .references(() => bots.id, { onDelete: `cascade` }),
-        botBId: text(`bot_b_id`)
-            .notNull()
-            .references(() => bots.id, { onDelete: `cascade` }),
-        aFirst: integer(`a_first`).notNull(),
-        aX: integer(`a_x`).notNull(),
-        test: integer(`test`).notNull(),
-        games: integer(`games`).notNull(),
-        timeControl: text(`time_control`).notNull(),
-        openingPlies: integer(`opening_plies`).notNull(),
-        aLevel: text(`a_level`),
-        bLevel: text(`b_level`),
-        aRating: real(`a_rating`).notNull(),
-        bRating: real(`b_rating`).notNull(),
-        aVersion: text(`a_version`),
-        bVersion: text(`b_version`),
-        rated: integer(`rated`).notNull(),
-        status: text(`status`).notNull().default(`running`),
-        endReason: text(`end_reason`),
-        endBot: text(`end_bot`),
-        createdAt: integer(`created_at`).notNull(),
-        endedAt: integer(`ended_at`),
-    },
-    (table) => [
-        uniqueIndex(`duels_live_pair_idx`).on(table.botAId, table.botBId).where(sql`${table.status} = 'running'`),
-        // Leads with the foreign key, and serves the count of a person's duels a day.
-        index(`duels_started_by_created_idx`).on(table.startedBy, table.createdAt),
-        index(`duels_bot_a_idx`).on(table.botAId),
-        index(`duels_bot_b_idx`).on(table.botBId),
-        check(`duels_pair_check`, sql`${table.botAId} < ${table.botBId}`),
-        check(`duels_a_first_check`, sql`${table.aFirst} in (0, 1)`),
-        check(`duels_a_x_check`, sql`${table.aX} in (0, 1)`),
-        check(`duels_test_check`, sql`${table.test} in (0, 1)`),
-        check(
-            `duels_games_check`,
-            sql`${table.games} in (${sql.raw(duelGamesOptions.join(`, `))}) and (${table.test} = 1 or ${table.games} in (${sql.raw(duelGameCounts.join(`, `))}))`,
-        ),
-        check(`duels_time_control_check`, sql`json_valid(${table.timeControl})`),
-        check(`duels_opening_check`, sql`${table.openingPlies} in (1, 3, 5, 7, 9) and (${table.openingPlies} > 1 or ${table.games} <= 2)`),
-        check(`duels_a_level_check`, jsonObject(table.aLevel, seatLevelMax)),
-        check(`duels_b_level_check`, jsonObject(table.bLevel, seatLevelMax)),
-        check(`duels_rating_check`, sql`${table.aRating} >= 400 and ${table.bRating} >= 400`),
-        check(
-            `duels_version_check`,
-            sql`(${table.aVersion} is null or length(${table.aVersion}) between 1 and ${sql.raw(String(botVersionMaxLength))}) and (${table.bVersion} is null or length(${table.bVersion}) between 1 and ${sql.raw(String(botVersionMaxLength))})`,
-        ),
-        // Nothing one person holds on both sides is rated.
-        check(
-            `duels_rated_check`,
-            sql`${table.rated} in (0, 1) and (${table.rated} = 0 or (${table.test} = 0 and ${table.aLevel} is null and ${table.bLevel} is null))`,
-        ),
-        check(`duels_status_check`, sql`${table.status} in ('running', 'finished', 'cut_short', 'stopped')`),
-        check(
-            `duels_end_check`,
-            sql`(${table.status} = 'cut_short' and coalesce(${table.endReason}, '') in (${quoted(duelCutReasons)})) or (${table.status} = 'stopped' and coalesce(${table.endReason}, '') in (${quoted(duelStopReasons)})) or (${table.status} in ('running', 'finished') and ${table.endReason} is null)`,
-        ),
-        check(`duels_end_bot_check`, sql`${table.endBot} is null or (${table.endBot} in ('a', 'b') and ${table.status} in ('cut_short', 'stopped'))`),
-        check(`duels_ended_check`, sql`(${table.status} = 'running') = (${table.endedAt} is null)`),
     ],
 );
 

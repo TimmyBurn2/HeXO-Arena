@@ -1,25 +1,9 @@
 import { migrate } from 'drizzle-orm/better-sqlite3/migrator';
 import { drizzle } from 'drizzle-orm/better-sqlite3';
-import { cpSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { rmSync } from 'node:fs';
 import { afterEach, describe, expect, it } from 'vitest';
 import { openDatabase, runMigrations, type Sqlite } from '../src/db';
-
-const migrationsFolder = join(dirname(fileURLToPath(import.meta.url)), `../src/db/migrations`);
-
-// A copy of the migrations folder whose journal stops after `count`
-// entries, so a test can seed rows the way an older deploy left them.
-function migrationsUpTo(count: number): string {
-    const folder = mkdtempSync(join(tmpdir(), `hexo-arena-migrations-`));
-    cpSync(migrationsFolder, folder, { recursive: true });
-    const journalPath = join(folder, `meta/_journal.json`);
-    const journal = JSON.parse(readFileSync(journalPath, `utf8`)) as { entries: unknown[] };
-    journal.entries = journal.entries.slice(0, count);
-    writeFileSync(journalPath, JSON.stringify(journal));
-    return folder;
-}
+import { migrationsUpTo } from './migrations-folder';
 
 describe('the finish order migration', () => {
     let sqlite: Sqlite;
@@ -318,7 +302,7 @@ describe('the guest games migration', () => {
         expect(() => guest.run(`g4`, null, `Guest k3f9 and more`)).toThrow(/CHECK/);
         expect(() => guest.run(`g5`, null, null)).toThrow(/CHECK/);
         const indexes = sqlite.prepare(`select name from sqlite_master where type = 'index' and tbl_name = 'games' and name like 'games_%' order by name`).all();
-        expect(indexes).toHaveLength(19);
+        expect(indexes).toHaveLength(17);
     });
 });
 
@@ -606,6 +590,16 @@ describe('the involved analyzers migration', () => {
     });
 });
 
+// The last schema that held the duels table, which later tournaments of two took over.
+function migrateThroughDuels(sqlite: Sqlite): void {
+    const folder = migrationsUpTo(32);
+    try {
+        migrate(drizzle(sqlite), { migrationsFolder: folder });
+    } finally {
+        rmSync(folder, { recursive: true, force: true });
+    }
+}
+
 describe('the series migration', () => {
     let sqlite: Sqlite;
     let folder: string;
@@ -630,7 +624,7 @@ describe('the series migration', () => {
             insert into game_ratings (game_id, side, rating_before, rating_after, deviation_after) values ('rated', 'x', 1000, 1100, 300), ('rated', 'o', 1500, 1500, 500);
             insert into moves (game_id, seq, side, first_x, first_y, second_x, second_y, created_at) values ('chosen', 1, 'o', 1, 0, 0, 1, 2);
         `);
-        runMigrations(sqlite);
+        migrateThroughDuels(sqlite);
         expect(sqlite.prepare(`select id, unrated_by_choice as unrated, duel_id as duel from games order by id`).all()).toEqual([
             { id: `chosen`, unrated: 1, duel: null },
             { id: `rated`, unrated: 0, duel: null },
@@ -679,7 +673,7 @@ describe('the duels migration', () => {
             insert into game_ratings (game_id, side, rating_before, rating_after, deviation_after) values ('g1', 'x', 1500, 1510, 300), ('g1', 'o', 1500, 1490, 300);
             insert into admin_actions (actor, action, target, reason, at) values ('operator', 'series-stop', 's_npqrstuvwxyz', 'farming', 40), ('operator', 'pause', null, 'deploy', 41);
         `);
-        runMigrations(sqlite);
+        migrateThroughDuels(sqlite);
     }
 
     const insertDuel = (id: string, status: string, extra: Record<string, unknown> = {}) => {

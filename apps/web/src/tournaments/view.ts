@@ -108,8 +108,11 @@ export const tournamentListViews = [`yours`, `tests`] as const;
 
 export type TournamentListView = (typeof tournamentListViews)[number];
 
-/** The tournaments under Games, on one view when named. */
-export function gamesTournamentsPath(view: TournamentListView | null = null): string {
+/** The tournaments under Games, on one view and for one bot when named. */
+export function gamesTournamentsPath(view: TournamentListView | null = null, bot: string | null = null): string {
+    const params = new URLSearchParams();
+    if (bot !== null) params.set(`bot`, bot);
+    if (view !== null) params.set(`list`, view);
     const path = pagePath(`games-tournaments`, {});
-    return view === null ? path : `${path}?list=${view}`;
+    return params.size === 0 ? path : `${path}?${params.toString()}`;
 }

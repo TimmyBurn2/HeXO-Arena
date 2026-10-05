@@ -7,7 +7,6 @@ import {
     turnsOnBoard,
     type FinishReason,
     type GameHeadline,
-    type GameDuel,
     type GameTournament,
     type SeatLevel,
     type Side,
@@ -19,7 +18,7 @@ import { randomUUID } from 'node:crypto';
 import { replay, type Coord, type Position } from '@hexo-arena/rules';
 import { nowSeconds, type Query } from './db';
 import { alias } from 'drizzle-orm/sqlite-core';
-import { bots, duels, games, moves, tournamentPairings, tournaments, users } from './db/schema';
+import { bots, games, moves, tournamentPairings, tournaments, users } from './db/schema';
 import { seated } from './game-seats';
 import { applyFinishedGame, countedGameOf, ratable, ratesSomebody, seatColumns } from './rating-store';
 import { shownBot, shownUser, type ShownName } from './shown-names';
@@ -147,11 +146,14 @@ export function insertMove(
         .run();
 }
 
-/** What a bot game belongs to: a tournament's pairing, or a duel. */
-export type BotGameTag = { readonly kind: `pairing`; readonly id: string; readonly game: 1 | 2 } | { readonly kind: `duel`; readonly id: string; readonly game: number };
+/** The tournament pairing a bot game belongs to, and which of its two games it is. */
+export interface BotGameTag {
+    readonly pairingId: string;
+    readonly game: 1 | 2;
+}
 
 /**
- * A game between two bots: a challenge's, a tournament's, or a duel's.
+ * A game between two bots: a challenge's, or a tournament's.
  * The caller decides its seats' levels and its marks, as the contract's unratedByChoiceSchema and testMarkSchema define them.
  */
 export function insertBotGame(
@@ -187,7 +189,7 @@ export function insertBotGame(
             timeControl: JSON.stringify(game.timeControl),
             openingCells: JSON.stringify(game.opening),
             createdAt: nowSeconds(),
-            ...(tag === undefined ? {} : tag.kind === `pairing` ? { pairingId: tag.id, pairingGame: tag.game } : { duelId: tag.id, duelGame: tag.game }),
+            ...(tag === undefined ? {} : { pairingId: tag.pairingId, pairingGame: tag.game }),
         })
         .run();
     return id;
@@ -511,9 +513,8 @@ export function gameTournamentFrom(row: {
     });
 }
 
-// A game's tournament line: its format, round and game, the pair's opening
-// and its count where the pair plays other than one opening, and who set
-// up a person's.
+// A game's tournament line: its format, its round, its number among its
+// pair's games, each opening's two in turn, of how many, and who set up a person's.
 function gameTournamentOf(parts: GameTournamentParts): GameTournament | undefined {
     if (parts.game !== 1 && parts.game !== 2) return undefined;
     return {
@@ -521,8 +522,8 @@ function gameTournamentOf(parts: GameTournamentParts): GameTournament | undefine
         name: tournamentNameOf(parts),
         format: tournamentFormatOf(parts),
         round: parts.round,
-        game: parts.game,
-        ...(parts.gamesPerPair !== 2 ? { leg: parts.leg, of: parts.gamesPerPair } : {}),
+        game: (parts.leg - 1) * 2 + parts.game,
+        of: parts.gamesPerPair,
         ...(parts.origin === `person` ? { createdBy: creatorOf(parts) } : {}),
     };
 }
@@ -545,17 +546,6 @@ export function findGameTournament(query: Query, gameId: string): GameTournament
         .where(eq(games.id, gameId))
         .get();
     return row === undefined ? undefined : gameTournamentOf(row);
-}
-
-/** The duel a game belongs to, with its number and the duel's length. */
-export function findGameDuel(query: Query, gameId: string): GameDuel | undefined {
-    const row = query
-        .select({ id: duels.id, game: games.duelGame, of: duels.games })
-        .from(games)
-        .innerJoin(duels, eq(duels.id, games.duelId))
-        .where(eq(games.id, gameId))
-        .get();
-    return row?.game == null ? undefined : { id: row.id, game: row.game, of: row.of };
 }
 
 export function countBotBotGamesSince(query: Query, botId: string, sinceSeconds: number): number {

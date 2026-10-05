@@ -150,14 +150,15 @@ describe('AppShell', () => {
         await lit(`/ladder`, `Ladder`);
     });
 
-    it('take an old address of a duel, a tournament, or their lists on to the new one in place, its query kept', async () => {
+    it('take an old address of a duel, a tournament, or their lists on to the new one in place, its query read as the new page reads it', async () => {
         stubHealthOk();
         for (const [from, to] of [
-            [`/play/duels/d_abcdefghijkl`, `/duels/d_abcdefghijkl`],
+            [`/play/duels/d_abcdefghijkl`, `/tournaments/d_abcdefghijkl`],
+            [`/duels/d_abcdefghijkl`, `/tournaments/d_abcdefghijkl`],
             [`/tournaments`, `/games/tournaments`],
-            [`/duels`, `/games/duels`],
-            [`/play/duels?list=tests&bot=hextide`, `/games/duels?bot=hextide&list=tests`],
-            [`/play/duels?list=yours`, `/games/duels?list=yours`],
+            [`/duels`, `/games/tournaments`],
+            [`/games/duels?bot=hextide&list=tests`, `/games/tournaments?bot=hextide&list=tests`],
+            [`/play/duels?first=hextide&second=pebble&games=4`, `/play/tournament?bots=hextide%2Cpebble&games=4`],
         ] as const) {
             window.history.replaceState(null, ``, from);
             const before = window.history.length;
@@ -290,10 +291,8 @@ describe('AppShell', () => {
         render(<AppShell />);
         for (const path of [
             `/`,
-            `/play/duels`,
             `/play/tournament`,
             `/games`,
-            `/games/duels`,
             `/games/tournaments`,
             `/tournaments/t_wintercup202`,
             `/ladder`,

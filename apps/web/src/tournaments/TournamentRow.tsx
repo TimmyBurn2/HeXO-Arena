@@ -1,6 +1,6 @@
+import type { ReactNode } from 'react';
 import { clockText, deletedPlayerName, type TournamentPair, type TournamentSummary } from '@hexo-arena/contract';
-import { BotBadge, PlayerName } from '../components/player';
-import { glyphPairs } from '../duels/DuelRows';
+import { BotBadge } from '../components/player';
 import { pointsText, signed } from '../duels/words';
 import { Hex } from './Crosstable';
 import { cutWhy } from './DuelParts';
@@ -19,6 +19,9 @@ export function tournamentWhen(iso: string): string {
 
 const when = tournamentWhen;
 
+// A list row draws each game while the openings fit a glance; past it, the score alone.
+const glyphOpenings = 5;
+
 /** A tournament's tag: the weekly rated, a person's round robin unrated, or a test. */
 export function TournamentTag({ tournament }: { tournament: Pick<TournamentSummary, `rated` | `test`> }) {
     const tags = text.roundRobins.tags;
@@ -26,16 +29,18 @@ export function TournamentTag({ tournament }: { tournament: Pick<TournamentSumma
 }
 
 /**
- * One tournament as a list row: its name linking its page, its tag, the
- * facts its state calls for, the reader's own bot's part or that they set
- * it up, and an owner's way to enter one coming up; compact, as Play's
- * side holds it, the parts stack under the name.
+ * One tournament as a list row: a duel's or a round robin's under way or
+ * over, one link to its page in the duel row's frame, its facts, the
+ * reader's own bot's part or that they set it up, and its leaders' points
+ * or a duel's games as cells; one coming up named with its start, and an
+ * owner's way to enter it; compact, as Play's side holds it, the parts
+ * stack under the name.
  */
 export function TournamentRow({ tournament, owner = false, compact = false }: { tournament: TournamentSummary; owner?: boolean; compact?: boolean }) {
     const me = useMe();
     const viewer = me.status === `ready` && me.me?.kind === `user` ? me.me.name : null;
-    const setUp = tournament.origin === `person` && viewer !== null && tournament.createdBy === viewer;
     if (tournament.pair !== undefined) return <DuelRow tournament={tournament} pair={tournament.pair} viewer={viewer} />;
+    if (tournament.status !== `scheduled`) return <FieldRow tournament={tournament} viewer={viewer} />;
     return (
         <div className={compact ? `tournament-row tournament-row-compact` : `tournament-row`}>
             <span className="tournament-tag-row">
@@ -45,14 +50,10 @@ export function TournamentRow({ tournament, owner = false, compact = false }: { 
                 <TournamentTag tournament={tournament} />
             </span>
             <span className="tournament-row-facts">
-                <Facts tournament={tournament} />
+                {text.tournaments.starts(when(tournament.startsAt))}; {text.tournaments.entered(tournament.entrants, tournament.maxEntrants)}; {clockText(tournament.timeControl)}
             </span>
-            {tournament.yours !== undefined ? (
-                <span className="tournament-row-yours">{yoursText(tournament, tournament.yours)}</span>
-            ) : setUp ? (
-                <span className="tournament-row-yours">{text.roundRobins.lists.yourRole}</span>
-            ) : null}
-            {owner && tournament.status === `scheduled` && tournament.yours === undefined ? (
+            {tournament.yours === undefined ? null : <span className="tournament-row-yours">{yoursText(tournament, tournament.yours)}</span>}
+            {owner && tournament.yours === undefined ? (
                 <Link to={tournamentPagePath(tournament.id)} className="tournament-row-enter" ariaLabel={text.tournaments.enterBotIn(tournament.name)}>
                     {text.tournaments.enterBot}
                 </Link>
@@ -61,76 +62,75 @@ export function TournamentRow({ tournament, owner = false, compact = false }: { 
     );
 }
 
-function Winner({ tournament }: { tournament: TournamentSummary }) {
-    if (tournament.winner === null) return <>{text.tournaments.played(tournament.entrants)}</>;
-    return (
-        <>
-            {text.tournaments.played(tournament.entrants)};{` `}
-            {text.tournaments.winner(<PlayerName name={tournament.winner.name} kind="bot" deleted={tournament.winner.deleted} />)}
-            <BotBadge />{` `}
-            <span className="tournament-owner">{text.ladder.byOwner(<PlayerName name={tournament.winner.ownerName} kind="human" deleted={tournament.winner.ownerName === deletedPlayerName} />)}</span>
-        </>
-    );
+// How long ago a tournament ended, or began where it never ended, as every row of a list says it.
+function ago(tournament: TournamentSummary, now: number): string {
+    return text.time.ago(Math.max(0, Math.floor((now - Date.parse(tournament.endedAt ?? tournament.startsAt)) / 1000)));
 }
 
 // A test over reads as its page leads: the bot first in it against the rest, and the verdict.
-function TestLead({ lead }: { lead: NonNullable<TournamentSummary[`lead`]> }) {
+function testLead(lead: NonNullable<TournamentSummary[`lead`]>): string {
     const verdict = text.roundRobins.estimates.verdicts[verdictOf(lead.estimate)];
-    return <>{text.roundRobins.lists.testLead(lead.bot, signed(lead.estimate.rating), verdict)}</>;
+    return text.roundRobins.lists.testLead(lead.bot, signed(lead.estimate.rating), verdict);
 }
 
-function Facts({ tournament }: { tournament: TournamentSummary }) {
-    const clock = clockText(tournament.timeControl);
+// A round robin under way or over as a list row, the duel row's frame: its
+// name and tag, where it stands, its field, who set it up, and when it
+// ended; the reader's part; and its leaders' points of their games.
+function FieldRow({ tournament, viewer }: { tournament: TournamentSummary; viewer: string | null }) {
     const lists = text.roundRobins.lists;
+    const now = Date.now();
+    const person = tournament.origin === `person`;
+    const setUp = person && viewer !== null && tournament.createdBy === viewer;
     const lead = tournament.test ? tournament.lead : undefined;
+    const round = tournament.end?.round ?? null;
     // Who stopped it: its creator, unless the operator or the creator's ban or deletion did.
     const stopper = (tournament.end?.reason ?? `creator`) === `creator` ? tournament.createdBy : null;
-    const round = tournament.end?.round ?? null;
-    switch (tournament.status) {
-        case `scheduled`:
-            return (
-                <>
-                    {text.tournaments.starts(when(tournament.startsAt))}; {text.tournaments.entered(tournament.entrants, tournament.maxEntrants)}; {clock}
-                </>
-            );
-        case `running`:
-            return (
-                <>
-                    {tournament.round === null ? null : (
-                        <>
-                            <span className="tournament-row-live">{text.tournaments.roundLive(tournament.round.current, tournament.round.of)}</span>;{` `}
-                        </>
-                    )}
-                    {text.tournaments.played(tournament.entrants)}; {clock}
-                </>
-            );
-        case `finished`:
-            return (
-                <>
-                    {when(tournament.endedAt ?? tournament.startsAt)}; {lead === undefined ? <Winner tournament={tournament} /> : <TestLead lead={lead} />}
-                </>
-            );
-        case `stopped`:
-            return (
-                <>
-                    {when(tournament.endedAt ?? tournament.startsAt)}; {lead === undefined ? text.tournaments.played(tournament.entrants) : <TestLead lead={lead} />};{` `}
-                    {stopper === null ? lists.stopped(round) : lists.stoppedBy(stopper, round)}
-                </>
-            );
-        case `cut_short`:
-            return (
-                <>
-                    {when(tournament.endedAt ?? tournament.startsAt)}; {lead === undefined ? text.tournaments.played(tournament.entrants) : <TestLead lead={lead} />}; {lists.cutShort(round)}
-                </>
-            );
-        case `called_off`:
-        case `canceled`:
-            return (
-                <>
-                    {when(tournament.startsAt)}; {text.tournaments.outcomeInLine[tournament.status]}
-                </>
-            );
-    }
+    const field = tournament.gamesPerPair === 2 ? text.tournaments.played(tournament.entrants) : lists.field(tournament.entrants, tournament.gamesPerPair);
+    const state =
+        tournament.status === `running`
+            ? tournament.round === null
+                ? null
+                : text.tournaments.roundLive(tournament.round.current, tournament.round.of)
+            : tournament.status === `stopped`
+              ? stopper === null
+                  ? lists.stopped(round)
+                  : lists.stoppedBy(stopper, round)
+              : tournament.status === `cut_short`
+                ? lists.cutShort(round)
+                : tournament.status === `called_off` || tournament.status === `canceled`
+                  ? text.tournaments.outcomeInLine[tournament.status]
+                  : null;
+    const yours = tournament.yours !== undefined ? yoursText(tournament, tournament.yours) : setUp ? lists.yourRole : null;
+    return (
+        <Link to={tournamentPagePath(tournament.id)} className="duel-row">
+            <span className="duel-row-who tournament-tag-row">
+                <span className="event-row-name">{tournament.name}</span>
+                <TournamentTag tournament={tournament} />
+            </span>
+            <span className="duel-row-facts">
+                {state === null ? null : <span className={tournament.status === `running` ? `duel-row-live` : undefined}>{state}</span>}
+                {lead === undefined ? null : <span>{testLead(lead)}</span>}
+                <span>{field}</span>
+                <span>{person ? lists.setUpBy(tournament.createdBy ?? deletedPlayerName) : lists.weekly}</span>
+                {tournament.status === `running` ? null : <span>{ago(tournament, now)}</span>}
+            </span>
+            {yours === null ? null : <span className="event-row-yours">{yours}</span>}
+            {tournament.leaders === undefined ? null : <LeadersFigure tournament={tournament} leaders={tournament.leaders} />}
+        </Link>
+    );
+}
+
+// The leaders' points of their games, and who leads, won, or led when it ended early.
+function LeadersFigure({ tournament, leaders }: { tournament: TournamentSummary; leaders: NonNullable<TournamentSummary[`leaders`]> }) {
+    const lists = text.roundRobins.lists;
+    const names = leaders.bots.map((bot) => bot.name);
+    const sub = tournament.status === `running` ? lists.leads(names) : tournament.status === `finished` ? lists.won(names) : lists.led(names);
+    return (
+        <span className="event-figure">
+            <span className="event-figure-main">{lists.figure(leaders.points, leaders.games)}</span>
+            <span className="event-figure-sub">{sub}</span>
+        </span>
+    );
 }
 
 // A duel's score, the leader's points first, as its row says it.
@@ -140,8 +140,15 @@ function pairScore(pair: TournamentPair): string {
     return text.duels.row.score(String(high), String(low));
 }
 
-// Where a duel stands, as its row says it.
-function pairState(tournament: TournamentSummary, pair: TournamentPair): string {
+/** Who leads a duel by how much, or that it stands level. */
+export function pairStanding(pair: TournamentPair): string {
+    const words = text.duels.page.status;
+    const leader = pair.first.points === pair.second.points ? null : pair.first.points > pair.second.points ? pair.first : pair.second;
+    return leader === null ? words.level(pairScore(pair)) : words.leads(leader.name, pairScore(pair));
+}
+
+/** Where a duel stands, as a list row says it: the game live or next, or how it ended and the score. */
+export function pairState(tournament: Pick<TournamentSummary, `status` | `end`>, pair: TournamentPair): string {
     const words = text.duels.row;
     const of = pair.games.length;
     const score = pairScore(pair);
@@ -167,38 +174,50 @@ function pairState(tournament: TournamentSummary, pair: TournamentPair): string 
 }
 
 // A duel as a list row, one link to its page: the two bots, where it
-// stands, unrated or a test, who set it up, and its games as cells while
-// they fit a glance, else the score; a test over leads with its estimate.
+// stands, unrated or a test, who set it up, and when it ended; the
+// reader's part; and its games as cells while they fit a glance, else the
+// score; a test over leads with its estimate.
 function DuelRow({ tournament, pair, viewer }: { tournament: TournamentSummary; pair: TournamentPair; viewer: string | null }) {
     const words = text.duels.row;
+    const lists = text.roundRobins.lists;
     const running = tournament.status === `running`;
     const lead = tournament.test ? tournament.lead : undefined;
     const estimate = lead === undefined ? null : text.duels.row.estimate(lead.bot, signed(lead.estimate.rating), text.roundRobins.estimates.verdicts[verdictOf(lead.estimate)]);
-    const glyphs = !tournament.test && Math.ceil(pair.games.length / 2) <= glyphPairs;
+    const glyphs = !tournament.test && Math.ceil(pair.games.length / 2) <= glyphOpenings;
     const now = Date.now();
-    const creator = tournament.createdBy ?? deletedPlayerName;
+    const setUp = viewer !== null && viewer === tournament.createdBy;
+    const yours = tournament.yours !== undefined ? yoursText(tournament, tournament.yours) : setUp ? lists.yourRole : null;
     return (
         <Link to={tournamentPagePath(tournament.id)} className="duel-row">
-            <span className="duel-row-who">
-                <PlayerName name={pair.first.name} kind="bot" deleted={pair.first.deleted} />
-                <BotBadge />
-                <span className="duel-row-vs">{words.vs}</span>
-                <PlayerName name={pair.second.name} kind="bot" deleted={pair.second.deleted} />
-                <BotBadge />
-                {tournament.test ? <span className="tag muted">{words.test}</span> : null}
-            </span>
+            <PairWho pair={pair}>{tournament.test ? <span className="tag muted">{words.test}</span> : null}</PairWho>
             <span className="duel-row-facts">
                 {estimate === null ? <span className={running ? `duel-row-live` : undefined}>{pairState(tournament, pair)}</span> : <span>{estimate}</span>}
                 {tournament.test ? null : <span>{words.unrated}</span>}
-                <span>{viewer !== null && viewer === tournament.createdBy ? text.roundRobins.lists.yourRole : words.startedBy(creator)}</span>
-                {tournament.endedAt === undefined ? null : <span>{text.time.ago(Math.max(0, Math.floor((now - Date.parse(tournament.endedAt)) / 1000)))}</span>}
+                <span>{lists.setUpBy(tournament.createdBy ?? deletedPlayerName)}</span>
+                {running ? null : <span>{ago(tournament, now)}</span>}
             </span>
+            {yours === null ? null : <span className="event-row-yours">{yours}</span>}
             {glyphs ? (
                 <PairGlyphs pair={pair} />
             ) : (
                 <span className="duel-figure">{lead === undefined ? text.duels.row.score(String(pair.first.points), String(pair.second.points)) : text.duels.row.score(pointsText(lead.estimate.points.first), pointsText(lead.estimate.points.second))}</span>
             )}
         </Link>
+    );
+}
+
+/** A duel's two bots as a list row names them: plain names, since the row is one link to the duel. */
+export function PairWho({ pair, children }: { pair: TournamentPair; children?: ReactNode }) {
+    const name = (bot: TournamentPair[`first`]) => <span className={bot.deleted === true ? `deleted-name` : undefined}>{bot.name}</span>;
+    return (
+        <span className="duel-row-who">
+            {name(pair.first)}
+            <BotBadge />
+            <span className="duel-row-vs">{text.duels.row.vs}</span>
+            {name(pair.second)}
+            <BotBadge />
+            {children}
+        </span>
     );
 }
 

@@ -15,7 +15,7 @@ import { useAsync } from '../api/use-async';
 import { BotBadge, PlayerName } from '../components/player';
 import { ErrorFrame, SkeletonRows } from '../components/states';
 import { TopbarPanel, usePanel } from '../components/TopbarPanel';
-import { DuelPick, duelWords, RoundPick, TournamentPick, tournamentWords, useEventNames, type EventNames } from '../games/EventPick';
+import { RoundPick, TournamentPick, tournamentWords, useEventName, type EventName } from '../games/EventPick';
 import { Choice, NameField } from '../games/Fields';
 import { gamesPathOf, pagePathOf, searchOf, shownKeys, viewOf, withFilter, type FilterKey, type GameFilters, type GamesView } from '../games/filters';
 import { useShowTests } from '../games/show-tests';
@@ -31,7 +31,7 @@ const resultOptions = [`won`, `lost`, `none`] as const;
 const sideOptions = [`x`, `o`] as const;
 const clockOptions = [`turn`, `match`, `unlimited`] as const;
 const kindOptions = [`bot-bot`, `human-bot`, `guest-bot`] as const;
-const eventOptions = [`duel`, `tournament`, `none`] as const;
+const eventOptions = [`tournament`, `none`] as const;
 const openingOptions = [`1`, `3`, `5`, `7`, `9`] as const;
 
 /** A list's page, a name no player holds, or a read that failed. */
@@ -133,7 +133,7 @@ export function GamesScreen() {
         setSeekBefore(true);
     }
 
-    const named = useEventNames(filters);
+    const named = useEventName(filters);
     const fields = { filters, set };
     const counted = shownKeys(filters).filter((key) => key !== `player`).length;
     return (
@@ -227,8 +227,8 @@ function PlayerField({ filters, set }: FieldsProps) {
 
 // Against, Side, and a won or lost result read from a player's seat, so they wait for one;
 // a game without a winner needs none.
-// Once Played in names a duel or a tournament, one of them can be picked, and a tournament's round.
-function FilterFields({ filters, set, tests, named }: FieldsProps & { tests: boolean; named: EventNames }) {
+// Once Played in names a tournament, one can be picked, a duel among them, and its round.
+function FilterFields({ filters, set, tests, named }: FieldsProps & { tests: boolean; named: EventName }) {
     const alone = filters.player === undefined;
     const results = alone ? ([`none`] as const) : resultOptions;
     return (
@@ -307,30 +307,20 @@ function FilterFields({ filters, set, tests, named }: FieldsProps & { tests: boo
                     set(`event`, value);
                 }}
             />
-            {filters.event === `duel` ? (
-                <DuelPick
-                    value={filters.duel}
-                    named={named.duel}
-                    tests={tests}
-                    onChange={(value) => {
-                        set(`duel`, value);
-                    }}
-                />
-            ) : null}
             {filters.event === `tournament` ? (
                 <TournamentPick
                     value={filters.tournament}
-                    named={named.tournament}
+                    named={named}
                     tests={tests}
                     onChange={(value) => {
                         set(`tournament`, value);
                     }}
                 />
             ) : null}
-            {filters.tournament !== undefined && named.tournament !== null && named.tournament !== `gone` && named.tournament.rounds > 0 ? (
+            {filters.tournament !== undefined && named !== null && named !== `gone` && named.rounds > 1 ? (
                 <RoundPick
                     value={filters.round}
-                    rounds={named.tournament.rounds}
+                    rounds={named.rounds}
                     onChange={(value) => {
                         set(`round`, value);
                     }}
@@ -363,7 +353,7 @@ function FilterFields({ filters, set, tests, named }: FieldsProps & { tests: boo
 }
 
 /** A filter as its chip and the no-match sentence name it. */
-function chipOf(key: FilterKey, filters: GameFilters, named: EventNames): string {
+function chipOf(key: FilterKey, filters: GameFilters, named: EventName): string {
     const chips = text.games.chips;
     switch (key) {
         case `player`:
@@ -382,10 +372,8 @@ function chipOf(key: FilterKey, filters: GameFilters, named: EventNames): string
             return filters.kind === undefined ? `` : chips.kinds[filters.kind];
         case `event`:
             return filters.event === undefined ? `` : chips.events[filters.event];
-        case `duel`:
-            return duelWords(named.duel);
         case `tournament`:
-            return tournamentWords(named.tournament);
+            return tournamentWords(named);
         case `round`:
             return chips.round(Number(filters.round));
         case `opening`:
@@ -399,7 +387,7 @@ function chipOf(key: FilterKey, filters: GameFilters, named: EventNames): string
 
 // A removed chip hands the keyboard to the chip that takes its place, or
 // to the player field once none is left; the one event chosen clears back to its kind.
-function Chips({ filters, named }: { filters: GameFilters; named: EventNames }) {
+function Chips({ filters, named }: { filters: GameFilters; named: EventName }) {
     const keys = shownKeys(filters);
     const group = useRef<HTMLDivElement>(null);
     const [refocus, setRefocus] = useState<number | null>(null);
@@ -447,7 +435,7 @@ function Chips({ filters, named }: { filters: GameFilters; named: EventNames }) 
     );
 }
 
-function Body({ load, named, onRetry, onPickBefore, onTurn }: { load: Load; named: EventNames; onRetry: () => void; onPickBefore: () => void; onTurn: () => void }) {
+function Body({ load, named, onRetry, onPickBefore, onTurn }: { load: Load; named: EventName; onRetry: () => void; onPickBefore: () => void; onTurn: () => void }) {
     switch (load.kind) {
         case `loading`:
             return <SkeletonRows />;
@@ -476,7 +464,7 @@ function ClearAction({ to = `/games`, label = text.games.clear }: { to?: string;
     );
 }
 
-function Results({ page, view, named, now, onPickBefore, onTurn }: { page: FinishedGamesPage; view: GamesView; named: EventNames; now: number; onPickBefore: () => void; onTurn: () => void }) {
+function Results({ page, view, named, now, onPickBefore, onTurn }: { page: FinishedGamesPage; view: GamesView; named: EventName; now: number; onPickBefore: () => void; onTurn: () => void }) {
     const { filters } = view;
     const keys = shownKeys(filters);
     if (page.games.length === 0) {

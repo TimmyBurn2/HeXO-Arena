@@ -9,7 +9,6 @@ import { users } from './db/schema';
 import type { GameRegistry } from './game-registry';
 import { deleteUser, liveBotIdsOf, type UserDeletion } from './moderation';
 import type { PresenceRegistry } from './presence';
-import type { DuelRunner } from './duel-runner';
 import type { TournamentScheduler } from './tournament-scheduler';
 import { daySeconds } from './utc-day';
 
@@ -19,7 +18,6 @@ export interface BotWithdrawalDeps {
     presence: Pick<PresenceRegistry, `close`>;
     challenges: Pick<ChallengeRegistry, `withdrawFor`>;
     tournaments: Pick<TournamentScheduler, `withdraw`>;
-    duels: Pick<DuelRunner, `endForBot`>;
     analysis: { withdraw: (botId: string) => void };
 }
 
@@ -27,15 +25,13 @@ export interface BotWithdrawalDeps {
 export type BotWithdrawal = `delisted` | `banned` | `deleted`;
 
 /**
- * Takes a bot out of its duels, challenges, tournaments, and analysis.
+ * Takes a bot out of its challenges, tournaments, and analysis.
  * A delisted bot keeps its stream and live games; a banned one loses its
  * stream, so its live games forfeit on the clock, rated, as a ban grants
  * no unrated escape; a deleted one's live games end unrated.
  * Answers how many live games it aborted.
  */
 export function withdrawBot(deps: BotWithdrawalDeps, botId: string, reason: BotWithdrawal): number {
-    // Ended before the abort, so the duel names the reason rather than the abort.
-    deps.duels.endForBot(botId, reason);
     const aborted = reason === `deleted` ? deps.games.abortForBot(botId) : 0;
     if (reason !== `delisted`) deps.presence.close(botId);
     deps.analysis.withdraw(botId);
@@ -53,7 +49,7 @@ export interface ErasureDeps extends BotWithdrawalDeps {
 /**
  * Deletes a user inside the caller's transaction: their own and their
  * bots' live games end unrated, their bots leave the streams, challenges,
- * tournaments, and duels, and the account goes under the deletion policy.
+ * and tournaments, and the account goes under the deletion policy.
  * An operator's or a person's own deletion is no one's fault at the board,
  * and a clean delete would take the game rows away from under the registry.
  */

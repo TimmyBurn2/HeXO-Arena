@@ -179,14 +179,14 @@ for (const width of [1280, 390, 320]) {
         if (width === 1280) expect(Math.round(itemBox.height)).toBe(68);
         const axe = await new AxeBuilder({ page }).withRules([`target-size`]).analyze();
         expect(axe.violations.flatMap((violation) => violation.nodes.map((node) => node.target))).toEqual([]);
-        await expect(page.getByRole(`link`, { name: `Duel, game 3 of 10` })).toHaveAttribute(`href`, /^\/duels\/d_/u);
+        await expect(page.getByRole(`link`, { name: `Duel, game 3 of 10` })).toHaveAttribute(`href`, `/tournaments/t_brunoduel001`);
         expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
         await caption.click();
         await expect(page).toHaveURL(/\/tournaments\/t_autumnrobin1$/u);
     });
 }
 
-test('Played in narrows the list to a tournament\'s games, a duel\'s, or neither, and its chip clears it', async ({ page }) => {
+test('Played in narrows the list to the games of a tournament, a duel among them, or of none, and its chip clears it', async ({ page }) => {
     await page.setViewportSize({ width: 1280, height: 900 });
     const look = looks[0];
     if (look === undefined) throw new Error(`no look registered`);
@@ -196,12 +196,12 @@ test('Played in narrows the list to a tournament\'s games, a duel\'s, or neither
     await page.locator(`.game-row`).first().waitFor();
     await page.getByRole(`button`, { name: `Filters`, exact: true }).click();
     await page.getByLabel(`Played in`).selectOption(`tournament`);
-    await expect(page.locator(`.game-row`)).toHaveCount(tournamentGameRows.length);
+    await expect(page.locator(`.game-row`)).toHaveCount([...tournamentGameRows, ...duelGameRows].filter((game) => game.test !== true).length);
     expect(search(page)).toBe(`?event=tournament`);
     await page.getByLabel(`Played in`).selectOption(`none`);
     await expect(page.locator(`.game-row-evented`)).toHaveCount(0);
     await page.keyboard.press(`Escape`);
-    await page.getByRole(`button`, { name: `Remove no duel or tournament` }).click();
+    await page.getByRole(`button`, { name: `Remove in no tournament` }).click();
     expect(search(page)).toBe(``);
     await expect(page.locator(`.game-row-evented`)).not.toHaveCount(0);
 });

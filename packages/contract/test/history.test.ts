@@ -39,33 +39,32 @@ describe('finishedGamesQuerySchema', () => {
             opening: `5`,
             before: `2026-10-01`,
             analyzed: `1`,
-            event: `duel`,
+            event: `tournament`,
             page: `3`,
         });
-        expect(parsed).toMatchObject({ player: `hextide`, opening: `5`, event: `duel`, page: `3` });
+        expect(parsed).toMatchObject({ player: `hextide`, opening: `5`, event: `tournament`, page: `3` });
     });
 
-    it('takes games of a duel, of a tournament, or of neither, with no player needed', () => {
-        for (const event of [`duel`, `tournament`, `none`] as const) expect(finishedGamesQuerySchema.parse({ event })).toEqual({ event });
+    it('takes games of a tournament or of none, with no player needed', () => {
+        for (const event of [`tournament`, `none`] as const) expect(finishedGamesQuerySchema.parse({ event })).toEqual({ event });
     });
 
-    it('takes one duel, or one tournament and one of its rounds, beside the kind named and every other filter', () => {
-        expect(finishedGamesQuerySchema.parse({ duel: `d_abcdefghijkl` })).toEqual({ duel: `d_abcdefghijkl` });
-        expect(finishedGamesQuerySchema.parse({ event: `duel`, duel: `d_abcdefghijkl`, player: `hextide`, result: `won`, tests: `1` })).toMatchObject({ duel: `d_abcdefghijkl` });
+    it('takes one tournament, a duel kept from the duels of old by its d_ id, and one of its rounds, beside every other filter', () => {
+        expect(finishedGamesQuerySchema.parse({ tournament: `d_abcdefghijkl` })).toEqual({ tournament: `d_abcdefghijkl` });
+        expect(finishedGamesQuerySchema.parse({ event: `tournament`, tournament: `d_abcdefghijkl`, player: `hextide`, result: `won`, tests: `1` })).toMatchObject({ tournament: `d_abcdefghijkl` });
         expect(finishedGamesQuerySchema.parse({ tournament: `t_autumnrobin1`, round: `2` })).toEqual({ tournament: `t_autumnrobin1`, round: `2` });
         expect(finishedGamesQuerySchema.parse({ event: `tournament`, tournament: `t_autumnrobin1`, round: `12`, side: `x`, player: `hextide` })).toMatchObject({ round: `12` });
     });
 
     it.each([
         [{ round: `2` }],
-        [{ duel: `d_abcdefghijkl`, tournament: `t_autumnrobin1` }],
-        [{ duel: `d_abcdefghijkl`, event: `tournament` }],
-        [{ duel: `d_abcdefghijkl`, event: `none` }],
-        [{ tournament: `t_autumnrobin1`, event: `duel` }],
+        [{ duel: `d_abcdefghijkl` }],
+        [{ event: `duel` }],
+        [{ tournament: `t_autumnrobin1`, event: `none` }],
         [{ tournament: `t_autumnrobin1`, round: `0` }],
         [{ tournament: `t_autumnrobin1`, round: `02` }],
         [{ tournament: `t_autumnrobin1`, round: `100` }],
-        [{ duel: `s_abcdefghijkl` }],
+        [{ tournament: `s_abcdefghijkl` }],
         [{ tournament: `autumn` }],
     ])('refuses %j, an event that is not one or a round of no tournament', (filters) => {
         expect(finishedGamesQuerySchema.safeParse(filters).success).toBe(false);
@@ -121,10 +120,12 @@ describe('finishedGamesPageSchema', () => {
         expect(finishedGamesPageSchema.safeParse({ ...page, record: { ...record, asO: { games: 20, won: 10 } } }).success).toBe(false);
     });
 
-    it('names the tournament a game belongs to, its round, and which of the pairing\'s two games it is', () => {
-        const tournament = { id: `t_autumnrobin1`, name: `Autumn round robin`, format: `round_robin`, round: 2, game: 1 };
+    it('names the tournament a game belongs to, its round, and which of its pair\'s games it is', () => {
+        const tournament = { id: `t_autumnrobin1`, name: `Autumn round robin`, format: `round_robin`, round: 2, game: 1, of: 2 };
         expect(finishedGameEntrySchema.parse({ ...entry, tournament }).tournament).toEqual(tournament);
-        expect(finishedGameEntrySchema.safeParse({ ...entry, tournament: { ...tournament, game: 3 } }).success).toBe(false);
+        expect(finishedGameEntrySchema.safeParse({ ...entry, tournament: { ...tournament, game: 51 } }).success).toBe(false);
+        expect(finishedGameEntrySchema.safeParse({ ...entry, duel: { id: `d_abcdefghjkmn`, game: 1, of: 2 } }).success).toBe(true);
+        expect(finishedGameEntrySchema.parse({ ...entry, duel: { id: `d_abcdefghjkmn`, game: 1, of: 2 } })).not.toHaveProperty(`duel`);
     });
 
     it('counts the finished community readings of a game, at most two', () => {
@@ -142,7 +143,7 @@ describe('listFinishedGames in the document', () => {
         expect(operation?.operationId).toBe(`listFinishedGames`);
         expect(operation?.security).toEqual([]);
         const names = (operation?.parameters ?? []).map((parameter) => (`name` in parameter ? parameter.name : ``));
-        expect(names.sort()).toEqual([`analyzed`, `before`, `clock`, `duel`, `event`, `kind`, `opening`, `page`, `player`, `reason`, `result`, `round`, `side`, `tests`, `tournament`, `vs`]);
+        expect(names.sort()).toEqual([`analyzed`, `before`, `clock`, `event`, `kind`, `opening`, `page`, `player`, `reason`, `result`, `round`, `side`, `tests`, `tournament`, `vs`]);
         expect(Object.keys(operation?.responses ?? {}).sort()).toEqual([`200`, `400`, `404`, `429`]);
     });
 });

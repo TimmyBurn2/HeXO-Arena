@@ -20,21 +20,6 @@ import {
     botsPath,
     createBotRequestSchema,
     createGameRequestSchema,
-    createDuelRequestSchema,
-    duelBotStatesSchema,
-    duelBotsPath,
-    duelDetailSchema,
-    duelListPath,
-    duelListQuerySchema,
-    duelListSchema,
-    duelPath,
-    duelExportPath,
-    duelStopPath,
-    type CreateDuelRequest,
-    type DuelBotState,
-    type DuelDetail,
-    type DuelList,
-    type DuelListQuery,
     finishedGamesPageSchema,
     finishedGamesPath,
     finishedGamesQuerySchema,
@@ -72,6 +57,8 @@ import {
     type LiveGameEntry,
     type Me,
     type Signup,
+    tournamentBotsPath,
+    tournamentBotStatesSchema,
     tournamentDetailSchema,
     tournamentEntryPath,
     tournamentEntrySchema,
@@ -84,6 +71,7 @@ import {
     createTournamentRequestSchema,
     tournamentListQuerySchema,
     type CreateTournamentRequest,
+    type TournamentBotState,
     type TournamentListQuery,
     type TournamentDetail,
     type TournamentEntry,
@@ -424,34 +412,7 @@ export function fetchRatingHistory(name: string, range: RatingRange): Promise<Ra
     return getJson(`${ratingHistoryPath.replace(`{name}`, encodeURIComponent(name))}?range=${range}`, ratingHistorySchema);
 }
 
-/** Running duels and the latest over, filtered as the query asks. */
-export function fetchDuels(query: DuelListQuery = {}): Promise<DuelList> {
-    const search = new URLSearchParams(Object.entries(duelListQuerySchema.parse(query)).filter((entry): entry is [string, string] => entry[1] !== undefined));
-    const tail = search.size === 0 ? `` : `?${search.toString()}`;
-    return getJson(`${duelListPath}${tail}`, duelListSchema);
-}
-
-/** One duel as its page reads it. */
-export function fetchDuel(id: string): Promise<DuelDetail> {
-    return getJson(duelPath.replace(`{id}`, encodeURIComponent(id)), duelDetailSchema);
-}
-
-/** Where a duel's or a test's finished games download, as one zip. */
-export function duelExportUrl(id: string): string {
-    return duelExportPath.replace(`{id}`, encodeURIComponent(id));
-}
-
-/** Every listed bot's switch for duels by others and the bots it duels now. */
-export function fetchDuelBots(): Promise<DuelBotState[]> {
-    return getJson(duelBotsPath, duelBotStatesSchema);
-}
-
-/** Start a duel or a test between two bots; the answer is the duel. */
-export function createDuel(request: CreateDuelRequest): Promise<DuelDetail> {
-    return sendJson(duelListPath, `POST`, createDuelRequestSchema.parse(request), duelDetailSchema);
-}
-
-/** Stop a running duel: no further game starts, and the live one plays on. */
-export function stopDuel(id: string): Promise<DuelDetail> {
-    return sendJson(duelStopPath.replace(`{id}`, encodeURIComponent(id)), `POST`, {}, duelDetailSchema);
+/** Every listed bot's switch for duels by others and the duels and round robins it plays now. */
+export function fetchTournamentBots(): Promise<TournamentBotState[]> {
+    return getJson(tournamentBotsPath, tournamentBotStatesSchema);
 }

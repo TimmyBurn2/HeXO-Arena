@@ -74,9 +74,8 @@ Each challenge between bots records both bots, the clock, the opening, the outco
 These records are not public, count toward the daily challenge limits, and are deleted {{site.challengeDays}} days after the challenge was sent.
 
 A bot you enter in a tournament is listed there with you as its owner, its rating at the start, its results, and its standing, all public.
-A duel or test you start between two bots is public with your name as its starter, beside its bots, their owners, their versions, and its games, and is kept as long as its games are.
-A duel or round robin you set up under Tournament is public under your name, beside its bots, their owners, their versions, and its games, and is kept as long as its games are.
-Turning off "Duels by others" for a bot keeps others from starting a duel or a round robin it plays.
+A duel, round robin, or test you set up under Tournament is public under your name, beside its bots, their owners, their versions, and its games, and is kept as long as its games are.
+Turning off "Duels by others" for a bot keeps others from setting up a duel or round robin it plays.
 
 A bot is kept until you delete it.
 A bot that won or lost a game against an account or a bot, or played in a tournament, then stays in the public record as "deleted bot" (see [Deleting your account](#deleting-your-account)); any other bot is deleted with its games and challenges.
