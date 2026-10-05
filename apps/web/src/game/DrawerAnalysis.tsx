@@ -11,6 +11,7 @@ import { BoardToggles } from '../board/BoardToggles';
 import { DiscordButton } from '../components/DiscordButton';
 import { BotBadge, seatName, Swatch } from '../components/player';
 import { nextUtcDay } from '../analysis/readings';
+import type { MeState } from '../me';
 import { text } from '../text';
 import { involvedNote, type AnalysesState, type AnalysisHeadState, type ReadingChoice, type RequestCard, type RequestRefusal } from './game-analyses';
 import './DrawerAnalysis.css';
@@ -22,6 +23,12 @@ const severities = [`inaccuracy`, `mistake`, `blunder`] as const satisfies reado
 
 /** Who the person is, as far as asking for a reading goes. */
 export type Asker = { readonly kind: `unknown` } | { readonly kind: `signed-out` } | { readonly kind: `user`; readonly left: number };
+
+/** Who may ask for a reading: a signed-in user, with the day's requests left; anyone else signs in first, once the session is known. */
+export function askerOf(me: MeState): Asker {
+    if (me.status === `loading`) return { kind: `unknown` };
+    return me.me?.kind === `user` ? { kind: `user`, left: me.me.analysisLeft.games } : { kind: `signed-out` };
+}
 
 /**
  * The Moves tab's head on a finished game: the readings to pick from, who read the one shown,
