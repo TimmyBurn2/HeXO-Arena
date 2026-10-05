@@ -101,23 +101,33 @@ export function cutWhy(detail: Pick<TournamentDetail, `end`>): string {
     }
 }
 
+// How a duel over stands: who won it, or led it when it ended early, by how much, or that it ended level.
+function ended(view: DuelView, finished: boolean): string {
+    const leader = leaderOf(view);
+    if (leader === null) return text.duels.page.status.level(scoreLine(view));
+    return (finished ? text.drawer.duelWon : text.drawer.duelLed)(view[leader].bot, scoreLine(view));
+}
+
 /**
  * How a duel stands, as a game's drawer says it beside the game's place:
- * who leads and by how much, or a test's estimate so far; null for any
- * other tournament, and before a game is over.
+ * who leads and by how much, or a test's estimate so far, and once it is
+ * over, how it ended; null for any other tournament, and before a game is
+ * over.
  */
 export function duelLead(detail: TournamentDetail): string | null {
     const view = duelViewOf(detail);
     if (view === null || !view.games.some(overGame)) return null;
+    const running = detail.status === `running`;
+    const words = text.drawer;
     const estimate = detail.estimates?.find((each) => each.key === view.first.key)?.estimate;
     if (view.kind === `test` && estimate !== undefined && estimate.favored !== null) {
         const lead = estimate.favored;
-        if (sweptBy(estimate) === lead) return text.drawer.testSwept(view[lead].bot, estimate.games);
+        if (sweptBy(estimate) === lead) return (running ? words.testSwept : words.testSweptOver)(view[lead].bot, estimate.games);
         const rating = lead === `first` ? estimate.rating : -estimate.rating;
         const score = text.duels.row.score(pointsText(estimate.points[lead]), pointsText(estimate.points[otherSide(lead)]));
-        return text.drawer.testSoFar(view[lead].bot, score, text.duels.noWinner(noWinnerCount(view)), signed(rating));
+        return (running ? words.testSoFar : words.testOver)(view[lead].bot, score, text.duels.noWinner(noWinnerCount(view)), signed(rating));
     }
-    return standing(view);
+    return running ? standing(view) : ended(view, detail.status === `finished`);
 }
 
 /** The status sentence a duel's page leads with, a test over leaving its score to the head and the estimate. */
@@ -177,7 +187,7 @@ export function duelTerms(detail: TournamentDetail, viewer: string | null): stri
         ...detail.entries.flatMap((entry) => (entry.level === undefined ? [] : [words.strength(entry.bot, entry.level.label)])),
         detail.test ? words.test : text.tournamentDuel.neverRated,
     ];
-    return words.line(parts, viewer !== null && viewer === detail.createdBy ? words.startedByYou : words.startedBy(detail.createdBy ?? text.duels.page.status.operator));
+    return words.line(parts, viewer !== null && viewer === detail.createdBy ? words.setUpByYou : words.setUpBy(detail.createdBy ?? text.duels.page.status.operator));
 }
 
 /** The two bots facing each other across the score. */

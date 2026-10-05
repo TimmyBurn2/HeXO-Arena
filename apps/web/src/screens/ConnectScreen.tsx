@@ -3,6 +3,7 @@ import { namePattern, isReservedName, pagePath, type AccountDeclaration, type An
 import { ApiError, createBot, limitedFor } from '../api/client';
 import { useWait, WaitText } from '../components/wait';
 import { CodeBlock } from '../components/CodeBlock';
+import { duelPresets } from '../duels/setup';
 import { Link } from '../router/Link';
 import { landed, landingOf, useRoute } from '../router/use-route';
 import { DiscordSignIn } from '../components/DiscordButton';
@@ -19,6 +20,10 @@ const exampleEngine = `${bridgeRepository}/blob/main/examples/random_engine.py`;
 const bridgeReadme = `${bridgeRepository}#readme`;
 
 const code: Slot = (words) => <code>{words}</code>;
+
+// The clocks the setup of a duel or round robin offers, in seconds a turn, and minutes and seconds a match.
+const eventTurns = duelPresets.flatMap((preset) => (preset.clock.mode === `turn` ? [preset.clock.turnTimeMs / 1000] : []));
+const eventMatches = duelPresets.flatMap((preset) => (preset.clock.mode === `match` ? [[preset.clock.mainTimeMs / 60_000, preset.clock.incrementMs / 1000] as const] : []));
 
 function outTo(href: string): Slot {
     return (words) => (
@@ -149,6 +154,16 @@ export function ConnectScreen() {
                 <h2 className="section-title">{words.declaration.title}</h2>
                 <p>{words.declaration.lead(code)}</p>
                 <Fields fields={declared} className="declaration-fields" />
+            </section>
+            <section className="build-part">
+                <h2 className="section-title">{words.events.title}</h2>
+                <p>{words.events.lead}</p>
+                <ul className="event-needs">
+                    <li>{words.events.clocks(code, eventTurns, eventMatches)}</li>
+                    <li>{words.events.open(code)}</li>
+                    <li>{words.events.ready}</li>
+                    <li>{words.events.cap}</li>
+                </ul>
             </section>
             <section className="build-part">
                 <h2 className="section-title">{words.api.title}</h2>

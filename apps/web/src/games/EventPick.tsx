@@ -57,9 +57,10 @@ function matches(tournament: TournamentSummary, find: string): boolean {
 }
 
 /**
- * One tournament to narrow the list to, recent first: those live, then
- * those over that played, a duel by its pair; tests among them while the
- * list shows tests; searched by name or by a duel's bot.
+ * One tournament to narrow the list to, recent first: those live since
+ * they began, then those over that played, when they ended; a duel by its
+ * pair; tests among them while the list shows tests; searched by name or
+ * by a duel's bot.
  * The tournament chosen stays an option whatever the search.
  */
 export function TournamentPick({ value, named, tests, onChange }: { value: string | undefined; named: EventName; tests: boolean; onChange: (tournament: string | undefined) => void }) {
@@ -68,7 +69,11 @@ export function TournamentPick({ value, named, tests, onChange }: { value: strin
     const [find, setFind] = useState<string | null>(null);
     const all = read.data === null ? [] : [...read.data.running, ...read.data.past.filter((tournament) => tournament.status !== `called_off`)].filter((tournament) => tests || !tournament.test);
     const listed = find === null ? all : all.filter((tournament) => matches(tournament, find));
-    const options: (readonly [string, string])[] = listed.map((tournament) => [tournament.id, pick.tournamentOption(nameOf(tournament), tournament.status === `running` ? pick.live : tournamentWhen(tournament.endedAt ?? tournament.startsAt))] as const);
+    // A live one names when it began, so two of one pair or one creator read apart, as those over name when they ended.
+    const options: (readonly [string, string])[] = listed.map(
+        (tournament) =>
+            [tournament.id, pick.tournamentOption(nameOf(tournament), tournament.status === `running` ? pick.live(tournamentWhen(tournament.startsAt)) : tournamentWhen(tournament.endedAt ?? tournament.startsAt))] as const,
+    );
     if (value !== undefined && !listed.some((tournament) => tournament.id === value)) options.unshift([value, tournamentWords(named)]);
     const note = read.error ? pick.failed : read.data !== null && listed.length === 0 && find !== null ? pick.noTournament : null;
     return (

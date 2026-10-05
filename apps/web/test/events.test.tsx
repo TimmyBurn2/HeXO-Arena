@@ -155,6 +155,51 @@ describe('the tournaments under Games', () => {
         expect((await rowOf(`d_overoverover`)).querySelector(`.duel-row-facts`)?.textContent).toMatch(/4 h ago$/u);
     });
 
+    it('say when the weekly starts as Play says it, by the wait until it starts', async () => {
+        serve({ '/api/tournaments': list });
+        render(<TournamentsScreen />);
+        expect(await screen.findByText(`Starts in 3 h 0 min; 1 of 12 entered; turn clock 10 s`)).toBeTruthy();
+    });
+
+    it('phrase a test of two bots and a test of three alike: the estimate, the framed score and who won, and the reader\'s bots as theirs', async () => {
+        const estimate = (rating: number, first: number, second: number) => ({ games: first + second, points: { first, second }, rating, low: 100, high: null, chance: 0.99, favored: `first` as const, verdict: `stronger` as const, narrowed: null });
+        const games = Array.from({ length: 10 }, (_, index) => ({ x: (index % 2) + 1, gameId: `g-${String(index)}`, outcome: `played` as const, point: 1, missing: [] }));
+        const two = duel(`d_anatest00001`, {
+            name: `Test by quinn`,
+            createdBy: `quinn`,
+            test: true,
+            status: `finished`,
+            endedAt: new Date(Date.now() - 4 * hour).toISOString(),
+            round: null,
+            pair: { first: { key: 1, name: `hextide`, points: 10 }, second: { key: 2, name: `pebble`, points: 0 }, games },
+            lead: { bot: `hextide`, estimate: estimate(456, 10, 0) },
+            yours: { bot: `hextide`, place: { state: `playing`, rank: 1, points: 10 } },
+        });
+        const three = summary(`t_anatest00002`, {
+            name: `Round robin by quinn`,
+            origin: `person`,
+            createdBy: `quinn`,
+            rated: false,
+            test: true,
+            entrants: 3,
+            gamesPerPair: 4,
+            endedAt: new Date(Date.now() - 2 * hour).toISOString(),
+            leaders: { bots: [{ name: `hextide` }], points: 7, games: 8 },
+            lead: { bot: `hextide`, estimate: estimate(191, 7, 1) },
+            yours: { bot: `hextide`, place: { state: `playing`, rank: 1, points: 7 } },
+        });
+        serve({ '/api/tournaments?kind=test': { running: [], scheduled: [], past: [three, two] } }, quinn);
+        open(`/games/tournaments?list=tests`, () => <TournamentsScreen />);
+        const duelRow = await rowOf(`d_anatest00001`);
+        const fieldRow = await rowOf(`t_anatest00002`);
+        expect(duelRow.querySelector(`.duel-row-facts`)?.textContent).toBe(`hextide about +456, strongerset up by quinn4 h ago`);
+        expect(fieldRow.querySelector(`.duel-row-facts`)?.textContent).toBe(`hextide about +191, stronger3 bots, 4 games a pairset up by quinn2 h ago`);
+        expect(duelRow.querySelector(`.event-figure`)?.textContent).toBe(`10-0hextide won`);
+        expect(fieldRow.querySelector(`.event-figure`)?.textContent).toBe(`7 of 8hextide won`);
+        expect(duelRow.querySelector(`.event-row-yours`)?.textContent).toBe(`Yours: both bots`);
+        expect(fieldRow.querySelector(`.event-row-yours`)?.textContent).toBe(`Yours: all 3 bots`);
+    });
+
     it('keep the reader\'s filter and one bot in the address, and lead back to every bot', async () => {
         const reads = serve({ '/api/tournaments?bot=hextide': { running: [], scheduled: [], past: [summary(`t_summercup202`, { name: `Summer cup` })] }, '/api/tournaments?bot=hextide&kind=test': { running: [], scheduled: [], past: [] } });
         open(`/games/tournaments?bot=hextide`, () => <TournamentsScreen />);

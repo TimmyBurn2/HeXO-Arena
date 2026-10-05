@@ -255,6 +255,8 @@ export const steps = [
     [`hover above overlay`, `--c-bg-hover`, `--c-bg-overlay`, 1.05],
     [`active above hover`, `--c-bg-active`, `--c-bg-hover`, 1.05],
     [`input above base`, `--c-bg-input`, `--c-bg`, 1.1],
+    // A tag on a hovered row takes the page's ground as its plate, since the hover fill is a tag's own.
+    [`hover above base`, `--c-bg-hover`, `--c-bg`, 1.1],
     // Fields and chips also sit in panels and sheets, on the overlay.
     [`input above overlay`, `--c-bg-input`, `--c-bg-overlay`, 1.05],
 ];

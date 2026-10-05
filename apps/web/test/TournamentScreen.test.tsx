@@ -309,7 +309,7 @@ describe('TournamentScreen', () => {
 });
 
 describe('TournamentsScreen', () => {
-    it('list the running tournament, those coming up, and the past ones with their winner', async () => {
+    it('list the running tournament, those coming up with the wait until they start as Play says it, and the past ones with their winner', async () => {
         const summary = { id: base.id, name: `Autumn round robin`, origin: `operator` as const, format: `round_robin` as const, createdBy: null, rated: true, test: false, gamesPerPair: 2 as const, status: `running` as const, startsAt: base.startsAt, timeControl: base.timeControl, openingPlies: 5 as const, entrants: 3, maxEntrants: 12, winner: null, round: null };
         const list: TournamentList = {
             running: [{ ...summary, round: { current: 2, of: 3 } }],
@@ -330,7 +330,7 @@ describe('TournamentsScreen', () => {
         expect(row(base.id)?.querySelector(`.event-row-name`)?.textContent).toBe(`Autumn round robin`);
         expect(row(base.id)?.querySelector(`.duel-row-facts`)?.textContent).toBe(`Round 2 of 3 live3 botsthe weekly`);
         expect(screen.getByRole(`link`, { name: `Winter cup` }).getAttribute(`href`)).toBe(`/tournaments/t_bcdefghijk23`);
-        expect(screen.getByText(/4 of 12 entered; turn clock 10 s$/u)).toBeTruthy();
+        expect(screen.getByText(`Starts in 2 h 0 min; 4 of 12 entered; turn clock 10 s`)).toBeTruthy();
         expect(row(`t_cdefghijk234`)?.querySelector(`.event-figure`)?.textContent).toBe(`4 of 4hextide won`);
         expect(row(`t_cdefghijk234`)?.querySelectorAll(`a`)).toHaveLength(0);
         expect(row(`t_defghijk2345`)?.querySelector(`.duel-row-facts`)?.textContent).toMatch(/^called off3 botsthe weekly/u);

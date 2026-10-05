@@ -187,6 +187,9 @@ const test: TournamentDetail = {
     ],
 };
 
+// Focus lands in a render after the one a click makes; under load that can outlast waitFor's default second.
+const focusWait = { timeout: 5_000 };
+
 function openTournament(detail: TournamentDetail, me: Me, extra: Record<string, Answer> = {}) {
     const calls = serve({ [`GET /api/tournaments/${detail.id}`]: detail, ...extra }, me);
     window.history.replaceState(null, ``, `/tournaments/${detail.id}`);
@@ -368,12 +371,12 @@ describe('a round robin\'s page', () => {
         expect(screen.getByText(`Stop the round robin? No further game starts; the live games play on, and the standings stand as they are.`)).toBeTruthy();
         await waitFor(() => {
             expect(document.activeElement).toBe(screen.getByRole(`button`, { name: `Keep playing` }));
-        });
+        }, focusWait);
         fireEvent.click(screen.getByRole(`button`, { name: `Keep playing` }));
         expect(screen.queryByText(/^Stop the round robin\?/u)).toBeNull();
         await waitFor(() => {
             expect(document.activeElement).toBe(screen.getByRole(`button`, { name: `Stop round robin` }));
-        });
+        }, focusWait);
         fireEvent.click(screen.getByRole(`button`, { name: `Stop round robin` }));
         fireEvent.click(screen.getByRole(`button`, { name: `Stop; no further game starts` }));
         await waitFor(() => {
@@ -383,9 +386,9 @@ describe('a round robin\'s page', () => {
         // The stopped detail lands focus in a render of its own, which may follow the one that shows it.
         await waitFor(() => {
             expect(document.activeElement).toBe(screen.getByRole(`link`, { name: `These games in Games` }));
-        });
+        }, focusWait);
         expect(screen.queryByRole(`button`, { name: /^Withdraw/u })).toBeNull();
-    });
+    }, 30_000);
 
     it('lands focus on the status once a change leaves no action to hold it', async () => {
         const fresh: TournamentDetail = { ...live, rounds: live.rounds.map((round) => ({ ...round, pairings: round.pairings.map((pairing) => ({ ...pairing, games: pairing.games.map((game) => ({ ...game, outcome: `pending` as const, point: null, gameId: null })) })) })) };
@@ -393,11 +396,11 @@ describe('a round robin\'s page', () => {
         fireEvent.click(await screen.findByRole(`button`, { name: `Withdraw hextide` }));
         await waitFor(() => {
             expect(document.activeElement).toBe(screen.getByRole(`button`, { name: `Keep playing` }));
-        });
+        }, focusWait);
         fireEvent.click(screen.getByRole(`button`, { name: `Keep playing` }));
         await waitFor(() => {
             expect(document.activeElement).toBe(screen.getByRole(`button`, { name: `Withdraw hextide` }));
-        });
+        }, focusWait);
         fireEvent.click(screen.getByRole(`button`, { name: `Withdraw hextide` }));
         fireEvent.click(screen.getByRole(`button`, { name: `Withdraw; hextide plays no further game` }));
         await waitFor(() => {
@@ -407,8 +410,8 @@ describe('a round robin\'s page', () => {
         // The changed detail lands focus in a render of its own, which may follow the one that closes the confirm.
         await waitFor(() => {
             expect(document.activeElement?.id).toBe(`tournament-status`);
-        });
-    });
+        }, focusWait);
+    }, 30_000);
 
     it('gives a viewer with several bots playing one Withdraw, its confirm naming the bot chosen', async () => {
         const calls = openTournament({ ...live, entries: live.entries.map((entry) => (entry.bot === `quietlake` ? { ...entry, ownerName: `ana` } : entry)) }, ana, { 'POST /api/tournaments/t_brunorobin01/withdraw': { status: 200, body: live } });
@@ -540,26 +543,32 @@ describe('a duel, a tournament of two', () => {
         expect(screen.getByRole(`heading`, { name: `hextide vs Pistol1`, level: 1 })).toBeTruthy();
         expect(screen.getByRole(`img`, { name: `2 to 1, game 4 of 6` })).toBeTruthy();
         expect(document.querySelector(`.duel-kicker`)?.textContent).toContain(`Duel`);
-        expect(screen.getByText(/^6 games: 3 openings, each played twice with sides swapped; turn clock 10 s; 5-stone openings; never rated\. Started by bruno\.$/u)).toBeTruthy();
+        expect(screen.getByText(/^6 games: 3 openings, each played twice with sides swapped; turn clock 10 s; 5-stone openings; never rated\. Set up by bruno\.$/u)).toBeTruthy();
         expect(screen.getByRole(`heading`, { name: `Opening 1` })).toBeTruthy();
         expect(screen.getByRole(`columnheader`, { name: `Opening 2` })).toBeTruthy();
         expect(screen.getAllByText(`hextide won with six in a row`)).toHaveLength(2);
         expect(screen.queryByRole(`heading`, { name: `Standings` })).toBeNull();
     });
 
-    it('lets its creator stop the duel, and an owner withdraw a bot, which ends it', async () => {
-        const calls = openTournament(duel, bruno, {
+    it('gives its creator Stop duel alone, though a bot in it is theirs too', async () => {
+        openTournament(duel, bruno);
+        expect(await screen.findByRole(`button`, { name: `Stop duel` })).toBeTruthy();
+        expect(screen.queryByRole(`button`, { name: /^Withdraw/u })).toBeNull();
+    });
+
+    it('lets the owner of a bot in it, who did not set it up, withdraw the bot, which ends it', async () => {
+        const calls = openTournament(duel, ana, {
             'POST /api/tournaments/t_brunoduel001/withdraw': {
                 status: 200,
-                body: { ...duel, status: `cut_short`, endedAt: `2026-10-04T13:00:00Z`, end: { reason: `owner`, round: 1, bot: { key: 2, name: `Pistol1` } } },
+                body: { ...duel, status: `cut_short`, endedAt: `2026-10-04T13:00:00Z`, end: { reason: `owner`, round: 1, bot: { key: 1, name: `hextide` } } },
             },
         });
-        expect(await screen.findByRole(`button`, { name: `Stop duel` })).toBeTruthy();
-        fireEvent.click(screen.getByRole(`button`, { name: `Withdraw Pistol1` }));
-        expect(screen.getByText(`Withdraw Pistol1? The duel ends: its live game plays on and counts, and no further game starts.`)).toBeTruthy();
+        fireEvent.click(await screen.findByRole(`button`, { name: `Withdraw hextide` }));
+        expect(screen.queryByRole(`button`, { name: `Stop duel` })).toBeNull();
+        expect(screen.getByText(`Withdraw hextide? The duel ends: its live game plays on and counts, and no further game starts.`)).toBeTruthy();
         fireEvent.click(screen.getByRole(`button`, { name: `Withdraw; the duel ends` }));
-        expect(await screen.findByText(`Cut short at 2-1: Pistol1's owner withdrew it.`)).toBeTruthy();
-        expect(calls.find((call) => call.method === `POST`)?.body).toEqual({ bot: `Pistol1` });
+        expect(await screen.findByText(`Cut short at 2-1: hextide's owner withdrew it.`)).toBeTruthy();
+        expect(calls.find((call) => call.method === `POST`)?.body).toEqual({ bot: `hextide` });
         expect(screen.getByRole(`link`, { name: `Duel again` }).getAttribute(`href`)).toBe(`/play/tournament?bots=hextide%2CPistol1&games=6&clock=t10&opening=5`);
     });
 
@@ -591,7 +600,7 @@ describe('the tournaments under Games', () => {
         expect(await screen.findByText(`stopped by bruno after round 2`)).toBeTruthy();
         expect(screen.getAllByText(`Yours: set up by you`)).toHaveLength(2);
         fireEvent.click(screen.getByRole(`button`, { name: `Tests` }));
-        expect(await screen.findByText(`hextide +191, stronger`)).toBeTruthy();
+        expect(await screen.findByText(`hextide about +191, stronger`)).toBeTruthy();
     });
 
     it('lists every duel and round robin but tests, tagged, with a way to set one up, and tests alone under Tests', async () => {

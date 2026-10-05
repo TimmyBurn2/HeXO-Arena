@@ -236,10 +236,10 @@ export function playBotPath(bot: string, level: Level | null = null): string {
 /** Where this browser keeps the last opponent and clock a game started with, and the Rated switch. */
 export const playStorageKey = `hexo-arena.play.v1`;
 
-interface Played {
+/** The last opponent and clock a game started with in this browser, and the Rated switch, off until the person turns it on here. */
+export interface Played {
     opponent: string | null;
     clock: TimeControl | null;
-    // Off until the person turns it on here.
     rated: boolean;
 }
 

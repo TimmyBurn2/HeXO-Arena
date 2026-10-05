@@ -548,6 +548,17 @@ export const shots: readonly Shot[] = [
     { name: `build`, path: `/connect`, world: world(), ready: `h1`, framed: true, viewports: guideViewports, fullPage: true },
     { name: `build-signed-out`, path: `/connect`, world: signedOut, ready: `h1`, framed: true, viewports: guideViewports, fullPage: true },
     {
+        name: `build-tournaments`,
+        path: `/connect`,
+        world: world(),
+        ready: `.event-needs li`,
+        framed: true,
+        viewports: guideViewports,
+        after: async (page) => {
+            await page.locator(`.event-needs`).scrollIntoViewIfNeeded();
+        },
+    },
+    {
         name: `build-created`,
         path: `/connect`,
         world: world(),

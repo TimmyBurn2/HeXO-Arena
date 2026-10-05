@@ -220,11 +220,12 @@ describe('GamesScreen', () => {
         expect(within(screen.getByRole(`group`, { name: `Active filters` })).getAllByRole(`button`)[0]?.getAttribute(`aria-label`)).toBe(`Remove in a tournament`);
     });
 
-    it('pick one duel among the tournaments by its pair, found by a bot\'s name, each dated or live, its chip naming it and clearing back to every tournament', async () => {
+    it('pick one duel among the tournaments by its pair, found by a bot\'s name, a live one dated by its start and the rest by their end, its chip naming it and clearing back to every tournament', async () => {
         const one = duelOf(`d_sealhextide1`, `sealbot`, `hextide`);
         const test = duelOf(`d_sealmarsh001`, `sealbot`, `marsh`, true);
         const running = duelOf(`d_ternmarsh001`, `tern`, `marsh`, false, `running`);
         const when = new Intl.DateTimeFormat(undefined, { dateStyle: `medium`, timeStyle: `short` }).format(new Date(`2026-10-01T12:20:00Z`));
+        const began = new Intl.DateTimeFormat(undefined, { dateStyle: `medium`, timeStyle: `short` }).format(new Date(`2026-10-01T12:00:00Z`));
         const detail: TournamentDetail = { ...autumn, id: one.id, name: one.name, origin: `person`, format: `duel`, createdBy: `bruno`, rated: false, maxEntrants: 2, entries: [
             { key: 1, bot: `sealbot`, ownerName: `quinn`, online: true, ratingAtStart: 1500, state: `playing` },
             { key: 2, bot: `hextide`, ownerName: `ana`, online: true, ratingAtStart: 1500, state: `playing` },
@@ -235,7 +236,7 @@ describe('GamesScreen', () => {
         const panel = openFilters();
         const pick = await within(panel).findByLabelText<HTMLSelectElement>(`Tournament`);
         await waitFor(() => {
-            expect([...pick.options].map((option) => option.textContent)).toEqual([`Any`, `Duel tern vs marsh, live`, `Duel sealbot vs hextide, ${when}`, `Duel pebble vs cinder, ${when}`]);
+            expect([...pick.options].map((option) => option.textContent)).toEqual([`Any`, `Duel tern vs marsh, live since ${began}`, `Duel sealbot vs hextide, ${when}`, `Duel pebble vs cinder, ${when}`]);
         });
         fireEvent.change(within(panel).getByLabelText(`Find a tournament: name or bot`), { target: { value: `sealbot` } });
         fireEvent.keyDown(within(panel).getByLabelText(`Find a tournament: name or bot`), { key: `Enter` });
@@ -266,8 +267,8 @@ describe('GamesScreen', () => {
         expect(reads(fetch)).toContain(`/api/games/finished?clock=turn&event=tournament&tournament=d_sealhextide1`);
     });
 
-    it('tell repeats of a tournament apart by the date and time the tournaments list gives them, the live one said live', async () => {
-        const summary = (id: string, status: TournamentSummary[`status`], endedAt?: string): TournamentSummary => ({
+    it('tell repeats of a tournament apart by the date and time the tournaments list gives them, live ones by when they began', async () => {
+        const summary = (id: string, status: TournamentSummary[`status`], endedAt?: string, startsAt = `2026-10-03T09:00:00Z`): TournamentSummary => ({
             id,
             name: `Dev round robin`,
             origin: `person`,
@@ -277,7 +278,7 @@ describe('GamesScreen', () => {
             test: false,
             gamesPerPair: 2,
             status,
-            startsAt: `2026-10-03T09:00:00Z`,
+            startsAt,
             ...(endedAt === undefined ? {} : { endedAt }),
             timeControl: { mode: `turn`, turnTimeMs: 10_000 },
             openingPlies: 5,
@@ -286,7 +287,7 @@ describe('GamesScreen', () => {
             winner: null,
             round: status === `running` ? { current: 1, of: 3 } : null,
         });
-        const list: TournamentList = { running: [summary(`t_devrobin0001`, `running`)], scheduled: [], past: [summary(`t_devrobin0002`, `finished`, `2026-10-03T10:15:00Z`), summary(`t_devrobin0003`, `finished`, `2026-10-03T14:40:00Z`)] };
+        const list: TournamentList = { running: [summary(`t_devrobin0001`, `running`), summary(`t_devrobin0004`, `running`, undefined, `2026-10-03T11:30:00Z`)], scheduled: [], past: [summary(`t_devrobin0002`, `finished`, `2026-10-03T10:15:00Z`), summary(`t_devrobin0003`, `finished`, `2026-10-03T14:40:00Z`)] };
         serveEvents({ '/api/tournaments': list });
         open(`/games?event=tournament`);
         await screen.findAllByRole(`link`, { name: /hextide/u });
@@ -294,7 +295,13 @@ describe('GamesScreen', () => {
         const pick = await within(panel).findByLabelText<HTMLSelectElement>(`Tournament`);
         const when = (iso: string) => new Intl.DateTimeFormat(undefined, { dateStyle: `medium`, timeStyle: `short` }).format(new Date(iso));
         await waitFor(() => {
-            expect([...pick.options].map((option) => option.textContent)).toEqual([`Any`, `Dev round robin, live`, `Dev round robin, ${when(`2026-10-03T10:15:00Z`)}`, `Dev round robin, ${when(`2026-10-03T14:40:00Z`)}`]);
+            expect([...pick.options].map((option) => option.textContent)).toEqual([
+                `Any`,
+                `Dev round robin, live since ${when(`2026-10-03T09:00:00Z`)}`,
+                `Dev round robin, live since ${when(`2026-10-03T11:30:00Z`)}`,
+                `Dev round robin, ${when(`2026-10-03T10:15:00Z`)}`,
+                `Dev round robin, ${when(`2026-10-03T14:40:00Z`)}`,
+            ]);
         });
     });
 
