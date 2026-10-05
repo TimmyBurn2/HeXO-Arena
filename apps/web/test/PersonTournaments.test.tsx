@@ -7,6 +7,7 @@ import { TournamentScreen } from '../src/screens/TournamentScreen';
 import { TournamentsScreen } from '../src/screens/TournamentsScreen';
 import { NewTournament } from '../src/tournaments/NewTournament';
 import { emptyTournamentSetup } from '../src/tournaments/setup';
+import { pressAsReadLands } from './press-as-read-lands';
 
 const wide = { turnMs: [5_000, 60_000] as [number, number], match: true, unlimited: true };
 
@@ -187,8 +188,11 @@ const test: TournamentDetail = {
     ],
 };
 
-// Focus lands in a render after the one a click makes; under load that can outlast waitFor's default second.
+// Focus moves in a render's effects, which React may run a task after the render shows; under load that can outlast waitFor's default second.
 const focusWait = { timeout: 5_000 };
+
+// The page's read of a tournament, answering `detail` this time.
+const beat = (detail: TournamentDetail) => ({ path: `/api/tournaments/${detail.id}`, answer: detail });
 
 function openTournament(detail: TournamentDetail, me: Me, extra: Record<string, Answer> = {}) {
     const calls = serve({ [`GET /api/tournaments/${detail.id}`]: detail, ...extra }, me);
@@ -390,6 +394,20 @@ describe('a round robin\'s page', () => {
         expect(screen.queryByRole(`button`, { name: /^Withdraw/u })).toBeNull();
     }, 30_000);
 
+    it('keeps focus on a control that is there when Stop and Keep playing are pressed as a read lands', async () => {
+        const ahead: TournamentDetail = { ...live, standings: live.standings.map((line) => (line.bot === `hextide` ? { ...line, points: 3 } : line)) };
+        openTournament(live, bruno);
+        await screen.findByRole(`button`, { name: `Stop round robin` });
+        await pressAsReadLands(beat(ahead), `hextide leads with 3 points`, () => screen.getByRole(`button`, { name: `Stop round robin` }));
+        await waitFor(() => {
+            expect(document.activeElement).toBe(screen.getByRole(`button`, { name: `Keep playing` }));
+        }, focusWait);
+        await pressAsReadLands(beat(live), `hextide leads with 2 points`, () => screen.getByRole(`button`, { name: `Keep playing` }));
+        await waitFor(() => {
+            expect(document.activeElement).toBe(screen.getByRole(`button`, { name: `Stop round robin` }));
+        }, focusWait);
+    }, 30_000);
+
     it('lands focus on the status once a change leaves no action to hold it', async () => {
         const fresh: TournamentDetail = { ...live, rounds: live.rounds.map((round) => ({ ...round, pairings: round.pairings.map((pairing) => ({ ...pairing, games: pairing.games.map((game) => ({ ...game, outcome: `pending` as const, point: null, gameId: null })) })) })) };
         openTournament(fresh, ana, { 'POST /api/tournaments/t_brunorobin01/withdraw': { status: 200, body: { ...fresh, entries: fresh.entries.map((entry) => (entry.bot === `hextide` ? { ...entry, state: `withdrawn`, reason: `owner` } : entry)) } } });
@@ -571,6 +589,20 @@ describe('a duel, a tournament of two', () => {
         expect(calls.find((call) => call.method === `POST`)?.body).toEqual({ bot: `hextide` });
         expect(screen.getByRole(`link`, { name: `Duel again` }).getAttribute(`href`)).toBe(`/play/tournament?bots=hextide%2CPistol1&games=6&clock=t10&opening=5`);
     });
+
+    it('keeps focus on a control that is there when Withdraw and Keep playing are pressed as a read lands', async () => {
+        const later: TournamentDetail = { ...duel, rounds: duel.rounds.map((round) => ({ ...round, pairings: round.pairings.map((pairing) => ({ ...pairing, games: pairing.games.map((game, index) => (index === 3 ? duelGame(`Pistol1`, `played`, `Pistol1`, `d4`, 3) : index === 4 ? duelGame(`hextide`, `live`, null, `d5`, 4) : game)) })) })) };
+        openTournament(duel, ana);
+        await screen.findByRole(`button`, { name: `Withdraw hextide` });
+        await pressAsReadLands(beat(later), `Game 5 of 6 is live`, () => screen.getByRole(`button`, { name: `Withdraw hextide` }));
+        await waitFor(() => {
+            expect(document.activeElement).toBe(screen.getByRole(`button`, { name: `Keep playing` }));
+        }, focusWait);
+        await pressAsReadLands(beat(duel), `Game 4 of 6 is live`, () => screen.getByRole(`button`, { name: `Keep playing` }));
+        await waitFor(() => {
+            expect(document.activeElement).toBe(screen.getByRole(`button`, { name: `Withdraw hextide` }));
+        }, focusWait);
+    }, 30_000);
 
     it('marks a no-show, which scores for the bot that came', async () => {
         const [round] = duel.rounds;

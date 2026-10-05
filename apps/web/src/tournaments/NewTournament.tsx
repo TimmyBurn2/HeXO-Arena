@@ -139,7 +139,9 @@ export function NewTournament({
     const [picks, setPicks] = useState<TimeControl | null>(initial.clock);
     const [opening, setOpening] = useState<OpeningPlies>(initial.opening ?? defaultTournamentOpening);
     const [outcome, setOutcome] = useState<Outcome>({ kind: `idle` });
-    const added = useRef(false);
+    // Each add, counted in state rather than flagged in a ref: a press can come while a read's render
+    // still has its effects to run, which React runs first, before the plates the add makes are there.
+    const [adds, setAdds] = useState(0);
     const plateList = useRef<HTMLUListElement>(null);
     const viewer = reads.viewer;
     const find = (name: string) => bots.find((bot) => nameKeyOf(bot.name) === nameKeyOf(name)) ?? null;
@@ -156,11 +158,10 @@ export function NewTournament({
 
     // Bots added hand focus to the Add slot, else to the last plate's Remove, since the button that opened the list may be gone.
     useEffect(() => {
-        if (!added.current) return;
-        added.current = false;
+        if (adds === 0) return;
         const list = plateList.current;
         (list?.querySelector<HTMLElement>(`.slot-empty-add`) ?? [...(list?.querySelectorAll<HTMLElement>(`.slot-remove`) ?? [])].at(-1))?.focus();
-    });
+    }, [adds]);
 
     const ready = field.length >= tournamentBotsMin;
     const duel = field.length <= tournamentBotsMin;
@@ -190,7 +191,7 @@ export function NewTournament({
     const note = test ? (yours ? words.allYours(field.length) : words.allOwners(owner, field.length)) : ready ? words.fieldNote(field.length) : null;
 
     function add(next: readonly BotListing[]) {
-        added.current = true;
+        setAdds((count) => count + 1);
         setPicked([...picked, ...next.map((bot) => ({ name: bot.name, level: null }))].slice(0, tournamentBotsMax));
         setPicking(false);
         setOutcome({ kind: `idle` });
