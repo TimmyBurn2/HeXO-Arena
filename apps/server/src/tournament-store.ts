@@ -153,12 +153,11 @@ export function cancelTournament(query: Query, id: string, now: number): CancelT
         .set({ status: `canceled`, endedAt: now })
         .where(and(eq(tournaments.id, id), isNull(tournaments.endedAt)))
         .run();
-    // The status check admits only these values.
-    return { kind: `canceled`, status: row.status as TournamentStatus };
+    return { kind: `canceled`, status: row.status };
 }
 
 /** Why a person's round robin was stopped. */
-export type StopReason = `creator` | `banned` | `deleted`;
+export type StopReason = NonNullable<(typeof tournaments.$inferSelect)[`endReason`]>;
 
 /** Stops a running round robin a person set up; answers whether it was running. */
 export function stopRoundRobin(query: Query, id: string, reason: StopReason, now: number): boolean {
@@ -211,8 +210,7 @@ export function openTournaments(query: Query): AdminTournament[] {
         .where(inArray(tournaments.status, [`scheduled`, `running`]))
         .orderBy(asc(tournaments.startsAt))
         .all()
-        // The status check admits only the contract's statuses.
-        .map((row) => ({ id: row.id, name: tournamentNameOf(row), status: row.status as TournamentStatus, startsAt: row.startsAt, entrants: row.entrants }));
+        .map((row) => ({ id: row.id, name: tournamentNameOf(row), status: row.status, startsAt: row.startsAt, entrants: row.entrants }));
 }
 
 const runningPerson = and(eq(tournaments.origin, `person`), eq(tournaments.status, `running`));

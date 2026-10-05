@@ -67,17 +67,21 @@ function updateBotSettings(query: Query, ownerId: string, nameKey: string, chang
     return row === undefined ? undefined : settingsOf(row);
 }
 
+interface NameParams {
+    name: string;
+}
+
 /** The owner reads a bot's settings, or changes some; anyone else finds no such bot. */
 export function registerBotSettingsApi(app: FastifyInstance, deps: BotSettingsDeps): void {
     const { query, limits } = deps;
 
-    const answer = (request: FastifyRequest, reply: FastifyReply, changes: () => BotSettingsUpdate | null) => {
+    const answer = (request: FastifyRequest<{ Params: NameParams }>, reply: FastifyReply, changes: () => BotSettingsUpdate | null) => {
         const user = sessionUser(query, request);
         if (user === null) return reply.code(401).send({ error: `no session`, code: `unauthorized` });
         if (limits.refuse(reply, `principal`, `user:${user.id}`)) return reply;
         const parsed = changes();
         if (parsed === null) return reply.code(400).send({ error: `the request fails validation`, code: `bad_request` });
-        const { name } = request.params as { name: string };
+        const { name } = request.params;
         const held = nameSyntaxSchema.safeParse(name).success ? updateBotSettings(query, user.id, nameKeyOf(name), parsed) : undefined;
         if (held === undefined) return reply.code(404).send({ error: `no such bot of yours`, code: `not_found` });
         if (parsed.duelsByOthers === false) {
@@ -87,9 +91,9 @@ export function registerBotSettingsApi(app: FastifyInstance, deps: BotSettingsDe
         return reply.code(200).send(held);
     };
 
-    app.get(`/api/bots/:name/settings`, { config: { limit: `principal` } }, async (request, reply) => answer(request, reply, () => ({})));
+    app.get<{ Params: NameParams }>(`/api/bots/:name/settings`, { config: { limit: `principal` } }, async (request, reply) => answer(request, reply, () => ({})));
 
-    app.patch(`/api/bots/:name/settings`, { config: { limit: `principal` } }, async (request, reply) =>
+    app.patch<{ Params: NameParams }>(`/api/bots/:name/settings`, { config: { limit: `principal` } }, async (request, reply) =>
         answer(request, reply, () => {
             const parsed = botSettingsUpdateSchema.safeParse(request.body);
             return parsed.success ? parsed.data : null;

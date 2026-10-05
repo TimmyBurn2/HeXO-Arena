@@ -13,7 +13,7 @@ import type { AdminHandler } from './admin-socket';
 import { recentAdminActions, recordAdminAction } from './admin-store';
 import type { AnalysisService } from './analysis-service';
 import { clientCensus, findBot, findBotClient } from './bots';
-import { eraseUser, type ErasureJournal } from './erasure';
+import { eraseUser, withdrawBot, type ErasureJournal } from './erasure';
 import {
     banUser,
     botIdsOf,
@@ -40,6 +40,7 @@ import { isPaused, setPaused } from './site-state';
 import type { TournamentScheduler } from './tournament-scheduler';
 import { addTournamentRule, adminTournamentRules, nextRuleStart, removeTournamentRule, ruleSlot } from './tournament-rules';
 import { countRunningRoundRobins, createTournament, openTournaments } from './tournament-store';
+import { daySeconds } from './utc-day';
 
 interface AdminDeps {
     query: Query;
@@ -78,7 +79,7 @@ function statusOf(deps: AdminDeps): AdminStatus {
         tournamentRules: adminTournamentRules(deps.query, nowOf(deps), deps.tournamentLeadMs),
         liveDuels: countRunningDuels(deps.query),
         liveRoundRobins: countRunningRoundRobins(deps.query),
-        clients: clientCensus(deps.query, Math.floor(nowOf(deps) / 1000) - clientCensusDays * 86_400),
+        clients: clientCensus(deps.query, Math.floor(nowOf(deps) / 1000) - clientCensusDays * daySeconds),
         recentActions: recentAdminActions(deps.query, recentActionCount),
         openReportCount: reports.count,
         openReports: reports.oldest,
@@ -318,13 +319,8 @@ export function createAdminHandler(deps: AdminDeps): AdminHandler {
                         done: `delisted ${request.name}`,
                         unchanged: `already delisted`,
                         notFound: `no such bot`,
-                        // Its stream and live games run on; only what is
-                        // still pending leaves with it.
                         live: (botId) => {
-                            deps.analysis.withdraw(botId);
-                            deps.challenges.withdrawFor(botId);
-                            deps.tournaments.withdraw(botId, `delisted`);
-                            deps.duels.endForBot(botId, `delisted`);
+                            withdrawBot(deps, botId, `delisted`);
                         },
                     }),
                 );
@@ -334,18 +330,9 @@ export function createAdminHandler(deps: AdminDeps): AdminHandler {
                         done: `banned ${request.name}`,
                         unchanged: `already banned`,
                         notFound: `no such user`,
-                        // A closed stream orphans the bot's live games,
-                        // which then forfeit on the clock, rated: a ban
-                        // grants no unrated escape.
                         live: (userId) => {
                             deps.tournaments.stopSetUpBy(userId, `banned`);
-                            for (const botId of botIdsOf(deps.query, userId)) {
-                                deps.presence.close(botId);
-                                deps.analysis.withdraw(botId);
-                                deps.challenges.withdrawFor(botId);
-                                deps.tournaments.withdraw(botId, `banned`);
-                                deps.duels.endForBot(botId, `banned`);
-                            }
+                            for (const botId of botIdsOf(deps.query, userId)) withdrawBot(deps, botId, `banned`);
                         },
                     }),
                 );

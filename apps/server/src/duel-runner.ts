@@ -31,6 +31,7 @@ import {
     type DuelRow,
 } from './duel-store';
 import { isCurrentGeneration, isPaused } from './site-state';
+import { utcDay } from './utc-day';
 
 /** A gate a bot fails for a duel game: taken out, held by a tournament, or not ready. */
 export type DuelGateFailure = `deleted` | `delisted` | `banned` | `offline` | `closed` | `refused` | `clock` | `tournament` | `busy`;
@@ -87,10 +88,6 @@ interface DuelRunnerDeps {
 interface DuelWait {
     readonly key: DuelKey;
     readonly until: number;
-}
-
-function utcDayStart(seconds: number): number {
-    return Math.floor(seconds / 86_400) * 86_400;
 }
 
 /**
@@ -250,7 +247,7 @@ export class DuelRunner {
     // A rated duel's game counts toward the daily caps like any rated bot
     // game, so each checks them again at its start; a refused one ends the duel.
     #capped(row: DuelRow, now: number): boolean {
-        const day = utcDayStart(Math.floor(now / 1000));
+        const day = utcDay(Math.floor(now / 1000)).start;
         if (countPairBotGamesSince(this.#query, { one: row.botIds.a, two: row.botIds.b }, day) >= pairDailyCap) {
             this.#end(row, { status: `cut_short`, reason: `daily_cap`, bot: null });
             return true;

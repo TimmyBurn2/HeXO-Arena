@@ -11,7 +11,7 @@ import {
     positionReadingSchema,
 } from '@hexo-arena/contract';
 import { setupProblem, type Setup } from '@hexo-arena/rules';
-import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
+import type { FastifyInstance, FastifyReply } from 'fastify';
 import type { WebSocket } from 'ws';
 import type { AnalysisService } from './analysis-service';
 import type { AnalyzerSessions } from './analyzers';
@@ -40,6 +40,11 @@ interface AnalysisApiDeps {
 
 interface GameParams {
     gameId: string;
+}
+
+// The analyzer's token rides in the query, checked before the upgrade.
+interface TokenQuery {
+    token?: unknown;
 }
 
 // The analysis answers what waiting may lift with 429 and its wait, and a
@@ -94,8 +99,8 @@ export function registerAnalysisApi(app: FastifyInstance, deps: AnalysisApiDeps)
         return reply.code(204).send();
     });
 
-    app.post(`/api/games/:gameId/analyses`, { config: { limit: `principal` } }, async (request, reply) => {
-        const { gameId } = request.params as GameParams;
+    app.post<{ Params: GameParams }>(`/api/games/:gameId/analyses`, { config: { limit: `principal` } }, async (request, reply) => {
+        const { gameId } = request.params;
         const user = sessionUser(query, request);
         if (user === null) return reply.code(401).send({ error: `sign in to ask for analysis`, code: `unauthorized` });
         if (limits.refuse(reply, `principal`, `user:${user.id}`)) return reply;
@@ -107,20 +112,20 @@ export function registerAnalysisApi(app: FastifyInstance, deps: AnalysisApiDeps)
         return reply.code(202).send(communityAnalysisSchema.parse(answer.analysis));
     });
 
-    app.get(`/api/games/:gameId/analyses`, { config: { limit: `public` } }, async (request, reply) => {
-        const { gameId } = request.params as GameParams;
+    app.get<{ Params: GameParams }>(`/api/games/:gameId/analyses`, { config: { limit: `public` } }, async (request, reply) => {
+        const { gameId } = request.params;
         const answer = analysis.list(gameId);
         if (answer.kind === `refused`) return refuse(reply, answer.code);
         return reply.code(200).send(analysisListSchema.parse(answer.list));
     });
 
-    app.get(
+    app.get<{ Querystring: TokenQuery }>(
         analysisSocketRoute,
         {
             websocket: true,
             config: { limit: `engine` },
             preHandler: async (request, reply) => {
-                const token = (request.query as Record<string, unknown>).token;
+                const token = request.query.token;
                 const botId = typeof token === `string` ? analyzers.claim(token) : null;
                 if (botId === null) return reply.code(401).send({ error: `missing, unknown, expired, or replaced analysis token`, code: `unauthorized` });
                 if (!analyzers.mayAnalyze(botId)) return reply.code(404).send({ error: `the bot declares no analyzer`, code: `not_found` });
@@ -128,9 +133,10 @@ export function registerAnalysisApi(app: FastifyInstance, deps: AnalysisApiDeps)
                 if (limits.refuse(reply, `engineDial`, `analysis:${botId}`)) return reply;
             },
         },
-        (socket: WebSocket, request: FastifyRequest) => {
-            const token = (request.query as { token: string }).token;
-            const botId = analyzers.claim(token);
+        (socket: WebSocket, request) => {
+            const token = request.query.token;
+            // The token passed the preHandler, which admits a string alone.
+            const botId = typeof token === `string` ? analyzers.claim(token) : null;
             if (botId === null) {
                 socket.close(1008, `session revoked`);
                 return;

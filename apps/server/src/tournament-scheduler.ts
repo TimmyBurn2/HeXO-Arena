@@ -1,6 +1,7 @@
 import {
     acceptsCovers,
     acceptsSchema,
+    boardCellSchema,
     botConcurrentGameCap,
     botDailyCap,
     expandTournamentName,
@@ -25,13 +26,14 @@ import { bots, games, tournamentEntries, tournamentPairings, tournaments, users 
 import { duelGateFailures, levelNow, type DuelGateFailure } from './duel-runner';
 import { readDuelBot, type DuelBotRecord } from './duel-store';
 import type { FinishedGameNote, GameRegistry } from './game-registry';
-import { countBotBotGamesSince, countPairBotGamesSince, type OpeningCell } from './game-store';
+import { countBotBotGamesSince, countPairBotGamesSince } from './game-store';
 import type { PresenceRegistry } from './presence';
 import { readRating } from './rating-store';
 import { missedTooManyInARow, slotDone, storedSlot, xSeatOf, type PairingSeat, type ScoredPairing, type SlotResult } from './round-robin';
 import { isCurrentGeneration, isPaused } from './site-state';
 import { dueRuleStarts, hasRuleTournament, readTournamentRules } from './tournament-rules';
 import { cancelTournament, createTournament, insertPairings, runningRoundRobinsBy, stopRoundRobin as markStopped, type StopReason } from './tournament-store';
+import { utcDay } from './utc-day';
 
 // Why a bot is taken out of every tournament, as a running one's withdrawn entry records it.
 type WithdrawReason = `banned` | `delisted` | `deleted`;
@@ -106,10 +108,6 @@ function scored(row: PairingRow): ScoredPairing {
 
 function slotKey(pairingId: string, game: 1 | 2): string {
     return `${pairingId}:${String(game)}`;
-}
-
-function utcDayStart(seconds: number): number {
-    return Math.floor(seconds / 86_400) * 86_400;
 }
 
 const pairOf = (row: PairingRow) => `${row.firstBotId} ${row.secondBotId}`;
@@ -367,8 +365,7 @@ export class TournamentScheduler {
             .all()
             .map((row) => ({
                 id: row.id,
-                // The origin check admits only these two.
-                origin: row.origin as RunningTournament[`origin`],
+                origin: row.origin,
                 createdBy: row.createdBy,
                 timeControl: timeControlSchema.parse(JSON.parse(row.timeControl)),
                 openingPlies: openingPliesSchema.parse(row.openingPlies),
@@ -407,7 +404,7 @@ export class TournamentScheduler {
         );
         const clockFits = present.filter((entry) => acceptsCovers(entry.accepts === null ? undefined : acceptsSchema.parse(JSON.parse(entry.accepts)), clock));
         const needed = 2 * (clockFits.length - 1);
-        const day = utcDayStart(seconds);
+        const day = utcDay(seconds).start;
         const field = clockFits.filter((entry) => botDailyCap - countBotBotGamesSince(this.#query, entry.botId, day) >= needed);
         const stateOf = (botId: string): { state: string; reason: string | null } => {
             if (!present.some((entry) => entry.botId === botId)) return { state: `absent`, reason: null };
@@ -595,7 +592,7 @@ export class TournamentScheduler {
 
     // The weekly's games are rated, so each counts toward the daily caps.
     #capped(seats: readonly [string, string], now: number): boolean {
-        const day = utcDayStart(Math.floor(now / 1000));
+        const day = utcDay(Math.floor(now / 1000)).start;
         return (
             countPairBotGamesSince(this.#query, { one: seats[0], two: seats[1] }, day) >= pairDailyCap ||
             countBotBotGamesSince(this.#query, seats[0], day) >= botDailyCap ||
@@ -611,7 +608,7 @@ export class TournamentScheduler {
         // Both rows stand: a bot deleted outright takes its pairings with it.
         if (xBot === undefined || oBot === undefined) return;
         // The pairing column holds the opening as its game wrote it.
-        const stored = pairing.openingCells === null ? null : (JSON.parse(pairing.openingCells) as OpeningCell[]);
+        const stored = pairing.openingCells === null ? null : boardCellSchema.array().parse(JSON.parse(pairing.openingCells));
         // The slot is live before its game exists, so a finish heard at once
         // finds it; a game that never got created reads as pending at boot.
         this.#settle(this.#query, pairing.id, game, { state: `live`, seat: null });
@@ -702,9 +699,8 @@ export class TournamentScheduler {
                         .orderBy(asc(games.createdAt))
                         .all();
                     const last = played.at(-1);
-                    if (last !== undefined && last.reason !== `aborted`) {
-                        // The checks admit only these sides and reasons.
-                        this.#settle(this.#query, pairing.id, game, this.#outcomeOf(game, last.winner as Side | null, last.reason as FinishReason));
+                    if (last?.reason != null && last.reason !== `aborted`) {
+                        this.#settle(this.#query, pairing.id, game, this.#outcomeOf(game, last.winner, last.reason));
                     } else if (stopped) {
                         this.#settle(this.#query, pairing.id, game, { state: `not_played`, seat: null });
                     } else if (last === undefined) {

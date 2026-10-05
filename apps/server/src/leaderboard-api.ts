@@ -2,12 +2,11 @@ import { leaderboardActiveDays, leaderboardCap, leaderboardPath, leaderboardQuer
 import type { FastifyInstance } from 'fastify';
 import type { Ladder } from './ladder';
 import type { PresenceRegistry } from './presence';
-
-const secondsPerDay = 86_400;
+import { daySeconds } from './utc-day';
 
 /** The earliest finish, in epoch seconds, that keeps a player on the default board at this moment. */
 export function activeSince(nowMs: number): number {
-    return Math.floor(nowMs / 1000) - leaderboardActiveDays * secondsPerDay;
+    return Math.floor(nowMs / 1000) - leaderboardActiveDays * daySeconds;
 }
 
 function isoOf(seconds: number): string {

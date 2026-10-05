@@ -1,7 +1,5 @@
 import {
     nameKeyOf,
-    nameSyntaxSchema,
-    placeholderNamePattern,
     playerOpponentsCap,
     playerPlacingsCap,
     playerRecordMemoMs,
@@ -14,10 +12,11 @@ import {
     type RatingPoint,
     type Side,
 } from '@hexo-arena/contract';
-import { and, asc, desc, eq, inArray, isNull, sql, type SQL, type SQLWrapper } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, sql, type SQL } from 'drizzle-orm';
 import type { FastifyInstance } from 'fastify';
 import type { Query } from './db';
 import { bots, gameRatings, games, tournamentEntries, tournamentPairings, tournaments, users } from './db/schema';
+import { botSideAgainstPerson, resolvePlayer, seatsOf } from './game-seats';
 import type { Ladder } from './ladder';
 import { activeSince } from './leaderboard-api';
 import { isProvisional, type PlayerRef } from './rating';
@@ -25,39 +24,12 @@ import { readRating } from './rating-store';
 import { shownBot, shownUser, type ShownName } from './shown-names';
 import { standingsOf, storedSlot } from './round-robin';
 import { creatorJoin, creators, nameColumns, tournamentNameOf } from './tournament-store';
+import { daySeconds } from './utc-day';
+import { WindowMemo } from './window-memo';
 
 const isoOf = (seconds: number) => new Date(seconds * 1000).toISOString().replace(/\.\d{3}Z$/u, `Z`);
 
-const day = 86_400;
-const rangeSeconds = { '30d': 30 * day, '1y': 365 * day, all: null } as const;
-
-interface Named extends PlayerRef {
-    readonly name: string;
-}
-
-// A deleted player's placeholder names no one a reader can ask for.
-function resolve(query: Query, name: string): Named | null {
-    if (!nameSyntaxSchema.safeParse(name).success || placeholderNamePattern.test(nameKeyOf(name))) return null;
-    const key = nameKeyOf(name);
-    const user = query.select({ id: users.id, name: users.name }).from(users).where(and(eq(users.nameKey, key), isNull(users.deletedAt))).get();
-    if (user !== undefined) return { kind: `human`, ...user };
-    const bot = query.select({ id: bots.id, name: bots.name }).from(bots).where(and(eq(bots.nameKey, key), isNull(bots.deletedAt))).get();
-    return bot === undefined ? null : { kind: `bot`, ...bot };
-}
-
-const otherSide = sql`(case ${games.challengerSide} when 'x' then 'o' else 'x' end)`;
-const otherUserSide = sql`(case ${games.userSide} when 'x' then 'o' else 'x' end)`;
-
-// The seat columns a player can sit in, each with that seat's side and the
-// opponent's column and kind.
-function seatsOf(player: PlayerRef): readonly { column: SQLWrapper; side: SQLWrapper; opponent: SQLWrapper; opponentKind: PlayerRef[`kind`] }[] {
-    if (player.kind === `human`) return [{ column: games.userId, side: games.userSide, opponent: games.botId, opponentKind: `bot` }];
-    return [
-        { column: games.botId, side: otherUserSide, opponent: games.userId, opponentKind: `human` },
-        { column: games.challengerBotId, side: games.challengerSide, opponent: games.destBotId, opponentKind: `bot` },
-        { column: games.destBotId, side: otherSide, opponent: games.challengerBotId, opponentKind: `bot` },
-    ];
-}
+const rangeSeconds = { '30d': 30 * daySeconds, '1y': 365 * daySeconds, all: null } as const;
 
 interface PlayedRow {
     readonly side: Side;
@@ -85,7 +57,7 @@ function playedRows(query: Query, player: PlayerRef): PlayedRow[] {
 // A bot's counted games against guests: unrated, and in no other figure.
 function guestRecord(query: Query, botId: string): NonNullable<PlayerRecord[`guests`]> {
     const row = query.get<{ games: number; won: number | null; lost: number | null }>(
-        sql`select count(*) as games, sum(${games.winner} = ${otherUserSide}) as won, sum(${games.winner} = ${games.userSide}) as lost from ${games} where ${games.botId} = ${botId} and ${games.guestName} is not null and ${counted}`,
+        sql`select count(*) as games, sum(${games.winner} = ${botSideAgainstPerson}) as won, sum(${games.winner} = ${games.userSide}) as lost from ${games} where ${games.botId} = ${botId} and ${games.guestName} is not null and ${counted}`,
     );
     return { games: row.games, won: row.won ?? 0, lost: row.lost ?? 0 };
 }
@@ -153,7 +125,7 @@ function placingsOf(query: Query, botId: string): NonNullable<PlayerRecord[`plac
 
 // A player's record over every finished game but aborted and voided ones; null for a name no player holds.
 function playerRecord(query: Query, ladder: Pick<Ladder, `read`>, name: string, nowMs: number): PlayerRecord | null {
-    const player = resolve(query, name);
+    const player = resolvePlayer(query, name);
     if (player === null) return null;
     const rows = playedRows(query, player);
     const asX = { games: 0, won: 0 };
@@ -212,7 +184,7 @@ function playerRecord(query: Query, ladder: Pick<Ladder, `read`>, name: string, 
 
 // A player's rating after each rated game in the range, oldest first, the newest `ratingHistoryCap` at most.
 function ratingHistory(query: Query, name: string, range: keyof typeof rangeSeconds, nowMs: number): RatingPoint[] | null {
-    const player = resolve(query, name);
+    const player = resolvePlayer(query, name);
     if (player === null) return null;
     const span = rangeSeconds[range];
     const since = span === null ? null : Math.floor(nowMs / 1000) - span;
@@ -241,17 +213,12 @@ export interface PlayerAnswer<T> {
 }
 
 function remembering<T>(now: () => number, serialize: (value: T) => string): (key: string, read: () => T | null) => PlayerAnswer<T> {
-    const memo = new Map<string, { at: number; answer: PlayerAnswer<T> }>();
-    return (key, read) => {
-        const at = now();
-        const held = memo.get(key);
-        if (held !== undefined && at >= held.at && at - held.at < playerRecordMemoMs) return held.answer;
-        const value = read();
-        const answer = value === null ? { value, status: 404, body: notFound } : { value, status: 200, body: serialize(value) };
-        memo.set(key, { at, answer });
-        for (const [stale, entry] of memo) if (at - entry.at >= playerRecordMemoMs) memo.delete(stale);
-        return answer;
-    };
+    const memo = new WindowMemo<PlayerAnswer<T>>({ windowMs: playerRecordMemoMs, now });
+    return (key, read) =>
+        memo.read(key, () => {
+            const value = read();
+            return value === null ? { value, status: 404, body: notFound } : { value, status: 200, body: serialize(value) };
+        });
 }
 
 /** The player reads, each name's read at most once in its few seconds, whoever asks. */

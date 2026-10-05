@@ -10,8 +10,8 @@ import {
 import { and, asc, eq, min } from 'drizzle-orm';
 import type { Query } from './db';
 import { tournamentRules, tournaments } from './db/schema';
+import { daySeconds } from './utc-day';
 
-const daySeconds = 86_400;
 const weekSeconds = 7 * daySeconds;
 
 // When a weekly rule's tournaments start: weekday 0 is Monday, and the minute is UTC.
