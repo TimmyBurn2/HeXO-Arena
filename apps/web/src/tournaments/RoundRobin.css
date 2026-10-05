@@ -392,20 +392,20 @@
     }
 
     /* Large text on a narrow window leaves a plate's name too little room beside its rating,
-       so the name takes the plate's width and the rating and remove step under it. */
+       so the name takes the plate's width and the rating and remove step under it, a duel's two plates as a field's. */
     @media (max-width: 19.5rem) {
-        .rr-plates .slot-filled .slot-who {
+        .rr-card .slot-filled .slot-who {
             flex-basis: 100%;
         }
     }
 
     /* At its narrowest, the name steps down a size and the plate gives up some padding to keep a name whole. */
     @media (max-width: 13rem) {
-        .rr-plates .slot-filled {
+        .rr-card .slot-filled {
             padding: var(--space-2) var(--space-3);
         }
 
-        .rr-plates .slot-name {
+        .rr-card .slot-name {
             font-size: var(--text-base);
         }
     }

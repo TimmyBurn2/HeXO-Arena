@@ -26,11 +26,15 @@ export type SlotResult =
     | { readonly kind: `not_played` }
     | { readonly kind: `aborted` };
 
-/** A pairing with the results of its two games, game 1 first; a pair playing several openings meets in one per opening, its leg, 1 when absent. */
+/**
+ * A pairing with the results of its games, game 1 first: two, or one
+ * where the pair plays a single game. A pair playing several openings
+ * meets in one per opening, its leg, 1 when absent.
+ */
 export interface ScoredPairing extends RoundPairing {
     readonly round: number;
     readonly leg?: number;
-    readonly games: readonly [SlotResult, SlotResult];
+    readonly games: readonly SlotResult[];
 }
 
 // A bot's line in the standings.
@@ -101,6 +105,12 @@ export function storedSlot(state: string, seat: string | null): SlotResult {
     }
 }
 
+/** A pairing row's slots as results: both, or game 1 alone where its second slot is none. */
+export function storedSlots(row: { readonly game1: string; readonly game1Seat: string | null; readonly game2: string; readonly game2Seat: string | null }): SlotResult[] {
+    const first = storedSlot(row.game1, row.game1Seat);
+    return row.game2 === `none` ? [first] : [first, storedSlot(row.game2, row.game2Seat)];
+}
+
 /** The seat a slot's point went to, if any: a no-show or a withdrawal scores for the bot that remained. */
 export function pointOf(result: SlotResult): PairingSeat | null {
     switch (result.kind) {
@@ -119,7 +129,7 @@ export function pointOf(result: SlotResult): PairingSeat | null {
 }
 
 /** The seat that plays x in a pairing's game: first in game 1, second in game 2. */
-export function xSeatOf(game: 1 | 2): PairingSeat {
+export function xSeatOf(game: number): PairingSeat {
     return game === 1 ? `first` : `second`;
 }
 
@@ -166,7 +176,7 @@ export function standingsOf(field: readonly string[], pairings: readonly ScoredP
             if (seat === null) continue;
             const bot = botAt(pairing, seat);
             points.set(bot, (points.get(bot) ?? 0) + 1);
-            const sides = seat === xSeatOf(index === 0 ? 1 : 2) ? asX : asO;
+            const sides = seat === xSeatOf(index + 1) ? asX : asO;
             sides.set(bot, (sides.get(bot) ?? 0) + 1);
         }
     }

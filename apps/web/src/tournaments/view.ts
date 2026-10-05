@@ -35,8 +35,8 @@ export function roundBegun(detail: TournamentDetail): boolean {
     return roundStates(detail).find((entry) => entry.round === round)?.state === `live`;
 }
 
-// A game as one of its two bots met it; a bot is its key in the tournament.
-function hexOf(game: TournamentGame, bot: number): HexView {
+/** A game as one of its two bots met it; a bot is its key in the tournament. */
+export function hexOf(game: TournamentGame, bot: number): HexView {
     const gameId = game.gameId;
     switch (game.outcome) {
         case `pending`:

@@ -305,7 +305,7 @@ export async function buildApp(deps: AppDeps): Promise<BuiltApp> {
     registerGameApi(app, { query, presence, games, watchers, gate, guests, limits, reservations: tournaments });
     registerFinishedGamesApi(app, { query, now: deps.now ?? Date.now });
     registerLeaderboardApi(app, { ladder, presence, now: deps.now ?? Date.now });
-    registerTournamentApi(app, { query, presence, games, gate, limits, tournaments, now: deps.now ?? Date.now });
+    registerTournamentApi(app, { query, presence, games, gate, limits, tournaments, random: deps.random ?? randomFloat, now: deps.now ?? Date.now });
     registerBotSettingsApi(app, { query, limits, tournaments });
     registerDuelApi(app, { query, presence, games, gate, limits, reservations: tournaments, duels, random: deps.random ?? randomFloat, now: deps.now ?? Date.now });
     const playerReads = createPlayerReads({ query, ladder, now: deps.now ?? Date.now });

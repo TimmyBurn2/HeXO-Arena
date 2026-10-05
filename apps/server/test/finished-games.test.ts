@@ -348,7 +348,7 @@ describe('GET /api/games/finished', () => {
 
         it('names a tournament game\'s tournament, its round, and which game of the pairing it is, and a duel game\'s duel', async () => {
             const listed = new Map((await page(`?tests=1`)).games.map((game) => [game.gameId, game]));
-            expect(listed.get(games.tournament ?? ``)?.tournament).toEqual({ id: tournamentId, name: `Autumn round robin`, round: 2, game: 1 });
+            expect(listed.get(games.tournament ?? ``)?.tournament).toEqual({ id: tournamentId, name: `Autumn round robin`, format: `round_robin`, round: 2, game: 1 });
             expect(listed.get(games.duel ?? ``)).toMatchObject({ duel: { id: duelId, game: 1, of: 2 } });
             expect(listed.get(games.duel ?? ``)?.tournament).toBeUndefined();
             expect(listed.get(games.plain ?? ``)?.tournament).toBeUndefined();
@@ -375,8 +375,8 @@ describe('GET /api/games/finished', () => {
             // A second round of the tournament and a second game of the duel, finished after every game above.
             beforeEach(() => {
                 world.sqlite
-                    .prepare(`insert into tournament_pairings (id, tournament_id, round, first_bot_id, second_bot_id, game1, game1_seat, leg) values ('p_round1alpha', ?, 1, ?, ?, 'played', 'first', 2)`)
-                    .run(tournamentId, id(`alpha`), id(`beta`));
+                    .prepare(`insert into tournament_pairings (id, tournament_id, round, first_bot_id, second_bot_id, game1, game1_seat, games_per_pair) values ('p_round1alpha', ?, 1, ?, ?, 'played', 'first', 2)`)
+                    .run(tournamentId, id(`beta`), id(`alpha`));
                 const tagged = (challenger: string, dest: string, tag: NonNullable<Parameters<typeof insertBotGame>[1][`tag`]>) =>
                     insertBotGame(query, { challengerBotId: id(challenger), destBotId: id(dest), challengerSide: `x`, timeControl: turnClock, opening: opening(5), tag, unratedByChoice: tag.kind === `duel` });
                 round1 = finish(tagged(`beta`, `alpha`, { kind: `pairing`, id: `p_round1alpha`, game: 1 }), `o`);

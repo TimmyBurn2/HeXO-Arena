@@ -43,7 +43,7 @@ import {
     type DuelList,
     type StreamEvent,
     type TimeControl,
-    type CreateRoundRobinRequest,
+    type CreateTournamentRequest,
     type TournamentDetail,
     type TournamentList,
 } from '@hexo-arena/contract';
@@ -259,14 +259,14 @@ export class ArenaClient {
         return tournamentDetailSchema.parse(await response.json());
     }
 
-    /** Sets a round robin of bots up as the signed-in person; the answer is the round robin. */
-    async createRoundRobin(cookie: string, request: Partial<CreateRoundRobinRequest> & Pick<CreateRoundRobinRequest, `bots` | `timeControl`>): Promise<TournamentDetail> {
+    /** Sets a duel or round robin of bots up as the signed-in person; the answer is the tournament. */
+    async createTournament(cookie: string, request: Partial<CreateTournamentRequest> & Pick<CreateTournamentRequest, `bots` | `timeControl`>): Promise<TournamentDetail> {
         const response = await fetch(this.#url(tournamentsPath), {
             method: `POST`,
             headers: { cookie, ...json },
             body: JSON.stringify(request),
         });
-        if (response.status !== 201) throw await refusal(response, `setting up a round robin of ${request.bots.map((bot) => bot.name).join(`, `)}`);
+        if (response.status !== 201) throw await refusal(response, `setting up a tournament of ${request.bots.map((bot) => bot.name).join(`, `)}`);
         return tournamentDetailSchema.parse(await response.json());
     }
 

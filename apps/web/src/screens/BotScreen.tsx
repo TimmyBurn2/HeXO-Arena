@@ -1,7 +1,8 @@
 import { Fragment, useCallback, useId } from 'react';
 import { analysisPagePath, botMeta, levelFacts, nameKeyOf, notFoundMeta, pagePath, type Accepts, type Analyzer, type BotListing, type Levels, type LiveGameEntry } from '@hexo-arena/contract';
 import { fetchBots } from '../api/client';
-import { duelsPath, pickReason } from '../duels/setup';
+import { duelsPath } from '../duels/setup';
+import { eventReadiness, reasonText } from '../play/readiness';
 import { useDuelStates } from '../duels/use-duels';
 import { useAsync } from '../api/use-async';
 import { OwnerPanel } from '../components/OwnerPanel';
@@ -88,8 +89,8 @@ function BotProfile({ bot, onChanged }: { bot: BotListing; onChanged: () => void
     };
     // Start a duel opens a setup only for a bot the picker would add, and says why not as the picker does;
     // beside no other bot, no reason is a pair's.
-    const duelWhy = pickReason(bot, null, { reserved: duelStates.reserved, states: duelStates.states, viewer });
-    const duelReason = duelWhy === null || duelWhy === `pair` || duelWhy === `clock` ? null : text.duels.picker.reasons[duelWhy];
+    const duelWhy = eventReadiness(bot, [], { reserved: duelStates.reserved, states: duelStates.states, viewer }, true);
+    const duelReason = duelWhy === null || duelWhy === `pair` || duelWhy === `clock` ? null : reasonText(duelWhy, []);
     const reason = readiness !== `ready` ? blockedReasons[readiness] : duelReason;
 
     return (

@@ -1,13 +1,10 @@
 import {
     acceptsCovers,
-    botConcurrentGameCap,
     defaultDuelGames,
     defaultOpeningPlies,
     defaultTestGames,
     duelGameCounts,
     duelGamesOptions,
-    duelPerBotCap,
-    nameKeyOf,
     openingPliesSchema,
     pagePath,
     scheduledIncrementMs,
@@ -15,7 +12,6 @@ import {
     scheduledTurnMs,
     testGameCounts,
     type BotListing,
-    type DuelBotState,
     type DuelDetail,
     type DuelGames,
     type DuelKind,
@@ -32,27 +28,10 @@ export type SlotKey = `first` | `second`;
 
 export const otherSlot = (slot: SlotKey): SlotKey => (slot === `first` ? `second` : `first`);
 
-/** What the setup reads beside the bot list: the running tournament's bots, each bot's duel state, and who is looking. */
-export interface DuelReads {
-    readonly reserved: ReadonlySet<string>;
-    readonly states: readonly DuelBotState[];
-    readonly viewer: string | null;
-}
-
-/** Why a bot cannot take a slot now; a slot takes a bot with none. */
-export type PickReason = `offline` | `closed` | `nothing` | `tournament` | `busy` | `duels` | `refused` | `pair` | `clock`;
-
-/** The reasons a bot not ready now stands under: Ready now hides these, and the list's foot counts them. */
-export const notReady: ReadonlySet<PickReason> = new Set([`offline`, `closed`, `nothing`]);
-
 // The clocks a duel can take of both bots: a turn window inside the scheduled bounds, in whole seconds, and whether a match clock is in.
 interface DuelClocks {
     readonly turn: readonly [number, number] | null;
     readonly match: boolean;
-}
-
-function stateOf(bot: BotListing, reads: DuelReads): DuelBotState | undefined {
-    return reads.states.find((state) => nameKeyOf(state.name) === nameKeyOf(bot.name));
 }
 
 // A scheduled game takes turn clocks of 5 to 60 s, in the 5 s steps a clock set by hand takes.
@@ -84,26 +63,6 @@ export function duelClocks(first: BotListing, second: BotListing | null): DuelCl
 export function shareClock(first: BotListing, second: BotListing | null): boolean {
     const clocks = duelClocks(first, second);
     return clocks.turn !== null || clocks.match;
-}
-
-/**
- * Why a bot cannot take a slot beside the bot in the other one, or null
- * when it can: being open and its owner's switch bind only bots the viewer
- * does not own, who starts the duel.
- */
-export function pickReason(bot: BotListing, other: BotListing | null, reads: DuelReads): PickReason | null {
-    const own = ownedBy(bot, reads.viewer);
-    if (!bot.online) return `offline`;
-    if (!bot.openForChallenges && !own) return `closed`;
-    if (!shareClock(bot, null)) return `nothing`;
-    if (reads.reserved.has(bot.name)) return `tournament`;
-    if (bot.liveGames >= botConcurrentGameCap) return `busy`;
-    const state = stateOf(bot, reads);
-    if (state !== undefined && state.dueling.length + state.roundRobins >= duelPerBotCap) return `duels`;
-    if (state !== undefined && !state.duelsByOthers && !own) return `refused`;
-    if (other !== null && state !== undefined && state.dueling.some((name) => nameKeyOf(name) === nameKeyOf(other.name))) return `pair`;
-    if (other !== null && !shareClock(bot, other)) return `clock`;
-    return null;
 }
 
 /** A duel between two bots one person owns is a test. */

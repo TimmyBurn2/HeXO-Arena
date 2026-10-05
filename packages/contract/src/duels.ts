@@ -46,7 +46,7 @@ export const duelLiveCap = 2;
 /** Duels and tests one person may start in a UTC day. */
 export const duelDailyCap = 10;
 
-/** Running duels and round robins people set up that one bot plays in at once, together, so they fill at most half its game slots. */
+/** Running duels and tournaments people set up that one bot plays in at once, together, so they fill at most half its game slots. */
 export const duelPerBotCap = 2;
 
 /** Running duels one pair of bots plays at once; a unique index holds it. */
@@ -339,7 +339,7 @@ export const duelBotStateSchema = z
             .int()
             .min(0)
             .max(duelPerBotCap)
-            .meta({ description: `Running round robins people set up that it plays in; with its duels, at most ${String(duelPerBotCap)}.` }),
+            .meta({ description: `Running duels and round robins people set up as tournaments that it plays in; with its duels, at most ${String(duelPerBotCap)}.` }),
     })
     .meta({ id: `DuelBotState`, description: `What a duel's setup reads of a listed bot beside the bot list.` });
 export type DuelBotState = z.infer<typeof duelBotStateSchema>;

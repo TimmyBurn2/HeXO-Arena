@@ -22,7 +22,7 @@ import { activeSince } from './leaderboard-api';
 import { isProvisional, type PlayerRef } from './rating';
 import { readRating } from './rating-store';
 import { shownBot, shownUser, type ShownName } from './shown-names';
-import { standingsOf, storedSlot } from './round-robin';
+import { standingsOf, storedSlots } from './round-robin';
 import { creatorJoin, creators, nameColumns, tournamentNameOf } from './tournament-store';
 import { daySeconds } from './utc-day';
 import { WindowMemo } from './window-memo';
@@ -115,7 +115,7 @@ function placingsOf(query: Query, botId: string): NonNullable<PlayerRecord[`plac
                 leg: pairing.leg,
                 first: pairing.first,
                 second: pairing.second,
-                games: [storedSlot(pairing.game1, pairing.game1Seat), storedSlot(pairing.game2, pairing.game2Seat)] as const,
+                games: storedSlots(pairing),
             }));
         const line = standingsOf(field, pairings).find((standing) => standing.bot === botId);
         if (line === undefined || row.endedAt === null) return [];

@@ -143,7 +143,7 @@ export const accountExportSchema = z
                     endedAt: time.nullable(),
                 }),
             )
-            .meta({ description: `Round robins and tests of several bots the account set up.` }),
+            .meta({ description: `Duels and round robins the account set up as tournaments, tests among them.` }),
         challenges: z.array(
             z.object({
                 id: z.string(),

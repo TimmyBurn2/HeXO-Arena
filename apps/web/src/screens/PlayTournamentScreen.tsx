@@ -1,18 +1,19 @@
 import { useState } from 'react';
-import { clockText, nameKeyOf, playTournamentMeta, tournamentMinPresent, tournamentWaitingPollMs, type TournamentDetail, type TournamentList, type TournamentSummary } from '@hexo-arena/contract';
+import { clockText, nameKeyOf, playTournamentMeta, tournamentBotsMin, tournamentWaitingPollMs, type TournamentDetail, type TournamentList, type TournamentSummary } from '@hexo-arena/contract';
 import { fetchTournament, fetchTournaments } from '../api/client';
 import { useAsync, type AsyncView } from '../api/use-async';
 import { ErrorFrame, SkeletonRows } from '../components/states';
 import { useSetupReads } from '../duels/use-duels';
 import { useMe } from '../me';
 import { PlayHead } from '../play/PlayHead';
+import { eventReadiness } from '../play/readiness';
 import { Link } from '../router/Link';
 import { useRoute } from '../router/use-route';
 import { useSiteStatus } from '../site-status';
 import { text } from '../text';
 import { EntryControl } from '../tournaments/EntryControl';
-import { NewRoundRobin } from '../tournaments/NewRoundRobin';
-import { joinReason, roundRobinSetupFromParams } from '../tournaments/round-robin';
+import { NewTournament } from '../tournaments/NewTournament';
+import { tournamentSetupFromParams } from '../tournaments/setup';
 import { TournamentRow } from '../tournaments/TournamentRow';
 import { gamesTournamentsPath, tournamentPagePath } from '../tournaments/view';
 import { useDocumentMeta } from '../use-document-meta';
@@ -35,14 +36,14 @@ async function loadWeekly(): Promise<Weekly> {
 const loadMine = async () => fetchTournaments({ mine: `1` });
 
 /**
- * The Tournament place under Play: a round robin of picked bots set up
- * here, beside the weekly tournament with its entry in place and the
- * reader's own round robins, where one just set up is found again.
+ * The Tournament place under Play: a duel or round robin of picked bots
+ * set up here, beside the weekly tournament with its entry in place and
+ * the reader's own tournaments, where one just set up is found again.
  */
 export function PlayTournamentScreen() {
     const route = useRoute();
     useDocumentMeta(route, playTournamentMeta.title, playTournamentMeta.description);
-    const [initial] = useState(() => roundRobinSetupFromParams(new URLSearchParams(window.location.search)));
+    const [initial] = useState(() => tournamentSetupFromParams(new URLSearchParams(window.location.search)));
     const me = useMe();
     const paused = useSiteStatus() === `paused`;
     const self = me.status === `ready` ? me.me : undefined;
@@ -50,13 +51,13 @@ export function PlayTournamentScreen() {
     const setup = useSetupReads();
     // Read again on a waiting tournament's beat while the page is in view.
     const weekly = useAsync(loadWeekly, { every: tournamentWaitingPollMs });
-    // The reader's own round robins and their quota, read again with the setup's reads.
+    // The reader's own tournaments and their quota, read again with the setup's reads.
     const mine = useAsync(loadMine, { enabled: viewer !== null });
     const reads = { reserved: setup.reserved, states: setup.states, viewer };
-    const ready = setup.bots?.filter((bot) => joinReason(bot, [], reads) === null) ?? [];
+    const ready = setup.bots?.filter((bot) => eventReadiness(bot, [], reads) === null) ?? [];
     const next = weekly.data?.next ?? null;
     const at = weekly.data?.at ?? 0;
-    // A bot entered in the coming weekly leaves a round robin as the weekly starts, which its plate says.
+    // A bot entered in the coming weekly leaves a duel or round robin as the weekly starts, which its plate says.
     const weeklyHint = (bot: string): string | null => {
         if (next === null || !next.entries.some((entry) => nameKeyOf(entry.bot) === nameKeyOf(bot))) return null;
         return text.roundRobins.weekly(text.time.until(Math.max(0, Math.floor((Date.parse(next.startsAt) - at) / 1000))));
@@ -73,7 +74,7 @@ export function PlayTournamentScreen() {
                         ) : (
                             <SkeletonRows />
                         )
-                    ) : viewer !== null && ready.length < tournamentMinPresent && initial.bots.length === 0 ? (
+                    ) : viewer !== null && ready.length < tournamentBotsMin && initial.bots.length === 0 ? (
                         <div className="empty">
                             <h2>{text.roundRobins.noneReady.heading}</h2>
                             <p>{text.roundRobins.noneReady.body(ready.length)}</p>
@@ -84,7 +85,7 @@ export function PlayTournamentScreen() {
                             </div>
                         </div>
                     ) : (
-                        <NewRoundRobin
+                        <NewTournament
                             bots={setup.bots}
                             reads={reads}
                             me={self}
@@ -101,7 +102,7 @@ export function PlayTournamentScreen() {
                 </div>
                 <aside className="duels-side">
                     <WeeklyBlock weekly={weekly} />
-                    <YourRoundRobins list={mine.data} failed={mine.error} signedIn={viewer !== null} signedOut={me.status === `ready` && viewer === null} />
+                    <YourTournaments list={mine.data} failed={mine.error} signedIn={viewer !== null} signedOut={me.status === `ready` && viewer === null} />
                 </aside>
             </div>
         </>
@@ -142,14 +143,14 @@ function Next({ detail, at, onEntry }: { detail: TournamentDetail; at: number; o
     );
 }
 
-// The round robins the reader set up or their bots play, the live first, then the latest over.
-function YourRoundRobins({ list, failed, signedIn, signedOut }: { list: TournamentList | null; failed: boolean; signedIn: boolean; signedOut: boolean }) {
+// The duels and round robins the reader set up or their bots play, the live first, then the latest over.
+function YourTournaments({ list, failed, signedIn, signedOut }: { list: TournamentList | null; failed: boolean; signedIn: boolean; signedOut: boolean }) {
     const words = text.roundRobins.side;
     const mine: TournamentSummary[] = list === null ? [] : [...list.running, ...list.past].filter((tournament) => tournament.origin === `person`).slice(0, 5);
     return (
-        <section className="duel-list" aria-labelledby="your-round-robins-title">
+        <section className="duel-list" aria-labelledby="your-tournaments-title">
             <div className="duel-list-head">
-                <h2 id="your-round-robins-title" className="section-title">
+                <h2 id="your-tournaments-title" className="section-title">
                     {words.yours}
                 </h2>
                 <Link to={gamesTournamentsPath(`yours`)}>{words.allYours}</Link>

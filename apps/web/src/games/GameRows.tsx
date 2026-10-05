@@ -96,7 +96,7 @@ function GameRow({ game, now }: { game: FinishedGameEntry; now: number }) {
 // The duel or tournament a game belongs to, as its caption names and links it.
 function eventOf(game: FinishedGameEntry): { to: string; words: string } | null {
     if (game.tournament !== undefined) {
-        return { to: pagePath(`tournament`, { id: game.tournament.id }), words: gameCaption(game.tournament) };
+        return { to: pagePath(`tournament`, { id: game.tournament.id }), words: gameCaption(game.tournament, game.test === true) };
     }
     if (game.duel !== undefined) return { to: duelPagePath(game.duel.id), words: text.duels.caption(game.test === true ? `test` : `duel`, game.duel.game, game.duel.of) };
     return null;

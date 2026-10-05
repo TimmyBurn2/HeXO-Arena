@@ -71,7 +71,7 @@ async function findLeft(client: ArenaClient, plan: DevRoundRobinPlan, wanted: (s
 async function start(options: DevRoundRobinOptions, plan: DevRoundRobinPlan): Promise<string> {
     const cookie = await options.cookieOf(plan.creator);
     const request = { bots: plan.bots.map((name) => ({ name })), gamesPerPair: plan.gamesPerPair, timeControl: roundRobinClock };
-    const created = await waitingOut(async () => options.client.createRoundRobin(cookie, request), options.log, options.pollMs);
+    const created = await waitingOut(async () => options.client.createTournament(cookie, request), options.log, options.pollMs);
     return created.id;
 }
 

@@ -139,14 +139,15 @@ test('the picker takes the keyboard: its rows are one Tab stop, the arrows move 
     await expect(page.getByRole(`heading`, { name: `New test` })).toBeVisible();
 });
 
-test('a refusal says why by its code, naming the bot and the cause the server found though the page read it late', async ({ page }) => {
+test('a refusal says why by its code, naming the bot the server names though the page read it late, its plate saying why once read again', async ({ page }) => {
     const state = dueling();
     await open(page, `/play/duels?first=hextide&second=Pistol1`, state);
     await expect(page.getByRole(`button`, { name: `Start duel` })).toBeVisible();
     // Pistol1 meets its most duels after the page read the duel states.
     state.duelStates = duelBots.map((bot) => ({ name: bot.name, duelsByOthers: true, dueling: bot.name === `Pistol1` ? [`devbot-a`, `devbot-b`] : [], roundRobins: 0 }));
     await page.getByRole(`button`, { name: `Start duel` }).click();
-    await expect(page.getByText(`Pistol1 is in 2 duels or round robins already; try again after one ends.`)).toBeVisible();
+    await expect(page.getByText(/^Pistol1 is busy: /u)).toBeVisible();
+    await expect(page.getByText(`Pistol1: In 2 duels or round robins; try again after one ends`)).toBeVisible();
     await expect(page).toHaveURL(/\/play\/duels\?/u);
 });
 
@@ -232,7 +233,7 @@ test('a visitor gets no Run 50 more on another\'s test, which the server would r
         });
         return { status: response.status, body: (await response.json()) as unknown };
     });
-    expect(answer).toEqual({ status: 400, body: { error: `refused`, code: `not_open` } });
+    expect(answer).toEqual({ status: 400, body: { error: `refused`, code: `not_open`, bot: `pebble` } });
 });
 
 test('a long test lists its first pairs and the one under way, names its games without a winner, and shows every game on asking', async ({ page }) => {

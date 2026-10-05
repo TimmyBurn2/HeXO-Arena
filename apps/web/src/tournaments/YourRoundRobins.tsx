@@ -12,9 +12,10 @@ import './RoundRobin.css';
 const shown = 3;
 
 /**
- * The signed-in person's round robins on their Profile, as Games lists
- * them under Yours: those they set up and those their bots play, live
- * first, then a link to the rest; nothing at all while there are none.
+ * The signed-in person's duels and round robins set up as tournaments on
+ * their Profile, as Games lists them under Yours: those they set up and
+ * those their bots play, live first, then a link to the rest; nothing at
+ * all while there are none.
  */
 export function YourRoundRobins() {
     const load = useCallback(async () => fetchTournaments({ mine: `1` }), []);

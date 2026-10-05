@@ -24,11 +24,12 @@ async function noSidewaysScroll(page: Page): Promise<void> {
 for (const width of [1280, 390]) {
     test(`a round robin is set up from bots picked several at once and opens its page, Back finding the setup as it was left, at ${String(width)} px`, async ({ page }) => {
         await open(page, `/play/tournament`, width);
-        await expect(page.getByRole(`heading`, { name: `New round robin` })).toBeVisible();
-        await expect(page.getByText(`Pick 3 to 8 from the bot list, several at once`)).toBeVisible();
+        await expect(page.getByRole(`heading`, { name: `New duel` })).toBeVisible();
+        await expect(page.getByText(`Pick 2 to 8 from the bot list, several at once`)).toBeVisible();
         await pickBots(page, [`hextide`, `Pistol1`, `devbot-a`]);
+        await expect(page.getByRole(`heading`, { name: `New round robin` })).toBeVisible();
         await expect(page.getByText(/^Every pair meets once: 3 pairs in 3 rounds\./u)).toBeVisible();
-        await expect(page.getByText(`Entered in the weekly, which starts in 2 h 59 min; it leaves this round robin then.`)).toBeVisible();
+        await expect(page.getByText(`Entered in the weekly, which starts in 2 h 59 min; it leaves this duel or round robin then.`)).toBeVisible();
         await noSidewaysScroll(page);
         await page.getByRole(`button`, { name: `Start round robin` }).click();
         await expect(page).toHaveURL(/\/tournaments\/t_newrobin0001$/u);
@@ -47,7 +48,7 @@ for (const width of [1280, 390]) {
         state.duelStates = duelBots.map((bot) => ({ name: bot.name, duelsByOthers: bot.name !== `quietlake`, dueling: [], roundRobins: bot.name === `devbot-c` ? 2 : 0 }));
         await open(page, `/play/tournament`, width, state);
         await pickBots(page, [`hextide`]);
-        await page.getByRole(`button`, { name: `Add bots to the round robin` }).click();
+        await page.getByRole(`button`, { name: `Add a second bot` }).click();
         const dialog = page.locator(`dialog.rr-picker[open]`);
         await expect(dialog.getByRole(`button`, { name: /^hextide\b/u })).toContainText(`added`);
         await expect(dialog.getByRole(`button`, { name: /^quietlake\b/u })).toHaveAttribute(`aria-disabled`, `true`);
@@ -55,7 +56,7 @@ for (const width of [1280, 390]) {
         await expect(dialog.getByRole(`button`, { name: /^devbot-c\b/u })).toContainText(`In 2 duels or round robins; try again after one ends`);
         await dialog.getByRole(`button`, { name: /^Pistol1\b/u }).click();
         await expect(dialog.getByText(`1 picked`)).toBeVisible();
-        await expect(dialog.getByText(`6 more fit; a round robin takes 3 to 8`)).toBeVisible();
+        await expect(dialog.getByText(`6 more fit; up to 8 bots`)).toBeVisible();
         if (width === 390) {
             const box = await dialog.boundingBox();
             expect(box?.width).toBe(390);
@@ -63,7 +64,7 @@ for (const width of [1280, 390]) {
         await noSidewaysScroll(page);
     });
 
-    test(`a refusal says why under Start and marks the bot it names, and a test takes up to ten games a pair, at ${String(width)} px`, async ({ page }) => {
+    test(`a refusal says why under Start and marks the bot it names, and a test takes up to fifty games a pair while no bot passes 70, at ${String(width)} px`, async ({ page }) => {
         await open(page, `/play/tournament`, width, robins({ roundRobinStart: { status: 400, code: `bot_busy`, bot: `devbot-a` } }));
         await pickBots(page, [`hextide`, `Pistol1`, `devbot-a`]);
         await page.getByRole(`button`, { name: `Start round robin` }).click();
@@ -72,17 +73,20 @@ for (const width of [1280, 390]) {
         for (const name of [`Pistol1`, `devbot-a`]) await page.getByRole(`button`, { name: `Remove ${name}` }).click();
         await pickBots(page, [`cinder`, `pebble`]);
         await expect(page.getByRole(`heading`, { name: `New test` })).toBeVisible();
-        await expect(page.getByRole(`radiogroup`, { name: `Games per pair` }).getByRole(`radio`)).toHaveCount(4);
+        const counts = page.getByRole(`radiogroup`, { name: `Games per pair` }).getByRole(`radio`);
+        await expect(counts).toHaveCount(9);
+        await expect(counts.last()).toBeDisabled();
+        await expect(page.getByText(`3 bots take up to 30 a pair: no bot plays more than 30 games, or 70 in a test.`)).toBeVisible();
         await expect(page.getByRole(`button`, { name: `Start test` })).toBeVisible();
         await noSidewaysScroll(page);
     });
 
     test(`a signed-out reader is asked to sign in to set one up, the weekly beside it, at ${String(width)} px`, async ({ page }) => {
         await open(page, `/play/tournament`, width, robins({ me: null }));
-        await expect(page.getByText(`Sign in to set up a round robin; anyone can watch one.`)).toBeVisible();
-        await expect(page.getByRole(`button`, { name: `Add bots to the round robin` })).toHaveCount(0);
+        await expect(page.getByText(`Sign in to set up a duel or round robin; anyone can watch one.`)).toBeVisible();
+        await expect(page.getByRole(`button`, { name: `Add bots`, exact: true })).toHaveCount(0);
         await expect(page.getByRole(`heading`, { name: `Weekly tournament` })).toBeVisible();
-        await expect(page.getByText(`Sign in to see your round robins.`)).toBeVisible();
+        await expect(page.getByText(`Sign in to see your tournaments.`)).toBeVisible();
         await noSidewaysScroll(page);
     });
 
@@ -127,7 +131,7 @@ for (const width of [1280, 390]) {
 
     test(`the tournaments under Games tag each one and narrow to the reader's own and to tests, at ${String(width)} px`, async ({ page }) => {
         await open(page, `/games/tournaments`, width);
-        await expect(page.getByRole(`link`, { name: `Set up a round robin` })).toHaveAttribute(`href`, `/play/tournament`);
+        await expect(page.getByRole(`link`, { name: `New duel or round robin` })).toHaveAttribute(`href`, `/play/tournament`);
         const live = page.getByRole(`region`, { name: `Live` });
         await expect(live.locator(`.tournament-row`)).toHaveCount(2);
         await expect(live.locator(`.tournament-row`).first()).toContainText(`unrated`);
@@ -135,7 +139,7 @@ for (const width of [1280, 390]) {
         await page.getByRole(`button`, { name: `Tests` }).click();
         await expect(page).toHaveURL(/\/games\/tournaments\?list=tests$/u);
         await expect(page.getByRole(`link`, { name: `Round robin by ana` })).toBeVisible();
-        await expect(page.getByText(`No round robin is live right now.`)).toBeVisible();
+        await expect(page.getByText(`No duel or round robin is live right now.`)).toBeVisible();
         await page.getByRole(`button`, { name: `Yours` }).click();
         await expect(page.getByRole(`link`, { name: `Round robin by ana` })).toBeVisible();
         await noSidewaysScroll(page);
@@ -168,7 +172,7 @@ for (const [width, height] of [[320, 640], [360, 740], [390, 844]] as const) {
         const devtools = await page.context().newCDPSession(page);
         for (const size of [24, 32]) {
             await devtools.send(`Page.setFontSizes`, { fontSizes: { standard: size } });
-            await page.getByRole(`button`, { name: `Add bots to the round robin` }).click();
+            await page.getByRole(`button`, { name: `Add bots`, exact: true }).click();
             const dialog = page.locator(`dialog.rr-picker[open]`);
             const last = dialog.locator(`.rr-pick:not([aria-disabled='true'])`).last();
             const name = (await last.getAttribute(`data-bot`)) ?? ``;

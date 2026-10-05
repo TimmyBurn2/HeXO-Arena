@@ -81,7 +81,8 @@ export function Crosstable({ detail }: { detail: TournamentDetail }) {
     );
 }
 
-function Hex({ view, side, bot, opponent }: { view: HexView; side: Side; bot: string; opponent: string }) {
+/** One game in a crosstable's or a duel's cell, in the stone of the side the bot played: filled when won, a ring when lost or without a winner, a dot to play, a dash when not played; a link once played. */
+export function Hex({ view, side, bot, opponent }: { view: HexView; side: Side; bot: string; opponent: string }) {
     const label = text.tournaments.hex(bot, side, opponent, outcomeWords[view.state]);
     const mark = (
         <svg className={`xt-hex xt-${view.state} xt-${side}`} viewBox={box} aria-hidden="true">

@@ -10,12 +10,13 @@ import {
     duelPerBotCap,
     estimateMoreGames,
     presenceGraceMs,
-    roundRobinDailyCap,
-    roundRobinLiveCap,
-    roundRobinMaxBots,
-    roundRobinTestGamesPerPair,
     testGameCounts,
-    tournamentMinPresent,
+    tournamentBotGamesMax,
+    tournamentBotsMax,
+    tournamentBotsMin,
+    tournamentDailyCap,
+    tournamentGameCounts,
+    tournamentLiveCap,
     tournamentRoundGapMs,
     levelCountMax,
     levelCountMin,
@@ -1673,80 +1674,97 @@ export const en = {
         },
     },
     roundRobins: {
-        newRoundRobin: `New round robin`,
-        newTest: `New test`,
-        cardNote: `Every bot meets every other`,
+        title: { duel: `New duel`, round_robin: `New round robin`, test: `New test` },
         fieldNote: (count: number) =>
-            count >= roundRobinMaxBots ? `${String(count)} bots, the most a round robin takes` : `${String(count)} ${plural(count, `bot`, `bots`)}; ${String(roundRobinMaxBots - count)} more fit`,
-        allYours: (count: number) => `All ${String(count)} bots are yours`,
-        allOwners: (owner: string, count: number) => `All ${String(count)} bots are ${owner}'s`,
+            count === 0
+                ? `Two bots play a duel, three or more a round robin`
+                : count === 1
+                  ? `1 bot; one more makes a duel`
+                  : count === tournamentBotsMin
+                    ? `2 bots; a third makes a round robin`
+                    : count >= tournamentBotsMax
+                      ? `${String(count)} bots, the most that fit`
+                      : `${String(count)} bots; ${String(tournamentBotsMax - count)} more fit`,
+        allYours: (count: number) => (count === 2 ? `Both bots are yours` : `All ${String(count)} bots are yours`),
+        allOwners: (owner: string, count: number) => (count === 2 ? `Both bots are ${owner}'s` : `All ${String(count)} bots are ${owner}'s`),
         add: `Add bots`,
-        addLabel: `Add bots to the round robin`,
-        addHint: `Pick ${String(tournamentMinPresent)} to ${String(roundRobinMaxBots)} from the bot list, several at once`,
-        addMore: (more: number) => `Add ${String(more)} more; a round robin takes ${String(tournamentMinPresent)} to ${String(roundRobinMaxBots)}`,
-        moreFit: (more: number) => `${String(more)} more fit; a round robin takes ${String(tournamentMinPresent)} to ${String(roundRobinMaxBots)}`,
-        rule: `Each pair plays one opening twice, sides swapped. Add ${String(tournamentMinPresent)} bots or more; the games, the clock, and the opening follow. Each bot can play at any strength it offers.`,
+        addLabel: `Add bots`,
+        addSecondLabel: `Add a second bot`,
+        addHint: `Pick ${String(tournamentBotsMin)} to ${String(tournamentBotsMax)} from the bot list, several at once`,
+        addSecond: `One more makes a duel; three or more, a round robin`,
+        moreFit: (more: number, count: number) =>
+            count === tournamentBotsMin ? `${String(more)} more fit; three or more play a round robin` : `${String(more)} more fit; two bots play a duel, three to eight a round robin`,
+        rule: `Pick ${String(tournamentBotsMin)} to ${String(tournamentBotsMax)} bots: two play a duel, three or more a round robin. The games, the clock, and the opening follow; each bot can play at any strength it offers.`,
         schedule: `Schedule`,
         scheduleLine: (pairs: number, rounds: number, atOnce: number, gamesPerBot: number) =>
             atOnce === 1
-                ? `Every pair meets once: ${String(pairs)} ${plural(pairs, `pair`, `pairs`)} in ${String(rounds)} rounds. With ${String(rounds)} bots one rests each round, so one pair plays at a time; each bot plays ${String(gamesPerBot)} games.`
+                ? `Every pair meets once: ${String(pairs)} ${plural(pairs, `pair`, `pairs`)} in ${String(rounds)} rounds. With ${String(rounds)} bots one rests each round, so one pair plays at a time; each bot plays ${String(gamesPerBot)} ${plural(gamesPerBot, `game`, `games`)}.`
                 : `Every pair meets once: ${String(pairs)} pairs in ${String(rounds)} rounds, ${String(atOnce)} pairs at a time. No bot plays two games at once, so each plays its ${String(gamesPerBot)} games one after another.`,
         scheduleLabel: (bots: number) => `The schedule's crosstable of ${String(bots)} bots, every game still to play`,
-        gamesPerPair: `Games per pair`,
-        pairNote: (games: number) => (games === 2 ? `One opening per pair, played twice with sides swapped.` : `${String(games / 2)} openings per pair, each played twice with sides swapped.`),
-        clockFoot: `Every bot takes every clock here; a round robin never runs unlimited.`,
+        gamesLabel: (bots: number) => (bots <= tournamentBotsMin ? `Games` : `Games per pair`),
+        countsOut: (bots: number, most: number) =>
+            `${String(bots)} bots take up to ${String(most)} a pair: no bot plays more than ${String(tournamentBotGamesMax.event)} games, or ${String(tournamentBotGamesMax.test)} in a test.`,
+        pairNote: (games: number, bots: number) =>
+            bots <= tournamentBotsMin
+                ? games === 1
+                    ? `A single game; sides drawn by lot.`
+                    : games === 2
+                      ? `One opening, played twice with sides swapped.`
+                      : `${String(games / 2)} openings, each played twice with sides swapped.`
+                : games === 1
+                  ? `A single game per pair; sides drawn by lot.`
+                  : games === 2
+                    ? `One opening per pair, played twice with sides swapped.`
+                    : `${String(games / 2)} openings per pair, each played twice with sides swapped.`,
+        clockFoot: `Every bot takes every clock here; a duel or round robin never runs unlimited.`,
         openingValue: (count: number) => (count === 1 ? `Origin only` : `${String(count)} ${plural(count, `stone`, `stones`)}, drawn for each pair`),
-        openingOrigin: `The origin alone only at one opening a pair.`,
         rated: `Rated`,
         no: `No`,
-        ratedLine: `A round robin set up here never moves a rating; the weekly tournament is the rated one.`,
+        ratedLine: `Duels and round robins set up here never move a rating; the weekly tournament is the rated one.`,
         ratedTest: `A test never moves a rating; its result estimates each bot against the others instead.`,
         testBlock: {
             title: `Test`,
-            yours: `Every bot is yours: never rated, up to ${String(Math.max(...roundRobinTestGamesPerPair))} games a pair, and the page estimates each bot against the others.`,
-            owners: (owner: string) => `Every bot is ${owner}'s: never rated, up to ${String(Math.max(...roundRobinTestGamesPerPair))} games a pair, and the page estimates each bot against the others.`,
+            yours: (count: number, most: number) =>
+                `${count === 2 ? `Both bots are yours` : `Every bot is yours`}: never rated, up to ${String(most)} games a pair, and the page estimates ${count === 2 ? `which is stronger` : `each bot against the others`}.`,
+            owners: (owner: string, count: number, most: number) =>
+                `${count === 2 ? `Both bots are` : `Every bot is`} ${owner}'s: never rated, up to ${String(most)} games a pair, and the page estimates ${count === 2 ? `which is stronger` : `each bot against the others`}.`,
         },
-        start: `Start round robin`,
-        startTest: `Start test`,
+        start: { duel: `Start duel`, round_robin: `Start round robin`, test: `Start test` },
         starting: `Starting`,
-        terms: (games: number, atOnce: number) =>
-            `${String(games)} games, ${atOnce === 1 ? `one pair` : String(atOnce)} at a time. You can stop the round robin, and each owner can withdraw their bot; a live game always finishes.`,
-        termsTest: (games: number, atOnce: number) =>
-            `${String(games)} games, ${atOnce === 1 ? `one pair` : `${String(atOnce)} pairs`} at a time; the estimates update after every game. You can stop the test; a live game always finishes.`,
+        terms: (kind: `duel` | `round_robin` | `test`, bots: number, games: number, atOnce: number) => {
+            const count = `${String(games)} ${plural(games, `game`, `games`)}`;
+            if (bots === tournamentBotsMin) {
+                return kind === `test`
+                    ? `${count}, one at a time; the estimate updates after every game. You can stop the test; a live game always finishes.`
+                    : `${count}, one at a time. You can stop the duel, and each owner can withdraw their bot, which ends it; the live game always finishes.`;
+            }
+            const pace = atOnce === 1 ? `one pair` : `${String(atOnce)} pairs`;
+            return kind === `test`
+                ? `${count}, ${pace} at a time; the estimates update after every game. You can stop the test; a live game always finishes.`
+                : `${count}, ${pace} at a time. You can stop the round robin, and each owner can withdraw their bot; a live game always finishes.`;
+        },
         quota: (live: number, today: number) =>
-            `Your round robins: ${String(live)} of ${String(roundRobinLiveCap)} live; ${String(Math.max(0, roundRobinDailyCap - today))} of ${String(roundRobinDailyCap)} left today`,
-        fewer: (more: number) => `Add ${String(more)} more ${plural(more, `bot`, `bots`)}; a round robin needs ${String(tournamentMinPresent)}.`,
+            `Your duels and round robins: ${String(live)} of ${String(tournamentLiveCap)} live; ${String(Math.max(0, tournamentDailyCap - today))} of ${String(tournamentDailyCap)} left today`,
+        fewer: (more: number) => `Add ${String(more)} more ${plural(more, `bot`, `bots`)}; a duel takes ${String(tournamentBotsMin)}.`,
         startWaits: `Start waits for every bot to be ready; remove a bot or wait.`,
         gone: (bot: string) => `${bot} went offline; remove it, or wait and Start opens once it is back.`,
-        weekly: (wait: string) => `Entered in the weekly, which starts in ${wait}; it leaves this round robin then.`,
-        signedOut: `Sign in to set up a round robin; anyone can watch one.`,
-        guest: `Guests watch; sign in with Discord to set up a round robin.`,
+        weekly: (wait: string) => `Entered in the weekly, which starts in ${wait}; it leaves this duel or round robin then.`,
+        signedOut: `Sign in to set up a duel or round robin; anyone can watch one.`,
+        guest: `Guests watch; sign in with Discord to set up a duel or round robin.`,
         noneReady: {
-            heading: `No round robin possible right now`,
-            body: (count: number) => `A round robin needs ${String(tournamentMinPresent)} bots online and open; ${String(count)} ${count === 1 ? `is` : `are`}. Check back later.`,
+            heading: `No duel or round robin possible right now`,
+            body: (count: number) => `A duel needs ${String(tournamentBotsMin)} bots online and open; ${String(count)} ${count === 1 ? `is` : `are`}. Check back later.`,
         },
         picker: {
             title: `Add bots`,
             picked: (count: number) => `${String(count)} picked`,
-            fit: (more: number) =>
-                more <= 0 ? `The round robin takes no more` : `${String(more)} more ${plural(more, `fits`, `fit`)}; a round robin takes ${String(tournamentMinPresent)} to ${String(roundRobinMaxBots)}`,
+            fit: (more: number) => (more <= 0 ? `No more fit; up to ${String(tournamentBotsMax)} bots` : `${String(more)} more ${plural(more, `fits`, `fit`)}; up to ${String(tournamentBotsMax)} bots`),
             add: (count: number) => `Add ${String(count)} ${plural(count, `bot`, `bots`)}`,
             added: `added`,
-            reasons: {
-                offline: `Offline`,
-                closed: `Closed for challenges`,
-                nothing: `Accepts nothing yet`,
-                tournament: `In a tournament until it ends`,
-                busy: `In ${String(botConcurrentGameCap)} games; try again shortly`,
-                events: `In ${String(duelPerBotCap)} duels or round robins; try again after one ends`,
-                refused: `Duels by others are off`,
-                clock: (bots: readonly string[]) => `No clock in common with ${andList(bots)}`,
-                full: `The round robin has ${String(roundRobinMaxBots)} bots`,
-            },
         },
         errors: {
-            round_robin_busy: `You have a round robin running; stop it or wait for it to end.`,
-            daily_round_robin_cap: (time: string) => `You set up ${String(roundRobinDailyCap)} round robins today; the next can start at ${time} (00:00 UTC).`,
+            tournament_busy: `You run ${String(tournamentLiveCap)} duels or round robins already; stop one or wait for one to end.`,
+            daily_tournament_cap: (time: string) => `You set up ${String(tournamentDailyCap)} duels and round robins today; the next can start at ${time} (00:00 UTC).`,
             duel_refused: (bot: string) => `${bot} takes no duels or round robins set up by others now; remove it.`,
             not_open: (bot: string) => `${bot} went offline; remove it, or wait and try again.`,
             bot_busy: (bot: string) => `${bot} is busy: at its game cap, in ${String(duelPerBotCap)} duels or round robins, or in a tournament; remove it, or try again shortly.`,
@@ -1757,22 +1775,22 @@ export const en = {
             },
             clock_not_accepted: (bot: string) => `${bot} no longer takes that clock; pick another.`,
             unknown_level: (bot: string) => `${bot} no longer plays at that strength; pick another strength.`,
-            test_only: `Only a test, every bot yours, plays more than 4 games a pair.`,
+            test_only: `Only a test, every bot yours, plays more than ${String(Math.max(...tournamentGameCounts))} games a pair.`,
+            too_many_games: `No bot plays more than ${String(tournamentBotGamesMax.event)} games in one, or ${String(tournamentBotGamesMax.test)} in a test; pick fewer games a pair.`,
             gone: (bot: string) => `${bot} takes no new games; remove it.`,
             paused: `Starting games is paused; live games continue.`,
-            failed: `The round robin did not start; try again.`,
-            failedTest: `The test did not start; try again.`,
+            failed: { duel: `The duel did not start; try again.`, round_robin: `The round robin did not start; try again.`, test: `The test did not start; try again.` },
         },
         side: {
             weekly: `Weekly tournament`,
             noWeekly: `No weekly tournament is coming up; the operator schedules each one.`,
             when: (wait: string, entered: number, max: number, clock: string) => `Starts in ${wait}; ${String(entered)} of ${String(max)} entered; ${clock}`,
             whenSoon: (entered: number, max: number, clock: string) => `Starts any moment now; ${String(entered)} of ${String(max)} entered; ${clock}`,
-            yours: `Your round robins`,
+            yours: `Your tournaments`,
             allYours: `All yours`,
-            noneYours: `None yet; the round robins you set up, and those your bots play, show here.`,
-            signIn: `Sign in to see your round robins.`,
-            failed: `Your round robins did not load`,
+            noneYours: `None yet; the duels and round robins you set up, and those your bots play, show here.`,
+            signIn: `Sign in to see your tournaments.`,
+            failed: `Your tournaments did not load`,
         },
         tags: { rated: `rated`, unrated: `unrated`, test: `test` },
         kind: `Round robin`,
@@ -1793,8 +1811,13 @@ export const en = {
             terms: (bots: number, creator: string, pairing: string, clock: string, plies: number) =>
                 `${String(bots)} bots, picked by ${creator}; ${pairing}; ${clock}; ${String(plies)}-stone openings; unrated.`,
             termsTest: (bots: number, owner: string, games: number, pairing: string, clock: string, plies: number) =>
-                `A test: ${String(bots)} of ${owner}'s bots, ${String(games)} games a pair, ${pairing}; ${clock}; ${String(plies)}-stone openings; never rated.`,
-            pairing: (games: number) => (games === 2 ? `each pair plays one opening twice, sides swapped` : `${String(games / 2)} openings each played twice with sides swapped`),
+                `A test: ${String(bots)} of ${owner}'s bots, ${String(games)} ${plural(games, `game`, `games`)} a pair, ${pairing}; ${clock}; ${String(plies)}-stone openings; never rated.`,
+            pairing: (games: number) =>
+                games === 1
+                    ? `each pair plays a single game, sides drawn by lot`
+                    : games === 2
+                      ? `each pair plays one opening twice, sides swapped`
+                      : `${String(games / 2)} openings each played twice with sides swapped`,
             strengths: (parts: readonly (readonly [string, string])[], over: boolean) =>
                 `${parts.map(([bot, label]) => `${bot} ${over ? `played` : `plays`} at ${label}`).join(`; `)}.`,
             status: {
@@ -1854,24 +1877,62 @@ export const en = {
             axis: (bot: string, value: string) => `${bot} on a scale of rating points: ${value}`,
         },
         lists: {
-            lead: `Round robins: the weekly tournament, rated, and those people set up on Play, unrated. Each pair plays one opening twice, sides swapped.`,
-            setUp: `Set up a round robin`,
+            lead: `Duels and round robins people set up on Play, never rated, and the weekly tournament, rated.`,
+            setUp: `New duel or round robin`,
             filters: `Which tournaments`,
             all: `All`,
             yours: `Yours`,
             tests: `Tests`,
-            noLive: `No round robin is live right now.`,
-            noPast: { all: `No tournament has ended yet.`, yours: `None of your round robins has ended yet.`, tests: `No test has ended yet.` },
-            signIn: `Sign in to see your round robins and your bots' tournaments.`,
-            testsNote: `Tests, round robins where one person owns every bot, are listed under Tests.`,
+            noLive: `No duel or round robin is live right now.`,
+            noPast: { all: `No tournament has ended yet.`, yours: `None of your duels or round robins has ended yet.`, tests: `No test has ended yet.` },
+            signIn: `Sign in to see the duels and round robins you set up and your bots' tournaments.`,
+            testsNote: `Tests, where one person owns every bot, are listed under Tests.`,
             stoppedBy: (by: string, round: number | null) => (round === null ? `stopped by ${by}` : `stopped by ${by} after round ${String(round)}`),
             stopped: (round: number | null) => (round === null ? `stopped` : `stopped after round ${String(round)}`),
+            cutShort: (round: number | null) => (round === null ? `cut short` : `cut short in round ${String(round)}`),
             bots: (count: number) => `${String(count)} bots`,
             testLead: (bot: string, rating: string, verdict: string) => `${bot} ${rating}, ${verdict}`,
             yourRole: `Yours: set up by you`,
         },
         home: { setUp: `Set up a round robin`, enter: `Enter a bot` },
         caption: (name: string, round: number, game: number, of: number) => `${name}, round ${String(round)}, game ${String(game)} of ${String(of)}`,
+    },
+    tournamentDuel: {
+        crumb: { duel: `Duel`, test: `Test`, round_robin: `Round robin` },
+        aBot: `a bot`,
+        neverRated: `never rated`,
+        opening: (opening: number) => `Opening ${String(opening)}`,
+        openingLabel: (opening: number, stones: number) => `Opening ${String(opening)}, ${String(stones)} ${plural(stones, `stone`, `stones`)}`,
+        openingLive: (game: number) => `Drawn when game ${String(game)} started; game ${String(game + 1)} replays it with sides swapped.`,
+        nextSame: (game: number) => `Game ${String(game)} replays this opening with sides swapped. A bot not ready within ${String(presenceGraceMs / 1000)} s scores a no-show.`,
+        nextNew: (game: number) => `Game ${String(game)} draws a new opening. A bot not ready within ${String(presenceGraceMs / 1000)} s scores a no-show.`,
+        waiting: (bot: string, left: string) => `Waiting for ${bot} to be ready; ${left} left before the game is scored a no-show.`,
+        waitingQuiet: (bot: string) => `Waiting for ${bot} to be ready, or the game is scored a no-show.`,
+        cutShort: (score: string, why: string) => `Cut short at ${score}${why === `` ? `` : `: ${why}`}.`,
+        cutShortField: (round: number | null, playing: readonly string[]) =>
+            `Cut short${round === null ? `` : ` in round ${String(round)}`}: ${playing.length === 0 ? `no bot still plays` : `only ${andList(playing)} still ${playing.length === 1 ? `plays` : `play`}`}.`,
+        stoppedGone: (kind: string, game: number | null) => `The ${kind} stopped as the account that set it up went${game === null ? `` : `, after game ${String(game)}`}.`,
+        canceled: (game: number | null) => `Canceled by the operator${game === null ? `` : ` after game ${String(game)}`}.`,
+        canceledWord: `canceled`,
+        cut: {
+            missed: (bot: string) => `${bot} missed two openings`,
+            owner: (bot: string) => `${bot}'s owner withdrew it`,
+            refused: (bot: string) => `${bot}'s owner turned duels by others off`,
+            tournament: (bot: string) => `${bot} began the weekly tournament`,
+            banned: (bot: string) => `${bot}'s owner was banned`,
+            delisted: (bot: string) => `${bot} was delisted`,
+            deleted: (bot: string) => `${bot} was deleted`,
+        },
+        noShow: (missing: readonly string[], scorer: string | null) => `No-show: ${andList(missing)} did not come${scorer === null ? `` : `; ${scorer} scores`}`,
+        forfeit: (missing: readonly string[], scorer: string | null) => `Forfeit: ${andList(missing)} withdrawn${scorer === null ? `` : `; ${scorer} scores`}`,
+        more: (openings: number, all: Slot): ReactNode => rich`${String(openings)} more ${plural(openings, `opening`, `openings`)}; ${all(`show all games`)}`,
+        earlier: (openings: number, all: Slot): ReactNode => rich`${String(openings)} earlier ${plural(openings, `opening`, `openings`)}; ${all(`show all games`)}`,
+        later: (openings: number) => `${String(openings)} more ${plural(openings, `opening`, `openings`)} to come`,
+        stop: { duel: `Stop duel`, test: `Stop test`, round_robin: `Stop round robin` },
+        stopAsk: (test: boolean) => `Stop the ${test ? `test` : `duel`}? No further game starts; the live game plays on, and the score stands as it is.`,
+        withdrawAsk: (bot: string) => `Withdraw ${bot}? The duel ends: its live game plays on and counts, and no further game starts.`,
+        withdrawYes: `Withdraw; the duel ends`,
+        again: `Duel again`,
     },
     duels: {
         places: `Play`,
@@ -1943,10 +2004,11 @@ export const en = {
                 nothing: `Accepts nothing yet`,
                 tournament: `In a tournament until it ends`,
                 busy: `In ${String(botConcurrentGameCap)} games; try again shortly`,
-                duels: `In ${String(duelPerBotCap)} duels or round robins; try again after one ends`,
+                events: `In ${String(duelPerBotCap)} duels or round robins; try again after one ends`,
                 refused: `Duels by others are off`,
                 pair: (other: string) => `Already in a duel with ${other}`,
-                clock: (other: string) => `No clock in common with ${other}`,
+                clock: (bots: readonly string[]) => `No clock in common with ${andList(bots)}`,
+                full: `The field has ${String(tournamentBotsMax)} bots`,
             },
         },
         testBlock: {
@@ -1996,7 +2058,7 @@ export const en = {
             bot_busy: (bot: string) => `${bot} is busy: at its game cap, in ${String(duelPerBotCap)} duels or round robins, or in a tournament; try again shortly.`,
             busyBecause: {
                 busy: (bot: string) => `${bot} is in ${String(botConcurrentGameCap)} games already; try again shortly.`,
-                duels: (bot: string) => `${bot} is in ${String(duelPerBotCap)} duels or round robins already; try again after one ends.`,
+                events: (bot: string) => `${bot} is in ${String(duelPerBotCap)} duels or round robins already; try again after one ends.`,
                 tournament: (bot: string) => `${bot} is in a tournament until it ends; pick another bot.`,
             },
             unknown_level: (bot: string) => `${bot} no longer plays at that strength; pick another strength.`,

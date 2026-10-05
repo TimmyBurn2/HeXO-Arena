@@ -1,17 +1,21 @@
 import {
     acceptsCovers,
     acceptsSchema,
-    createRoundRobinRequestSchema,
+    boardCellSchema,
+    createTournamentRequestSchema,
     duelPerBotCap,
     estimateOf,
+    gamesPerPairFits,
     nameKeyOf,
     nameSyntaxSchema,
     openingPliesSchema,
-    roundRobinDailyCap,
-    roundRobinGamesPerPair,
-    roundRobinLiveCap,
-    seatLevelOf,
     seatLevelSchema,
+    sideOf,
+    tournamentDailyCap,
+    tournamentFormatOf,
+    tournamentGameCounts,
+    tournamentLiveCap,
+    turnsOnBoard,
     timeControlSchema,
     tournamentDetailMemoMs,
     tournamentDetailSchema,
@@ -28,6 +32,8 @@ import {
     tournamentWaitingCap,
     tournamentWithdrawRequestSchema,
     type EstimateUnit,
+    type BoardCell,
+    type FinishReason,
     type SeatLevel,
     type TournamentBot,
     type TournamentDetail,
@@ -37,39 +43,41 @@ import {
     type TournamentGame,
     type TournamentList,
     type TournamentOrigin,
+    type TournamentPair,
     type TournamentPlace,
     type TournamentStatus,
     type TournamentSummary,
     type TournamentYours,
 } from '@hexo-arena/contract';
 import { and, asc, desc, eq, inArray, isNull, ne, or, sql, type SQL } from 'drizzle-orm';
-import type { FastifyInstance, FastifyReply } from 'fastify';
+import type { FastifyInstance } from 'fastify';
+import { botGates, busyBot, chosenLevel, gateRefusal, readBot, sendRefusal, type Refusal } from './bot-gates';
 import { nowSeconds, type Query } from './db';
-import { bots, games, tournamentEntries, tournamentPairings, tournaments, users } from './db/schema';
-import { duelGateFailures, type DuelGateFailure } from './duel-runner';
-import { countRunningOfBot, readDuelBot, type DuelBotRecord } from './duel-store';
+import { bots, games, moves, tournamentEntries, tournamentPairings, tournaments, users } from './db/schema';
+import { countRunningOfBot } from './duel-store';
 import type { GameRegistry } from './game-registry';
 import type { PresenceRegistry } from './presence';
 import { tournamentExport } from './game-export';
+import { isProvisional } from './rating';
 import { readRating } from './rating-store';
 import type { ClientLimits, CredentialLimits } from './request-limits';
-import { pointOf, standingsOf, storedSlot, xSeatOf, type PairingSeat, type ScoredPairing } from './round-robin';
+import { pointOf, standingsOf, storedSlots, xSeatOf, type PairingSeat, type ScoredPairing } from './round-robin';
 import { sessionUser } from './sessions';
 import { shownBot, shownUser } from './shown-names';
 import type { StartGate } from './site-state';
 import type { TournamentScheduler } from './tournament-scheduler';
 import {
-    countRoundRobinsSince,
-    countRunningRoundRobinsBy,
-    countRunningRoundRobinsOfBot,
+    countRunningTournamentsOfBot,
+    countSetUpSince,
     creatorJoin,
     creatorOf,
     creators,
-    insertRoundRobin,
+    insertPersonTournament,
     nameColumns,
+    runningSlotsOf,
     tournamentNameOf,
-    type RoundRobinEntrant,
-    type StopReason,
+    type EndReason,
+    type PersonEntrant,
 } from './tournament-store';
 import { utcDay } from './utc-day';
 import { WindowMemo } from './window-memo';
@@ -97,7 +105,8 @@ interface TournamentRow {
     readonly rated: number;
     readonly test: number;
     readonly gamesPerPair: number;
-    readonly endReason: StopReason | null;
+    readonly endReason: EndReason | null;
+    readonly endBotId: string | null;
 }
 
 const tournamentColumns = {
@@ -116,6 +125,7 @@ const tournamentColumns = {
     test: tournaments.test,
     gamesPerPair: tournaments.gamesPerPair,
     endReason: tournaments.endReason,
+    endBotId: tournaments.endBotId,
 };
 
 function selectTournaments(query: Query) {
@@ -142,8 +152,9 @@ interface EntryRow {
     readonly version: string | null;
 }
 
-// A deleted bot reads by its label alone; its number in the entry order
-// keeps it apart from another deleted bot without either one's placeholder.
+// A deleted bot reads by its label alone; its number in the entry order,
+// a person's seats first, keeps it apart from another deleted bot without
+// either one's placeholder.
 function entryRows(query: Query, tournamentId: string): EntryRow[] {
     const rows = query
         .select({
@@ -163,7 +174,7 @@ function entryRows(query: Query, tournamentId: string): EntryRow[] {
         .innerJoin(bots, eq(bots.id, tournamentEntries.botId))
         .innerJoin(users, eq(users.id, tournamentEntries.ownerId))
         .where(eq(tournamentEntries.tournamentId, tournamentId))
-        .orderBy(asc(tournamentEntries.enteredAt), asc(bots.nameKey))
+        .orderBy(asc(tournamentEntries.seat), asc(tournamentEntries.enteredAt), asc(bots.nameKey))
         .all();
     return rows.map(({ botDeletedAt, ownerDeletedAt, level, ...row }, index) => ({
         ...row,
@@ -183,9 +194,17 @@ function botOf(entry: EntryRow | undefined, botId: string): TournamentBot {
     return { key: entry.key, name: entry.bot, ...(entry.deleted ? { deleted: true as const } : {}) };
 }
 
+// A bot's rating on the ladder now, which a duel's head shows; none once deleted.
+function ratingNow(query: Query, row: EntryRow): TournamentEntry[`now`] {
+    if (row.deleted) return null;
+    const rating = readRating(query, { kind: `bot`, id: row.botId });
+    return { rating: Math.round(rating.rating), provisional: isProvisional(rating) };
+}
+
 // The checks admit only the contract's states and reasons. A bot at a
-// level other than its default has no rating of its own to show.
-function entryView(row: EntryRow, online: boolean): TournamentEntry {
+// level other than its default has no rating of its own to show; a
+// duel's entry names its rating now.
+function entryView(row: EntryRow, online: boolean, now?: TournamentEntry[`now`]): TournamentEntry {
     return {
         key: row.key,
         bot: row.bot,
@@ -197,12 +216,22 @@ function entryView(row: EntryRow, online: boolean): TournamentEntry {
         ...(row.reason === null ? {} : { reason: tournamentEntryReasonSchema.parse(row.reason) }),
         ...(row.level === null ? {} : { level: row.level }),
         ...(row.version === null ? {} : { version: row.version }),
+        ...(now === undefined ? {} : { now }),
     };
+}
+
+// What a slot's latest game says once over: how it ended and its turns on the board.
+interface SlotGame {
+    readonly id: string;
+    readonly reason: FinishReason | null;
+    readonly turns: number | null;
 }
 
 interface LegView {
     readonly scored: ScoredPairing;
-    readonly gameIds: readonly [string | null, string | null];
+    readonly games: readonly (SlotGame | null)[];
+    // The opening the leg's first game drew, which its second replays.
+    readonly opening: readonly BoardCell[] | null;
 }
 
 /** A pair's meeting in a round, over every opening it plays. */
@@ -229,6 +258,7 @@ function pairingViews(query: Query, tournamentId: string, entries: readonly Entr
             game1Seat: tournamentPairings.game1Seat,
             game2: tournamentPairings.game2,
             game2Seat: tournamentPairings.game2Seat,
+            openingCells: tournamentPairings.openingCells,
         })
         .from(tournamentPairings)
         .where(eq(tournamentPairings.tournamentId, tournamentId))
@@ -237,28 +267,32 @@ function pairingViews(query: Query, tournamentId: string, entries: readonly Entr
     if (rows.length === 0) return [];
     const byBot = new Map(entries.map((entry) => [entry.botId, entry]));
     // The latest game of each slot, a replay over the game it replaced.
-    const slotGames = new Map<string, string>();
+    const slotGames = new Map<string, SlotGame>();
     for (const game of query
-        .select({ id: games.id, pairingId: games.pairingId, pairingGame: games.pairingGame })
+        .select({
+            id: games.id,
+            pairingId: games.pairingId,
+            pairingGame: games.pairingGame,
+            reason: games.finishReason,
+            openingCells: games.openingCells,
+            moves: sql<number>`(select count(*) from ${moves} where ${moves.gameId} = ${games.id})`,
+        })
         .from(games)
         .where(inArray(games.pairingId, rows.map((row) => row.id)))
         .orderBy(asc(games.createdAt))
         .all()) {
-        slotGames.set(`${game.pairingId ?? ``}:${String(game.pairingGame)}`, game.id);
+        const turns = game.reason === null ? null : turnsOnBoard(boardCellSchema.array().parse(JSON.parse(game.openingCells)).length) + game.moves;
+        slotGames.set(`${game.pairingId ?? ``}:${String(game.pairingGame)}`, { id: game.id, reason: game.reason, turns });
     }
     const meetings = new Map<string, { round: number; firstBotId: string; secondBotId: string; legs: LegView[] }>();
     for (const row of rows) {
         const key = `${String(row.round)} ${row.firstBotId} ${row.secondBotId}`;
         const meeting = meetings.get(key) ?? { round: row.round, firstBotId: row.firstBotId, secondBotId: row.secondBotId, legs: [] };
+        const slots = storedSlots(row);
         meeting.legs.push({
-            scored: {
-                round: row.round,
-                leg: row.leg,
-                first: row.firstBotId,
-                second: row.secondBotId,
-                games: [storedSlot(row.game1, row.game1Seat), storedSlot(row.game2, row.game2Seat)],
-            },
-            gameIds: [slotGames.get(`${row.id}:1`) ?? null, slotGames.get(`${row.id}:2`) ?? null],
+            scored: { round: row.round, leg: row.leg, first: row.firstBotId, second: row.secondBotId, games: slots },
+            games: slots.map((_, index) => slotGames.get(`${row.id}:${String(index + 1)}`) ?? null),
+            opening: row.openingCells === null ? null : boardCellSchema.array().parse(JSON.parse(row.openingCells)),
         });
         meetings.set(key, meeting);
     }
@@ -271,19 +305,31 @@ function pairingViews(query: Query, tournamentId: string, entries: readonly Entr
 
 const scoredOf = (pairings: readonly PairingView[]) => pairings.flatMap((pairing) => pairing.legs.map((leg) => leg.scored));
 
-function gameView(pairing: PairingView, leg: LegView, index: 0 | 1): TournamentGame {
-    const result = leg.scored.games[index];
+// A game as the pages read it; a duel's carries how it ended, its turns, and its opening, which its games list and live side show.
+function gameView(pairing: PairingView, leg: LegView, index: number, duel: boolean): TournamentGame {
+    const result = leg.scored.games[index] ?? { kind: `pending` };
+    const game = leg.games[index] ?? null;
     const keyOf = (seat: PairingSeat) => (seat === `first` ? pairing.first.key : pairing.second.key);
     const point = pointOf(result);
     const absent = result.kind === `no_show` ? result.missing : result.kind === `forfeit` ? result.withdrawn : null;
-    return {
-        x: keyOf(xSeatOf(index === 0 ? 1 : 2)),
-        gameId: leg.gameIds[index],
+    const over = result.kind === `played` || result.kind === `aborted`;
+    const view = {
+        x: keyOf(xSeatOf(index + 1)),
+        gameId: game?.id ?? null,
         outcome: result.kind,
         point: point === null ? null : keyOf(point),
         missing: absent === null ? [] : absent === `both` ? [pairing.first.key, pairing.second.key] : [keyOf(absent)],
     };
+    if (!duel) return view;
+    return {
+        ...view,
+        reason: over ? (game?.reason ?? null) : null,
+        turns: result.kind === `played` ? (game?.turns ?? null) : null,
+        opening: leg.opening === null ? null : leg.opening.map((cell) => ({ x: cell.x, y: cell.y, side: sideOf(cell.player) })),
+    };
 }
+
+const gamesOf = (pairing: PairingView, duel: boolean) => pairing.legs.flatMap((leg) => leg.scored.games.map((_, index) => gameView(pairing, leg, index, duel)));
 
 // The round under way, or the last one begun; null before any began. A
 // game never played, as a stopped round robin leaves those to come, begins nothing.
@@ -294,11 +340,12 @@ function lastBegunRound(pairings: readonly PairingView[]): number | null {
     return begun.length === 0 ? null : Math.max(...begun);
 }
 
-function endOf(row: TournamentRow, pairings: readonly PairingView[]): TournamentEnd | undefined {
+function endOf(row: TournamentRow, pairings: readonly PairingView[], entries: readonly EntryRow[]): TournamentEnd | undefined {
     if (row.status === `canceled`) return { reason: `operator`, round: lastBegunRound(pairings) };
-    // The end check gives a stopped round robin, and only it, a reason.
+    // The end check gives a stopped or cut short tournament, and only it, a reason.
     if (row.endReason === null) return undefined;
-    return { reason: row.endReason, round: lastBegunRound(pairings) };
+    const bot = row.endBotId === null ? undefined : entries.find((entry) => entry.botId === row.endBotId);
+    return { reason: row.endReason, round: lastBegunRound(pairings), ...(bot === undefined ? {} : { bot: botOf(bot, bot.botId) }) };
 }
 
 // Each bot of a test against all the others together, counted by the
@@ -359,6 +406,7 @@ function tournamentDetail(query: Query, reads: TournamentReads, id: string): Tou
         };
     });
     const roundNumbers = [...new Set(pairings.map((pairing) => pairing.round))];
+    const duel = tournamentFormatOf(row) === `duel`;
     const rounds = roundNumbers.map((round) => {
         const inRound = pairings.filter((pairing) => pairing.round === round);
         const seated = new Set(inRound.flatMap((pairing) => [pairing.first.key, pairing.second.key]));
@@ -368,24 +416,24 @@ function tournamentDetail(query: Query, reads: TournamentReads, id: string): Tou
             pairings: inRound.map((pairing) => ({
                 first: pairing.first,
                 second: pairing.second,
-                games: pairing.legs.flatMap((leg) => [gameView(pairing, leg, 0), gameView(pairing, leg, 1)]),
+                games: gamesOf(pairing, duel),
             })),
             rest: resting === undefined ? null : botOf(resting, resting.botId),
         };
     });
-    const liveIds = pairings.flatMap((pairing) => pairing.legs.flatMap((leg) => leg.gameIds.filter((gameId, index) => gameId !== null && leg.scored.games[index]?.kind === `live`)));
+    const liveIds = pairings.flatMap((pairing) => pairing.legs.flatMap((leg) => leg.games.flatMap((game, index) => (game !== null && leg.scored.games[index]?.kind === `live` ? [game.id] : []))));
     const running = row.status === `running`;
     const nextRoundAt = running ? reads.tournaments.nextRoundAt(id) : null;
-    const end = endOf(row, pairings);
+    const end = endOf(row, pairings, entries);
     const estimates = row.test === 1 ? estimatesOf(field, pairings) : [];
     return {
         ...summaryBase(row),
         startedAt: row.startedAt === null ? null : isoOf(row.startedAt),
         endedAt: row.endedAt === null ? null : isoOf(row.endedAt),
-        entries: entries.map((entry) => entryView(entry, reads.presence.isOnline(entry.botId))),
+        entries: entries.map((entry) => entryView(entry, reads.presence.isOnline(entry.botId), duel ? ratingNow(query, entry) : undefined)),
         rounds,
         standings,
-        live: reads.games.liveEntriesOf(liveIds.filter((gameId): gameId is string => gameId !== null)),
+        live: reads.games.liveEntriesOf(liveIds),
         ...(end === undefined ? {} : { end }),
         waiting: running
             ? reads.tournaments.waitingOf(id).flatMap((wait) => {
@@ -404,6 +452,7 @@ function summaryBase(row: TournamentRow) {
         id: row.id,
         name: tournamentNameOf(row),
         origin: row.origin,
+        format: tournamentFormatOf(row),
         createdBy: person ? creatorOf(row) : null,
         rated: row.rated === 1,
         test: row.test === 1,
@@ -426,17 +475,23 @@ function summaryOf(query: Query, row: TournamentRow): TournamentSummary {
             .where(and(eq(tournamentEntries.tournamentId, row.id), counted === undefined ? undefined : inArray(tournamentEntries.state, counted)))
             .get()?.n ?? 0;
     // Only a tournament that started has pairings to read.
-    const begun = row.status === `running` || row.status === `finished` || row.status === `stopped` || row.status === `canceled`;
+    const begun = row.status === `running` || row.status === `finished` || row.status === `stopped` || row.status === `cut_short` || row.status === `canceled`;
     const entries = begun ? entryRows(query, row.id) : [];
     const pairings = begun ? pairingViews(query, row.id, entries) : [];
     const field = entries.filter(inField);
-    const top = row.status === `finished` || (row.test === 1 && row.status === `stopped`) ? standingsOf(field.map((entry) => entry.botId), scoredOf(pairings))[0] : undefined;
+    const lines = standingsOf(
+        field.map((entry) => entry.botId),
+        scoredOf(pairings),
+    );
+    const endedEarly = row.status === `stopped` || row.status === `cut_short`;
+    const top = row.status === `finished` || (row.test === 1 && endedEarly) ? lines[0] : undefined;
     const first = entries.find((candidate) => candidate.botId === top?.bot);
     const deleted = first?.deleted === true ? { deleted: true as const } : {};
     const winner = row.status === `finished` && first !== undefined ? { name: first.bot, ownerName: first.ownerName, ...deleted } : null;
     // A test's verdict on the bot first in it, against the rest, as its page leads with.
     const estimate = row.test === 1 && first !== undefined ? estimatesOf(field, pairings).find((each) => each.key === first.key)?.estimate : undefined;
-    const end = endOf(row, pairings);
+    const end = endOf(row, pairings, entries);
+    const pair = tournamentFormatOf(row) === `duel` ? pairOf(entries, pairings, lines) : undefined;
     return {
         ...summaryBase(row),
         entrants,
@@ -445,7 +500,17 @@ function summaryOf(query: Query, row: TournamentRow): TournamentSummary {
         ...(row.endedAt === null ? {} : { endedAt: isoOf(row.endedAt) }),
         ...(end === undefined ? {} : { end }),
         ...(estimate === undefined || first === undefined ? {} : { lead: { bot: first.bot, ...deleted, estimate } }),
+        ...(pair === undefined ? {} : { pair }),
     };
+}
+
+// A duel's two bots in the order named, their points, and every game, as a list row's score cells draw them.
+function pairOf(entries: readonly EntryRow[], pairings: readonly PairingView[], lines: ReturnType<typeof standingsOf>): TournamentPair | undefined {
+    const [one, two] = entries;
+    const pairing = pairings[0];
+    if (one === undefined || two === undefined || pairing === undefined) return undefined;
+    const side = (entry: EntryRow) => ({ ...botOf(entry, entry.botId), points: lines.find((line) => line.bot === entry.botId)?.points ?? 0 });
+    return { first: side(one), second: side(two), games: gamesOf(pairing, false) };
 }
 
 // The entries a list's row may name, each with its place; a bot outside
@@ -529,7 +594,7 @@ function tournamentList(query: Query, filter: TournamentListFilter): TournamentL
     return {
         running: all([`running`], [sql`${tournaments.origin} = 'person'`, desc(tournaments.startedAt), desc(tournaments.id)], tournamentRunningListCap).map(summary),
         scheduled: all([`scheduled`], [asc(tournaments.startsAt)], tournamentWaitingCap).map(summary),
-        past: all([`finished`, `stopped`, `called_off`, `canceled`], [desc(sql`coalesce(${tournaments.endedAt}, ${tournaments.startsAt})`)], tournamentListPastCap).map(summary),
+        past: all([`finished`, `stopped`, `cut_short`, `called_off`, `canceled`], [desc(sql`coalesce(${tournaments.endedAt}, ${tournaments.startsAt})`)], tournamentListPastCap).map(summary),
     };
 }
 
@@ -540,25 +605,14 @@ interface TournamentApiDeps {
     gate: StartGate;
     limits: CredentialLimits & ClientLimits;
     tournaments: TournamentScheduler;
+    // The lot that picks which bot plays x in a pair's single game.
+    random: () => number;
     now: () => number;
 }
 
-type Refusal = { status: number; code: string; error: string; bot?: string; retryAfter?: number };
+const eventLengths: ReadonlySet<number> = new Set(tournamentGameCounts);
 
-function sendRefusal(reply: FastifyReply, refusal: Refusal): FastifyReply {
-    if (refusal.retryAfter !== undefined) void reply.header(`retry-after`, String(refusal.retryAfter));
-    return reply.code(refusal.status).send({ error: refusal.error, code: refusal.code, ...(refusal.bot === undefined ? {} : { bot: refusal.bot }) });
-}
-
-// The chosen level by its id, null at the bot's default; undefined for a level the bot does not declare.
-function chosenLevel(bot: DuelBotRecord, id: string | undefined): SeatLevel | null | undefined {
-    if (id === undefined) return null;
-    const declared = bot.levels?.list.find((level) => level.id === id);
-    if (declared === undefined) return undefined;
-    return declared.id === bot.levels?.default ? null : seatLevelOf(declared);
-}
-
-const shortLengths: ReadonlySet<number> = new Set(roundRobinGamesPerPair);
+const tournamentBusy: Refusal = { status: 400, code: `tournament_busy`, error: `you run your most duels and round robins at once` };
 
 function isUniqueViolation(error: unknown): boolean {
     return error instanceof Error && `code` in error && String(error.code).startsWith(`SQLITE_CONSTRAINT_UNIQUE`);
@@ -566,8 +620,8 @@ function isUniqueViolation(error: unknown): boolean {
 
 /**
  * The tournament routes: the reads, public and memoized per tournament;
- * the owner's entry while the weekly waits; and a person's round robin,
- * set up, stopped, and left by a bot's owner.
+ * the owner's entry while the weekly waits; and a person's duel or round
+ * robin, set up, stopped, and left by a bot's owner.
  */
 export function registerTournamentApi(app: FastifyInstance, deps: TournamentApiDeps): void {
     const { query, limits, gate } = deps;
@@ -596,7 +650,7 @@ export function registerTournamentApi(app: FastifyInstance, deps: TournamentApiD
             if (mine && viewer === null) return reply.send(tournamentListSchema.parse({ running: [], scheduled: [], past: [] }));
             const list = tournamentList(query, { botId: null, userId: mine ? viewer : null, test, viewerId: viewer });
             const dayStart = utcDay(Math.floor(deps.now() / 1000)).start;
-            const quota = mine && viewer !== null ? { quota: { live: countRunningRoundRobinsBy(query, viewer), today: countRoundRobinsSince(query, viewer, dayStart) } } : {};
+            const quota = mine && viewer !== null ? { quota: { live: runningSlotsOf(query, viewer).length, today: countSetUpSince(query, viewer, dayStart) } } : {};
             return reply.header(`content-type`, `application/json; charset=utf-8`).send(JSON.stringify(tournamentListSchema.parse({ ...list, ...quota })));
         }
         const bot = nameSyntaxSchema.safeParse(name).success
@@ -612,26 +666,16 @@ export function registerTournamentApi(app: FastifyInstance, deps: TournamentApiD
         const user = sessionUser(query, request);
         if (user === null) return reply.code(401).send({ error: `no signed-in user`, code: `unauthorized` });
         if (limits.refuse(reply, `principal`, `user:${user.id}`)) return reply;
-        const parsed = createRoundRobinRequestSchema.safeParse(request.body);
+        const parsed = createTournamentRequestSchema.safeParse(request.body);
         if (!parsed.success) return reply.code(400).send({ error: `the request fails validation`, code: `bad_request` });
         if (gate.refuse(reply)) return reply;
         const terms = parsed.data;
-        const picked = terms.bots.map((wanted) => ({ wanted, bot: readDuelBot(query, { nameKey: nameKeyOf(wanted.name) }) }));
+        const picked = terms.bots.map((wanted) => ({ wanted, bot: readBot(query, { nameKey: nameKeyOf(wanted.name) }) }));
         const found = picked.flatMap(({ wanted, bot }) => (bot === undefined ? [] : [{ wanted, bot }]));
         if (found.length < picked.length) return reply.code(404).send({ error: `no such bot`, code: `not_found` });
-        const failures = found.map(({ bot }) => ({ bot, reasons: duelGateFailures(bot, { starterId: user.id, timeControl: terms.timeControl }, { ...deps, reservations: deps.tournaments }) }));
-        const failing = (...reasons: DuelGateFailure[]) => failures.find((each) => each.reasons.some((reason) => reasons.includes(reason)))?.bot.name;
-        const gates: [DuelGateFailure[], Omit<Refusal, `bot`>][] = [
-            [[`delisted`], { status: 403, code: `delisted`, error: `a bot is delisted` }],
-            [[`banned`], { status: 403, code: `banned`, error: `a bot's owner is banned` }],
-            [[`offline`, `closed`], { status: 400, code: `not_open`, error: `a bot is not online and taking games` }],
-            [[`refused`], { status: 400, code: `duel_refused`, error: `a bot's owner takes no duels or round robins set up by others` }],
-            [[`clock`], { status: 400, code: `clock_not_accepted`, error: `a bot does not accept this clock` }],
-        ];
-        for (const [reasons, refusal] of gates) {
-            const bot = failing(...reasons);
-            if (bot !== undefined) return sendRefusal(reply, { ...refusal, bot });
-        }
+        const field = found.map(({ bot }) => ({ bot, reasons: botGates(bot, { starterId: user.id, timeControl: terms.timeControl }, { ...deps, reservations: deps.tournaments }) }));
+        const refused = gateRefusal(field);
+        if (refused !== null) return sendRefusal(reply, refused);
         const levels = found.map(({ wanted, bot }) => ({ bot, level: chosenLevel(bot, wanted.level) }));
         const unknown = levels.find((each) => each.level === undefined);
         if (unknown !== undefined) return sendRefusal(reply, { status: 400, code: `unknown_level`, error: `a bot declares no such level`, bot: unknown.bot.name });
@@ -639,17 +683,20 @@ export function registerTournamentApi(app: FastifyInstance, deps: TournamentApiD
         const test = new Set(found.map(({ bot }) => bot.ownerId)).size === 1;
         const now = Math.floor(deps.now() / 1000);
         const { start: dayStart, secondsLeft: untilTomorrow } = utcDay(now);
-        // The quotas are read where the round robin is written, as the daily caps are.
+        // The quotas are read where the tournament is written, as the daily caps are.
         const create = () =>
             query.transaction((tx): { id: string } | Refusal => {
-                const busy = failures.find(({ bot, reasons }) => reasons.includes(`busy`) || reasons.includes(`tournament`) || countRunningOfBot(tx, bot.id) + countRunningRoundRobinsOfBot(tx, bot.id) >= duelPerBotCap);
-                if (busy !== undefined) return { status: 400, code: `bot_busy`, error: `a bot is at its game cap, in the weekly, or in its most duels and round robins`, bot: busy.bot.name };
-                if (!test && !shortLengths.has(terms.gamesPerPair)) return { status: 400, code: `test_only`, error: `only a test of one person's bots plays that many games a pair` };
-                if (countRunningRoundRobinsBy(tx, user.id) >= roundRobinLiveCap) return { status: 400, code: `round_robin_busy`, error: `you run a round robin already` };
-                if (countRoundRobinsSince(tx, user.id, dayStart) >= roundRobinDailyCap) {
-                    return { status: 429, code: `daily_round_robin_cap`, error: `you set up your round robins for the day`, retryAfter: untilTomorrow };
+                const busy = busyBot(field, (botId) => countRunningOfBot(tx, botId) + countRunningTournamentsOfBot(tx, botId), duelPerBotCap);
+                if (busy !== undefined) return { status: 400, code: `bot_busy`, error: `a bot is at its game cap, in the weekly, or in its most duels and round robins`, bot: busy.name };
+                if (!test && !eventLengths.has(terms.gamesPerPair)) return { status: 400, code: `test_only`, error: `only a test of one person's bots plays that many games a pair` };
+                if (!gamesPerPairFits(found.length, terms.gamesPerPair, test)) return { status: 400, code: `too_many_games`, error: `a bot would play more games than one tournament holds` };
+                const held = runningSlotsOf(tx, user.id);
+                const liveSlot = Array.from({ length: tournamentLiveCap }, (_, index) => index + 1).find((slot) => !held.includes(slot));
+                if (liveSlot === undefined) return tournamentBusy;
+                if (countSetUpSince(tx, user.id, dayStart) >= tournamentDailyCap) {
+                    return { status: 429, code: `daily_tournament_cap`, error: `you set up your duels and round robins for the day`, retryAfter: untilTomorrow };
                 }
-                const entrants: RoundRobinEntrant[] = levels.map(({ bot, level }) => ({
+                const entrants: PersonEntrant[] = levels.map(({ bot, level }) => ({
                     botId: bot.id,
                     ownerId: bot.ownerId,
                     name: bot.name,
@@ -657,16 +704,21 @@ export function registerTournamentApi(app: FastifyInstance, deps: TournamentApiD
                     level: level ?? null,
                     version: bot.version,
                 }));
-                const id = insertRoundRobin(tx, { createdBy: user.id, entrants, test, gamesPerPair: terms.gamesPerPair, timeControl: terms.timeControl, openingPlies: terms.openingPlies }, now);
+                const id = insertPersonTournament(
+                    tx,
+                    { createdBy: user.id, entrants, test, gamesPerPair: terms.gamesPerPair, timeControl: terms.timeControl, openingPlies: terms.openingPlies, liveSlot },
+                    now,
+                    deps.random,
+                );
                 return { id };
             });
         let created: { id: string } | Refusal;
         try {
             created = create();
         } catch (error) {
-            // Two requests at once: the unique index holds the person to one running round robin.
+            // Two requests at once: the unique index holds the person to their live slots.
             if (!isUniqueViolation(error)) throw error;
-            created = { status: 400, code: `round_robin_busy`, error: `you run a round robin already` };
+            created = tournamentBusy;
         }
         if (`code` in created) return sendRefusal(reply, created);
         deps.tournaments.advance(created.id);
@@ -702,8 +754,8 @@ export function registerTournamentApi(app: FastifyInstance, deps: TournamentApiD
         const { id } = request.params;
         const row = tournamentIdSchema.safeParse(id).success ? findTournament(query, id) : undefined;
         if (row === undefined) return reply.code(404).send({ error: `no such tournament`, code: `not_found` });
-        if (row.origin !== `person` || row.createdBy !== user.id) return reply.code(403).send({ error: `you did not set the round robin up`, code: `not_yours` });
-        if (!deps.tournaments.stopRoundRobin(id, `creator`)) return reply.code(409).send({ error: `the round robin is already over`, code: `over` });
+        if (row.origin !== `person` || row.createdBy !== user.id) return reply.code(403).send({ error: `you did not set it up`, code: `not_yours` });
+        if (!deps.tournaments.stopPersonTournament(id, `creator`)) return reply.code(409).send({ error: `it is already over`, code: `over` });
         forget(id);
         return reply.code(200).send(detailOf(id));
     });
@@ -716,12 +768,12 @@ export function registerTournamentApi(app: FastifyInstance, deps: TournamentApiD
         if (!parsed.success) return reply.code(400).send({ error: `the request fails validation`, code: `bad_request` });
         const { id } = request.params;
         const row = tournamentIdSchema.safeParse(id).success ? findTournament(query, id) : undefined;
-        const bot = readDuelBot(query, { nameKey: nameKeyOf(parsed.data.bot) });
-        // The weekly holds its entrants to the end; only a round robin a person set up lets a bot go.
-        if (row?.origin !== `person` || bot === undefined) return reply.code(404).send({ error: `no such round robin or bot`, code: `not_found` });
+        const bot = readBot(query, { nameKey: nameKeyOf(parsed.data.bot) });
+        // The weekly holds its entrants to the end; only a tournament a person set up lets a bot go.
+        if (row?.origin !== `person` || bot === undefined) return reply.code(404).send({ error: `no such duel, round robin, or bot`, code: `not_found` });
         if (bot.ownerId !== user.id) return reply.code(403).send({ error: `the bot is someone else's`, code: `not_owner` });
         const left = deps.tournaments.withdrawByOwner(id, bot.id);
-        if (left === `over`) return reply.code(409).send({ error: `the round robin is over`, code: `over` });
+        if (left === `over`) return reply.code(409).send({ error: `it is over`, code: `over` });
         if (left === `not_playing`) return reply.code(409).send({ error: `the bot plays no further game in it`, code: `not_playing` });
         forget(id);
         return reply.code(200).send(detailOf(id));

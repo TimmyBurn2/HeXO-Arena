@@ -66,6 +66,7 @@ function summary(id: string, overrides: Partial<TournamentSummary>): TournamentS
         id,
         name: `Autumn round robin`,
         origin: `operator`,
+        format: `round_robin`,
         createdBy: null,
         rated: true,
         test: false,
@@ -88,6 +89,7 @@ const waiting: TournamentDetail = {
     id: `t_wintercup202`,
     name: `Winter cup`,
     origin: `operator`,
+    format: `round_robin`,
     createdBy: null,
     rated: true,
     test: false,
@@ -229,20 +231,20 @@ describe('the tournaments under Games', () => {
 });
 
 describe('the Tournament place under Play', () => {
-    it('set a round robin up beside the weekly, entered in place, and the reader\'s own round robins', async () => {
-        const mine = summary(`t_brunorobin01`, { name: `Round robin by quinn`, origin: `person`, createdBy: `quinn`, rated: false, status: `running`, round: { current: 1, of: 3 } });
+    it('set a duel or round robin up beside the weekly, entered in place, and the reader\'s own tournaments', async () => {
+        const mine = summary(`t_brunorobin01`, { name: `Round robin by quinn`, origin: `person`, format: `round_robin`, createdBy: `quinn`, rated: false, status: `running`, round: { current: 1, of: 3 } });
         const accepts = { turnMs: [5_000, 60_000] as [number, number], match: true, unlimited: true };
         const bots = [`sealbot`, `hextide`, `pebble`].map((name) => ({ ...listing(name, name === `sealbot` ? `quinn` : `ana`), accepts }));
         serve({ '/api/tournaments': list, '/api/tournaments?mine=1': { running: [mine], scheduled: [], past: [], quota: { live: 1, today: 1 } }, [`/api/tournaments/${waiting.id}`]: waiting, '/api/bots': bots, '/api/duels/bots': [] }, quinn);
         render(<PlayTournamentScreen />);
-        expect(await screen.findByRole(`heading`, { level: 2, name: `New round robin` })).toBeTruthy();
-        expect(screen.getByRole(`button`, { name: `Add bots to the round robin` })).toBeTruthy();
+        expect(await screen.findByRole(`heading`, { level: 2, name: `New duel` })).toBeTruthy();
+        expect(screen.getByRole(`button`, { name: `Add bots` })).toBeTruthy();
         const weekly = screen.getByRole(`heading`, { name: `Weekly tournament` }).closest(`section`) as HTMLElement;
         expect((await within(weekly).findByRole(`link`, { name: `Winter cup` })).getAttribute(`href`)).toBe(`/tournaments/t_wintercup202`);
         expect(within(weekly).getByText(/^Starts in 3 h 0 min; 1 of 12 entered; turn clock 10 s$/u)).toBeTruthy();
         expect(within(weekly).getByText(`rated`)).toBeTruthy();
         expect(await within(weekly).findByLabelText(`Your bot`)).toBeTruthy();
-        const yours = screen.getByRole(`heading`, { name: `Your round robins` }).closest(`section`) as HTMLElement;
+        const yours = screen.getByRole(`heading`, { name: `Your tournaments` }).closest(`section`) as HTMLElement;
         await waitFor(() => {
             expect(within(yours).getAllByRole(`link`).map((link) => link.getAttribute(`href`))).toEqual([`/games/tournaments?list=yours`, `/tournaments/t_brunorobin01`]);
         });
@@ -254,7 +256,7 @@ describe('the Tournament place under Play', () => {
         serve({ '/api/tournaments': list, [`/api/tournaments/${waiting.id}`]: waiting, '/api/bots': [listing(`sealbot`, `quinn`)], '/api/duels/bots': [] });
         render(<PlayTournamentScreen />);
         expect(await screen.findByText(`Sign in to enter a bot.`)).toBeTruthy();
-        expect(await screen.findByText(`Sign in to set up a round robin; anyone can watch one.`)).toBeTruthy();
+        expect(await screen.findByText(`Sign in to set up a duel or round robin; anyone can watch one.`)).toBeTruthy();
         expect(document.querySelectorAll(`.discord-button`)).toHaveLength(1);
         expect(document.querySelector(`.rr-card .discord-button`)).not.toBe(null);
     });
@@ -263,9 +265,9 @@ describe('the Tournament place under Play', () => {
         serve({ '/api/tournaments': { ...list, scheduled: [] }, '/api/bots': [listing(`sealbot`, `quinn`)], '/api/duels/bots': [] });
         render(<PlayTournamentScreen />);
         expect(await screen.findByText(`No weekly tournament is coming up; the operator schedules each one.`)).toBeTruthy();
-        expect(await screen.findByText(`Sign in to set up a round robin; anyone can watch one.`)).toBeTruthy();
-        expect(screen.getByText(`Sign in to see your round robins.`)).toBeTruthy();
-        expect(screen.queryByRole(`button`, { name: `Add bots to the round robin` })).toBeNull();
+        expect(await screen.findByText(`Sign in to set up a duel or round robin; anyone can watch one.`)).toBeTruthy();
+        expect(screen.getByText(`Sign in to see your tournaments.`)).toBeTruthy();
+        expect(screen.queryByRole(`button`, { name: `Add bots` })).toBeNull();
     });
 });
 

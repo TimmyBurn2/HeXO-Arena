@@ -23,6 +23,7 @@ const base: TournamentDetail = {
     id: `t_abcdefghijk2`,
     name: `Autumn round robin`,
     origin: `operator`,
+    format: `round_robin`,
     createdBy: null,
     rated: true,
     test: false,
@@ -309,7 +310,7 @@ describe('TournamentScreen', () => {
 
 describe('TournamentsScreen', () => {
     it('list the running tournament, those coming up, and the past ones with their winner', async () => {
-        const summary = { id: base.id, name: `Autumn round robin`, origin: `operator` as const, createdBy: null, rated: true, test: false, gamesPerPair: 2 as const, status: `running` as const, startsAt: base.startsAt, timeControl: base.timeControl, openingPlies: 5 as const, entrants: 3, maxEntrants: 12, winner: null, round: null };
+        const summary = { id: base.id, name: `Autumn round robin`, origin: `operator` as const, format: `round_robin` as const, createdBy: null, rated: true, test: false, gamesPerPair: 2 as const, status: `running` as const, startsAt: base.startsAt, timeControl: base.timeControl, openingPlies: 5 as const, entrants: 3, maxEntrants: 12, winner: null, round: null };
         const list: TournamentList = {
             running: [{ ...summary, round: { current: 2, of: 3 } }],
             scheduled: [{ ...summary, id: `t_bcdefghijk23`, name: `Winter cup`, status: `scheduled`, entrants: 4 }],

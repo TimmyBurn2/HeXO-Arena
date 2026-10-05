@@ -81,9 +81,9 @@ import {
     tournamentsPath,
     tournamentStopPath,
     tournamentWithdrawPath,
-    createRoundRobinRequestSchema,
+    createTournamentRequestSchema,
     tournamentListQuerySchema,
-    type CreateRoundRobinRequest,
+    type CreateTournamentRequest,
     type TournamentListQuery,
     type TournamentDetail,
     type TournamentEntry,
@@ -374,17 +374,17 @@ export function fetchTournaments(query: TournamentListQuery = {}): Promise<Tourn
     return getJson(`${tournamentsPath}${tail}`, tournamentListSchema);
 }
 
-/** Set up a round robin of picked bots; the answer is the round robin. */
-export function createRoundRobin(request: CreateRoundRobinRequest): Promise<TournamentDetail> {
-    return sendJson(tournamentsPath, `POST`, createRoundRobinRequestSchema.parse(request), tournamentDetailSchema);
+/** Set up a duel or round robin of picked bots; the answer is the tournament. */
+export function createTournament(request: CreateTournamentRequest): Promise<TournamentDetail> {
+    return sendJson(tournamentsPath, `POST`, createTournamentRequestSchema.parse(request), tournamentDetailSchema);
 }
 
-/** Stop a round robin the reader set up: no further game starts, and the live ones play on. */
+/** Stop a duel or round robin the reader set up: no further game starts, and the live ones play on. */
 export function stopTournament(id: string): Promise<TournamentDetail> {
     return sendJson(tournamentStopPath.replace(`{id}`, encodeURIComponent(id)), `POST`, {}, tournamentDetailSchema);
 }
 
-/** Withdraw the reader's bot from a round robin: its live game plays on, and its games to come score for its opponents. */
+/** Withdraw the reader's bot from a duel or round robin: its live game plays on, and its games to come score for its opponents, unless fewer than two bots are left. */
 export function withdrawFromTournament(id: string, bot: string): Promise<TournamentDetail> {
     return sendJson(tournamentWithdrawPath.replace(`{id}`, encodeURIComponent(id)), `POST`, { bot }, tournamentDetailSchema);
 }

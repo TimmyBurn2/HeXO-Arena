@@ -218,6 +218,13 @@
       "when": 1791128828789,
       "tag": "0030_round_robins",
       "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "6",
+      "when": 1791183989177,
+      "tag": "0031_two_bot_tournaments",
+      "breakpoints": true
     }
   ]
 }

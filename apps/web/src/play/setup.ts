@@ -51,15 +51,23 @@ export function ownedBy(bot: BotListing, viewer: string | null): boolean {
     return viewer !== null && bot.ownerName === viewer;
 }
 
+// Whether a bot takes any clock it declares, as a game against a person may run any.
+function takesAny(bot: BotListing): boolean {
+    const covered = coveredModes(bot.accepts);
+    return covered.turn || covered.match || covered.unlimited;
+}
+
 /**
- * A bot's readiness; one the running tournament reserves takes no other game until it ends.
- * Its owner, the viewer, plays it online whether or not it is open to others.
+ * A bot's readiness, the checks every setup makes first, in this order:
+ * online, open unless the viewer owns it, a clock it can play, free of the
+ * running tournament, and below its game cap. Its owner, the viewer, plays
+ * it online whether or not it is open to others; a bot event asks for a
+ * clock a scheduled game runs, where a game against a person takes any.
  */
-export function readinessOf(bot: BotListing, reserved: ReadonlySet<string> = unreserved, viewer: string | null = null): Readiness {
+export function readinessOf(bot: BotListing, reserved: ReadonlySet<string> = unreserved, viewer: string | null = null, takesAClock = takesAny(bot)): Readiness {
     if (!bot.online) return `offline`;
     if (!bot.openForChallenges && !ownedBy(bot, viewer)) return `closed`;
-    const covered = coveredModes(bot.accepts);
-    if (!covered.turn && !covered.match && !covered.unlimited) return `nothing`;
+    if (!takesAClock) return `nothing`;
     if (reserved.has(bot.name)) return `tournament`;
     return bot.liveGames >= botConcurrentGameCap ? `busy` : `ready`;
 }

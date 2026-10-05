@@ -212,6 +212,7 @@ describe('round robins people set up', () => {
             expect(detail).toMatchObject({
                 name: `Round robin by eve`,
                 origin: `person`,
+                format: `round_robin`,
                 createdBy: `eve`,
                 rated: false,
                 test: false,
@@ -222,13 +223,14 @@ describe('round robins people set up', () => {
                 maxEntrants: 4,
                 endedAt: null,
             });
-            expect(detail.entries.map((entry) => [entry.bot, entry.state, entry.ratingAtStart])).toEqual([
-                [`alpha`, `playing`, 1500],
-                [`beta`, `playing`, 1500],
-                [`delta`, `playing`, 1500],
-                [`gamma`, `playing`, 1500],
+            // Seated as named.
+            expect(detail.entries.map((entry) => [entry.key, entry.bot, entry.state, entry.ratingAtStart])).toEqual([
+                [1, `alpha`, `playing`, 1500],
+                [2, `beta`, `playing`, 1500],
+                [3, `gamma`, `playing`, 1500],
+                [4, `delta`, `playing`, 1500],
             ]);
-            expect(detail.entries.map((entry) => entry.version)).toEqual([`1.0.0`, `1.0.3`, `1.0.5`, `1.0.4`]);
+            expect(detail.entries.map((entry) => entry.version)).toEqual([`1.0.0`, `1.0.3`, `1.0.4`, `1.0.5`]);
             expect(detail.rounds).toHaveLength(3);
             expect(detail.rounds.every((round) => round.pairings.length === 2 && round.rest === null)).toBe(true);
             const live = liveRows(detail.id);
@@ -244,7 +246,7 @@ describe('round robins people set up', () => {
                 }
             }
             expect(detail.live).toHaveLength(2);
-            expect(detail.live[0]?.tournament).toMatchObject({ name: `Round robin by eve`, round: 1, game: 1, createdBy: `eve` });
+            expect(detail.live[0]?.tournament).toMatchObject({ name: `Round robin by eve`, format: `round_robin`, round: 1, game: 1, createdBy: `eve` });
             expect(detail.live[0]?.tournament?.leg).toBeUndefined();
         });
 
@@ -256,9 +258,10 @@ describe('round robins people set up', () => {
             expect(answer.statusCode).toBe(401);
         });
 
-        it('refuses fewer than three bots or more than eight, one bot twice, a clock outside the bounds, and a 1-ply opening for two openings', async () => {
+        it('refuses one bot or more than eight, one bot twice, a clock outside the bounds, a count no event plays, and a 1-ply opening for two openings', async () => {
             for (const [names, extra] of [
-                [[`alpha`, `beta`], {}],
+                [[`alpha`], {}],
+                [[`alpha`, `beta`, `gamma`, `delta`, `aster`, `axe`, `one`, `two`, `three`], {}],
                 [[`alpha`, `beta`, `ALPHA`], {}],
                 [[`alpha`, `beta`, `gamma`], { timeControl: { mode: `unlimited` } }],
                 [[`alpha`, `beta`, `gamma`], { openingPlies: 1, gamesPerPair: 4 }],
@@ -338,31 +341,46 @@ describe('round robins people set up', () => {
             expect(third.json()).toMatchObject({ code: `bot_busy` });
         });
 
-        it('holds a person to one running round robin, apart from their duels', async () => {
-            await started(`eve`, [`alpha`, `beta`, `gamma`]);
-            expect((await create(`eve`, [`aster`, `axe`, `delta`])).json()).toMatchObject({ code: `round_robin_busy` });
-            const duel = await world.app.inject({ method: `POST`, url: `/api/duels`, cookies: { hexo_arena_session: session(`eve`) }, payload: { first: `aster`, second: `delta`, timeControl: turn } });
-            expect(duel.statusCode).toBe(201);
+        it('holds a person to two running at once, of any size, in two live slots, apart from their duels', async () => {
+            const duel = await started(`eve`, [`alpha`, `beta`]);
+            await started(`eve`, [`gamma`, `delta`, `aster`]);
+            expect((await create(`eve`, [`axe`, `beta`])).json()).toMatchObject({ code: `tournament_busy` });
+            const old = await world.app.inject({ method: `POST`, url: `/api/duels`, cookies: { hexo_arena_session: session(`eve`) }, payload: { first: `axe`, second: `delta`, timeControl: turn } });
+            expect(old.statusCode).toBe(201);
+            expect((await post(`eve`, `/api/tournaments/${duel.id}/stop`)).statusCode).toBe(200);
+            expect((await create(`eve`, [`axe`, `beta`])).statusCode).toBe(201);
+            expect(world.sqlite.prepare(`select live_slot as slot from tournaments where created_by = (select id from users where name = 'eve') and status = 'running' order by slot`).all()).toEqual([{ slot: 1 }, { slot: 2 }]);
         });
 
-        it('holds a person to three round robins a UTC day, refused until midnight', async () => {
-            for (let index = 0; index < 3; index++) {
-                const detail = await started(`eve`, [`alpha`, `beta`, `gamma`]);
-                expect((await post(`eve`, `/api/tournaments/${detail.id}/stop`)).statusCode).toBe(200);
-            }
+        it('holds a person to ten a UTC day of any size, refused until midnight', async () => {
+            // Ten over already, so the rate limit on requests stays out of it.
+            const seconds = Math.floor(clock / 1000);
+            const insert = world.sqlite.prepare(
+                `insert into tournaments (id, status, starts_at, time_control, opening_plies, max_entrants, created_at, started_at, ended_at, origin, created_by, rated, games_per_pair, live_slot) values (?, 'finished', ?, '{}', 5, ?, ?, ?, ?, 'person', (select id from users where name = 'eve'), 0, 2, 1)`,
+            );
+            for (let index = 0; index < 10; index++) insert.run(`t_dailycap${String(index).padStart(4, `0`)}`, seconds - 60, index % 2 === 0 ? 2 : 3, seconds - 60, seconds - 60, seconds - 30);
             const answer = await create(`eve`, [`alpha`, `beta`, `gamma`]);
             expect(answer.statusCode).toBe(429);
-            expect(answer.json()).toMatchObject({ code: `daily_round_robin_cap` });
+            expect(answer.json()).toMatchObject({ code: `daily_tournament_cap` });
             expect(answer.headers[`retry-after`]).toBe(String(12 * 3600));
             clock = Date.UTC(2026, 9, 5, 0, 0, 1);
-            expect((await create(`eve`, [`alpha`, `beta`, `gamma`])).statusCode).toBe(201);
+            expect((await create(`eve`, [`alpha`, `beta`])).statusCode).toBe(201);
         });
 
-        it('lets only a test of one person\'s bots play more than four games a pair', async () => {
-            expect((await create(`eve`, [`alpha`, `beta`, `gamma`], { gamesPerPair: 6 })).json()).toMatchObject({ code: `test_only` });
-            expect((await create(`eve`, [`alpha`, `beta`, `gamma`], { gamesPerPair: 4 })).statusCode).toBe(201);
-            const test = await started(`ann`, [`alpha`, `aster`, `axe`], { gamesPerPair: 10 });
-            expect(test).toMatchObject({ test: true, rated: false, gamesPerPair: 10, name: `Round robin by ann` });
+        it('lets only a test of one person\'s bots play past ten games a pair, and no bot past 30 games, or 70 in a test', async () => {
+            const stop = async (id: string, person: string) => {
+                expect((await post(person, `/api/tournaments/${id}/stop`)).statusCode).toBe(200);
+            };
+            expect((await create(`eve`, [`alpha`, `beta`], { gamesPerPair: 20 })).json()).toMatchObject({ code: `test_only` });
+            await stop((await started(`eve`, [`alpha`, `beta`, `gamma`, `delta`], { gamesPerPair: 10 })).id, `eve`);
+            expect((await create(`eve`, [`alpha`, `beta`, `gamma`, `delta`, `aster`], { gamesPerPair: 10 })).json()).toMatchObject({ code: `too_many_games` });
+            await stop((await started(`eve`, [`alpha`, `beta`, `gamma`, `delta`, `aster`], { gamesPerPair: 6 })).id, `eve`);
+            const test = await started(`ann`, [`alpha`, `aster`], { gamesPerPair: 50 });
+            expect(test).toMatchObject({ test: true, rated: false, gamesPerPair: 50, format: `duel`, name: `Duel by ann` });
+            expect(test.rounds[0]?.pairings[0]?.games).toHaveLength(50);
+            await stop(test.id, `ann`);
+            expect((await create(`ann`, [`alpha`, `aster`, `axe`], { gamesPerPair: 50 })).json()).toMatchObject({ code: `too_many_games` });
+            expect((await started(`ann`, [`alpha`, `aster`, `axe`], { gamesPerPair: 30 })).gamesPerPair).toBe(30);
         });
     });
 
@@ -594,6 +612,125 @@ describe('round robins people set up', () => {
         });
     });
 
+    describe('a duel, a tournament of two', () => {
+        it('sets two bots up as a duel: one round, the bot named first standing first, never rated', async () => {
+            const detail = await started(`eve`, [`beta`, `alpha`]);
+            expect(detail).toMatchObject({ name: `Duel by eve`, format: `duel`, origin: `person`, maxEntrants: 2, gamesPerPair: 2, rated: false, test: false, status: `running` });
+            expect(detail.entries.map((entry) => [entry.key, entry.bot])).toEqual([
+                [1, `beta`],
+                [2, `alpha`],
+            ]);
+            expect(detail.entries.map((entry) => entry.now)).toEqual([
+                { rating: 1500, provisional: true },
+                { rating: 1500, provisional: true },
+            ]);
+            expect(detail.rounds).toHaveLength(1);
+            expect(detail.rounds[0]?.pairings).toHaveLength(1);
+            expect(detail.rounds[0]?.rest).toBeNull();
+            const [row] = liveRows(detail.id);
+            if (row === undefined) throw new Error(`no live game`);
+            expect(gameStart(row.x, row.id).rated).toBe(false);
+            const live = await read(detail.id);
+            expect(live.live[0]?.tournament).toMatchObject({ name: `Duel by eve`, format: `duel`, round: 1, game: 1 });
+            expect(live.rounds[0]?.pairings[0]?.games[0]?.opening).toHaveLength(5);
+            const listed = tournamentListSchema.parse((await world.app.inject({ method: `GET`, url: `/api/tournaments` })).json());
+            const summary = listed.running.find((each) => each.id === detail.id);
+            expect(summary).toMatchObject({ format: `duel`, pair: { first: { key: 1, name: `beta`, points: 0 }, second: { key: 2, name: `alpha`, points: 0 } } });
+            expect(summary?.pair?.games.map((game) => game.outcome)).toEqual([`live`, `pending`]);
+        });
+
+        it('plays a single game with its sides drawn by lot, its second slot none, and finishes after it', async () => {
+            const detail = await started(`eve`, [`alpha`, `beta`], { gamesPerPair: 1, openingPlies: 1 });
+            expect(detail.rounds[0]?.pairings[0]?.games).toHaveLength(1);
+            expect(world.sqlite.prepare(`select game2 from tournament_pairings where tournament_id = ?`).all(detail.id)).toEqual([{ game2: `none` }]);
+            const [row] = liveRows(detail.id);
+            if (row === undefined) throw new Error(`no live game`);
+            expect([row.x, row.o].sort()).toEqual([`alpha`, `beta`]);
+            const live = await read(detail.id);
+            expect(live.live[0]?.tournament).toMatchObject({ format: `duel`, game: 1, leg: 1, of: 1 });
+            await resignX(row);
+            tick(clock + 1_000);
+            const over = await read(detail.id);
+            expect(over.status).toBe(`finished`);
+            expect(over.rounds[0]?.pairings[0]?.games.map((game) => [game.outcome, game.reason])).toEqual([[`played`, `surrender`]]);
+            expect(over.standings.find((line) => line.bot === row.o)?.points).toBe(1);
+        });
+
+        it('plays its openings game after game, each played twice with the sides swapped, its games carrying how they ended', async () => {
+            const detail = await started(`eve`, [`alpha`, `beta`], { gamesPerPair: 4 });
+            await playOut(detail.id);
+            const over = await read(detail.id);
+            expect(over.status).toBe(`finished`);
+            const games = over.rounds[0]?.pairings[0]?.games ?? [];
+            expect(games.map((game) => game.x)).toEqual([1, 2, 1, 2].map((seat) => (seat === 1 ? over.rounds[0]?.pairings[0]?.first.key : over.rounds[0]?.pairings[0]?.second.key)));
+            expect(games.every((game) => game.outcome === `played` && game.reason === `surrender` && game.turns !== null)).toBe(true);
+            expect(games[0]?.opening).toEqual(games[1]?.opening);
+            expect(over.standings.map((line) => line.points)).toEqual([2, 2]);
+        });
+
+        it('scores a no-show for the bot that came, and cuts the duel short once a bot misses two openings in a row', async () => {
+            const detail = await started(`eve`, [`alpha`, `beta`], { gamesPerPair: 10 });
+            const [row] = liveRows(detail.id);
+            if (row === undefined) throw new Error(`no live game`);
+            await resignX(row);
+            offline(`beta`);
+            for (let pass = 0; pass < 20 && stored(detail.id).status === `running`; pass++) tick(clock + presenceGraceMs);
+            expect(stored(detail.id)).toEqual({ status: `cut_short`, reason: `missed` });
+            const over = await read(detail.id);
+            expect(over.end).toEqual({ reason: `missed`, round: 1, bot: { key: 2, name: `beta` } });
+            // The first opening was played in part, so the two missed in a row are the next two.
+            expect(over.rounds[0]?.pairings[0]?.games.map((game) => game.outcome)).toEqual([`played`, ...Array.from({ length: 5 }, () => `no_show`), ...Array.from({ length: 4 }, () => `not_played`)]);
+            expect(entries(detail.id).beta).toEqual({ state: `withdrawn`, reason: `missed` });
+            const listed = tournamentListSchema.parse((await world.app.inject({ method: `GET`, url: `/api/tournaments` })).json());
+            expect(listed.past.find((each) => each.id === detail.id)).toMatchObject({ status: `cut_short`, end: { reason: `missed`, bot: { name: `beta` } } });
+        });
+
+        it('ends when its bot\'s owner withdraws it: cut short, the live game playing on and counting, no further game', async () => {
+            const detail = await started(`eve`, [`alpha`, `beta`], { gamesPerPair: 4 });
+            const [row] = liveRows(detail.id);
+            if (row === undefined) throw new Error(`no live game`);
+            const answer = await post(`bob`, `/api/tournaments/${detail.id}/withdraw`, { bot: `beta` });
+            expect(answer.statusCode).toBe(200);
+            expect(tournamentDetailSchema.parse(answer.json())).toMatchObject({ status: `cut_short`, end: { reason: `owner`, bot: { name: `beta` } } });
+            expect(liveRows(detail.id).map((each) => each.id)).toEqual([row.id]);
+            await resignX(row);
+            tick(clock + 1_000);
+            expect(liveRows(detail.id)).toEqual([]);
+            const over = await read(detail.id);
+            expect(over.rounds[0]?.pairings[0]?.games.map((game) => game.outcome)).toEqual([`played`, `not_played`, `not_played`, `not_played`]);
+            expect(over.standings.reduce((sum, line) => sum + line.points, 0)).toBe(1);
+            expect((await post(`eve`, `/api/tournaments/${detail.id}/stop`)).json()).toMatchObject({ code: `over` });
+        });
+
+        it('cuts a round robin short once one bot is left to play', async () => {
+            const detail = await started(`eve`, [`alpha`, `beta`, `gamma`]);
+            expect((await post(`bob`, `/api/tournaments/${detail.id}/withdraw`, { bot: `beta` })).statusCode).toBe(200);
+            expect(stored(detail.id).status).toBe(`running`);
+            expect((await post(`cid`, `/api/tournaments/${detail.id}/withdraw`, { bot: `gamma` })).statusCode).toBe(200);
+            expect(stored(detail.id)).toEqual({ status: `cut_short`, reason: `owner` });
+            expect((await read(detail.id)).end).toMatchObject({ reason: `owner`, bot: { name: `gamma` } });
+        });
+
+        it('cuts a duel short at once when a bot of it is delisted, and stops one its creator stops', async () => {
+            const cut = await started(`eve`, [`alpha`, `beta`]);
+            world.admin({ op: `delist-bot`, name: `beta`, reason: `test` });
+            expect(stored(cut.id)).toEqual({ status: `cut_short`, reason: `delisted` });
+            const stopped = await started(`eve`, [`gamma`, `delta`]);
+            expect((await post(`eve`, `/api/tournaments/${stopped.id}/stop`)).json()).toMatchObject({ status: `stopped`, end: { reason: `creator`, round: 1 } });
+        });
+
+        it('estimates the first bot of a test of two against the second, counted by openings', async () => {
+            const detail = await started(`ann`, [`alpha`, `aster`], { gamesPerPair: 4 });
+            await playOut(detail.id);
+            const over = await read(detail.id);
+            expect(over.test).toBe(true);
+            const first = over.estimates?.find((each) => each.key === 1)?.estimate;
+            const second = over.estimates?.find((each) => each.key === 2)?.estimate;
+            expect(first?.games).toBe(4);
+            expect(first?.points.first).toBe(second?.points.second);
+        });
+    });
+
     describe('around the site', () => {
         it('lists every running one with the weekly first, the caller\'s own with their quota, and tests alone', async () => {
             const weekly = enterWeekly(`beta`, `gamma`, `delta`);
@@ -610,9 +747,11 @@ describe('round robins people set up', () => {
             const own = tournamentListSchema.parse((await world.app.inject({ method: `GET`, url: `/api/tournaments?mine=1`, cookies: { hexo_arena_session: session(`eve`) } })).json());
             expect(own.running.map((each) => each.id)).toEqual([mine.id]);
             expect(own.quota).toEqual({ live: 1, today: 1 });
+            expect(own.running[0]?.pair).toBeUndefined();
             const owner = tournamentListSchema.parse((await world.app.inject({ method: `GET`, url: `/api/tournaments?mine=1`, cookies: { hexo_arena_session: session(`ann`) } })).json());
             expect(owner.running.map((each) => each.id)).toEqual([test.id, mine.id]);
-            expect(owner.running.map((each) => each.yours?.bot)).toEqual([`alpha`, `aster`]);
+            // Level at the start, the first seated stands first.
+            expect(owner.running.map((each) => each.yours?.bot)).toEqual([`aster`, `aster`]);
             const tests = tournamentListSchema.parse((await world.app.inject({ method: `GET`, url: `/api/tournaments?kind=test` })).json());
             expect(tests.running.map((each) => each.id)).toEqual([test.id]);
             const signedOut = tournamentListSchema.parse((await world.app.inject({ method: `GET`, url: `/api/tournaments?mine=1` })).json());
@@ -632,7 +771,7 @@ describe('round robins people set up', () => {
             if (row === undefined) throw new Error(`no live game`);
             await resignX(row);
             const snapshot = gameSnapshotSchema.parse((await world.app.inject({ method: `GET`, url: `/api/games/${row.id}` })).json());
-            expect(snapshot.tournament).toEqual({ id: detail.id, name: `Round robin by eve`, round: 1, game: 1, createdBy: `eve` });
+            expect(snapshot.tournament).toEqual({ id: detail.id, name: `Round robin by eve`, format: `round_robin`, round: 1, game: 1, createdBy: `eve` });
             expect(snapshot).toMatchObject({ unratedByChoice: true });
             const history = finishedGamesPageSchema.parse((await world.app.inject({ method: `GET`, url: `/api/games/finished?tournament=${detail.id}` })).json());
             expect(history.games.map((game) => [game.gameId, game.rated, game.tournament?.name])).toEqual([[row.id, false, `Round robin by eve`]]);

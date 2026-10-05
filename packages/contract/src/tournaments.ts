@@ -1,11 +1,12 @@
 import { z } from 'zod';
 import { botVersionSchema } from './api';
 import { duelEstimateSchema } from './duels';
-import { liveGameEntrySchema, scheduledClockSchema } from './games';
+import { duelGamesMax, gameCellSchema, liveGameEntrySchema, scheduledClockSchema, tournamentFormatSchema, tournamentLegsMax, type TournamentFormat } from './games';
+import { provisionalSchema } from './leaderboard';
 import { levelIdSchema, seatLevelSchema } from './levels';
 import { clockText, pageTitle, plural, siteName, type PageMeta } from './meta';
 import { deletedBotName, deletedMarkSchema, deletedPlayerName, nameKeyOf, nameMaxLength, nameSyntaxSchema } from './names';
-import { openingPliesRequestSchema, openingPliesSchema, timeControlSchema, type TimeControl } from './stream';
+import { finishReasonSchema, openingPliesRequestSchema, openingPliesSchema, timeControlSchema, type TimeControl } from './stream';
 
 /** Bots that must be connected at the start, or the tournament is called off. */
 export const tournamentMinPresent = 3;
@@ -29,26 +30,40 @@ export const tournamentHorizonMs = 14 * 86_400_000;
 /** A development server schedules a tournament this soon, so a seeded one starts within minutes. */
 export const tournamentDevLeadMs = 60_000;
 
-/** The most bots a round robin a person sets up takes; the fewest is {@link tournamentMinPresent}. */
-export const roundRobinMaxBots = 8;
+/** The fewest bots a tournament a person sets up takes: two play a duel, three or more a round robin. */
+export const tournamentBotsMin = 2;
 
-/** The games each pair plays in a round robin a person sets up: one opening twice, or two. */
-export const roundRobinGamesPerPair = [2, 4] as const;
+/** The most bots a tournament a person sets up takes. */
+export const tournamentBotsMax = 8;
 
-/** The games each pair plays in a test, a round robin of one person's bots alone. */
-export const roundRobinTestGamesPerPair = [2, 4, 6, 10] as const;
+/** The games each pair plays in a tournament a person sets up: a single game, or one to five openings, each played twice with the sides swapped. */
+export const tournamentGameCounts = [1, 2, 4, 6, 8, 10] as const;
 
-/** A round robin a person sets up plays one opening a pair unless asked for more. */
-export const defaultRoundRobinGamesPerPair = 2;
+/** The games each pair plays in a test, where one person owns every bot: a tournament's counts, and longer runs. */
+export const tournamentTestGameCounts = [...tournamentGameCounts, 20, 30, 50] as const;
 
-/** Round robins one person runs at once; a unique index holds it. */
-export const roundRobinLiveCap = 1;
+/** A tournament a person sets up plays one opening a pair unless asked for more. */
+export const defaultTournamentGamesPerPair = 2;
 
-/** Round robins one person sets up in a UTC day. */
-export const roundRobinDailyCap = 3;
+/** The most games one bot plays in a tournament a person sets up, and in a test. */
+export const tournamentBotGamesMax = { event: 30, test: 70 } as const;
 
-/** Openings one pair plays at most, each twice with the sides swapped: a test's ten games. */
-export const tournamentLegsMax = 5;
+/** The games each bot of a field plays: its pair's games against each other bot. */
+export function gamesPerBot(bots: number, gamesPerPair: number): number {
+    return (bots - 1) * gamesPerPair;
+}
+
+/** Whether a field of a person's bots may play a count a pair: one its kind offers, and no bot past its most games. */
+export function gamesPerPairFits(bots: number, gamesPerPair: number, test: boolean): boolean {
+    const counts: readonly number[] = test ? tournamentTestGameCounts : tournamentGameCounts;
+    return counts.includes(gamesPerPair) && gamesPerBot(bots, gamesPerPair) <= (test ? tournamentBotGamesMax.test : tournamentBotGamesMax.event);
+}
+
+/** Tournaments one person runs at once, of any size; a live slot each, which a unique index holds. */
+export const tournamentLiveCap = 2;
+
+/** Tournaments one person sets up in a UTC day, of any size. */
+export const tournamentDailyCap = 10;
 
 /** Running tournaments the list holds at most, the operator's first. */
 export const tournamentRunningListCap = 20;
@@ -65,26 +80,34 @@ export const tournamentNameSchema = z
 
 export const tournamentIdSchema = z.string().regex(/^t_[a-z0-9]{12}$/);
 
-export const tournamentStatusSchema = z.enum([`scheduled`, `running`, `finished`, `called_off`, `canceled`, `stopped`]);
+export const tournamentStatusSchema = z.enum([`scheduled`, `running`, `finished`, `called_off`, `canceled`, `stopped`, `cut_short`]);
 export type TournamentStatus = z.infer<typeof tournamentStatusSchema>;
 
 export const tournamentOriginSchema = z.enum([`operator`, `person`]).meta({
     id: `TournamentOrigin`,
-    description: `operator: a tournament the operator scheduled, which owners enter, rated. person: a round robin someone signed in set up from bots they picked, never rated.`,
+    description: `operator: a tournament the operator scheduled, which owners enter, rated. person: a duel or round robin someone signed in set up from bots they picked, never rated.`,
 });
 export type TournamentOrigin = z.infer<typeof tournamentOriginSchema>;
 
 // zod takes a numeric enum as an object, so the keys are names only; an
 // enum renders as an integer enum in OpenAPI, where a literal list does not.
-export const tournamentGamesPerPairSchema = z.enum({ two: 2, four: 4, six: 6, ten: 10 }).meta({
+export const tournamentGamesPerPairSchema = z.enum({ one: 1, two: 2, four: 4, six: 6, eight: 8, ten: 10, twenty: 20, thirty: 30, fifty: 50 }).meta({
     id: `TournamentGamesPerPair`,
-    description: `The games each pair plays: each opening twice, sides swapped. More than 4 only in a test, where one person owns every bot.`,
+    description: [
+        `The games each pair plays: a single game with sides drawn by lot, or openings each played twice with the sides swapped.`,
+        `More than ${String(Math.max(...tournamentGameCounts))} only in a test, where one person owns every bot; no bot plays more than ${String(tournamentBotGamesMax.event)} games, or ${String(tournamentBotGamesMax.test)} in a test.`,
+    ].join(` `),
 });
 export type TournamentGamesPerPair = z.infer<typeof tournamentGamesPerPairSchema>;
 
-/** A round robin a person set up, named for them, since no one names one freely. */
-export function roundRobinName(createdBy: string): string {
-    return `Round robin by ${createdBy}`;
+/** A tournament's format: a person's of two bots is a duel, every other a round robin. */
+export function tournamentFormatOf(tournament: { readonly origin: TournamentOrigin; readonly maxEntrants: number }): TournamentFormat {
+    return tournament.origin === `person` && tournament.maxEntrants === tournamentBotsMin ? `duel` : `round_robin`;
+}
+
+/** A tournament a person set up, named for them by its format, since no one names one freely. */
+export function personTournamentName(createdBy: string, format: TournamentFormat): string {
+    return `${format === `duel` ? `Duel` : `Round robin`} by ${createdBy}`;
 }
 
 /** A running or scheduled tournament as the admin status lists it. */
@@ -161,64 +184,69 @@ export const tournamentExportPath = `/api/tournaments/{id}/export`;
 export const tournamentStopPath = `/api/tournaments/{id}/stop`;
 export const tournamentWithdrawPath = `/api/tournaments/{id}/withdraw`;
 
-export const roundRobinBotSchema = z
+export const tournamentPickSchema = z
     .strictObject({
         name: nameSyntaxSchema,
         level: levelIdSchema.optional().meta({ description: `The bot's declared level to play at, its default when absent.` }),
     })
-    .meta({ id: `RoundRobinBot` });
-export type RoundRobinBot = z.infer<typeof roundRobinBotSchema>;
+    .meta({ id: `TournamentPick` });
+export type TournamentPick = z.infer<typeof tournamentPickSchema>;
 
 // Restating the component id keeps the $ref and renders this default beside it.
-export const createRoundRobinRequestSchema = z
+export const createTournamentRequestSchema = z
     .strictObject({
-        bots: z.array(roundRobinBotSchema).min(tournamentMinPresent).max(roundRobinMaxBots),
-        gamesPerPair: tournamentGamesPerPairSchema.default(defaultRoundRobinGamesPerPair).meta({ id: `TournamentGamesPerPair`, default: defaultRoundRobinGamesPerPair }),
+        bots: z.array(tournamentPickSchema).min(tournamentBotsMin).max(tournamentBotsMax).meta({ description: `The bots in the order named; of two, the first named stands first.` }),
+        gamesPerPair: tournamentGamesPerPairSchema.default(defaultTournamentGamesPerPair).meta({ id: `TournamentGamesPerPair`, default: defaultTournamentGamesPerPair }),
         openingPlies: openingPliesRequestSchema,
         timeControl: timeControlSchema,
     })
     .refine((request) => new Set(request.bots.map((bot) => nameKeyOf(bot.name))).size === request.bots.length, { message: `the bots are distinct`, path: [`bots`] })
     .refine((request) => scheduledClockSchema.safeParse(request.timeControl).success, { message: `a turn clock of 5 to 60 s, or a match clock of 1 to 10 min plus 0 to 10 s`, path: [`timeControl`] })
-    .refine((request) => request.openingPlies > 1 || request.gamesPerPair === 2, { message: `a 1-ply opening allows one opening a pair` })
+    .refine((request) => request.openingPlies > 1 || request.gamesPerPair <= 2, { message: `a 1-ply opening allows a single game or one opening a pair` })
     .meta({
-        id: `CreateRoundRobinRequest`,
+        id: `CreateTournamentRequest`,
         description: [
-            `${String(tournamentMinPresent)} to ${String(roundRobinMaxBots)} distinct bots.`,
+            `${String(tournamentBotsMin)} to ${String(tournamentBotsMax)} distinct bots: two play a duel, three or more a round robin.`,
             `The clock is a turn clock of 5 to 60 s, or a match clock of 1 to 10 min plus 0 to 10 s, never unlimited.`,
-            `A 1-ply opening allows one opening a pair, since a bot that plays alike every time would replay the bare origin identically.`,
+            `A 1-ply opening allows a single game or one opening a pair, since a bot that plays alike every time would replay the bare origin identically.`,
         ].join(` `),
     });
-export type CreateRoundRobinRequest = z.infer<typeof createRoundRobinRequestSchema>;
+export type CreateTournamentRequest = z.infer<typeof createTournamentRequestSchema>;
 
-// Each bot's gates in the caller's order, then the round robin's own limits:
-// a length only a test takes, and the caller's running round robin.
-export const roundRobinCreateErrorCodes = [`not_open`, `duel_refused`, `clock_not_accepted`, `unknown_level`, `bot_busy`, `test_only`, `round_robin_busy`] as const;
+// Each bot's gates in the caller's order, then the tournament's own limits:
+// a length only a test takes, a bot past its most games, and the caller's
+// running tournaments.
+export const tournamentCreateErrorCodes = [`not_open`, `duel_refused`, `clock_not_accepted`, `unknown_level`, `bot_busy`, `test_only`, `too_many_games`, `tournament_busy`] as const;
 
-// A delisted bot, or one whose owner is banned, plays no new round robin.
-export const roundRobinForbiddenErrorCodes = [`delisted`, `banned`] as const;
+// A delisted bot, or one whose owner is banned, plays in no new tournament.
+export const tournamentCreateForbiddenErrorCodes = [`delisted`, `banned`] as const;
 
 // The daily cap, which the UTC day's turn lifts, so it answers 429 with the wait.
-export const roundRobinQuotaErrorCodes = [`daily_round_robin_cap`] as const;
+export const tournamentQuotaErrorCodes = [`daily_tournament_cap`] as const;
 
-// Only the person who set a round robin up stops it, and only while it runs.
+// Only the person who set a tournament up stops it, and only while it runs.
 export const tournamentStopForbiddenErrorCodes = [`not_yours`] as const;
 export const tournamentStopConflictErrorCodes = [`over`] as const;
 
-// Only a bot's owner withdraws it, and only while it plays a running round robin.
+// Only a bot's owner withdraws it, and only while it plays a running tournament a person set up.
 export const tournamentWithdrawForbiddenErrorCodes = [`not_owner`] as const;
 export const tournamentWithdrawConflictErrorCodes = [`over`, `not_playing`] as const;
 
 export const tournamentWithdrawRequestSchema = z.strictObject({ bot: nameSyntaxSchema }).meta({ id: `TournamentWithdrawRequest` });
 export type TournamentWithdrawRequest = z.infer<typeof tournamentWithdrawRequestSchema>;
 
+// The most games a test of any field size plays: every pair meeting at the most games a pair its bots' cap allows.
+const testGamesMax = Math.max(
+    ...Array.from({ length: tournamentBotsMax - tournamentBotsMin + 1 }, (_, index) => index + tournamentBotsMin).flatMap((bots) =>
+        tournamentTestGameCounts.filter((count) => gamesPerPairFits(bots, count, true)).map((count) => ((bots * (bots - 1)) / 2) * count),
+    ),
+);
+
 /**
  * The most games one tournament plays:
- * the larger of the weekly's largest field, every pair meeting twice, and a test of the most bots at the most games a pair.
+ * the larger of the weekly's largest field, every pair meeting twice, and the longest test a person sets up.
  */
-export const tournamentGamesMax = Math.max(
-    tournamentMaxEntrants * (tournamentMaxEntrants - 1),
-    ((roundRobinMaxBots * (roundRobinMaxBots - 1)) / 2) * Math.max(...roundRobinTestGamesPerPair),
-);
+export const tournamentGamesMax = Math.max(tournamentMaxEntrants * (tournamentMaxEntrants - 1), testGamesMax);
 
 /** Tournaments over that the list holds, the latest first. */
 export const tournamentListPastCap = 20;
@@ -242,7 +270,7 @@ export type TournamentEntryReason = z.infer<typeof tournamentEntryReasonSchema>;
 
 const entryReasonDescription = [
     `Why a bot was left out at the start (daily_cap: too few bot games left that day; clock: it does not accept the clock)`,
-    `or withdrawn (missed: two pairings missed in a row; banned, delisted, deleted; and from a round robin a person set up,`,
+    `or withdrawn (missed: two openings missed in a row; banned, delisted, deleted; and from a tournament a person set up,`,
     `owner: by its owner; refused: its owner turned duels by others off; tournament: the weekly tournament it entered began).`,
 ].join(` `);
 
@@ -279,87 +307,19 @@ export const tournamentListQuerySchema = z.object({
     mine: z
         .literal(`1`)
         .optional()
-        .meta({ param: { description: `Present as 1, only the round robins the signed-in caller set up and the tournaments one of their bots plays; none for a caller signed out.` } }),
-    kind: z.literal(`test`).optional().meta({ param: { description: `Only tests, round robins of one person's bots.` } }),
+        .meta({ param: { description: `Present as 1, only the tournaments the signed-in caller set up and those one of their bots plays; none for a caller signed out.` } }),
+    kind: z.literal(`test`).optional().meta({ param: { description: `Only tests, duels and round robins of one person's bots.` } }),
 });
 export type TournamentListQuery = z.infer<typeof tournamentListQuerySchema>;
 
-export const tournamentEndSchema = z
-    .object({
-        reason: z.enum([`creator`, `banned`, `deleted`, `operator`]).meta({
-            description: `Stopped by the person who set it up (creator), or as their account was banned or deleted; or canceled by the operator.`,
-        }),
-        round: z.number().int().min(1).nullable().meta({ description: `The round under way, or the last one begun; null before any.` }),
-    })
-    .meta({ id: `TournamentEnd`, description: `Why a tournament ended before its last game: stopped or canceled.` });
-export type TournamentEnd = z.infer<typeof tournamentEndSchema>;
+/** Why a tournament a person set up was stopped: by its creator, or as their account was banned or deleted. */
+export const tournamentStopReasons = [`creator`, `banned`, `deleted`] as const;
 
-export const tournamentLeadSchema = z
-    .object({ bot: z.string(), deleted: deletedMarkSchema.optional(), estimate: duelEstimateSchema })
-    .meta({
-        id: `TournamentLead`,
-        description: `A test's bot first in the final standings, once a game was played, and its estimate against all the others together: first is the bot, second the rest.`,
-    });
-export type TournamentLead = z.infer<typeof tournamentLeadSchema>;
+/** Why the bot that left a tournament a person set up, leaving fewer than two to play, was withdrawn. */
+export const tournamentCutReasons = [`owner`, `missed`, `refused`, `tournament`, `banned`, `delisted`, `deleted`] as const;
 
-// Shared by the list and the detail, so their descriptions live on the
-// two components rather than on fields the document would repeat.
-const tournamentKindFields = {
-    origin: tournamentOriginSchema,
-    createdBy: z.string().nullable(),
-    rated: z.boolean(),
-    test: z.boolean(),
-    gamesPerPair: tournamentGamesPerPairSchema,
-};
-
-const kindDescription = [
-    `createdBy names who set a person's round robin up, ${deletedPlayerName} once their account is deleted, and is null on the operator's, whose name the operator chose;`,
-    `a person's is named for its creator.`,
-    `test: one person owns every bot.`,
-].join(` `);
-
-export const tournamentSummarySchema = z
-    .object({
-        id: tournamentIdSchema,
-        name: z.string(),
-        ...tournamentKindFields,
-        status: tournamentStatusSchema,
-        startsAt: tournamentTime,
-        timeControl: timeControlSchema,
-        openingPlies: openingPliesSchema,
-        entrants: z.number().int().min(0).meta({ description: `Bots entered; once it starts, the bots that played.` }),
-        maxEntrants: z.number().int().min(tournamentMinPresent).max(tournamentMaxEntrants),
-        winner: tournamentWinnerSchema.nullable().meta({ description: `The bot first in the final standings, once finished.` }),
-        round: z
-            .object({ current: z.number().int().min(1), of: z.number().int().min(1) })
-            .nullable()
-            .meta({ description: `While it runs, the round under way or the next to start, and how many there are; null otherwise.` }),
-        endedAt: tournamentTime.optional().meta({ description: `When it ended: finished, called off, or canceled.` }),
-        end: tournamentEndSchema.optional(),
-        lead: tournamentLeadSchema.optional(),
-        bot: tournamentPlaceSchema.optional(),
-        yours: tournamentYoursSchema.optional(),
-    })
-    .meta({ id: `TournamentSummary`, description: kindDescription });
-export type TournamentSummary = z.infer<typeof tournamentSummarySchema>;
-
-export const tournamentQuotaSchema = z
-    .object({
-        live: z.number().int().min(0).max(roundRobinLiveCap).meta({ description: `Round robins the caller set up that run now, of ${String(roundRobinLiveCap)}.` }),
-        today: z.number().int().min(0).max(roundRobinDailyCap).meta({ description: `Round robins the caller set up this UTC day, of ${String(roundRobinDailyCap)}.` }),
-    })
-    .meta({ id: `TournamentQuota` });
-export type TournamentQuota = z.infer<typeof tournamentQuotaSchema>;
-
-export const tournamentListSchema = z
-    .object({
-        running: z.array(tournamentSummarySchema).max(tournamentRunningListCap).meta({ description: `Every running one, the operator's first, then the newest.` }),
-        scheduled: z.array(tournamentSummarySchema).max(tournamentWaitingCap).meta({ description: `Soonest first.` }),
-        past: z.array(tournamentSummarySchema).max(tournamentListPastCap).meta({ description: `Finished, stopped, called off, or canceled, latest first.` }),
-        quota: tournamentQuotaSchema.optional().meta({ description: `Present when mine names a signed-in caller, whose round robins it counts.` }),
-    })
-    .meta({ id: `TournamentList` });
-export type TournamentList = z.infer<typeof tournamentListSchema>;
+export const tournamentEndReasonSchema = z.enum([`creator`, `operator`, `owner`, `missed`, `refused`, `tournament`, `banned`, `delisted`, `deleted`]);
+export type TournamentEndReason = z.infer<typeof tournamentEndReasonSchema>;
 
 // A bot's number within one tournament, by which its pages name it; a
 // deleted bot reads as its label alone, so two deleted bots stay apart only
@@ -376,6 +336,46 @@ export const tournamentBotSchema = z
     .meta({ id: `TournamentBot` });
 export type TournamentBot = z.infer<typeof tournamentBotSchema>;
 
+export const tournamentEndSchema = z
+    .object({
+        reason: tournamentEndReasonSchema.meta({
+            description: [
+                `Stopped by the person who set it up (creator), or as their account was banned or deleted; canceled by the operator (operator);`,
+                `or cut short once fewer than two bots still played, for why the last to leave was withdrawn:`,
+                `by its owner (owner), two openings missed in a row (missed), its owner turning duels by others off (refused), the weekly it entered beginning (tournament), or it or its owner taken out (banned, delisted, deleted).`,
+            ].join(` `),
+        }),
+        round: z.number().int().min(1).nullable().meta({ description: `The round under way, or the last one begun; null before any.` }),
+        bot: tournamentBotSchema.optional().meta({ description: `The bot whose leaving cut it short.` }),
+    })
+    .meta({ id: `TournamentEnd`, description: `Why a tournament ended before its last game: stopped, canceled, or cut short.` });
+export type TournamentEnd = z.infer<typeof tournamentEndSchema>;
+
+export const tournamentLeadSchema = z
+    .object({ bot: z.string(), deleted: deletedMarkSchema.optional(), estimate: duelEstimateSchema })
+    .meta({
+        id: `TournamentLead`,
+        description: `A test's bot first in the final standings, once a game was played, and its estimate against all the others together: first is the bot, second the rest.`,
+    });
+export type TournamentLead = z.infer<typeof tournamentLeadSchema>;
+
+// Shared by the list and the detail, so their descriptions live on the
+// two components rather than on fields the document would repeat.
+const tournamentKindFields = {
+    origin: tournamentOriginSchema,
+    format: tournamentFormatSchema,
+    createdBy: z.string().nullable(),
+    rated: z.boolean(),
+    test: z.boolean(),
+    gamesPerPair: tournamentGamesPerPairSchema,
+};
+
+const kindDescription = [
+    `createdBy names who set a person's duel or round robin up, ${deletedPlayerName} once their account is deleted, and is null on the operator's, whose name the operator chose;`,
+    `a person's is named for its creator.`,
+    `test: one person owns every bot.`,
+].join(` `);
+
 export const tournamentEntrySchema = z
     .object({
         key: tournamentKeySchema,
@@ -388,10 +388,15 @@ export const tournamentEntrySchema = z
         reason: tournamentEntryReasonSchema.optional().meta({ description: entryReasonDescription }),
         level: seatLevelSchema.optional(),
         version: botVersionSchema.optional(),
+        now: z
+            .object({ rating: z.number().int(), provisional: provisionalSchema })
+            .nullable()
+            .optional()
+            .meta({ description: `On a duel's entries: its rating on the ladder now, which its page shows; null once deleted.` }),
     })
     .meta({
         id: `TournamentEntry`,
-        description: `level is present on a bot a round robin plays at a level other than its default, whose rating at the start is then null; version, where the bot declared one as a round robin began.`,
+        description: `level is present on a bot a tournament a person set up plays at a level other than its default, whose rating at the start is then null; version, where the bot declared one as it began.`,
     });
 export type TournamentEntry = z.infer<typeof tournamentEntrySchema>;
 
@@ -404,6 +409,13 @@ export const tournamentGameSchema = z
         outcome: tournamentGameOutcomeSchema,
         point: tournamentKeySchema.nullable().meta({ description: `The bot the game scored for: the winner, or the bot that came or stayed when the other did not.` }),
         missing: z.array(tournamentKeySchema).meta({ description: `The bots that did not show for a no-show, or were withdrawn for a forfeit.` }),
+        reason: finishReasonSchema.nullable().optional().meta({ description: `On a duel's games: how a game played or aborted ended; null before, and for a game never played.` }),
+        turns: z.number().int().min(0).nullable().optional().meta({ description: `On a duel's games: turns on the board once played, the opening's included; null otherwise.` }),
+        opening: z
+            .array(gameCellSchema)
+            .nullable()
+            .optional()
+            .meta({ description: `On a duel's games: the opening's stones, the origin included, once drawn at its first game, which its second replays.` }),
     })
     .meta({ id: `TournamentGame` });
 export type TournamentGame = z.infer<typeof tournamentGameSchema>;
@@ -414,12 +426,70 @@ export const tournamentPairingSchema = z
         second: tournamentBotSchema,
         games: z
             .array(tournamentGameSchema)
-            .min(2)
+            .min(1)
             .max(2 * tournamentLegsMax)
-            .meta({ description: `Its games in order: each opening twice, the first bot on x and then the second, and the next opening once both are over.` }),
+            .meta({
+                description: `Its games in order: each opening twice, the first bot on x and then the second, and the next opening once both are over; or a single game, the first bot drawn by lot to play x.`,
+            }),
     })
     .meta({ id: `TournamentPairing` });
 export type TournamentPairing = z.infer<typeof tournamentPairingSchema>;
+
+const pointsSchema = z.number().int().min(0);
+
+export const tournamentPairSchema = z
+    .object({
+        first: tournamentBotSchema.extend({ points: pointsSchema }),
+        second: tournamentBotSchema.extend({ points: pointsSchema }),
+        games: z.array(tournamentGameSchema).min(1).max(duelGamesMax),
+    })
+    .meta({ id: `TournamentPair`, description: `A duel's two bots, the first named first, with their points, and every game in order.` });
+export type TournamentPair = z.infer<typeof tournamentPairSchema>;
+
+export const tournamentSummarySchema = z
+    .object({
+        id: tournamentIdSchema,
+        name: z.string(),
+        ...tournamentKindFields,
+        status: tournamentStatusSchema,
+        startsAt: tournamentTime,
+        timeControl: timeControlSchema,
+        openingPlies: openingPliesSchema,
+        entrants: z.number().int().min(0).meta({ description: `Bots entered; once it starts, the bots that played.` }),
+        maxEntrants: z.number().int().min(tournamentBotsMin).max(tournamentMaxEntrants),
+        winner: tournamentWinnerSchema.nullable().meta({ description: `The bot first in the final standings, once finished.` }),
+        round: z
+            .object({ current: z.number().int().min(1), of: z.number().int().min(1) })
+            .nullable()
+            .meta({ description: `While it runs, the round under way or the next to start, and how many there are; null otherwise.` }),
+        endedAt: tournamentTime.optional().meta({ description: `When it ended: finished, stopped, cut short, called off, or canceled.` }),
+        end: tournamentEndSchema.optional(),
+        lead: tournamentLeadSchema.optional(),
+        pair: tournamentPairSchema.optional().meta({ description: `A duel's bots, points, and games, as a row's score cells draw them.` }),
+        bot: tournamentPlaceSchema.optional(),
+        yours: tournamentYoursSchema.optional(),
+    })
+    .meta({ id: `TournamentSummary`, description: kindDescription });
+export type TournamentSummary = z.infer<typeof tournamentSummarySchema>;
+
+export const tournamentQuotaSchema = z
+    .object({
+        live: z.number().int().min(0).max(tournamentLiveCap).meta({ description: `Duels and round robins the caller set up that run now, of ${String(tournamentLiveCap)}.` }),
+        today: z.number().int().min(0).max(tournamentDailyCap).meta({ description: `Duels and round robins the caller set up this UTC day, of ${String(tournamentDailyCap)}.` }),
+    })
+    .meta({ id: `TournamentQuota` });
+export type TournamentQuota = z.infer<typeof tournamentQuotaSchema>;
+
+export const tournamentListSchema = z
+    .object({
+        running: z.array(tournamentSummarySchema).max(tournamentRunningListCap).meta({ description: `Every running one, the operator's first, then the newest.` }),
+        scheduled: z.array(tournamentSummarySchema).max(tournamentWaitingCap).meta({ description: `Soonest first.` }),
+        past: z.array(tournamentSummarySchema).max(tournamentListPastCap).meta({ description: `Finished, stopped, cut short, called off, or canceled, latest first.` }),
+        quota: tournamentQuotaSchema.optional().meta({ description: `Present when mine names a signed-in caller, whose tournaments it counts.` }),
+    })
+    .meta({ id: `TournamentList` });
+export type TournamentList = z.infer<typeof tournamentListSchema>;
+
 
 export const tournamentRoundSchema = z
     .object({
@@ -472,7 +542,7 @@ export const tournamentDetailSchema = z
         endedAt: tournamentTime.nullable(),
         timeControl: timeControlSchema,
         openingPlies: openingPliesSchema,
-        maxEntrants: z.number().int().min(tournamentMinPresent).max(tournamentMaxEntrants),
+        maxEntrants: z.number().int().min(tournamentBotsMin).max(tournamentMaxEntrants),
         entries: z.array(tournamentEntrySchema).meta({ description: `Every bot entered, its state, and once it starts, its rating then.` }),
         rounds: z.array(tournamentRoundSchema).meta({ description: `Every round with its pairings, drawn at the start.` }),
         standings: z.array(tournamentStandingSchema).meta({
@@ -496,21 +566,52 @@ export type TournamentDetail = z.infer<typeof tournamentDetailSchema>;
 /** The tournament list's meta. */
 export const tournamentsMeta: PageMeta = {
     title: pageTitle(`Tournaments`),
-    description: `Bot round robins on ${siteName}: the weekly tournament, rated, and those people set up, unrated`,
+    description: `Bot duels and round robins on ${siteName}: the weekly tournament, rated, and those people set up, unrated`,
 };
 
-/** The Tournament place under Play, where an owner enters a bot in the next one and anyone signed in sets a round robin up. */
+/** The Tournament place under Play, where an owner enters a bot in the next one and anyone signed in sets a duel or round robin up. */
 export const playTournamentMeta: PageMeta = {
     title: pageTitle(`Tournament`),
-    description: `Enter the weekly tournament, or set up a round robin of bots`,
+    description: `Enter the weekly tournament, or set up a duel or round robin of bots`,
 };
+
+// A duel's state in a few words, its score the leader's points first.
+function duelState(tournament: TournamentSummary, pair: TournamentPair): string {
+    const leader = pair.first.points === pair.second.points ? null : pair.first.points > pair.second.points ? pair.first : pair.second;
+    const score = `${String(Math.max(pair.first.points, pair.second.points))}-${String(Math.min(pair.first.points, pair.second.points))}`;
+    switch (tournament.status) {
+        case `running`:
+            return leader === null ? `running, level at ${score}; ` : `running; ${leader.name} leads ${score}; `;
+        case `finished`:
+            return leader === null ? `ended level, ${score}; ` : `${leader.name} won ${score}; `;
+        case `stopped`:
+            return `stopped at ${score}; `;
+        case `cut_short`:
+            return `cut short at ${score}; `;
+        case `canceled`:
+            return `canceled; `;
+        case `scheduled`:
+        case `called_off`:
+            return ``;
+    }
+}
 
 /** A tournament's title, and a description that follows its state. */
 export function tournamentMeta(tournament: TournamentSummary): PageMeta {
     const bots = `${String(tournament.entrants)} ${plural(tournament.entrants, `bot`, `bots`)}`;
     if (tournament.origin === `person`) {
-        const kind = tournament.test ? `Bot test` : `Bot round robin`;
         const tag = tournament.test ? `test` : `unrated`;
+        const creator = tournament.createdBy ?? deletedPlayerName;
+        const pair = tournament.pair;
+        if (pair !== undefined) {
+            const kind = tournament.test ? `Bot test` : `Bot duel`;
+            const games = `${String(tournament.gamesPerPair)} ${plural(tournament.gamesPerPair, `game`, `games`)}`;
+            return {
+                title: pageTitle(`${pair.first.name} vs ${pair.second.name}`),
+                description: `${kind} of ${games} between two bots, set up by ${creator}; ${duelState(tournament, pair)}${tag}`,
+            };
+        }
+        const kind = tournament.test ? `Bot test` : `Bot round robin`;
         const round = tournament.round === null ? `` : `round ${String(tournament.round.current)} of ${String(tournament.round.of)} live; `;
         const state = {
             scheduled: ``,
@@ -519,8 +620,9 @@ export function tournamentMeta(tournament: TournamentSummary): PageMeta {
             called_off: ``,
             canceled: `canceled; `,
             stopped: `stopped; `,
+            cut_short: `cut short; `,
         }[tournament.status];
-        return { title: pageTitle(tournament.name), description: `${kind} of ${bots} set up by ${tournament.createdBy ?? deletedPlayerName}; ${state}${tag}` };
+        return { title: pageTitle(tournament.name), description: `${kind} of ${bots} set up by ${creator}; ${state}${tag}` };
     }
     const when = `${tournament.startsAt.slice(0, 10)} ${tournament.startsAt.slice(11, 16)} UTC`;
     const description = {
@@ -530,6 +632,7 @@ export function tournamentMeta(tournament: TournamentSummary): PageMeta {
         called_off: `Bot round robin, called off at the start`,
         canceled: `Bot round robin, canceled`,
         stopped: `Bot round robin of ${bots}, stopped`,
+        cut_short: `Bot round robin of ${bots}, cut short`,
     }[tournament.status];
     return { title: pageTitle(tournament.name), description };
 }

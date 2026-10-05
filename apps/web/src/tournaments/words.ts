@@ -18,16 +18,19 @@ export function yoursText(tournament: Pick<TournamentSummary, `status`>, yours: 
         case `running`:
         case `finished`:
         case `stopped`:
+        case `cut_short`:
             if (place.state === `withdrawn`) return words.withdrawn(yours.bot);
             if (place.rank === null) return words.didNotPlay(yours.bot);
             return tournament.status === `running` ? words.soFar(yours.bot, place.rank) : words.final(yours.bot, place.rank);
     }
 }
 
-/** A tournament game's caption: the tournament, the round, and the game within its pair's games. */
-export function gameCaption(tournament: GameTournament): string {
+/** A tournament game's caption: a duel's place among its games, else the tournament, the round, and the game within its pair's games. */
+export function gameCaption(tournament: GameTournament, test = false): string {
     const game = tournament.leg === undefined ? tournament.game : (tournament.leg - 1) * 2 + tournament.game;
-    return text.roundRobins.caption(tournament.name, tournament.round, game, tournament.of ?? 2);
+    const of = tournament.of ?? 2;
+    if (tournament.format === `duel`) return text.duels.caption(test ? `test` : `duel`, game, of);
+    return text.roundRobins.caption(tournament.name, tournament.round, game, of);
 }
 
 /** A bot's verdict from its own side of a test's estimate: the estimate favoring the rest reads weaker. */
@@ -49,6 +52,7 @@ export function leadText(detail: Pick<TournamentDetail, `status` | `standings`>)
         case `finished`:
             return text.drawer.tournamentWon(bots, points);
         case `stopped`:
+        case `cut_short`:
         case `canceled`:
             return words.led(bots, points);
         case `scheduled`:

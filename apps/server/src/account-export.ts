@@ -234,9 +234,9 @@ export function accountExport(query: Query, userId: string, nowMs: number): Acco
             .orderBy(asc(tournamentEntries.enteredAt))
             .all()
             // The state and reason checks admit only the contract's values.
-            .map(({ botDeletedAt, name, creatorName, creatorDeletedAt, ...entry }) => ({
+            .map(({ botDeletedAt, name, origin, maxEntrants, creatorName, creatorDeletedAt, ...entry }) => ({
                 ...entry,
-                tournament: tournamentNameOf({ name, creatorName, creatorDeletedAt }),
+                tournament: tournamentNameOf({ name, origin, maxEntrants, creatorName, creatorDeletedAt }),
                 bot: shownBot(entry.bot, botDeletedAt).name,
                 state: tournamentEntryStateSchema.parse(entry.state),
                 reason: entry.reason === null ? null : tournamentEntryReasonSchema.parse(entry.reason),

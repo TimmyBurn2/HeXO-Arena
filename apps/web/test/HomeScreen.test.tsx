@@ -187,7 +187,7 @@ describe('HomeScreen', () => {
     });
 
     it('shows the tournament running now, or one starting within a day, and none further off', async () => {
-        const summary = { id: `t_autumnrobin1`, name: `Autumn round robin`, origin: `operator` as const, createdBy: null, rated: true, test: false, gamesPerPair: 2 as const, status: `scheduled` as const, startsAt: new Date(Date.now() + 3 * 3_600_000 + 30_000).toISOString(), timeControl: { mode: `turn` as const, turnTimeMs: 10_000 }, openingPlies: 5 as const, entrants: 4, maxEntrants: 12, winner: null, round: null };
+        const summary = { id: `t_autumnrobin1`, name: `Autumn round robin`, origin: `operator` as const, format: `round_robin` as const, createdBy: null, rated: true, test: false, gamesPerPair: 2 as const, status: `scheduled` as const, startsAt: new Date(Date.now() + 3 * 3_600_000 + 30_000).toISOString(), timeControl: { mode: `turn` as const, turnTimeMs: 10_000 }, openingPlies: 5 as const, entrants: 4, maxEntrants: 12, winner: null, round: null };
         serve({ tournaments: { running: [], scheduled: [summary], past: [] } });
         const { unmount } = render(<HomeScreen />);
         expect((await screen.findByRole(`link`, { name: `Autumn round robin` })).getAttribute(`href`)).toBe(`/tournaments/t_autumnrobin1`);

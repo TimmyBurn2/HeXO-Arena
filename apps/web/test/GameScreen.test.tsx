@@ -888,7 +888,7 @@ describe('GameScreen for a watcher', () => {
     });
 
     it('say in the rundown that a game of a round robin a person set up is an unrated round robin', async () => {
-        const tournament = { id: `t_brunorobin01`, name: `Round robin by bruno`, round: 1, game: 1, createdBy: `bruno` };
+        const tournament = { id: `t_brunorobin01`, name: `Round robin by bruno`, format: `round_robin`, round: 1, game: 1, createdBy: `bruno` };
         stubRundown(watched({ ...freshSnapshot, unratedByChoice: true, tournament } as GameSnapshot));
         render(<GameScreen gameId="g-new" />);
         const card = await screen.findByRole(`region`, { name: `Rundown` });
@@ -1105,7 +1105,7 @@ describe('GameScreen for a watcher', () => {
     });
 
     it('name a tournament game\'s place on the Game tab, leading to its tournament', async () => {
-        const tournamentGame = { ...watched(finishedSnapshot), tournament: { id: `t_autumnrobin1`, name: `Autumn round robin`, round: 4, game: 2 } } as GameSnapshot;
+        const tournamentGame = { ...watched(finishedSnapshot), tournament: { id: `t_autumnrobin1`, name: `Autumn round robin`, format: `round_robin`, round: 4, game: 2 } } as GameSnapshot;
         stubGame(tournamentGame);
         render(<GameScreen gameId="g-end" />);
         await screen.findByRole(`heading`, { name: `hextide vs quinn` });
@@ -1117,11 +1117,12 @@ describe('GameScreen for a watcher', () => {
     });
 
     it('name who leads the tournament beside a tournament game\'s place, once the tournament is read', async () => {
-        const tournamentGame = { ...watched(finishedSnapshot), tournament: { id: `t_autumnrobin1`, name: `Autumn round robin`, round: 4, game: 2 } } as GameSnapshot;
+        const tournamentGame = { ...watched(finishedSnapshot), tournament: { id: `t_autumnrobin1`, name: `Autumn round robin`, format: `round_robin`, round: 4, game: 2 } } as GameSnapshot;
         const autumn: TournamentDetail = {
             id: `t_autumnrobin1`,
             name: `Autumn round robin`,
             origin: `operator`,
+            format: `round_robin`,
             createdBy: null,
             rated: true,
             test: false,

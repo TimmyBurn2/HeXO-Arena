@@ -3,13 +3,14 @@ import { clockText, nameKeyOf, type BotListing, type DuelGames, type DuelQuota, 
 import { createDuel } from '../api/client';
 import { DiscordSignIn } from '../components/DiscordButton';
 import { OpeningRow } from '../play/OpeningRow';
+import { eventReadiness, reasonText, type BotReason, type SetupReads } from '../play/readiness';
 import { ownedBy } from '../play/setup';
 import { Link } from '../router/Link';
 import { navigate } from '../router/use-route';
 import { text } from '../text';
+import { BotPicker } from '../tournaments/BotPicker';
 import { DuelClock } from './DuelClock';
-import { Picker } from './Picker';
-import { namesABot, refusalLine, refusalReads, refusedBot } from './refusal';
+import { refusalLine } from './refusal';
 import { GameGlyph } from './Scoreboard';
 import {
     clockForPair,
@@ -19,15 +20,12 @@ import {
     kindOf,
     openingAllowed,
     otherSlot,
-    pickReason,
     ratedReason,
     readChoices,
     setupPath,
     writeChoices,
     type DuelChoices,
-    type DuelReads,
     type DuelSetup,
-    type PickReason,
     type RatedReason,
     type SlotKey,
 } from './setup';
@@ -45,11 +43,10 @@ function levelOf(bot: BotListing | null, id: string | null): Level | null {
     return bot.levels.list.find((level) => level.id === id) ?? null;
 }
 
-function reasonLine(bot: BotListing, reason: PickReason, other: BotListing | null): string {
+function reasonLine(bot: BotListing, reason: BotReason, other: BotListing | null): string {
     if (reason === `offline`) return text.duels.slot.gone(bot.name);
-    const words = text.duels.picker.reasons;
-    const said = reason === `pair` ? words.pair(other?.name ?? ``) : reason === `clock` ? words.clock(other?.name ?? ``) : words[reason];
-    return text.duels.slot.unready(bot.name, said);
+    const name = other?.name ?? ``;
+    return text.duels.slot.unready(bot.name, reasonText(reason, [name], name));
 }
 
 function ratedLine(reason: RatedReason): string {
@@ -87,7 +84,7 @@ export function NewDuel({
     onRefused,
 }: {
     bots: readonly BotListing[];
-    reads: DuelReads;
+    reads: SetupReads;
     me: Me | undefined;
     quota: DuelQuota | null;
     paused: boolean;
@@ -154,7 +151,7 @@ export function NewDuel({
     });
 
     function warningOf(subject: BotListing, other: BotListing | null): string | null {
-        const why = pickReason(subject, other, reads);
+        const why = eventReadiness(subject, other === null ? [] : [other], reads, true);
         return why === null ? null : reasonLine(subject, why, other);
     }
 
@@ -189,12 +186,11 @@ export function NewDuel({
             if (!compact) navigate(setupPath({ first: first.name, second: second.name, levels: { first: picked.first?.id ?? null, second: picked.second?.id ?? null }, games, clock, opening: plies }), { replace: true });
             navigate(duelPagePath(created.id));
         } catch (cause) {
-            // The reads beside the list may lag the server's, so a refusal naming a bot reads them again to tell which bot and why.
-            const fresh = namesABot(cause) ? await refusalReads(viewer) : null;
-            const listed = (held: BotListing) => fresh?.bots.find((each) => nameKeyOf(each.name) === nameKeyOf(held.name)) ?? held;
-            const pair = [listed(first), listed(second)] as const;
-            const terms = { clock, levelled: picked.first !== null ? (`first` as const) : picked.second !== null ? (`second` as const) : null };
-            const line = await refusalLine(cause, { first: first.name, second: second.name }, (code) => refusedBot(code, pair, terms, fresh?.reads ?? reads), text.duels.errors.failed);
+            const why = (name: string) => {
+                const subject = nameKeyOf(name) === nameKeyOf(first.name) ? first : second;
+                return eventReadiness(subject, [subject === first ? second : first], reads, true);
+            };
+            const line = await refusalLine(cause, { first: first.name, second: second.name }, why, text.duels.errors.failed);
             setOutcome({ kind: `refused`, line });
             onRefused();
         }
@@ -359,14 +355,17 @@ export function NewDuel({
                 />
             </section>
             {picking === null ? null : (
-                <Picker
-                    slot={picking}
+                <BotPicker
                     bots={bots}
                     reads={reads}
-                    other={bot[otherSlot(picking)]}
-                    current={bot[picking]}
-                    onAdd={(next) => {
-                        add(picking, next);
+                    mode={{
+                        kind: `one`,
+                        slot: picking,
+                        other: bot[otherSlot(picking)],
+                        current: bot[picking],
+                        onAdd: (next) => {
+                            add(picking, next);
+                        },
                     }}
                     onClose={() => {
                         setPicking(null);
