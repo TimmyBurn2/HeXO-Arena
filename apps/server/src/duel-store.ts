@@ -268,14 +268,14 @@ export function duelGameRows(query: Query, duelId: string): DuelGameRow[] {
         .orderBy(asc(games.duelGame), asc(sql`${games}.rowid`))
         .all()
         .map((row) => {
-            // The duel check gives every duel game a number and a challenger, and the side, winner, and reason checks admit only these values.
+            // The duel check gives every duel game a number and a challenger.
             if (row.game === null || row.xBotId === null) throw new Error(`a duel game lacks its number or its bots: ${row.id}`);
             return {
                 id: row.id,
                 game: row.game,
                 xBotId: row.xBotId,
-                winner: row.winner as Side | null,
-                reason: row.reason as FinishReason | null,
+                winner: row.winner,
+                reason: row.reason,
                 finishedAt: row.finishedAt,
                 opening: boardCellSchema.array().parse(JSON.parse(row.openingCells)),
                 moves: row.moves,

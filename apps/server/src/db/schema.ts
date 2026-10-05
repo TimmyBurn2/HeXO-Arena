@@ -2,22 +2,28 @@ import { check, foreignKey, index, integer, primaryKey, real, sqliteTable, text,
 import { sql, type SQL } from 'drizzle-orm';
 import type { AnySQLiteColumn } from 'drizzle-orm/sqlite-core';
 import {
+    analysisFailureSchema,
     analysisHeuristicLimit,
     analysisLinesMax,
+    analysisStatusSchema,
     analysisWinInLimit,
     analyzerMaxSecondsCap,
     botAboutMaxLength,
     botRepoUrlMaxLength,
     botVersionMaxLength,
+    challengeStatusSchema,
     discordNameMaxLength,
     duelCutReasons,
     duelGameCounts,
     duelGamesMax,
     duelGamesOptions,
     duelStopReasons,
+    finishReasonSchema,
+    firstPlayerSchema,
     nextPathMaxLength,
     roundRobinMaxBots,
     roundRobinTestGamesPerPair,
+    sideSchema,
     tournamentLegsMax,
     requestBodyLimitBytes,
     reportDetailsMaxLength,
@@ -26,8 +32,21 @@ import {
     reportReasons,
     reportSubjectMaxLength,
     signupAttemptCap,
+    tournamentOriginSchema,
+    tournamentStatusSchema,
     valueCutMax,
 } from '@hexo-arena/contract';
+
+// An enum column's values, from the contract schema whose type its reads
+// take; the column's check, not this list, holds what is stored.
+function valuesOf<T extends string>(schema: { readonly options: readonly T[] }): [T, ...T[]] {
+    const [first, ...rest] = schema.options;
+    if (first === undefined) throw new Error(`an enum column takes one value at least`);
+    return [first, ...rest];
+}
+
+const sides = valuesOf(sideSchema);
+
 // One global namespace shared by users and bots: a SQLite unique index
 // cannot span two tables, so the fold key is reserved here first and both
 // tables reference it.
@@ -283,21 +302,21 @@ export const games = sqliteTable(
         id: text(`id`).primaryKey(),
         userId: text(`user_id`).references(() => users.id, { onDelete: `cascade` }),
         botId: text(`bot_id`).references(() => bots.id, { onDelete: `cascade` }),
-        userSide: text(`user_side`),
+        userSide: text(`user_side`, { enum: sides }),
         guestName: text(`guest_name`),
         challengerBotId: text(`challenger_bot_id`).references(() => bots.id, {
             onDelete: `cascade`,
         }),
         destBotId: text(`dest_bot_id`).references(() => bots.id, { onDelete: `cascade` }),
-        challengerSide: text(`challenger_side`),
+        challengerSide: text(`challenger_side`, { enum: sides }),
         xLevel: text(`x_level`),
         oLevel: text(`o_level`),
         unratedByChoice: integer(`unrated_by_choice`).notNull().default(0),
         test: integer(`test`).notNull().default(0),
         timeControl: text(`time_control`).notNull(),
         openingCells: text(`opening_cells`).notNull(),
-        winner: text(`winner`),
-        finishReason: text(`finish_reason`),
+        winner: text(`winner`, { enum: sides }),
+        finishReason: text(`finish_reason`, { enum: valuesOf(finishReasonSchema) }),
         createdAt: integer(`created_at`).notNull(),
         finishedAt: integer(`finished_at`),
         finishSeq: integer(`finish_seq`),
@@ -417,7 +436,7 @@ export const moves = sqliteTable(
             .notNull()
             .references(() => games.id, { onDelete: `cascade` }),
         seq: integer(`seq`).notNull(),
-        side: text(`side`).notNull(),
+        side: text(`side`, { enum: sides }).notNull(),
         firstX: integer(`first_x`).notNull(),
         firstY: integer(`first_y`).notNull(),
         secondX: integer(`second_x`).notNull(),
@@ -463,7 +482,7 @@ export const ownValues = sqliteTable(
         gameId: text(`game_id`)
             .notNull()
             .references(() => games.id, { onDelete: `cascade` }),
-        side: text(`side`).notNull(),
+        side: text(`side`, { enum: sides }).notNull(),
         scale: real(`scale`),
         cutInaccuracy: real(`cut_inaccuracy`),
         cutMistake: real(`cut_mistake`),
@@ -501,8 +520,8 @@ export const analyses = sqliteTable(
         // The analyzer the requester named, if any; only it may take the request.
         namedBotId: text(`named_bot_id`).references(() => bots.id, { onDelete: `cascade` }),
         requestedBy: text(`requested_by`).references(() => users.id, { onDelete: `set null` }),
-        status: text(`status`).notNull(),
-        failure: text(`failure`),
+        status: text(`status`, { enum: valuesOf(analysisStatusSchema) }).notNull(),
+        failure: text(`failure`, { enum: valuesOf(analysisFailureSchema) }),
         failedTurn: integer(`failed_turn`),
         seconds: integer(`seconds`).notNull(),
         createdAt: integer(`created_at`).notNull(),
@@ -574,8 +593,8 @@ export const challenges = sqliteTable(
         requestKey: text(`request_key`).notNull(),
         timeControl: text(`time_control`).notNull(),
         openingPlies: integer(`opening_plies`).notNull(),
-        firstPlayer: text(`first_player`).notNull(),
-        status: text(`status`).notNull(),
+        firstPlayer: text(`first_player`, { enum: valuesOf(firstPlayerSchema) }).notNull(),
+        status: text(`status`, { enum: valuesOf(challengeStatusSchema) }).notNull(),
         gameId: text(`game_id`).references(() => games.id, { onDelete: `cascade` }),
         createdAt: integer(`created_at`).notNull(),
         decidedAt: integer(`decided_at`),
@@ -644,7 +663,7 @@ export const gameRatings = sqliteTable(
         gameId: text(`game_id`)
             .notNull()
             .references(() => games.id, { onDelete: `cascade` }),
-        side: text(`side`).notNull(),
+        side: text(`side`, { enum: sides }).notNull(),
         ratingBefore: real(`rating_before`).notNull(),
         ratingAfter: real(`rating_after`).notNull(),
         deviationAfter: real(`deviation_after`).notNull(),
@@ -745,7 +764,7 @@ export const tournaments = sqliteTable(
     {
         id: text(`id`).primaryKey(),
         name: text(`name`),
-        status: text(`status`).notNull(),
+        status: text(`status`, { enum: valuesOf(tournamentStatusSchema) }).notNull(),
         startsAt: integer(`starts_at`).notNull(),
         timeControl: text(`time_control`).notNull(),
         openingPlies: integer(`opening_plies`).notNull(),
@@ -754,12 +773,12 @@ export const tournaments = sqliteTable(
         startedAt: integer(`started_at`),
         endedAt: integer(`ended_at`),
         ruleId: integer(`rule_id`).references(() => tournamentRules.id, { onDelete: `set null` }),
-        origin: text(`origin`).notNull().default(`operator`),
+        origin: text(`origin`, { enum: valuesOf(tournamentOriginSchema) }).notNull().default(`operator`),
         createdBy: text(`created_by`).references(() => users.id, { onDelete: `set null` }),
         rated: integer(`rated`).notNull().default(1),
         test: integer(`test`).notNull().default(0),
         gamesPerPair: integer(`games_per_pair`).notNull().default(2),
-        endReason: text(`end_reason`),
+        endReason: text(`end_reason`, { enum: [`creator`, `banned`, `deleted`] }),
     },
     (table) => [
         index(`tournaments_status_starts_idx`).on(table.status, table.startsAt),

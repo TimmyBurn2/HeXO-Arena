@@ -18,6 +18,7 @@ import { replay, type Coord, type Position } from '@hexo-arena/rules';
 import { nowSeconds, type Query } from './db';
 import { alias } from 'drizzle-orm/sqlite-core';
 import { bots, duels, games, moves, tournamentPairings, tournaments, users } from './db/schema';
+import { seated } from './game-seats';
 import { applyFinishedGame, countedGameOf, ratable, ratesSomebody, seatColumns } from './rating-store';
 import { shownBot, shownUser, type ShownName } from './shown-names';
 import { creatorJoin, creatorOf, creators, nameColumns, tournamentNameOf, type NameParts } from './tournament-store';
@@ -275,8 +276,7 @@ export function findGame(query: Query, gameId: string): GameRecord | undefined {
     const timeControl = timeControlSchema.parse(JSON.parse(row.timeControl));
     const opening = boardCellSchema.array().parse(JSON.parse(row.openingCells));
     const levels = seatLevelsOf(row);
-    const winner = (row.winner as Side | null) ?? null;
-    const finishReason = (row.finishReason as FinishReason | null) ?? null;
+    const { winner, finishReason } = row;
     if (
         row.userId !== null &&
         row.userName !== null &&
@@ -291,8 +291,7 @@ export function findGame(query: Query, gameId: string): GameRecord | undefined {
             user: shownUser(row.userName, row.userDeletedAt),
             botId: row.botId,
             bot: shownBot(row.botName, row.botDeletedAt),
-            // The seats constraint admits only x and o here.
-            userSide: row.userSide as Side,
+            userSide: row.userSide,
             timeControl,
             opening,
             levels,
@@ -310,8 +309,7 @@ export function findGame(query: Query, gameId: string): GameRecord | undefined {
             guestName: row.guestName,
             botId: row.botId,
             bot: shownBot(row.botName, row.botDeletedAt),
-            // The seats constraint admits only x and o here.
-            guestSide: row.userSide as Side,
+            guestSide: row.userSide,
             createdAt: row.createdAt,
             timeControl,
             opening,
@@ -335,8 +333,7 @@ export function findGame(query: Query, gameId: string): GameRecord | undefined {
             challenger: shownBot(row.challengerName, row.challengerDeletedAt),
             destBotId: row.destBotId,
             dest: shownBot(row.destName, row.destDeletedAt),
-            // The seats constraint admits only x and o here.
-            challengerSide: row.challengerSide as Side,
+            challengerSide: row.challengerSide,
             timeControl,
             opening,
             levels,
@@ -381,16 +378,13 @@ export function findFinishedHeadline(query: Query, gameId: string): GameHeadline
         .where(eq(games.id, gameId))
         .get();
     if (row === undefined || row.finishReason === null) return undefined;
-    // The seats, side, winner, and reason checks admit only these values.
-    const seated = (firstSide: Side, first: string, second: string): Record<Side, string> =>
-        firstSide === `x` ? { x: first, o: second } : { x: second, o: first };
     const human = row.userName === null ? row.guestName : shownUser(row.userName, row.userDeletedAt).name;
     const names =
         human !== null && row.botName !== null && row.userSide !== null
-            ? seated(row.userSide as Side, human, shownBot(row.botName, row.botDeletedAt).name)
+            ? seated(row.userSide, human, shownBot(row.botName, row.botDeletedAt).name)
             : row.challengerName !== null && row.destName !== null && row.challengerSide !== null
               ? seated(
-                    row.challengerSide as Side,
+                    row.challengerSide,
                     shownBot(row.challengerName, row.challengerDeletedAt).name,
                     shownBot(row.destName, row.destDeletedAt).name,
                 )
@@ -400,8 +394,8 @@ export function findFinishedHeadline(query: Query, gameId: string): GameHeadline
     return {
         status: `finished`,
         names: { x: nameAtLevel(names.x, levels.x), o: nameAtLevel(names.o, levels.o) },
-        winner: (row.winner as Side | null) ?? null,
-        reason: row.finishReason as FinishReason,
+        winner: row.winner,
+        reason: row.finishReason,
         turns: turnsOnBoard(boardCellSchema.array().parse(JSON.parse(row.openingCells)).length) + row.moves,
     };
 }
@@ -572,13 +566,13 @@ export function findMoves(query: Query, gameId: string): StoredMove[] {
         .where(eq(moves.gameId, gameId))
         .orderBy(moves.seq)
         .all()
-        .map((row) => ({
+        .map((row): StoredMove => ({
             seq: row.seq,
-            side: row.side as Side,
+            side: row.side,
             cells: [
                 { x: row.firstX, y: row.firstY },
                 { x: row.secondX, y: row.secondY },
-            ] as [Coord, Coord],
+            ],
         }));
 }
 

@@ -11,15 +11,43 @@ import { deleteUser, liveBotIdsOf, type UserDeletion } from './moderation';
 import type { PresenceRegistry } from './presence';
 import type { DuelRunner } from './duel-runner';
 import type { TournamentScheduler } from './tournament-scheduler';
+import { daySeconds } from './utc-day';
 
-/** The registries a deletion ends live play on, the scheduler it withdraws entries from, and the runner whose duels it ends. */
-export interface ErasureDeps {
-    games: Pick<GameRegistry, `abortForPerson` | `abortForBot`>;
+/** The registries a bot leaves live play through. */
+export interface BotWithdrawalDeps {
+    games: Pick<GameRegistry, `abortForBot`>;
     presence: Pick<PresenceRegistry, `close`>;
     challenges: Pick<ChallengeRegistry, `withdrawFor`>;
-    tournaments: Pick<TournamentScheduler, `withdraw` | `stopSetUpBy`>;
+    tournaments: Pick<TournamentScheduler, `withdraw`>;
     duels: Pick<DuelRunner, `endForBot`>;
     analysis: { withdraw: (botId: string) => void };
+}
+
+/** Why a bot leaves live play. */
+export type BotWithdrawal = `delisted` | `banned` | `deleted`;
+
+/**
+ * Takes a bot out of its duels, challenges, tournaments, and analysis.
+ * A delisted bot keeps its stream and live games; a banned one loses its
+ * stream, so its live games forfeit on the clock, rated, as a ban grants
+ * no unrated escape; a deleted one's live games end unrated.
+ * Answers how many live games it aborted.
+ */
+export function withdrawBot(deps: BotWithdrawalDeps, botId: string, reason: BotWithdrawal): number {
+    // Ended before the abort, so the duel names the reason rather than the abort.
+    deps.duels.endForBot(botId, reason);
+    const aborted = reason === `deleted` ? deps.games.abortForBot(botId) : 0;
+    if (reason !== `delisted`) deps.presence.close(botId);
+    deps.analysis.withdraw(botId);
+    deps.challenges.withdrawFor(botId);
+    deps.tournaments.withdraw(botId, reason);
+    return aborted;
+}
+
+/** The registries a deletion ends live play on, and the scheduler that stops what the user set up. */
+export interface ErasureDeps extends BotWithdrawalDeps {
+    games: Pick<GameRegistry, `abortForPerson` | `abortForBot`>;
+    tournaments: Pick<TournamentScheduler, `withdraw` | `stopSetUpBy`>;
 }
 
 /**
@@ -32,15 +60,7 @@ export interface ErasureDeps {
 export function eraseUser(deps: ErasureDeps, tx: Query, userId: string): UserDeletion & { aborted: number } {
     let aborted = deps.games.abortForPerson({ kind: `user`, id: userId });
     deps.tournaments.stopSetUpBy(userId, `deleted`);
-    for (const botId of liveBotIdsOf(tx, userId)) {
-        // Ended before the abort, so the duel names the deletion rather than the abort.
-        deps.duels.endForBot(botId, `deleted`);
-        aborted += deps.games.abortForBot(botId);
-        deps.presence.close(botId);
-        deps.analysis.withdraw(botId);
-        deps.challenges.withdrawFor(botId);
-        deps.tournaments.withdraw(botId, `deleted`);
-    }
+    for (const botId of liveBotIdsOf(tx, userId)) aborted += withdrawBot(deps, botId, `deleted`);
     return { ...deleteUser(tx, userId), aborted };
 }
 
@@ -71,7 +91,7 @@ export class ErasureJournal {
 
     constructor(options: { path: string; keepDays: number; log: JournalLog; now?: () => number }) {
         this.#path = options.path;
-        this.#keepSeconds = options.keepDays * 86_400;
+        this.#keepSeconds = options.keepDays * daySeconds;
         this.#log = options.log;
         this.#now = options.now ?? Date.now;
     }

@@ -4,6 +4,7 @@ import { msUntilNextRun } from './backup';
 import type { Query } from './db';
 import { adminActions, challenges, reports } from './db/schema';
 import type { ErasureJournal } from './erasure';
+import { daySeconds } from './utc-day';
 
 // What one purge removed, by kind.
 interface Purged {
@@ -21,7 +22,7 @@ interface Purged {
 export function purgeExpired(query: Query, now: Date): Purged {
     const seconds = (date: number) => Math.floor(date / 1000);
     const auditCutoff = seconds(Date.UTC(now.getUTCFullYear() - moderationRecordYears, 0, 1));
-    const challengeCutoff = seconds(now.getTime()) - challengeRecordDays * 86_400;
+    const challengeCutoff = seconds(now.getTime()) - challengeRecordDays * daySeconds;
     const reportCutoff = new Date(now);
     reportCutoff.setUTCMonth(reportCutoff.getUTCMonth() - closedReportMonths);
     return query.transaction((tx) => ({

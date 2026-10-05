@@ -68,7 +68,7 @@ function toRecord(row: {
     timeControl: string;
     openingPlies: number;
     firstPlayer: string;
-    status: string;
+    status: ChallengeStatus;
     gameId: string | null;
     createdAt: number;
     sameOwner: number;
@@ -85,7 +85,7 @@ function toRecord(row: {
         timeControl: timeControlSchema.parse(JSON.parse(row.timeControl)),
         openingPlies: openingPliesSchema.parse(row.openingPlies),
         firstPlayer: firstPlayerSchema.parse(row.firstPlayer),
-        status: row.status as ChallengeStatus,
+        status: row.status,
         gameId: row.gameId,
         createdAt: row.createdAt,
         sameOwner: row.sameOwner === 1,

@@ -69,10 +69,16 @@ import { sessionUser } from './sessions';
 import { shownBot, shownUser } from './shown-names';
 import type { StartGate } from './site-state';
 import { countRunningRoundRobinsOfBot } from './tournament-store';
+import { utcDay } from './utc-day';
+import { WindowMemo } from './window-memo';
 
 const isoOf = (seconds: number) => new Date(seconds * 1000).toISOString().replace(/\.\d{3}Z$/u, `Z`);
 
 const cells = (opening: readonly OpeningCell[]) => opening.map((cell) => ({ x: cell.x, y: cell.y, side: sideOf(cell.player) }));
+
+interface IdParams {
+    id: string;
+}
 
 interface NamedBot {
     readonly name: string;
@@ -309,24 +315,11 @@ const duelLengths: ReadonlySet<number> = new Set(duelGameCounts);
  */
 export function registerDuelApi(app: FastifyInstance, deps: DuelApiDeps): void {
     const { query, limits, gate } = deps;
-    const memo = new Map<string, { at: number; body: string }>();
-
-    // Every reader of one key within the window gets the one body; a clock
-    // that steps back starts a new window.
-    const memoized = (key: string, build: () => string | null): string | null => {
-        const now = deps.now();
-        const held = memo.get(key);
-        if (held !== undefined && now >= held.at && now - held.at < duelDetailMemoMs) return held.body;
-        const body = build();
-        if (body !== null) memo.set(key, { at: now, body });
-        for (const [stale, entry] of memo) if (now - entry.at >= duelDetailMemoMs) memo.delete(stale);
-        return body;
-    };
+    const memo = new WindowMemo<string>({ windowMs: duelDetailMemoMs, now: deps.now });
 
     // A duel started or stopped shows in the lists and the bots' states at once, as it does on its own page.
     const forget = (id: string) => {
-        memo.delete(id);
-        for (const key of memo.keys()) if (key.startsWith(`list:`) || key === `bots`) memo.delete(key);
+        memo.forget((key) => key === id || key.startsWith(`list:`) || key === `bots`);
     };
 
     const detailOf = (id: string) => {
@@ -367,8 +360,7 @@ export function registerDuelApi(app: FastifyInstance, deps: DuelApiDeps): void {
         const ownsOne = (first.ownerId === user.id) !== (second.ownerId === user.id);
         const atDefault = firstLevel === null && secondLevel === null;
         const nowSeconds = Math.floor(deps.now() / 1000);
-        const dayStart = Math.floor(nowSeconds / 86_400) * 86_400;
-        const untilTomorrow = dayStart + 86_400 - nowSeconds;
+        const { start: dayStart, secondsLeft: untilTomorrow } = utcDay(nowSeconds);
         // The quotas are read where the duel is written, as the daily caps are.
         const created = query.transaction((tx): { id: string } | Refusal => {
             if (pairRunning(tx, botIds)) return { status: 400, code: `duel_live`, error: `the two bots already play a duel` };
@@ -426,10 +418,10 @@ export function registerDuelApi(app: FastifyInstance, deps: DuelApiDeps): void {
         // Signed out, the caller owns nothing and started nothing.
         if (mine && userId === null) return reply.send(duelListSchema.parse({ running: [], past: [] }));
         const filter: DuelListFilter = { botId, userId, kind: parsed.data.kind ?? null };
-        const body = memoized(`list:${JSON.stringify(filter)}`, () => {
+        const body = memo.read(`list:${JSON.stringify(filter)}`, () => {
             const list = duelList(query, filter);
             if (userId === null) return JSON.stringify(duelListSchema.parse(list));
-            const dayStart = Math.floor(deps.now() / 86_400_000) * 86_400;
+            const dayStart = utcDay(Math.floor(deps.now() / 1000)).start;
             const quota = { live: countRunningStartedBy(query, userId), today: countStartedSince(query, userId, dayStart) };
             return JSON.stringify(duelListSchema.parse({ ...list, quota }));
         });
@@ -437,14 +429,14 @@ export function registerDuelApi(app: FastifyInstance, deps: DuelApiDeps): void {
     });
 
     app.get(`/api/duels/bots`, { config: { limit: `public` } }, async (_request, reply) => {
-        const body = memoized(`bots`, () => JSON.stringify(duelBotStatesSchema.parse(duelBotStates(query))));
+        const body = memo.read(`bots`, () => JSON.stringify(duelBotStatesSchema.parse(duelBotStates(query))));
         return reply.header(`content-type`, `application/json; charset=utf-8`).send(body);
     });
 
-    app.get(`/api/duels/:id`, { config: { limit: `public` } }, async (request, reply) => {
-        const { id } = request.params as { id: string };
+    app.get<{ Params: IdParams }>(`/api/duels/:id`, { config: { limit: `public` } }, async (request, reply) => {
+        const { id } = request.params;
         if (!duelIdSchema.safeParse(id).success) return reply.code(404).send({ error: `no such duel`, code: `not_found` });
-        const body = memoized(id, () => {
+        const body = memo.read(id, () => {
             const detail = detailOf(id);
             return detail === null ? null : JSON.stringify(detail);
         });
@@ -452,8 +444,8 @@ export function registerDuelApi(app: FastifyInstance, deps: DuelApiDeps): void {
         return reply.header(`content-type`, `application/json; charset=utf-8`).send(body);
     });
 
-    app.get(`/api/duels/:id/export`, { config: { limit: `public` } }, async (request, reply) => {
-        const { id } = request.params as { id: string };
+    app.get<{ Params: IdParams }>(`/api/duels/:id/export`, { config: { limit: `public` } }, async (request, reply) => {
+        const { id } = request.params;
         if (!duelIdSchema.safeParse(id).success) return reply.code(404).send({ error: `no such duel`, code: `not_found` });
         if (limits.refuseExport(reply, request)) return reply;
         const detail = duelDetail(query, deps, id);
@@ -462,11 +454,11 @@ export function registerDuelApi(app: FastifyInstance, deps: DuelApiDeps): void {
         return reply.header(`content-type`, `application/zip`).header(`content-disposition`, `attachment; filename="${file.fileName}"`).send(file.body);
     });
 
-    app.post(`/api/duels/:id/stop`, { config: { limit: `principal` } }, async (request, reply) => {
+    app.post<{ Params: IdParams }>(`/api/duels/:id/stop`, { config: { limit: `principal` } }, async (request, reply) => {
         const user = sessionUser(query, request);
         if (user === null) return reply.code(401).send({ error: `no signed-in user`, code: `unauthorized` });
         if (limits.refuse(reply, `principal`, `user:${user.id}`)) return reply;
-        const { id } = request.params as { id: string };
+        const { id } = request.params;
         const row = duelIdSchema.safeParse(id).success ? findDuel(query, id) : undefined;
         if (row === undefined) return reply.code(404).send({ error: `no such duel`, code: `not_found` });
         const ownedKey = [row.first, otherKey(row.first)].find((key) => readDuelBot(query, { id: row.botIds[key] })?.ownerId === user.id) ?? null;

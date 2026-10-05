@@ -8,32 +8,31 @@ import {
     finishedGamesPath,
     finishedGamesQuerySchema,
     nameKeyOf,
-    nameSyntaxSchema,
-    placeholderNamePattern,
+    openingPliesSchema,
     rankableDeviation,
     timeControlSchema,
     turnsOnBoard,
-    type FinishReason,
     type FinishedGameEntry,
     type FinishedGamesPage,
     type FinishedGamesQuery,
     type FinishedGamesRecord,
     type GamePlayer,
     type GameTournament,
-    type OpeningPlies,
     type SeatLevel,
     type Side,
 } from '@hexo-arena/contract';
-import { and, desc, eq, inArray, isNotNull, isNull, lt, lte, sql, type SQL, type SQLWrapper } from 'drizzle-orm';
+import { and, desc, eq, inArray, isNotNull, isNull, lt, lte, sql, type SQL } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/sqlite-core';
 import type { FastifyInstance } from 'fastify';
 import type { Query } from './db';
 import { bots, duels, gameRatings, games, moves, tournamentPairings, tournaments, users } from './db/schema';
 import { gameTournamentColumns, gameTournamentFrom, seatLevelsOf } from './game-store';
+import { resolvePlayer, seated, seatsOf, type GameSeat } from './game-seats';
 import { creatorJoin, creators } from './tournament-store';
 import type { PlayerRef } from './rating';
 import { ratesSomebody } from './rating-store';
 import { shownBot, shownUser, type ShownName } from './shown-names';
+import { WindowMemo } from './window-memo';
 
 // Distinct queries remembered at once; past it the oldest leaves first.
 const memoCap = 500;
@@ -49,44 +48,12 @@ interface Bound {
 /** A query with its names resolved: what the page reads, or an unknown name. */
 type Resolved = { kind: `unknown` } | { kind: `page`; player: PlayerRef | null; vs: PlayerRef | null; filters: Filters; page: number };
 
-// A deleted player's placeholder names no one a reader can ask for.
-function resolveName(query: Query, name: string): PlayerRef | null {
-    if (!nameSyntaxSchema.safeParse(name).success || placeholderNamePattern.test(nameKeyOf(name))) return null;
-    const key = nameKeyOf(name);
-    const user = query.select({ id: users.id }).from(users).where(and(eq(users.nameKey, key), isNull(users.deletedAt))).get();
-    if (user !== undefined) return { kind: `human`, id: user.id };
-    const bot = query.select({ id: bots.id }).from(bots).where(and(eq(bots.nameKey, key), isNull(bots.deletedAt))).get();
-    return bot === undefined ? null : { kind: `bot`, id: bot.id };
-}
-
 function resolve(query: Query, request: FinishedGamesQuery): Resolved {
     const { player: playerName, vs: vsName, page, ...filters } = request;
-    const player = playerName === undefined ? null : resolveName(query, playerName);
-    const vs = vsName === undefined ? null : resolveName(query, vsName);
+    const player = playerName === undefined ? null : resolvePlayer(query, playerName);
+    const vs = vsName === undefined ? null : resolvePlayer(query, vsName);
     if ((playerName !== undefined && player === null) || (vsName !== undefined && vs === null)) return { kind: `unknown` };
     return { kind: `page`, player, vs, filters, page: page === undefined ? 1 : Number(page) };
-}
-
-const otherSide = sql`(case ${games.challengerSide} when 'x' then 'o' else 'x' end)`;
-const otherUserSide = sql`(case ${games.userSide} when 'x' then 'o' else 'x' end)`;
-
-// One seat column a player can sit in, with that seat's side and the
-// opponent's column: a human sits in user_id; a bot in bot_id against a
-// human, and as challenger or challenged against a bot.
-interface Seat {
-    readonly column: SQLWrapper;
-    readonly side: SQLWrapper;
-    readonly opponent: SQLWrapper;
-    readonly opponentKind: PlayerRef[`kind`];
-}
-
-function seatsOf(player: PlayerRef): readonly Seat[] {
-    if (player.kind === `human`) return [{ column: games.userId, side: games.userSide, opponent: games.botId, opponentKind: `bot` }];
-    return [
-        { column: games.botId, side: otherUserSide, opponent: games.userId, opponentKind: `human` },
-        { column: games.challengerBotId, side: games.challengerSide, opponent: games.destBotId, opponentKind: `bot` },
-        { column: games.destBotId, side: otherSide, opponent: games.challengerBotId, opponentKind: `bot` },
-    ];
 }
 
 // Each kind reads through its own partial index.
@@ -168,7 +135,7 @@ function shared(filters: Filters, before: Bound | null, named: boolean): (SQL | 
     ];
 }
 
-function seatConditions(seat: Seat, player: PlayerRef, vs: PlayerRef | null, filters: Filters): (SQL | undefined)[] {
+function seatConditions(seat: GameSeat, player: PlayerRef, vs: PlayerRef | null, filters: Filters): (SQL | undefined)[] {
     return [
         sql`${seat.column} = ${player.id}`,
         vs === null ? undefined : sql`${seat.opponent} = ${vs.id}`,
@@ -181,7 +148,7 @@ function seatConditions(seat: Seat, player: PlayerRef, vs: PlayerRef | null, fil
 // The arms a named player's games read, one per seat the player can
 // hold, against an opponent's kind when one is named; none when the two
 // can never have met.
-function seatArms(resolved: Extract<Resolved, { kind: `page` }>, player: PlayerRef): Seat[] {
+function seatArms(resolved: Extract<Resolved, { kind: `page` }>, player: PlayerRef): GameSeat[] {
     return seatsOf(player).filter((seat) => resolved.vs === null || seat.opponentKind === resolved.vs.kind);
 }
 
@@ -365,13 +332,7 @@ export function finishedEntriesOf(query: Query, ids: readonly string[]): Finishe
         .all();
     const analyzed = doneCounts(query, ids);
     return rows.map((row): FinishedGameEntry => {
-        // The seats, side, winner, and reason checks admit only these values,
-        // and a page lists finished games alone.
-        const winner = row.winner as Side | null;
-        const reason = row.finishReason as FinishReason;
         type Seat = { shown: ShownName; kind: GamePlayer[`kind`] };
-        const seated = (firstSide: string, first: Seat, second: Seat): Record<Side, Seat> =>
-            firstSide === `x` ? { x: first, o: second } : { x: second, o: first };
         const human: Seat | null =
             row.userName !== null
                 ? { shown: shownUser(row.userName, row.userDeletedAt), kind: `user` }
@@ -388,7 +349,8 @@ export function finishedEntriesOf(query: Query, ids: readonly string[]): Finishe
                         { shown: shownBot(row.destName, row.destDeletedAt), kind: `bot` },
                     )
                   : null;
-        if (seats === null || row.finishedAt === null) throw new Error(`stored game row seats nobody or never finished: ${row.id}`);
+        // A page lists finished games alone.
+        if (seats === null || row.finishedAt === null || row.finishReason === null) throw new Error(`stored game row seats nobody or never finished: ${row.id}`);
         const openingPlies = boardCellSchema.array().parse(JSON.parse(row.openingCells)).length;
         const levels = seatLevelsOf(row);
         return {
@@ -397,14 +359,13 @@ export function finishedEntriesOf(query: Query, ids: readonly string[]): Finishe
                 x: seatOf(seats.x.shown, seats.x.kind, row.xBefore, row.xDeviation, levels.x),
                 o: seatOf(seats.o.shown, seats.o.kind, row.oBefore, row.oDeviation, levels.o),
             },
-            winner,
-            reason,
+            winner: row.winner,
+            reason: row.finishReason,
             timeControl: timeControlSchema.parse(JSON.parse(row.timeControl)),
-            // The opening checks admit only the odd counts from one to nine.
-            openingPlies: openingPlies as OpeningPlies,
+            openingPlies: openingPliesSchema.parse(openingPlies),
             turns: turnsOnBoard(openingPlies) + row.moves,
             finishedAt: new Date(row.finishedAt * 1000).toISOString().replace(/\.\d{3}Z$/u, `Z`),
-            rated: winner !== null && row.voidedAt === null && ratesSomebody(row),
+            rated: row.winner !== null && row.voidedAt === null && ratesSomebody(row),
             voided: row.voidedAt !== null,
             ...(row.unratedByChoice === 1 ? { unratedByChoice: true } : {}),
             ...(row.test === 1 ? { test: true as const } : {}),
@@ -470,29 +431,19 @@ export function explainFinishedGames(query: Query, request: FinishedGamesQuery):
  * in the key folded so every spelling of one query shares its body.
  */
 export function registerFinishedGamesApi(app: FastifyInstance, deps: { query: Query; now: () => number }): void {
-    const memo = new Map<string, { at: number; status: number; body: string }>();
+    const memo = new WindowMemo<{ status: number; body: string }>({ windowMs: finishedGamesMemoMs, now: deps.now, cap: memoCap });
 
     app.get(finishedGamesPath, { config: { limit: `public` } }, async (request, reply) => {
         const parsed = finishedGamesQuerySchema.safeParse(request.query);
         if (!parsed.success) return reply.code(400).send({ error: `the query fails validation`, code: `bad_request` });
         const { player, vs, ...rest } = parsed.data;
         const key = JSON.stringify({ ...rest, player: player === undefined ? null : nameKeyOf(player), vs: vs === undefined ? null : nameKeyOf(vs) });
-        const now = deps.now();
-        let held = memo.get(key);
-        // A clock that steps back starts a new window.
-        if (held === undefined || now < held.at || now - held.at >= finishedGamesMemoMs) {
+        const held = memo.read(key, () => {
             const page = listFinishedGames(deps.query, parsed.data);
-            held =
-                page === `unknown`
-                    ? { at: now, status: 404, body: JSON.stringify({ error: `no player has that name`, code: `not_found` }) }
-                    : { at: now, status: 200, body: JSON.stringify(finishedGamesPageSchema.parse(page)) };
-            memo.delete(key);
-            memo.set(key, held);
-            for (const [stale, entry] of memo) {
-                if (memo.size <= memoCap && now - entry.at < finishedGamesMemoMs) break;
-                memo.delete(stale);
-            }
-        }
+            return page === `unknown`
+                ? { status: 404, body: JSON.stringify({ error: `no player has that name`, code: `not_found` }) }
+                : { status: 200, body: JSON.stringify(finishedGamesPageSchema.parse(page)) };
+        });
         return reply.code(held.status).header(`content-type`, `application/json; charset=utf-8`).send(held.body);
     });
 }

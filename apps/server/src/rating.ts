@@ -1,5 +1,6 @@
 import { humanSeedRating, rankableDeviation, type Side } from '@hexo-arena/contract';
 import { glicko2Update, type Glicko2Rating } from './glicko2';
+import { daySeconds } from './utc-day';
 
 const botSeedRating = 1500;
 const seedDeviation = 500;
@@ -13,7 +14,6 @@ const glicko2Tau = 0.5;
 // lichess's rate, lila's Glicko.periodsPerDay: one period about every
 // 4.7 days, so an active player's deviation settles toward the floor.
 const ratingPeriodsPerDay = 0.21436;
-const secondsPerDay = 86_400;
 
 export type PlayerRating = Glicko2Rating;
 
@@ -70,7 +70,7 @@ function clamp(value: number, low: number, high: number): number {
 
 /** The rating periods between two finishes in epoch seconds, at lichess's rate; never negative. */
 export function periodsBetween(from: number, to: number): number {
-    return (Math.max(0, to - from) / secondsPerDay) * ratingPeriodsPerDay;
+    return (Math.max(0, to - from) / daySeconds) * ratingPeriodsPerDay;
 }
 
 /**

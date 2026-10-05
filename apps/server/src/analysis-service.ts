@@ -52,10 +52,11 @@ import type { AnalyzerSessions, ReadingOutcome } from './analyzers';
 import { findBot } from './bots';
 import type { Query } from './db';
 import type { GameRegistry } from './game-registry';
+import { seated } from './game-seats';
 import { findGame } from './game-store';
 import { ReadingCache, type CachedReading } from './reading-cache';
-
-const dayMs = 86_400_000;
+import { utcDay } from './utc-day';
+import { WindowMemo } from './window-memo';
 
 // A request's end before it is answered: its reading, why it failed, or a refusal.
 type PositionResult =
@@ -143,7 +144,7 @@ export class AnalysisService {
     // Jobs an analyzer has taken, until they finish, fail on it, or move on.
     readonly #taken = new Map<string, GameJob>();
     readonly #lastAssigned = new Map<string, number>();
-    readonly #memo = new Map<string, { readonly at: number; readonly answer: GameListAnswer }>();
+    readonly #memo: WindowMemo<GameListAnswer>;
     readonly #sweep: ReturnType<typeof setInterval>;
     // A stopped service writes nothing: the sessions it ends answer after the database may be gone.
     #stopped = false;
@@ -153,6 +154,7 @@ export class AnalysisService {
         this.#analyzers = deps.analyzers;
         this.#games = deps.games;
         this.#now = deps.now;
+        this.#memo = new WindowMemo({ windowMs: analysesMemoMs, now: deps.now });
         this.#cache = new ReadingCache(deps.now);
         this.#restore();
         this.#analyzers.onReady(() => {
@@ -177,7 +179,7 @@ export class AnalysisService {
 
     /** Whole games the user may still ask to have read this UTC day. */
     gamesLeft(userId: string): number {
-        return Math.max(0, analysisRequestsPerUserDay - userRequests(this.#query, userId, Math.floor(this.#dayStart() / 1000)).today);
+        return Math.max(0, analysisRequestsPerUserDay - userRequests(this.#query, userId, this.#today().start).today);
     }
 
     /**
@@ -205,7 +207,7 @@ export class AnalysisService {
         if (target === undefined) return Promise.resolve({ kind: `refused`, code: `no_analyzer` });
         const cached = this.#cache.find(key, target, ask.seconds);
         if (cached !== null) return Promise.resolve(this.#answer(userId, ask.lines, { status: `done`, reading: cached, cached: true }));
-        if (this.#usedBy(userId) >= positionReadingsPerUserDay) return Promise.resolve({ kind: `refused`, code: `analysis_limit`, retryAfter: this.#toMidnight() });
+        if (this.#usedBy(userId) >= positionReadingsPerUserDay) return Promise.resolve({ kind: `refused`, code: `analysis_limit`, retryAfter: this.#today().secondsLeft });
         if (!this.#available().some((info) => target === null || info.id === target)) return Promise.resolve({ kind: `refused`, code: `no_analyzer` });
         const waiting = this.#positions.filter((entry) => entry.assigned === null);
         if (waiting.length >= positionQueueCap || (target !== null && waiting.filter((entry) => entry.target === target).length >= analyzerPositionQueueCap)) {
@@ -241,9 +243,9 @@ export class AnalysisService {
         const standing = standingOf(this.#query, gameId);
         if (standing.done >= analysesPerGame.done) return { kind: `refused`, code: `analysis_full` };
         if (standing.pending >= analysesPerGame.pending) return { kind: `refused`, code: `analysis_pending` };
-        const requests = userRequests(this.#query, userId, Math.floor(this.#dayStart() / 1000));
+        const requests = userRequests(this.#query, userId, this.#today().start);
         if (requests.pending >= analysisPendingPerUser) return { kind: `refused`, code: `pending_limit` };
-        if (requests.today >= analysisRequestsPerUserDay) return { kind: `refused`, code: `analysis_limit`, retryAfter: this.#toMidnight() };
+        if (requests.today >= analysisRequestsPerUserDay) return { kind: `refused`, code: `analysis_limit`, retryAfter: this.#today().secondsLeft };
         if (this.#jobs.length >= analysisQueueCap) return { kind: `refused`, code: `analysis_queue_full`, retryAfter: analysisQueueRetryAfterSeconds };
         const target = analyzerName === null ? null : (findBot(this.#query, nameKeyOf(analyzerName))?.id ?? null);
         const job: GameJob = { analysisId: `a_${randomUUID()}`, game, target, createdAt: this.#now(), tried: new Set(), attempt: null, cancelled: false };
@@ -258,13 +260,7 @@ export class AnalysisService {
 
     /** A finished game's community readings and each bot seat's own view. */
     list(gameId: string): GameListAnswer {
-        const now = this.#now();
-        const memo = this.#memo.get(gameId);
-        if (memo !== undefined && memo.at + analysesMemoMs > now) return memo.answer;
-        const answer = this.#list(gameId);
-        this.#memo.set(gameId, { at: now, answer });
-        for (const [id, held] of this.#memo) if (held.at + analysesMemoMs <= now) this.#memo.delete(id);
-        return answer;
+        return this.#memo.read(gameId, () => this.#list(gameId));
     }
 
     /** Sets a user's opt-out; opting out stops and deletes the readings of their games. */
@@ -591,7 +587,7 @@ export class AnalysisService {
 
     // The day's counts, cleared as a new UTC day begins.
     #usedBy(userId: string): number {
-        const day = Math.floor(this.#now() / dayMs);
+        const day = this.#today().start;
         if (day !== this.#usedDay) {
             this.#used.clear();
             this.#usedDay = day;
@@ -599,12 +595,8 @@ export class AnalysisService {
         return this.#used.get(userId) ?? 0;
     }
 
-    #dayStart(): number {
-        return Math.floor(this.#now() / dayMs) * dayMs;
-    }
-
-    #toMidnight(): number {
-        return Math.max(1, Math.ceil((this.#dayStart() + dayMs - this.#now()) / 1000));
+    #today() {
+        return utcDay(Math.floor(this.#now() / 1000));
     }
 
     // Requests a stopped process left queued or running wait again, in the
@@ -647,14 +639,11 @@ export class AnalysisService {
         ];
         const own = ownLinesOf(this.#query, gameId, record.opening.length);
         const values = ownValuesOf(this.#query, gameId);
+        // Only a bot's seat has a view of its own.
         const seats: Record<Side, string | null> =
             record.kind === `bots`
-                ? record.challengerSide === `x`
-                    ? { x: record.challenger.name, o: record.dest.name }
-                    : { x: record.dest.name, o: record.challenger.name }
-                : record.kind === `human`
-                  ? { x: record.userSide === `x` ? null : record.bot.name, o: record.userSide === `o` ? null : record.bot.name }
-                  : { x: record.guestSide === `x` ? null : record.bot.name, o: record.guestSide === `o` ? null : record.bot.name };
+                ? seated(record.challengerSide, record.challenger.name, record.dest.name)
+                : seated(record.kind === `human` ? record.userSide : record.guestSide, null, record.bot.name);
         const views: OwnAnalysis[] = ([`x`, `o`] as const).flatMap((side) => {
             const player = seats[side];
             return player === null || own[side].length === 0 ? [] : [{ kind: `own` as const, side, player, values: values[side], turns: own[side] }];

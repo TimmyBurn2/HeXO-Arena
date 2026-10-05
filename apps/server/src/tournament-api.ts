@@ -36,7 +36,9 @@ import {
     type TournamentEstimate,
     type TournamentGame,
     type TournamentList,
+    type TournamentOrigin,
     type TournamentPlace,
+    type TournamentStatus,
     type TournamentSummary,
     type TournamentYours,
 } from '@hexo-arena/contract';
@@ -67,28 +69,35 @@ import {
     nameColumns,
     tournamentNameOf,
     type RoundRobinEntrant,
+    type StopReason,
 } from './tournament-store';
+import { utcDay } from './utc-day';
+import { WindowMemo } from './window-memo';
 
 const isoOf = (seconds: number) => new Date(seconds * 1000).toISOString().replace(/\.\d{3}Z$/u, `Z`);
+
+interface IdParams {
+    id: string;
+}
 
 interface TournamentRow {
     readonly id: string;
     readonly name: string | null;
     readonly creatorName: string | null;
     readonly creatorDeletedAt: number | null;
-    readonly status: string;
+    readonly status: TournamentStatus;
     readonly startsAt: number;
     readonly startedAt: number | null;
     readonly endedAt: number | null;
     readonly timeControl: string;
     readonly openingPlies: number;
     readonly maxEntrants: number;
-    readonly origin: string;
+    readonly origin: TournamentOrigin;
     readonly createdBy: string | null;
     readonly rated: number;
     readonly test: number;
     readonly gamesPerPair: number;
-    readonly endReason: string | null;
+    readonly endReason: StopReason | null;
 }
 
 const tournamentColumns = {
@@ -287,9 +296,9 @@ function lastBegunRound(pairings: readonly PairingView[]): number | null {
 
 function endOf(row: TournamentRow, pairings: readonly PairingView[]): TournamentEnd | undefined {
     if (row.status === `canceled`) return { reason: `operator`, round: lastBegunRound(pairings) };
-    if (row.status !== `stopped`) return undefined;
-    // The end check admits only these reasons on a stopped round robin.
-    return { reason: row.endReason as TournamentEnd[`reason`], round: lastBegunRound(pairings) };
+    // The end check gives a stopped round robin, and only it, a reason.
+    if (row.endReason === null) return undefined;
+    return { reason: row.endReason, round: lastBegunRound(pairings) };
 }
 
 // Each bot of a test against all the others together, counted by the
@@ -394,8 +403,7 @@ function summaryBase(row: TournamentRow) {
     return {
         id: row.id,
         name: tournamentNameOf(row),
-        // The origin check admits only these two.
-        origin: row.origin as TournamentSummary[`origin`],
+        origin: row.origin,
         createdBy: person ? creatorOf(row) : null,
         rated: row.rated === 1,
         test: row.test === 1,
@@ -507,7 +515,7 @@ function tournamentList(query: Query, filter: TournamentListFilter): TournamentL
               ),
         filter.test ? eq(tournaments.test, 1) : undefined,
     ];
-    const all = (statuses: string[], order: SQL[], limit: number) =>
+    const all = (statuses: TournamentStatus[], order: SQL[], limit: number) =>
         selectTournaments(query)
             .where(and(inArray(tournaments.status, statuses), ...narrowed))
             .orderBy(...order)
@@ -563,24 +571,11 @@ function isUniqueViolation(error: unknown): boolean {
  */
 export function registerTournamentApi(app: FastifyInstance, deps: TournamentApiDeps): void {
     const { query, limits, gate } = deps;
-    const memo = new Map<string, { at: number; body: string }>();
-
-    // Every reader of one key within the window gets the one body; a clock
-    // that steps back starts a new window.
-    const memoized = (key: string, build: () => string | null): string | null => {
-        const now = deps.now();
-        const held = memo.get(key);
-        if (held !== undefined && now >= held.at && now - held.at < tournamentDetailMemoMs) return held.body;
-        const body = build();
-        if (body !== null) memo.set(key, { at: now, body });
-        for (const [stale, entry] of memo) if (now - entry.at >= tournamentDetailMemoMs) memo.delete(stale);
-        return body;
-    };
+    const memo = new WindowMemo<string>({ windowMs: tournamentDetailMemoMs, now: deps.now });
 
     // A change shows on its page and in every bot's list at once.
     const forget = (id: string) => {
-        memo.delete(id);
-        for (const key of memo.keys()) if (key.startsWith(`bot:`)) memo.delete(key);
+        memo.forget((key) => key === id || key.startsWith(`bot:`));
     };
 
     const detailOf = (id: string) => {
@@ -600,7 +595,7 @@ export function registerTournamentApi(app: FastifyInstance, deps: TournamentApiD
             // Signed out, the caller set up nothing and owns nothing.
             if (mine && viewer === null) return reply.send(tournamentListSchema.parse({ running: [], scheduled: [], past: [] }));
             const list = tournamentList(query, { botId: null, userId: mine ? viewer : null, test, viewerId: viewer });
-            const dayStart = Math.floor(deps.now() / 86_400_000) * 86_400;
+            const dayStart = utcDay(Math.floor(deps.now() / 1000)).start;
             const quota = mine && viewer !== null ? { quota: { live: countRunningRoundRobinsBy(query, viewer), today: countRoundRobinsSince(query, viewer, dayStart) } } : {};
             return reply.header(`content-type`, `application/json; charset=utf-8`).send(JSON.stringify(tournamentListSchema.parse({ ...list, ...quota })));
         }
@@ -609,7 +604,7 @@ export function registerTournamentApi(app: FastifyInstance, deps: TournamentApiD
             : undefined;
         if (bot === undefined) return reply.code(404).send({ error: `no such bot`, code: `not_found` });
         // A bot's list reads the standings of every tournament it entered, so it shares the detail's window.
-        const body = memoized(`bot:${bot.id}:${String(test)}`, () => JSON.stringify(tournamentListSchema.parse(tournamentList(query, { botId: bot.id, userId: null, test, viewerId: null }))));
+        const body = memo.read(`bot:${bot.id}:${String(test)}`, () => JSON.stringify(tournamentListSchema.parse(tournamentList(query, { botId: bot.id, userId: null, test, viewerId: null }))));
         return reply.header(`content-type`, `application/json; charset=utf-8`).send(body);
     });
 
@@ -643,8 +638,7 @@ export function registerTournamentApi(app: FastifyInstance, deps: TournamentApiD
         // One person on every seat makes a test, whoever set it up.
         const test = new Set(found.map(({ bot }) => bot.ownerId)).size === 1;
         const now = Math.floor(deps.now() / 1000);
-        const dayStart = Math.floor(now / 86_400) * 86_400;
-        const untilTomorrow = dayStart + 86_400 - now;
+        const { start: dayStart, secondsLeft: untilTomorrow } = utcDay(now);
         // The quotas are read where the round robin is written, as the daily caps are.
         const create = () =>
             query.transaction((tx): { id: string } | Refusal => {
@@ -680,10 +674,10 @@ export function registerTournamentApi(app: FastifyInstance, deps: TournamentApiD
         return reply.code(201).send(detailOf(created.id));
     });
 
-    app.get(`/api/tournaments/:id`, { config: { limit: `public` } }, async (request, reply) => {
-        const { id } = request.params as { id: string };
+    app.get<{ Params: IdParams }>(`/api/tournaments/:id`, { config: { limit: `public` } }, async (request, reply) => {
+        const { id } = request.params;
         if (!tournamentIdSchema.safeParse(id).success) return reply.code(404).send({ error: `no such tournament`, code: `not_found` });
-        const body = memoized(id, () => {
+        const body = memo.read(id, () => {
             const detail = detailOf(id);
             return detail === null ? null : JSON.stringify(detail);
         });
@@ -691,8 +685,8 @@ export function registerTournamentApi(app: FastifyInstance, deps: TournamentApiD
         return reply.header(`content-type`, `application/json; charset=utf-8`).send(body);
     });
 
-    app.get(`/api/tournaments/:id/export`, { config: { limit: `public` } }, async (request, reply) => {
-        const { id } = request.params as { id: string };
+    app.get<{ Params: IdParams }>(`/api/tournaments/:id/export`, { config: { limit: `public` } }, async (request, reply) => {
+        const { id } = request.params;
         if (!tournamentIdSchema.safeParse(id).success) return reply.code(404).send({ error: `no such tournament`, code: `not_found` });
         if (limits.refuseExport(reply, request)) return reply;
         const detail = tournamentDetail(query, deps, id);
@@ -701,11 +695,11 @@ export function registerTournamentApi(app: FastifyInstance, deps: TournamentApiD
         return reply.header(`content-type`, `application/zip`).header(`content-disposition`, `attachment; filename="${file.fileName}"`).send(file.body);
     });
 
-    app.post(`/api/tournaments/:id/stop`, { config: { limit: `principal` } }, async (request, reply) => {
+    app.post<{ Params: IdParams }>(`/api/tournaments/:id/stop`, { config: { limit: `principal` } }, async (request, reply) => {
         const user = sessionUser(query, request);
         if (user === null) return reply.code(401).send({ error: `no signed-in user`, code: `unauthorized` });
         if (limits.refuse(reply, `principal`, `user:${user.id}`)) return reply;
-        const { id } = request.params as { id: string };
+        const { id } = request.params;
         const row = tournamentIdSchema.safeParse(id).success ? findTournament(query, id) : undefined;
         if (row === undefined) return reply.code(404).send({ error: `no such tournament`, code: `not_found` });
         if (row.origin !== `person` || row.createdBy !== user.id) return reply.code(403).send({ error: `you did not set the round robin up`, code: `not_yours` });
@@ -714,13 +708,13 @@ export function registerTournamentApi(app: FastifyInstance, deps: TournamentApiD
         return reply.code(200).send(detailOf(id));
     });
 
-    app.post(`/api/tournaments/:id/withdraw`, { config: { limit: `principal` } }, async (request, reply) => {
+    app.post<{ Params: IdParams }>(`/api/tournaments/:id/withdraw`, { config: { limit: `principal` } }, async (request, reply) => {
         const user = sessionUser(query, request);
         if (user === null) return reply.code(401).send({ error: `no signed-in user`, code: `unauthorized` });
         if (limits.refuse(reply, `principal`, `user:${user.id}`)) return reply;
         const parsed = tournamentWithdrawRequestSchema.safeParse(request.body);
         if (!parsed.success) return reply.code(400).send({ error: `the request fails validation`, code: `bad_request` });
-        const { id } = request.params as { id: string };
+        const { id } = request.params;
         const row = tournamentIdSchema.safeParse(id).success ? findTournament(query, id) : undefined;
         const bot = readDuelBot(query, { nameKey: nameKeyOf(parsed.data.bot) });
         // The weekly holds its entrants to the end; only a round robin a person set up lets a bot go.
@@ -733,13 +727,13 @@ export function registerTournamentApi(app: FastifyInstance, deps: TournamentApiD
         return reply.code(200).send(detailOf(id));
     });
 
-    app.put(`/api/tournaments/:id/entry`, { config: { limit: `principal` } }, async (request, reply) => {
+    app.put<{ Params: IdParams }>(`/api/tournaments/:id/entry`, { config: { limit: `principal` } }, async (request, reply) => {
         const user = sessionUser(query, request);
         if (user === null) return reply.code(401).send({ error: `no session`, code: `unauthorized` });
         if (limits.refuse(reply, `principal`, `user:${user.id}`)) return reply;
         const parsed = tournamentEntryRequestSchema.safeParse(request.body);
         if (!parsed.success) return reply.code(400).send({ error: `the request fails validation`, code: `bad_request` });
-        const { id } = request.params as { id: string };
+        const { id } = request.params;
         const tournament = findTournament(query, id);
         const bot = nameSyntaxSchema.safeParse(parsed.data.bot).success
             ? query
@@ -775,11 +769,11 @@ export function registerTournamentApi(app: FastifyInstance, deps: TournamentApiD
         return reply.code(200).send(entryView(entry, deps.presence.isOnline(bot.id)));
     });
 
-    app.delete(`/api/tournaments/:id/entry`, { config: { limit: `principal` } }, async (request, reply) => {
+    app.delete<{ Params: IdParams }>(`/api/tournaments/:id/entry`, { config: { limit: `principal` } }, async (request, reply) => {
         const user = sessionUser(query, request);
         if (user === null) return reply.code(401).send({ error: `no session`, code: `unauthorized` });
         if (limits.refuse(reply, `principal`, `user:${user.id}`)) return reply;
-        const { id } = request.params as { id: string };
+        const { id } = request.params;
         const tournament = query.select({ status: tournaments.status }).from(tournaments).where(eq(tournaments.id, id)).get();
         if (tournament === undefined) return reply.code(404).send({ error: `no such tournament`, code: `not_found` });
         if (tournament.status !== `scheduled`) return reply.code(409).send({ error: `the tournament no longer waits`, code: `closed` });

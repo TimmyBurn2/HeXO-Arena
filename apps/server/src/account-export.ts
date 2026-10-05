@@ -19,6 +19,7 @@ import { alias } from 'drizzle-orm/sqlite-core';
 import { and, asc, eq, inArray, isNotNull, or, type SQL } from 'drizzle-orm';
 import type { Query } from './db';
 import { adminActions, bots, challenges, duels, gameRatings, games, moves, ratings, sessions, tournamentEntries, tournaments, users } from './db/schema';
+import { seated } from './game-seats';
 import { findGame, type GameRecord } from './game-store';
 import { requestsOf } from './analysis-store';
 import { storedAnalyzer, storedClient } from './bots';
@@ -29,25 +30,30 @@ import { creatorJoin, creators, nameColumns, tournamentNameOf } from './tourname
 const isoOf = (seconds: number) => new Date(seconds * 1000).toISOString().replace(/\.\d{3}Z$/u, `Z`);
 const isoOrNull = (seconds: number | null) => (seconds === null ? null : isoOf(seconds));
 
-function seatsOf(record: GameRecord, own: (botId: string) => boolean, userId: string): AccountExport[`games`][number][`players`] {
-    type Exported = AccountExport[`games`][number][`players`][`x`];
-    const leveled = (side: Side, seat: Exported): Exported => {
+type ExportedPlayer = AccountExport[`games`][number][`players`][`x`];
+
+function seatedOf(record: GameRecord, own: (botId: string) => boolean, userId: string): Record<Side, ExportedPlayer> {
+    switch (record.kind) {
+        case `human`:
+            return seated(record.userSide, { name: record.user.name, kind: `user`, yours: record.userId === userId }, { name: record.bot.name, kind: `bot`, yours: own(record.botId) });
+        case `guest`:
+            return seated(record.guestSide, { name: record.guestName, kind: `guest`, yours: false }, { name: record.bot.name, kind: `bot`, yours: own(record.botId) });
+        case `bots`:
+            return seated(
+                record.challengerSide,
+                { name: record.challenger.name, kind: `bot`, yours: own(record.challengerBotId) },
+                { name: record.dest.name, kind: `bot`, yours: own(record.destBotId) },
+            );
+    }
+}
+
+function playersOf(record: GameRecord, own: (botId: string) => boolean, userId: string): AccountExport[`games`][number][`players`] {
+    const players = seatedOf(record, own, userId);
+    const leveled = (side: Side): ExportedPlayer => {
         const level = record.levels[side];
-        return level === null ? seat : { ...seat, level };
+        return level === null ? players[side] : { ...players[side], level };
     };
-    const seated = (side: Side, first: Exported, second: Exported) =>
-        side === `x` ? { x: leveled(`x`, first), o: leveled(`o`, second) } : { x: leveled(`x`, second), o: leveled(`o`, first) };
-    if (record.kind === `human`) {
-        return seated(record.userSide, { name: record.user.name, kind: `user`, yours: record.userId === userId }, { name: record.bot.name, kind: `bot`, yours: own(record.botId) });
-    }
-    if (record.kind === `guest`) {
-        return seated(record.guestSide, { name: record.guestName, kind: `guest`, yours: false }, { name: record.bot.name, kind: `bot`, yours: own(record.botId) });
-    }
-    return seated(
-        record.challengerSide,
-        { name: record.challenger.name, kind: `bot`, yours: own(record.challengerBotId) },
-        { name: record.dest.name, kind: `bot`, yours: own(record.destBotId) },
-    );
+    return { x: leveled(`x`), o: leveled(`o`) };
 }
 
 function gamesOf(query: Query, userId: string, botIds: readonly string[]): AccountExport[`games`] {
@@ -66,7 +72,7 @@ function gamesOf(query: Query, userId: string, botIds: readonly string[]): Accou
             return [
                 {
                     id: row.id,
-                    players: seatsOf(record, (botId) => own.has(botId), userId),
+                    players: playersOf(record, (botId) => own.has(botId), userId),
                     timeControl: record.timeControl,
                     openingPlies: openingPliesSchema.parse(record.opening.length),
                     opening: record.opening.map((cell) => ({ x: cell.x, y: cell.y, side: sideOf(cell.player) })),
@@ -76,8 +82,7 @@ function gamesOf(query: Query, userId: string, botIds: readonly string[]): Accou
                         .where(eq(moves.gameId, row.id))
                         .orderBy(asc(moves.seq))
                         .all()
-                        // The side check admits only x and o.
-                        .map((move) => ({ side: move.side as Side, cells: [{ x: move.firstX, y: move.firstY }, { x: move.secondX, y: move.secondY }], at: isoOf(move.createdAt) })),
+                        .map((move) => ({ side: move.side, cells: [{ x: move.firstX, y: move.firstY }, { x: move.secondX, y: move.secondY }], at: isoOf(move.createdAt) })),
                     winner: record.winner,
                     reason: record.finishReason,
                     createdAt: isoOf(row.createdAt),
@@ -89,9 +94,7 @@ function gamesOf(query: Query, userId: string, botIds: readonly string[]): Accou
                         .from(gameRatings)
                         .where(eq(gameRatings.gameId, row.id))
                         .orderBy(asc(gameRatings.side))
-                        .all()
-                        // The side check admits only x and o.
-                        .map((rating) => ({ ...rating, side: rating.side as Side })),
+                        .all(),
                 },
             ];
         });

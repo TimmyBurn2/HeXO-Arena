@@ -195,9 +195,8 @@ function rowsWhere(query: Query, condition: ReturnType<typeof and>): AnalysisRow
             ownerName: row.ownerName === null || row.ownerDeletedAt !== null ? null : shownUser(row.ownerName, row.ownerDeletedAt).name,
             namedBotId: row.namedBotId,
             requestedBy: row.requestedBy,
-            // The status and failure checks admit only these values.
-            status: row.status as AnalysisStatus,
-            failure: row.failure as AnalysisFailure | null,
+            status: row.status,
+            failure: row.failure,
             failedTurn: row.failedTurn,
             seconds: row.seconds,
             createdAt: row.createdAt,
@@ -320,8 +319,7 @@ export function ownLinesOf(query: Query, gameId: string, openingPlies: number): 
         .all();
     const views: Record<Side, AnalysisTurn[]> = { x: [], o: [] };
     for (const row of rows) {
-        // The side check admits only x and o.
-        const list = views[row.side as Side];
+        const list = views[row.side];
         const turn = firstTurn + row.seq - 1;
         const last = list.at(-1);
         const line = lineOf(row);
@@ -410,9 +408,7 @@ export function requestsOf(query: Query, userId: string): { id: string; gameId: 
         .from(analyses)
         .where(eq(analyses.requestedBy, userId))
         .orderBy(desc(analyses.createdAt))
-        .all()
-        // The status check admits only these values.
-        .map((row) => ({ ...row, status: row.status as AnalysisStatus }));
+        .all();
 }
 
 function analysisValueColumns(values: AnalyzerValues | null) {

@@ -39,7 +39,7 @@ import { registerLeaderboardApi } from './leaderboard-api';
 import type { DiscordOAuth } from './discord';
 import { drain } from './drain';
 import { randomFloat } from './random';
-import { ErasureJournal, reapplyErasures } from './erasure';
+import { ErasureJournal, reapplyErasures, withdrawBot } from './erasure';
 import { deleteBotByPolicy, ownedBotId } from './moderation';
 import type { PresenceRegistry } from './presence';
 import { GuestSessions } from './guests';
@@ -409,11 +409,7 @@ export async function buildApp(deps: AppDeps): Promise<BuiltApp> {
         if (games.activeGameCount(botId) > 0) {
             return reply.code(409).send({ error: `the bot is in a live game`, code: `in_game` });
         }
-        presence.close(botId);
-        analysis.withdraw(botId);
-        challenges.withdrawFor(botId);
-        tournaments.withdraw(botId, `deleted`);
-        duels.endForBot(botId, `deleted`);
+        withdrawBot({ games, presence, analysis, challenges, tournaments, duels }, botId, `deleted`);
         query.transaction((tx) => deleteBotByPolicy(tx, botId));
         return reply.code(204).send();
     });

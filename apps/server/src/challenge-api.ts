@@ -19,6 +19,7 @@ import { findChallenge } from './challenge-store';
 import type { PresenceRegistry } from './presence';
 import type { CredentialLimits } from './request-limits';
 import type { StartGate } from './site-state';
+import { utcDay } from './utc-day';
 
 interface ChallengeApiDeps {
     query: Query;
@@ -39,15 +40,10 @@ interface ChallengeParams {
     challengeId: string;
 }
 
-// Unix epoch days are UTC days, so the floor is the whole day boundary.
-function utcDayStartSeconds(seconds: number): number {
-    return Math.floor(seconds / 86_400) * 86_400;
-}
-
 export function registerChallengeApi(app: FastifyInstance, deps: ChallengeApiDeps): void {
     const { query, presence, games, challenges, gate, limits, reservations } = deps;
 
-    app.post(`/api/bot/challenge/:name`, { config: { limit: `principal` } }, async (request, reply) => {
+    app.post<{ Params: NameParams }>(`/api/bot/challenge/:name`, { config: { limit: `principal` } }, async (request, reply) => {
         const challenger = requireBot(query, request, reply);
         if (!challenger) return reply;
         if (limits.refuse(reply, `principal`, `bot:${challenger.id}`)) return reply;
@@ -56,7 +52,7 @@ export function registerChallengeApi(app: FastifyInstance, deps: ChallengeApiDep
             return reply.code(400).send({ error: `the request fails validation`, code: `bad_request` });
         }
         if (gate.refuse(reply)) return reply;
-        const { name } = request.params as NameParams;
+        const { name } = request.params;
         if (!nameSyntaxSchema.safeParse(name).success) {
             return reply.code(404).send({ error: `no such bot`, code: `not_found` });
         }
@@ -99,10 +95,9 @@ export function registerChallengeApi(app: FastifyInstance, deps: ChallengeApiDep
                 code: `inbox_full`,
             });
         }
-        const now = nowSeconds();
-        const dayStart = utcDayStartSeconds(now);
         // The daily caps lift when the UTC day turns, so they answer with the wait until then.
-        const untilTomorrow = String(dayStart + 86_400 - now);
+        const { start: dayStart, secondsLeft } = utcDay(nowSeconds());
+        const untilTomorrow = String(secondsLeft);
         // Two bots of one owner play unrated, and an unrated game spends no daily game cap.
         const sameOwner = target.ownerId === challenger.ownerId;
         if (
@@ -149,14 +144,14 @@ export function registerChallengeApi(app: FastifyInstance, deps: ChallengeApiDep
             .send(outcome.view);
     });
 
-    app.post(`/api/bot/challenge/:challengeId/accept`, { config: { limit: `principal` } }, async (request, reply) => {
+    app.post<{ Params: ChallengeParams }>(`/api/bot/challenge/:challengeId/accept`, { config: { limit: `principal` } }, async (request, reply) => {
         const bot = requireBot(query, request, reply);
         if (!bot) return reply;
         if (limits.refuse(reply, `principal`, `bot:${bot.id}`)) return reply;
         // Acceptance starts a game, so a pause holds it like any creation;
         // the challenge stays pending and may still be accepted on resume.
         if (gate.refuse(reply)) return reply;
-        const { challengeId } = request.params as ChallengeParams;
+        const { challengeId } = request.params;
         // A tournament that started since the challenge was sent holds it pending.
         const pending = findChallenge(query, challengeId);
         if (pending !== undefined && pending.destBotId === bot.id && (reservations.isReserved(pending.challengerBotId) || reservations.isReserved(bot.id))) {
@@ -175,22 +170,22 @@ export function registerChallengeApi(app: FastifyInstance, deps: ChallengeApiDep
         return reply.code(200).send({ ok: true });
     });
 
-    app.post(`/api/bot/challenge/:challengeId/decline`, { config: { limit: `principal` } }, async (request, reply) => {
+    app.post<{ Params: ChallengeParams }>(`/api/bot/challenge/:challengeId/decline`, { config: { limit: `principal` } }, async (request, reply) => {
         const bot = requireBot(query, request, reply);
         if (!bot) return reply;
         if (limits.refuse(reply, `principal`, `bot:${bot.id}`)) return reply;
-        const { challengeId } = request.params as ChallengeParams;
+        const { challengeId } = request.params;
         if (challenges.decline(bot.id, challengeId).kind !== `ok`) {
             return reply.code(404).send({ error: `no such challenge of yours`, code: `not_found` });
         }
         return reply.code(200).send({ ok: true });
     });
 
-    app.post(`/api/bot/challenge/:challengeId/cancel`, { config: { limit: `principal` } }, async (request, reply) => {
+    app.post<{ Params: ChallengeParams }>(`/api/bot/challenge/:challengeId/cancel`, { config: { limit: `principal` } }, async (request, reply) => {
         const bot = requireBot(query, request, reply);
         if (!bot) return reply;
         if (limits.refuse(reply, `principal`, `bot:${bot.id}`)) return reply;
-        const { challengeId } = request.params as ChallengeParams;
+        const { challengeId } = request.params;
         if (challenges.cancel(bot.id, challengeId).kind !== `ok`) {
             return reply.code(404).send({ error: `no such challenge of yours`, code: `not_found` });
         }
