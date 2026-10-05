@@ -125,7 +125,8 @@ describe('POST /api/auth/guest', () => {
         expect(response.headers[`retry-after`]).toBe(`60`);
         expect(response.json()).toMatchObject({ code: `guest_limit` });
         await arena.app.close();
-    });
+        // Five thousand guest sessions take a few seconds, more on a loaded machine.
+    }, 60_000);
 
     it('forgets a guest idle for a day', async () => {
         vi.useFakeTimers({ toFake: [`Date`] });

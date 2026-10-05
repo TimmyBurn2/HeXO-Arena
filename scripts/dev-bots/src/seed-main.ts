@@ -73,7 +73,7 @@ async function scheduleTournament(name: string, startsAt: Date): Promise<string>
 }
 
 try {
-    log(`seeding ${origin}; the humans keep the creation cooldown, so this takes about ten minutes`);
+    log(`seeding ${origin}; the humans keep the game start rate, so this takes about ten minutes`);
     const report = await seedDevData({
         origin,
         plan: seedPlan,

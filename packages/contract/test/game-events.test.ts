@@ -37,8 +37,8 @@ describe('gameEventSchema', () => {
 });
 
 describe('watcher caps', () => {
-    it('allow fifty watchers a game and five hundred in total', () => {
-        expect(gameWatcherCap).toBe(50);
-        expect(siteWatcherCap).toBe(500);
+    it('allow 200 watchers a game and 1,500 in total', () => {
+        expect(gameWatcherCap).toBe(200);
+        expect(siteWatcherCap).toBe(1_500);
     });
 });

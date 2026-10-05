@@ -60,7 +60,7 @@ import { nowSeconds, type Query } from './db';
 import { bots, games, moves, tournamentEntries, tournamentPairings, tournaments, users } from './db/schema';
 import type { GameRegistry } from './game-registry';
 import type { PresenceRegistry } from './presence';
-import { tournamentExport } from './game-export';
+import { TournamentExports } from './game-export';
 import { isProvisional } from './rating';
 import { readRating } from './rating-store';
 import type { ClientLimits, CredentialLimits } from './request-limits';
@@ -662,6 +662,7 @@ function isUniqueViolation(error: unknown): boolean {
 export function registerTournamentApi(app: FastifyInstance, deps: TournamentApiDeps): void {
     const { query, limits, gate } = deps;
     const memo = new WindowMemo<string>({ windowMs: tournamentDetailMemoMs, now: deps.now });
+    const exports = new TournamentExports();
 
     // A change shows on its page, in every bot's list, and in the bots' states at once.
     const forget = (id: string) => {
@@ -784,7 +785,7 @@ export function registerTournamentApi(app: FastifyInstance, deps: TournamentApiD
         if (limits.refuseExport(reply, request)) return reply;
         const detail = tournamentDetail(query, deps, id);
         if (detail === null) return reply.code(404).send({ error: `no such tournament`, code: `not_found` });
-        const file = tournamentExport(query, detail, deps.now());
+        const file = exports.read(query, detail, deps.now());
         return reply.header(`content-type`, `application/zip`).header(`content-disposition`, `attachment; filename="${file.fileName}"`).send(file.body);
     });
 

@@ -48,7 +48,7 @@ describe('GameWatchers', () => {
         expect(frameOf(finish)).toBe(`event: finish\ndata: ${JSON.stringify(finish.data)}\n\n`);
     });
 
-    it('admits fifty watchers without a seat to one game and refuses the next', () => {
+    it('admits 200 watchers without a seat to one game and refuses the next', () => {
         const watchers = new GameWatchers();
         fill(watchers, `g1`, gameWatcherCap - 1);
         expect(watchers.admits(`g1`)).toBe(true);
@@ -57,9 +57,9 @@ describe('GameWatchers', () => {
         expect(watchers.admits(`g2`)).toBe(true);
     });
 
-    it('admits five hundred watchers without a seat across the site and refuses the next', () => {
+    it('admits 1,500 watchers without a seat across the site and refuses the next', () => {
         const watchers = new GameWatchers();
-        for (let game = 0; game < siteWatcherCap / gameWatcherCap; game += 1) fill(watchers, `g${String(game)}`, gameWatcherCap);
+        for (let game = 0, left = siteWatcherCap; left > 0; game += 1, left -= gameWatcherCap) fill(watchers, `g${String(game)}`, Math.min(gameWatcherCap, left));
         expect(watchers.unseatedCount()).toBe(siteWatcherCap);
         expect(watchers.admits(`fresh`)).toBe(false);
     });

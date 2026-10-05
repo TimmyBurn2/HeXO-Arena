@@ -1,10 +1,10 @@
 // The API version is spec semver, decoupled from package versions on
 // purpose.
-export const apiVersion = `0.50.0`;
+export const apiVersion = `0.51.0`;
 
 // The bot surface's own document, which other servers may implement,
 // versions apart from the whole site's.
-export const botApiVersion = `0.12.0`;
+export const botApiVersion = `0.12.1`;
 
 export const healthzPath = `/healthz`;
 

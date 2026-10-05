@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type MouseEvent, type ReactNode } from 'react';
-import { humanGameCooldownSeconds, pagePath, type BotListing, type Level, type OpeningPlies, type TimeControl } from '@hexo-arena/contract';
+import { humanGameStartLimit, pagePath, type BotListing, type Level, type TimeControl } from '@hexo-arena/contract';
 import { ApiError, createGame, limitedFor } from '../api/client';
 import { DiscordButton } from '../components/DiscordButton';
 import { seatName } from '../components/player';
@@ -10,19 +10,20 @@ import { Link } from '../router/Link';
 import { navigate } from '../router/use-route';
 import { siteStatusStore } from '../site-status';
 import { text } from '../text';
-import { ownedBy, readinessOf, writePlayed, type Holder } from './setup';
+import { readinessOf, writePlayed, type Holder } from './setup';
+import type { CardSetup } from './setup-state';
 
 // What the start area last heard back:
 // nothing yet, a request in flight,
 // a line to show, with the bot and clock the bot's side refused when it did,
-// the live-game cap, whose line leads to the games that fill it,
+// a live-game cap, overall or against one bot, whose line leads to the games that fill it,
 // a wait counting down, in its own words,
 // or a session that ended, with who held it.
 type Outcome =
     | { kind: `idle` }
     | { kind: `sending` }
     | { kind: `line`; text: ReactNode; refused: Refused | null }
-    | { kind: `capped` }
+    | { kind: `capped`; bot: string | null }
     | { kind: `wait`; line: (seconds: number) => string }
     | { kind: `stale`; was: `guest` | `user` };
 
@@ -56,39 +57,23 @@ function secondClick(event: MouseEvent): boolean {
  * every refusal said in a line.
  */
 export function StartArea({
-    bot,
-    clock,
-    level,
-    rated,
-    opening,
-    path,
+    setup,
     paused,
-    notice,
-    choices,
     reads,
-    onRefused,
     reserved,
     holder,
+    onRefused,
 }: {
-    bot: BotListing;
+    setup: CardSetup;
+    paused: boolean;
+    // How many times the bot list has been read, so a line about the bot's state knows a newer read.
+    reads: number;
     // The bots the running tournament holds, and that tournament.
     reserved: ReadonlySet<string>;
     holder: Holder | null;
-    clock: TimeControl;
-    // The bot's level picked, null at its default.
-    level: Level | null;
-    // Whether the game asked for is rated: someone signed in, at the default level, with Rated on.
-    rated: boolean;
-    opening: OpeningPlies;
-    path: string;
-    paused: boolean;
-    notice: string | null;
-    // How many picks the person has made, so a line gives way to their next one and not to the list's.
-    choices: number;
-    // How many times the bot list has been read, so a line about the bot's state knows a newer read.
-    reads: number;
     onRefused: () => void;
 }) {
+    const { bot, clock, level, own, rated, opening, path, notice, choices } = setup;
     const me = useMe();
     const legal = useLegalSlots();
     const held = holder === null ? null : <Link to={pagePath(`tournament`, { id: holder.id })}>{holder.name}</Link>;
@@ -102,8 +87,6 @@ export function StartArea({
     });
     const visitor = me.status === `loading` ? null : me.me;
     const viewer = visitor?.kind === `user` ? visitor.name : null;
-    // The person's own bot plays them unrated, open to others or not.
-    const own = ownedBy(bot, viewer);
     const state = readinessOf(bot, reserved, viewer);
 
     // A wait that ran out leaves the start free.
@@ -167,7 +150,7 @@ export function StartArea({
             }
             const code = cause instanceof ApiError ? cause.code : null;
             if (code === `game_cooldown` && cause instanceof ApiError) {
-                wait(cause.retryAfter ?? humanGameCooldownSeconds, text.play.cooldown);
+                wait(cause.retryAfter ?? humanGameStartLimit.refillMs / 1_000, text.play.cooldown);
                 return;
             }
             // The day's cap holds this pair alone, so the start stays free for another bot.
@@ -190,10 +173,10 @@ export function StartArea({
                     return;
                 }
             }
-            // The cap's line leads to the games that fill it, so the session is read again for them.
-            if (code === `human_busy`) {
+            // A cap's line leads to the games that fill it, so the session is read again for them.
+            if (code === `human_busy` || code === `pair_busy`) {
                 await meStore.refresh();
-                setOutcome({ kind: `capped` });
+                setOutcome({ kind: `capped`, bot: code === `pair_busy` ? bot.name : null });
                 return;
             }
             const errors = text.play.errors;
@@ -216,12 +199,21 @@ export function StartArea({
     const unavailable =
         state === `ready` ? null : state === `tournament` ? text.play.unavailable.tournament(bot.name, held) : text.play.unavailable[state](bot.name);
     const cooling = outcome.kind === `wait` ? limit.wait : null;
+    // The games that fill the cap refused: every live game, or the one against the bot.
+    const capping =
+        outcome.kind !== `capped` || visitor === null
+            ? []
+            : visitor.liveGames
+                  .map((game) => ({ gameId: game.gameId, opponent: game.players[game.players.x.name === visitor.name ? `o` : `x`] }))
+                  .filter(({ opponent }) => outcome.bot === null || opponent.name === outcome.bot);
     const blocked = paused || unavailable !== null || cooling !== null || moved || outcome.kind === `sending` || (stale && visitor !== null);
     // Where the list kept the bot and moved its clock, the line says so, whatever the refusal was;
     // a level the bot no longer offers moves the setup to its default, which that refusal's own line says.
     const outcomeLine =
         outcome.kind === `capped`
-            ? text.play.errors.human_busy()
+            ? outcome.bot === null
+                ? text.play.errors.human_busy()
+                : text.play.errors.pair_busy(outcome.bot)
             : outcome.kind !== `line`
               ? null
               : moved && refused.bot === bot.name && refused.code !== `unknown_level`
@@ -263,13 +255,11 @@ export function StartArea({
                         {line.text}
                     </p>
                 ))}
-                {outcome.kind === `capped` && visitor !== null && visitor.liveGames.length > 0 ? (
+                {capping.length > 0 ? (
                     <ul className="start-yours">
-                        {visitor.liveGames.map((game) => (
-                            <li key={game.gameId}>
-                                <Link to={pagePath(`game`, { gameId: game.gameId })}>
-                                    {text.play.yourGame(seatName(game.players[game.players.x.name === visitor.name ? `o` : `x`]))}
-                                </Link>
+                        {capping.map(({ gameId, opponent }) => (
+                            <li key={gameId}>
+                                <Link to={pagePath(`game`, { gameId })}>{text.play.yourGame(seatName(opponent))}</Link>
                             </li>
                         ))}
                     </ul>

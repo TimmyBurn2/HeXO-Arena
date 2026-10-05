@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { nameKeyOf, playMeta, type BotListing, type Level, type OpeningPlies, type TimeControl } from '@hexo-arena/contract';
+import { useCallback, useEffect, useReducer, useRef, useState, type Dispatch } from 'react';
+import { nameKeyOf, playMeta, type BotListing } from '@hexo-arena/contract';
 import { fetchBots } from '../api/client';
 import { liveRefreshMs } from '../api/refresh';
 import { useAsync } from '../api/use-async';
@@ -27,9 +27,9 @@ import {
     readPlayed,
     rosterOf,
     writeRated,
-    type Holder,
-    type PickedLevel,
+    type Played,
 } from '../play/setup';
+import { firstSetup, settle, setupReducer, shownBot, type Asked, type CardSetup, type ListFacts, type SetupAction } from '../play/setup-state';
 import { Link } from '../router/Link';
 import { routePath } from '../router/route';
 import { subscribe, useRoute } from '../router/use-route';
@@ -58,8 +58,10 @@ function useBotList() {
     return { bots: list.data?.bots ?? null, reserved: reserved.bots, holder: reserved.tournament, reads: list.data?.reads ?? 0, failed: list.error, limited: list.limited, reload };
 }
 
+type BotList = ReturnType<typeof useBotList>;
+
 // A level in the address belongs to the bot the address names.
-function readAsked() {
+function readAsked(): Asked {
     const params = new URLSearchParams(window.location.search);
     const bot = params.get(`bot`);
     const level = params.get(`level`);
@@ -78,116 +80,73 @@ function readAsked() {
  * The address follows the setup, so a sign-in comes back to it and a link shares it.
  */
 export function PlayScreen() {
-    const route = useRoute();
-    const [asked, setAsked] = useState(readAsked);
-    const [played] = useState(readPlayed);
-    const list = useBotList();
-    const me = useMe();
-    const paused = useSiteStatus() === `paused`;
-    const [picked, setPicked] = useState<string | null>(null);
-    const [opened, setOpened] = useState<string | null>(null);
-    // The bot the card showed that then left the list, named in a line until the person picks.
-    const [lost, setLost] = useState<string | null>(null);
-    const [shown, setShown] = useState<string[]>([]);
-    // Counts the person's own picks, so the start area tells them from the list's changes.
-    const [choices, setChoices] = useState(0);
-    const [picks, setPicks] = useState<TimeControl | null>(asked.clock);
-    const [opening, setOpening] = useState<OpeningPlies>(asked.opening);
-    const [strength, setStrength] = useState<PickedLevel | null>(asked.level);
-    // The Rated switch as this browser last left it, off until turned on.
-    const [ratedPick, setRatedPick] = useState(played.rated);
-    const [sheet, setSheet] = useState(false);
     const [visit, setVisit] = useState(0);
+    const list = useBotList();
+    const [played] = useState(readPlayed);
+    // The Rated switch as this browser last left it, off until turned on; it stands across visits.
+    const [rated, setRated] = useState(played.rated);
 
     // The route stays the same when the nav's Play or Back lands on another setup,
-    // so the page reads the address again then;
+    // so the setup starts over from the address then;
     // its own replaced address never notifies.
     useEffect(
         () =>
             subscribe(() => {
-                if (window.location.pathname !== routePath({ name: `play` })) return;
-                const next = readAsked();
-                setAsked(next);
-                setPicked(null);
-                setOpened(null);
-                setLost(null);
-                setShown([]);
-                setPicks(next.clock);
-                setOpening(next.opening);
-                setStrength(next.level);
-                setSheet(false);
-                setVisit((count) => count + 1);
+                if (window.location.pathname === routePath({ name: `play` })) setVisit((count) => count + 1);
             }),
         [],
     );
 
+    return (
+        <Visit
+            key={visit}
+            list={list}
+            played={played}
+            rated={rated}
+            onRated={(next) => {
+                setRated(next);
+                writeRated(next);
+            }}
+        />
+    );
+}
+
+function Visit({ list, played, rated: ratedPick, onRated }: { list: BotList; played: Played; rated: boolean; onRated: (rated: boolean) => void }) {
+    const route = useRoute();
+    const [asked] = useState(readAsked);
+    const [state, dispatch] = useReducer(setupReducer, asked, firstSetup);
+    const me = useMe();
+    const paused = useSiteStatus() === `paused`;
     const bots = list.bots;
     const ready = bots !== null && me.status === `ready`;
-    const find = (name: string | null) => (name === null || bots === null ? null : (bots.find((entry) => nameKeyOf(entry.name) === nameKeyOf(name)) ?? null));
-    const pickedBot = find(picked);
-    const openedBot = find(opened);
-    // Until the person picks, the page stays on the bot it opened on,
-    // so a list read after a refusal never swaps the card under the line that explains it.
-    // A bot picked or opened on that leaves the list gives way, once, to a new preselect the page then stays on,
-    // and its name stays in a line;
-    // listed again before the person picks, it takes the card back.
+    const find = (name: string) => (bots === null ? null : (bots.find((entry) => nameKeyOf(entry.name) === nameKeyOf(name)) ?? null));
     const rating = me.status === `ready` && me.me?.kind === `user` ? me.me.rating : null;
     // Only someone signed in has a rating to stake, so only they see the switch, and only they own bots.
     const viewer = me.status === `ready` && me.me?.kind === `user` ? me.me.name : null;
-    const signedIn = viewer !== null;
-    const fallback =
-        ready && pickedBot === null && openedBot === null
-            ? preselect(bots, picked === null && lost === null ? asked.bot : null, played.opponent, rating, list.reserved, viewer)
-            : null;
-    const bot = pickedBot ?? openedBot ?? fallback;
-    useEffect(() => {
-        if (bots === null) return;
-        if (picked !== null && find(picked) === null) {
-            setLost(picked);
-            setPicked(null);
-            setOpened(null);
-        } else if (picked === null && opened !== null && find(opened) === null) {
-            setLost(opened);
-            setOpened(null);
-        } else if (picked === null && lost !== null && find(lost) !== null) {
-            setOpened(lost);
-            setLost(null);
-        } else if (picked === null && opened === null && fallback !== null) {
-            setOpened(fallback.name);
-        }
-    });
-    // A bot the card showed while it was not ready keeps its row for the visit,
-    // so picking another never moves the list under the pointer.
-    useEffect(() => {
-        if (bot !== null && readinessOf(bot, list.reserved, viewer) !== `ready` && !shown.includes(bot.name)) setShown([...shown, bot.name]);
-    }, [bot, shown, list.reserved, viewer]);
-    const unlisted = picked === null && lost === null && asked.bot !== null && bots !== null && find(asked.bot) === null ? asked.bot : null;
-    // A lost bot listed again needs no line.
-    const gone = lost !== null ? (find(lost) === null ? lost : null) : unlisted;
-    const notice = gone === null ? null : text.play.errors.not_found(gone);
+    const facts: ListFacts = {
+        find,
+        ready: (listed) => readinessOf(listed, list.reserved, viewer) === `ready`,
+        open: (fromAddress) => (ready ? preselect(bots, fromAddress ? asked.bot : null, played.opponent, rating, list.reserved, viewer) : null),
+    };
+    // Each list read settles the setup before the card draws, so a bot that left the list never shows.
+    const setup = bots === null ? state : settle(state, facts);
+    if (setup !== state) dispatch({ kind: `settle`, facts });
+    const bot = shownBot(setup, facts);
+    const unlisted = setup.picked === null && setup.lost === null && asked.bot !== null && bots !== null && find(asked.bot) === null ? asked.bot : null;
+    const gone = setup.lost ?? unlisted;
     // The clock picked stands while the bot takes it; otherwise the bot's default does.
-    const clock = bot === null ? null : clockFor(bot, picks, played.clock);
+    const clock = bot === null ? null : clockFor(bot, setup.clock, played.clock);
     // A strength stands for the bot it was picked for, while the bot still offers it; otherwise the default does.
-    const level = bot === null ? null : levelFor(bot, strength);
+    const level = bot === null ? null : levelFor(bot, setup.strength);
 
-    // The address follows the setup, without a history entry per change.
-    const path = ready ? playPath(bot?.name ?? null, clock, opening, level) : null;
-    // A new visit writes it too, for a nav link that left a bare address on the same setup.
+    // The address follows the setup, without a history entry per change; a new visit writes it too, for a nav link that left a bare address on the same setup.
+    const path = ready ? playPath(bot?.name ?? null, clock, setup.opening, level) : null;
     useEffect(() => {
         if (path !== null) window.history.replaceState(window.history.state, ``, path);
-    }, [path, visit]);
+    }, [path]);
 
     const meta = playMeta(bot?.name);
     useDocumentMeta(route, meta.title, meta.description);
-
-    // A strength belongs to the bot it was picked for; another pick opens on that bot's default.
-    function choose(next: BotListing, from: PickedBy) {
-        setPicked(next.name);
-        setStrength(null);
-        setLost(null);
-        setChoices((count) => count + 1);
-        if (from === `pointer`) setSheet(false);
-    }
 
     if (!ready) {
         return (
@@ -199,7 +158,25 @@ export function PlayScreen() {
     }
     if (bots.length === 0) return <Empty kind="none" />;
     if (bot === null || clock === null) return <Empty kind="unready" />;
-    const roster = rosterOf(bots, [...(asked.bot === null ? [] : [asked.bot]), ...shown, bot.name], list.reserved, viewer);
+    const roster = rosterOf(bots, [...(asked.bot === null ? [] : [asked.bot]), ...setup.shown, bot.name], list.reserved, viewer);
+    const own = ownedBy(bot, viewer);
+    const switchOn = viewer === null ? null : ratedPick;
+    const card: CardSetup = {
+        bot,
+        clock,
+        level,
+        opening: setup.opening,
+        own,
+        switchOn,
+        rated: switchOn === true && level === null && !own,
+        last: played.clock,
+        path: playPath(bot.name, clock, setup.opening, level),
+        notice: gone === null ? null : text.play.errors.not_found(gone),
+        choices: setup.choices,
+    };
+    const choose = (next: BotListing, from: PickedBy) => {
+        dispatch({ kind: `pick`, bot: next.name, from });
+    };
 
     return (
         <>
@@ -215,49 +192,20 @@ export function PlayScreen() {
                     <RosterList roster={roster} reserved={list.reserved} viewer={viewer} chosen={bot} name="opponent" labelledBy="opponent-label" onChoose={choose} />
                 </section>
                 <SetupCard
-                    key={visit}
-                    bot={bot}
-                    clock={clock}
-                    level={level}
-                    own={ownedBy(bot, viewer)}
-                    switchOn={signedIn ? ratedPick : null}
-                    last={played.clock}
-                    opening={opening}
-                    path={playPath(bot.name, clock, opening, level)}
+                    setup={card}
+                    list={list}
                     paused={paused}
-                    notice={notice}
-                    choices={choices}
-                    reads={list.reads}
-                    reserved={list.reserved}
-                    holder={list.holder}
-                    onClock={(next) => {
-                        setPicks(next);
-                        setChoices((count) => count + 1);
-                    }}
-                    onAdjust={setPicks}
-                    onLevel={(id) => {
-                        setStrength({ bot: bot.name, id });
-                        setChoices((count) => count + 1);
-                    }}
+                    dispatch={dispatch}
                     onRated={(next) => {
-                        setRatedPick(next);
-                        writeRated(next);
-                        setChoices((count) => count + 1);
+                        onRated(next);
+                        dispatch({ kind: `rated` });
                     }}
-                    onOpening={(next) => {
-                        setOpening(next);
-                        setChoices((count) => count + 1);
-                    }}
-                    onChange={() => {
-                        setSheet(true);
-                    }}
-                    onRefused={list.reload}
                 />
             </div>
-            {sheet ? (
+            {setup.sheet ? (
                 <OpponentSheet
                     onClose={() => {
-                        setSheet(false);
+                        dispatch({ kind: `sheet`, open: false });
                     }}
                 >
                     <RosterList roster={roster} reserved={list.reserved} viewer={viewer} chosen={bot} name="sheet-opponent" labelledBy="sheet-title" onChoose={choose} />
@@ -299,58 +247,10 @@ function Empty({ kind }: { kind: `none` | `unready` }) {
     );
 }
 
-function SetupCard({
-    bot,
-    clock,
-    level,
-    own,
-    switchOn,
-    last,
-    opening,
-    path,
-    paused,
-    notice,
-    choices,
-    reads,
-    reserved,
-    holder,
-    onClock,
-    onAdjust,
-    onLevel,
-    onRated,
-    onOpening,
-    onChange,
-    onRefused,
-}: {
-    bot: BotListing;
-    clock: TimeControl;
-    // The bot's level picked, null at its default.
-    level: Level | null;
-    // The bot is the person's own, which plays them unrated.
-    own: boolean;
-    // The Rated switch, null for anyone not signed in, who has no switch.
-    switchOn: boolean | null;
-    last: TimeControl | null;
-    opening: OpeningPlies;
-    // The setup's own address, where a sign-in from the card returns.
-    path: string;
-    paused: boolean;
-    notice: string | null;
-    choices: number;
-    reads: number;
-    reserved: ReadonlySet<string>;
-    holder: Holder | null;
-    onClock: (clock: TimeControl) => void;
-    onAdjust: (clock: TimeControl) => void;
-    onLevel: (id: string) => void;
-    onRated: (rated: boolean) => void;
-    onOpening: (opening: OpeningPlies) => void;
-    onChange: () => void;
-    onRefused: () => void;
-}) {
+function SetupCard({ setup, list, paused, dispatch, onRated }: { setup: CardSetup; list: BotList; paused: boolean; dispatch: Dispatch<SetupAction>; onRated: (rated: boolean) => void }) {
+    const { bot, level, own, switchOn, rated } = setup;
     // The expected score is a rated game's; practice at another level, a game with Rated off, and one against the person's own bot have none.
     const expected = useExpectedScore(bot.name);
-    const rated = switchOn === true && level === null && !own;
     return (
         <div className="play-setup-lift">
             <section className="play-setup" aria-label={text.play.setup}>
@@ -372,7 +272,14 @@ function SetupCard({
                         <span className="setup-rating">
                             <Rating value={bot.rating} provisional={bot.provisional} />
                         </span>
-                        <button type="button" className="btn btn-ghost btn-sm" aria-label={text.play.changeOpponent} onClick={onChange}>
+                        <button
+                            type="button"
+                            className="btn btn-ghost btn-sm"
+                            aria-label={text.play.changeOpponent}
+                            onClick={() => {
+                                dispatch({ kind: `sheet`, open: true });
+                            }}
+                        >
                             {text.play.change}
                         </button>
                     </div>
@@ -388,25 +295,32 @@ function SetupCard({
                 {level !== null && expected.kind !== `none` ? <p className="note setup-expected">{text.play.practiceScore(level.label)}</p> : null}
                 {level === null && own && expected.kind !== `none` ? <p className="note setup-expected">{text.play.ownScore}</p> : null}
                 {level === null && !own && switchOn === false && expected.kind !== `none` ? <p className="note setup-expected">{text.play.unratedScore}</p> : null}
-                <ClockPicker bot={bot} clock={clock} last={last} onClock={onClock} onAdjust={onAdjust} />
-                <StrengthRow bot={bot} level={level} onLevel={onLevel} />
-                {switchOn === null ? null : <RatedRow rated={switchOn} practice={level !== null} own={own} bot={bot.name} onRated={onRated} />}
-                <OpeningRow opening={opening} onOpening={onOpening} />
-                <StartArea
+                <ClockPicker
                     bot={bot}
-                    clock={clock}
-                    level={level}
-                    rated={rated}
-                    opening={opening}
-                    path={path}
-                    paused={paused}
-                    notice={notice}
-                    choices={choices}
-                    reads={reads}
-                    onRefused={onRefused}
-                    reserved={reserved}
-                    holder={holder}
+                    clock={setup.clock}
+                    last={setup.last}
+                    onClock={(clock) => {
+                        dispatch({ kind: `clock`, clock });
+                    }}
+                    onAdjust={(clock) => {
+                        dispatch({ kind: `adjust`, clock });
+                    }}
                 />
+                <StrengthRow
+                    bot={bot}
+                    level={level}
+                    onLevel={(id) => {
+                        dispatch({ kind: `level`, level: { bot: bot.name, id } });
+                    }}
+                />
+                {switchOn === null ? null : <RatedRow rated={switchOn} practice={level !== null} own={own} bot={bot.name} onRated={onRated} />}
+                <OpeningRow
+                    opening={setup.opening}
+                    onOpening={(opening) => {
+                        dispatch({ kind: `opening`, opening });
+                    }}
+                />
+                <StartArea setup={setup} paused={paused} reads={list.reads} reserved={list.reserved} holder={list.holder} onRefused={list.reload} />
             </section>
         </div>
     );

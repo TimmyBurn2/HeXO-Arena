@@ -7,7 +7,7 @@ import {
     type HtttxMoveOption,
     type HtttxPositionEvaluation,
 } from '@hexo-arena/contract';
-import { otherPlayer, playTurn, winsThisTurn, type Coord, type Player, type Setup } from '@hexo-arena/rules';
+import { IndexedBoard, otherPlayer, type Coord, type Player, type Setup } from '@hexo-arena/rules';
 
 // What an analyzer's answer comes to: its lines, best first, or why the reading fails.
 type CheckedReading =
@@ -36,12 +36,14 @@ type PlayedLine =
  */
 export function checkReading(setup: Setup, answer: ReadingAnswer, lines: number): CheckedReading {
     const kept = [answer.move, ...(answer.considerations ?? []).filter((option) => evaluationOf(option.evaluation) !== null).slice(0, lines - 1)];
+    // Indexed once, so each line is judged without walking the board again.
+    const board = new IndexedBoard(setup.stones);
     const played: AnalysisLine[] = [];
     for (const [rank, option] of kept.entries()) {
-        const line = playLine(setup, option);
+        const line = playLine(board, setup.toMove, option);
         if (!line.ok) return { ok: false, failure: line.fault };
         // A side that can complete six this turn would; a best line that does not misreads the board.
-        if (rank === 0 && !line.completesSix && winsThisTurn(setup.stones, setup.toMove)) return { ok: false, failure: `inconsistent` };
+        if (rank === 0 && !line.completesSix && board.winsThisTurn(setup.toMove)) return { ok: false, failure: `inconsistent` };
         if (played.some((other) => samePair(other.cells, line.line.cells))) return { ok: false, failure: `illegal` };
         played.push(line.line);
     }
@@ -49,38 +51,38 @@ export function checkReading(setup: Setup, answer: ReadingAnswer, lines: number)
 }
 
 /**
- * A bot's own view of the turn it played at `setup`: its move first, then up to
+ * A bot's own view of the turn it played on `board`, `mover` to move: its move first, then up to
  * `considerations` of the lines it considered, each kept only when it passes
  * the checks a reading meets, the move's own choice aside.
  * Null when the move's evaluation is missing or fails them, since a view
  * leads with the turn played; a bad opinion is dropped, never punished.
  */
-export function ownLines(setup: Setup, answer: ReadingAnswer, considerations: number): readonly AnalysisLine[] | null {
-    const move = playLine(setup, answer.move);
+export function ownLines(board: IndexedBoard, mover: Player, answer: ReadingAnswer, considerations: number): readonly AnalysisLine[] | null {
+    const move = playLine(board, mover, answer.move);
     if (!move.ok) return null;
     const kept: AnalysisLine[] = [move.line];
     for (const option of answer.considerations ?? []) {
         if (kept.length > considerations) break;
-        const line = playLine(setup, option);
+        const line = playLine(board, mover, option);
         if (line.ok && !kept.some((other) => samePair(other.cells, line.line.cells))) kept.push(line.line);
     }
     return kept;
 }
 
-function playLine(setup: Setup, option: HtttxMoveOption): PlayedLine {
+function playLine(board: IndexedBoard, mover: Player, option: HtttxMoveOption): PlayedLine {
     const evaluation = evaluationOf(option.evaluation);
     if (evaluation === null) return { ok: false, fault: `no_evaluation` };
     if (evaluation === `out_of_bounds`) return { ok: false, fault: `inconsistent` };
     const [first, second] = option.pieces.map((piece) => wireToInternal(piece));
     if (first === undefined || second === undefined || (first.x === second.x && first.y === second.y)) return { ok: false, fault: `illegal` };
     const line: AnalysisLine = { cells: [first, second], ...evaluation };
-    const opening = playTurn(setup, [first]);
-    if (opening.ok) return favoursMover(line, setup.toMove) ? { ok: true, line, completesSix: true } : { ok: false, fault: `inconsistent` };
+    const opening = board.judgeTurn(mover, [first]);
+    if (opening.ok) return favoursMover(line, mover) ? { ok: true, line, completesSix: true } : { ok: false, fault: `inconsistent` };
     if (opening.rejection.kind !== `turn-unfinished`) return { ok: false, fault: `illegal` };
-    const turn = playTurn(setup, [first, second]);
+    const turn = board.judgeTurn(mover, [first, second]);
     if (!turn.ok) return { ok: false, fault: `illegal` };
-    if (turn.win !== null) return favoursMover(line, setup.toMove) ? { ok: true, line, completesSix: true } : { ok: false, fault: `inconsistent` };
-    return consistentAfter(line, turn.setup) ? { ok: true, line, completesSix: false } : { ok: false, fault: `inconsistent` };
+    if (turn.win !== null) return favoursMover(line, mover) ? { ok: true, line, completesSix: true } : { ok: false, fault: `inconsistent` };
+    return consistentAfter(line, board, mover, [first, second]) ? { ok: true, line, completesSix: false } : { ok: false, fault: `inconsistent` };
 }
 
 // An evaluation in the site's terms: null when it holds no value, and
@@ -107,10 +109,9 @@ function favoursMover(line: AnalysisLine, mover: Player): boolean {
 // After a line that ends no game, the side then to move takes the odd turns
 // of a forced win; it wins at once exactly when it holds a window to fill,
 // and a board where it does is never the mover's.
-function consistentAfter(line: AnalysisLine, after: Setup): boolean {
-    const toMove = after.toMove;
-    const mover = otherPlayer(toMove);
-    const winsNow = winsThisTurn(after.stones, toMove);
+function consistentAfter(line: AnalysisLine, board: IndexedBoard, mover: Player, cells: readonly Coord[]): boolean {
+    const toMove = otherPlayer(mover);
+    const winsNow = board.winsThisTurnAfter(toMove, cells);
     const winNow = signOf(toMove);
     if (line.winIn !== undefined) {
         const winner: Player = line.winIn > 0 ? 0 : 1;

@@ -13,6 +13,7 @@ import {
     gameExportLimit,
     guestMintLimit,
     guestMintPrefixLimit,
+    humanGameStartLimit,
     principalRequestLimit,
     publicRequestLimit,
     reportGlobalLimit,
@@ -20,12 +21,14 @@ import {
     reportPrefixLimit,
     signInStartLimit,
     signInStartPrefixLimit,
+    rateText,
     streamOpenLimit,
     type RateLimit,
 } from '@hexo-arena/contract';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { ClientKeys } from './client-key';
 import { RateBuckets } from './rate-limits';
+import { RefusalCounts, refusalCode } from './refusals';
 
 // How a route is limited beyond the client bucket every request spends:
 // `public` and `shell` routes need no credential and share one ceiling,
@@ -70,6 +73,7 @@ export interface LimitTable {
     positionRequest: RateLimit;
     positionCheck: RateLimit;
     positionCheckPrefix: RateLimit;
+    gameStart: RateLimit;
 }
 
 export const defaultLimits: LimitTable = {
@@ -95,6 +99,7 @@ export const defaultLimits: LimitTable = {
     positionRequest: positionRequestLimit,
     positionCheck: positionCheckLimit,
     positionCheckPrefix: positionCheckPrefixLimit,
+    gameStart: humanGameStartLimit,
 };
 
 /** The limits a client is held to for one kind of act anyone may try. */
@@ -106,6 +111,15 @@ export type CredentialLimit = `principal` | `botManagement` | `streamOpen` | `en
 /** The part of the limits a route handler spends after authentication. */
 export interface CredentialLimits {
     refuse(reply: FastifyReply, limit: CredentialLimit, key: string): boolean;
+}
+
+/**
+ * The games a person starts, read before a game is created and spent once it is,
+ * so a start the server refuses for another reason costs none.
+ */
+export interface GameStartLimits {
+    refuseGameStart(reply: FastifyReply, key: string): boolean;
+    takeGameStart(key: string): void;
 }
 
 /** The part of the limits a handler spends for an act anyone may try. */
@@ -132,6 +146,8 @@ export function refuseRate(reply: FastifyReply, seconds: number, code = `rate_li
  */
 export class RequestLimits {
     readonly keys: ClientKeys;
+    /** Refusals since start, by code and by the rate limit behind them. */
+    readonly refusals = new RefusalCounts();
     /** Each route's class, by method and pattern, as registered. */
     readonly classes = new Map<string, LimitClass>();
     readonly #client: RateBuckets;
@@ -143,6 +159,8 @@ export class RequestLimits {
     readonly #export: RateBuckets;
     readonly #discordExchange: RateBuckets;
     readonly #reportGlobal: RateBuckets;
+    readonly #gameStart: RateBuckets;
+    readonly #gameStartText: string;
 
     constructor(deps: { table: LimitTable; now: () => number; trustedProxy: string | null }) {
         this.keys = new ClientKeys({ trustedProxy: deps.trustedProxy, now: deps.now });
@@ -174,6 +192,8 @@ export class RequestLimits {
         this.#export = new RateBuckets(deps.table.gameExportGlobal, deps.now);
         this.#discordExchange = new RateBuckets(deps.table.discordExchange, deps.now);
         this.#reportGlobal = new RateBuckets(deps.table.reportGlobal, deps.now);
+        this.#gameStart = new RateBuckets(deps.table.gameStart, deps.now);
+        this.#gameStartText = rateText(deps.table.gameStart);
         this.keys.onRekey(() => {
             this.#client.clear();
             for (const buckets of [...Object.values(this.#perClient), ...Object.values(this.#perPrefix)]) buckets.clear();
@@ -194,6 +214,13 @@ export class RequestLimits {
         this.#export.sweep();
         this.#discordExchange.sweep();
         this.#reportGlobal.sweep();
+        this.#gameStart.sweep();
+    }
+
+    // Counts a refusal under the limit that made it, and passes its wait on.
+    #counted(limit: keyof LimitTable, wait: number | null): number | null {
+        if (wait !== null) this.refusals.limit(limit);
+        return wait;
     }
 
     /**
@@ -203,17 +230,39 @@ export class RequestLimits {
      */
     wait(limit: ClientLimit, request: FastifyRequest): number | null {
         if (request.clientKey === null) return null;
-        return this.#perClient[limit].take(request.clientKey) ?? (request.prefixKey === null ? null : this.#perPrefix[limit].take(request.prefixKey));
+        return (
+            this.#counted(limit, this.#perClient[limit].take(request.clientKey)) ??
+            (request.prefixKey === null ? null : this.#counted(`${limit}Prefix`, this.#perPrefix[limit].take(request.prefixKey)))
+        );
     }
 
     /** Spends one of the Discord exchanges every caller shares; false once they are spent. */
     takeDiscordExchange(): boolean {
-        return this.#discordExchange.take(`all`) === null;
+        return this.#counted(`discordExchange`, this.#discordExchange.take(`all`)) === null;
     }
 
     /** Spends one of the reports every caller shares: null when admitted, else whole seconds until one returns. */
     takeReport(): number | null {
-        return this.#reportGlobal.take(`all`);
+        return this.#counted(`reportGlobal`, this.#reportGlobal.take(`all`));
+    }
+
+    /**
+     * Answers 429 `game_cooldown` with the wait, and yields true,
+     * while the person's starts are spent; spends nothing.
+     */
+    refuseGameStart(reply: FastifyReply, key: string): boolean {
+        const wait = this.#counted(`gameStart`, this.#gameStart.wait(key));
+        if (wait === null) return false;
+        void reply
+            .code(429)
+            .header(`retry-after`, String(wait))
+            .send({ error: `games start ${this.#gameStartText}; the next in ${String(wait)} s`, code: `game_cooldown` });
+        return true;
+    }
+
+    /** Spends one of a person's game starts, once the game exists. */
+    takeGameStart(key: string): void {
+        this.#gameStart.take(key);
     }
 
     /**
@@ -221,7 +270,9 @@ export class RequestLimits {
      * a replayed board costs what a cheap read does not.
      */
     refuseArchive(reply: FastifyReply, request: FastifyRequest): boolean {
-        const wait = (request.clientKey === null ? null : this.#perClient.archiveRead.take(request.clientKey)) ?? this.#archive.take(`all`);
+        const wait =
+            (request.clientKey === null ? null : this.#counted(`archiveRead`, this.#perClient.archiveRead.take(request.clientKey))) ??
+            this.#counted(`archiveReadGlobal`, this.#archive.take(`all`));
         if (wait === null) return false;
         void refuseRate(reply, wait);
         return true;
@@ -232,7 +283,9 @@ export class RequestLimits {
      * each reads and writes up to a tournament's every game.
      */
     refuseExport(reply: FastifyReply, request: FastifyRequest): boolean {
-        const wait = (request.clientKey === null ? null : this.#perClient.gameExport.take(request.clientKey)) ?? this.#export.take(`all`);
+        const wait =
+            (request.clientKey === null ? null : this.#counted(`gameExport`, this.#perClient.gameExport.take(request.clientKey))) ??
+            this.#counted(`gameExportGlobal`, this.#export.take(`all`));
         if (wait === null) return false;
         void refuseRate(reply, wait);
         return true;
@@ -244,7 +297,7 @@ export class RequestLimits {
      * Answers the refusal and yields true when the bucket is spent.
      */
     refuse(reply: FastifyReply, limit: CredentialLimit, key: string): boolean {
-        const wait = this.#credential[limit].take(key);
+        const wait = this.#counted(limit, this.#credential[limit].take(key));
         if (wait === null) return false;
         void refuseRate(reply, wait);
         return true;
@@ -252,7 +305,8 @@ export class RequestLimits {
 
     /**
      * Makes every route name its class, so none ships unlimited,
-     * and spends each request's tokens before anything else runs.
+     * spends each request's tokens before anything else runs,
+     * and counts every refusal's code as it is sent.
      */
     register(app: FastifyInstance): void {
         app.decorateRequest(`clientKey`, null);
@@ -268,16 +322,27 @@ export class RequestLimits {
             const { client: key, prefix } = this.keys.keysOf(request.socket.remoteAddress, request.headers[`x-forwarded-for`]);
             request.clientKey = key;
             request.prefixKey = prefix;
-            const wait = (key === null ? null : this.#client.take(key)) ?? (limit === `public` || limit === `shell` ? this.#public.take(`all`) : null);
+            const wait =
+                (key === null ? null : this.#counted(`client`, this.#client.take(key))) ??
+                (limit === `public` || limit === `shell` ? this.#counted(`public`, this.#public.take(`all`)) : null);
             if (wait === null) {
                 done();
                 return;
             }
             if (limit === `shell`) {
+                // A page's refusal is plain text, which the code count below cannot read.
+                this.refusals.code(`rate_limited`);
                 void reply.code(429).header(`retry-after`, String(wait)).type(`text/plain; charset=utf-8`).send(`Too many requests; try again in ${String(wait)} s.\n`);
                 return;
             }
             void refuseRate(reply, wait);
+        });
+        app.addHook(`onSend`, (_request, reply, payload, done) => {
+            if (reply.statusCode >= 400) {
+                const code = refusalCode(payload);
+                if (code !== null) this.refusals.code(code);
+            }
+            done(null, payload);
         });
     }
 }

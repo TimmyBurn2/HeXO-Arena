@@ -2,6 +2,7 @@ import { z } from 'zod';
 import type { Accepts } from './api';
 import { axialCoordSchema } from './board';
 import { levelIdSchema, seatLevelSchema } from './levels';
+import type { RateLimit } from './limits';
 import { deletedMarkSchema, nameSyntaxSchema } from './names';
 import {
     finishReasonSchema,
@@ -20,11 +21,14 @@ export const botGameSocketPath = `/api/bot/game/{gameId}/socket`;
 export const botGameResignPath = `/api/bot/game/{gameId}/resign`;
 
 // Live games at once: a bot across every surface, a human, user or guest,
-// on the human surface.
+// on the human surface, and a human against one bot, so no person holds
+// the slots a bot's tournaments need.
 export const botConcurrentGameCap = 4;
 export const humanConcurrentGameCap = 3;
-export const humanGameCooldownSeconds = 60;
+export const humanBotGameCap = 1;
 
+/** Games one person, user or guest, may start: a few at once, then at the sustained rate. */
+export const humanGameStartLimit: RateLimit = { burst: 3, refillMs: 60_000 };
 
 // The live list is a glance, not an archive: this many games, newest first.
 export const liveGameListCap = 12;
@@ -235,10 +239,11 @@ export const humanMoveRequestSchema = z.object({
     cells: z.array(axialCoordSchema).length(2),
 });
 
-// Caller-side bounds on the human: the live-game cap, then bot-side gates.
-export const gameCreateErrorCodes = [`human_busy`, `not_open`, `clock_not_accepted`, `unknown_level`, `bot_busy`] as const;
+// Caller-side bounds on the human: the live-game caps, overall and against
+// the one bot, then bot-side gates.
+export const gameCreateErrorCodes = [`human_busy`, `pair_busy`, `not_open`, `clock_not_accepted`, `unknown_level`, `bot_busy`] as const;
 
-// The creation cooldown, so a browser cannot farm the create route, and
+// The start rate, so a browser cannot farm the create route, and
 // the daily pair cap one human and one bot share; waiting lifts either,
 // so both answer 429.
 export const gameLimitErrorCodes = [`game_cooldown`, `daily_pair_cap`] as const;

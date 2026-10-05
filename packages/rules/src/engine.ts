@@ -137,9 +137,11 @@ export type Replay =
     | { readonly ok: true; readonly position: Position; readonly win: Win | null }
     | { readonly ok: false; readonly index: number; readonly rejection: Rejection };
 
-// Every offset within placementRadius,
-// so a radius check looks up a fixed number of cells however many stones the board holds.
-const radiusOffsets: readonly Coord[] = (() => {
+/**
+ * Every offset within placementRadius,
+ * so a radius check looks up a fixed number of cells however many stones the board holds.
+ */
+export const radiusOffsets: readonly Coord[] = (() => {
     const offsets: Coord[] = [];
     for (let x = -placementRadius; x <= placementRadius; x += 1) {
         for (let y = -placementRadius; y <= placementRadius; y += 1) {
@@ -228,8 +230,8 @@ function findWin(stones: readonly Stone[], last: Stone): Win | null {
     return winThrough((x, y) => owned.has(cellKey(x, y)), last);
 }
 
-// The win through the last stone, given which cells its player owns.
-function winThrough(owns: (x: number, y: number) => boolean, last: Stone): Win | null {
+/** The win through `last`, given which cells its player owns: the six winner() would report, or null. */
+export function winThrough(owns: (x: number, y: number) => boolean, last: Stone): Win | null {
     for (const axis of lineAxes) {
         const backward = walk(owns, last, -axis.x, -axis.y);
         const forward = walk(owns, last, axis.x, axis.y);

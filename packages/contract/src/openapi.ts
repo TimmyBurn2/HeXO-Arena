@@ -138,8 +138,9 @@ import {
     guestPath,
     guestRetryAfterSeconds,
     healthzPath,
+    humanBotGameCap,
     humanConcurrentGameCap,
-    humanGameCooldownSeconds,
+    humanGameStartLimit,
     logoutPath,
     mePath,
     meSchema,
@@ -328,7 +329,7 @@ function registerSharedComponents(registry: OpenAPIRegistry, surface: `site` | `
         badRequest: response(`BadRequest`, `The request fails validation.`, badRequestError),
         gameOver: response(`GameOver`, `The game is already finished (game_over).`, gameOverError),
         paused: registry.registerComponent('responses', 'Paused', {
-            description: `The site is paused: no new stream, challenge, or game starts, and open streams and live games continue. A bot with a live game, or with a place in a running tournament, still opens its stream. Retry after Retry-After.`,
+            description: `The site is paused: no new stream, challenge, or game starts, and open streams and live games continue. A bot with a live game, or playing the running weekly tournament, still opens its stream. Retry after Retry-After.`,
             headers: { 'Retry-After': retryAfter },
             content: json(pausedError),
         }).ref,
@@ -802,7 +803,7 @@ function registerSiteSurface(registry: OpenAPIRegistry, shared: SharedComponents
         security: [{ sessionCookie: [] }],
         description: [
             `The bot must hold its stream open with open=1, or at all if it is the caller's own, have fewer than ${String(botConcurrentGameCap)} live games, and accept the clock.`,
-            `The caller may hold ${String(humanConcurrentGameCap)} live games and create one every ${String(humanGameCooldownSeconds)} s.`,
+            `The caller may hold ${String(humanConcurrentGameCap)} live games, ${String(humanBotGameCap)} per bot.`,
             `The bot receives gameStart. A guest's game, or one against the caller's own bot, is unrated.`,
         ].join(` `),
         request: {
@@ -814,7 +815,7 @@ function registerSiteSurface(registry: OpenAPIRegistry, shared: SharedComponents
                 content: { 'application/json': { schema: gameSnapshotSchema } },
             },
             400: {
-                description: `Validation failed (bad_request), the caller is at its live-game cap (human_busy), or the bot is not open (not_open), excludes the clock (clock_not_accepted), declares no such level (unknown_level), or is at its game cap or playing a tournament (bot_busy).`,
+                description: `Validation failed (bad_request), the caller is at its live-game cap (human_busy) or already plays this bot (pair_busy), or the bot is not open (not_open), excludes the clock (clock_not_accepted), declares no such level (unknown_level), or is at its game cap or playing the weekly tournament (bot_busy).`,
                 content: {
                     'application/json': {
                         schema: gameCreateError,
@@ -824,7 +825,7 @@ function registerSiteSurface(registry: OpenAPIRegistry, shared: SharedComponents
             401: shared.unauthorized,
             403: shared.gameCreateForbidden,
             429: {
-                description: `The caller is inside the creation cooldown (game_cooldown); or a signed-in caller has played this bot rated ${String(pairDailyCap)} times this UTC day (daily_pair_cap), until 00:00 UTC; Retry-After says how long either has left; or too many requests (rate_limited).`,
+                description: `The caller started games faster than ${rateText(humanGameStartLimit)} (game_cooldown); or a signed-in caller has played this bot rated ${String(pairDailyCap)} times this UTC day (daily_pair_cap), until 00:00 UTC; Retry-After says how long either has left; or too many requests (rate_limited).`,
                 headers: { 'Retry-After': shared.retryAfter },
                 content: { 'application/json': { schema: gameLimitError } },
             },
@@ -1412,7 +1413,7 @@ function registerBotSurface(registry: OpenAPIRegistry, shared: SharedComponents)
                 name: 'open',
                 in: 'query',
                 required: false,
-                description: `Present as 1, the bot is open while the stream is: other bots may challenge it, and players on the website may start games against it, which arrive as gameStart with no challenge. Its owner's games against it, and its tournament games, reach it without open=1.`,
+                description: `Present as 1, the bot is open while the stream is: other bots may challenge it, and players on the website may start games against it, which arrive as gameStart with no challenge. Its owner's games against it, the games of duels and round robins its owner set up, and the weekly tournament's games reach it without open=1.`,
                 schema: { type: 'string', enum: ['1'] },
             },
         ],
@@ -1462,7 +1463,7 @@ function registerBotSurface(registry: OpenAPIRegistry, shared: SharedComponents)
         security: [{ bearerAuth: [] }],
         description: [
             `Each present field replaces the stored one; an empty string clears a text field, accepts, levels, and analyzer are replaced whole, and null clears levels or withdraws the analyzer. An unknown key answers 400. A challenge or game outside accepts answers clock_not_accepted.`,
-            `A player on the website picks a declared level, which gameStart.level names; challenges and tournaments play the default.`,
+            `Levels picked on the website reach the bot as gameStart.level; challenges and the weekly tournament play the default.`,
         ].join(` `),
         request: {
             body: {
@@ -1642,7 +1643,7 @@ function registerBotSurface(registry: OpenAPIRegistry, shared: SharedComponents)
                 content: { 'application/json': { schema: challengeSchema } },
             },
             400: {
-                description: `Validation failed or the bot challenged itself (bad_request), the target is not open (not_open) or excludes the clock (clock_not_accepted), a side is at its game cap or playing a tournament (bot_busy), the target's inbox is full (inbox_full), or the challenger already has a challenge pending with the target (challenge_pending).`,
+                description: `Validation failed or the bot challenged itself (bad_request), the target is not open (not_open) or excludes the clock (clock_not_accepted), a side is at its game cap or playing the weekly tournament (bot_busy), the target's inbox is full (inbox_full), or the challenger already has a challenge pending with the target (challenge_pending).`,
                 content: {
                     'application/json': {
                         schema: challengeCreateError,
@@ -1683,7 +1684,7 @@ function registerBotSurface(registry: OpenAPIRegistry, shared: SharedComponents)
                 content: { 'application/json': { schema: okSchema } },
             },
             400: {
-                description: `The challenged bot is at its game cap, or a side is playing a tournament (bot_busy); the challenge stays pending.`,
+                description: `The challenged bot is at its game cap, or a side is playing the weekly tournament (bot_busy); the challenge stays pending.`,
                 content: {
                     'application/json': {
                         schema: challengeAcceptError,

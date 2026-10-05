@@ -193,6 +193,11 @@ function reportLines(status: AdminStatus): string[] {
     return lines;
 }
 
+function countLines(title: string, counts: Readonly<Record<string, number>>): string[] {
+    const entries = Object.entries(counts);
+    return [title, ...(entries.length === 0 ? [`  none`] : entries.map(([name, count]) => `  ${name}  ${String(count)}`))];
+}
+
 function formatStatus(status: AdminStatus): string {
     const lines = [
         `uptime        ${String(status.uptimeSeconds)} s`,
@@ -203,6 +208,8 @@ function formatStatus(status: AdminStatus): string {
         `round robins  ${String(status.liveRoundRobins)} live`,
         `client keys   ${String(status.clientKeys)}`,
         `keyless       ${String(status.keylessRequests)}`,
+        ...countLines(`refusals since start, by code:`, status.refusals),
+        ...countLines(`rate limits since start, by refusals:`, status.rateLimits),
         `bot clients, last ${String(clientCensusDays)} days:`,
         ...(status.clients.length === 0 ? [`  none`] : status.clients.map((count) => `  ${count.client}  ${String(count.bots)}`)),
         `tournaments:`,

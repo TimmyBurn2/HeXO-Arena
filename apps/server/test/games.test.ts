@@ -401,6 +401,24 @@ async function standardBot(arena: Arena): Promise<Fixture> {
     };
 }
 
+// More bots of the same owner, online and open for every clock, so a
+// person's games can reach the caps that count games against many bots.
+async function spareBots(arena: Arena, names: readonly string[]): Promise<{ dispose: () => void }> {
+    const owner = await arena.login(`botowner`);
+    const streams: StreamHandle[] = [];
+    for (const name of names) {
+        const token = await arena.createBot(owner, name);
+        await arena.declareWideAccepts(token);
+        streams.push(arena.openStream(token));
+    }
+    await until(() => names.every((name) => arena.presenceOf(name).open));
+    return {
+        dispose: () => {
+            for (const stream of streams) stream.close();
+        },
+    };
+}
+
 async function startGame(
     arena: Arena,
     cookie: string,
@@ -961,14 +979,27 @@ describe('a guest plays a connected bot', () => {
         }
     });
 
-    it('holds each guest session to its own creation cooldown', async () => {
+    it('holds each guest session to its own start rate: 3 at once, then 1 a minute', async () => {
         const guest = await arena.guest();
-        await startGame(arena, guest);
-        const immediate = await arena.createGame(guest, { bot: `opponentbot`, timeControl: turnControl });
-        expect(immediate.status).toBe(429);
-        expect(json(immediate)).toMatchObject({ code: `game_cooldown` });
-        expect(immediate.retryAfter).toBe(`60`);
+        for (let started = 0; started < 3; started += 1) {
+            const { gameId } = await startGame(arena, guest);
+            await arena.humanResign(guest, gameId);
+        }
+        const fourth = await arena.createGame(guest, { bot: `opponentbot`, timeControl: turnControl });
+        expect(fourth.status).toBe(429);
+        expect(json(fourth)).toMatchObject({ code: `game_cooldown` });
+        expect(fourth.retryAfter).toBe(`60`);
         await startGame(arena, await arena.guest());
+    });
+
+    it('holds a guest to one live game against one bot', async () => {
+        const guest = await arena.guest();
+        const { gameId } = await startGame(arena, guest);
+        const second = await arena.createGame(guest, { bot: `opponentbot`, timeControl: turnControl });
+        expect(second.status).toBe(400);
+        expect(json(second)).toMatchObject({ code: `pair_busy` });
+        await arena.humanResign(guest, gameId);
+        await startGame(arena, guest);
     });
 
     it('states the clock on a guest game once it finishes', async () => {
@@ -1088,19 +1119,18 @@ describe('a person picks a bot level', () => {
         expect((await gameStartOn(bot.stream)).level).toBe(`deep`);
     });
 
-    it('counts practice toward no daily pair cap, and toward the live-game cap', async () => {
+    it('counts practice toward no daily pair cap, and toward the live-game cap against the bot', async () => {
         const now = Math.floor(Date.now() / 1000);
         arena.seedPairGames(`humanplayer`, `opponentbot`, pairDailyCap - 1, now - (now % 86_400));
-        expect((await arena.createGame(bot.cookie, { bot: `opponentbot`, timeControl: unlimitedControl, level: `quick` })).status).toBe(201);
-        await vi.advanceTimersByTimeAsync(60_000);
-        expect((await arena.createGame(bot.cookie, { bot: `opponentbot`, timeControl: unlimitedControl })).status).toBe(201);
-        await vi.advanceTimersByTimeAsync(60_000);
+        const practice = await arena.createGame(bot.cookie, { bot: `opponentbot`, timeControl: unlimitedControl, level: `quick` });
+        expect(practice.status).toBe(201);
+        expect(json(await arena.createGame(bot.cookie, { bot: `opponentbot`, timeControl: unlimitedControl }))).toMatchObject({ code: `pair_busy` });
+        await arena.humanResign(bot.cookie, snapshotOf(practice).gameId);
+        const rated = await arena.createGame(bot.cookie, { bot: `opponentbot`, timeControl: unlimitedControl });
+        expect(rated.status).toBe(201);
+        await arena.humanResign(bot.cookie, snapshotOf(rated).gameId);
         expect(json(await arena.createGame(bot.cookie, { bot: `opponentbot`, timeControl: unlimitedControl }))).toMatchObject({ code: `daily_pair_cap` });
         expect((await arena.createGame(bot.cookie, { bot: `opponentbot`, timeControl: unlimitedControl, level: `deep` })).status).toBe(201);
-        await vi.advanceTimersByTimeAsync(60_000);
-        const fourth = await arena.createGame(bot.cookie, { bot: `opponentbot`, timeControl: unlimitedControl, level: `quick` });
-        expect(fourth.status).toBe(400);
-        expect(json(fourth)).toMatchObject({ code: `human_busy` });
     });
 });
 
@@ -1175,19 +1205,18 @@ describe('a signed-in person plays unrated', () => {
         expect(arena.query.get(sql`select count(*) as n from games where unrated_by_choice = 1`)).toEqual({ n: 0 });
     });
 
-    it('counts unrated games toward no daily pair cap, and toward the live-game cap', async () => {
+    it('counts unrated games toward no daily pair cap, and toward the live-game cap against the bot', async () => {
         const now = Math.floor(Date.now() / 1000);
         arena.seedPairGames(`humanplayer`, `opponentbot`, pairDailyCap - 1, now - (now % 86_400));
-        expect((await arena.createGame(bot.cookie, { bot: `opponentbot`, timeControl: unlimitedControl, rated: false })).status).toBe(201);
-        await vi.advanceTimersByTimeAsync(60_000);
-        expect((await arena.createGame(bot.cookie, { bot: `opponentbot`, timeControl: unlimitedControl })).status).toBe(201);
-        await vi.advanceTimersByTimeAsync(60_000);
+        const unrated = await arena.createGame(bot.cookie, { bot: `opponentbot`, timeControl: unlimitedControl, rated: false });
+        expect(unrated.status).toBe(201);
+        expect(json(await arena.createGame(bot.cookie, { bot: `opponentbot`, timeControl: unlimitedControl }))).toMatchObject({ code: `pair_busy` });
+        await arena.humanResign(bot.cookie, snapshotOf(unrated).gameId);
+        const rated = await arena.createGame(bot.cookie, { bot: `opponentbot`, timeControl: unlimitedControl });
+        expect(rated.status).toBe(201);
+        await arena.humanResign(bot.cookie, snapshotOf(rated).gameId);
         expect(json(await arena.createGame(bot.cookie, { bot: `opponentbot`, timeControl: unlimitedControl }))).toMatchObject({ code: `daily_pair_cap` });
         expect((await arena.createGame(bot.cookie, { bot: `opponentbot`, timeControl: unlimitedControl, rated: false })).status).toBe(201);
-        await vi.advanceTimersByTimeAsync(60_000);
-        const fourth = await arena.createGame(bot.cookie, { bot: `opponentbot`, timeControl: unlimitedControl, rated: false });
-        expect(fourth.status).toBe(400);
-        expect(json(fourth)).toMatchObject({ code: `human_busy` });
     });
 });
 
@@ -1262,12 +1291,11 @@ describe('an owner plays their own bot', () => {
     });
 
     it('holds the owner\'s games to the live-game caps of both sides', async () => {
-        for (let started = 0; started < 3; started += 1) {
-            expect((await arena.createGame(owner, { bot: `opponentbot`, timeControl: unlimitedControl })).status).toBe(201);
-            await vi.advanceTimersByTimeAsync(60_000);
+        expect((await arena.createGame(owner, { bot: `opponentbot`, timeControl: unlimitedControl })).status).toBe(201);
+        expect(json(await arena.createGame(owner, { bot: `opponentbot`, timeControl: unlimitedControl }))).toMatchObject({ code: `pair_busy` });
+        for (const cookie of [bot.cookie, await arena.login(`secondplayer`), await arena.login(`thirdplayer`)]) {
+            expect((await arena.createGame(cookie, { bot: `opponentbot`, timeControl: unlimitedControl })).status).toBe(201);
         }
-        expect(json(await arena.createGame(owner, { bot: `opponentbot`, timeControl: unlimitedControl }))).toMatchObject({ code: `human_busy` });
-        expect((await arena.createGame(bot.cookie, { bot: `opponentbot`, timeControl: unlimitedControl })).status).toBe(201);
         const busy = await arena.createGame(await arena.login(`lateplayer`), { bot: `opponentbot`, timeControl: unlimitedControl });
         expect(json(busy)).toMatchObject({ code: `bot_busy` });
     });
@@ -1330,28 +1358,39 @@ describe('game creation gates', () => {
     });
 
     it('caps a human at three concurrent games', async () => {
-        for (let created = 0; created < 3; created += 1) {
-            const response = await arena.createGame(bot.cookie, {
-                bot: `opponentbot`,
-                timeControl: unlimitedControl,
-            });
-            expect(response.status).toBe(201);
-            await vi.advanceTimersByTimeAsync(60_000);
+        const spare = await spareBots(arena, [`secondbot`, `thirdbot`, `fourthbot`]);
+        for (const name of [`opponentbot`, `secondbot`, `thirdbot`]) {
+            expect((await arena.createGame(bot.cookie, { bot: name, timeControl: unlimitedControl })).status).toBe(201);
         }
-        const fourth = await arena.createGame(bot.cookie, {
-            bot: `opponentbot`,
-            timeControl: unlimitedControl,
-        });
+        await vi.advanceTimersByTimeAsync(60_000);
+        const fourth = await arena.createGame(bot.cookie, { bot: `fourthbot`, timeControl: unlimitedControl });
         expect(fourth.status).toBe(400);
         expect(json(fourth)).toMatchObject({ code: `human_busy` });
+        spare.dispose();
+    });
+
+    it('holds a person to one live game against one bot, leaving its other slots to other people and its tournaments', async () => {
+        const spare = await spareBots(arena, [`secondbot`]);
+        const { gameId } = await startGame(arena, bot.cookie, unlimitedControl);
+        const second = await arena.createGame(bot.cookie, { bot: `opponentbot`, timeControl: turnControl });
+        expect(second.status).toBe(400);
+        expect(json(second)).toMatchObject({ code: `pair_busy` });
+        expect((await arena.createGame(bot.cookie, { bot: `secondbot`, timeControl: unlimitedControl })).status).toBe(201);
+        expect((await arena.createGame(await arena.login(`secondplayer`), { bot: `opponentbot`, timeControl: unlimitedControl })).status).toBe(201);
+        expect((await arena.directoryEntry(`opponentbot`))?.liveGames).toBe(2);
+        await arena.humanResign(bot.cookie, gameId);
+        await startGame(arena, bot.cookie, unlimitedControl);
+        spare.dispose();
     });
 
     it('lists a person\'s own live games in me, newest first, until each ends', async () => {
+        const spare = await spareBots(arena, [`secondbot`, `thirdbot`]);
         expect(await arena.liveGamesOf(bot.cookie)).toEqual([]);
         const started: string[] = [];
-        for (let created = 0; created < 3; created += 1) {
-            started.push((await startGame(arena, bot.cookie, unlimitedControl)).gameId);
-            await vi.advanceTimersByTimeAsync(60_000);
+        for (const name of [`opponentbot`, `secondbot`, `thirdbot`]) {
+            const response = await arena.createGame(bot.cookie, { bot: name, timeControl: unlimitedControl });
+            expect(response.status).toBe(201);
+            started.push(snapshotOf(response).gameId);
         }
         const guest = await arena.guest();
         const guestGame = (await startGame(arena, guest, unlimitedControl)).gameId;
@@ -1360,35 +1399,33 @@ describe('game creation gates', () => {
         const [first = ``] = started;
         expect((await arena.humanResign(bot.cookie, first)).status).toBe(200);
         expect(await arena.liveGamesOf(bot.cookie)).toEqual(started.slice(1).reverse());
+        spare.dispose();
     });
 
-    it('cools a human down for sixty seconds between game creations', async () => {
-        const first = await arena.createGame(bot.cookie, {
-            bot: `opponentbot`,
-            timeControl: unlimitedControl,
-        });
-        expect(first.status).toBe(201);
-        const immediate = await arena.createGame(bot.cookie, {
-            bot: `opponentbot`,
-            timeControl: unlimitedControl,
-        });
-        expect(immediate.status).toBe(429);
-        expect(json(immediate)).toMatchObject({ code: `game_cooldown` });
-        expect(immediate.retryAfter).toBe(`60`);
+    it('starts 3 games at once, then 1 a minute, naming the wait, and spends no start on a refused one', async () => {
+        const first = await startGame(arena, bot.cookie, unlimitedControl);
+        for (let refused = 0; refused < 3; refused += 1) {
+            expect(json(await arena.createGame(bot.cookie, { bot: `opponentbot`, timeControl: unlimitedControl }))).toMatchObject({ code: `pair_busy` });
+        }
+        await arena.humanResign(bot.cookie, first.gameId);
+        for (let started = 1; started < 3; started += 1) {
+            const { gameId } = await startGame(arena, bot.cookie, unlimitedControl);
+            await arena.humanResign(bot.cookie, gameId);
+        }
+        const fourth = await arena.createGame(bot.cookie, { bot: `opponentbot`, timeControl: unlimitedControl });
+        expect(fourth.status).toBe(429);
+        expect(json(fourth)).toMatchObject({ code: `game_cooldown`, error: `games start 3 at once, then 1 a minute; the next in 60 s` });
+        expect(fourth.retryAfter).toBe(`60`);
         await vi.advanceTimersByTimeAsync(30_000);
-        const cooling = await arena.createGame(bot.cookie, {
-            bot: `opponentbot`,
-            timeControl: unlimitedControl,
-        });
+        const cooling = await arena.createGame(bot.cookie, { bot: `opponentbot`, timeControl: unlimitedControl });
         expect(cooling.status).toBe(429);
-        expect(json(cooling)).toMatchObject({ code: `game_cooldown` });
         expect(cooling.retryAfter).toBe(`30`);
         await vi.advanceTimersByTimeAsync(30_000);
-        const after = await arena.createGame(bot.cookie, {
-            bot: `opponentbot`,
-            timeControl: unlimitedControl,
-        });
-        expect(after.status).toBe(201);
+        const { gameId } = await startGame(arena, bot.cookie, unlimitedControl);
+        await arena.humanResign(bot.cookie, gameId);
+        const next = await arena.createGame(bot.cookie, { bot: `opponentbot`, timeControl: unlimitedControl });
+        expect(next.status).toBe(429);
+        expect(next.retryAfter).toBe(`60`);
     });
 
     it('caps one human against one bot at the daily pair cap from the UTC day\'s start, waiting until 00:00 UTC', async () => {
@@ -1396,7 +1433,8 @@ describe('game creation gates', () => {
         const dayStart = now - (now % 86_400);
         arena.seedPairGames(`humanplayer`, `opponentbot`, pairDailyCap - 1, dayStart);
         arena.seedPairGames(`humanplayer`, `opponentbot`, 3, dayStart - 1);
-        expect((await arena.createGame(bot.cookie, { bot: `opponentbot`, timeControl: unlimitedControl })).status).toBe(201);
+        const last = await startGame(arena, bot.cookie, unlimitedControl);
+        await arena.humanResign(bot.cookie, last.gameId);
         await vi.advanceTimersByTimeAsync(60_000);
         const refused = await arena.createGame(bot.cookie, { bot: `opponentbot`, timeControl: unlimitedControl });
         expect(refused.status).toBe(429);

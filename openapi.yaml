@@ -123,7 +123,7 @@ components:
           schema:
             $ref: "#/components/schemas/PausedError"
       description: "The site is paused: no new stream, challenge, or game starts, and open streams and
-        live games continue. A bot with a live game, or with a place in a running tournament, still
+        live games continue. A bot with a live game, or playing the running weekly tournament, still
         opens its stream. Retry after Retry-After."
       headers:
         Retry-After:
@@ -1738,8 +1738,8 @@ components:
       description: "How a game ended. six-in-a-row: the winner completed six in a row. timeout: the
         loser's clock ran out. surrender: the loser resigned. disconnect: the loser's stream stayed
         closed for 30 s. terminated: the loser played an illegal move, or, with no winner, the game
-        reached 500 turns or an unlimited game 24 hours. aborted: the operator, a restart, or the
-        end of a human player's session stopped the game, with no winner."
+        reached 500 turns or 24 hours. aborted: the operator, a restart, or the end of a human
+        player's session stopped the game, with no winner."
       enum:
         - aborted
         - disconnect
@@ -1969,6 +1969,7 @@ components:
           enum:
             - bad_request
             - human_busy
+            - pair_busy
             - not_open
             - clock_not_accepted
             - unknown_level
@@ -2262,7 +2263,8 @@ components:
           description: "Whether this game moves the bot's own rating: true only in a rated game between two
             bots. A game against a player moves only the player's rating, and one against a guest
             moves none. A game between two bots is unrated at a level other than a bot's default, in
-            a series a player on the website started unrated, and between two bots of one owner."
+            a duel or round robin a person set up on the website, and between two bots of one
+            owner."
           type: boolean
         side:
           enum:
@@ -4538,7 +4540,7 @@ components:
       type: apiKey
 info:
   title: HeXO Arena
-  version: 0.50.0
+  version: 0.51.0
 openapi: 3.0.3
 paths:
   /api/analysis/check:
@@ -4720,7 +4722,7 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/GuestLimitError"
-          description: The global cap of 500 guest sessions is full (guest_limit), retry after 60 s; or one
+          description: The global cap of 5000 guest sessions is full (guest_limit), retry after 60 s; or one
             client started 3 at once, then 1 every 20 min, or one IPv6 /48 12 at once, then 1 every
             5 min (rate_limited), or too many requests.
           headers:
@@ -4775,8 +4777,8 @@ paths:
       description: Each present field replaces the stored one; an empty string clears a text field,
         accepts, levels, and analyzer are replaced whole, and null clears levels or withdraws the
         analyzer. An unknown key answers 400. A challenge or game outside accepts answers
-        clock_not_accepted. A player on the website picks a declared level, which gameStart.level
-        names; challenges and tournaments play the default.
+        clock_not_accepted. Levels picked on the website reach the bot as gameStart.level;
+        challenges and the weekly tournament play the default.
       operationId: updateAccount
       requestBody:
         content:
@@ -4878,8 +4880,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ChallengeAcceptError"
-          description: The challenged bot is at its game cap, or a side is playing a tournament (bot_busy);
-            the challenge stays pending.
+          description: The challenged bot is at its game cap, or a side is playing the weekly tournament
+            (bot_busy); the challenge stays pending.
         "401":
           $ref: "#/components/responses/BotUnauthorized"
         "403":
@@ -5008,8 +5010,8 @@ paths:
                 $ref: "#/components/schemas/ChallengeCreateError"
           description: Validation failed or the bot challenged itself (bad_request), the target is not open
             (not_open) or excludes the clock (clock_not_accepted), a side is at its game cap or
-            playing a tournament (bot_busy), the target's inbox is full (inbox_full), or the
-            challenger already has a challenge pending with the target (challenge_pending).
+            playing the weekly tournament (bot_busy), the target's inbox is full (inbox_full), or
+            the challenger already has a challenge pending with the target (challenge_pending).
         "401":
           $ref: "#/components/responses/BotUnauthorized"
         "403":
@@ -5130,8 +5132,8 @@ paths:
       parameters:
         - description: "Present as 1, the bot is open while the stream is: other bots may challenge it, and
             players on the website may start games against it, which arrive as gameStart with no
-            challenge. Its owner's games against it, and its tournament games, reach it without
-            open=1."
+            challenge. Its owner's games against it, the games of duels and round robins its owner
+            set up, and the weekly tournament's games reach it without open=1."
           in: query
           name: open
           required: false
@@ -5408,9 +5410,9 @@ paths:
         - Games
     post:
       description: The bot must hold its stream open with open=1, or at all if it is the caller's own,
-        have fewer than 4 live games, and accept the clock. The caller may hold 3 live games and
-        create one every 60 s. The bot receives gameStart. A guest's game, or one against the
-        caller's own bot, is unrated.
+        have fewer than 4 live games, and accept the clock. The caller may hold 3 live games, 1 per
+        bot. The bot receives gameStart. A guest's game, or one against the caller's own bot, is
+        unrated.
       operationId: createGame
       requestBody:
         content:
@@ -5454,9 +5456,10 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/GameCreateError"
-          description: Validation failed (bad_request), the caller is at its live-game cap (human_busy), or
-            the bot is not open (not_open), excludes the clock (clock_not_accepted), declares no
-            such level (unknown_level), or is at its game cap or playing a tournament (bot_busy).
+          description: Validation failed (bad_request), the caller is at its live-game cap (human_busy) or
+            already plays this bot (pair_busy), or the bot is not open (not_open), excludes the
+            clock (clock_not_accepted), declares no such level (unknown_level), or is at its game
+            cap or playing the weekly tournament (bot_busy).
         "401":
           $ref: "#/components/responses/Unauthorized"
         "403":
@@ -5468,9 +5471,10 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/GameLimitError"
-          description: The caller is inside the creation cooldown (game_cooldown); or a signed-in caller has
-            played this bot rated 20 times this UTC day (daily_pair_cap), until 00:00 UTC;
-            Retry-After says how long either has left; or too many requests (rate_limited).
+          description: The caller started games faster than 3 at once, then 1 a minute (game_cooldown); or a
+            signed-in caller has played this bot rated 20 times this UTC day (daily_pair_cap), until
+            00:00 UTC; Retry-After says how long either has left; or too many requests
+            (rate_limited).
           headers:
             Retry-After:
               $ref: "#/components/headers/RetryAfter"
@@ -5774,9 +5778,9 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/WatcherLimitError"
-          description: Watchers without a seat are capped at 50 per game, 500 in total, and 10 per client, and
-            a seat holds at most 4 streams of its own game (watcher_limit), retry after 30 s; or a
-            finished game read too often, as on getGameSnapshot, or too many requests
+          description: Watchers without a seat are capped at 200 per game, 1500 in total, and 10 per client,
+            and a seat holds at most 4 streams of its own game (watcher_limit), retry after 30 s; or
+            a finished game read too often, as on getGameSnapshot, or too many requests
             (rate_limited).
           headers:
             Retry-After:

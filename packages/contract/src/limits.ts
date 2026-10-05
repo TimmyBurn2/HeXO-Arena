@@ -34,14 +34,14 @@ export const presenceGraceMs = 60_000;
 /** How long a bot's live games wait for its stream to return before it forfeits them. */
 export const orphanForfeitMs = 30_000;
 
-/** An unlimited game ends after this long with no winner, as `terminated`. */
-export const unlimitedWallCapMs = 24 * 60 * 60 * 1000;
+/** Any game, whatever its clock, ends after this long with no winner, as `terminated`. */
+export const gameWallCapMs = 24 * 60 * 60 * 1000;
 
 /** Guest sessions one client may start. */
 export const guestMintLimit: RateLimit = { burst: 3, refillMs: 20 * 60_000 };
 
 /** Guest sessions alive at once, across every caller. */
-export const guestSessionCap = 500;
+export const guestSessionCap = 5_000;
 
 /** Discord sign-ins one client may start. */
 export const signInStartLimit: RateLimit = { burst: 10, refillMs: 30_000 };

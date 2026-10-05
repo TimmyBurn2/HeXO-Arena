@@ -11,7 +11,6 @@ interface GuestSession {
     // When the session was minted, which tells its stored games from those of an earlier holder of its label.
     readonly since: number;
     lastSeenAt: number;
-    lastGameCreatedAt: number | null;
 }
 
 interface GuestSessionsDeps {
@@ -29,6 +28,8 @@ interface GuestSessionsDeps {
 export class GuestSessions {
     readonly #byTokenHash = new Map<string, GuestSession>();
     readonly #byId = new Map<string, GuestSession>();
+    // The labels in use, kept beside the sessions so a mint never lists them all.
+    readonly #labels = new Set<string>();
     readonly #deps: GuestSessionsDeps;
 
     constructor(deps: GuestSessionsDeps) {
@@ -48,10 +49,10 @@ export class GuestSessions {
             name: this.#freshLabel(),
             since: nowSeconds(),
             lastSeenAt: nowSeconds(),
-            lastGameCreatedAt: null,
         };
         this.#byTokenHash.set(sha256Hex(token), guest);
         this.#byId.set(guest.id, guest);
+        this.#labels.add(guest.name);
         return { token, guest };
     }
 
@@ -81,6 +82,7 @@ export class GuestSessions {
     #end(key: string, guest: GuestSession): void {
         this.#byTokenHash.delete(key);
         this.#byId.delete(guest.id);
+        this.#labels.delete(guest.name);
         this.#deps.ended(guest.id);
     }
 
@@ -94,15 +96,14 @@ export class GuestSessions {
         }
     }
 
-    // 36^4 labels against a cap of 500 live guests: a retry is rare and the
-    // loop ends almost surely.
+    // 36^4 labels, over 300 times the live-guest cap: a retry is rare and
+    // the loop ends almost surely.
     #freshLabel(): string {
-        const taken = new Set([...this.#byTokenHash.values()].map((guest) => guest.name));
         for (;;) {
             let suffix = ``;
             for (let index = 0; index < 4; index += 1) suffix += labelAlphabet.charAt(randomInt(labelAlphabet.length));
             const label = `Guest ${suffix}`;
-            if (!taken.has(label)) return label;
+            if (!this.#labels.has(label)) return label;
         }
     }
 }

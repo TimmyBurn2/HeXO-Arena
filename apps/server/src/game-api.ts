@@ -3,8 +3,8 @@ import {
     seatLevelOf,
     botConcurrentGameCap,
     createGameRequestSchema,
+    humanBotGameCap,
     humanConcurrentGameCap,
-    humanGameCooldownSeconds,
     humanMoveRequestSchema,
     liveGameListCap,
     liveGameListMemoMs,
@@ -25,10 +25,10 @@ import {
     type MoveErrorCode,
     type Person,
 } from './game-registry';
-import { countHumanPairGamesSince, lastHumanGameCreatedAt } from './game-store';
+import { countHumanPairGamesSince } from './game-store';
 import type { GuestSessions } from './guests';
 import type { PresenceRegistry } from './presence';
-import type { ClientLimits, CredentialLimits } from './request-limits';
+import type { ClientLimits, CredentialLimits, GameStartLimits } from './request-limits';
 import { sessionPerson } from './session-api';
 import type { StartGate } from './site-state';
 import { utcDay } from './utc-day';
@@ -44,7 +44,7 @@ interface GameApiDeps {
     games: GameRegistry;
     watchers: GameWatchers;
     guests: GuestSessions;
-    limits: CredentialLimits & ClientLimits;
+    limits: CredentialLimits & ClientLimits & GameStartLimits;
     // A bot playing a tournament takes no other new game until it ends.
     reservations: { isReserved: (botId: string) => boolean };
 }
@@ -70,14 +70,6 @@ function requirePerson(
         return null;
     }
     return person;
-}
-
-// A user's cooldown reads the game log so a restart cannot reset it; a
-// guest's lives in its session, which a restart ends anyway.
-function lastGameCreatedAt(deps: GameApiDeps, person: Person): number | null {
-    return person.kind === `user`
-        ? lastHumanGameCreatedAt(deps.query, person.id)
-        : (deps.guests.byId(person.id)?.lastGameCreatedAt ?? null);
 }
 
 export function registerGameApi(app: FastifyInstance, deps: GameApiDeps): void {
@@ -112,15 +104,14 @@ export function registerGameApi(app: FastifyInstance, deps: GameApiDeps): void {
                 code: `human_busy`,
             });
         }
-        const lastCreated = lastGameCreatedAt(deps, person);
-        if (lastCreated !== null && nowSeconds() - lastCreated < humanGameCooldownSeconds) {
-            // The wait left, so a page can count it down instead of trying again.
-            reply.header(`retry-after`, String(Math.max(1, humanGameCooldownSeconds - (nowSeconds() - lastCreated))));
-            return reply.code(429).send({
-                error: `a moment must pass between game creations`,
-                code: `game_cooldown`,
+        if (games.activeHumanGameCount(person, bot.id) >= humanBotGameCap) {
+            return reply.code(400).send({
+                error: `you already play this bot`,
+                code: `pair_busy`,
             });
         }
+        const starter = `${person.kind}:${person.id}`;
+        if (deps.limits.refuseGameStart(reply, starter)) return reply;
         if (!presence.isOnline(bot.id) || (!own && !presence.isOpenForChallenges(bot.id))) {
             return reply.code(400).send({
                 error: `the bot is not online and taking games`,
@@ -168,8 +159,8 @@ export function registerGameApi(app: FastifyInstance, deps: GameApiDeps): void {
             timeControl: parsed.data.timeControl,
             openingPlies: parsed.data.openingPlies,
         });
-        const guest = person.kind === `guest` ? deps.guests.byId(person.id) : null;
-        if (guest !== null) guest.lastGameCreatedAt = nowSeconds();
+        // Only a game that started spends a start, so a refusal above costs none.
+        deps.limits.takeGameStart(starter);
         return reply.code(201).send(created.snapshot);
     });
 
