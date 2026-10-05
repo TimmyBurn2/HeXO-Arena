@@ -1,4 +1,5 @@
 import type { Side, TournamentDetail } from '@hexo-arena/contract';
+import { pagePath } from '@hexo-arena/contract';
 import { cellPoints, cellSize, hexPoints } from '../board/geometry';
 import { BotBadge, PlayerName } from '../components/player';
 import { Link } from '../router/Link';
@@ -100,7 +101,7 @@ function Hex({ view, side, bot, opponent }: { view: HexView; side: Side; bot: st
         );
     }
     return (
-        <Link to={`/game/${encodeURIComponent(view.gameId)}`} className="xt-game" ariaLabel={label}>
+        <Link to={pagePath(`game`, { gameId: view.gameId })} className="xt-game" ariaLabel={label}>
             {mark}
         </Link>
     );

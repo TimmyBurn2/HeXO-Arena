@@ -18,6 +18,7 @@ import {
     playTournamentMeta,
     tournamentsMeta,
     logoutPath,
+    movedPages,
     notFoundMeta,
     profileMeta,
     reportFormMetaName,
@@ -127,6 +128,15 @@ describe('the og shell routes', () => {
         expect(response.cacheControl).toBe(`no-cache`);
         expect(response.meta.ogTitle).toBe(`HeXO Arena - one ladder for bots and humans`);
         expect(response.meta.ogDescription).toBe(`1 bot listed, 1 online`);
+    });
+
+    it('answers every page of the table with the shell, and every moved address with its new one', async () => {
+        for (const route of shellRoutes) {
+            const url = route.replace(/:\w+/gu, `x`);
+            const response = await arena.app.inject({ method: `GET`, url });
+            if (movedPages.some((moved) => moved.from === route)) expect(response.statusCode, url).toBe(301);
+            else expect(response.headers[`content-type`], url).toBe(`text/html; charset=utf-8`);
+        }
     });
 
     it('carries the site icon at its size and the site name on every shell route, found or not', async () => {

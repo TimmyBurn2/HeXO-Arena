@@ -1,11 +1,12 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useState } from 'react';
 import { duelListMeta, duelRunningPollMs, type DuelSummary, type LiveGameEntry } from '@hexo-arena/contract';
 import { fetchLiveGames } from '../api/client';
+import { useAsync } from '../api/use-async';
 import { SkeletonRows } from '../components/states';
 import { DuelRows } from '../duels/DuelRows';
 import { LiveDuels } from '../duels/LiveDuels';
 import { duelListViews, gamesDuelsPath } from '../duels/setup';
-import { useBeat, useDuelLists, type DuelFilter } from '../duels/use-duels';
+import { useDuelLists, type DuelFilter } from '../duels/use-duels';
 import { GamesHead } from '../games/GamesHead';
 import { useMe } from '../me';
 import { Link } from '../router/Link';
@@ -27,22 +28,11 @@ function listOf(search: string): { filter: DuelFilter; bot: string | null } {
     return { filter: duelListViews.find((view) => view === params.get(`list`)) ?? `all`, bot: params.get(`bot`) };
 }
 
-// Live duels draw their live games, which the live list holds with tests among them.
-function useLiveGames(): { games: readonly LiveGameEntry[]; at: number } {
-    const [read, setRead] = useState<{ games: readonly LiveGameEntry[]; at: number }>({ games: [], at: Date.now() });
-    const load = useCallback(async () => {
-        try {
-            setRead({ games: await fetchLiveGames(true), at: Date.now() });
-        } catch {
-            // The cards stand without their boards until a read lands.
-        }
-    }, []);
-    useEffect(() => {
-        void load();
-    }, [load]);
-    useBeat(load, duelRunningPollMs);
-    return read;
-}
+// Live duels draw their live games, which the live list holds with tests among them;
+// the cards stand without their boards until a read lands.
+const loadLive = async () => ({ games: await fetchLiveGames(true), at: Date.now() });
+
+const noLive: { games: readonly LiveGameEntry[]; at: number } = { games: [], at: 0 };
 
 /**
  * The duels under Games: what a duel is and where one starts, then those
@@ -59,7 +49,7 @@ export function GamesDuelsScreen() {
     const me = useMe();
     const viewer = me.status === `ready` && me.me?.kind === `user` ? me.me.name : null;
     const lists = useDuelLists(filter, bot, viewer !== null);
-    const live = useLiveGames();
+    const live = useAsync(loadLive, { every: duelRunningPollMs }).data ?? noLive;
     const words = text.duels.lists;
     const shown = lists.recent;
     const signIn = filter === `yours` && viewer === null && me.status === `ready`;

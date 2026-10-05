@@ -1,4 +1,5 @@
 import type { DuelDetail, DuelGame, DuelSide, Side } from '@hexo-arena/contract';
+import { pagePath } from '@hexo-arena/contract';
 import { cellPoints, cellSize, hexPoints } from '../board/geometry';
 import { BotBadge, PlayerName } from '../components/player';
 import { Link } from '../router/Link';
@@ -76,7 +77,7 @@ export function GameGlyph({ game, side, bot, opponent, linked = true }: { game: 
         );
     }
     return (
-        <Link to={`/game/${encodeURIComponent(game.gameId)}`} className="xt-game" ariaLabel={label}>
+        <Link to={pagePath(`game`, { gameId: game.gameId })} className="xt-game" ariaLabel={label}>
             {mark}
         </Link>
     );

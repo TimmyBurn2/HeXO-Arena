@@ -1,5 +1,5 @@
 import type { BotListing, FinishedGameEntry, GamePlayer, LeaderboardEntry, Side, TournamentList, TournamentSummary } from '@hexo-arena/contract';
-import { clockText, resultSentence } from '@hexo-arena/contract';
+import { clockText, pagePath, resultSentence } from '@hexo-arena/contract';
 import { BotBadge, OpenTag, PlayerName, PresenceDot, Rating, seatLevelFacts, seatName, Swatch } from '../components/player';
 import { Rungs } from '../components/Rungs';
 import { LiveGameGrid } from '../live/LiveGameCard';
@@ -161,7 +161,7 @@ export function RecentResults({ games, failed, now, retry }: { games: readonly F
             <ul className="recent-list">
                 {games.slice(0, recentCount).map((game) => (
                     <li key={game.gameId}>
-                        <Link to={`/game/${encodeURIComponent(game.gameId)}`} className="recent-game">
+                        <Link to={pagePath(`game`, { gameId: game.gameId })} className="recent-game">
                             <span className="live-seats">
                                 <RecentSeat side="x" player={game.players.x} />
                                 <span className="live-vs">{text.ladder.live.vs}</span>

@@ -5,6 +5,7 @@ import {
     humanSeedRating,
     nameKeyOf,
     openingPliesSchema,
+    pagePath,
     type Accepts,
     type BotListing,
     type Level,
@@ -215,7 +216,8 @@ export function playPath(bot: string | null, clock: TimeControl | null, opening:
     if (level !== null) params.set(`level`, level.id);
     if (opening !== defaultHumanOpeningPlies) params.set(`opening`, String(opening));
     const query = params.toString();
-    return query === `` ? `/play` : `/play?${query}`;
+    const path = pagePath(`play`, {});
+    return query === `` ? path : `${path}?${query}`;
 }
 
 /** The Play page opened on a bot, as the bot page and the Bots rows link to it; at a level when given one, null standing for its default. */

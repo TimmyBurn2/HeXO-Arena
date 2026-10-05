@@ -1,7 +1,9 @@
-import { describe, expect, it } from 'vitest';
-import { analysisTurnCap, undeclaredValues, type AnalysisList, type GameCell, type GamePlayers } from '@hexo-arena/contract';
+// @vitest-environment jsdom
+import { act, renderHook, waitFor } from '@testing-library/react';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { analysisTurnCap, undeclaredValues, type AnalysisList, type CommunityAnalysis, type GameCell, type GamePlayers } from '@hexo-arena/contract';
 import { gameLineOf } from '../src/analysis/game-readings';
-import { analysesStep, headOf, initialAnalyses, involvedNote, ownChoiceId, refusalOf, underWay, type AnalysesState } from '../src/game/game-analyses';
+import { headOf, involvedNote, ownChoiceId, refusalOf, underWay, useGameAnalyses, withQueued } from '../src/game/game-analyses';
 import { community, judgedCells, ownViews } from './judged-game';
 
 const line = gameLineOf(judgedCells, 1);
@@ -94,37 +96,66 @@ describe('what a reading says of an analyzer whose owner played', () => {
 });
 
 describe('where a game\'s readings and a request stand', () => {
-    const ready: AnalysesState = analysesStep(initialAnalyses, { kind: `loaded`, list: list(ownViews) });
-
-    it('read a list in, and keep it through a later read that fails', () => {
-        expect(ready.load).toEqual({ kind: `ready`, list: list(ownViews) });
-        expect(analysesStep(initialAnalyses, { kind: `load-failed` }).load).toEqual({ kind: `failed` });
-        expect(analysesStep(ready, { kind: `load-failed` })).toBe(ready);
+    afterEach(() => {
+        vi.unstubAllGlobals();
     });
 
-    it('hold a request while it is out, then add it to the list at once when queued', () => {
-        const sending = analysesStep(ready, { kind: `sending` });
-        expect(sending.request).toEqual({ kind: `sending` });
-        const done = analysesStep(sending, { kind: `queued`, analysis: queued });
-        expect(done.request).toEqual({ kind: `idle` });
-        expect(done.load).toEqual({ kind: `ready`, list: list([...ownViews, queued]) });
-        // A list read meanwhile that already holds it keeps one copy.
-        const again = analysesStep(analysesStep(done, { kind: `loaded`, list: list([queued]) }), { kind: `queued`, analysis: queued });
-        expect(again.load).toEqual({ kind: `ready`, list: list([queued]) });
+    // The list reads answer `held`, and a request answers `asked` in turn: a queued reading, or a refusal's status, code, and wait.
+    function stubAnalyses(held: AnalysisList, asked: (CommunityAnalysis | { status: number; code: string; wait: number })[]): void {
+        vi.stubGlobal(
+            `fetch`,
+            vi.fn((url: string, init?: RequestInit) => {
+                if (!url.includes(`/analyses`)) return Promise.resolve(new Response(null, { status: 401 }));
+                if (init?.method !== `POST`) return Promise.resolve(new Response(JSON.stringify(held)));
+                const answer = asked.shift();
+                if (answer === undefined || `kind` in answer) return Promise.resolve(new Response(JSON.stringify(answer)));
+                return Promise.resolve(new Response(JSON.stringify({ error: answer.code, code: answer.code }), { status: answer.status, headers: { 'retry-after': String(answer.wait) } }));
+            }),
+        );
+    }
+
+    it('hold a request while it is out, then add it to the list at once when queued', async () => {
+        stubAnalyses(list(ownViews), [queued]);
+        const { result } = renderHook(() => useGameAnalyses(`g1`, true));
+        await waitFor(() => {
+            expect(result.current.state.load).toEqual({ kind: `ready`, list: list(ownViews) });
+        });
+        act(() => {
+            result.current.request(null);
+        });
+        expect(result.current.state.request).toEqual({ kind: `sending` });
+        await waitFor(() => {
+            expect(result.current.state.request).toEqual({ kind: `idle` });
+        });
+        expect(result.current.state.load).toEqual({ kind: `ready`, list: list([...ownViews, queued]) });
     });
 
-    it('keep a refusal with its wait until the next request', () => {
-        const refused = analysesStep(ready, { kind: `refused`, code: `analysis_limit`, retryAfter: 600 });
-        expect(refused.request).toEqual({ kind: `refused`, code: `analysis_limit`, retryAfter: 600 });
-        expect(analysesStep(refused, { kind: `sending` }).request).toEqual({ kind: `sending` });
+    it('keep a refusal with its wait until the next request', async () => {
+        stubAnalyses(list(ownViews), [{ status: 429, code: `analysis_limit`, wait: 600 }, queued]);
+        const { result } = renderHook(() => useGameAnalyses(`g1`, true));
+        act(() => {
+            result.current.request(null);
+        });
+        await waitFor(() => {
+            expect(result.current.state.request).toEqual({ kind: `refused`, code: `analysis_limit`, retryAfter: 600 });
+        });
+        act(() => {
+            result.current.request(null);
+        });
+        expect(result.current.state.request).toEqual({ kind: `sending` });
+    });
+
+    it('add a request queued meanwhile once, beside the readings a list held, or alone before any list', () => {
+        expect(withQueued(list(ownViews), queued)).toEqual(list([...ownViews, queued]));
+        expect(withQueued(list([queued]), queued)).toEqual(list([queued]));
+        expect(withQueued(null, queued)).toEqual(list([queued]));
     });
 
     it('poll only while a community reading is queued or running', () => {
-        expect(underWay(initialAnalyses)).toBe(false);
-        expect(underWay(ready)).toBe(false);
-        expect(underWay(analysesStep(ready, { kind: `queued`, analysis: queued }))).toBe(true);
-        expect(underWay(analysesStep(initialAnalyses, { kind: `loaded`, list: list([running]) }))).toBe(true);
-        expect(underWay(analysesStep(initialAnalyses, { kind: `loaded`, list: list([community(), failed]) }))).toBe(false);
+        expect(underWay(list(ownViews))).toBe(false);
+        expect(underWay(withQueued(list(ownViews), queued))).toBe(true);
+        expect(underWay(list([running]))).toBe(true);
+        expect(underWay(list([community(), failed]))).toBe(false);
     });
 
     it('word a refusal by its code, signed out and paused by their status, and anything else as the generic one', () => {

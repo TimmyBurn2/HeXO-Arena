@@ -1,5 +1,5 @@
 import { Fragment, useCallback, useId } from 'react';
-import { analysisPagePath, botMeta, levelFacts, nameKeyOf, notFoundMeta, type Accepts, type Analyzer, type BotListing, type Levels, type LiveGameEntry } from '@hexo-arena/contract';
+import { analysisPagePath, botMeta, levelFacts, nameKeyOf, notFoundMeta, pagePath, type Accepts, type Analyzer, type BotListing, type Levels, type LiveGameEntry } from '@hexo-arena/contract';
 import { fetchBots } from '../api/client';
 import { duelsPath, pickReason } from '../duels/setup';
 import { useDuelStates } from '../duels/use-duels';
@@ -154,7 +154,7 @@ function BotProfile({ bot, onChanged }: { bot: BotListing; onChanged: () => void
             <PlayerBlocks name={bot.name} />
             <PlayerHistory player={bot.name} title={text.games.recent} />
             {owned ? <OwnerPanel bot={bot.name} onChanged={onChanged} /> : null}
-            <ReportLine subject={`/bots/${encodeURIComponent(bot.name)}`} name={bot.name} />
+            <ReportLine subject={pagePath(`bot`, { bot: bot.name })} name={bot.name} />
         </>
     );
 }

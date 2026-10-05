@@ -47,7 +47,7 @@ export function refusedBot(code: string, pair: readonly [BotListing, BotListing]
 /** The bot list and the reads beside it, fetched to tell what a refusal is about; null when a read fails. */
 export async function refusalReads(viewer: string | null): Promise<{ bots: readonly BotListing[]; reads: DuelReads } | null> {
     try {
-        const [bots, states, held] = await Promise.all([fetchBots(false), fetchDuelBots(), reservedBots()]);
+        const [bots, states, held] = await Promise.all([fetchBots(false), fetchDuelBots(), reservedBots().catch(() => null)]);
         return { bots, reads: { reserved: held?.bots ?? new Set(), states, viewer } };
     } catch {
         return null;

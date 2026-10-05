@@ -1,4 +1,4 @@
-import { clockText, resultSentence, type FinishedGameEntry, type GamePlayer, type Side } from '@hexo-arena/contract';
+import { clockText, pagePath, resultSentence, type FinishedGameEntry, type GamePlayer, type Side } from '@hexo-arena/contract';
 import { BotBadge, Rating, seatLevelFacts, seatName, seatsRateNobody, Swatch } from '../components/player';
 import { duelPagePath } from '../duels/setup';
 import { Link } from '../router/Link';
@@ -57,7 +57,7 @@ function GameRow({ game, now }: { game: FinishedGameEntry; now: number }) {
     );
     return (
         <li className={event === null ? undefined : `game-row-evented`}>
-            <Link to={`/game/${encodeURIComponent(game.gameId)}`} className="game-row">
+            <Link to={pagePath(`game`, { gameId: game.gameId })} className="game-row">
                 <span className="game-row-seats">
                     <Seat side="x" player={game.players.x} />
                     <span className="game-row-vs">{text.games.versus}</span>
@@ -96,7 +96,7 @@ function GameRow({ game, now }: { game: FinishedGameEntry; now: number }) {
 // The duel or tournament a game belongs to, as its caption names and links it.
 function eventOf(game: FinishedGameEntry): { to: string; words: string } | null {
     if (game.tournament !== undefined) {
-        return { to: `/tournaments/${encodeURIComponent(game.tournament.id)}`, words: gameCaption(game.tournament) };
+        return { to: pagePath(`tournament`, { id: game.tournament.id }), words: gameCaption(game.tournament) };
     }
     if (game.duel !== undefined) return { to: duelPagePath(game.duel.id), words: text.duels.caption(game.test === true ? `test` : `duel`, game.duel.game, game.duel.of) };
     return null;

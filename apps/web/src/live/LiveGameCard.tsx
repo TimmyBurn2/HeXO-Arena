@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { clockText, type GamePlayer, type LiveGameEntry, type Side } from '@hexo-arena/contract';
+import { clockText, pagePath, type GamePlayer, type LiveGameEntry, type Side } from '@hexo-arena/contract';
 import { BotBadge, seatLevelFacts, seatName, Swatch } from '../components/player';
 import { Clock } from '../game/Clock';
 import { Link } from '../router/Link';
@@ -40,7 +40,7 @@ function LiveGameCard({ game, level }: { game: LiveView; level: 2 | 3 }) {
         <article className="live-card">
             <div className="live-card-body">
                 <Heading className="live-card-title">
-                    <Link to={`/game/${encodeURIComponent(entry.gameId)}`} className="live-card-link">
+                    <Link to={pagePath(`game`, { gameId: entry.gameId })} className="live-card-link">
                         <span className="sr-only">{text.ladder.live.watch}</span>
                         <Seat side="x" player={entry.players.x} />
                         <span className="live-vs">{text.ladder.live.vs}</span>

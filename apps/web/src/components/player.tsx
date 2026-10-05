@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { levelFacts, nameAtLevel, namePattern, type Accepts, type GamePlayer, type Side } from '@hexo-arena/contract';
+import { levelFacts, nameAtLevel, namePattern, pagePath, type Accepts, type GamePlayer, type Side } from '@hexo-arena/contract';
 import { Link } from '../router/Link';
 import { text } from '../text';
 import { cellPoints, cellSize, hexPoints } from '../board/geometry';
@@ -70,7 +70,7 @@ export function PlayerName({ name, kind, deleted = false }: { name: string; kind
     if (deleted) return <span className="player-name deleted-name">{name}</span>;
     if (!namePattern.test(name)) return <span className="player-name">{name}</span>;
     return (
-        <Link to={kind === `bot` ? `/bots/${encodeURIComponent(name)}` : `/players/${encodeURIComponent(name)}`} className="player-name">
+        <Link to={kind === `bot` ? pagePath(`bot`, { bot: name }) : pagePath(`player`, { player: name })} className="player-name">
             {name}
         </Link>
     );

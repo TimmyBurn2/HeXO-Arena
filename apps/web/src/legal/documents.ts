@@ -1,4 +1,3 @@
-import { useSyncExternalStore } from 'react';
 import {
     challengeRecordDays,
     closedReportMonths,
@@ -27,6 +26,7 @@ import { drawerPinnedStorageKey } from '../game/use-drawer';
 import { playStorageKey } from '../play/setup';
 import { reportForm } from '../report-form';
 import { botApiRepository } from '../site-links';
+import { createStore, useStore } from '../store';
 import { themeStorageKey } from '../theme/themes';
 import { legalDetailNames, legalDetailValues } from './details';
 
@@ -93,14 +93,8 @@ export type LegalState =
     | { status: `loading` }
     | { status: `ready`; documents: ReadonlyMap<LegalPage, LegalSource>; failed: ReadonlySet<LegalPage> };
 
-let current: LegalState = { status: `loading` };
+const legal = createStore<LegalState>({ status: `loading` });
 let started = false;
-const listeners = new Set<() => void>();
-
-function set(next: LegalState): void {
-    current = next;
-    for (const listener of listeners) listener();
-}
 
 /** A file of the legal folder as one read found it. */
 type Read<T> = { readonly kind: `found`; readonly value: T } | { readonly kind: `absent` } | { readonly kind: `failed` };
@@ -179,18 +173,7 @@ async function load(): Promise<void> {
     legalPages.forEach((page, index) => {
         reads.set(page, texts[index] ?? { kind: `failed` });
     });
-    set(legalState(reads, details));
-}
-
-function subscribe(listener: () => void): () => void {
-    listeners.add(listener);
-    return () => {
-        listeners.delete(listener);
-    };
-}
-
-function read(): LegalState {
-    return current;
+    legal.set(legalState(reads, details));
 }
 
 /**
@@ -198,8 +181,8 @@ function read(): LegalState {
  * boot, since every framed screen's footer links only those it has.
  */
 export const legalStore = {
-    read,
-    subscribe,
+    read: legal.read,
+    subscribe: legal.subscribe,
     start(): void {
         if (started) return;
         started = true;
@@ -213,12 +196,12 @@ export const legalStore = {
     /** Test seam: start from boot, or from the documents given. */
     reset(state: LegalState = { status: `loading` }): void {
         started = state.status === `ready`;
-        current = state;
+        legal.set(state);
     },
 };
 
 export function useLegal(): LegalState {
-    return useSyncExternalStore(legalStore.subscribe, read, read);
+    return useStore(legal);
 }
 
 /**

@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useSyncExternalStore, type ReactNode, type RefObject } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, type ReactNode, type RefObject } from 'react';
+import { createStore, useStore } from '../store';
 import './TopbarPanel.css';
 
 // The shell's phone breakpoint, where the tab strip takes over: at and
@@ -16,24 +17,7 @@ type OpenMode = `popover` | `sheet`;
 export type PanelMode = `closed` | OpenMode;
 
 // One panel at a time: opening one takes the place of any other.
-let open: { id: PanelId; mode: OpenMode } | null = null;
-const listeners = new Set<() => void>();
-
-function setOpen(next: typeof open): void {
-    open = next;
-    for (const listener of listeners) listener();
-}
-
-function subscribe(listener: () => void): () => void {
-    listeners.add(listener);
-    return () => {
-        listeners.delete(listener);
-    };
-}
-
-function read(): typeof open {
-    return open;
-}
+const open = createStore<{ id: PanelId; mode: OpenMode } | null>(null);
 
 function modeForViewport(): OpenMode {
     return typeof window.matchMedia === `function` && window.matchMedia(sheetQuery).matches ? `sheet` : `popover`;
@@ -53,7 +37,7 @@ export interface PanelControl {
  * filters, shared so that opening one panel shuts any other.
  */
 export function usePanel(id: PanelId): PanelControl {
-    const current = useSyncExternalStore(subscribe, read, read);
+    const current = useStore(open);
     const mode = current?.id === id ? current.mode : `closed`;
     const button = useRef<HTMLButtonElement>(null);
     const refocus = useRef(false);
@@ -70,25 +54,25 @@ export function usePanel(id: PanelId): PanelControl {
     // A close aimed at a panel another has replaced must not shut that one.
     const close = useCallback(
         (returnFocus: boolean) => {
-            if (open?.id !== id) return;
+            if (open.read()?.id !== id) return;
             refocus.current = returnFocus;
-            setOpen(null);
+            open.set(null);
         },
         [id],
     );
 
     const toggle = useCallback(() => {
-        if (open?.id === id) {
+        if (open.read()?.id === id) {
             close(true);
         } else {
-            setOpen({ id, mode: modeForViewport() });
+            open.set({ id, mode: modeForViewport() });
         }
     }, [id, close]);
 
     // A button that leaves the bar takes its panel along.
     useEffect(
         () => () => {
-            if (open?.id === id) setOpen(null);
+            if (open.read()?.id === id) open.set(null);
         },
         [id],
     );

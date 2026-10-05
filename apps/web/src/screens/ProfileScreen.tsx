@@ -1,5 +1,5 @@
 import { useCallback, useId, useState } from 'react';
-import { botCapPerUser, nameKeyOf, type BotListing, type GuestMe, type UserMe } from '@hexo-arena/contract';
+import { botCapPerUser, nameKeyOf, pagePath, type BotListing, type GuestMe, type UserMe } from '@hexo-arena/contract';
 import { fetchBots } from '../api/client';
 import { useAsync } from '../api/use-async';
 import { AccountPanel } from '../components/AccountPanel';
@@ -223,7 +223,7 @@ function BotRow({ bot }: { bot: BotListing }) {
     const words = text.profile;
     return (
         <li>
-            <Link to={`/bots/${encodeURIComponent(bot.name)}`} className="bot-row">
+            <Link to={pagePath(`bot`, { bot: bot.name })} className="bot-row">
                 <span className="bot-row-name">
                     <span className="player-name">{bot.name}</span>
                     <BotBadge />

@@ -1,4 +1,4 @@
-import { useState, useSyncExternalStore } from 'react';
+import { useState } from 'react';
 import { duelsMeta } from '@hexo-arena/contract';
 import { ErrorFrame, SkeletonRows } from '../components/states';
 import { NewDuel } from '../duels/NewDuel';
@@ -11,7 +11,7 @@ import { playBotPath } from '../play/setup';
 import { Link } from '../router/Link';
 import { Moved } from '../router/Moved';
 import { useRoute } from '../router/use-route';
-import { siteStatusStore } from '../site-status';
+import { useSiteStatus } from '../site-status';
 import { text } from '../text';
 import { useDocumentMeta } from '../use-document-meta';
 import '../duels/Duels.css';
@@ -33,7 +33,7 @@ function BotDuel() {
     useDocumentMeta(route, duelsMeta.title, duelsMeta.description);
     const [initial] = useState(() => setupFromParams(new URLSearchParams(window.location.search)));
     const me = useMe();
-    const paused = useSyncExternalStore(siteStatusStore.subscribe, siteStatusStore.read, siteStatusStore.read) === `paused`;
+    const paused = useSiteStatus() === `paused`;
     const self = me.status === `ready` ? me.me : undefined;
     const viewer = self?.kind === `user` ? self.name : null;
     const setup = useSetupReads();

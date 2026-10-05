@@ -1,5 +1,5 @@
 import { useCallback, useEffect } from 'react';
-import { notFoundMeta, playerMeta } from '@hexo-arena/contract';
+import { notFoundMeta, pagePath, playerMeta } from '@hexo-arena/contract';
 import { ApiError, fetchPlayerRecord } from '../api/client';
 import { useAsync } from '../api/use-async';
 import { Rating } from '../components/player';
@@ -36,7 +36,7 @@ export function PlayerScreen({ name }: { name: string }) {
     useDocumentMeta(route, meta?.title, meta?.description);
 
     useEffect(() => {
-        if (data?.kind === `bot`) navigate(`/bots/${encodeURIComponent(data.name)}`, { replace: true });
+        if (data?.kind === `bot`) navigate(pagePath(`bot`, { bot: data.name }), { replace: true });
     }, [data]);
 
     const tag = <span className="tag muted">{text.players.human}</span>;
@@ -76,7 +76,7 @@ export function PlayerScreen({ name }: { name: string }) {
             </div>
             <PlayerBlocks name={data.name} />
             <PlayerHistory player={data.name} title={text.games.recent} />
-            <ReportLine subject={`/players/${encodeURIComponent(data.name)}`} name={data.name} />
+            <ReportLine subject={pagePath(`player`, { player: data.name })} name={data.name} />
         </>
     );
 }

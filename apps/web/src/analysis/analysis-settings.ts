@@ -1,7 +1,6 @@
-import { useSyncExternalStore } from 'react';
 import { analysisLinesMax, analysisSecondsChoices, analysisSecondsDefault, nameSyntaxSchema } from '@hexo-arena/contract';
 import { z } from 'zod';
-import { readStored, writeStored } from '../stored';
+import { persistedStore, useStore } from '../store';
 import { analysisSettingsStorageKey } from './storage-key';
 
 /** The seconds a person may ask for a position. */
@@ -57,39 +56,21 @@ export function effectiveSeconds(chosen: AnalysisSeconds, cap: number | null): A
     return allowed.at(-1) ?? analysisSecondsChoices[0];
 }
 
-let current: AnalysisSettings | null = null;
-const listeners = new Set<() => void>();
+const stored = persistedStore(analysisSettingsStorageKey, parseAnalysisSettings, (settings) => JSON.stringify(settings));
 
-function read(): AnalysisSettings {
-    current ??= parseAnalysisSettings(readStored(analysisSettingsStorageKey));
-    return current;
-}
-
-function subscribe(listener: () => void): () => void {
-    listeners.add(listener);
-    return () => {
-        listeners.delete(listener);
-    };
-}
-
-function update(changes: Partial<AnalysisSettings>): void {
-    current = { ...read(), ...changes };
-    writeStored(analysisSettingsStorageKey, JSON.stringify(current));
-    for (const listener of listeners) listener();
-}
-
-/** The analysis settings as a store: the analysis board's settings panel writes them, and they stay in this browser. */
+/**
+ * The analysis settings as a store: the analysis board's settings panel writes them, and they stay in this browser.
+ * `reset` is a test seam that reads the browser's storage again.
+ */
 export const analysisSettingsStore = {
-    read,
-    subscribe,
-    update,
-    /** Test seam: read the browser's storage again. */
-    reset(): void {
-        current = null;
+    read: stored.read,
+    subscribe: stored.subscribe,
+    update: (changes: Partial<AnalysisSettings>): void => {
+        stored.set({ ...stored.read(), ...changes });
     },
+    reset: stored.reset,
 };
 
 export function useAnalysisSettings(): readonly [AnalysisSettings, typeof analysisSettingsStore.update] {
-    const settings = useSyncExternalStore(analysisSettingsStore.subscribe, read, read);
-    return [settings, analysisSettingsStore.update];
+    return [useStore(stored), analysisSettingsStore.update];
 }

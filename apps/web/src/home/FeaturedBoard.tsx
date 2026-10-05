@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { clockText, type GamePlayer, type GameSnapshot, type LiveGameEntry, type Side } from '@hexo-arena/contract';
+import { clockText, pagePath, type GamePlayer, type GameSnapshot, type LiveGameEntry, type Side } from '@hexo-arena/contract';
 import { Board } from '../board/Board';
 import { defaultBoardSettings } from '../board/board-settings';
 import { stonesFrame } from '../board/geometry';
@@ -36,7 +36,7 @@ function FeaturedLive({ view }: { view: LiveView }) {
     const landed = view.cells.length === entry.cells.length;
     return (
         <article className="featured" aria-label={text.home.featured}>
-            <Link to={`/game/${encodeURIComponent(entry.gameId)}`} className="featured-link" ariaLabel={text.home.watch(seatName(x), seatName(o))}>
+            <Link to={pagePath(`game`, { gameId: entry.gameId })} className="featured-link" ariaLabel={text.home.watch(seatName(x), seatName(o))}>
                 <MiniBoard game={view} />
             </Link>
             <div className="featured-bar featured-top">
@@ -63,7 +63,7 @@ function FeaturedFinished({ snapshot, ended }: { snapshot: GameSnapshot; ended: 
     }, [snapshot]);
     return (
         <article className="featured" aria-label={text.home.featured}>
-            <Link to={`/game/${encodeURIComponent(snapshot.gameId)}`} className="featured-link" ariaLabel={text.home.replay(seatName(x), seatName(o))}>
+            <Link to={pagePath(`game`, { gameId: snapshot.gameId })} className="featured-link" ariaLabel={text.home.replay(seatName(x), seatName(o))}>
                 <div className="mini-board">
                     <Board stones={stones} settings={featuredSettings} label={resultLine(snapshot)} overlays={overlays} frame={frame} />
                 </div>

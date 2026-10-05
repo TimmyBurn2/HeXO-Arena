@@ -1,29 +1,9 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback } from 'react';
 import { duelRunningPollMs, type BotListing, type DuelBotState, type DuelList, type DuelListQuery, type DuelQuota } from '@hexo-arena/contract';
-import { fetchBots, fetchDuelBots, fetchDuels, limitedFor } from '../api/client';
+import { fetchBots, fetchDuelBots, fetchDuels } from '../api/client';
 import { liveRefreshMs } from '../api/refresh';
-import { noReservations, reservedBots } from '../play/reserved';
-
-/** Runs `read` on the beat while the page is in view, and whenever it comes back into view; the caller reads first. */
-export function useBeat(read: () => Promise<void>, ms: number): void {
-    const latest = useRef(read);
-    useEffect(() => {
-        latest.current = read;
-    });
-    useEffect(() => {
-        const timer = setInterval(() => {
-            if (document.visibilityState === `visible`) void latest.current();
-        }, ms);
-        function onVisible() {
-            if (document.visibilityState === `visible`) void latest.current();
-        }
-        document.addEventListener(`visibilitychange`, onVisible);
-        return () => {
-            clearInterval(timer);
-            document.removeEventListener(`visibilitychange`, onVisible);
-        };
-    }, [ms]);
-}
+import { useAsync } from '../api/use-async';
+import { useReserved } from '../play/reserved';
 
 // What a duel's setup reads beside the bot list: the running tournament's bots and each bot's duel state.
 interface DuelStates {
@@ -36,18 +16,16 @@ const noStates: readonly DuelBotState[] = [];
 
 /** The tournament's hold and the bots' duel states, read on the bot lists' beat; a failed read leaves the last one standing. */
 export function useDuelStates(): DuelStates {
-    const [reserved, setReserved] = useState<ReadonlySet<string>>(noReservations);
-    const [states, setStates] = useState<readonly DuelBotState[]>(noStates);
-    const read = useCallback(async () => {
-        const [held, found] = await Promise.all([reservedBots(), fetchDuelBots().catch(() => null)]);
-        if (held !== null) setReserved(held.bots);
-        if (found !== null) setStates(found);
-    }, []);
-    useEffect(() => {
-        void read();
-    }, [read]);
-    useBeat(read, liveRefreshMs);
-    return { reserved, states, reload: () => void read() };
+    const reserved = useReserved();
+    const states = useAsync(fetchDuelBots, { every: liveRefreshMs });
+    return {
+        reserved: reserved.bots,
+        states: states.data ?? noStates,
+        reload: () => {
+            reserved.reload();
+            states.reload();
+        },
+    };
 }
 
 // What a duel's setup reads: the bots, and their duel states.
@@ -60,33 +38,20 @@ interface SetupReads {
     readonly reload: () => void;
 }
 
+const loadBots = async () => fetchBots(false);
+
 /** The bot list a setup picks from, read again on the bot lists' beat, the duel states never holding it back. */
 export function useSetupReads(): SetupReads {
-    const [bots, setBots] = useState<BotListing[] | null>(null);
-    const [failed, setFailed] = useState(false);
-    const [limited, setLimited] = useState<number | null>(null);
+    const bots = useAsync(loadBots, { every: liveRefreshMs });
     const duelStates = useDuelStates();
-    const read = useCallback(async () => {
-        try {
-            setBots(await fetchBots(false));
-            setFailed(false);
-        } catch (cause) {
-            setFailed(true);
-            setLimited(limitedFor(cause));
-        }
-    }, []);
-    useEffect(() => {
-        void read();
-    }, [read]);
-    useBeat(read, liveRefreshMs);
     return {
-        bots,
+        bots: bots.data,
         reserved: duelStates.reserved,
         states: duelStates.states,
-        failed,
-        limited,
+        failed: bots.error,
+        limited: bots.limited,
         reload: () => {
-            void read();
+            bots.reload();
             duelStates.reload();
         },
     };
@@ -98,24 +63,12 @@ export interface MineRead {
     readonly failed: boolean;
 }
 
+const loadMine = async () => fetchDuels({ mine: `1` });
+
 /** The duels and tests the signed-in reader started or whose bots play them, with their quota. */
 export function useMineDuels(signedIn: boolean): MineRead {
-    const [list, setList] = useState<DuelList | null>(null);
-    const [failed, setFailed] = useState(false);
-    const read = useCallback(async () => {
-        if (!signedIn) return;
-        try {
-            setList(await fetchDuels({ mine: `1` }));
-            setFailed(false);
-        } catch {
-            setFailed(true);
-        }
-    }, [signedIn]);
-    useEffect(() => {
-        void read();
-    }, [read]);
-    useBeat(read, duelRunningPollMs);
-    return { list, failed };
+    const read = useAsync(loadMine, { enabled: signedIn, every: duelRunningPollMs });
+    return { list: read.data, failed: read.error };
 }
 
 /** Which duels a list shows: every one, the reader's, or tests alone. */
@@ -135,25 +88,12 @@ interface ListReads {
  * duel's beat while the page is in view.
  */
 export function useDuelLists(filter: DuelFilter, bot: string | null, signedIn: boolean): ListReads {
-    const [all, setAll] = useState<DuelList | null>(null);
-    const [recent, setRecent] = useState<DuelList | null>(null);
-    const [quota, setQuota] = useState<DuelQuota | null>(null);
-    const [failed, setFailed] = useState(false);
-    const read = useCallback(async () => {
+    const load = useCallback(async () => {
         const base: DuelListQuery = bot === null ? {} : { bot };
-        try {
-            const [every, mine] = await Promise.all([fetchDuels(base), signedIn ? fetchDuels({ ...base, mine: `1` }) : Promise.resolve(null)]);
-            setAll(every);
-            setQuota(mine?.quota ?? null);
-            setRecent(filter === `all` ? every : filter === `yours` ? mine : await fetchDuels({ ...base, kind: `test` }));
-            setFailed(false);
-        } catch {
-            setFailed(true);
-        }
+        const [all, mine] = await Promise.all([fetchDuels(base), signedIn ? fetchDuels({ ...base, mine: `1` }) : Promise.resolve(null)]);
+        const recent = filter === `all` ? all : filter === `yours` ? mine : await fetchDuels({ ...base, kind: `test` });
+        return { all, recent, quota: mine?.quota ?? null };
     }, [filter, bot, signedIn]);
-    useEffect(() => {
-        void read();
-    }, [read]);
-    useBeat(read, duelRunningPollMs);
-    return { all, recent, quota, failed, reload: () => void read() };
+    const read = useAsync(load, { every: duelRunningPollMs });
+    return { all: read.data?.all ?? null, recent: read.data?.recent ?? null, quota: read.data?.quota ?? null, failed: read.error, reload: read.reload };
 }
