@@ -366,10 +366,14 @@ describe('a round robin\'s page', () => {
         const calls = openTournament(live, bruno, { 'POST /api/tournaments/t_brunorobin01/stop': { status: 200, body: { ...live, status: `stopped`, end: { reason: `creator`, round: 2 } } } });
         fireEvent.click(await screen.findByRole(`button`, { name: `Stop round robin` }));
         expect(screen.getByText(`Stop the round robin? No further game starts; the live games play on, and the standings stand as they are.`)).toBeTruthy();
-        expect(document.activeElement).toBe(screen.getByRole(`button`, { name: `Keep playing` }));
+        await waitFor(() => {
+            expect(document.activeElement).toBe(screen.getByRole(`button`, { name: `Keep playing` }));
+        });
         fireEvent.click(screen.getByRole(`button`, { name: `Keep playing` }));
         expect(screen.queryByText(/^Stop the round robin\?/u)).toBeNull();
-        expect(document.activeElement).toBe(screen.getByRole(`button`, { name: `Stop round robin` }));
+        await waitFor(() => {
+            expect(document.activeElement).toBe(screen.getByRole(`button`, { name: `Stop round robin` }));
+        });
         fireEvent.click(screen.getByRole(`button`, { name: `Stop round robin` }));
         fireEvent.click(screen.getByRole(`button`, { name: `Stop; no further game starts` }));
         await waitFor(() => {
@@ -387,9 +391,13 @@ describe('a round robin\'s page', () => {
         const fresh: TournamentDetail = { ...live, rounds: live.rounds.map((round) => ({ ...round, pairings: round.pairings.map((pairing) => ({ ...pairing, games: pairing.games.map((game) => ({ ...game, outcome: `pending` as const, point: null, gameId: null })) })) })) };
         openTournament(fresh, ana, { 'POST /api/tournaments/t_brunorobin01/withdraw': { status: 200, body: { ...fresh, entries: fresh.entries.map((entry) => (entry.bot === `hextide` ? { ...entry, state: `withdrawn`, reason: `owner` } : entry)) } } });
         fireEvent.click(await screen.findByRole(`button`, { name: `Withdraw hextide` }));
-        expect(document.activeElement).toBe(screen.getByRole(`button`, { name: `Keep playing` }));
+        await waitFor(() => {
+            expect(document.activeElement).toBe(screen.getByRole(`button`, { name: `Keep playing` }));
+        });
         fireEvent.click(screen.getByRole(`button`, { name: `Keep playing` }));
-        expect(document.activeElement).toBe(screen.getByRole(`button`, { name: `Withdraw hextide` }));
+        await waitFor(() => {
+            expect(document.activeElement).toBe(screen.getByRole(`button`, { name: `Withdraw hextide` }));
+        });
         fireEvent.click(screen.getByRole(`button`, { name: `Withdraw hextide` }));
         fireEvent.click(screen.getByRole(`button`, { name: `Withdraw; hextide plays no further game` }));
         await waitFor(() => {
