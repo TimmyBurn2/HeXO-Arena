@@ -1,9 +1,10 @@
 // @vitest-environment jsdom
-import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { BotListing, FinishedGameEntry, GamePlayer, LeaderboardEntry, LiveGameEntry, Me, TournamentList } from '@hexo-arena/contract';
+import { tournamentPerBotCap, type BotListing, type FinishedGameEntry, type GamePlayer, type LeaderboardEntry, type LiveGameEntry, type Me, type TournamentList } from '@hexo-arena/contract';
 import { meStore } from '../src/me';
 import { HomeScreen } from '../src/screens/HomeScreen';
+import { pressAsReadLands } from './press-as-read-lands';
 
 const bot = (name: string, rating: number): GamePlayer => ({ name, rating, provisional: false, kind: `bot` });
 
@@ -81,7 +82,9 @@ function serve(reads: Reads): void {
                             ? { games: reads.finished ?? [], page: 1, pages: 1, total: (reads.finished ?? []).length }
                             : path === `/api/tournaments`
                               ? (reads.tournaments ?? { running: [], scheduled: [], past: [] })
-                              : undefined;
+                              : path === `/api/tournaments/bots`
+                                ? []
+                                : undefined;
             return Promise.resolve(body === undefined ? new Response(`{}`, { status: 404 }) : new Response(JSON.stringify(body)));
         }),
     );
@@ -142,6 +145,24 @@ describe('HomeScreen', () => {
         const last = screen.getByRole(`link`, { name: `hextide vs pebble` });
         expect(last.getAttribute(`href`)).toBe(`/game/g-0`);
         expect(last.parentElement?.textContent).toBe(`Last game: hextide vs pebble; hextide won with six in a row`);
+    });
+
+    it('hands focus on to the next slot as each bot of a duel is added, though a read lands as the second is picked', async () => {
+        const ana: Me = { kind: `user`, name: `ana`, rating: 1500, provisional: false, discord: null, liveGames: [], analysisOptOut: false, analysisLeft: { positions: 300, games: 10 } };
+        serve({ me: ana, bots: [listing(`pebble`, 1400), listing(`hextide`, 1600), listing(`cinder`, 1500)] });
+        render(<HomeScreen />);
+        fireEvent.click(await screen.findByRole(`button`, { name: `Add a bot, First bot` }));
+        fireEvent.click(within(screen.getByRole(`dialog`, { name: `Add the first bot` })).getByRole(`button`, { name: /^cinder\b/u }));
+        await waitFor(() => {
+            expect(document.activeElement).toBe(screen.getByRole(`button`, { name: `Add a bot, Second bot` }));
+        });
+        fireEvent.click(screen.getByRole(`button`, { name: `Add a bot, Second bot` }));
+        const dialog = screen.getByRole(`dialog`, { name: `Add the second bot` });
+        const busy = [{ name: `pebble`, duelsByOthers: true, running: tournamentPerBotCap }];
+        await pressAsReadLands({ path: `/api/tournaments/bots`, answer: busy }, `try again after one ends`, () => within(dialog).getByRole(`button`, { name: /^hextide\b/u }));
+        await waitFor(() => {
+            expect(document.activeElement).toBe(screen.getByRole(`button`, { name: `Remove hextide` }));
+        });
     });
 
     it('when busy features the best game and lists the rest, the ladder, and eight results without rating moves', async () => {

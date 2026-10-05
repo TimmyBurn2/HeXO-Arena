@@ -120,10 +120,10 @@ export function RoundRobinTerms({ detail }: { detail: TournamentDetail }) {
 
 type Asking = { kind: `none` } | { kind: `stop` } | { kind: `withdraw`; bot: string };
 
-// Where focus goes after a render: the confirm's Keep playing once it opens,
-// the control that opened it once kept, or past the change once confirmed,
-// since each time the control that held focus is gone.
-type Landing = `keep` | `stop` | `withdraw` | `changed` | null;
+// Where focus goes after a press or a change: the confirm's Keep playing once
+// it opens, the control that opened it once kept, or past the change once
+// confirmed, since each time the control that held focus is gone.
+type Landing = `keep` | `stop` | `withdraw` | `changed`;
 
 /**
  * The actions beside a round robin's crumb: its games under Games and as
@@ -141,15 +141,17 @@ export function RoundRobinActions({ detail, viewer, onChange }: { detail: Tourna
     const keep = useRef<HTMLButtonElement>(null);
     const stopper = useRef<HTMLButtonElement>(null);
     const withdrawer = useRef<HTMLButtonElement>(null);
-    const landing = useRef<Landing>(null);
+    // State, not a ref: a press can come while an earlier render's effects are still to run, a read's say,
+    // and React runs those first, which would take a ref's landing before the confirm is there.
+    // A fresh object each time, so the same landing twice moves focus twice.
+    const [landing, setLanding] = useState<{ readonly to: Landing } | null>(null);
     useEffect(() => {
-        const to = landing.current;
-        landing.current = null;
+        const to = landing?.to;
         if (to === `keep`) keep.current?.focus();
         if (to === `stop`) stopper.current?.focus();
         if (to === `withdraw`) withdrawer.current?.focus();
         if (to === `changed`) (actions.current?.querySelector<HTMLElement>(`a, button`) ?? document.getElementById(tournamentStatusId))?.focus();
-    });
+    }, [landing]);
     const words = text.roundRobins.page;
     const duelWords = text.tournamentDuel;
     const duel = detail.format === `duel`;
@@ -163,7 +165,7 @@ export function RoundRobinActions({ detail, viewer, onChange }: { detail: Tourna
     const schedule = scheduleOf(detail.standings.length, detail.gamesPerPair);
 
     function ask(next: Asking) {
-        landing.current = next.kind !== `none` ? `keep` : asking.kind === `stop` ? `stop` : `withdraw`;
+        setLanding({ to: next.kind !== `none` ? `keep` : asking.kind === `stop` ? `stop` : `withdraw` });
         setAsking(next);
         setError(null);
     }
@@ -173,7 +175,7 @@ export function RoundRobinActions({ detail, viewer, onChange }: { detail: Tourna
         setError(null);
         try {
             const next = await run();
-            landing.current = `changed`;
+            setLanding({ to: `changed` });
             setAsking({ kind: `none` });
             onChange(next);
         } catch {
