@@ -4,9 +4,10 @@ import { text } from '../text';
 /**
  * The reader's own bot's part in a tournament, in a few words: entered
  * while it waits or once it is called off, its place so far or at the end,
- * or that it was withdrawn or never played.
+ * or that it was withdrawn or never played; a test, every bot the reader's,
+ * says so rather than name one.
  */
-export function yoursText(tournament: Pick<TournamentSummary, `status`>, yours: TournamentYours): string {
+export function yoursText(tournament: Pick<TournamentSummary, `status` | `test` | `entrants`>, yours: TournamentYours): string {
     const words = text.tournaments.yours;
     const { place } = yours;
     switch (tournament.status) {
@@ -19,6 +20,7 @@ export function yoursText(tournament: Pick<TournamentSummary, `status`>, yours: 
         case `finished`:
         case `stopped`:
         case `cut_short`:
+            if (tournament.test) return words.every(tournament.entrants);
             if (place.state === `withdrawn`) return words.withdrawn(yours.bot);
             if (place.rank === null) return words.didNotPlay(yours.bot);
             return tournament.status === `running` ? words.soFar(yours.bot, place.rank) : words.final(yours.bot, place.rank);

@@ -889,15 +889,7 @@
         text-align: right;
     }
 
-    .duel-figure {
-        grid-column: 2;
-        grid-row: 1 / span 3;
-        font-size: var(--text-lg);
-        font-weight: var(--weight-display);
-        font-variant-numeric: tabular-nums;
-    }
-
-    /* A round robin's row in the duel row's frame: its name in the accent, the reader's part under its facts, and its leaders' points. */
+    /* A round robin's row in the duel row's frame: its name in the accent, the reader's part under its facts, and its leaders' points framed, as a duel's score past a glance is. */
     .event-row-name {
         color: var(--c-accent);
     }
@@ -1284,11 +1276,6 @@
             grid-column: 1;
             grid-row: auto;
             justify-self: start;
-        }
-
-        .duel-figure {
-            grid-column: 1;
-            grid-row: auto;
         }
 
         .event-figure {

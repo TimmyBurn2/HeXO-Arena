@@ -76,6 +76,11 @@
         color: var(--c-text-dim);
     }
 
+    /* A hovered row's fill is a tag's own plate, so a tag on one takes the page's ground and keeps its edge. */
+    :is(.duel-row, .game-row, .live-game, .bot-row):hover .tag {
+        background: var(--c-bg);
+    }
+
     .prov {
         color: var(--c-text-dim);
     }

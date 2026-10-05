@@ -1165,7 +1165,7 @@ describe('GameScreen for a watcher', () => {
         });
     });
 
-    it('name a duel\'s game by its place in the duel, who leads it, and why it is unrated, as a duel', async () => {
+    it('name a duel\'s game by its place in the duel, who leads it with the score kept whole at its hyphen, and why it is unrated, as a duel', async () => {
         const tournament = { id: `d_brunoduel001`, name: `Duel by bruno`, format: `duel`, round: 1, game: 3, of: 4, createdBy: `bruno` } as const;
         const duelGame = { ...watched(finishedSnapshot), unratedByChoice: true, tournament } as GameSnapshot;
         const played = (x: number, point: number | null, gameId: string) => ({ x, gameId, outcome: `played` as const, point, missing: [] });
@@ -1219,7 +1219,61 @@ describe('GameScreen for a watcher', () => {
         await waitFor(() => {
             expect(line.closest(`dd`)?.textContent).toBe(`Duel, game 3 of 4; hextide leads 2-1`);
         });
+        expect([...(line.closest(`dd`)?.querySelectorAll(`.facts-whole`) ?? [])].map((word) => word.textContent)).toEqual([`2-1`]);
         expect(screen.getByText(`No; a duel bruno set up`, { selector: `.facts dd` })).toBeTruthy();
+    });
+
+    it('say how a duel or a test of two ended once it is over, never so far, its hyphenated names and scores kept whole', async () => {
+        const played = (x: number, point: number | null, gameId: string) => ({ x, gameId, outcome: `played` as const, point, missing: [] });
+        const over = (test: boolean, points: readonly (number | null)[]): TournamentDetail => ({
+            id: `d_devbotover01`,
+            name: `Duel by bruno`,
+            origin: `person`,
+            format: `duel`,
+            createdBy: `bruno`,
+            rated: false,
+            test,
+            gamesPerPair: 4,
+            status: `finished`,
+            startsAt: `2026-10-04T12:00:00Z`,
+            startedAt: `2026-10-04T12:00:00Z`,
+            endedAt: `2026-10-04T13:00:00Z`,
+            timeControl: { mode: `turn`, turnTimeMs: 10_000 },
+            openingPlies: 5,
+            maxEntrants: 2,
+            entries: [
+                { key: 1, bot: `devbot-b`, ownerName: `bruno`, online: true, ratingAtStart: 1500, state: `playing` },
+                { key: 2, bot: `sealbot`, ownerName: `bruno`, online: true, ratingAtStart: 1500, state: `playing` },
+            ],
+            rounds: [{ round: 1, pairings: [{ first: { key: 1, name: `devbot-b` }, second: { key: 2, name: `sealbot` }, games: points.map((point, index) => played((index % 2) + 1, point, index === 3 ? `g-end` : `g-${String(index)}`)) }], rest: null }],
+            standings: [],
+            live: [],
+            waiting: [],
+            nextRoundAt: null,
+            ...(test ? { estimates: [{ key: 1, estimate: { games: 4, points: { first: points.filter((point) => point === 1).length, second: points.filter((point) => point === 2).length }, rating: 120, low: -40, high: null, chance: 0.9, favored: `first` as const, verdict: `likely_stronger` as const, narrowed: null } }] } : {}),
+        });
+        const drawerLine = async (detail: TournamentDetail) => {
+            const tournament = { id: detail.id, name: detail.name, format: `duel`, round: 1, game: 4, of: 4, createdBy: `bruno` } as const;
+            // The marks are true or absent, never false.
+            const game = { ...watched(finishedSnapshot), ...(detail.test ? { test: true } : { unratedByChoice: true }), tournament } as GameSnapshot;
+            vi.stubGlobal(`fetch`, vi.fn((url: string) => Promise.resolve(new Response(JSON.stringify(url === `/api/tournaments/${detail.id}` ? detail : game)))));
+            stubEventSource(game);
+            render(<GameScreen gameId="g-end" />);
+            await screen.findByRole(`heading`, { name: `hextide vs quinn` });
+            await openWithM();
+            fireEvent.click(screen.getByRole(`tab`, { name: `Game` }));
+            const line = await screen.findByRole(`link`, { name: `${detail.test ? `Test` : `Duel`}, game 4 of 4` });
+            const dd = line.closest(`dd`);
+            await waitFor(() => {
+                expect(dd?.textContent).toMatch(/; /u);
+            });
+            const words = { text: dd?.textContent, whole: [...(dd?.querySelectorAll(`.facts-whole`) ?? [])].map((word) => word.textContent) };
+            cleanup();
+            return words;
+        };
+        expect(await drawerLine(over(false, [1, 2, 1, 1]))).toEqual({ text: `Duel, game 4 of 4; devbot-b won 3-1`, whole: [`devbot-b`, `3-1`] });
+        expect(await drawerLine(over(true, [1, 2, 1, 1]))).toEqual({ text: `Test, game 4 of 4; devbot-b scored 3-1; about +120`, whole: [`devbot-b`, `3-1;`] });
+        expect(await drawerLine(over(true, [1, 1, 1, 1]))).toEqual({ text: `Test, game 4 of 4; devbot-b won all 4`, whole: [`devbot-b`] });
     });
 
     it('name a deleted player by the label, set apart and unlinked, and read no head-to-head for it', async () => {

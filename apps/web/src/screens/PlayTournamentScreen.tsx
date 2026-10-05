@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { clockText, nameKeyOf, playTournamentMeta, tournamentBotsMin, tournamentWaitingPollMs, type TournamentDetail, type TournamentList, type TournamentSummary } from '@hexo-arena/contract';
+import { nameKeyOf, playTournamentMeta, tournamentBotsMin, tournamentWaitingPollMs, type TournamentDetail, type TournamentList, type TournamentSummary } from '@hexo-arena/contract';
 import { fetchTournament, fetchTournaments } from '../api/client';
 import { useAsync, type AsyncView } from '../api/use-async';
 import { ErrorFrame, SkeletonRows } from '../components/states';
@@ -14,7 +14,7 @@ import { text } from '../text';
 import { EntryControl } from '../tournaments/EntryControl';
 import { NewTournament, type Kind } from '../tournaments/NewTournament';
 import { tournamentSetupFromParams } from '../tournaments/setup';
-import { TournamentRow } from '../tournaments/TournamentRow';
+import { comingFacts, TournamentRow } from '../tournaments/TournamentRow';
 import { gamesTournamentsPath, tournamentPagePath } from '../tournaments/view';
 import { useDocumentMeta } from '../use-document-meta';
 import '../duels/Duels.css';
@@ -127,16 +127,13 @@ function WeeklyBlock({ weekly }: { weekly: AsyncView<Weekly> }) {
 }
 
 function Next({ detail, at, onEntry }: { detail: TournamentDetail; at: number; onEntry: () => void }) {
-    const words = text.roundRobins.side;
-    const wait = Math.floor((Date.parse(detail.startsAt) - at) / 1000);
-    const clock = clockText(detail.timeControl);
     return (
         <div className="next-tournament">
             <p className="tournament-tag-row next-tournament-name">
                 <Link to={tournamentPagePath(detail.id)}>{detail.name}</Link>
                 <span className="tag">{text.roundRobins.tags.rated}</span>
             </p>
-            <p className="note">{wait > 0 ? words.when(text.time.until(wait), detail.entries.length, detail.maxEntrants, clock) : words.whenSoon(detail.entries.length, detail.maxEntrants, clock)}</p>
+            <p className="note">{comingFacts(detail, detail.entries.length, at)}</p>
             {/* The setup beside it holds the page's one sign-in. */}
             <EntryControl detail={detail} onChange={onEntry} level={3} signIn={false} />
         </div>

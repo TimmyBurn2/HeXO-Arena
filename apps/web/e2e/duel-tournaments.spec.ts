@@ -104,7 +104,7 @@ for (const width of [1280, 390]) {
         await noSidewaysScroll(page);
     });
 
-    test(`Games > Tournaments frames duels and round robins alike, one link a row with its figure and one date form, and narrows to one bot, at ${String(width)} px`, async ({ page }) => {
+    test(`Games > Tournaments frames duels and round robins alike, one link a row with its figure, one date form, and one estimate phrase, a hovered row keeping its tag's plate, and narrows to one bot, at ${String(width)} px`, async ({ page }) => {
         await open(page, `/games/tournaments?list=tests`, width);
         const past = page.getByRole(`region`, { name: `Past` });
         const duel = past.locator(`a.duel-row[href="/tournaments/t_anaduel00001"]`);
@@ -114,9 +114,15 @@ for (const width of [1280, 390]) {
             await expect(each.locator(`a`)).toHaveCount(0);
             await expect(each.locator(`.duel-row-facts`)).toHaveText(/\d+ h ago$/u);
         }
-        await expect(duel.locator(`.duel-figure`)).toBeVisible();
+        await expect(duel.locator(`.event-figure-main`)).toHaveText(`10-0`);
         await expect(field.locator(`.event-figure-main`)).toHaveText(`7 of 8`);
-        await expect(field.locator(`.event-figure-sub`)).toHaveText(`hextide won`);
+        for (const each of [duel, field]) {
+            await expect(each.locator(`.event-figure-sub`)).toHaveText(`hextide won`);
+            await expect(each.locator(`.duel-row-facts`)).toContainText(/^hextide about \+\d+, stronger/u);
+            await each.hover();
+            const [rowFill, tagFill] = await Promise.all([each.evaluate((element) => getComputedStyle(element).backgroundColor), each.locator(`.tag`).evaluate((element) => getComputedStyle(element).backgroundColor)]);
+            expect(tagFill).not.toBe(rowFill);
+        }
         const [duelBox, fieldBox] = await Promise.all([duel.boundingBox(), field.boundingBox()]);
         if (duelBox === null || fieldBox === null) throw new Error(`a row drew no box`);
         expect(Math.round(duelBox.width)).toBe(Math.round(fieldBox.width));
@@ -195,7 +201,7 @@ for (const width of [1280, 390]) {
     });
 }
 
-test('Home\'s duel starts through the bot list by pointer: a press picks a bot, Add adds it, a double press adds the bot pressed, and Start sets a duel of two up', async ({ page }) => {
+test('Home\'s duel starts through the bot list by pointer: a press picks a bot, Add adds it, a double press adds the bot pressed, more choices carry both, and Start sets a duel of two up', async ({ page }) => {
     await open(page, `/`, 1280);
     await page.getByRole(`button`, { name: `Add a bot, First bot` }).click();
     await expect(picker(page).getByRole(`heading`, { name: `Add the first bot` })).toBeVisible();
@@ -208,7 +214,7 @@ test('Home\'s duel starts through the bot list by pointer: a press picks a bot, 
     await expect(picker(page)).toHaveCount(0);
     await expect(page.getByRole(`button`, { name: `Change hextide` })).toBeVisible();
     await expect(page.getByRole(`button`, { name: `Change devbot-a` })).toBeVisible();
-    await expect(page.locator(`.home-duel`).getByRole(`link`, { name: `Tournament`, exact: true })).toHaveAttribute(`href`, `/play/tournament`);
+    await expect(page.locator(`.home-duel`).getByRole(`link`, { name: `Tournament`, exact: true })).toHaveAttribute(`href`, `/play/tournament?bots=hextide%2Cdevbot-a`);
     const sent = started(page);
     await page.getByRole(`button`, { name: `Start duel` }).click();
     expect((await sent).postDataJSON()).toMatchObject({ bots: [{ name: `hextide` }, { name: `devbot-a` }], gamesPerPair: 2, openingPlies: 5 });

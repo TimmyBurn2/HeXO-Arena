@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type MouseEvent, type ReactNode } from 'react';
-import { humanGameStartLimit, pagePath, type BotListing, type Level, type OpeningPlies, type TimeControl } from '@hexo-arena/contract';
+import { humanGameStartLimit, pagePath, type BotListing, type Level, type TimeControl } from '@hexo-arena/contract';
 import { ApiError, createGame, limitedFor } from '../api/client';
 import { DiscordButton } from '../components/DiscordButton';
 import { seatName } from '../components/player';
@@ -10,7 +10,8 @@ import { Link } from '../router/Link';
 import { navigate } from '../router/use-route';
 import { siteStatusStore } from '../site-status';
 import { text } from '../text';
-import { ownedBy, readinessOf, writePlayed, type Holder } from './setup';
+import { readinessOf, writePlayed, type Holder } from './setup';
+import type { CardSetup } from './setup-state';
 
 // What the start area last heard back:
 // nothing yet, a request in flight,
@@ -56,39 +57,23 @@ function secondClick(event: MouseEvent): boolean {
  * every refusal said in a line.
  */
 export function StartArea({
-    bot,
-    clock,
-    level,
-    rated,
-    opening,
-    path,
+    setup,
     paused,
-    notice,
-    choices,
     reads,
-    onRefused,
     reserved,
     holder,
+    onRefused,
 }: {
-    bot: BotListing;
+    setup: CardSetup;
+    paused: boolean;
+    // How many times the bot list has been read, so a line about the bot's state knows a newer read.
+    reads: number;
     // The bots the running tournament holds, and that tournament.
     reserved: ReadonlySet<string>;
     holder: Holder | null;
-    clock: TimeControl;
-    // The bot's level picked, null at its default.
-    level: Level | null;
-    // Whether the game asked for is rated: someone signed in, at the default level, with Rated on.
-    rated: boolean;
-    opening: OpeningPlies;
-    path: string;
-    paused: boolean;
-    notice: string | null;
-    // How many picks the person has made, so a line gives way to their next one and not to the list's.
-    choices: number;
-    // How many times the bot list has been read, so a line about the bot's state knows a newer read.
-    reads: number;
     onRefused: () => void;
 }) {
+    const { bot, clock, level, own, rated, opening, path, notice, choices } = setup;
     const me = useMe();
     const legal = useLegalSlots();
     const held = holder === null ? null : <Link to={pagePath(`tournament`, { id: holder.id })}>{holder.name}</Link>;
@@ -102,8 +87,6 @@ export function StartArea({
     });
     const visitor = me.status === `loading` ? null : me.me;
     const viewer = visitor?.kind === `user` ? visitor.name : null;
-    // The person's own bot plays them unrated, open to others or not.
-    const own = ownedBy(bot, viewer);
     const state = readinessOf(bot, reserved, viewer);
 
     // A wait that ran out leaves the start free.

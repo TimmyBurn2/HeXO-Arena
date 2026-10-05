@@ -556,7 +556,20 @@ function tournamentRowOf(tag: GameTournament, tournament: TournamentDetail | nul
     const term = tag.format !== `duel` ? text.drawer.tournament : test ? text.duels.page.test : text.duels.page.duel;
     const place = <Link to={tournamentPagePath(tag.id)}>{gameCaption(tag, test)}</Link>;
     const lead = tournament === null ? null : tournament.format === `duel` ? duelLead(tournament) : leadText(tournament);
-    return { term, place: lead === null ? place : text.drawer.tournamentStanding(place, lead) };
+    return { term, place: lead === null ? place : text.drawer.tournamentStanding(place, unbroken(lead)) };
+}
+
+// A standing whose hyphenated words, a score or a bot's name, move to the next line whole rather than break at the hyphen.
+function unbroken(line: string): ReactNode {
+    return line.split(/(\S*-\S*)/u).map((part, index) =>
+        index % 2 === 1 ? (
+            <span key={index} className="facts-whole">
+                {part}
+            </span>
+        ) : (
+            part
+        ),
+    );
 }
 
 // The tournament a game belongs to, read once and again as the game ends; null until it is, or for any other game.
