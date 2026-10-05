@@ -149,10 +149,11 @@ describe('the tournament tables', () => {
     it('hold a pairing to two bots, a winner only for a played game, and game 2 behind game 1', () => {
         const alpha = ids(`alpha`).bot;
         const beta = ids(`beta`).bot;
+        // The two that stand seat the pair each way round, as the weekly plays each pair once.
         const pairing = (id: string, game1: string, seat1: string | null, game2 = `pending`) => () =>
             world.sqlite
-                .prepare(`insert into tournament_pairings (id, tournament_id, round, first_bot_id, second_bot_id, game1, game1_seat, game2, leg) values (?, 't_aaaaaaaaaaaa', 1, ?, ?, ?, ?, ?, ?)`)
-                .run(id, alpha, beta, game1, seat1, game2, Number(id.slice(1)) % 5 + 1);
+                .prepare(`insert into tournament_pairings (id, tournament_id, round, first_bot_id, second_bot_id, game1, game1_seat, game2, games_per_pair) values (?, 't_aaaaaaaaaaaa', 1, ?, ?, ?, ?, ?, 2)`)
+                .run(id, ...(id === `p6` ? [beta, alpha] : [alpha, beta]), game1, seat1, game2);
         expect(pairing(`p1`, `played`, `both`)).toThrow(/CHECK/);
         expect(pairing(`p2`, `no_show`, null)).toThrow(/CHECK/);
         expect(pairing(`p3`, `live`, null, `live`)).toThrow(/CHECK/);

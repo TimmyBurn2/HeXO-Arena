@@ -21,10 +21,16 @@ import {
     finishReasonSchema,
     firstPlayerSchema,
     nextPathMaxLength,
-    roundRobinMaxBots,
-    roundRobinTestGamesPerPair,
     sideSchema,
+    tournamentBotGamesMax,
+    tournamentBotsMax,
+    tournamentBotsMin,
+    tournamentCutReasons,
+    tournamentGameCounts,
     tournamentLegsMax,
+    tournamentLiveCap,
+    tournamentStopReasons,
+    tournamentTestGameCounts,
     requestBodyLimitBytes,
     reportDetailsMaxLength,
     reportEmailMaxLength,
@@ -745,20 +751,27 @@ export const tournamentRules = sqliteTable(
     ],
 );
 
-// A round robin the operator scheduled, or one a person set up from bots
-// they picked. The operator's waits scheduled until its start, then runs,
-// or is called off when too few bots are connected; a person's runs from
-// the moment it is set up, never rated, and is named for its creator, so
-// it holds no name of its own. Either may be canceled by the operator; a
-// person's may be stopped, by its creator or as their account goes, which
-// end_reason says. ended_at is set exactly once it is over.
+const quoted = (values: readonly string[]) => sql.raw(values.map((value) => `'${value}'`).join(`, `));
+
+// A round robin the operator scheduled, or a duel or round robin a person
+// set up from bots they picked. The operator's waits scheduled until its
+// start, then runs, or is called off when too few bots are connected; a
+// person's runs from the moment it is set up, never rated, and is named
+// for its creator, so it holds no name of its own. Either may be canceled
+// by the operator; a person's may be stopped, by its creator or as their
+// account goes, or cut short once fewer than two bots still play, which
+// end_reason says, end_bot_id naming the bot whose leaving cut it short.
+// ended_at is set exactly once it is over.
 // A weekly rule's tournament names its rule, unique per start,
 // so no restart or clock step creates a week twice;
 // the tournament outlives the rule.
-// test is 1 on a person's round robin of their own bots alone, the one
-// kind that plays more than two openings a pair.
-// One person runs one round robin at a time, which a partial unique index
-// holds; (id, origin) is unique so an entry's key carries its origin.
+// test is 1 on a person's tournament of their own bots alone, the one
+// kind that plays past ten games a pair; no bot plays more games in one
+// than its cap, which the field size and the count stored here bound.
+// A person's takes one of their live slots, so a partial unique index
+// holds them to that many running at once; (id, origin) is unique so an
+// entry's key carries its origin, and (id, games_per_pair) so a
+// pairing's carries the count its legs keep to.
 export const tournaments = sqliteTable(
     `tournaments`,
     {
@@ -778,16 +791,20 @@ export const tournaments = sqliteTable(
         rated: integer(`rated`).notNull().default(1),
         test: integer(`test`).notNull().default(0),
         gamesPerPair: integer(`games_per_pair`).notNull().default(2),
-        endReason: text(`end_reason`, { enum: [`creator`, `banned`, `deleted`] }),
+        endReason: text(`end_reason`, { enum: [`creator`, `banned`, `deleted`, `owner`, `missed`, `refused`, `tournament`, `delisted`] }),
+        endBotId: text(`end_bot_id`).references(() => bots.id, { onDelete: `set null` }),
+        liveSlot: integer(`live_slot`),
     },
     (table) => [
         index(`tournaments_status_starts_idx`).on(table.status, table.startsAt),
         uniqueIndex(`tournaments_rule_starts_idx`).on(table.ruleId, table.startsAt),
         uniqueIndex(`tournaments_id_origin_idx`).on(table.id, table.origin),
-        // Leads with the foreign key, and serves the count of a person's round robins a day.
+        uniqueIndex(`tournaments_id_games_idx`).on(table.id, table.gamesPerPair),
+        // Leads with the foreign key, and serves the count of a person's tournaments a day.
         index(`tournaments_created_by_idx`).on(table.createdBy, table.createdAt),
-        uniqueIndex(`tournaments_running_creator_idx`).on(table.createdBy).where(sql`${table.status} = 'running'`),
-        check(`tournaments_status_check`, sql`${table.status} in ('scheduled', 'running', 'finished', 'called_off', 'canceled', 'stopped')`),
+        uniqueIndex(`tournaments_live_slot_idx`).on(table.createdBy, table.liveSlot).where(sql`${table.status} = 'running'`),
+        index(`tournaments_end_bot_idx`).on(table.endBotId),
+        check(`tournaments_status_check`, sql`${table.status} in ('scheduled', 'running', 'finished', 'called_off', 'canceled', 'stopped', 'cut_short')`),
         check(
             `tournaments_name_check`,
             sql`(${table.origin} = 'operator') = (${table.name} is not null) and (${table.name} is null or (length(${table.name}) between 3 and 40 and ${table.name} not glob '*[^ -~]*'))`,
@@ -795,28 +812,33 @@ export const tournaments = sqliteTable(
         check(`tournaments_opening_check`, sql`${table.openingPlies} in (1, 3, 5, 7, 9)`),
         check(
             `tournaments_max_check`,
-            sql`${table.maxEntrants} between 3 and 12 and (${table.origin} = 'operator' or ${table.maxEntrants} <= ${sql.raw(String(roundRobinMaxBots))})`,
+            sql`${table.maxEntrants} between ${sql.raw(String(tournamentBotsMin))} and 12 and ((${table.origin} = 'operator' and ${table.maxEntrants} >= 3) or (${table.origin} = 'person' and ${table.maxEntrants} <= ${sql.raw(String(tournamentBotsMax))}))`,
         ),
         check(
             `tournaments_started_check`,
-            sql`${table.status} = 'canceled' or (${table.status} in ('running', 'finished', 'stopped')) = (${table.startedAt} is not null)`,
+            sql`${table.status} = 'canceled' or (${table.status} in ('running', 'finished', 'stopped', 'cut_short')) = (${table.startedAt} is not null)`,
         ),
-        check(`tournaments_ended_check`, sql`(${table.status} in ('finished', 'called_off', 'canceled', 'stopped')) = (${table.endedAt} is not null)`),
-        // A person's round robin starts as it is set up, and only it is stopped.
+        check(`tournaments_ended_check`, sql`(${table.status} in ('finished', 'called_off', 'canceled', 'stopped', 'cut_short')) = (${table.endedAt} is not null)`),
+        // A person's starts as it is set up, and only it is stopped or cut short.
         check(
             `tournaments_origin_check`,
-            sql`(${table.origin} = 'operator' and ${table.createdBy} is null and ${table.status} <> 'stopped') or (${table.origin} = 'person' and ${table.ruleId} is null and ${table.status} not in ('scheduled', 'called_off'))`,
+            sql`(${table.origin} = 'operator' and ${table.createdBy} is null and ${table.status} not in ('stopped', 'cut_short')) or (${table.origin} = 'person' and ${table.ruleId} is null and ${table.status} not in ('scheduled', 'called_off'))`,
         ),
         // Nothing one person picks every bot of is rated.
         check(`tournaments_rated_check`, sql`${table.rated} in (0, 1) and (${table.origin} = 'operator') = (${table.rated} = 1)`),
         check(`tournaments_test_check`, sql`${table.test} in (0, 1) and (${table.test} = 0 or ${table.origin} = 'person')`),
         check(
             `tournaments_games_per_pair_check`,
-            sql`${table.gamesPerPair} in (${sql.raw(roundRobinTestGamesPerPair.join(`, `))}) and (${table.gamesPerPair} <= 4 or ${table.test} = 1) and (${table.origin} = 'person' or ${table.gamesPerPair} = 2) and (${table.openingPlies} > 1 or ${table.gamesPerPair} = 2)`,
+            sql`${table.gamesPerPair} in (${sql.raw(tournamentTestGameCounts.join(`, `))}) and (${table.gamesPerPair} <= ${sql.raw(String(Math.max(...tournamentGameCounts)))} or ${table.test} = 1) and (${table.origin} = 'person' or ${table.gamesPerPair} = 2) and (${table.openingPlies} > 1 or ${table.gamesPerPair} <= 2) and (${table.maxEntrants} - 1) * ${table.gamesPerPair} <= (case ${table.test} when 1 then ${sql.raw(String(tournamentBotGamesMax.test))} else ${sql.raw(String(tournamentBotGamesMax.event))} end)`,
         ),
         check(
             `tournaments_end_check`,
-            sql`(${table.status} = 'stopped') = (${table.endReason} is not null) and (${table.endReason} is null or ${table.endReason} in ('creator', 'banned', 'deleted'))`,
+            sql`(${table.status} in ('stopped', 'cut_short')) = (${table.endReason} is not null) and (${table.status} <> 'stopped' or ${table.endReason} in (${quoted(tournamentStopReasons)})) and (${table.status} <> 'cut_short' or ${table.endReason} in (${quoted(tournamentCutReasons)}))`,
+        ),
+        check(`tournaments_end_bot_check`, sql`${table.endBotId} is null or ${table.status} = 'cut_short'`),
+        check(
+            `tournaments_live_slot_check`,
+            sql`(${table.origin} = 'operator') = (${table.liveSlot} is null) and (${table.liveSlot} is null or ${table.liveSlot} between 1 and ${sql.raw(String(tournamentLiveCap))})`,
         ),
     ],
 );
@@ -826,8 +848,9 @@ export const tournaments = sqliteTable(
 // tournament waits; at the start it plays, is absent, or is left out, and
 // a playing bot may later be withdrawn; left out and withdrawn say why.
 // A person's entries play from the start and may be withdrawn, by the
-// bot's owner too. origin is the tournament's, held to it by the key, so
-// the one-per-owner index can leave a person's out.
+// bot's owner too, and keep the seat they were named in, the first named
+// first. origin is the tournament's, held to it by the key, so the
+// one-per-owner index can leave a person's out.
 // A level is the bot's declared level as it stood at the start, null at
 // its default; the version is the bot's then, null where it declared none.
 export const tournamentEntries = sqliteTable(
@@ -843,10 +866,12 @@ export const tournamentEntries = sqliteTable(
         origin: text(`origin`).notNull().default(`operator`),
         level: text(`level`),
         version: text(`version`),
+        seat: integer(`seat`),
     },
     (table) => [
         primaryKey({ columns: [table.tournamentId, table.botId] }),
         uniqueIndex(`tournament_entries_owner_idx`).on(table.tournamentId, table.ownerId).where(sql`${table.origin} = 'operator'`),
+        uniqueIndex(`tournament_entries_seat_idx`).on(table.tournamentId, table.seat),
         index(`tournament_entries_bot_idx`).on(table.botId, table.ownerId),
         index(`tournament_entries_owner_id_idx`).on(table.ownerId),
         foreignKey({ columns: [table.tournamentId, table.origin], foreignColumns: [tournaments.id, tournaments.origin] }).onDelete(`cascade`),
@@ -863,22 +888,27 @@ export const tournamentEntries = sqliteTable(
         check(`tournament_entries_rating_check`, sql`${table.ratingAtStart} is null or ${table.ratingAtStart} >= 400`),
         check(`tournament_entries_level_check`, sql`(${jsonObject(table.level, seatLevelMax)}) and (${table.level} is null or ${table.origin} = 'person')`),
         check(`tournament_entries_version_check`, sql`${table.version} is null or length(${table.version}) between 1 and ${sql.raw(String(botVersionMaxLength))}`),
+        check(
+            `tournament_entries_seat_check`,
+            sql`(${table.origin} = 'operator') = (${table.seat} is null) and (${table.seat} is null or ${table.seat} between 1 and ${sql.raw(String(tournamentBotsMax))})`,
+        ),
     ],
 );
 
 // One meeting of two bots in a round over one opening: two games, the
-// first bot playing x in game 1 and the second in game 2. A pair that plays
-// several openings meets in one row per opening, its leg, each played once
-// the one before is over. Each game's state says how it went; its seat
-// names the winner of a played game, the bot that missed a no-show, or the
-// bot withdrawn from a forfeit, both for the last two when neither came.
+// first bot playing x in game 1 and the second in game 2; or, where a pair
+// plays a single game, game 1 alone, its second slot none. A pair that
+// plays several openings meets in one row per opening, its leg, each
+// played once the one before is over; the count it keeps to is the
+// tournament's, held to it by the key. Each game's state says how it went;
+// its seat names the winner of a played game, the bot that missed a
+// no-show, or the bot withdrawn from a forfeit, both for the last two
+// when neither came.
 export const tournamentPairings = sqliteTable(
     `tournament_pairings`,
     {
         id: text(`id`).primaryKey(),
-        tournamentId: text(`tournament_id`)
-            .notNull()
-            .references(() => tournaments.id, { onDelete: `cascade` }),
+        tournamentId: text(`tournament_id`).notNull(),
         round: integer(`round`).notNull(),
         firstBotId: text(`first_bot_id`)
             .notNull()
@@ -892,30 +922,35 @@ export const tournamentPairings = sqliteTable(
         game2: text(`game2`).notNull().default(`pending`),
         game2Seat: text(`game2_seat`),
         leg: integer(`leg`).notNull().default(1),
+        gamesPerPair: integer(`games_per_pair`).notNull(),
     },
     (table) => [
+        // Leads with the tournament, which serves its foreign key.
         index(`tournament_pairings_round_idx`).on(table.tournamentId, table.round),
         uniqueIndex(`tournament_pairings_leg_idx`).on(table.tournamentId, table.firstBotId, table.secondBotId, table.leg),
-        check(`tournament_pairings_leg_check`, sql`${table.leg} between 1 and ${sql.raw(String(tournamentLegsMax))}`),
+        foreignKey({ columns: [table.tournamentId, table.gamesPerPair], foreignColumns: [tournaments.id, tournaments.gamesPerPair] }).onDelete(`cascade`),
+        check(
+            `tournament_pairings_leg_check`,
+            sql`${table.leg} between 1 and ${sql.raw(String(tournamentLegsMax))} and ${table.leg} <= max(1, ${table.gamesPerPair} / 2)`,
+        ),
         index(`tournament_pairings_first_idx`).on(table.firstBotId),
         index(`tournament_pairings_second_idx`).on(table.secondBotId),
         check(`tournament_pairings_round_check`, sql`${table.round} >= 1`),
         check(`tournament_pairings_pair_check`, sql`${table.firstBotId} <> ${table.secondBotId}`),
-        ...([
-            [`game1`, table.game1, table.game1Seat],
-            [`game2`, table.game2, table.game2Seat],
-        ] as const).map(([name, state, seat]) =>
-            check(
-                `tournament_pairings_${name}_check`,
-                sql`(${state} in ('pending', 'live', 'not_played', 'aborted') and ${seat} is null) or (${state} = 'played' and (${seat} is null or ${seat} in ('first', 'second'))) or (${state} in ('no_show', 'forfeit') and coalesce(${seat}, '') in ('first', 'second', 'both'))`,
-            ),
+        check(
+            `tournament_pairings_game1_check`,
+            sql`(${table.game1} in ('pending', 'live', 'not_played', 'aborted') and ${table.game1Seat} is null) or (${table.game1} = 'played' and (${table.game1Seat} is null or ${table.game1Seat} in ('first', 'second'))) or (${table.game1} in ('no_show', 'forfeit') and coalesce(${table.game1Seat}, '') in ('first', 'second', 'both'))`,
         ),
+        check(
+            `tournament_pairings_game2_check`,
+            sql`(${table.game2} in ('pending', 'live', 'not_played', 'aborted', 'none') and ${table.game2Seat} is null) or (${table.game2} = 'played' and (${table.game2Seat} is null or ${table.game2Seat} in ('first', 'second'))) or (${table.game2} in ('no_show', 'forfeit') and coalesce(${table.game2Seat}, '') in ('first', 'second', 'both'))`,
+        ),
+        // A single game a pair leaves the second slot none, and only it.
+        check(`tournament_pairings_single_check`, sql`(${table.gamesPerPair} = 1) = (${table.game2} = 'none')`),
         // Game 2 waits for game 1 to be over.
-        check(`tournament_pairings_order_check`, sql`${table.game2} = 'pending' or ${table.game1} not in ('pending', 'live')`),
+        check(`tournament_pairings_order_check`, sql`${table.game2} in ('pending', 'none') or ${table.game1} not in ('pending', 'live')`),
     ],
 );
-
-const quoted = (values: readonly string[]) => sql.raw(values.map((value) => `'${value}'`).join(`, `));
 
 // Bots meet in a duel one game at a time: a single game, or pairs of one
 // opening played twice with the sides swapped. The pair is stored in one

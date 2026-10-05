@@ -3,8 +3,9 @@ import type { BotListing, Me } from '@hexo-arena/contract';
 import { fetchDuels } from '../api/client';
 import { useAsync } from '../api/use-async';
 import { NewDuel } from '../duels/NewDuel';
-import { emptySetup, pickReason } from '../duels/setup';
+import { emptySetup } from '../duels/setup';
 import { useDuelStates } from '../duels/use-duels';
+import { eventReadiness } from '../play/readiness';
 import { useSiteStatus } from '../site-status';
 
 /**
@@ -21,6 +22,6 @@ export function HomeDuel({ bots, me }: { bots: readonly BotListing[] | null; me:
     const viewer = me?.kind === `user` ? me.name : null;
     const reads = { reserved: duelStates.reserved, states: duelStates.states, viewer };
     if (bots === null || me === undefined) return null;
-    if (bots.filter((bot) => pickReason(bot, null, reads) === null).length < 2) return null;
+    if (bots.filter((bot) => eventReadiness(bot, [], reads, true) === null).length < 2) return null;
     return <NewDuel compact bots={bots} reads={reads} me={me} quota={null} paused={paused} initial={emptySetup} liveCount={live} onRefused={duelStates.reload} />;
 }

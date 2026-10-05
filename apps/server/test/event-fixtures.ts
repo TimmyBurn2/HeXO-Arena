@@ -107,6 +107,7 @@ export function seedTournament(
                 game1Seat: pairing.game1Seat ?? null,
                 game2: pairing.game2 ?? `pending`,
                 game2Seat: pairing.game2Seat ?? null,
+                gamesPerPair: 2,
             })
             .run();
     }

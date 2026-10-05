@@ -76,13 +76,21 @@ const screens: readonly { name: string; path: string; world?: Partial<World>; th
         path: `/play/tournament?bots=hextide`,
         world: { bots: duelBots.map((bot) => ({ ...bot, ownerName: bot.ownerName === `ana` ? `quinn` : bot.ownerName })), tournaments: tournaments().filter((entry) => entry.status !== `running`) },
         then: async (page) => {
-            await page.getByRole(`button`, { name: `Add bots to the round robin` }).click();
+            await page.getByRole(`button`, { name: `Add a second bot` }).click();
             await page.locator(`dialog.rr-picker[open] .rr-pick`).first().waitFor();
         },
+    },
+    {
+        name: `a duel set up on Play`,
+        path: `/play/tournament?bots=devbot-b%2Cdevbot-c&games=10`,
+        world: { bots: duelBots, tournaments: tournaments().filter((entry) => entry.status !== `running`) },
     },
     { name: `the round robins under Games`, path: `/games/tournaments`, world: { tournaments: [...tournaments(), ...roundRobins()] } },
     { name: `a live round robin`, path: `/tournaments/t_brunorobin01`, world: { tournaments: roundRobins() } },
     { name: `a test of several bots`, path: `/tournaments/t_anatest00001`, world: { tournaments: roundRobins() } },
+    { name: `a live duel`, path: `/tournaments/t_brunoduel001`, world: { tournaments: roundRobins() } },
+    { name: `a test of two bots`, path: `/tournaments/t_anaduel00001`, world: { tournaments: roundRobins() } },
+    { name: `a duel cut short`, path: `/tournaments/t_dmitricut001`, world: { tournaments: roundRobins() } },
     { name: `a round robin over`, path: `/tournaments/t_brunorobin02`, world: { tournaments: roundRobins() } },
     { name: `tournaments`, path: `/games/tournaments`, world: { tournaments: tournaments() } },
     { name: `a running tournament`, path: `/tournaments/t_autumnrobin1`, world: { tournaments: tournaments() } },

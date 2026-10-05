@@ -33,6 +33,7 @@ function tournament(id: string, overrides: Partial<TournamentSummary>): Tourname
         id,
         name: `Autumn round robin`,
         origin: `operator`,
+        format: `round_robin`,
         createdBy: null,
         rated: true,
         test: false,

@@ -5,8 +5,8 @@ import type { BotListing, Me, TournamentDetail, TournamentGame, TournamentList, 
 import { meStore } from '../src/me';
 import { TournamentScreen } from '../src/screens/TournamentScreen';
 import { TournamentsScreen } from '../src/screens/TournamentsScreen';
-import { NewRoundRobin } from '../src/tournaments/NewRoundRobin';
-import { emptyRoundRobin } from '../src/tournaments/round-robin';
+import { NewTournament } from '../src/tournaments/NewTournament';
+import { emptyTournamentSetup } from '../src/tournaments/setup';
 
 const wide = { turnMs: [5_000, 60_000] as [number, number], match: true, unlimited: true };
 
@@ -67,6 +67,7 @@ const live: TournamentDetail = {
     id: `t_brunorobin01`,
     name: `Round robin by bruno`,
     origin: `person`,
+    format: `round_robin`,
     createdBy: `bruno`,
     rated: false,
     test: false,
@@ -193,39 +194,76 @@ function openTournament(detail: TournamentDetail, me: Me, extra: Record<string, 
     return calls;
 }
 
-describe('setting a round robin up', () => {
+describe('setting a duel or round robin up', () => {
     function setup(me: Me, bots: readonly BotListing[] = roster) {
-        return render(<NewRoundRobin bots={bots} reads={reads(me?.kind === `user` ? me.name : null)} me={me} quota={{ live: 0, today: 0 }} paused={false} initial={emptyRoundRobin} weekly={(bot) => (bot === `hextide` ? `Entered in the weekly, which starts in 2 h; it leaves this round robin then.` : null)} onRefused={() => undefined} />);
+        return render(
+            <NewTournament
+                bots={bots}
+                reads={reads(me?.kind === `user` ? me.name : null)}
+                me={me}
+                quota={{ live: 0, today: 1 }}
+                paused={false}
+                initial={emptyTournamentSetup}
+                weekly={(bot) => (bot === `hextide` ? `Entered in the weekly, which starts in 2 h; it leaves this duel or round robin then.` : null)}
+                onRefused={() => undefined}
+            />,
+        );
     }
 
     function pick(...names: string[]) {
-        fireEvent.click(screen.getByRole(`button`, { name: `Add bots to the round robin` }));
+        fireEvent.click(screen.getByRole(`button`, { name: `Add bots` }));
         const dialog = screen.getByRole(`dialog`, { name: `Add bots` });
         for (const name of names) fireEvent.click(within(dialog).getByRole(`button`, { name: new RegExp(`^${name}\\b`, `u`) }));
         fireEvent.click(within(dialog).getByRole(`button`, { name: /^Add \d+ bots?$/u }));
     }
 
+    const counts = () => screen.getAllByRole(`radio`, { name: /^\d+$/u }).map((radio) => [radio.getAttribute(`value`), (radio as HTMLInputElement).disabled]);
+
     it('asks a signed-out reader to sign in, and offers no bots to pick', () => {
         serve({});
         setup(null);
-        expect(screen.getByText(`Sign in to set up a round robin; anyone can watch one.`)).toBeTruthy();
-        expect(screen.queryByRole(`button`, { name: `Add bots to the round robin` })).toBeNull();
+        expect(screen.getByRole(`heading`, { name: `New duel` })).toBeTruthy();
+        expect(screen.getByText(`Sign in to set up a duel or round robin; anyone can watch one.`)).toBeTruthy();
+        expect(screen.queryByRole(`button`, { name: `Add bots` })).toBeNull();
     });
 
-    it('picks several bots at once, counting the room left, and holds Start until three are in', () => {
+    it('opens on two empty plates facing each other, and at two bots plays a duel, its games one after another', () => {
         serve({}, bruno);
         setup(bruno);
-        fireEvent.click(screen.getByRole(`button`, { name: `Add bots to the round robin` }));
+        expect(screen.getByRole(`heading`, { name: `New duel` })).toBeTruthy();
+        expect(screen.getByRole(`button`, { name: `Add a second bot` })).toBeTruthy();
+        expect(screen.getByText(/^Pick 2 to 8 bots: two play a duel, three or more a round robin\./u)).toBeTruthy();
+        pick(`quietlake`, `devbot-a`);
+        expect(screen.getByRole(`heading`, { name: `New duel` })).toBeTruthy();
+        expect(screen.getByText(`2 bots; a third makes a round robin`)).toBeTruthy();
+        expect(screen.getByText(`6 more fit; three or more play a round robin`)).toBeTruthy();
+        expect(screen.getByRole(`radiogroup`, { name: `Games` })).toBeTruthy();
+        expect(counts()).toEqual([`1`, `2`, `4`, `6`, `8`, `10`].map((count) => [count, false]));
+        fireEvent.click(screen.getByRole(`radio`, { name: `10` }));
+        expect(screen.getByText(`5 openings, each played twice with sides swapped.`)).toBeTruthy();
+        expect(screen.getByText(`Duels and round robins set up here never move a rating; the weekly tournament is the rated one.`)).toBeTruthy();
+        expect(screen.getByText(`10 games, one at a time. You can stop the duel, and each owner can withdraw their bot, which ends it; the live game always finishes.`)).toBeTruthy();
+        expect(screen.getByText(`Your duels and round robins: 0 of 2 live; 9 of 10 left today`)).toBeTruthy();
+        expect(screen.getByRole(`button`, { name: `Start duel` }).getAttribute(`aria-disabled`)).toBeNull();
+        pick(`hextide`);
+        expect(screen.getByRole(`heading`, { name: `New round robin` })).toBeTruthy();
+        expect(screen.getByRole(`radiogroup`, { name: `Games per pair` })).toBeTruthy();
+        expect(screen.getByText(`Entered in the weekly, which starts in 2 h; it leaves this duel or round robin then.`)).toBeTruthy();
+    });
+
+    it('picks several bots at once, counting the room left, and holds Start until two are in', () => {
+        serve({}, bruno);
+        setup(bruno);
+        fireEvent.click(screen.getByRole(`button`, { name: `Add bots` }));
         const dialog = screen.getByRole(`dialog`, { name: `Add bots` });
         fireEvent.click(within(dialog).getByRole(`button`, { name: /^quietlake\b/u }));
-        fireEvent.click(within(dialog).getByRole(`button`, { name: /^devbot-a\b/u }));
-        expect(within(dialog).getByText(`2 picked`)).toBeTruthy();
-        expect(within(dialog).getByText(`6 more fit; a round robin takes 3 to 8`)).toBeTruthy();
-        fireEvent.click(within(dialog).getByRole(`button`, { name: `Add 2 bots` }));
-        expect(screen.getByText(`Add 1 more bot; a round robin needs 3.`)).toBeTruthy();
-        expect(screen.getByRole(`button`, { name: `Start round robin` }).getAttribute(`aria-disabled`)).toBe(`true`);
-        fireEvent.click(screen.getByRole(`button`, { name: `Add bots to the round robin` }));
-        expect(within(screen.getByRole(`dialog`, { name: `Add bots` })).getAllByText(`added`)).toHaveLength(2);
+        expect(within(dialog).getByText(`1 picked`)).toBeTruthy();
+        expect(within(dialog).getByText(`7 more fit; up to 8 bots`)).toBeTruthy();
+        fireEvent.click(within(dialog).getByRole(`button`, { name: `Add 1 bot` }));
+        expect(screen.getByText(`Add 1 more bot; a duel takes 2.`)).toBeTruthy();
+        expect(screen.getByRole(`button`, { name: `Start duel` }).getAttribute(`aria-disabled`)).toBe(`true`);
+        fireEvent.click(screen.getByRole(`button`, { name: `Add a second bot` }));
+        expect(within(screen.getByRole(`dialog`, { name: `Add bots` })).getAllByText(`added`)).toHaveLength(1);
     });
 
     it('lays out the schedule, the games a pair plays, the clock, and Rated never, and sets the round robin up on Start', async () => {
@@ -234,9 +272,7 @@ describe('setting a round robin up', () => {
         pick(`hextide`, `quietlake`, `devbot-a`);
         expect(screen.getByRole(`heading`, { name: `New round robin` })).toBeTruthy();
         expect(screen.getByText(/^Every pair meets once: 3 pairs in 3 rounds\./u)).toBeTruthy();
-        expect(screen.getByText(`A round robin set up here never moves a rating; the weekly tournament is the rated one.`)).toBeTruthy();
-        expect(screen.getByText(`Entered in the weekly, which starts in 2 h; it leaves this round robin then.`)).toBeTruthy();
-        expect(screen.getAllByRole(`radio`, { name: /^\d+$/u }).map((radio) => radio.getAttribute(`value`))).toEqual([`2`, `4`]);
+        expect(counts()).toEqual([`1`, `2`, `4`, `6`, `8`, `10`].map((count) => [count, false]));
         fireEvent.click(screen.getByRole(`radio`, { name: `4` }));
         expect(screen.getByText(`2 openings per pair, each played twice with sides swapped.`)).toBeTruthy();
         fireEvent.click(screen.getByRole(`button`, { name: `Start round robin` }));
@@ -247,14 +283,32 @@ describe('setting a round robin up', () => {
         expect(sent?.body).toEqual({ bots: [{ name: `hextide` }, { name: `quietlake` }, { name: `devbot-a` }], gamesPerPair: 4, openingPlies: 5, timeControl: { mode: `turn`, turnTimeMs: 10_000 } });
     });
 
-    it('makes a test of one person\'s bots alone, up to ten games a pair', () => {
+    it('keeps every bot to 30 games, a count past it shown out of reach with why', () => {
+        serve({}, bruno);
+        setup(bruno, [...roster, listing(`ember`, `cleo`), listing(`sealbot`, `quinn`)]);
+        pick(`hextide`, `quietlake`, `devbot-a`, `Pistol1`, `ember`);
+        expect(counts()).toEqual([
+            [`1`, false],
+            [`2`, false],
+            [`4`, false],
+            [`6`, false],
+            [`8`, true],
+            [`10`, true],
+        ]);
+        expect(screen.getByText(`5 bots take up to 6 a pair: no bot plays more than 30 games, or 70 in a test.`)).toBeTruthy();
+    });
+
+    it('makes a test of one person\'s bots alone, up to fifty games a pair while no bot passes 70', () => {
         serve({}, ana);
         setup(ana);
         pick(`hextide`, `cinder`, `pebble`);
         expect(screen.getByRole(`heading`, { name: `New test` })).toBeTruthy();
         expect(screen.getByText(`All 3 bots are yours`)).toBeTruthy();
-        expect(screen.getAllByRole(`radio`, { name: /^\d+$/u }).map((radio) => radio.getAttribute(`value`))).toEqual([`2`, `4`, `6`, `10`]);
+        expect(counts()).toEqual([...[`1`, `2`, `4`, `6`, `8`, `10`, `20`, `30`].map((count) => [count, false]), [`50`, true]]);
         expect(screen.getByRole(`button`, { name: `Start test` })).toBeTruthy();
+        fireEvent.click(screen.getByRole(`button`, { name: `Remove pebble` }));
+        expect(screen.getByText(`Both bots are yours`)).toBeTruthy();
+        expect(counts().at(-1)).toEqual([`50`, false]);
     });
 
     it('says why the server refused, naming the bot it names, and marks its plate', async () => {
@@ -267,12 +321,12 @@ describe('setting a round robin up', () => {
         expect(document.querySelector(`.slot-marked`)?.textContent).toMatch(/^quietlake/u);
     });
 
-    it('says the daily cap until the next UTC day', async () => {
-        serve({ 'POST /api/tournaments': { status: 429, body: { error: `no`, code: `daily_round_robin_cap` } } }, bruno);
+    it('says the daily cap until the next UTC day, and the running cap', async () => {
+        serve({ 'POST /api/tournaments': { status: 429, body: { error: `no`, code: `daily_tournament_cap` } } }, bruno);
         setup(bruno);
-        pick(`hextide`, `quietlake`, `devbot-a`);
-        fireEvent.click(screen.getByRole(`button`, { name: `Start round robin` }));
-        expect(await screen.findByText(/^You set up 3 round robins today; the next can start at .+ \(00:00 UTC\)\.$/u)).toBeTruthy();
+        pick(`hextide`, `quietlake`);
+        fireEvent.click(screen.getByRole(`button`, { name: `Start duel` }));
+        expect(await screen.findByText(/^You set up 10 duels and round robins today; the next can start at .+ \(00:00 UTC\)\.$/u)).toBeTruthy();
     });
 });
 
@@ -408,6 +462,92 @@ describe('a round robin\'s page', () => {
     });
 });
 
+// bruno's duel of hextide and Pistol1, six games, hextide ahead 2-1 with game 4 live; the first named stands first.
+const duelGame = (x: string, outcome: TournamentGame[`outcome`], point: string | null, id: string | null, index: number): TournamentGame => ({
+    ...g(x, outcome, point, id),
+    reason: outcome === `played` ? `six-in-a-row` : null,
+    turns: outcome === `played` ? 28 + index : null,
+    opening: outcome === `pending` ? null : [{ x: 0, y: 0, side: `x` }, { x: 1, y: -1, side: `o` }, { x: -1, y: 1, side: `o` }],
+});
+const duel: TournamentDetail = {
+    ...live,
+    id: `t_brunoduel001`,
+    name: `Duel by bruno`,
+    format: `duel`,
+    gamesPerPair: 6,
+    maxEntrants: 2,
+    entries: [
+        { key: 1, bot: `hextide`, ownerName: `ana`, online: true, ratingAtStart: 2117, state: `playing`, now: { rating: 2120, provisional: false } },
+        { key: 2, bot: `Pistol1`, ownerName: `bruno`, online: true, ratingAtStart: 1600, state: `playing`, now: { rating: 1601, provisional: false } },
+    ],
+    rounds: [
+        {
+            round: 1,
+            pairings: [
+                {
+                    first: seat(`hextide`),
+                    second: seat(`Pistol1`),
+                    games: [
+                        duelGame(`hextide`, `played`, `hextide`, `d1`, 0),
+                        duelGame(`Pistol1`, `played`, `Pistol1`, `d2`, 1),
+                        duelGame(`hextide`, `played`, `hextide`, `d3`, 2),
+                        duelGame(`Pistol1`, `live`, null, `d4`, 3),
+                        duelGame(`hextide`, `pending`, null, null, 4),
+                        duelGame(`Pistol1`, `pending`, null, null, 5),
+                    ],
+                },
+            ],
+            rest: null,
+        },
+    ],
+    standings: [
+        { rank: 1, key: 1, bot: `hextide`, ownerName: `ana`, points: 2, asX: 2, asO: 0, withdrawn: false },
+        { rank: 2, key: 2, bot: `Pistol1`, ownerName: `bruno`, points: 1, asX: 1, asO: 0, withdrawn: false },
+    ],
+    live: [],
+    waiting: [],
+};
+
+describe('a duel, a tournament of two', () => {
+    it('faces its bots across the score, says the game live and who leads, and groups its games by opening', async () => {
+        openTournament(duel, null);
+        expect(await screen.findByText(`Game 4 of 6 is live; hextide leads 2-1.`)).toBeTruthy();
+        expect(screen.getByRole(`heading`, { name: `hextide vs Pistol1`, level: 1 })).toBeTruthy();
+        expect(screen.getByRole(`img`, { name: `2 to 1, game 4 of 6` })).toBeTruthy();
+        expect(document.querySelector(`.duel-kicker`)?.textContent).toContain(`Duel`);
+        expect(screen.getByText(/^6 games: 3 openings, each played twice with sides swapped; turn clock 10 s; 5-stone openings; never rated\. Started by bruno\.$/u)).toBeTruthy();
+        expect(screen.getByRole(`heading`, { name: `Opening 1` })).toBeTruthy();
+        expect(screen.getByRole(`columnheader`, { name: `Opening 2` })).toBeTruthy();
+        expect(screen.getAllByText(`hextide won with six in a row`)).toHaveLength(2);
+        expect(screen.queryByRole(`heading`, { name: `Standings` })).toBeNull();
+    });
+
+    it('lets its creator stop the duel, and an owner withdraw a bot, which ends it', async () => {
+        const calls = openTournament(duel, bruno, {
+            'POST /api/tournaments/t_brunoduel001/withdraw': {
+                status: 200,
+                body: { ...duel, status: `cut_short`, endedAt: `2026-10-04T13:00:00Z`, end: { reason: `owner`, round: 1, bot: { key: 2, name: `Pistol1` } } },
+            },
+        });
+        expect(await screen.findByRole(`button`, { name: `Stop duel` })).toBeTruthy();
+        fireEvent.click(screen.getByRole(`button`, { name: `Withdraw Pistol1` }));
+        expect(screen.getByText(`Withdraw Pistol1? The duel ends: its live game plays on and counts, and no further game starts.`)).toBeTruthy();
+        fireEvent.click(screen.getByRole(`button`, { name: `Withdraw; the duel ends` }));
+        expect(await screen.findByText(`Cut short at 2-1: Pistol1's owner withdrew it.`)).toBeTruthy();
+        expect(calls.find((call) => call.method === `POST`)?.body).toEqual({ bot: `Pistol1` });
+        expect(screen.getByRole(`link`, { name: `Duel again` }).getAttribute(`href`)).toBe(`/play/tournament?bots=hextide%2CPistol1&games=6&clock=t10&opening=5`);
+    });
+
+    it('marks a no-show, which scores for the bot that came', async () => {
+        const [round] = duel.rounds;
+        const pairing = round?.pairings[0];
+        if (round === undefined || pairing === undefined) throw new Error(`a duel's pairing`);
+        const missed = { ...pairing, games: pairing.games.map((game, index) => (index === 3 ? { ...game, outcome: `no_show` as const, point: 1, missing: [2], gameId: null, opening: null } : game)) };
+        openTournament({ ...duel, rounds: [{ ...round, pairings: [missed] }] }, null);
+        expect(await screen.findByText(`No-show: Pistol1 did not come; hextide scores`)).toBeTruthy();
+    });
+});
+
 describe('the tournaments under Games', () => {
     const summaryOf = (detail: TournamentDetail): TournamentSummary => {
         const { entries: _entries, rounds: _rounds, standings: _standings, live: _live, waiting: _waiting, nextRoundAt: _next, estimates: _estimates, startedAt: _started, end: _end, endedAt, ...fields } = detail;
@@ -429,18 +569,18 @@ describe('the tournaments under Games', () => {
         expect(await screen.findByText(/; hextide \+191, stronger$/u)).toBeTruthy();
     });
 
-    it('lists every round robin but tests, tagged, with a way to set one up, and tests alone under Tests', async () => {
+    it('lists every duel and round robin but tests, tagged, with a way to set one up, and tests alone under Tests', async () => {
         serve({ 'GET /api/tournaments': every, 'GET /api/tournaments?kind=test': { running: [], scheduled: [], past: [summaryOf(test)] } });
         window.history.replaceState(null, ``, `/games/tournaments`);
         render(<TournamentsScreen />);
         expect((await screen.findAllByRole(`link`, { name: `Round robin by bruno` })).length).toBe(2);
         expect(screen.queryByRole(`link`, { name: `Round robin by ana` })).toBeNull();
         expect(screen.getAllByText(`unrated`)).toHaveLength(2);
-        expect(screen.getByRole(`link`, { name: `Set up a round robin` }).getAttribute(`href`)).toBe(`/play/tournament`);
-        expect(screen.getByText(`Tests, round robins where one person owns every bot, are listed under Tests.`)).toBeTruthy();
+        expect(screen.getByRole(`link`, { name: `New duel or round robin` }).getAttribute(`href`)).toBe(`/play/tournament`);
+        expect(screen.getByText(`Tests, where one person owns every bot, are listed under Tests.`)).toBeTruthy();
         fireEvent.click(screen.getByRole(`button`, { name: `Tests` }));
         expect(await screen.findByRole(`link`, { name: `Round robin by ana` })).toBeTruthy();
-        expect(screen.getByText(`No round robin is live right now.`)).toBeTruthy();
+        expect(screen.getByText(`No duel or round robin is live right now.`)).toBeTruthy();
         expect(window.location.search).toBe(`?list=tests`);
     });
 
@@ -448,7 +588,7 @@ describe('the tournaments under Games', () => {
         serve({ 'GET /api/tournaments': every });
         window.history.replaceState(null, ``, `/games/tournaments?list=yours`);
         render(<TournamentsScreen />);
-        expect(await screen.findByText(`Sign in to see your round robins and your bots' tournaments.`)).toBeTruthy();
+        expect(await screen.findByText(`Sign in to see the duels and round robins you set up and your bots' tournaments.`)).toBeTruthy();
         expect(screen.queryByRole(`heading`, { name: `Past` })).toBeNull();
     });
 });

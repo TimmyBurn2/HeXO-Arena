@@ -24,7 +24,8 @@ function placeText(tournament: TournamentSummary, place: TournamentPlace): strin
             return text.tournaments.outcome[tournament.status];
         case `running`:
         case `finished`:
-        case `stopped`: {
+        case `stopped`:
+        case `cut_short`: {
             if (place.rank === null || place.points === null) return words.didNotPlay(place.reason === undefined ? reasons.absent : reasons[place.reason]);
             const standing = tournament.status === `running` ? words.soFar(place.rank, place.points) : words.final(place.rank, tournament.entrants, place.points);
             return place.state === `withdrawn` && place.reason !== undefined ? `${standing}; ${words.withdrawn(reasons[place.reason])}` : standing;

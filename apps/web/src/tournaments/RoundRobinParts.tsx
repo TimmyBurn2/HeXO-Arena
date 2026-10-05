@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import { clockText, tournamentRoundGapMs, type TournamentDetail } from '@hexo-arena/contract';
-import { createRoundRobin, stopTournament, tournamentExportUrl, withdrawFromTournament } from '../api/client';
+import { createTournament, stopTournament, tournamentExportUrl, withdrawFromTournament } from '../api/client';
 import { BotBadge, PlayerName } from '../components/player';
 import { pointsText, signed } from '../duels/words';
 import { Socket } from '../duels/Slots';
@@ -8,8 +8,8 @@ import { tournamentGamesPath } from '../games/filters';
 import { Link } from '../router/Link';
 import { navigate } from '../router/use-route';
 import { text } from '../text';
-import { againSetupOf, roundRobinSetupPath, scheduleOf } from './round-robin';
-import { roundRobinRefusal } from './NewRoundRobin';
+import { tournamentRefusal } from './NewTournament';
+import { againSetupOf, scheduleOf, tournamentSetupPath } from './setup';
 import { currentRound, roundBegun, tournamentPagePath } from './view';
 import { verdictOf } from './words';
 import '../duels/Duels.css';
@@ -87,6 +87,8 @@ export function RoundRobinStatus({ detail, readAt }: { detail: TournamentDetail;
             const by = detail.end?.reason === `creator` ? (detail.createdBy ?? words.operator) : words.operator;
             return <>{words.stopped(by, round, leadThen)}</>;
         }
+        case `cut_short`:
+            return <>{text.tournamentDuel.cutShortField(detail.end?.round ?? null, detail.entries.filter((entry) => entry.state === `playing`).map((entry) => entry.bot))}</>;
         case `canceled`:
             return <>{words.canceled(detail.end?.round ?? null)}</>;
         case `scheduled`:
@@ -149,6 +151,9 @@ export function RoundRobinActions({ detail, viewer, onChange }: { detail: Tourna
         if (to === `changed`) (actions.current?.querySelector<HTMLElement>(`a, button`) ?? document.getElementById(tournamentStatusId))?.focus();
     });
     const words = text.roundRobins.page;
+    const duelWords = text.tournamentDuel;
+    const duel = detail.format === `duel`;
+    const kind = detail.test ? `test` : detail.format;
     const running = detail.status === `running`;
     const person = detail.origin === `person`;
     const creator = person && viewer !== null && detail.createdBy === viewer;
@@ -182,7 +187,7 @@ export function RoundRobinActions({ detail, viewer, onChange }: { detail: Tourna
         setBusy(true);
         setError(null);
         try {
-            const created = await createRoundRobin({
+            const created = await createTournament({
                 bots: detail.entries.filter((entry) => entry.deleted !== true).map((entry) => ({ name: entry.bot, ...(entry.level === undefined ? {} : { level: entry.level.id }) })),
                 gamesPerPair: detail.gamesPerPair,
                 openingPlies: detail.openingPlies,
@@ -190,7 +195,7 @@ export function RoundRobinActions({ detail, viewer, onChange }: { detail: Tourna
             });
             navigate(tournamentPagePath(created.id));
         } catch (cause) {
-            const refusal = roundRobinRefusal(cause, () => null, true);
+            const refusal = tournamentRefusal(cause, () => null, `test`);
             setError(typeof refusal.line === `string` ? refusal.line : words.failed);
         } finally {
             setBusy(false);
@@ -214,7 +219,7 @@ export function RoundRobinActions({ detail, viewer, onChange }: { detail: Tourna
                 ) : null}
                 {creator && running && asking.kind === `none` ? (
                     <button ref={stopper} type="button" className="btn btn-ghost" onClick={() => { ask({ kind: `stop` }); }}>
-                        {detail.test ? words.stopTest : words.stop}
+                        {duelWords.stop[kind]}
                     </button>
                 ) : null}
                 {asking.kind === `none` && only !== undefined ? (
@@ -223,8 +228,8 @@ export function RoundRobinActions({ detail, viewer, onChange }: { detail: Tourna
                     </button>
                 ) : null}
                 {person && over(detail) && viewer !== null ? (
-                    <Link to={roundRobinSetupPath(againSetupOf(detail))} className="btn btn-ghost">
-                        {words.setUpAgain}
+                    <Link to={tournamentSetupPath(againSetupOf(detail))} className="btn btn-ghost">
+                        {duel ? duelWords.again : words.setUpAgain}
                     </Link>
                 ) : null}
                 {detail.test && creator && over(detail) ? (
@@ -234,7 +239,7 @@ export function RoundRobinActions({ detail, viewer, onChange }: { detail: Tourna
                 ) : null}
             </div>
             {asking.kind === `none` ? null : (
-                <div className="rr-confirm" role="group" aria-label={asking.kind === `stop` ? (detail.test ? words.stopTest : words.stop) : owned.length > 1 ? words.withdrawABot : words.withdraw(asking.bot)}>
+                <div className="rr-confirm" role="group" aria-label={asking.kind === `stop` ? duelWords.stop[kind] : owned.length > 1 ? words.withdrawABot : words.withdraw(asking.bot)}>
                     {asking.kind === `withdraw` && owned.length > 1 ? (
                         <div className="pills" role="group" aria-label={words.whichBot}>
                             {owned.map((bot) => (
@@ -244,7 +249,7 @@ export function RoundRobinActions({ detail, viewer, onChange }: { detail: Tourna
                             ))}
                         </div>
                     ) : null}
-                    <p>{asking.kind === `stop` ? words.stopAsk : words.withdrawAsk(asking.bot)}</p>
+                    <p>{asking.kind === `stop` ? (duel ? duelWords.stopAsk(detail.test) : words.stopAsk) : duel ? duelWords.withdrawAsk(asking.bot) : words.withdrawAsk(asking.bot)}</p>
                     <div className="actions">
                         <button
                             type="button"
@@ -255,7 +260,7 @@ export function RoundRobinActions({ detail, viewer, onChange }: { detail: Tourna
                                 void act(async () => (asking.kind === `stop` ? stopTournament(detail.id) : withdrawFromTournament(detail.id, asking.bot)));
                             }}
                         >
-                            {asking.kind === `stop` ? words.stopYes : words.withdrawYes(asking.bot)}
+                            {asking.kind === `stop` ? words.stopYes : duel ? duelWords.withdrawYes : words.withdrawYes(asking.bot)}
                         </button>
                         <button ref={keep} type="button" className="btn btn-ghost" onClick={() => { ask({ kind: `none` }); }}>
                             {words.keepPlaying}

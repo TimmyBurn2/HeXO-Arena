@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useId, useRef, useState, type ReactNode } from 'react';
-import { duelMeta, duelRunningPollMs, estimateMoreGames, nameKeyOf, notFoundMeta, pagePath, resultSentence, turnsOnBoard, type DuelBot, type DuelDetail, type DuelGame, type DuelSide } from '@hexo-arena/contract';
+import { duelMeta, duelRunningPollMs, estimateMoreGames, notFoundMeta, pagePath, resultSentence, turnsOnBoard, type DuelBot, type DuelDetail, type DuelGame, type DuelSide } from '@hexo-arena/contract';
 import { createDuel, duelExportUrl, fetchDuel, limitedFor, stopDuel } from '../api/client';
 import { useAsync } from '../api/use-async';
 import { hexPoints } from '../board/geometry';
@@ -7,10 +7,10 @@ import { BotBadge, PlayerName, Rating, seatName, Swatch } from '../components/pl
 import { ErrorFrame, SkeletonRows } from '../components/states';
 import { Estimate } from '../duels/Estimate';
 import { OpeningStones } from '../duels/OpeningStones';
-import { namesABot, refusalLine, refusalReads, refusedBot, type Refused } from '../duels/refusal';
+import { refusalLine } from '../duels/refusal';
 import { pairsOf, Scoreboard, sideIn } from '../duels/Scoreboard';
 import { againPath, duelPagePath, gamesDuelsPath } from '../duels/setup';
-import { scoreText, statusSentence, termsLine, waitingQuiet } from '../duels/words';
+import { noWinnerCount, scoreText, statusSentence, termsLine, waitingQuiet } from '../duels/words';
 import { duelGamesPath } from '../games/filters';
 import { FeaturedBoard } from '../home/FeaturedBoard';
 import { useMe } from '../me';
@@ -158,7 +158,10 @@ function DuelPage({ duel, at, onStopped }: { duel: DuelDetail; at: number; onSto
                                 <p className="note">{text.duels.estimate.waiting}</p>
                             </div>
                         ) : (
-                            <Estimate duel={duel} estimate={duel.estimate} />
+                            <Estimate
+                                duel={{ first: duel.first, second: duel.second, running, games: duel.terms.games, noWinner: noWinnerCount(duel.games) }}
+                                estimate={duel.estimate}
+                            />
                         )
                     ) : null}
                     {test ? (
@@ -540,13 +543,7 @@ function Again({ duel, viewer }: { duel: DuelDetail; viewer: string | null }) {
             });
             navigate(duelPagePath(created.id));
         } catch (cause) {
-            const found = namesABot(cause) ? await refusalReads(viewer) : null;
-            const listed = (name: string) => found?.bots.find((bot) => nameKeyOf(bot.name) === nameKeyOf(name));
-            const one = listed(duel.first.name);
-            const two = listed(duel.second.name);
-            const terms = { clock: duel.terms.timeControl, levelled: duel.first.level !== undefined ? (`first` as const) : duel.second.level !== undefined ? (`second` as const) : null };
-            const named = (code: string): Refused => (found === null || one === undefined || two === undefined ? { bot: duel.second.name, why: null } : refusedBot(code, [one, two], terms, found.reads));
-            setFailure(await refusalLine(cause, { first: duel.first.name, second: duel.second.name }, named, text.duels.errors.failedTest));
+            setFailure(await refusalLine(cause, { first: duel.first.name, second: duel.second.name }, () => null, text.duels.errors.failedTest));
             setSending(false);
         }
     }

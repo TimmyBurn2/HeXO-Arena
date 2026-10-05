@@ -1,6 +1,6 @@
 // The API version is spec semver, decoupled from package versions on
 // purpose.
-export const apiVersion = `0.49.1`;
+export const apiVersion = `0.50.0`;
 
 // The bot surface's own document, which other servers may implement,
 // versions apart from the whole site's.

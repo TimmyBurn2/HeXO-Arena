@@ -231,34 +231,34 @@ describe('duels', () => {
             expect(missing.statusCode).toBe(404);
         });
 
-        it('refuses a delisted bot and a banned owner\'s bot', async () => {
+        it('refuses a delisted bot and a banned owner\'s bot, naming it', async () => {
             world.admin({ op: `delist-bot`, name: `beta`, reason: `name` });
-            expect((await create(`dee`, { first: `alpha`, second: `beta` })).json()).toMatchObject({ code: `delisted` });
+            expect((await create(`dee`, { first: `alpha`, second: `beta` })).json()).toMatchObject({ code: `delisted`, bot: `beta` });
             world.admin({ op: `ban-user`, name: `cid`, reason: `abuse` });
             const banned = await create(`dee`, { first: `alpha`, second: `gamma` });
             expect(banned.statusCode).toBe(403);
-            expect(banned.json()).toMatchObject({ code: `banned` });
+            expect(banned.json()).toMatchObject({ code: `banned`, bot: `gamma` });
         });
 
-        it('refuses a bot not open, one whose owner takes no duels from others, one outside its clocks, and a level it does not declare', async () => {
+        it('refuses a bot not open, one whose owner takes no duels from others, one outside its clocks, and a level it does not declare, naming it', async () => {
             world.presence.attach(botId(`gamma`), new FakeStreamSocket(), false);
-            expect((await create(`dee`, { first: `alpha`, second: `gamma` })).json()).toMatchObject({ code: `not_open` });
+            expect((await create(`dee`, { first: `alpha`, second: `gamma` })).json()).toMatchObject({ code: `not_open`, bot: `gamma` });
             online(`gamma`);
             const off = await world.app.inject({ method: `PATCH`, url: `/api/bots/beta/settings`, cookies: { hexo_arena_session: session(`bob`) }, payload: { duelsByOthers: false } });
             expect(off.json()).toEqual({ name: `beta`, duelsByOthers: false });
-            expect((await create(`dee`, { first: `alpha`, second: `beta` })).json()).toMatchObject({ code: `duel_refused` });
+            expect((await create(`dee`, { first: `alpha`, second: `beta` })).json()).toMatchObject({ code: `duel_refused`, bot: `beta` });
             // The switch binds others: its owner still starts one.
             expect((await create(`bob`, { first: `beta`, second: `alpha` })).statusCode).toBe(201);
             await world.app.inject({ method: `PATCH`, url: `/api/bot/account`, headers: { authorization: `Bearer ${tokens.get(`aster`) ?? ``}` }, payload: { accepts: { turnMs: [5_000, 20_000], match: false, unlimited: false } } });
-            expect((await create(`dee`, { first: `aster`, second: `alpha` })).json()).toMatchObject({ code: `clock_not_accepted` });
-            expect((await create(`cid`, { first: `alpha`, second: `gamma`, levels: { second: `easy` } })).json()).toMatchObject({ code: `unknown_level` });
+            expect((await create(`dee`, { first: `aster`, second: `alpha` })).json()).toMatchObject({ code: `clock_not_accepted`, bot: `aster` });
+            expect((await create(`cid`, { first: `alpha`, second: `gamma`, levels: { second: `easy` } })).json()).toMatchObject({ code: `unknown_level`, bot: `gamma` });
         });
 
         it('refuses a bot in a running tournament or already in two duels, and a pair already playing one', async () => {
             await started(`dee`, { first: `alpha`, second: `beta` });
             expect((await create(`eve`, { first: `beta`, second: `alpha` })).json()).toMatchObject({ code: `duel_live` });
             await started(`dee`, { first: `alpha`, second: `gamma` });
-            expect((await create(`eve`, { first: `alpha`, second: `aster` })).json()).toMatchObject({ code: `bot_busy` });
+            expect((await create(`eve`, { first: `alpha`, second: `aster` })).json()).toMatchObject({ code: `bot_busy`, bot: `alpha` });
             const created = world.admin({ op: `tournament-create`, name: `Autumn round robin`, startsAt: new Date(clock + 120_000).toISOString(), timeControl: turn, openingPlies: 5, maxEntrants: 12, reason: `test` });
             expect(created.kind).toBe(`done`);
             for (const person of [`bob`, `cid`]) {

@@ -73,6 +73,7 @@ const autumn: TournamentDetail = {
     id: `t_autumnrobin1`,
     name: `Autumn round robin`,
     origin: `operator`,
+    format: `round_robin`,
     createdBy: null,
     rated: true,
     test: false,
@@ -177,7 +178,7 @@ describe('GamesScreen', () => {
     it('name a game\'s tournament or duel on a line of its own under the row, a link to its page beside the game\'s', async () => {
         serve(() => ({
             games: [
-                game(0, { tournament: { id: `t_autumnrobin1`, name: `Autumn round robin`, round: 2, game: 1 } }),
+                game(0, { tournament: { id: `t_autumnrobin1`, name: `Autumn round robin`, format: `round_robin`, round: 2, game: 1 } }),
                 game(1, { duel: { id: `d_abcdefabcdef`, game: 3, of: 10 }, rated: false, unratedByChoice: true }),
                 game(2, { duel: { id: `d_testtesttest`, game: 22, of: 50 }, rated: false, unratedByChoice: true, test: true }),
                 game(3),
@@ -257,6 +258,7 @@ describe('GamesScreen', () => {
             id,
             name: `Dev round robin`,
             origin: `person`,
+            format: `round_robin`,
             createdBy: `devowner-a`,
             rated: false,
             test: false,
@@ -288,6 +290,7 @@ describe('GamesScreen', () => {
             id,
             name: test ? `Round robin by ana` : `Round robin by bruno`,
             origin: `person`,
+            format: `round_robin`,
             createdBy: test ? `ana` : `bruno`,
             rated: false,
             test,

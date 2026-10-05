@@ -118,27 +118,37 @@ export type GamePlayer = z.infer<typeof gamePlayerSchema>;
 export const gamePlayersSchema = z.object({ x: gamePlayerSchema, o: gamePlayerSchema }).meta({ id: `GamePlayers` });
 export type GamePlayers = z.infer<typeof gamePlayersSchema>;
 
+/** The most games a duel plays, a test's most. */
+export const duelGamesMax = 50;
+
+/** Openings one pair plays at most, each twice with the sides swapped: a test's fifty games. */
+export const tournamentLegsMax = duelGamesMax / 2;
+
+export const tournamentFormatSchema = z.enum([`duel`, `round_robin`]).meta({
+    id: `TournamentFormat`,
+    description: `duel: two bots a person picked, playing game after game. round_robin: three bots or more, every pair meeting once; the weekly tournament is one.`,
+});
+export type TournamentFormat = z.infer<typeof tournamentFormatSchema>;
+
 export const gameTournamentSchema = z
     .object({
         id: z.string(),
         name: z.string(),
+        format: tournamentFormatSchema,
         round: z.number().int().min(1),
         game: z.union([z.literal(1), z.literal(2)]),
-        leg: z.number().int().min(1).max(5).optional(),
-        of: z.number().int().min(4).max(10).optional(),
+        leg: z.number().int().min(1).max(tournamentLegsMax).optional(),
+        of: z.number().int().min(1).max(duelGamesMax).optional(),
         createdBy: z.string().optional(),
     })
     .meta({
         id: `GameTournament`,
         description: [
             `The tournament a game belongs to: its round, and which of its opening's two games it is.`,
-            `Where a pair plays more than one opening, leg numbers the opening and of counts the pair's games; createdBy names who set a person's round robin up.`,
+            `Where a pair plays other than one opening, leg numbers the opening and of counts the pair's games, 1 for a single game; createdBy names who set a person's tournament up.`,
         ].join(` `),
     });
 export type GameTournament = z.infer<typeof gameTournamentSchema>;
-
-/** The most games a duel plays, a test's most. */
-export const duelGamesMax = 50;
 
 export const gameDuelSchema = z
     .object({ id: z.string(), game: z.number().int().min(1).max(duelGamesMax), of: z.number().int().min(1).max(duelGamesMax) })

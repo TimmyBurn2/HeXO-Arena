@@ -23,20 +23,22 @@ import { and, asc, eq, inArray, isNotNull, ne, or, sql } from 'drizzle-orm';
 import { recordAdminAction } from './admin-store';
 import type { Query } from './db';
 import { bots, games, tournamentEntries, tournamentPairings, tournaments, users } from './db/schema';
-import { duelGateFailures, levelNow, type DuelGateFailure } from './duel-runner';
-import { readDuelBot, type DuelBotRecord } from './duel-store';
+import { botGates, levelNow, readBot, type BotGateFailure, type BotRecord } from './bot-gates';
 import type { FinishedGameNote, GameRegistry } from './game-registry';
 import { countBotBotGamesSince, countPairBotGamesSince } from './game-store';
 import type { PresenceRegistry } from './presence';
 import { readRating } from './rating-store';
-import { missedTooManyInARow, slotDone, storedSlot, xSeatOf, type PairingSeat, type ScoredPairing, type SlotResult } from './round-robin';
+import { missedTooManyInARow, slotDone, storedSlots, xSeatOf, type PairingSeat, type ScoredPairing, type SlotResult } from './round-robin';
 import { isCurrentGeneration, isPaused } from './site-state';
 import { dueRuleStarts, hasRuleTournament, readTournamentRules } from './tournament-rules';
-import { cancelTournament, createTournament, insertPairings, runningRoundRobinsBy, stopRoundRobin as markStopped, type StopReason } from './tournament-store';
+import { cancelTournament, createTournament, cutShort, insertPairings, runningSetUpBy, stopPersonTournament as markStopped, type StopReason } from './tournament-store';
 import { utcDay } from './utc-day';
 
 // Why a bot is taken out of every tournament, as a running one's withdrawn entry records it.
 type WithdrawReason = `banned` | `delisted` | `deleted`;
+
+// Why a playing bot leaves a running tournament, as its withdrawn entry records it.
+type LeaveReason = Exclude<TournamentEntryReason, `daily_cap` | `clock`>;
 
 type SlotState = SlotResult[`kind`];
 
@@ -86,9 +88,9 @@ interface SchedulerDeps {
 }
 
 // A bot taken out of play, no longer taking games from the person who set
-// the round robin up, or held by the weekly until it ends, is not ready
+// the tournament up, or held by the weekly until it ends, is not ready
 // within any grace, so it leaves at once.
-const lasting: ReadonlyMap<DuelGateFailure, TournamentEntryReason> = new Map([
+const lasting: ReadonlyMap<BotGateFailure, LeaveReason> = new Map([
     [`deleted`, `deleted`],
     [`delisted`, `delisted`],
     [`banned`, `banned`],
@@ -102,7 +104,7 @@ function scored(row: PairingRow): ScoredPairing {
         leg: row.leg,
         first: row.firstBotId,
         second: row.secondBotId,
-        games: [storedSlot(row.game1, row.game1Seat), storedSlot(row.game2, row.game2Seat)],
+        games: storedSlots(row),
     };
 }
 
@@ -114,12 +116,16 @@ const pairOf = (row: PairingRow) => `${row.firstBotId} ${row.secondBotId}`;
 
 const done = (row: PairingRow) => scored(row).games.every(slotDone);
 
+// A person's tournament stopped or cut short, whose live games still play out.
+const endedEarly = (status: string) => status === `stopped` || status === `cut_short`;
+
 /**
- * Runs every round robin in this process, the operator's and those people
- * set up: creates each weekly rule's tournaments in time for entries,
- * starts each weekly when it is due, and a person's as it is set up,
- * plays their rounds as bot games announced on the bots' streams, rated
- * in the weekly and never in a person's, scores no-shows and withdrawals,
+ * Runs every tournament in this process, the operator's and the duels and
+ * round robins people set up: creates each weekly rule's tournaments in
+ * time for entries, starts each weekly when it is due, and a person's as
+ * it is set up, plays their rounds as bot games announced on the bots'
+ * streams, rated in the weekly and never in a person's, scores no-shows
+ * and withdrawals, cuts a person's short once fewer than two bots play,
  * and picks up where each stood after a restart.
  * Its state lives in the database; only grace deadlines and round gaps are
  * held in memory, and restart afresh at boot.
@@ -174,7 +180,7 @@ export class TournamentScheduler {
         if (!running.some((tournament) => tournament.origin === `operator`)) this.#startDue(now);
     }
 
-    /** Moves one tournament on at once, as setting a round robin up does for its first round. */
+    /** Moves one tournament on at once, as setting a duel or round robin up does for its first round. */
     advance(id: string): void {
         if (this.#deps.draining() || isPaused(this.#query)) return;
         const tournament = this.#running().find((each) => each.id === id);
@@ -234,7 +240,7 @@ export class TournamentScheduler {
     }
 
     /**
-     * Withdraws a bot from every running round robin someone other than its
+     * Withdraws a bot from every running tournament someone other than its
      * owner set up, once its owner turns duels by others off.
      */
     withdrawRefused(botId: string): void {
@@ -245,9 +251,9 @@ export class TournamentScheduler {
     }
 
     /**
-     * Its owner withdraws a bot from a running round robin a person set up:
+     * Its owner withdraws a bot from a running tournament a person set up:
      * its live game plays on and counts, and its games still to come score
-     * for its opponents.
+     * for its opponents, unless fewer than two bots are left to play them.
      */
     withdrawByOwner(tournamentId: string, botId: string): `withdrawn` | `over` | `not_playing` {
         const tournament = this.#query.select({ status: tournaments.status }).from(tournaments).where(eq(tournaments.id, tournamentId)).get();
@@ -256,11 +262,11 @@ export class TournamentScheduler {
     }
 
     /**
-     * Stops a running round robin a person set up: no further game starts,
+     * Stops a running tournament a person set up: no further game starts,
      * every game still to come is not played, and a live one plays on to
      * its result, since ending it would be an escape from a losing position.
      */
-    stopRoundRobin(id: string, reason: StopReason): boolean {
+    stopPersonTournament(id: string, reason: StopReason): boolean {
         const stopped = this.#query.transaction((tx) => {
             if (!markStopped(tx, id, reason, Math.floor(this.#now() / 1000))) return false;
             this.#settleUnplayed(tx, id);
@@ -270,9 +276,9 @@ export class TournamentScheduler {
         return stopped;
     }
 
-    /** Stops every running round robin a person set up, once their account is banned or deleted. */
+    /** Stops every running tournament a person set up, once their account is banned or deleted. */
     stopSetUpBy(userId: string, reason: Exclude<StopReason, `creator`>): void {
-        for (const id of runningRoundRobinsBy(this.#query, userId)) this.stopRoundRobin(id, reason);
+        for (const id of runningSetUpBy(this.#query, userId)) this.stopPersonTournament(id, reason);
     }
 
     /**
@@ -311,12 +317,12 @@ export class TournamentScheduler {
             .where(eq(games.id, finished.gameId))
             .get();
         if (slot?.pairingId == null || (slot.game !== 1 && slot.game !== 2)) return;
-        if (slot.status !== `running` && slot.status !== `stopped`) return;
+        if (slot.status !== `running` && !endedEarly(slot.status)) return;
         if ((slot.game === 1 ? slot.state1 : slot.state2) !== `live`) return;
         if (finished.reason === `aborted` && !isCurrentGeneration(this.#query, this.#deps.generation)) return;
         this.#settle(this.#query, slot.pairingId, slot.game, this.#outcomeOf(slot.game, finished.winner, finished.reason));
-        // A stopped round robin plays its live games out and starts nothing after them.
-        if (slot.status === `stopped`) this.#settleUnplayed(this.#query, slot.tournamentId);
+        // A tournament stopped or cut short plays its live games out and starts nothing after them.
+        if (endedEarly(slot.status)) this.#settleUnplayed(this.#query, slot.tournamentId);
         else this.#checkWithdrawals(slot.pairingId);
     }
 
@@ -431,7 +437,7 @@ export class TournamentScheduler {
                 .map((entry) => ({ ...entry, rating: readRating(tx, { kind: `bot`, id: entry.botId }).rating }))
                 .sort((one, two) => two.rating - one.rating || one.name.localeCompare(two.name))
                 .map((entry) => entry.botId);
-            insertPairings(tx, due.id, order, 1);
+            insertPairings(tx, due.id, order, 2, Math.random);
             return true;
         });
         if (!started) return;
@@ -506,9 +512,11 @@ export class TournamentScheduler {
         }
     }
 
-    // Plays a pairing's next game: game 1, then game 2 once game 1 is over.
+    // Plays a pairing's next game: game 1, then game 2 once game 1 is over;
+    // a single game's second slot is none, so it passes over it.
     #advancePairing(tournament: RunningTournament, pairing: PairingRow, now: number): void {
         for (const game of [1, 2] as const) {
+            if (!this.#isRunning(tournament.id)) return;
             const state = game === 1 ? pairing.game1 : pairing.game2;
             if (state === `live`) return;
             if (state !== `pending`) continue;
@@ -526,6 +534,11 @@ export class TournamentScheduler {
         const key = slotKey(pairing.id, game);
         const seats = [pairing.firstBotId, pairing.secondBotId] as const;
         if (tournament.origin === `person`) this.#leaveIfGone(tournament, seats);
+        // A bot gone for good may have cut the tournament short, its games to come not played.
+        if (!this.#isRunning(tournament.id)) {
+            this.#graces.delete(key);
+            return true;
+        }
         const withdrawn = this.#withdrawn(tournament.id);
         const out = [withdrawn.has(seats[0]), withdrawn.has(seats[1])] as const;
         if (out[0] || out[1]) {
@@ -552,42 +565,64 @@ export class TournamentScheduler {
         return true;
     }
 
+    #isRunning(tournamentId: string): boolean {
+        return this.#query.select({ status: tournaments.status }).from(tournaments).where(eq(tournaments.id, tournamentId)).get()?.status === `running`;
+    }
+
     // The weekly's entering is consent, so its bots need only be connected
-    // and below their game cap; a person's round robin passes the gates a
-    // duel does, as the person who set it up would start one.
+    // and below their game cap; a person's passes the gates every bot event
+    // does, as the person who set it up would start one.
     #ready(tournament: RunningTournament, botId: string): boolean {
         if (tournament.origin === `operator`) return this.#deps.presence.isOnline(botId) && this.#deps.games.activeGameCount(botId) < botConcurrentGameCap;
-        const bot = readDuelBot(this.#query, { id: botId });
+        const bot = readBot(this.#query, { id: botId });
         return bot !== undefined && this.#gateFailures(tournament, bot).length === 0;
     }
 
-    #gateFailures(tournament: RunningTournament, bot: DuelBotRecord): DuelGateFailure[] {
-        return duelGateFailures(bot, { starterId: tournament.createdBy, timeControl: tournament.timeControl }, {
+    #gateFailures(tournament: RunningTournament, bot: BotRecord): BotGateFailure[] {
+        return botGates(bot, { starterId: tournament.createdBy, timeControl: tournament.timeControl }, {
             presence: this.#deps.presence,
             games: this.#deps.games,
             reservations: { isReserved: (botId: string) => this.isReserved(botId) },
         });
     }
 
-    // A bot gone for good leaves a person's round robin at once, rather than
+    // A bot gone for good leaves a person's tournament at once, rather than
     // waiting out a grace for every game it has left.
     #leaveIfGone(tournament: RunningTournament, seats: readonly string[]): void {
         for (const botId of seats) {
-            const bot = readDuelBot(this.#query, { id: botId });
+            const bot = readBot(this.#query, { id: botId });
             const reason = bot === undefined ? `deleted` : this.#gateFailures(tournament, bot).flatMap((failure) => lasting.get(failure) ?? [])[0];
             if (reason !== undefined) this.#leave(tournament.id, botId, reason);
         }
     }
 
-    // Withdraws a playing bot; answers whether it was playing.
-    #leave(tournamentId: string, botId: string, reason: TournamentEntryReason): boolean {
-        return (
+    // Withdraws a playing bot; answers whether it was playing. A person's
+    // tournament left with fewer than two bots to play is cut short, naming
+    // this bot and why it left: its games to come would only pad a score.
+    #leave(tournamentId: string, botId: string, reason: LeaveReason): boolean {
+        // One cut short holds its field as it stood, the bot that cut it the last to leave.
+        if (!this.#isRunning(tournamentId)) return false;
+        const left =
             this.#query
                 .update(tournamentEntries)
                 .set({ state: `withdrawn`, reason })
                 .where(and(eq(tournamentEntries.tournamentId, tournamentId), eq(tournamentEntries.botId, botId), eq(tournamentEntries.state, `playing`)))
-                .run().changes === 1
-        );
+                .run().changes === 1;
+        if (!left) return false;
+        const playing =
+            this.#query
+                .select({ n: sql<number>`count(*)` })
+                .from(tournamentEntries)
+                .where(and(eq(tournamentEntries.tournamentId, tournamentId), eq(tournamentEntries.state, `playing`)))
+                .get()?.n ?? 0;
+        if (playing >= 2) return true;
+        const cut = this.#query.transaction((tx) => {
+            if (!cutShort(tx, tournamentId, reason, botId, Math.floor(this.#now() / 1000))) return false;
+            this.#settleUnplayed(tx, tournamentId);
+            return true;
+        });
+        if (cut) this.#forget(tournamentId);
+        return true;
     }
 
     // The weekly's games are rated, so each counts toward the daily caps.
@@ -602,7 +637,7 @@ export class TournamentScheduler {
 
     #play(tournament: RunningTournament, pairing: PairingRow, game: 1 | 2): void {
         const [x, o] = game === 1 ? [pairing.firstBotId, pairing.secondBotId] : [pairing.secondBotId, pairing.firstBotId];
-        const seat = (botId: string) => readDuelBot(this.#query, { id: botId });
+        const seat = (botId: string) => readBot(this.#query, { id: botId });
         const xBot = seat(x);
         const oBot = seat(o);
         // Both rows stand: a bot deleted outright takes its pairings with it.
@@ -679,16 +714,16 @@ export class TournamentScheduler {
 
     // The boot sweep has aborted every game a stopped process left live; a
     // tournament game it caught replays once from its opening and sides, and
-    // a game that ended before the stop is recorded as it ended. A stopped
-    // round robin replays nothing, its cut game not played.
+    // a game that ended before the stop is recorded as it ended. A tournament
+    // stopped or cut short replays nothing, its cut game not played.
     #resume(): void {
         const open = this.#query
             .select({ id: tournaments.id, status: tournaments.status })
             .from(tournaments)
-            .where(or(eq(tournaments.status, `running`), eq(tournaments.status, `stopped`)))
+            .where(or(eq(tournaments.status, `running`), eq(tournaments.status, `stopped`), eq(tournaments.status, `cut_short`)))
             .all();
         for (const tournament of open) {
-            const stopped = tournament.status === `stopped`;
+            const stopped = endedEarly(tournament.status);
             for (const pairing of this.#pairings(tournament.id)) {
                 for (const game of [1, 2] as const) {
                     if ((game === 1 ? pairing.game1 : pairing.game2) !== `live`) continue;

@@ -3,6 +3,7 @@ import {
     nameAtLevel,
     seatLevelSchema,
     timeControlSchema,
+    tournamentFormatOf,
     turnsOnBoard,
     type FinishReason,
     type GameHeadline,
@@ -11,6 +12,7 @@ import {
     type SeatLevel,
     type Side,
     type TimeControl,
+    type TournamentOrigin,
 } from '@hexo-arena/contract';
 import { and, count, desc, eq, gte, isNull, or, sql } from 'drizzle-orm';
 import { randomUUID } from 'node:crypto';
@@ -452,7 +454,6 @@ export function countPairBotGamesSince(
 // What a game's tournament line is built from.
 interface GameTournamentParts extends NameParts {
     readonly id: string;
-    readonly origin: string;
     readonly round: number;
     readonly leg: number;
     readonly gamesPerPair: number;
@@ -466,6 +467,7 @@ export const gameTournamentColumns = {
     tournamentCreatorName: creators.name,
     tournamentCreatorDeletedAt: creators.deletedAt,
     tournamentOrigin: tournaments.origin,
+    tournamentEntrants: tournaments.maxEntrants,
     tournamentRound: tournamentPairings.round,
     tournamentLeg: tournamentPairings.leg,
     tournamentGamesPerPair: tournaments.gamesPerPair,
@@ -478,19 +480,30 @@ export function gameTournamentFrom(row: {
     readonly tournamentName: string | null;
     readonly tournamentCreatorName: string | null;
     readonly tournamentCreatorDeletedAt: number | null;
-    readonly tournamentOrigin: string | null;
+    readonly tournamentOrigin: TournamentOrigin | null;
+    readonly tournamentEntrants: number | null;
     readonly tournamentRound: number | null;
     readonly tournamentLeg: number | null;
     readonly tournamentGamesPerPair: number | null;
     readonly pairingGame: number | null;
 }): GameTournament | undefined {
-    if (row.tournamentId === null || row.tournamentOrigin === null || row.tournamentRound === null || row.tournamentLeg === null || row.tournamentGamesPerPair === null) return undefined;
+    if (
+        row.tournamentId === null ||
+        row.tournamentOrigin === null ||
+        row.tournamentEntrants === null ||
+        row.tournamentRound === null ||
+        row.tournamentLeg === null ||
+        row.tournamentGamesPerPair === null
+    ) {
+        return undefined;
+    }
     return gameTournamentOf({
         id: row.tournamentId,
         name: row.tournamentName,
         creatorName: row.tournamentCreatorName,
         creatorDeletedAt: row.tournamentCreatorDeletedAt,
         origin: row.tournamentOrigin,
+        maxEntrants: row.tournamentEntrants,
         round: row.tournamentRound,
         leg: row.tournamentLeg,
         gamesPerPair: row.tournamentGamesPerPair,
@@ -498,16 +511,18 @@ export function gameTournamentFrom(row: {
     });
 }
 
-// A game's tournament line: its round and game, the pair's opening and its
-// count where the pair plays more than one, and who set up a person's.
+// A game's tournament line: its format, round and game, the pair's opening
+// and its count where the pair plays other than one opening, and who set
+// up a person's.
 function gameTournamentOf(parts: GameTournamentParts): GameTournament | undefined {
     if (parts.game !== 1 && parts.game !== 2) return undefined;
     return {
         id: parts.id,
         name: tournamentNameOf(parts),
+        format: tournamentFormatOf(parts),
         round: parts.round,
         game: parts.game,
-        ...(parts.gamesPerPair > 2 ? { leg: parts.leg, of: parts.gamesPerPair } : {}),
+        ...(parts.gamesPerPair !== 2 ? { leg: parts.leg, of: parts.gamesPerPair } : {}),
         ...(parts.origin === `person` ? { createdBy: creatorOf(parts) } : {}),
     };
 }
@@ -518,7 +533,6 @@ export function findGameTournament(query: Query, gameId: string): GameTournament
         .select({
             id: tournaments.id,
             ...nameColumns,
-            origin: tournaments.origin,
             round: tournamentPairings.round,
             leg: tournamentPairings.leg,
             gamesPerPair: tournaments.gamesPerPair,

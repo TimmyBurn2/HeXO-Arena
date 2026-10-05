@@ -149,14 +149,29 @@ export function duelExport(query: Query, duel: DuelDetail, now: number): GameExp
     };
 }
 
-/** A tournament's finished games by round, pairing, and game, with games.csv and standings.csv. */
+/**
+ * A tournament's finished games in the order played, by round, pairing,
+ * and game, with games.csv and standings.csv; a duel's titled as its
+ * games list counts them, and a test's naming each bot's version.
+ */
 export function tournamentExport(query: Query, tournament: TournamentDetail, now: number): GameExport {
     const slots: Slot[] = [];
+    const kind = tournament.test ? `Test` : `Duel`;
+    const version = (key: number) => tournament.entries.find((entry) => entry.key === key)?.version ?? ``;
     for (const round of tournament.rounds) {
         for (const pairing of round.pairings) {
+            const of = pairing.games.length;
             for (const [index, game] of pairing.games.entries()) {
                 if (game.gameId === null || (game.outcome !== `played` && game.outcome !== `aborted`)) continue;
-                slots.push({ gameId: game.gameId, number: slots.length + 1, group: round.round, title: `${tournament.name}, round ${String(round.round)}, game ${String(index + 1)} of 2` });
+                const place = `game ${String(index + 1)} of ${String(of)}`;
+                const o = game.x === pairing.first.key ? pairing.second.key : pairing.first.key;
+                slots.push({
+                    gameId: game.gameId,
+                    number: slots.length + 1,
+                    group: round.round,
+                    title: tournament.format === `duel` ? `${kind}, ${place}` : `${tournament.name}, round ${String(round.round)}, ${place}`,
+                    ...(tournament.test ? { versions: { x: version(game.x), o: version(o) } } : {}),
+                });
             }
         }
     }

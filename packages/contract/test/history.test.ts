@@ -122,7 +122,7 @@ describe('finishedGamesPageSchema', () => {
     });
 
     it('names the tournament a game belongs to, its round, and which of the pairing\'s two games it is', () => {
-        const tournament = { id: `t_autumnrobin1`, name: `Autumn round robin`, round: 2, game: 1 };
+        const tournament = { id: `t_autumnrobin1`, name: `Autumn round robin`, format: `round_robin`, round: 2, game: 1 };
         expect(finishedGameEntrySchema.parse({ ...entry, tournament }).tournament).toEqual(tournament);
         expect(finishedGameEntrySchema.safeParse({ ...entry, tournament: { ...tournament, game: 3 } }).success).toBe(false);
     });

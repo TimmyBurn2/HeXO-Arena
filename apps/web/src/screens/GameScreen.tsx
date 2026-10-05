@@ -471,7 +471,7 @@ function GameView({ snapshot, send, link }: { snapshot: GameSnapshot; send: Game
                     meetings={meetingsLine}
                     rundown={running && !rundownShown ? <Rundown players={snapshot.players} unratedBy={unratedByOf(snapshot)} data={rundown} meetings={null} /> : null}
                     duel={duelRowOf(snapshot, duel)}
-                    tournament={snapshot.tournament === undefined ? null : tournamentRowOf(snapshot.tournament, tournament)}
+                    tournament={snapshot.tournament === undefined ? null : tournamentRowOf(snapshot.tournament, tournament, snapshot.test === true)}
                     analysis={running ? null : gameLink(snapshot.gameId, turnOf(replay.shown))}
                     running={running}
                     timed={snapshot.clock !== undefined && snapshot.clock.mode !== `unlimited`}
@@ -576,8 +576,8 @@ function duelRowOf(snapshot: GameSnapshot, duel: DuelDetail | null): { term: str
 }
 
 // A tournament's game names its place in the tournament and who leads it, once the tournament is read.
-function tournamentRowOf(tag: GameTournament, tournament: TournamentDetail | null): ReactNode {
-    const place = <Link to={tournamentPagePath(tag.id)}>{gameCaption(tag)}</Link>;
+function tournamentRowOf(tag: GameTournament, tournament: TournamentDetail | null, test: boolean): ReactNode {
+    const place = <Link to={tournamentPagePath(tag.id)}>{gameCaption(tag, test)}</Link>;
     const lead = tournament === null ? null : leadText(tournament);
     return lead === null ? place : text.drawer.tournamentStanding(place, lead);
 }

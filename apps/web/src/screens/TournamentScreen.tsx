@@ -11,6 +11,7 @@ import { Link } from '../router/Link';
 import { useRoute } from '../router/use-route';
 import { text } from '../text';
 import { Crosstable } from '../tournaments/Crosstable';
+import { DuelAside, DuelEstimate, DuelGames, DuelHead, DuelScores, duelStatus, duelTerms, duelViewOf, duelWaitingQuiet, type DuelView } from '../tournaments/DuelParts';
 import { EntryControl } from '../tournaments/EntryControl';
 import { Estimates, NextRound, PairsTable, RoundRobinActions, RoundRobinStatus, RoundRobinTerms, tournamentStatusId, Waits } from '../tournaments/RoundRobinParts';
 import { RoundSteps } from '../tournaments/RoundSteps';
@@ -19,6 +20,7 @@ import { Rounds } from '../tournaments/Rounds';
 import { Standings } from '../tournaments/Standings';
 import { absentees, currentRound, roundBegun } from '../tournaments/view';
 import { useDocumentMeta } from '../use-document-meta';
+import { useNow } from '../use-now';
 import './DuelScreen.css';
 import './TournamentScreen.css';
 
@@ -37,10 +39,12 @@ function tournamentBeat(read: Read): number | null {
 
 function summaryOf(detail: TournamentDetail): TournamentSummary {
     const top = detail.standings[0];
+    const view = duelViewOf(detail);
     return {
         id: detail.id,
         name: detail.name,
         origin: detail.origin,
+        format: detail.format,
         createdBy: detail.createdBy,
         rated: detail.rated,
         test: detail.test,
@@ -53,6 +57,15 @@ function summaryOf(detail: TournamentDetail): TournamentSummary {
         maxEntrants: detail.maxEntrants,
         winner: detail.status === `finished` && top !== undefined ? { name: top.bot, ownerName: top.ownerName } : null,
         round: detail.status === `running` && detail.rounds.length > 0 ? { current: currentRound(detail) ?? detail.rounds.length, of: detail.rounds.length } : null,
+        ...(view === null
+            ? {}
+            : {
+                  pair: {
+                      first: { key: view.first.key, name: view.first.bot, points: view.points.first },
+                      second: { key: view.second.key, name: view.second.bot, points: view.points.second },
+                      games: view.games.map((each) => each.game),
+                  },
+              }),
     };
 }
 
@@ -94,7 +107,8 @@ export function TournamentScreen({ id }: { id: string }) {
             </div>
         );
     }
-    const title = detail?.name ?? text.tournaments.title;
+    const view = detail === null ? null : duelViewOf(detail);
+    const title = view === null ? (detail?.name ?? text.tournaments.title) : text.duels.page.title(view.first.bot, view.second.bot);
     return (
         <>
             <div className="duel-title-row">
@@ -102,17 +116,61 @@ export function TournamentScreen({ id }: { id: string }) {
                     <Link to="/games/tournaments">{text.tournaments.crumb}</Link>
                     {detail?.origin === `person` ? (
                         <>
-                            <span>{text.roundRobins.kind}</span>
+                            <span>{text.tournamentDuel.crumb[detail.test ? `test` : detail.format]}</span>
                             <TournamentTag tournament={detail} />
                         </>
                     ) : null}
                 </p>
                 {detail === null ? null : <RoundRobinActions detail={detail} viewer={viewer} onChange={replace} />}
             </div>
-            <h1 className="screen-title tournament-title">{title}</h1>
+            <h1 className={view === null ? `screen-title tournament-title` : `sr-only`}>{title}</h1>
             {read.loading ? <SkeletonRows /> : null}
             {detail === null && read.error ? <ErrorFrame sentence={text.tournaments.detailFailed} onRetry={read.reload} wait={read.limited} /> : null}
-            {read.data === null ? null : <Tournament detail={read.data.detail} readAt={read.data.at} onEntry={read.reload} />}
+            {read.data === null ? null : view === null ? (
+                <Tournament detail={read.data.detail} readAt={read.data.at} onEntry={read.reload} />
+            ) : (
+                <Duel detail={read.data.detail} view={view} readAt={read.data.at} viewer={viewer} />
+            )}
+        </>
+    );
+}
+
+// A tournament of two as a duel's page: the bots facing each other across
+// the score, the status and the terms, a test's estimate, the score cells
+// by opening and the games grouped by opening beside the live game, its
+// opening, and what comes next.
+function Duel({ detail, view, readAt, viewer }: { detail: TournamentDetail; view: DuelView; readAt: number; viewer: string | null }) {
+    const running = detail.status === `running`;
+    const ticking = running && detail.waiting.length > 0;
+    const tick = useNow(ticking);
+    const now = ticking ? Math.max(tick, readAt) : readAt;
+    const quiet = duelWaitingQuiet(detail);
+    const sentence = duelStatus(detail, view, now, viewer);
+    return (
+        <>
+            <DuelHead detail={detail} view={view} viewer={viewer} />
+            <div className="duel-intro">
+                {/* A screen reader hears the waiting once, not every tick of its countdown. */}
+                <p id={tournamentStatusId} className="duel-status" role="status" tabIndex={-1}>
+                    {quiet === null ? (
+                        sentence
+                    ) : (
+                        <>
+                            <span aria-hidden="true">{sentence}</span>
+                            <span className="sr-only">{quiet}</span>
+                        </>
+                    )}
+                </p>
+                <p className="duel-terms">{duelTerms(detail, viewer)}</p>
+            </div>
+            <div className="duel-grid">
+                <div className="duel-main">
+                    {detail.test ? <DuelEstimate detail={detail} view={view} /> : null}
+                    <DuelScores view={view} label={text.duels.page.score} />
+                    <DuelGames detail={detail} view={view} />
+                </div>
+                <DuelAside detail={detail} view={view} readAt={readAt} />
+            </div>
         </>
     );
 }
@@ -140,7 +198,7 @@ function Tournament({ detail, readAt, onEntry }: { detail: TournamentDetail; rea
             {person && detail.test ? <Estimates detail={detail} /> : null}
             {detail.status === `scheduled` ? <Waiting detail={detail} onEntry={onEntry} /> : null}
             {detail.status === `running` ? <Running detail={detail} readAt={readAt} /> : null}
-            {detail.status === `finished` || detail.status === `stopped` ? <Finished detail={detail} /> : null}
+            {detail.status === `finished` || detail.status === `stopped` || detail.status === `cut_short` ? <Finished detail={detail} /> : null}
             {detail.status === `called_off` || (detail.status === `canceled` && detail.rounds.length === 0) ? <Entries detail={detail} /> : null}
             {detail.status === `canceled` && detail.rounds.length > 0 ? <Finished detail={detail} /> : null}
         </div>
@@ -167,8 +225,9 @@ function StatusSentence({ detail, readAt }: { detail: TournamentDetail; readAt: 
         }
         case `canceled`:
             return <>{status.canceled}</>;
-        // The weekly is never stopped, only canceled.
+        // The weekly is never stopped or cut short, only canceled.
         case `stopped`:
+        case `cut_short`:
             return null;
     }
 }

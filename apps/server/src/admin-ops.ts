@@ -39,7 +39,7 @@ import { countRunningDuels } from './duel-store';
 import { isPaused, setPaused } from './site-state';
 import type { TournamentScheduler } from './tournament-scheduler';
 import { addTournamentRule, adminTournamentRules, nextRuleStart, removeTournamentRule, ruleSlot } from './tournament-rules';
-import { countRunningRoundRobins, createTournament, openTournaments } from './tournament-store';
+import { countRunningPersonTournaments, createTournament, openTournaments } from './tournament-store';
 import { daySeconds } from './utc-day';
 
 interface AdminDeps {
@@ -77,8 +77,8 @@ function statusOf(deps: AdminDeps): AdminStatus {
         keylessRequests: deps.limits.keys.keyless,
         tournaments: openTournaments(deps.query),
         tournamentRules: adminTournamentRules(deps.query, nowOf(deps), deps.tournamentLeadMs),
-        liveDuels: countRunningDuels(deps.query),
-        liveRoundRobins: countRunningRoundRobins(deps.query),
+        liveDuels: countRunningDuels(deps.query) + countRunningPersonTournaments(deps.query, `duel`),
+        liveRoundRobins: countRunningPersonTournaments(deps.query, `round_robin`),
         clients: clientCensus(deps.query, Math.floor(nowOf(deps) / 1000) - clientCensusDays * daySeconds),
         recentActions: recentAdminActions(deps.query, recentActionCount),
         openReportCount: reports.count,

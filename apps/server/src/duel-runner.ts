@@ -1,14 +1,6 @@
-import {
-    acceptsCovers,
-    botConcurrentGameCap,
-    botDailyCap,
-    pairDailyCap,
-    presenceGraceMs,
-    seatLevelOf,
-    type SeatLevel,
-    type TimeControl,
-} from '@hexo-arena/contract';
+import { botDailyCap, pairDailyCap, presenceGraceMs } from '@hexo-arena/contract';
 import { eq } from 'drizzle-orm';
+import { botGates, levelNow, readBot, type BotGateFailure, type BotRecord } from './bot-gates';
 import type { Query } from './db';
 import { games } from './db/schema';
 import type { FinishedGameNote, GameRegistry } from './game-registry';
@@ -20,12 +12,10 @@ import {
     keyOfBot,
     latestGames,
     otherKey,
-    readDuelBot,
     runningDuels,
     runningDuelsOfBot,
     duelGameRows,
     xKeyOf,
-    type DuelBotRecord,
     type DuelEnding,
     type DuelKey,
     type DuelRow,
@@ -33,45 +23,9 @@ import {
 import { isCurrentGeneration, isPaused } from './site-state';
 import { utcDay } from './utc-day';
 
-/** A gate a bot fails for a duel game: taken out, held by a tournament, or not ready. */
-export type DuelGateFailure = `deleted` | `delisted` | `banned` | `offline` | `closed` | `refused` | `clock` | `tournament` | `busy`;
-
 // A bot taken out of play, or held by a tournament until it ends, is not
 // ready within any grace, so its duel ends at once.
-const lasting: ReadonlySet<DuelGateFailure> = new Set([`deleted`, `delisted`, `banned`, `tournament`]);
-
-// What the gates read beyond the bot's own row.
-interface DuelGateDeps {
-    readonly presence: Pick<PresenceRegistry, `isOnline` | `isOpenForChallenges`>;
-    readonly games: Pick<GameRegistry, `activeGameCount`>;
-    readonly reservations: { isReserved: (botId: string) => boolean };
-}
-
-/**
- * Every gate a bot fails for a duel game, in the order a refusal names
- * them: being open and its owner's switch bind only a duel someone else
- * started, since an owner may test a bot kept closed to others.
- */
-export function duelGateFailures(bot: DuelBotRecord, terms: { starterId: string | null; timeControl: TimeControl }, deps: DuelGateDeps): DuelGateFailure[] {
-    const failures: DuelGateFailure[] = [];
-    if (bot.deleted) failures.push(`deleted`);
-    if (bot.delisted) failures.push(`delisted`);
-    if (bot.ownerBanned) failures.push(`banned`);
-    if (!deps.presence.isOnline(bot.id)) failures.push(`offline`);
-    else if (!deps.presence.isOpenForChallenges(bot.id) && bot.ownerId !== terms.starterId) failures.push(`closed`);
-    if (!bot.duelsByOthers && bot.ownerId !== terms.starterId) failures.push(`refused`);
-    if (!acceptsCovers(bot.accepts, terms.timeControl)) failures.push(`clock`);
-    if (deps.reservations.isReserved(bot.id)) failures.push(`tournament`);
-    if (deps.games.activeGameCount(bot.id) >= botConcurrentGameCap) failures.push(`busy`);
-    return failures;
-}
-
-/** The level a duel bot plays a game at: the one it chose while still declared and not its default, else its default. */
-export function levelNow(bot: DuelBotRecord, chosen: SeatLevel | null): SeatLevel | null {
-    if (chosen === null) return null;
-    const declared = bot.levels?.list.find((level) => level.id === chosen.id);
-    return declared === undefined || declared.id === bot.levels?.default ? null : seatLevelOf(declared);
-}
+const lasting: ReadonlySet<BotGateFailure> = new Set([`deleted`, `delisted`, `banned`, `tournament`]);
 
 interface DuelRunnerDeps {
     readonly query: Query;
@@ -100,7 +54,7 @@ interface DuelWait {
  */
 export class DuelRunner {
     readonly #deps: DuelRunnerDeps;
-    readonly #waits = new Map<string, DuelWait & { reason: DuelGateFailure }>();
+    readonly #waits = new Map<string, DuelWait & { reason: BotGateFailure }>();
     #timer: ReturnType<typeof setInterval> | null = null;
 
     constructor(deps: DuelRunnerDeps) {
@@ -220,13 +174,13 @@ export class DuelRunner {
             // A pair's second game replays the stones its first game drew.
             opening = next % 2 === 0 ? (latest.get(next - 1)?.opening ?? null) : null;
         }
-        const a = readDuelBot(this.#query, { id: row.botIds.a });
-        const b = readDuelBot(this.#query, { id: row.botIds.b });
+        const a = readBot(this.#query, { id: row.botIds.a });
+        const b = readBot(this.#query, { id: row.botIds.b });
         // A bot deleted outright takes its duel with it, so both rows stand here.
         if (a === undefined || b === undefined) return;
         const bots = { a, b };
         const terms = { starterId: row.startedBy, timeControl: row.timeControl };
-        const blocked = ([`a`, `b`] as const).flatMap((key) => duelGateFailures(bots[key], terms, this.#deps).map((reason) => ({ key, reason })));
+        const blocked = ([`a`, `b`] as const).flatMap((key) => botGates(bots[key], terms, this.#deps).map((reason) => ({ key, reason })));
         const lost = blocked.find((failure) => lasting.has(failure.reason));
         if (lost !== undefined) {
             this.#end(row, { status: `cut_short`, reason: lost.reason, bot: lost.key });
@@ -258,7 +212,7 @@ export class DuelRunner {
         return true;
     }
 
-    #play(row: DuelRow, game: number, opening: readonly OpeningCell[] | null, bots: Record<DuelKey, DuelBotRecord>): void {
+    #play(row: DuelRow, game: number, opening: readonly OpeningCell[] | null, bots: Record<DuelKey, BotRecord>): void {
         const x = xKeyOf(row, game);
         const o = otherKey(x);
         this.#deps.games.createScheduledGame({

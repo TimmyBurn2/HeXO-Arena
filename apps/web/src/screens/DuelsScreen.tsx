@@ -2,7 +2,8 @@ import { useState } from 'react';
 import { duelsMeta } from '@hexo-arena/contract';
 import { ErrorFrame, SkeletonRows } from '../components/states';
 import { NewDuel } from '../duels/NewDuel';
-import { movedListPath, pickReason, setupFromParams } from '../duels/setup';
+import { movedListPath, setupFromParams } from '../duels/setup';
+import { eventReadiness } from '../play/readiness';
 import { useMineDuels, useSetupReads } from '../duels/use-duels';
 import { YourDuelsBeside } from '../duels/YourDuels';
 import { useMe } from '../me';
@@ -39,7 +40,7 @@ function BotDuel() {
     const setup = useSetupReads();
     const mine = useMineDuels(viewer !== null);
     const reads = { reserved: setup.reserved, states: setup.states, viewer };
-    const ready = setup.bots?.filter((bot) => pickReason(bot, null, reads) === null) ?? [];
+    const ready = setup.bots?.filter((bot) => eventReadiness(bot, [], reads, true) === null) ?? [];
 
     return (
         <>

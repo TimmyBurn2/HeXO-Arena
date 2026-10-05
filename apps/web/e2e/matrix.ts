@@ -184,9 +184,9 @@ async function addBot(page: Page, slot: `first` | `second`, name: string): Promi
     await dialog.waitFor({ state: `detached` });
 }
 
-/** Checks bots in the round robin's bot list and adds them, the list closing. */
+/** Checks bots in the setup's bot list and adds them, the list closing. */
 export async function pickBots(page: Page, names: readonly string[]): Promise<void> {
-    await page.getByRole(`button`, { name: `Add bots to the round robin` }).click();
+    await page.locator(`.rr-card .slot-empty-add`).first().click();
     const dialog = page.locator(`dialog.rr-picker[open]`);
     await dialog.waitFor();
     for (const name of names) await dialog.getByRole(`button`, { name: new RegExp(`^${name}\\b`, `u`) }).click();
@@ -394,7 +394,7 @@ export const shots: readonly Shot[] = [
         framed: true,
         viewports: duelViewports,
         after: async (page) => {
-            await page.getByRole(`button`, { name: `Add bots to the round robin` }).click();
+            await page.getByRole(`button`, { name: `Add bots`, exact: true }).click();
             const dialog = page.locator(`dialog.rr-picker[open]`);
             for (const name of [`hextide`, `Pistol1`, `devbot-a`]) await dialog.getByRole(`button`, { name: new RegExp(`^${name}\\b`, `u`) }).click();
         },
@@ -412,16 +412,31 @@ export const shots: readonly Shot[] = [
         },
     },
     {
-        name: `rr-setup-few`,
+        name: `rr-setup-one`,
         path: `/play/tournament`,
         world: robins(),
         ready: `.rr-card .slot-empty`,
         framed: true,
         viewports: duelViewports,
         after: async (page) => {
-            await pickBots(page, [`devbot-a`, `devbot-b`]);
+            await pickBots(page, [`devbot-a`]);
         },
     },
+    {
+        name: `event-duel-setup`,
+        path: `/play/tournament?games=10`,
+        world: robins(),
+        ready: `.rr-card .slot-empty`,
+        framed: true,
+        viewports: duelViewports,
+        fullPage: true,
+        after: async (page) => {
+            await pickBots(page, [`devbot-b`, `devbot-c`]);
+        },
+    },
+    { name: `event-duel-live`, path: `/tournaments/t_brunoduel001`, world: robins(), ready: `.score-hex`, framed: true, board: true, viewports: duelViewports, fullPage: true },
+    { name: `event-duel-test`, path: `/tournaments/t_anaduel00001`, world: robins(), ready: `.estimate`, framed: true, viewports: duelViewports, fullPage: true },
+    { name: `event-duel-cut`, path: `/tournaments/t_dmitricut001`, world: robins(), ready: `.duel-status`, framed: true, viewports: duelViewports, fullPage: true },
     {
         name: `rr-setup-test`,
         path: `/play/tournament`,

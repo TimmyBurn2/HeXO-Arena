@@ -65,7 +65,7 @@ for (const width of [1280, 390]) {
         await weekly.getByRole(`button`, { name: `Enter`, exact: true }).click();
         await expect(weekly.getByText(`sealbot is entered.`)).toBeVisible();
         await expect(weekly.getByText(/; 3 of 12 entered; turn clock 10 s$/u)).toBeVisible();
-        await expect(page.getByRole(`heading`, { name: `No round robin possible right now` })).toBeVisible();
+        await expect(page.getByRole(`heading`, { name: `No duel or round robin possible right now` })).toBeVisible();
         expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
         await page.goto(`/tournaments/t_wintercup202`);
         expect(await gapUnder(page.locator(`.entry-control > .note`))).toBe(gap);

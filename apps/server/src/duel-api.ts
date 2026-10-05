@@ -17,7 +17,6 @@ import {
     nameKeyOf,
     nameSyntaxSchema,
     pairDailyCap,
-    seatLevelOf,
     sideOf,
     turnsOnBoard,
     type DuelBot,
@@ -29,14 +28,14 @@ import {
     type DuelList,
     type DuelSummary,
     type EstimateUnit,
-    type SeatLevel,
 } from '@hexo-arena/contract';
 import { and, eq, isNull } from 'drizzle-orm';
-import type { FastifyInstance, FastifyReply } from 'fastify';
+import type { FastifyInstance } from 'fastify';
+import { botGates, busyBot, chosenLevel, gateRefusal, readBot, sendRefusal, type Refusal } from './bot-gates';
 import { listBots } from './bots';
 import type { Query } from './db';
 import { bots, users } from './db/schema';
-import { duelGateFailures, type DuelGateFailure, type DuelRunner } from './duel-runner';
+import type { DuelRunner } from './duel-runner';
 import {
     countRunningOfBot,
     countRunningStartedBy,
@@ -49,11 +48,9 @@ import {
     listedDuels,
     otherKey,
     pairRunning,
-    readDuelBot,
     runningPairs,
     sideOfKey,
     xKeyOf,
-    type DuelBotRecord,
     type DuelGameRow,
     type DuelKey,
     type DuelRow,
@@ -68,7 +65,7 @@ import type { ClientLimits, CredentialLimits } from './request-limits';
 import { sessionUser } from './sessions';
 import { shownBot, shownUser } from './shown-names';
 import type { StartGate } from './site-state';
-import { countRunningRoundRobinsOfBot } from './tournament-store';
+import { countRunningTournamentsOfBot } from './tournament-store';
 import { utcDay } from './utc-day';
 import { WindowMemo } from './window-memo';
 
@@ -276,7 +273,7 @@ function duelBotStates(query: Query): DuelBotState[] {
             const name = other === null ? undefined : names.get(other);
             return name === undefined ? [] : [name];
         }),
-        roundRobins: countRunningRoundRobinsOfBot(query, bot.id),
+        roundRobins: countRunningTournamentsOfBot(query, bot.id),
     }));
 }
 
@@ -290,21 +287,6 @@ interface DuelApiDeps {
     duels: DuelRunner;
     random: () => number;
     now: () => number;
-}
-
-type Refusal = { status: number; code: string; error: string; retryAfter?: number };
-
-function sendRefusal(reply: FastifyReply, refusal: Refusal): FastifyReply {
-    if (refusal.retryAfter !== undefined) void reply.header(`retry-after`, String(refusal.retryAfter));
-    return reply.code(refusal.status).send({ error: refusal.error, code: refusal.code });
-}
-
-// The chosen level by its id, null at the bot's default; undefined for a level the bot does not declare.
-function chosenLevel(bot: DuelBotRecord, id: string | undefined): SeatLevel | null | undefined {
-    if (id === undefined) return null;
-    const declared = bot.levels?.list.find((level) => level.id === id);
-    if (declared === undefined) return undefined;
-    return declared.id === bot.levels?.default ? null : seatLevelOf(declared);
 }
 
 const duelLengths: ReadonlySet<number> = new Set(duelGameCounts);
@@ -335,23 +317,20 @@ export function registerDuelApi(app: FastifyInstance, deps: DuelApiDeps): void {
         if (!parsed.success) return reply.code(400).send({ error: `the request fails validation`, code: `bad_request` });
         if (gate.refuse(reply)) return reply;
         const terms = parsed.data;
-        const first = readDuelBot(query, { nameKey: nameKeyOf(terms.first) });
-        const second = readDuelBot(query, { nameKey: nameKeyOf(terms.second) });
+        const first = readBot(query, { nameKey: nameKeyOf(terms.first) });
+        const second = readBot(query, { nameKey: nameKeyOf(terms.second) });
         if (first === undefined || second === undefined) return reply.code(404).send({ error: `no such bot`, code: `not_found` });
         const pair = [first, second] as const;
-        const failures = pair.map((bot) => duelGateFailures(bot, { starterId: user.id, timeControl: terms.timeControl }, deps));
-        const fails = (...reasons: DuelGateFailure[]) => failures.some((list) => list.some((reason) => reasons.includes(reason)));
-        if (fails(`delisted`)) return reply.code(403).send({ error: `a bot is delisted`, code: `delisted` });
-        if (fails(`banned`)) return reply.code(403).send({ error: `a bot's owner is banned`, code: `banned` });
-        if (fails(`offline`, `closed`)) return reply.code(400).send({ error: `a bot is not online and taking games`, code: `not_open` });
-        if (fails(`refused`)) return reply.code(400).send({ error: `a bot's owner takes no duels started by others`, code: `duel_refused` });
-        if (fails(`clock`)) return reply.code(400).send({ error: `a bot does not accept this clock`, code: `clock_not_accepted` });
+        const field = pair.map((bot) => ({ bot, reasons: botGates(bot, { starterId: user.id, timeControl: terms.timeControl }, deps) }));
+        const refused = gateRefusal(field);
+        if (refused !== null) return sendRefusal(reply, refused);
         const firstLevel = chosenLevel(first, terms.levels?.first);
         const secondLevel = chosenLevel(second, terms.levels?.second);
-        if (firstLevel === undefined || secondLevel === undefined) return reply.code(400).send({ error: `a bot declares no such level`, code: `unknown_level` });
-        if (fails(`busy`, `tournament`) || pair.some((bot) => countRunningOfBot(query, bot.id) + countRunningRoundRobinsOfBot(query, bot.id) >= duelPerBotCap)) {
-            return reply.code(400).send({ error: `a bot is at its game cap, in a tournament, or in its most duels and round robins`, code: `bot_busy` });
+        if (firstLevel === undefined || secondLevel === undefined) {
+            return sendRefusal(reply, { status: 400, code: `unknown_level`, error: `a bot declares no such level`, bot: (firstLevel === undefined ? first : second).name });
         }
+        const busy = busyBot(field, (botId) => countRunningOfBot(query, botId) + countRunningTournamentsOfBot(query, botId), duelPerBotCap);
+        if (busy !== undefined) return sendRefusal(reply, { status: 400, code: `bot_busy`, error: `a bot is at its game cap, in the weekly, or in its most duels and round robins`, bot: busy.name });
         // One person on both sides makes a test, whoever started it.
         const test = first.ownerId === second.ownerId;
         // The pair is stored in one order, so one unique index holds it to one running duel.
@@ -461,7 +440,7 @@ export function registerDuelApi(app: FastifyInstance, deps: DuelApiDeps): void {
         const { id } = request.params;
         const row = duelIdSchema.safeParse(id).success ? findDuel(query, id) : undefined;
         if (row === undefined) return reply.code(404).send({ error: `no such duel`, code: `not_found` });
-        const ownedKey = [row.first, otherKey(row.first)].find((key) => readDuelBot(query, { id: row.botIds[key] })?.ownerId === user.id) ?? null;
+        const ownedKey = [row.first, otherKey(row.first)].find((key) => readBot(query, { id: row.botIds[key] })?.ownerId === user.id) ?? null;
         const starter = row.startedBy === user.id;
         if (!starter && ownedKey === null) return reply.code(403).send({ error: `you neither started the duel nor own one of its bots`, code: `not_yours` });
         const stopped = deps.duels.stopDuel(id, starter ? { reason: `starter`, bot: null } : { reason: `owner`, bot: ownedKey });

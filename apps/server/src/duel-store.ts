@@ -1,29 +1,25 @@
 import {
-    acceptsSchema,
     boardCellSchema,
     duelEndReasonSchema,
     duelGamesSchema,
     duelStatusSchema,
-    levelsSchema,
     openingPliesSchema,
     seatLevelSchema,
     timeControlSchema,
-    type Accepts,
     type DuelEndReason,
     type DuelGames,
     type DuelKind,
     type DuelSide,
     type DuelStatus,
     type FinishReason,
-    type Levels,
     type OpeningPlies,
     type SeatLevel,
     type Side,
     type TimeControl,
 } from '@hexo-arena/contract';
-import { and, asc, count, eq, gte, isNull, or, sql, type SQL } from 'drizzle-orm';
+import { and, asc, count, eq, gte, or, sql, type SQL } from 'drizzle-orm';
 import type { Query } from './db';
-import { bots, duels, games, moves, users } from './db/schema';
+import { bots, duels, games, moves } from './db/schema';
 import type { OpeningCell } from './game-store';
 import { shortId } from './random';
 
@@ -344,54 +340,4 @@ export function pairRunning(query: Query, botIds: Readonly<Record<DuelKey, strin
 /** Every running duel's pair of bots, for the duel states the setup reads. */
 export function runningPairs(query: Query): { a: string; b: string }[] {
     return query.select({ a: duels.botAId, b: duels.botBId }).from(duels).where(running).all();
-}
-
-/** What the gates read of a bot that may play a duel. */
-export interface DuelBotRecord {
-    readonly id: string;
-    readonly name: string;
-    readonly ownerId: string;
-    readonly deleted: boolean;
-    readonly delisted: boolean;
-    readonly ownerBanned: boolean;
-    readonly accepts: Accepts | undefined;
-    readonly levels: Levels | null;
-    readonly version: string | null;
-    readonly duelsByOthers: boolean;
-}
-
-const botStateColumns = {
-    id: bots.id,
-    name: bots.name,
-    ownerId: bots.ownerId,
-    deletedAt: bots.deletedAt,
-    delistedAt: bots.delistedAt,
-    ownerBannedAt: users.bannedAt,
-    accepts: bots.accepts,
-    levels: bots.levels,
-    version: bots.version,
-    duelsByOthers: bots.duelsByOthers,
-};
-
-/** A bot by id or by the fold of a live name, as the duel gates read it. */
-export function readDuelBot(query: Query, by: { id: string } | { nameKey: string }): DuelBotRecord | undefined {
-    const row = query
-        .select(botStateColumns)
-        .from(bots)
-        .innerJoin(users, eq(users.id, bots.ownerId))
-        .where(`id` in by ? eq(bots.id, by.id) : and(eq(bots.nameKey, by.nameKey), isNull(bots.deletedAt)))
-        .get();
-    if (row === undefined) return undefined;
-    return {
-        id: row.id,
-        name: row.name,
-        ownerId: row.ownerId,
-        deleted: row.deletedAt !== null,
-        delisted: row.delistedAt !== null,
-        ownerBanned: row.ownerBannedAt !== null,
-        accepts: row.accepts === null ? undefined : acceptsSchema.parse(JSON.parse(row.accepts)),
-        levels: row.levels === null ? null : levelsSchema.parse(JSON.parse(row.levels)),
-        version: row.version,
-        duelsByOthers: row.duelsByOthers === 1,
-    };
 }

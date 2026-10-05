@@ -76,6 +76,7 @@ describe('the tournament reads and entries', () => {
                 id,
                 name: `Autumn round robin`,
                 origin: `operator`,
+                format: `round_robin`,
                 createdBy: null,
                 rated: true,
                 test: false,
@@ -113,7 +114,14 @@ describe('the tournament reads and entries', () => {
 
     it('enters an owner\'s bot, replaces it with another of theirs, and withdraws it', async () => {
         const first = await enter(`ann`, `alpha`);
-        expect(tournamentEntrySchema.parse(first.json())).toEqual({ key: 1, bot: `alpha`, ownerName: `ann`, online: false, ratingAtStart: null, state: `entered` });
+        expect(tournamentEntrySchema.parse(first.json())).toEqual({
+            key: 1,
+            bot: `alpha`,
+            ownerName: `ann`,
+            online: false,
+            ratingAtStart: null,
+            state: `entered`,
+        });
         const token = await mintBot(world.app, sessions.get(`ann`) ?? ``, `alpha2`);
         await world.app.inject({ method: `PATCH`, url: `/api/bot/account`, headers: { authorization: `Bearer ${token}` }, payload: { accepts } });
         expect((await enter(`ann`, `alpha2`)).statusCode).toBe(200);
@@ -179,7 +187,7 @@ describe('the tournament reads and entries', () => {
         expect(pairing?.first.name).toBe(read.entries.find((entry) => entry.key === pairing?.first.key)?.bot);
         const gameId = pairing?.games[0]?.gameId ?? ``;
         expect(read.live.map((game) => game.gameId)).toEqual([gameId]);
-        const tag = { id, name: `Autumn round robin`, round: 1, game: 1 };
+        const tag = { id, name: `Autumn round robin`, format: `round_robin`, round: 1, game: 1 };
         expect(read.live[0]?.tournament).toEqual(tag);
         const liveList = liveGameEntrySchema.array().parse((await world.app.inject({ method: `GET`, url: `/api/games` })).json());
         expect(liveList.find((game) => game.gameId === gameId)?.tournament).toEqual(tag);
@@ -189,7 +197,7 @@ describe('the tournament reads and entries', () => {
             [1, 0],
         ]);
         const snapshot = gameSnapshotSchema.parse((await world.app.inject({ method: `GET`, url: `/api/games/${gameId}` })).json());
-        expect(snapshot.tournament).toEqual({ id, name: `Autumn round robin`, round: 1, game: 1 });
+        expect(snapshot.tournament).toEqual(tag);
         // The x bot resigns: the point goes to the second bot, as o.
         const start = (streams.get(pairing?.first.name ?? ``)?.writes ?? []).map((line) => line.trim()).filter((line) => line.includes(`gameStart`));
         const token = (JSON.parse(start.at(-1) ?? `{}`) as { engine: { token: string } }).engine.token;
@@ -199,7 +207,7 @@ describe('the tournament reads and entries', () => {
         expect(after.rounds[0]?.pairings[0]?.games[0]).toMatchObject({ outcome: `played`, point: pairing?.second.key, missing: [] });
         expect(after.standings[0]).toMatchObject({ rank: 1, key: pairing?.second.key, bot: pairing?.second.name, points: 1, asX: 0, asO: 1 });
         const finished = gameSnapshotSchema.parse((await world.app.inject({ method: `GET`, url: `/api/games/${gameId}` })).json());
-        expect(finished.tournament).toEqual({ id, name: `Autumn round robin`, round: 1, game: 1 });
+        expect(finished.tournament).toEqual(tag);
     });
 
     it('names every deleted bot and owner by the plain label, told apart by key alone, and never by a placeholder', async () => {
