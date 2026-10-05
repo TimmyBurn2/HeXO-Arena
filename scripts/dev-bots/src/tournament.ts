@@ -40,7 +40,7 @@ export interface Candidate {
     readonly bot: string;
 }
 
-export interface DevTournamentOptions {
+interface DevTournamentOptions {
     client: ArenaClient;
     // Schedules the tournament through the admin client and answers its id.
     schedule: (name: string, startsAt: Date) => Promise<string>;

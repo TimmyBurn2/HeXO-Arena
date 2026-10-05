@@ -3,11 +3,11 @@ import { cellSize } from '../board/geometry';
 /** A place on the podium: first in the middle, second to its left, third to its right. */
 export type Place = 1 | 2 | 3;
 
-/** Every place in the order the eye reads the podium, left to right. */
-export const placesLeftToRight: readonly Place[] = [2, 1, 3];
+// Every place in the order the eye reads the podium, left to right.
+const placesLeftToRight: readonly Place[] = [2, 1, 3];
 
-/** The stones each place's tower stands, the first's six a won line. */
-export const towerStones: Readonly<Record<Place, number>> = { 1: 6, 2: 5, 3: 4 };
+// The stones each place's tower stands, the first's six a won line.
+const towerStones: Readonly<Record<Place, number>> = { 1: 6, 2: 5, 3: 4 };
 
 // The podium is a strip of flat-top board, so a column of cells is one of
 // the three line axes: across the flats a column steps 1.5 cell sizes, and

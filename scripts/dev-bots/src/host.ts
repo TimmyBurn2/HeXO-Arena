@@ -26,8 +26,8 @@ export interface HostedFinish {
     readonly reason: FinishReason;
 }
 
-/** How the host reaches its target, paces its bots, and reports. */
-export interface HostOptions {
+// How the host reaches its target, paces its bots, and reports.
+interface HostOptions {
     client: ArenaClient;
     thinkMs: () => number;
     random: () => number;
@@ -40,8 +40,8 @@ export interface HostOptions {
     finished?: (bot: HostedBot, finish: HostedFinish) => void;
 }
 
-/** The hosted bots; stop closes every stream and engine session. */
-export interface BotHost {
+// The hosted bots; stop closes every stream and engine session.
+interface BotHost {
     stop(): Promise<void>;
 }
 

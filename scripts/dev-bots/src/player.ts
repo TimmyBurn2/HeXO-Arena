@@ -124,8 +124,8 @@ function applyPrevious(position: Position, previous: BwsMoveRequestPacket[`previ
     return next;
 }
 
-/** How one game's engine session plays and reports. */
-export interface PlayOptions {
+// How one game's engine session plays and reports.
+interface PlayOptions {
     url: string;
     strategy: Strategy;
     random: () => number;

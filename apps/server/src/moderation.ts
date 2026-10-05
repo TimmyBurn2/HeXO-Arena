@@ -20,7 +20,7 @@ export function setBotDelisted(query: Query, nameKey: string, delisted: boolean)
 
 // A stored hash no token can match: the row keeps its unique, non-null
 // column, and the owner mints a fresh token from the site.
-export function killBotToken(query: Query, botId: string): void {
+function killBotToken(query: Query, botId: string): void {
     query.update(bots)
         .set({ tokenHash: sha256Hex(`revoked:${randomToken(32)}`) })
         .where(eq(bots.id, botId))
@@ -45,7 +45,7 @@ export function ownedBotId(query: Query, ownerId: string, nameKey: string): stri
 
 // Placeholders count up from the number already claimed; a name some
 // earlier row happens to hold is skipped, so the claim always lands.
-export function claimPlaceholderName(query: Query): string {
+function claimPlaceholderName(query: Query): string {
     const claimed = query
         .select({ n: count() })
         .from(nameReservations)
@@ -80,8 +80,8 @@ function botSeat(botId: string): SQL | undefined {
     return or(eq(games.botId, botId), eq(games.challengerBotId, botId), eq(games.destBotId, botId));
 }
 
-/** What became of a deleted bot: kept under a placeholder, or gone with its name freed. */
-export type BotDeletion = { kind: `anonymized`; placeholder: string } | { kind: `deleted` };
+// What became of a deleted bot: kept under a placeholder, or gone with its name freed.
+type BotDeletion = { kind: `anonymized`; placeholder: string } | { kind: `deleted` };
 
 /**
  * Deletes a bot under the recorded policy: with rated games or a
@@ -187,7 +187,7 @@ function gamesMatching(query: Query, match: string): string[] | null {
     return gameIds(botSeat(bot.id));
 }
 
-export type VoidResult = { kind: `voided`; count: number } | { kind: `not_found`; match: string };
+type VoidResult = { kind: `voided`; count: number } | { kind: `not_found`; match: string };
 
 // Every match resolves before anything is voided, so a typo voids nothing.
 export function voidGames(query: Query, matches: readonly string[]): VoidResult {

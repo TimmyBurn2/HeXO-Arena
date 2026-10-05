@@ -4,8 +4,8 @@ import { DevTools } from './DevTools';
 import { fetchDevAccounts } from './dev-api';
 import { afterHolder, discordLinkOf } from './discord-click';
 
-/** Clicks on the Discord link held while the dev tools load, and the listener holding them. */
-export type EarlyClicks = { held: readonly MouseEvent[]; hold: (event: MouseEvent) => void };
+// Clicks on the Discord link held while the dev tools load, and the listener holding them.
+type EarlyClicks = { held: readonly MouseEvent[]; hold: (event: MouseEvent) => void };
 
 /**
  * Mounts the dev pill beside the app, in a root of its own, when the

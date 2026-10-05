@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from 'react';
 import { clockText, gameMeta, levelFacts, turnsOnBoard, type DuelDetail, type FinishedGamesRecord, type GameHeadline, type GameSnapshot, type GameTournament, type TournamentDetail } from '@hexo-arena/contract';
-import { useSeatBroadcast } from '../analysis/seat-channel';
 import { gameLink } from '../analysis/links';
 import { fetchDuel, fetchFinishedGames, fetchTournament } from '../api/client';
 import { duelPagePath } from '../duels/setup';
@@ -193,7 +192,6 @@ function GameView({ snapshot, send, link }: { snapshot: GameSnapshot; send: Game
     const you = snapshot.you ?? null;
     const bottom = you ?? `x`;
     const running = snapshot.status === `in-progress`;
-    useSeatBroadcast(running && you !== null ? snapshot.gameId : null);
     const yourMove = running && snapshot.toMove === you;
     const stones = useMemo(() => stonesOf(snapshot), [snapshot]);
     const feed = feedOf(snapshot);

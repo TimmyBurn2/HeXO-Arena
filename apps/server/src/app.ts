@@ -60,7 +60,7 @@ import { registerTournamentApi } from './tournament-api';
 import { TournamentScheduler } from './tournament-scheduler';
 import type { GameWatchers } from './watchers';
 
-export interface AppDeps {
+interface AppDeps {
     sqlite: Sqlite;
     discord: DiscordOAuth | null;
     secureCookies: boolean;

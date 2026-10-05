@@ -39,8 +39,8 @@ export type DuelGateFailure = `deleted` | `delisted` | `banned` | `offline` | `c
 // ready within any grace, so its duel ends at once.
 const lasting: ReadonlySet<DuelGateFailure> = new Set([`deleted`, `delisted`, `banned`, `tournament`]);
 
-/** What the gates read beyond the bot's own row. */
-export interface DuelGateDeps {
+// What the gates read beyond the bot's own row.
+interface DuelGateDeps {
     readonly presence: Pick<PresenceRegistry, `isOnline` | `isOpenForChallenges`>;
     readonly games: Pick<GameRegistry, `activeGameCount`>;
     readonly reservations: { isReserved: (botId: string) => boolean };
@@ -72,7 +72,7 @@ export function levelNow(bot: DuelBotRecord, chosen: SeatLevel | null): SeatLeve
     return declared === undefined || declared.id === bot.levels?.default ? null : seatLevelOf(declared);
 }
 
-export interface DuelRunnerDeps {
+interface DuelRunnerDeps {
     readonly query: Query;
     readonly presence: PresenceRegistry;
     readonly games: GameRegistry;
@@ -83,8 +83,8 @@ export interface DuelRunnerDeps {
     readonly now?: () => number;
 }
 
-/** A bot the next game of a duel waits for, and when the wait ends. */
-export interface DuelWait {
+// A bot the next game of a duel waits for, and when the wait ends.
+interface DuelWait {
     readonly key: DuelKey;
     readonly until: number;
 }

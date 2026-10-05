@@ -5,8 +5,8 @@ import { Link } from '../router/Link';
 import { text } from '../text';
 import './GamesHead.css';
 
-/** One of the places under Games. */
-export type GamesView = `finished` | `live` | `duels` | `tournaments`;
+// One of the places under Games.
+type GamesView = `finished` | `live` | `duels` | `tournaments`;
 
 const places: readonly { view: GamesView; to: string }[] = [
     { view: `finished`, to: `/games` },

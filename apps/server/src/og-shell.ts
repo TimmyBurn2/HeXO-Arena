@@ -47,7 +47,7 @@ import { activeSince } from './leaderboard-api';
 import type { PlayerReads } from './player-api';
 import { tournamentSummary } from './tournament-api';
 
-export interface OgShellDeps {
+interface OgShellDeps {
     query: Query;
     presence: PresenceRegistry;
     games: GameRegistry;

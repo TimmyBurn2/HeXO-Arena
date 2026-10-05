@@ -149,13 +149,11 @@ async function readDocument(page: LegalPage): Promise<Read<string>> {
     );
 }
 
-/**
- * The deployment's documents filled from its details, as the store holds
- * them. A document that names a detail needs the details file: without
- * one it is left out rather than shown with gaps, and when the details
- * did not load it failed with them.
- */
-export function legalState(texts: ReadonlyMap<LegalPage, Read<string>>, details: Read<ReadonlyMap<string, string>>): LegalState {
+// The deployment's documents filled from its details, as the store holds
+// them. A document that names a detail needs the details file: without
+// one it is left out rather than shown with gaps, and when the details
+// did not load it failed with them.
+function legalState(texts: ReadonlyMap<LegalPage, Read<string>>, details: Read<ReadonlyMap<string, string>>): LegalState {
     const values = details.kind === `found` ? details.value : null;
     const fill = (name: string): Filling => {
         if (name === reportFormFact) return reportForm.on() ? { kind: `value`, text: reportPagePath } : { kind: `absent` };

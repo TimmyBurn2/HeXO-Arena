@@ -151,8 +151,8 @@ function placingsOf(query: Query, botId: string): NonNullable<PlayerRecord[`plac
     });
 }
 
-/** A player's record over every finished game but aborted and voided ones; null for a name no player holds. */
-export function playerRecord(query: Query, ladder: Pick<Ladder, `read`>, name: string, nowMs: number): PlayerRecord | null {
+// A player's record over every finished game but aborted and voided ones; null for a name no player holds.
+function playerRecord(query: Query, ladder: Pick<Ladder, `read`>, name: string, nowMs: number): PlayerRecord | null {
     const player = resolve(query, name);
     if (player === null) return null;
     const rows = playedRows(query, player);
@@ -210,8 +210,8 @@ export function playerRecord(query: Query, ladder: Pick<Ladder, `read`>, name: s
     };
 }
 
-/** A player's rating after each rated game in the range, oldest first, the newest {@link ratingHistoryCap} at most. */
-export function ratingHistory(query: Query, name: string, range: keyof typeof rangeSeconds, nowMs: number): RatingPoint[] | null {
+// A player's rating after each rated game in the range, oldest first, the newest `ratingHistoryCap` at most.
+function ratingHistory(query: Query, name: string, range: keyof typeof rangeSeconds, nowMs: number): RatingPoint[] | null {
     const player = resolve(query, name);
     if (player === null) return null;
     const span = rangeSeconds[range];

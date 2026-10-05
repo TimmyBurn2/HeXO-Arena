@@ -116,7 +116,6 @@ export const devLoginRequestSchema = z.union([
     z.object({ name: nameSyntaxSchema }),
     z.object({ discord: discordNamesSchema, next: nextPathSchema.optional() }),
 ]);
-export type DevLoginRequest = z.infer<typeof devLoginRequestSchema>;
 
 // The literal `1` is the only legal value; absence means false.
 export const botStreamQuerySchema = z.object({ open: z.literal(`1`).optional() });
@@ -200,16 +199,6 @@ export const botListingSchema = z
         description: `The declaration fields are absent until the bot declares them, and levels and analyzer are null; about and repoUrl are the owner's from the website where set, else the declared ones.`,
     });
 export type BotListing = z.infer<typeof botListingSchema>;
-
-// The Hexo-Bot-Api error shape: `error` is human-readable prose, `code` is
-// the stable machine-readable half that callers branch on.
-export const botCreateErrorCodes = [
-    `unauthorized`,
-    `invalid_name`,
-    `name_reserved`,
-    `bot_limit`,
-    `name_taken`,
-] as const;
 
 // A declaration is shown on the bot's pages, so its text is cleaned rather
 // than refused: a bot written against an earlier contract keeps declaring,
@@ -321,7 +310,6 @@ export type BotSettingsUpdate = z.infer<typeof botSettingsUpdateSchema>;
 
 export const unauthorizedErrorCodes = [`unauthorized`] as const;
 export const notFoundErrorCodes = [`not_found`] as const;
-export const devLoginErrorCodes = [`invalid_name`, `name_reserved`, `name_taken`] as const;
 export const badRequestErrorCodes = [`bad_request`] as const;
 export const botForbiddenErrorCodes = [`banned`] as const;
 

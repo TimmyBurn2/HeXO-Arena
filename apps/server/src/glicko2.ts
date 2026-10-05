@@ -9,12 +9,10 @@ export interface Glicko2Rating {
     readonly volatility: number;
 }
 
-/**
- * One game of a rating period from the rated player's side: score 1 for a
- * win, 0.5 for a draw, 0 for a loss.
- * The opponent's volatility plays no part in the update.
- */
-export interface Glicko2Result {
+// One game of a rating period from the rated player's side: score 1 for a
+// win, 0.5 for a draw, 0 for a loss.
+// The opponent's volatility plays no part in the update.
+interface Glicko2Result {
     readonly opponent: Pick<Glicko2Rating, `rating` | `deviation`>;
     readonly score: number;
 }

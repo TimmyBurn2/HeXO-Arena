@@ -15,12 +15,12 @@ import type { ShownLine } from './reading-view';
 const words = text.analysis.window;
 const reading = text.analysis.reading;
 
-/** The position shown as the analyzer window reads it: who reads it, where that stands, its lines, and why none can come. */
-export interface WindowReading {
+// The position shown as the analyzer window reads it: who reads it, where that stands, its lines, and why none can come.
+interface WindowReading {
     readonly analyzer: AnalyzerShown;
     readonly entry: ShownEntry;
     readonly lines: readonly ShownLine[];
-    /** Whether line A's place is kept for a reading on its way. */
+    // Whether line A's place is kept for a reading on its way.
     readonly held: boolean;
     readonly toMove: Side;
     readonly unreadable: Unreadable | null;

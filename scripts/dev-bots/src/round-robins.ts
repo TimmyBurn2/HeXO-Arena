@@ -43,7 +43,7 @@ const roundRobinClock: TimeControl = { mode: `turn`, turnTimeMs: 10_000 };
 // first waits half a minute.
 const playDeadlineMs = 10 * 60_000;
 
-export interface DevRoundRobinOptions {
+interface DevRoundRobinOptions {
     client: ArenaClient;
     plans: DevRoundRobinPlans;
     // A signed-in persona's session cookie.

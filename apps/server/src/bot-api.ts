@@ -25,7 +25,7 @@ import { isProvisional } from './rating';
 import { streamPlayerOf } from './rating-store';
 import type { StartGate } from './site-state';
 
-export interface BotApiDeps {
+interface BotApiDeps {
     query: Query;
     presence: PresenceRegistry;
     gate: StartGate;

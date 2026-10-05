@@ -12,7 +12,7 @@ export interface BackupPolicy {
     hourUtc: number;
 }
 
-export interface BackupLog {
+interface BackupLog {
     info(fields: object, message: string): void;
     error(fields: object, message: string): void;
 }

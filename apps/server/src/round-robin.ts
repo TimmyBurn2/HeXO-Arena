@@ -1,14 +1,16 @@
+import { tournamentMissesToWithdraw } from '@hexo-arena/contract';
+
 /** One of the two bots of a pairing: first plays x in game 1, second in game 2. */
 export type PairingSeat = `first` | `second`;
 
-/** Two bots who meet once in a round. */
-export interface RoundPairing {
+// Two bots who meet once in a round.
+interface RoundPairing {
     readonly first: string;
     readonly second: string;
 }
 
-/** One round: its pairings, and the bot that rests when the field is odd. */
-export interface Round {
+// One round: its pairings, and the bot that rests when the field is odd.
+interface Round {
     readonly round: number;
     readonly pairings: readonly RoundPairing[];
     readonly rest: string | null;
@@ -31,9 +33,9 @@ export interface ScoredPairing extends RoundPairing {
     readonly games: readonly [SlotResult, SlotResult];
 }
 
-/** A bot's line in the standings. */
-export interface Standing {
-    /** Shared by bots tied on points, head-to-head points, and Sonneborn-Berger. */
+// A bot's line in the standings.
+interface Standing {
+    // Shared by bots tied on points, head-to-head points, and Sonneborn-Berger.
     readonly rank: number;
     readonly bot: string;
     readonly points: number;
@@ -186,12 +188,12 @@ export function standingsOf(field: readonly string[], pairings: readonly ScoredP
 }
 
 /**
- * Whether a bot missed two pairings in a row: it showed for none of the
- * games it was due in either, so it is withdrawn.
+ * Whether a bot missed {@link tournamentMissesToWithdraw} pairings in a row: it
+ * showed for none of the games it was due in any of them, so it is withdrawn.
  * Pairings are taken in round order and a pair's openings in theirs, rests
  * skipped; the count stops at the first pairing still running.
  */
-export function missedTwoInARow(bot: string, pairings: readonly ScoredPairing[]): boolean {
+export function missedTooManyInARow(bot: string, pairings: readonly ScoredPairing[]): boolean {
     const own = pairings
         .filter((pairing) => pairing.first === bot || pairing.second === bot)
         .sort((one, two) => one.round - two.round || (one.leg ?? 1) - (two.leg ?? 1));
@@ -201,7 +203,7 @@ export function missedTwoInARow(bot: string, pairings: readonly ScoredPairing[])
         const seat: PairingSeat = pairing.first === bot ? `first` : `second`;
         const missed = pairing.games.every((result) => result.kind === `no_show` && (result.missing === seat || result.missing === `both`));
         streak = missed ? streak + 1 : 0;
-        if (streak >= 2) return true;
+        if (streak >= tournamentMissesToWithdraw) return true;
     }
     return false;
 }

@@ -17,8 +17,8 @@ import './RoundRobin.css';
 
 type Pairing = TournamentDetail[`rounds`][number][`pairings`][number];
 
-/** Whether a game is over, so the export and the games under Games hold one. */
-export function anyGameOver(detail: TournamentDetail): boolean {
+// Whether a game is over, so the export and the games under Games hold one.
+function anyGameOver(detail: TournamentDetail): boolean {
     return detail.rounds.some((round) => round.pairings.some((pairing) => pairing.games.some((game) => game.gameId !== null && (game.outcome === `played` || game.outcome === `aborted`))));
 }
 

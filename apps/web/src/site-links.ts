@@ -11,8 +11,8 @@ export const bridgeRepository = `https://github.com/TimmyBurn2/hexo-bridge`;
 // Each bridge tag is a release, so this follows the bridge's latest tag.
 export const bridgeInstall = `pip install git+${bridgeRepository}@v0.4.1`;
 
-/** The site's own repository: its code, the legal templates, and how to run it. */
-export const siteRepository = `https://github.com/TimmyBurn2/HeXO-Arena`;
+// The site's own repository: its code, the legal templates, and how to run it.
+const siteRepository = `https://github.com/TimmyBurn2/HeXO-Arena`;
 
 /**
  * One standing link of the site: a page of the app, or a document it does

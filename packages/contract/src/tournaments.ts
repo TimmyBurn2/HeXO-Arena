@@ -236,7 +236,6 @@ const tournamentTime = z.iso.datetime();
 export const tournamentWinnerSchema = z.object({ name: z.string(), ownerName: z.string(), deleted: deletedMarkSchema.optional() }).meta({ id: `TournamentWinner` });
 
 export const tournamentEntryStateSchema = z.enum([`entered`, `playing`, `absent`, `left_out`, `withdrawn`]);
-export type TournamentEntryState = z.infer<typeof tournamentEntryStateSchema>;
 
 export const tournamentEntryReasonSchema = z.enum([`daily_cap`, `clock`, `missed`, `banned`, `delisted`, `deleted`, `owner`, `refused`, `tournament`]);
 export type TournamentEntryReason = z.infer<typeof tournamentEntryReasonSchema>;
@@ -397,7 +396,6 @@ export const tournamentEntrySchema = z
 export type TournamentEntry = z.infer<typeof tournamentEntrySchema>;
 
 export const tournamentGameOutcomeSchema = z.enum([`pending`, `live`, `played`, `no_show`, `forfeit`, `not_played`, `aborted`]);
-export type TournamentGameOutcome = z.infer<typeof tournamentGameOutcomeSchema>;
 
 export const tournamentGameSchema = z
     .object({

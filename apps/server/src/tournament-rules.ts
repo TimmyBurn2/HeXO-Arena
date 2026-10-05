@@ -14,14 +14,14 @@ import { tournamentRules, tournaments } from './db/schema';
 const daySeconds = 86_400;
 const weekSeconds = 7 * daySeconds;
 
-/** When a weekly rule's tournaments start: weekday 0 is Monday, and the minute is UTC. */
-export interface RuleSlot {
+// When a weekly rule's tournaments start: weekday 0 is Monday, and the minute is UTC.
+interface RuleSlot {
     readonly weekday: number;
     readonly minuteOfDay: number;
 }
 
-/** A weekly rule as stored. */
-export interface TournamentRule extends RuleSlot {
+// A weekly rule as stored.
+interface TournamentRule extends RuleSlot {
     readonly id: number;
     readonly namePattern: string;
     readonly timeControl: TimeControl;
@@ -30,7 +30,7 @@ export interface TournamentRule extends RuleSlot {
     readonly daysAhead: number;
 }
 
-export type NewTournamentRule = Omit<TournamentRule, `id`>;
+type NewTournamentRule = Omit<TournamentRule, `id`>;
 
 /** The slot of a weekday and an HH:MM time the request schema has checked. */
 export function ruleSlot(weekday: TournamentWeekday, time: string): RuleSlot {
@@ -87,7 +87,7 @@ export function readTournamentRules(query: Query): TournamentRule[] {
         }));
 }
 
-export type AddTournamentRuleResult = { kind: `added`; id: number } | { kind: `same`; id: number } | { kind: `slot_taken`; id: number };
+type AddTournamentRuleResult = { kind: `added`; id: number } | { kind: `same`; id: number } | { kind: `slot_taken`; id: number };
 
 /** Adds a weekly rule unless one holds its slot already, answering that one as the same rule or another. */
 export function addTournamentRule(query: Query, rule: NewTournamentRule, now: number): AddTournamentRuleResult {
@@ -114,7 +114,7 @@ export function addTournamentRule(query: Query, rule: NewTournamentRule, now: nu
     return { kind: `added`, id };
 }
 
-export type RemoveTournamentRuleResult = { kind: `removed`; waiting: string[] } | { kind: `not_found` };
+type RemoveTournamentRuleResult = { kind: `removed`; waiting: string[] } | { kind: `not_found` };
 
 /** Removes a weekly rule; the tournaments it created stay, and the waiting ones are answered. */
 export function removeTournamentRule(query: Query, id: number): RemoveTournamentRuleResult {

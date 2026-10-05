@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { turnsOnBoard } from '@hexo-arena/contract';
 
-/** The query parameter that opens a game at a turn. */
-export const turnParam = `turn`;
+// The query parameter that opens a game at a turn.
+const turnParam = `turn`;
 
 /**
  * Where a replay stands, in stones on the board: the opening is one step,

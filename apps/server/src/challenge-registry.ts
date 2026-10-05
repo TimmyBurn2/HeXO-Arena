@@ -33,15 +33,15 @@ interface LiveChallenge {
     ttlTimer: Timer;
 }
 
-export type CreateChallengeOutcome =
+type CreateChallengeOutcome =
     | { kind: `created`; view: Challenge }
     | { kind: `replay`; view: Challenge }
     | { kind: `pair_pending` }
     | { kind: `daily_cap`; retryAfter: number };
 
-export type ChallengeActionOutcome = { kind: `ok` } | { kind: `bot_busy` } | { kind: `unknown` };
+type ChallengeActionOutcome = { kind: `ok` } | { kind: `bot_busy` } | { kind: `unknown` };
 
-export interface ChallengeDeps {
+interface ChallengeDeps {
     query: Query;
     presence: PresenceRegistry;
     games: GameRegistry;

@@ -6,15 +6,13 @@ import { streamEventSchema, type StreamEvent } from './stream';
 const htttxBegin = `# --- BEGIN vendored htttx ---`;
 const htttxEnd = `# --- END vendored htttx ---`;
 
-/**
- * The vendored htttx schemas as the target document holds them.
- */
-export interface HtttxBlock {
-    /** The block's lines, both markers included, byte for byte. */
+// The vendored htttx schemas as the target document holds them.
+interface HtttxBlock {
+    // The block's lines, both markers included, byte for byte.
     readonly text: string;
-    /** The pinned htttx-bot-api commit the block names. */
+    // The pinned htttx-bot-api commit the block names.
     readonly commit: string;
-    /** The schema names the block defines. */
+    // The schema names the block defines.
     readonly schemaNames: readonly string[];
 }
 
@@ -92,11 +90,9 @@ function pruneUnreferenced(components: Components, roots: unknown) {
     }
 }
 
-/**
- * The bot surface as its own OpenAPI 3.1 document, without the schemas the
- * vendored htttx block defines; references to them stay in place.
- */
-export function buildBotApiDocument(htttx: HtttxBlock) {
+// The bot surface as its own OpenAPI 3.1 document, without the schemas the
+// vendored htttx block defines; references to them stay in place.
+function buildBotApiDocument(htttx: HtttxBlock) {
     const document = new OpenApiGeneratorV31(botSurfaceDefinitions()).generateDocument({
         openapi: `3.1.0`,
         info: {
@@ -146,10 +142,8 @@ const challenge = {
     firstPlayer: `random`,
 } as const;
 
-/**
- * One example line per stream event type, in the order a bot meets them.
- */
-export const streamExamples: readonly StreamEvent[] = [
+// One example line per stream event type, in the order a bot meets them.
+const streamExamples: readonly StreamEvent[] = [
     {
         type: `gameStart`,
         gameId: `g_7Qm2Kx`,

@@ -151,7 +151,7 @@ function duelRowOf(row: StoredDuel): DuelRow {
     };
 }
 
-export interface NewDuel {
+interface NewDuel {
     readonly startedBy: string;
     readonly botIds: Readonly<Record<DuelKey, string>>;
     readonly first: DuelKey;
@@ -215,11 +215,11 @@ export function runningDuelsOfBot(query: Query, botId: string): DuelRow[] {
     return selectDuels(query).where(and(running, seatsBot(botId))).all().map(duelRowOf);
 }
 
-/** Which duels a list holds: one bot's, one person's, one kind, or every one. */
-export interface DuelFilter {
+// Which duels a list holds: one bot's, one person's, one kind, or every one.
+interface DuelFilter {
     readonly running: boolean;
     readonly botId: string | null;
-    /** A person's: started by them, or played by a bot they own. */
+    // A person's: started by them, or played by a bot they own.
     readonly userId: string | null;
     readonly kind: DuelKind | null;
     readonly limit: number;

@@ -4,13 +4,13 @@ import { streamBacklogLimitBytes, streamKeepaliveMs, type StreamEvent } from '@h
 // nothing else, so online and open-for-challenges can never go stale.
 // The replay source hands back, in order, the lines a reconnecting bot must
 // see first.
-export type ReplaySource = (botId: string) => readonly StreamEvent[];
+type ReplaySource = (botId: string) => readonly StreamEvent[];
 
 // Presence transitions reach the game layer through this hook: a bot going
 // offline starts the orphan countdown on its live games, coming back stops
 // it. Attach fires online after a replacement close fired offline; the
 // orphan logic is idempotent, so the transient pair is harmless.
-export type PresenceWatcher = (botId: string, online: boolean) => void;
+type PresenceWatcher = (botId: string, online: boolean) => void;
 
 // The subset of http.ServerResponse the registry needs; narrowing to it
 // keeps the registry unit-testable against a plain fake.

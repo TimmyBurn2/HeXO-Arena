@@ -28,8 +28,8 @@ function minCellPx(element: HTMLElement, reading: boolean): number {
     return raw.endsWith(`rem`) ? value * rootPx : value;
 }
 
-/** Where a camera stands: its element, the scale it draws at, and the box of the field it frames. */
-export interface Camera {
+// Where a camera stands: its element, the scale it draws at, and the box of the field it frames.
+interface Camera {
     readonly ref: RefObject<HTMLDivElement | null>;
     readonly scale: number | undefined;
     readonly box: Frame;

@@ -28,7 +28,7 @@ export interface OpeningCell extends Coord {
     readonly player: 0 | 1;
 }
 
-export interface StoredMove {
+interface StoredMove {
     readonly seq: number;
     readonly side: Side;
     readonly cells: readonly [Coord, Coord];
@@ -455,8 +455,8 @@ export function countPairBotGamesSince(
     return row?.n ?? 0;
 }
 
-/** What a game's tournament line is built from. */
-export interface GameTournamentParts extends NameParts {
+// What a game's tournament line is built from.
+interface GameTournamentParts extends NameParts {
     readonly id: string;
     readonly origin: string;
     readonly round: number;
@@ -504,11 +504,9 @@ export function gameTournamentFrom(row: {
     });
 }
 
-/**
- * A game's tournament line: its round and game, the pair's opening and its
- * count where the pair plays more than one, and who set up a person's.
- */
-export function gameTournamentOf(parts: GameTournamentParts): GameTournament | undefined {
+// A game's tournament line: its round and game, the pair's opening and its
+// count where the pair plays more than one, and who set up a person's.
+function gameTournamentOf(parts: GameTournamentParts): GameTournament | undefined {
     if (parts.game !== 1 && parts.game !== 2) return undefined;
     return {
         id: parts.id,

@@ -52,7 +52,7 @@ export function erasureJournalPath(databasePath: string): string {
     return join(dirname(databasePath), `erasures.jsonl`);
 }
 
-export interface JournalLog {
+interface JournalLog {
     warn(fields: object, message: string): void;
     error(fields: object, message: string): void;
 }
@@ -120,8 +120,8 @@ export class ErasureJournal {
     }
 }
 
-/** The audit actor of a deletion the boot applies again. */
-export const restoreActor = `restore`;
+// The audit actor of a deletion the boot applies again.
+const restoreActor = `restore`;
 
 /**
  * Applies every journaled deletion again to an account a restore brought

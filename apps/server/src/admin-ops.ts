@@ -41,7 +41,7 @@ import type { TournamentScheduler } from './tournament-scheduler';
 import { addTournamentRule, adminTournamentRules, nextRuleStart, removeTournamentRule, ruleSlot } from './tournament-rules';
 import { countRunningRoundRobins, createTournament, openTournaments } from './tournament-store';
 
-export interface AdminDeps {
+interface AdminDeps {
     query: Query;
     presence: PresenceRegistry;
     analysis: Pick<AnalysisService, `withdraw` | `delete`>;

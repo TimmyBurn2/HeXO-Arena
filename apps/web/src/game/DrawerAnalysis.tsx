@@ -147,11 +147,9 @@ function ReadingBy({ choice, players }: { choice: ReadingChoice; players: GamePl
     );
 }
 
-/**
- * A reading's graph with its labels: x ahead above the middle line and o below, from the board after the opening
- * to the game's last turn, the own views keyed by seat; a press steps to the turn under it.
- */
-export function ReadingGraph({ view, choice, line, cursor, onTurn }: {
+// A reading's graph with its labels: x ahead above the middle line and o below, from the board after the opening
+// to the game's last turn, the own views keyed by seat; a press steps to the turn under it.
+function ReadingGraph({ view, choice, line, cursor, onTurn }: {
     view: GameReading;
     choice: ReadingChoice;
     line: GameLine;

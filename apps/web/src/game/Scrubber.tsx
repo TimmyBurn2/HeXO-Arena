@@ -3,12 +3,10 @@ import { text } from '../text';
 import { stepStone, stepTurn, turnOf, type Replay } from './replay';
 import './hud.css';
 
-/**
- * The count a replay states: the opening, or the turn of how many, a turn
- * shown to its first stone short of the game's last, and whether the game
- * is still live.
- */
-export function replayCount(replay: Replay, live: boolean): string {
+// The count a replay states: the opening, or the turn of how many, a turn
+// shown to its first stone short of the game's last, and whether the game
+// is still live.
+function replayCount(replay: Replay, live: boolean): string {
     const { range, shown, following } = replay;
     const last = turnOf(range.total);
     if (live && following) return text.replay.latest(last);

@@ -66,8 +66,8 @@ export function draftSetup(draft: SetupDraft): Setup {
     return { stones: draft.stones, toMove: draft.toMove };
 }
 
-/** What the check line says of a draft: its stones by side, and why it cannot be played from, if it cannot. */
-export interface DraftCheck {
+// What the check line says of a draft: its stones by side, and why it cannot be played from, if it cannot.
+interface DraftCheck {
     readonly x: number;
     readonly o: number;
     readonly problem: SetupProblem | null;

@@ -24,7 +24,7 @@ export const presets = [
     { id: `u`, clock: { mode: `unlimited` } },
 ] as const satisfies readonly { id: string; clock: TimeControl }[];
 
-export type Preset = (typeof presets)[number];
+type Preset = (typeof presets)[number];
 
 /** The bounds of a clock set by hand; the turn clock also keeps to what the bot accepts. */
 export const custom = {
@@ -226,7 +226,7 @@ export function playBotPath(bot: string, level: Level | null = null): string {
 /** Where this browser keeps the last opponent and clock a game started with, and the Rated switch. */
 export const playStorageKey = `hexo-arena.play.v1`;
 
-export interface Played {
+interface Played {
     opponent: string | null;
     clock: TimeControl | null;
     // Off until the person turns it on here.

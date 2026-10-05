@@ -37,8 +37,8 @@ const capabilitiesSchema = z.object({
         .optional(),
 });
 
-/** The seconds a deepening reading answers at on its way to the seconds asked. */
-export const deepeningSeconds = [0.25, 0.5, 1, 2] as const;
+// The seconds a deepening reading answers at on its way to the seconds asked.
+const deepeningSeconds = [0.25, 0.5, 1, 2] as const;
 
 type Answer = { readonly kind: `answer`; readonly packet: BwsMoveResponsePacket } | { readonly kind: `timeout` } | { readonly kind: `aborted` };
 

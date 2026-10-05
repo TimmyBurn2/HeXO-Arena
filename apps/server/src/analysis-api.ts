@@ -27,7 +27,7 @@ import type { StartGate } from './site-state';
 /** The analysis session's route, the one websocket besides a game's engine session. */
 export const analysisSocketRoute = `/api/bot/analysis/socket`;
 
-export interface AnalysisApiDeps {
+interface AnalysisApiDeps {
     query: Query;
     analysis: AnalysisService;
     analyzers: AnalyzerSessions;

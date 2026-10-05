@@ -4,7 +4,7 @@ import type { Query } from './db';
 import { bots, users } from './db/schema';
 import { sha256Hex } from './tokens';
 
-export const botPlayScope = `bot:play`;
+const botPlayScope = `bot:play`;
 
 export interface BotPrincipal {
     id: string;
@@ -14,7 +14,7 @@ export interface BotPrincipal {
     delisted: boolean;
 }
 
-export type BotAuth =
+type BotAuth =
     | { kind: `none` }
     | { kind: `banned`; bot: BotPrincipal }
     | { kind: `authenticated`; bot: BotPrincipal };

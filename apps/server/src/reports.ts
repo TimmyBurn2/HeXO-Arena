@@ -13,7 +13,7 @@ import { nowSeconds, type Query } from './db';
 import { reports } from './db/schema';
 import { refuseRate, type ClientLimits } from './request-limits';
 
-export function insertReport(query: Query, report: ReportRequest): number {
+function insertReport(query: Query, report: ReportRequest): number {
     const [row] = query
         .insert(reports)
         .values({
@@ -55,7 +55,7 @@ export function openReports(query: Query): { count: number; oldest: AdminReport[
     return { count: total, oldest };
 }
 
-export type ReportClose = { kind: `closed` } | { kind: `already_closed` } | { kind: `not_found` };
+type ReportClose = { kind: `closed` } | { kind: `already_closed` } | { kind: `not_found` };
 
 /** Closes an open report with the operator's note, which it keeps. */
 export function closeReport(query: Query, id: number, note: string): ReportClose {

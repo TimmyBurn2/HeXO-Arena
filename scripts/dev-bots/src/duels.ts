@@ -44,7 +44,7 @@ const duelClock: TimeControl = { mode: `turn`, turnTimeMs: 10_000 };
 // the personas' quick strategies takes seconds.
 const playDeadlineMs = 10 * 60_000;
 
-export interface DevDuelOptions {
+interface DevDuelOptions {
     client: ArenaClient;
     plans: DevDuelPlans;
     // A signed-in persona's session cookie.

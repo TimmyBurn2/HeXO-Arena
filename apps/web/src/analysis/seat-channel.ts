@@ -1,12 +1,11 @@
-import { useEffect } from 'react';
 import { z } from 'zod';
 
-/** The channel a game tab names its seat on, so an engine in another tab of the site stays off while the person plays. */
-export const seatChannelName = `hexo-arena.seat`;
+// One name for every tab of the site, so a seat named in one is heard in
+// the others.
+const seatChannelName = `hexo-arena.seat`;
 
-// A seated tab says so again this often, and a seat not heard of for the
-// stale span is taken as gone, so a tab closed without a word frees it.
-const seatRepeatMs = 10_000;
+// A seat not named again within this span is taken as gone, so a tab
+// closed without a word frees it.
 const seatStaleMs = 25_000;
 
 const seatMessageSchema = z.discriminatedUnion(`type`, [
@@ -30,40 +29,6 @@ function openPort(): SeatPort | null {
 function parsed(event: MessageEvent): SeatMessage | null {
     const message = seatMessageSchema.safeParse(event.data);
     return message.success ? message.data : null;
-}
-
-/**
- * Names the person's seat in a live game on the seat channel while `gameId` is one,
- * again every little while and whenever another tab asks, and frees it when the game ends or the tab goes.
- */
-export function useSeatBroadcast(gameId: string | null, open: () => SeatPort | null = openPort): void {
-    useEffect(() => {
-        if (gameId === null) return;
-        const port = open();
-        if (port === null) return;
-        const say = (seated: boolean) => {
-            port.postMessage({ type: `seat`, gameId, seated } satisfies SeatMessage);
-        };
-        const onMessage = (event: MessageEvent) => {
-            if (parsed(event)?.type === `ask`) say(true);
-        };
-        const leave = () => {
-            say(false);
-        };
-        say(true);
-        const timer = setInterval(() => {
-            say(true);
-        }, seatRepeatMs);
-        port.addEventListener(`message`, onMessage);
-        window.addEventListener(`pagehide`, leave);
-        return () => {
-            clearInterval(timer);
-            window.removeEventListener(`pagehide`, leave);
-            port.removeEventListener(`message`, onMessage);
-            say(false);
-            port.close();
-        };
-    }, [gameId, open]);
 }
 
 /**

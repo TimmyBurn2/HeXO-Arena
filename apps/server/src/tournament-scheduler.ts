@@ -28,13 +28,13 @@ import type { FinishedGameNote, GameRegistry } from './game-registry';
 import { countBotBotGamesSince, countPairBotGamesSince, type OpeningCell } from './game-store';
 import type { PresenceRegistry } from './presence';
 import { readRating } from './rating-store';
-import { missedTwoInARow, slotDone, storedSlot, xSeatOf, type PairingSeat, type ScoredPairing, type SlotResult } from './round-robin';
+import { missedTooManyInARow, slotDone, storedSlot, xSeatOf, type PairingSeat, type ScoredPairing, type SlotResult } from './round-robin';
 import { isCurrentGeneration, isPaused } from './site-state';
 import { dueRuleStarts, hasRuleTournament, readTournamentRules } from './tournament-rules';
 import { cancelTournament, createTournament, insertPairings, runningRoundRobinsBy, stopRoundRobin as markStopped, type StopReason } from './tournament-store';
 
-/** Why a bot is taken out of every tournament, as a running one's withdrawn entry records it. */
-export type WithdrawReason = `banned` | `delisted` | `deleted`;
+// Why a bot is taken out of every tournament, as a running one's withdrawn entry records it.
+type WithdrawReason = `banned` | `delisted` | `deleted`;
 
 type SlotState = SlotResult[`kind`];
 
@@ -66,7 +66,7 @@ interface Grace {
     readonly missing: readonly string[];
 }
 
-export interface SchedulerDeps {
+interface SchedulerDeps {
     readonly query: Query;
     readonly presence: PresenceRegistry;
     readonly games: GameRegistry;
@@ -666,7 +666,7 @@ export class TournamentScheduler {
         this.#roundReadyAt.delete(tournamentId);
     }
 
-    // Withdraws a bot of the pairing that has now missed two in a row.
+    // Withdraws a bot of the pairing that has now missed too many in a row.
     #checkWithdrawals(pairingId: string): void {
         const row = this.#query
             .select({ tournamentId: tournamentPairings.tournamentId, first: tournamentPairings.firstBotId, second: tournamentPairings.secondBotId })
@@ -676,7 +676,7 @@ export class TournamentScheduler {
         if (row === undefined) return;
         const pairings = this.#pairings(row.tournamentId).map(scored);
         for (const botId of [row.first, row.second]) {
-            if (missedTwoInARow(botId, pairings)) this.#leave(row.tournamentId, botId, `missed`);
+            if (missedTooManyInARow(botId, pairings)) this.#leave(row.tournamentId, botId, `missed`);
         }
     }
 

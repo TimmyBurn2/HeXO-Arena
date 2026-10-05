@@ -3,8 +3,8 @@ import type { Layout } from './frame';
 import { Link } from './router/Link';
 import { text } from './text';
 
-/** A screen's code that did not arrive, as against a screen that broke while drawing. */
-export class ScreenDownloadError extends Error {}
+// A screen's code that did not arrive, as against a screen that broke while drawing.
+class ScreenDownloadError extends Error {}
 
 /** Load a screen's module, marking a failed download as such for the boundary. */
 export async function loadScreen<T>(load: () => Promise<T>): Promise<T> {

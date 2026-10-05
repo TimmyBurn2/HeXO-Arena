@@ -38,7 +38,7 @@ export const adminUsage = `usage: hexo-arena-admin <op> [target] [--reason <text
   delete-analysis <analysisId> --reason <text>
   duel-stop <duelId> --reason <text>`;
 
-export type ParsedArgs = { kind: `request`; request: AdminRequest } | { kind: `usage`; error: string };
+type ParsedArgs = { kind: `request`; request: AdminRequest } | { kind: `usage`; error: string };
 
 const namedOps = new Set([`ban-user`, `unban-user`, `delete-user`, `delist-bot`, `relist-bot`, `revoke-bot`]);
 

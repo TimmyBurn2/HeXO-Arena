@@ -11,8 +11,8 @@ const halfWidth = (Math.sqrt(3) * cellSize) / 2;
 const stoneScale = 0.7;
 const box = `${String(-halfWidth)} ${String(-cellSize)} ${String(2 * halfWidth)} ${String(2 * cellSize)}`;
 
-/** One bot's game in the scoreboard: how it stands for that bot. */
-export type GlyphState = `won` | `lost` | `none` | `live` | `pending` | `missing`;
+// One bot's game in the scoreboard: how it stands for that bot.
+type GlyphState = `won` | `lost` | `none` | `live` | `pending` | `missing`;
 
 const outcomeWords: Readonly<Record<GlyphState, string>> = {
     won: text.tournaments.outcomes.won,
@@ -23,8 +23,8 @@ const outcomeWords: Readonly<Record<GlyphState, string>> = {
     missing: text.tournaments.outcomes.not_played,
 };
 
-/** How a game of the duel stands for one of its bots. */
-export function glyphOf(game: DuelGame, side: DuelSide): GlyphState {
+// How a game of the duel stands for one of its bots.
+function glyphOf(game: DuelGame, side: DuelSide): GlyphState {
     switch (game.state) {
         case `live`:
             return `live`;

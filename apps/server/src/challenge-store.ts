@@ -30,7 +30,7 @@ export interface ChallengeRecord {
     readonly sameOwner: boolean;
 }
 
-export interface NewChallenge {
+interface NewChallenge {
     readonly challengerBotId: string;
     readonly destBotId: string;
     readonly requestKey: string;
@@ -153,15 +153,6 @@ export function countChallengesSince(query: Query, challengerBotId: string, sinc
         .select({ n: sql<number>`count(*)` })
         .from(challenges)
         .where(and(eq(challenges.challengerBotId, challengerBotId), gte(challenges.createdAt, sinceSeconds)))
-        .all();
-    return row?.n ?? 0;
-}
-
-export function countPendingForDest(query: Query, destBotId: string): number {
-    const [row] = query
-        .select({ n: sql<number>`count(*)` })
-        .from(challenges)
-        .where(and(eq(challenges.destBotId, destBotId), eq(challenges.status, `created`)))
         .all();
     return row?.n ?? 0;
 }

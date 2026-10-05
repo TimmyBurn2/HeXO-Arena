@@ -9,13 +9,13 @@ import {
 } from '@hexo-arena/contract';
 import { otherPlayer, playTurn, winsThisTurn, type Coord, type Player, type Setup } from '@hexo-arena/rules';
 
-/** What an analyzer's answer comes to: its lines, best first, or why the reading fails. */
-export type CheckedReading =
+// What an analyzer's answer comes to: its lines, best first, or why the reading fails.
+type CheckedReading =
     | { readonly ok: true; readonly lines: readonly AnalysisLine[] }
     | { readonly ok: false; readonly failure: Extract<AnalysisFailure, `no_evaluation` | `illegal` | `inconsistent`> };
 
-/** The parts of a move_response a reading is made of. */
-export interface ReadingAnswer {
+// The parts of a move_response a reading is made of.
+interface ReadingAnswer {
     readonly move: HtttxMoveOption;
     readonly considerations?: readonly HtttxMoveOption[] | undefined;
 }

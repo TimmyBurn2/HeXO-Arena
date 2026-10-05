@@ -3,7 +3,7 @@ import { pausedRetryAfterSeconds, healthzPath } from '@hexo-arena/contract';
 // The health probe is one bit: up, or refusing new starts.
 // The pause retry-after doubles as the poll cadence, so a lifted pause
 // shows within a minute without anyone refreshing.
-export type SiteStatus = `up` | `paused`;
+type SiteStatus = `up` | `paused`;
 
 let current: SiteStatus = `up`;
 // One probe at a time; a caller during it waits for the same answer.

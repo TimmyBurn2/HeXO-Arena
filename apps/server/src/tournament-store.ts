@@ -19,7 +19,7 @@ import { shortId } from './random';
 import { roundRobin } from './round-robin';
 import { shownUser } from './shown-names';
 
-export interface NewTournament {
+interface NewTournament {
     readonly name: string;
     readonly startsAt: number;
     readonly timeControl: TimeControl;
@@ -28,7 +28,7 @@ export interface NewTournament {
     readonly ruleId?: number;
 }
 
-export type CreateTournamentResult =
+type CreateTournamentResult =
     | { kind: `created`; id: string }
     | { kind: `too_soon` }
     | { kind: `too_far` }
@@ -71,7 +71,7 @@ export interface RoundRobinEntrant {
     readonly version: string | null;
 }
 
-export interface NewRoundRobin {
+interface NewRoundRobin {
     readonly createdBy: string;
     readonly entrants: readonly RoundRobinEntrant[];
     readonly test: boolean;
@@ -141,7 +141,7 @@ export function insertPairings(query: Query, tournamentId: string, order: readon
     }
 }
 
-export type CancelTournamentResult = { kind: `canceled`; status: TournamentStatus } | { kind: `over` } | { kind: `not_found` };
+type CancelTournamentResult = { kind: `canceled`; status: TournamentStatus } | { kind: `over` } | { kind: `not_found` };
 
 /** Ends a waiting or running tournament as canceled, answering the status it had. */
 export function cancelTournament(query: Query, id: string, now: number): CancelTournamentResult {

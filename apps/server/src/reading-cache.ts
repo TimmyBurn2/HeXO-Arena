@@ -27,10 +27,6 @@ export class ReadingCache {
         this.#cap = cap;
     }
 
-    get size(): number {
-        return this.#entries.size;
-    }
-
     put(positionKey: string, reading: CachedReading): void {
         const key = entryKey(reading.botId, positionKey);
         this.#entries.delete(key);

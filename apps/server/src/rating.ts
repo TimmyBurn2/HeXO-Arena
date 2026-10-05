@@ -1,18 +1,18 @@
 import { humanSeedRating, rankableDeviation, type Side } from '@hexo-arena/contract';
 import { glicko2Update, type Glicko2Rating } from './glicko2';
 
-export const botSeedRating = 1500;
-export const seedDeviation = 500;
-export const seedVolatility = 0.09;
-export const deviationFloor = 45;
-export const deviationCap = 500;
-export const volatilityCap = 0.1;
-export const ratingFloor = 400;
-export const gameDeltaCap = 400;
-export const glicko2Tau = 0.5;
+const botSeedRating = 1500;
+const seedDeviation = 500;
+const seedVolatility = 0.09;
+const deviationFloor = 45;
+const deviationCap = 500;
+const volatilityCap = 0.1;
+const ratingFloor = 400;
+const gameDeltaCap = 400;
+const glicko2Tau = 0.5;
 // lichess's rate, lila's Glicko.periodsPerDay: one period about every
 // 4.7 days, so an active player's deviation settles toward the floor.
-export const ratingPeriodsPerDay = 0.21436;
+const ratingPeriodsPerDay = 0.21436;
 const secondsPerDay = 86_400;
 
 export type PlayerRating = Glicko2Rating;

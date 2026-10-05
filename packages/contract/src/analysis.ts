@@ -304,7 +304,6 @@ const positionShape = { cells: positionCellsSchema, toMove: htttxSideSchema };
 
 /** A position the analysis board may read, cleared against live games. */
 export const positionCheckRequestSchema = z.object(positionShape).meta({ id: `PositionCheck` });
-export type PositionCheckRequest = z.infer<typeof positionCheckRequestSchema>;
 
 /** A position to read, with the analyzer, lines, and seconds asked of it. */
 export const positionReadingRequestSchema = z

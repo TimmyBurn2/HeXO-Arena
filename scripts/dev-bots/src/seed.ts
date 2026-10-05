@@ -10,8 +10,8 @@ import { seedDevDuels, type DevDuels, type DevDuelPlans } from './duels';
 import { seedDevRoundRobins, type DevRoundRobinPlans, type DevRoundRobins } from './round-robins';
 import { devWeeklyRule, seedDevTournament, type Candidate, type DevTournament, type DevWeeklyRule } from './tournament';
 
-/** How the seed reaches its target, what it plays, and how it bans. */
-export interface SeedOptions {
+// How the seed reaches its target, what it plays, and how it bans.
+interface SeedOptions {
     origin: string;
     plan: SeedPlan;
     // Where the personas' online bots' tokens land, for pnpm dev:bots.

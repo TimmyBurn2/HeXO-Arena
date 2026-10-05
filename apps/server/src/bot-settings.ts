@@ -8,7 +8,7 @@ import type { CredentialLimits } from './request-limits';
 import { sessionUser } from './sessions';
 import type { TournamentScheduler } from './tournament-scheduler';
 
-export interface BotSettingsDeps {
+interface BotSettingsDeps {
     query: Query;
     limits: CredentialLimits;
     // Turning duels by others off takes the bot out of the round robins others set up.
@@ -51,12 +51,10 @@ function settingsOf(row: SettingsRow): BotSettings {
     });
 }
 
-/**
- * An owned, live bot's settings after any change the update makes; an empty
- * text clears the owner's own, so the declared one shows again.
- * Undefined for a bot the owner does not hold.
- */
-export function updateBotSettings(query: Query, ownerId: string, nameKey: string, changes: BotSettingsUpdate): BotSettings | undefined {
+// An owned, live bot's settings after any change the update makes; an empty
+// text clears the owner's own, so the declared one shows again.
+// Undefined for a bot the owner does not hold.
+function updateBotSettings(query: Query, ownerId: string, nameKey: string, changes: BotSettingsUpdate): BotSettings | undefined {
     const where = and(eq(bots.nameKey, nameKey), eq(bots.ownerId, ownerId), isNull(bots.deletedAt));
     const set: { duelsByOthers?: number; ownerAbout?: string | null; ownerRepoUrl?: string | null } = {};
     if (changes.duelsByOthers !== undefined) set.duelsByOthers = changes.duelsByOthers ? 1 : 0;

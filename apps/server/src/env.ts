@@ -91,7 +91,7 @@ const envSchema = envShape
         TRUSTED_PROXY: TRUSTED_PROXY === `` ? null : TRUSTED_PROXY,
     }));
 
-export type Env = z.infer<typeof envSchema>;
+type Env = z.infer<typeof envSchema>;
 
 export function parseEnv(source: unknown): Env {
     return envSchema.parse(source);

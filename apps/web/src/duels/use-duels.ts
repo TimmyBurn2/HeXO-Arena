@@ -25,8 +25,8 @@ export function useBeat(read: () => Promise<void>, ms: number): void {
     }, [ms]);
 }
 
-/** What a duel's setup reads beside the bot list: the running tournament's bots and each bot's duel state. */
-export interface DuelStates {
+// What a duel's setup reads beside the bot list: the running tournament's bots and each bot's duel state.
+interface DuelStates {
     readonly reserved: ReadonlySet<string>;
     readonly states: readonly DuelBotState[];
     readonly reload: () => void;
@@ -50,8 +50,8 @@ export function useDuelStates(): DuelStates {
     return { reserved, states, reload: () => void read() };
 }
 
-/** What a duel's setup reads: the bots, and their duel states. */
-export interface SetupReads {
+// What a duel's setup reads: the bots, and their duel states.
+interface SetupReads {
     readonly bots: BotListing[] | null;
     readonly reserved: ReadonlySet<string>;
     readonly states: readonly DuelBotState[];
@@ -121,8 +121,8 @@ export function useMineDuels(signedIn: boolean): MineRead {
 /** Which duels a list shows: every one, the reader's, or tests alone. */
 export type DuelFilter = `all` | `yours` | `tests`;
 
-/** The lists a duels place reads: every duel for the live ones, the filter's for the recent ones, and the reader's quota. */
-export interface ListReads {
+// The lists a duels place reads: every duel for the live ones, the filter's for the recent ones, and the reader's quota.
+interface ListReads {
     readonly all: DuelList | null;
     readonly recent: DuelList | null;
     readonly quota: DuelQuota | null;
