@@ -11,6 +11,7 @@ import {
     guestMintLimit,
     guestMintPrefixLimit,
     guestPath,
+    humanGameStartLimit,
     principalRequestLimit,
     publicRequestLimit,
     reportGlobalLimit,
@@ -189,6 +190,7 @@ describe('request limits', () => {
             positionRequest: positionRequestLimit,
             positionCheck: positionCheckLimit,
             positionCheckPrefix: positionCheckPrefixLimit,
+            gameStart: humanGameStartLimit,
         });
     });
 

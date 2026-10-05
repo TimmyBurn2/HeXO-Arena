@@ -47,7 +47,7 @@ interface AdminDeps {
     games: GameRegistry;
     challenges: ChallengeRegistry;
     tournaments: Pick<TournamentScheduler, `cancel` | `withdraw` | `stopSetUpBy`>;
-    limits: Pick<RequestLimits, `clientCount` | `keys`>;
+    limits: Pick<RequestLimits, `clientCount` | `keys` | `refusals`>;
     ladder: Pick<Ladder, `clear`>;
     actor: string;
     // Writes the night's backup now, or one under a label kept apart, and
@@ -72,6 +72,8 @@ function statusOf(deps: AdminDeps): AdminStatus {
         activeGames: deps.games.liveGameCount(),
         clientKeys: deps.limits.clientCount,
         keylessRequests: deps.limits.keys.keyless,
+        refusals: deps.limits.refusals.codes,
+        rateLimits: deps.limits.refusals.limits,
         tournaments: openTournaments(deps.query),
         tournamentRules: adminTournamentRules(deps.query, nowOf(deps), deps.tournamentLeadMs),
         liveDuels: countRunningPersonTournaments(deps.query, `duel`),

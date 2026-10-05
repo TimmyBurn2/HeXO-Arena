@@ -13,7 +13,7 @@ import {
     type TimeControl,
     type TournamentOrigin,
 } from '@hexo-arena/contract';
-import { and, count, desc, eq, gte, isNull, or, sql } from 'drizzle-orm';
+import { and, count, eq, gte, isNull, or, sql } from 'drizzle-orm';
 import { randomUUID } from 'node:crypto';
 import { replay, type Coord, type Position } from '@hexo-arena/rules';
 import { nowSeconds, type Query } from './db';
@@ -402,19 +402,6 @@ export function findFinishedHeadline(query: Query, gameId: string): GameHeadline
         reason: row.finishReason,
         turns: turnsOnBoard(boardCellSchema.array().parse(JSON.parse(row.openingCells)).length) + row.moves,
     };
-}
-
-// The creation cooldown reads the log rather than memory, so a restart
-// does not reset a human's clock between creations.
-export function lastHumanGameCreatedAt(query: Query, userId: string): number | null {
-    const row = query
-        .select({ createdAt: games.createdAt })
-        .from(games)
-        .where(eq(games.userId, userId))
-        .orderBy(desc(games.createdAt))
-        .limit(1)
-        .get();
-    return row === undefined ? null : row.createdAt;
 }
 
 // A signed-in human's games against one bot since an epoch second, which

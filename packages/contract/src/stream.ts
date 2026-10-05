@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { htttxMoveRequestSchema, htttxSideSchema } from './htttx';
 import { provisionalSchema, ratingSchema } from './leaderboard';
 import { levelIdSchema } from './levels';
-import { gameTurnCap, orphanForfeitMs, unlimitedWallCapMs } from './limits';
+import { gameTurnCap, gameWallCapMs, orphanForfeitMs } from './limits';
 
 // One line of the bot event stream, discriminated by `type`; the set of
 // kinds is closed, so an unknown discriminator is a hard parse failure.
@@ -21,7 +21,7 @@ export const finishReasonSchema = z
             `timeout: the loser's clock ran out.`,
             `surrender: the loser resigned.`,
             `disconnect: the loser's stream stayed closed for ${String(orphanForfeitMs / 1000)} s.`,
-            `terminated: the loser played an illegal move, or, with no winner, the game reached ${String(gameTurnCap)} turns or an unlimited game ${String(unlimitedWallCapMs / 3_600_000)} hours.`,
+            `terminated: the loser played an illegal move, or, with no winner, the game reached ${String(gameTurnCap)} turns or ${String(gameWallCapMs / 3_600_000)} hours.`,
             `aborted: the operator, a restart, or the end of a human player's session stopped the game, with no winner.`,
         ].join(` `),
     });
@@ -169,7 +169,7 @@ export const gameStartEventSchema = z
             description: [
                 `Whether this game moves the bot's own rating: true only in a rated game between two bots.`,
                 `A game against a player moves only the player's rating, and one against a guest moves none.`,
-                `A game between two bots is unrated at a level other than a bot's default, in a series a player on the website started unrated, and between two bots of one owner.`,
+                `A game between two bots is unrated at a level other than a bot's default, in a duel or round robin a person set up on the website, and between two bots of one owner.`,
             ].join(` `),
         }),
         level: levelIdSchema.nullable().meta({

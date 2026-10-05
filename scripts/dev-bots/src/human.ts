@@ -45,7 +45,7 @@ function positionOf(cells: readonly GameCell[]): Position {
 
 /**
  * Starts a game against a bot through the human routes, inside the
- * creation cooldown, and plays random turns next to the stones from the
+ * game start rate, and plays random turns next to the stones from the
  * game's event stream until it finishes, or ends it as the plan says.
  */
 export async function playHumanGame(options: HumanPlayOptions): Promise<HumanResult> {

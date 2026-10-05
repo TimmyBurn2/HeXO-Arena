@@ -26,7 +26,7 @@ import {
     botConcurrentGameCap,
     guestRetryAfterSeconds,
     humanConcurrentGameCap,
-    humanGameCooldownSeconds,
+    humanGameStartLimit,
     liveGameListCap,
     minimumAge,
     nameMaxLength,
@@ -35,7 +35,7 @@ import {
     placementRadius,
     plural,
     siteName,
-    unlimitedWallCapMs,
+    gameWallCapMs,
     valueCutMax,
     type AnalysisFailure,
     type DiscordNames,
@@ -49,7 +49,7 @@ import {
 import type { ReactNode } from 'react';
 import { rich, type Slot } from './rich';
 
-const wallCapHours = unlimitedWallCapMs / 3_600_000;
+const wallCapHours = gameWallCapMs / 3_600_000;
 
 // A wait in whole minutes, as a rate and as a delay: "a minute" for one.
 const perMinutes = (minutes: number) => (minutes === 1 ? `a minute` : `every ${String(minutes)} minutes`);
@@ -805,6 +805,7 @@ export const en = {
         yourGame: (opponent: string) => `Your game against ${opponent}`,
         errors: {
             human_busy: () => `You already have ${String(humanConcurrentGameCap)} live ${plural(humanConcurrentGameCap, `game`, `games`)}; finish one first`,
+            pair_busy: (name: string) => `You already play ${name}; finish that game first`,
             bot_busy: (name: string) => `${name} is in ${String(botConcurrentGameCap)} ${plural(botConcurrentGameCap, `game`, `games`)} already; try again shortly`,
             clock_not_accepted: (name: string) => `${name} no longer accepts that clock; pick another`,
             unknown_level: (name: string) => `${name} no longer offers that strength; pick another`,
@@ -815,7 +816,8 @@ export const en = {
                 `You have played ${name} rated ${String(pairDailyCap)} times today, the most one day allows; turn off Rated, pick another bot, or wait until 00:00 UTC`,
             paused: () => `Starting games is paused; live games continue`,
         },
-        cooldown: (seconds: number) => `1 new game ${perMinutes(humanGameCooldownSeconds / 60)}; try again in ${String(seconds)} s`,
+        cooldown: (seconds: number) =>
+            `${String(humanGameStartLimit.burst)} new games at once, then 1 ${perMinutes(humanGameStartLimit.refillMs / 60_000)}; try again in ${String(seconds)} s`,
         guestLimit: `The guest limit is full; try again in ${inMinutes(guestRetryAfterSeconds / 60)}, or sign in`,
         guestLimited: (seconds: number) => `Too many guest sessions from this network; try again in ${inWait(seconds)}, or sign in`,
         guestFailed: `The guest session did not start; try again`,

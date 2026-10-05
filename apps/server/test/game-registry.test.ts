@@ -7,7 +7,7 @@ import {
     sessionTokenTtlMs,
     sideOf,
     streamBacklogLimitBytes,
-    unlimitedWallCapMs,
+    gameWallCapMs,
     wireToInternal,
     type BwsHeartbeatPacket,
     type BwsMoveRequestPacket,
@@ -743,7 +743,7 @@ describe('clocks', () => {
             timeControl: unlimitedControl,
             openingPlies: 1,
         });
-        await vi.advanceTimersByTimeAsync(unlimitedWallCapMs - 1);
+        await vi.advanceTimersByTimeAsync(gameWallCapMs - 1);
         expect(world.games.activeGameCount(bot.id)).toBe(1);
         await vi.advanceTimersByTimeAsync(1);
         expect(latestEvent(world, `gameFinish`)).toEqual({
@@ -752,6 +752,18 @@ describe('clocks', () => {
             winner: null,
             reason: `terminated`,
         });
+        expect(world.games.activeGameCount(bot.id)).toBe(0);
+    });
+
+    it.each([
+        [`a match clock`, { mode: `match`, mainTimeMs: 2 * gameWallCapMs, incrementMs: 0 }],
+        [`a turn clock`, { mode: `turn`, turnTimeMs: 2 * gameWallCapMs }],
+    ] as const)('ends a game on %s longer than the wall cap at the cap, with no winner', async (_clock, timeControl) => {
+        const { gameId } = world.games.createGame({ person: user, bot, timeControl, openingPlies: 1 });
+        await vi.advanceTimersByTimeAsync(gameWallCapMs - 1);
+        expect(world.games.activeGameCount(bot.id)).toBe(1);
+        await vi.advanceTimersByTimeAsync(1);
+        expect(latestEvent(world, `gameFinish`)).toEqual({ type: `gameFinish`, gameId, winner: null, reason: `terminated` });
         expect(world.games.activeGameCount(bot.id)).toBe(0);
     });
 });
@@ -1349,6 +1361,21 @@ describe('a bot\'s own view', () => {
         expect(ownRows()).toHaveLength(2);
         expect(world.sqlite.prepare(`select game_id as gameId, side, scale, cut_inaccuracy as i, cut_mistake as m, cut_blunder as b, meaning from own_values`).all()).toEqual([
             { gameId, side: `x`, scale: 1000, i: 0.1, m: 0.2, b: 0.3, meaning: `expected` },
+        ]);
+    });
+
+    it('checks each line against the board as it stands after every turn, the other side\'s last one included', () => {
+        answerBot({ pieces: crossTurn(0).pieces, evaluation: { heuristic: 0.25 } });
+        world.games.humanMove(gameId, user, [wireToInternal(circleTurn(0).pieces[0]), wireToInternal(circleTurn(0).pieces[1])]);
+        answerBot({ pieces: crossTurn(1).pieces, evaluation: { heuristic: 0.2 } }, [
+            { pieces: circleTurn(0).pieces, evaluation: { heuristic: 0.1 } },
+            { pieces: crossTurn(0).pieces, evaluation: { heuristic: 0.1 } },
+            { pieces: crossTurn(2).pieces, evaluation: { heuristic: 0 } },
+        ]);
+        expect(ownRows()).toEqual([
+            { seq: 1, rank: 0, heuristic: 0.25, winIn: null },
+            { seq: 3, rank: 0, heuristic: 0.2, winIn: null },
+            { seq: 3, rank: 1, heuristic: 0, winIn: null },
         ]);
     });
 
