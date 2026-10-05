@@ -17,17 +17,6 @@ const others = looks.filter((look) => look.name !== defaultTheme);
 const rules = [`color-contrast`, `empty-table-header`, `heading-order`, `link-in-text-block`];
 const colorRules = [`color-contrast`, `link-in-text-block`];
 
-// Misses in a look, by the element they sit in, that only a change of that
-// look's colors mends: dim text on the active ground, which a strength
-// select and a found ladder row wear (4.32:1 in omok, 4.26:1 in tyto, where
-// 4.5:1 is needed), and the round robin pairs' scores in brass on omok's
-// wood (1.85:1).
-// The gate passes these and fails any other.
-const knownMisses: Readonly<Record<string, readonly string[]>> = {
-    omok: [`.slot-select`, `tr.found`, `.rr-pairs .xt-cell`],
-    tyto: [`.slot-select`, `tr.found`],
-};
-
 // Under reduced motion every transition and animation stands at its end at
 // once, so the gates read end states without waiting the motion out.
 async function open(page: Page, shot: Shot, viewport: Viewport): Promise<void> {
@@ -69,18 +58,9 @@ async function capture(page: Page, shot: Shot, look: string, viewport: Viewport)
     });
 }
 
-async function violations(page: Page, gates: string[], known: readonly string[] = []): Promise<string[][]> {
+async function violations(page: Page, gates: string[]): Promise<string[][]> {
     const axe = await new AxeBuilder({ page }).withRules(gates).analyze();
-    const targets = axe.violations.flatMap((violation) => violation.nodes.map((node) => node.target.map(String)));
-    if (known.length === 0) return targets;
-    return page.evaluate(
-        ({ targets, known }) =>
-            targets.filter((target) => {
-                const element = target.length === 1 ? document.querySelector(target[0] ?? ``) : null;
-                return element === null || !known.some((selector) => element.closest(selector) !== null);
-            }),
-        { targets, known },
-    );
+    return axe.violations.flatMap((violation) => violation.nodes.map((node) => node.target.map(String)));
 }
 
 // Framed screens must never scroll sideways; the game stage owns the
@@ -109,7 +89,7 @@ for (const shot of shots) {
         for (const look of others) {
             await restyle(page, look);
             if (shot.board === true) await capture(page, shot, look.name, first);
-            const found = { targets: await violations(page, colorRules, knownMisses[look.name]), overflow: await overflow(page, shot) };
+            const found = { targets: await violations(page, colorRules), overflow: await overflow(page, shot) };
             if (found.targets.length > 0 || found.overflow > 0) faults[look.name] = found;
         }
         expect(faults).toEqual({});
