@@ -19,14 +19,14 @@ import { useDocumentMeta } from '../use-document-meta';
 import { GameBoard, type TurnStatus } from '../game/GameBoard';
 import { FeedLabel, GameDrawer } from '../game/GameDrawer';
 import { clockOf, Pips, SeatChip, TurnChip, YouChip } from '../game/GameHud';
-import { PeekGraph, PeekReadout, ReadingHead, type Asker } from '../game/DrawerAnalysis';
+import { askerOf, PeekGraph, PeekReadout, ReadingHead } from '../game/DrawerAnalysis';
 import { lastTurnOf, turnOf, useReplay, type Replay } from '../game/replay';
 import { Scrubber } from '../game/Scrubber';
 import { Rundown, unratedByOf } from '../game/Rundown';
 import { useRundown } from '../game/rundown';
 import { useDrawer } from '../game/use-drawer';
 import { useGameReading } from '../game/use-game-reading';
-import { selfName, useMe, type MeState } from '../me';
+import { selfName, useMe } from '../me';
 import { useGame, type GameLink, type GameSend, type Refusal } from '../game/use-game';
 import { feedOf, matchName, otherSide, positionOf, resultLine, seatNames, stonesOf, winLineOf } from '../game/snapshot-views';
 import { NotFoundScreen } from './NotFoundScreen';
@@ -486,12 +486,6 @@ function GameView({ snapshot, send, link }: { snapshot: GameSnapshot; send: Game
             </div>
         </div>
     );
-}
-
-// Who may ask for a reading: a signed-in user, with the day's requests left; anyone else signs in first.
-function askerOf(me: MeState): Asker {
-    if (me.status === `loading`) return { kind: `unknown` };
-    return me.me?.kind === `user` ? { kind: `user`, left: me.me.analysisLeft.games } : { kind: `signed-out` };
 }
 
 /** Two players' record against each other, as x's. */

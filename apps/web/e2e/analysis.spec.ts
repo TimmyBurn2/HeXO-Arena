@@ -200,6 +200,8 @@ test('a live game waits for its end and an unknown one reads as missing', async 
 
 test('Set up places and takes off stones, names the side to move, checks the board, and starts a tree there', async ({ page }) => {
     await open(page, `/analysis`);
+    // The board's keys listen from the same effects that keep the board, so a key pressed before it is kept goes unheard.
+    await expect.poll(() => stored(page)).not.toBeNull();
     await page.keyboard.press(`s`);
     const panel = page.locator(`.an-tools`);
     await expect(panel.getByRole(`heading`, { name: `Set up a position` })).toBeFocused();
