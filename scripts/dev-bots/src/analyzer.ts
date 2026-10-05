@@ -110,8 +110,8 @@ export function readPosition(setup: Setup, lines: number, random: () => number):
     }));
 }
 
-/** How the toy reader answers and reports. */
-export interface AnalyzeOptions {
+// How the toy reader answers and reports.
+interface AnalyzeOptions {
     url: string;
     lines: number;
     random: () => number;

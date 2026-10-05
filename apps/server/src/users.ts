@@ -4,7 +4,7 @@ import { isReservedName, nameKeyOf, nameSyntaxSchema } from '@hexo-arena/contrac
 import { nowSeconds, type Query } from './db';
 import { nameReservations, users } from './db/schema';
 
-export interface UserRow {
+interface UserRow {
     id: string;
     discordId: string;
     name: string;
@@ -16,7 +16,7 @@ export interface UserRow {
 // joins words there, so it becomes a hyphen rather than fusing them; the
 // rest is stripped, trimmed to a legal start and end, and a fixed stem
 // stands in when too little is left, so the suffixes always have a base.
-export function nameBaseFromDiscordUsername(username: string): string {
+function nameBaseFromDiscordUsername(username: string): string {
     const stripped = username.toLowerCase().replaceAll(`.`, `-`).replace(/[^a-z0-9_-]/g, ``);
     const trimmed = stripped.replace(/^[^a-z]+/g, ``).slice(0, 30).replace(/[^a-z0-9]+$/g, ``);
     return trimmed.length >= 2 ? trimmed : `user`;

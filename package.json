@@ -9,7 +9,6 @@
     },
     "scripts": {
         "dev": "pnpm -r --parallel --if-present dev",
-        "dev:compose": "docker compose up --build",
         "dev:bots": "pnpm --filter @hexo-arena/dev-bots start",
         "dev:seed": "pnpm --filter @hexo-arena/dev-bots seed",
         "build": "pnpm -r --if-present build",

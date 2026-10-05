@@ -143,7 +143,6 @@ export const adminClientCountSchema = z.object({
     client: z.string(),
     bots: z.number().int().min(1),
 });
-export type AdminClientCount = z.infer<typeof adminClientCountSchema>;
 
 // One bot as the operator looks it up: its owner, presence, and the client
 // it last connected with, which only the owner and the operator see.
@@ -184,7 +183,6 @@ export type AdminStatus = z.infer<typeof adminStatusSchema>;
 // `unchanged` answers a mutation that would change nothing, which then
 // writes no audit row.
 export const adminErrorCodes = [`bad_request`, `not_found`, `unchanged`] as const;
-export type AdminErrorCode = (typeof adminErrorCodes)[number];
 
 export const adminResponseSchema = z.discriminatedUnion(`kind`, [
     z.object({ kind: z.literal(`status`), status: adminStatusSchema }),

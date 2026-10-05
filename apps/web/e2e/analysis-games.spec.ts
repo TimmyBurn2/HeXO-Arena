@@ -180,30 +180,3 @@ test('on a phone the window folds into a strip of the graph, Analyze, and the ge
     const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
     expect(overflow).toBeLessThanOrEqual(0);
 });
-
-test('a tab seated in a live game names its seat on the channel the site\'s other tabs hear, and frees it on leaving', async ({ page, context }) => {
-    await open(page, `/analysis`);
-    const heard = page.evaluate(
-        () =>
-            new Promise<unknown[]>((resolve) => {
-                const seen: unknown[] = [];
-                const channel = new BroadcastChannel(`hexo-arena.seat`);
-                channel.addEventListener(`message`, (event: MessageEvent) => {
-                    seen.push(event.data);
-                    if (seen.length === 2) resolve(seen);
-                });
-            }),
-    );
-    const game = await context.newPage();
-    const look = looks[0];
-    if (look === undefined) throw new Error(`no look registered`);
-    await wear(game, look);
-    await serve(game, world());
-    await game.goto(`/game/running`);
-    await game.locator(`svg polygon.cell`).first().waitFor();
-    await game.close({ runBeforeUnload: true });
-    expect(await heard).toEqual([
-        { type: `seat`, gameId: `running`, seated: true },
-        { type: `seat`, gameId: `running`, seated: false },
-    ]);
-});

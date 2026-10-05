@@ -27,13 +27,11 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { ClientKeys } from './client-key';
 import { RateBuckets } from './rate-limits';
 
-/**
- * How a route is limited beyond the client bucket every request spends:
- * `public` and `shell` routes need no credential and share one ceiling,
- * a shell route answering a page's plain line where the API answers JSON;
- * the rest carry a credential and are limited by it.
- */
-export type LimitClass = `public` | `shell` | `principal` | `botManagement` | `stream` | `engine`;
+// How a route is limited beyond the client bucket every request spends:
+// `public` and `shell` routes need no credential and share one ceiling,
+// a shell route answering a page's plain line where the API answers JSON;
+// the rest carry a credential and are limited by it.
+type LimitClass = `public` | `shell` | `principal` | `botManagement` | `stream` | `engine`;
 
 declare module 'fastify' {
     interface FastifyContextConfig {

@@ -35,7 +35,7 @@ export const seatColumns = {
     finishedAt: games.finishedAt,
 };
 
-export interface SeatRow {
+interface SeatRow {
     userId: string | null;
     botId: string | null;
     userSide: string | null;
@@ -54,7 +54,7 @@ function seated(firstSide: Side, first: PlayerRef, second: PlayerRef): Record<Si
 
 // The winner and side checks admit only x and o, which makes the casts
 // below sound.
-export function finishedGameOf(row: SeatRow): FinishedGame {
+function finishedGameOf(row: SeatRow): FinishedGame {
     const winner = row.winner as Side | null;
     const { createdAt: startedAt, finishedAt } = row;
     if (finishedAt === null) throw new Error(`stored game row has not finished`);
@@ -88,8 +88,8 @@ export function countedGameOf(row: SeatRow & { voidedAt: number | null }): Finis
     return row.voidedAt === null ? game : { ...game, winner: null };
 }
 
-/** A finished game of the log, as the fold counts it, by its id. */
-export interface LoggedGame extends FinishedGame {
+// A finished game of the log, as the fold counts it, by its id.
+interface LoggedGame extends FinishedGame {
     readonly id: string;
 }
 

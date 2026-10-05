@@ -36,7 +36,7 @@ import { frameOf, type GameWatchers } from './watchers';
 /** The one route that takes a websocket upgrade. */
 export const engineSocketRoute = `/api/bot/game/:gameId/socket`;
 
-export interface GameApiDeps {
+interface GameApiDeps {
     query: Query;
     presence: PresenceRegistry;
     gate: StartGate;

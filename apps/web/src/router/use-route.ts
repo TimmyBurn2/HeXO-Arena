@@ -40,8 +40,8 @@ export function navigate(path: string, how: { landing?: Landing; replace?: boole
     notify();
 }
 
-/** A control a screen can take focus to when a navigation asks for it. */
-export type Landing = `bot-name`;
+// A control a screen can take focus to when a navigation asks for it.
+type Landing = `bot-name`;
 
 /** The control this entry asked its screen to focus, until the screen takes it. */
 export function landingOf(): Landing | null {

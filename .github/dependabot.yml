@@ -18,7 +18,7 @@ updates:
           - dependency-name: typescript
             versions: [7.x]
     - package-ecosystem: docker
-      directories: [/docker/prod, /docker/dev]
+      directory: /docker/prod
       target-branch: develop
       schedule:
           interval: monthly

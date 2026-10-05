@@ -32,17 +32,12 @@
         font-size: var(--text-rung-1);
     }
 
-    .rung.r2,
-    .rung-skeleton.r2 {
-        margin-left: var(--space-5);
-    }
-
     .rung.r2 {
+        margin-left: var(--space-5);
         font-size: var(--text-xl);
     }
 
-    .rung.r3,
-    .rung-skeleton.r3 {
+    .rung.r3 {
         margin-left: var(--space-7);
     }
 
@@ -86,15 +81,6 @@
     .rung-kind {
         color: var(--c-text-dim);
         font-size: var(--text-sm);
-    }
-
-    .rung-skeleton {
-        height: var(--control-lg);
-        background: var(--c-bg-raised);
-    }
-
-    .rung-skeleton.r1 {
-        height: calc(var(--control-lg) * 2);
     }
 
     @media (max-width: 40rem) {

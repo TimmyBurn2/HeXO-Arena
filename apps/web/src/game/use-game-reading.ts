@@ -7,15 +7,15 @@ import { boardReading, feedFolds, feedNotes, type BoardReading, type FeedFold, t
 import { headOf, useGameAnalyses, type AnalysesState, type AnalysisHeadState, type ReadingChoice } from './game-analyses';
 import { shownAtTurn, turnOf, type Replay } from './replay';
 
-/** A finished game's readings as the game screen shows them, on the board, in the drawer, and in a phone's peek. */
-export interface GameReadingView {
-    /** The game's main line; null while it runs, when nothing is read. */
+// A finished game's readings as the game screen shows them, on the board, in the drawer, and in a phone's peek.
+interface GameReadingView {
+    // The game's main line; null while it runs, when nothing is read.
     readonly line: GameLine | null;
     readonly state: AnalysesState;
     readonly head: AnalysisHeadState | null;
     readonly active: ReadingChoice | null;
     readonly view: GameReading | null;
-    /** The turn on the board, which the graph's cursor marks. */
+    // The turn on the board, which the graph's cursor marks.
     readonly turn: number;
     readonly board: BoardReading | null;
     readonly notes: readonly (FeedNote | null)[] | null;

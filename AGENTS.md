@@ -24,8 +24,6 @@ opponents and the dev seed); `README.md` lists the other folders.
 - Dev personas: `pnpm dev:seed` beside `pnpm dev` (five accounts with bots
   and a played history over the real API, about ten minutes on a first run;
   restart `pnpm dev:bots` after)
-- Docker dev runtime: `pnpm dev:compose` (operator-run; containers are not
-  verified by day-to-day dev)
 - Schema change: edit `apps/server/src/db/schema.ts`, then
   `pnpm --filter @hexo-arena/server db:generate` writes the migration
 - Tests: `pnpm test`

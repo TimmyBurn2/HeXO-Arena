@@ -5,16 +5,16 @@ import { randomToken, sha256Hex } from './tokens';
 
 const labelAlphabet = `abcdefghijklmnopqrstuvwxyz0123456789`;
 
-export interface GuestSession {
+interface GuestSession {
     readonly id: string;
     readonly name: string;
-    /** When the session was minted, which tells its stored games from those of an earlier holder of its label. */
+    // When the session was minted, which tells its stored games from those of an earlier holder of its label.
     readonly since: number;
     lastSeenAt: number;
     lastGameCreatedAt: number | null;
 }
 
-export interface GuestSessionsDeps {
+interface GuestSessionsDeps {
     // A guest seated in a live game outlives its idle window, so an
     // unlimited game never loses its player to the sweep.
     seated: (guestId: string) => boolean;

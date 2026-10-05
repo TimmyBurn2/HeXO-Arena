@@ -40,7 +40,6 @@ export const liveGamesQuerySchema = z.object({
         .optional()
         .meta({ param: { description: `Present as 1, tests are listed beside the other games; else they are left out.` } }),
 });
-export type LiveGamesQuery = z.infer<typeof liveGamesQuerySchema>;
 
 /** A person's game opens on the origin alone unless the request asks for more; bot challenges and tournaments keep five. */
 export const defaultHumanOpeningPlies = 1;
@@ -234,7 +233,6 @@ export const scheduledClockSchema = timeControlSchema.refine(
 export const humanMoveRequestSchema = z.object({
     cells: z.array(axialCoordSchema).length(2),
 });
-export type HumanMoveRequest = z.infer<typeof humanMoveRequestSchema>;
 
 // Caller-side bounds on the human: the live-game cap, then bot-side gates.
 export const gameCreateErrorCodes = [`human_busy`, `not_open`, `clock_not_accepted`, `unknown_level`, `bot_busy`] as const;

@@ -5,8 +5,8 @@ import { fetchFinishedGames, fetchPlayerRecord } from '../api/client';
 /** One result as a player's form shows it. */
 export type FormResult = `won` | `lost` | `none`;
 
-/** The results a player's form shows at most. */
-export const formLength = 5;
+// The results a player's form shows at most.
+const formLength = 5;
 
 /**
  * A player's latest results from their own seat, newest first; voided and

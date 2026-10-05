@@ -44,8 +44,8 @@ export type PickReason = `offline` | `closed` | `nothing` | `tournament` | `busy
 /** The reasons a bot not ready now stands under: Ready now hides these, and the list's foot counts them. */
 export const notReady: ReadonlySet<PickReason> = new Set([`offline`, `closed`, `nothing`]);
 
-/** The clocks a duel can take of both bots: a turn window inside the scheduled bounds, in whole seconds, and whether a match clock is in. */
-export interface DuelClocks {
+// The clocks a duel can take of both bots: a turn window inside the scheduled bounds, in whole seconds, and whether a match clock is in.
+interface DuelClocks {
     readonly turn: readonly [number, number] | null;
     readonly match: boolean;
 }
@@ -137,8 +137,8 @@ export function defaultDuelClock(first: BotListing, second: BotListing, last: Ti
 /** Play's presets but Unlimited, which a duel never runs. */
 export const duelPresets = presets.filter((preset) => preset.clock.mode !== `unlimited`);
 
-/** Whether a clock is one a duel may run: inside the scheduled bounds, never unlimited. */
-export function scheduled(clock: TimeControl): boolean {
+// Whether a clock is one a duel may run: inside the scheduled bounds, never unlimited.
+function scheduled(clock: TimeControl): boolean {
     if (clock.mode === `turn`) return clock.turnTimeMs >= scheduledTurnMs.min && clock.turnTimeMs <= scheduledTurnMs.max;
     if (clock.mode === `match`) {
         return clock.mainTimeMs >= scheduledMainMs.min && clock.mainTimeMs <= scheduledMainMs.max && clock.incrementMs >= scheduledIncrementMs.min && clock.incrementMs <= scheduledIncrementMs.max;

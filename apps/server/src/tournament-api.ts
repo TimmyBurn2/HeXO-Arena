@@ -316,15 +316,15 @@ function estimatesOf(field: readonly EntryRow[], pairings: readonly PairingView[
     });
 }
 
-/** What a tournament's page reads beyond the database: who is online, its live games, and the waits the scheduler holds. */
-export interface TournamentReads {
+// What a tournament's page reads beyond the database: who is online, its live games, and the waits the scheduler holds.
+interface TournamentReads {
     readonly presence: Pick<PresenceRegistry, `isOnline`>;
     readonly games: Pick<GameRegistry, `liveEntriesOf`>;
     readonly tournaments: Pick<TournamentScheduler, `waitingOf` | `nextRoundAt`>;
 }
 
-/** A tournament as its page reads it; null for an unknown id. */
-export function tournamentDetail(query: Query, reads: TournamentReads, id: string): TournamentDetail | null {
+// A tournament as its page reads it; null for an unknown id.
+function tournamentDetail(query: Query, reads: TournamentReads, id: string): TournamentDetail | null {
     const row = findTournament(query, id);
     if (row === undefined) return null;
     const entries = entryRows(query, id);
@@ -480,23 +480,21 @@ export function tournamentSummary(query: Query, id: string): TournamentSummary |
     return row === undefined ? null : summaryOf(query, row);
 }
 
-/** Which tournaments a list holds: one bot's, one person's, tests alone, or every one; and whose bot each names under yours. */
-export interface TournamentListFilter {
+// Which tournaments a list holds: one bot's, one person's, tests alone, or every one; and whose bot each names under yours.
+interface TournamentListFilter {
     readonly botId: string | null;
-    /** A person's: set up by them, or with a bot of theirs entered. */
+    // A person's: set up by them, or with a bot of theirs entered.
     readonly userId: string | null;
     readonly test: boolean;
-    /** The signed-in caller, whose bot each row names. */
+    // The signed-in caller, whose bot each row names.
     readonly viewerId: string | null;
 }
 
-/**
- * The tournament list: every running one, those waiting, and the latest
- * over; for a bot, only those it entered, each with its place; for a
- * person, only theirs; and for a signed-in caller, each one their bot
- * plays names it and its place.
- */
-export function tournamentList(query: Query, filter: TournamentListFilter): TournamentList {
+// The tournament list: every running one, those waiting, and the latest
+// over; for a bot, only those it entered, each with its place; for a
+// person, only theirs; and for a signed-in caller, each one their bot
+// plays names it and its place.
+function tournamentList(query: Query, filter: TournamentListFilter): TournamentList {
     const narrowed: (SQL | undefined)[] = [
         filter.botId === null
             ? undefined
@@ -527,7 +525,7 @@ export function tournamentList(query: Query, filter: TournamentListFilter): Tour
     };
 }
 
-export interface TournamentApiDeps {
+interface TournamentApiDeps {
     query: Query;
     presence: PresenceRegistry;
     games: GameRegistry;

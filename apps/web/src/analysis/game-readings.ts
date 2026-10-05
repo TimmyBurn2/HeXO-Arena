@@ -64,8 +64,8 @@ export function setupBefore(line: GameLine, turn: number): Setup {
     };
 }
 
-/** What the board says around a played turn, as judging reads it under every analyzer. */
-export function boardFactsOf(line: GameLine, turn: number): BoardFacts {
+// What the board says around a played turn, as judging reads it under every analyzer.
+function boardFactsOf(line: GameLine, turn: number): BoardFacts {
     const { stones, toMove } = setupBefore(line, turn);
     const opponent = otherPlayer(toMove);
     const after = [...stones, ...turnCells(line, turn).map((cell) => ({ ...cell, player: toMove }))];
@@ -217,8 +217,8 @@ export function ownSourceId(gameId: string, side: Side): string {
     return `own:${gameId}:${side}`;
 }
 
-/** A reading kept with a game, to file under each of `ids` that holds none for its position yet. */
-export interface StoredReading {
+// A reading kept with a game, to file under each of `ids` that holds none for its position yet.
+interface StoredReading {
     readonly ids: readonly string[];
     readonly key: string;
     readonly reading: Reading;

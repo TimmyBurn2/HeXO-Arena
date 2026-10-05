@@ -10,8 +10,8 @@ const sides = [`x`, `o`] as const satisfies readonly Side[];
 const halfWidth = (Math.sqrt(3) * cellSize) / 2;
 const glyphBox = `${String(-halfWidth)} ${String(-cellSize)} ${String(2 * halfWidth)} ${String(2 * cellSize)}`;
 
-/** How a game was started unrated: a person's choice, a duel's, a round robin a person set up, or a test, where one person holds both sides. */
-export type UnratedBy = `choice` | `duel` | `roundRobin` | `test`;
+// How a game was started unrated: a person's choice, a duel's, a round robin a person set up, or a test, where one person holds both sides.
+type UnratedBy = `choice` | `duel` | `roundRobin` | `test`;
 
 /** The mark a snapshot carries, as the rundown says it. */
 export function unratedByOf(snapshot: {

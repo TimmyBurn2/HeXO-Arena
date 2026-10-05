@@ -88,8 +88,8 @@ export type JoinReason = `offline` | `closed` | `nothing` | `tournament` | `busy
 /** The reasons a bot not ready now stands under: Ready now hides these, and the list's foot counts them. */
 export const notReadyToJoin: ReadonlySet<JoinReason> = new Set([`offline`, `closed`, `nothing`]);
 
-/** Whether a field takes any clock a scheduled game can run, every bot of it. */
-export function fieldShares(field: readonly BotListing[]): boolean {
+// Whether a field takes any clock a scheduled game can run, every bot of it.
+function fieldShares(field: readonly BotListing[]): boolean {
     const clocks = fieldClocks(field);
     return clocks.turn !== null || clocks.match;
 }
@@ -135,8 +135,8 @@ export function gamesPerPairOf(test: boolean): readonly TournamentGamesPerPair[]
     return test ? roundRobinTestGamesPerPair : roundRobinGamesPerPair;
 }
 
-/** A field's schedule: its pairs and rounds, the pairs a round plays at once, and the games in all and for each bot. */
-export interface Schedule {
+// A field's schedule: its pairs and rounds, the pairs a round plays at once, and the games in all and for each bot.
+interface Schedule {
     readonly pairs: number;
     readonly rounds: number;
     readonly atOnce: number;
@@ -150,8 +150,8 @@ export function scheduleOf(bots: number, gamesPerPair: number): Schedule {
     return { pairs, rounds: bots % 2 === 0 ? bots - 1 : bots, atOnce: Math.floor(bots / 2), games: pairs * gamesPerPair, gamesPerBot: (bots - 1) * gamesPerPair };
 }
 
-/** Where this browser keeps the games a pair last played in a round robin and in a test. */
-export const roundRobinStorageKey = `hexo-arena.round-robins.v1`;
+// Where this browser keeps the games a pair last played in a round robin and in a test.
+const roundRobinStorageKey = `hexo-arena.round-robins.v1`;
 
 export interface RoundRobinChoices {
     readonly games: TournamentGamesPerPair;

@@ -30,7 +30,7 @@ import { createSession, deleteSession } from './sessions';
 import { dropSignup, findSignup, holdSignup, spendSignupAttempt } from './signups';
 import { createUserWithExactName, findUserByDiscordId, suggestedName } from './users';
 
-export interface SignInApiDeps {
+interface SignInApiDeps {
     query: Query;
     guests: GuestSessions;
     discord: DiscordOAuth | null;

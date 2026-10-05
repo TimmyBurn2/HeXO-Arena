@@ -20,7 +20,7 @@ import type { PresenceRegistry } from './presence';
 import type { CredentialLimits } from './request-limits';
 import type { StartGate } from './site-state';
 
-export interface ChallengeApiDeps {
+interface ChallengeApiDeps {
     query: Query;
     presence: PresenceRegistry;
     gate: StartGate;

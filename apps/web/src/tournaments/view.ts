@@ -1,7 +1,7 @@
 import type { Side, TournamentDetail, TournamentGame } from '@hexo-arena/contract';
 
-/** Where a round stands: over, under way, or still to come. */
-export type RoundState = `done` | `live` | `next`;
+// Where a round stands: over, under way, or still to come.
+type RoundState = `done` | `live` | `next`;
 
 /** One game from one bot's side, as a crosstable cell draws it. */
 export type HexState = `won` | `lost` | `none` | `pending` | `live` | `missing`;
@@ -80,8 +80,8 @@ export function pairingScore(pairing: TournamentDetail[`rounds`][number][`pairin
     return [points(pairing.first.key), points(pairing.second.key)];
 }
 
-/** Whether a bot, by its key, played a game of the tournament, whatever came of it. */
-export function playedAny(detail: TournamentDetail, bot: number): boolean {
+// Whether a bot, by its key, played a game of the tournament, whatever came of it.
+function playedAny(detail: TournamentDetail, bot: number): boolean {
     return detail.rounds.some((round) =>
         round.pairings.some((pairing) => pairing.games.some((game) => (game.outcome === `played` || game.outcome === `aborted`) && (pairing.first.key === bot || pairing.second.key === bot))),
     );

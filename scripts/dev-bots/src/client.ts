@@ -72,8 +72,8 @@ export class ApiError extends Error {
 // yet online and open.
 const passing = new Set([`rate_limited`, `bot_busy`, `not_open`]);
 
-/** How long a create call waits out a refusal that clears by itself before it gives up. */
-export const refusalWaitMs = 60_000;
+// How long a create call waits out a refusal that clears by itself before it gives up.
+const refusalWaitMs = 60_000;
 
 /**
  * Makes a create call until it is answered, waiting out a refusal that
@@ -108,8 +108,8 @@ function bearer(token: string): Record<string, string> {
 
 const json = { 'content-type': `application/json` };
 
-/** What a held stream reports: its open, then each event. */
-export interface StreamHandlers {
+// What a held stream reports: its open, then each event.
+interface StreamHandlers {
     opened(): void;
     event(event: StreamEvent): void;
 }

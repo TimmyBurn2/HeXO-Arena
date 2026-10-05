@@ -31,7 +31,7 @@ export interface Refusal {
     readonly seconds: number;
 }
 
-export type GameLoad =
+type GameLoad =
     | { state: `loading` }
     | { state: `missing` }
     | { state: `error`; retry: () => void; wait: Refusal | null }

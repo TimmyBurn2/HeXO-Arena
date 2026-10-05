@@ -4,8 +4,8 @@ import type { Strategy } from './player';
 
 export type PersonaName = (typeof devPersonas)[number][`name`];
 
-/** A bot one of the personas owns. */
-export interface PersonaBot {
+// A bot one of the personas owns.
+interface PersonaBot {
     readonly name: string;
     readonly owner: PersonaName;
     readonly strategy: Strategy;

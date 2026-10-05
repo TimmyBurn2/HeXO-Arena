@@ -2,8 +2,8 @@ import { Link } from '../router/Link';
 import { text } from '../text';
 import '../games/GamesHead.css';
 
-/** One of the places under Play, each a way to start something. */
-export type PlayView = `bot` | `duel` | `tournament`;
+// One of the places under Play, each a way to start something.
+type PlayView = `bot` | `duel` | `tournament`;
 
 const places: readonly { view: PlayView; to: string; label: string }[] = [
     { view: `bot`, to: `/play`, label: text.duels.playBot },

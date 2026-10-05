@@ -55,11 +55,9 @@ export function shownLinesOf(lines: readonly ReadingLine[], position: Setup, mov
     });
 }
 
-/**
- * An evaluation as its analyzer means it: the heuristic divided by the scale it declared and held to -1 to 1,
- * where its values call a position decided; a forced win as it is.
- */
-export function scaledEvaluation(evaluation: HtttxPositionEvaluation, values: AnalyzerValues): HtttxPositionEvaluation {
+// An evaluation as its analyzer means it: the heuristic divided by the scale it declared and held to -1 to 1,
+// where its values call a position decided; a forced win as it is.
+function scaledEvaluation(evaluation: HtttxPositionEvaluation, values: AnalyzerValues): HtttxPositionEvaluation {
     const heuristic = evaluation.heuristic;
     if (heuristic === undefined || !Number.isFinite(heuristic)) return evaluation;
     return { ...evaluation, heuristic: Math.max(-1, Math.min(1, heuristic / values.scale)) };

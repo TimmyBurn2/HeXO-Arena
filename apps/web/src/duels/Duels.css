@@ -925,15 +925,6 @@
         margin-top: var(--space-6);
     }
 
-    /* A game's place in its duel or test, under the result in a row. */
-    .duel-cap {
-        display: block;
-        flex-basis: 100%;
-        color: var(--c-text-dim);
-        font-size: var(--text-xs);
-        font-weight: var(--weight-regular);
-    }
-
     /* The test estimate: the score, the difference with its range, a
        verdict, and an axis where the range sits against zero. */
     .estimate {

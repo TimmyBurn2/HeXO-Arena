@@ -265,7 +265,6 @@ export const challengeEventSchema = z.discriminatedUnion(`type`, [
     challengeCanceledEventSchema,
     challengeDeclinedEventSchema,
 ]);
-export type ChallengeEvent = z.infer<typeof challengeEventSchema>;
 
 // Flat and closed: the challenge variants are members like the rest, so the
 // discriminator resolves every line in one step.

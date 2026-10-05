@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { limitedFor } from './client';
 
-export interface AsyncView<T> {
+interface AsyncView<T> {
     data: T | null;
     loading: boolean;
     error: boolean;

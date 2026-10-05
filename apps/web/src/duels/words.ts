@@ -3,14 +3,14 @@ import { text } from '../text';
 
 type Named = Pick<DuelSummary, `first` | `second`>;
 
-/** A game of a duel as its score reads it: how it stands and who won. */
-export interface ScoredGame {
+// A game of a duel as its score reads it: how it stands and who won.
+interface ScoredGame {
     readonly state: DuelGameState;
     readonly winner: DuelSide | null;
 }
 
-/** The bot on one side of a duel, by name. */
-export function nameOf(duel: Named, side: DuelSide): string {
+// The bot on one side of a duel, by name.
+function nameOf(duel: Named, side: DuelSide): string {
     return duel[side].name;
 }
 
@@ -38,8 +38,8 @@ function leaderScore(duel: Pick<DuelSummary, `score`>, games: readonly ScoredGam
     return `${score}${text.duels.noWinner(noWinnerCount(games))}`;
 }
 
-/** The bot ahead, or null when level. */
-export function leaderOf(duel: Pick<DuelSummary, `score`>): DuelSide | null {
+// The bot ahead, or null when level.
+function leaderOf(duel: Pick<DuelSummary, `score`>): DuelSide | null {
     if (duel.score.first === duel.score.second) return null;
     return duel.score.first > duel.score.second ? `first` : `second`;
 }
@@ -52,8 +52,8 @@ export function standingText(duel: Pick<DuelSummary, `first` | `second` | `score
     return leader === null ? words.level(score) : words.leads(nameOf(duel, leader), score);
 }
 
-/** Why a duel was cut short, in a few words. */
-export function cutText(duel: Pick<DuelSummary, `first` | `second` | `end`>): string {
+// Why a duel was cut short, in a few words.
+function cutText(duel: Pick<DuelSummary, `first` | `second` | `end`>): string {
     const end = duel.end;
     if (end === undefined) return ``;
     const bot = end.bot === null ? `` : nameOf(duel, end.bot);
@@ -67,8 +67,8 @@ export function cutText(duel: Pick<DuelSummary, `first` | `second` | `end`>): st
     }
 }
 
-/** The number of the game live, else the next one, else null once over. */
-export function currentGame(duel: Pick<DuelSummary, `results` | `status`>): { game: number; live: boolean } | null {
+// The number of the game live, else the next one, else null once over.
+function currentGame(duel: Pick<DuelSummary, `results` | `status`>): { game: number; live: boolean } | null {
     if (duel.status !== `running`) return null;
     const live = duel.results.find((result) => result.state === `live`);
     if (live !== undefined) return { game: live.game, live: true };

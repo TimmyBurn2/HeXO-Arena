@@ -110,8 +110,8 @@ function andList(items: readonly string[]): string {
     return `${items.slice(0, -1).join(`, `)}, and ${items.at(-1) ?? ``}`;
 }
 
-/** A link to each legal page the deployment has; a page it lacks is null, and its words go with it. */
-export type LegalSlots = Readonly<Record<LegalPage, Slot | null>>;
+// A link to each legal page the deployment has; a page it lacks is null, and its words go with it.
+type LegalSlots = Readonly<Record<LegalPage, Slot | null>>;
 
 // A no-break space holds "see Privacy." together, so a line never ends on
 // a word alone at any width or text size.

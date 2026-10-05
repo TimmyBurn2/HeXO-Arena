@@ -37,8 +37,8 @@ export function useBorrowFrame(): void {
     }, []);
 }
 
-/** Whether a mounted screen has asked for the frame. */
-export function useFrameLent(): boolean {
+// Whether a mounted screen has asked for the frame.
+function useFrameLent(): boolean {
     return useSyncExternalStore(subscribe, lent, lent);
 }
 

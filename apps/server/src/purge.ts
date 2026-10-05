@@ -5,8 +5,8 @@ import type { Query } from './db';
 import { adminActions, challenges, reports } from './db/schema';
 import type { ErasureJournal } from './erasure';
 
-/** What one purge removed, by kind. */
-export interface Purged {
+// What one purge removed, by kind.
+interface Purged {
     readonly moderation: number;
     readonly challenges: number;
     readonly reports: number;
@@ -34,7 +34,7 @@ export function purgeExpired(query: Query, now: Date): Purged {
     }));
 }
 
-export interface PurgeLog {
+interface PurgeLog {
     info(fields: object, message: string): void;
     error(fields: object, message: string): void;
 }

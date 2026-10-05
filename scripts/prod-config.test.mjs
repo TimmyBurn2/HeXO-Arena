@@ -89,6 +89,13 @@ describe(`the production Dockerfile`, () => {
         }
         assert.match(runtime, /\nRUN rm -rf /u);
     });
+
+    it(`ships better-sqlite3 with its own platform's binary alone, no SQLite sources, and checks it loads`, () => {
+        const build = dockerfile.slice(0, dockerfile.lastIndexOf(`\nFROM `));
+        assert.match(build, /\nRUN cd \/out\/node_modules\/better-sqlite3 \\\n {4}&& rm -rf deps src binding\.gyp \\\n/u);
+        assert.ok(build.includes(`find prebuilds -type f ! -name "linux-$(node -p process.arch).node" -delete`));
+        assert.ok(build.includes(`node -e "new (require('better-sqlite3'))(':memory:').close()"`));
+    });
 });
 
 describe(`the docker build context`, () => {

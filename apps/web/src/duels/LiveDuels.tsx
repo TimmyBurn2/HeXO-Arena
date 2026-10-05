@@ -8,8 +8,8 @@ import { duelPagePath } from './setup';
 import { estimatePoints, estimateRow, rowState, standingText } from './words';
 import './Duels.css';
 
-/** Past this many live duels, boards would push the past ones far down, so they list as rows. */
-export const liveBoardsCap = 3;
+// Past this many live duels, boards would push the past ones far down, so they list as rows.
+const liveBoardsCap = 3;
 
 /**
  * Live duels, each a card linking its page: its live game's board beside

@@ -142,8 +142,8 @@ export interface AnalysesState {
     readonly request: { readonly kind: `idle` } | { readonly kind: `sending` } | { readonly kind: `refused`; readonly code: RequestRefusal; readonly retryAfter: number | null };
 }
 
-/** What happens to a game's readings: a read lands or fails, a request goes out, is queued, or is refused. */
-export type AnalysesEvent =
+// What happens to a game's readings: a read lands or fails, a request goes out, is queued, or is refused.
+type AnalysesEvent =
     | { readonly kind: `loaded`; readonly list: AnalysisList }
     | { readonly kind: `load-failed` }
     | { readonly kind: `sending` }

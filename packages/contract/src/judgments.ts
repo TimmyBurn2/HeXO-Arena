@@ -12,9 +12,6 @@ export type JudgmentSeverity = `inaccuracy` | `mistake` | `blunder`;
  */
 export type ForcedJudgmentReason = `gave-away-win` | `missed-win` | `allowed-win`;
 
-/** Why a turn was judged: a forced win, or a drop of value by the analyzer's own cuts. */
-export type JudgmentReason = ForcedJudgmentReason | `value-drop`;
-
 /**
  * One analyzer's verdict on one played turn.
  * `turns` is the length, in its winner's own turns, of the forced win that grades the turn:

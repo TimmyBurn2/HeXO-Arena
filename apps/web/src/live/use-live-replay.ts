@@ -15,8 +15,8 @@ export interface LiveView {
     readAt: number;
 }
 
-/** The live list with each game's stones landing between reads. */
-export interface LiveReplay {
+// The live list with each game's stones landing between reads.
+interface LiveReplay {
     games: LiveView[] | null;
     // Whether the latest read failed; the games of the one before stay.
     failed: boolean;

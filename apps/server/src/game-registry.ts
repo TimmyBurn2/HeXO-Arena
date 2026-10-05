@@ -133,8 +133,8 @@ interface BotSeat {
     orphanTimer: Timer | null;
 }
 
-/** Who a human-facing action names: an account or an anonymous guest. */
-export interface PersonRef {
+// Who a human-facing action names: an account or an anonymous guest.
+interface PersonRef {
     readonly kind: `user` | `guest`;
     readonly id: string;
 }
@@ -145,14 +145,12 @@ export interface Person extends PersonRef {
     readonly since?: number;
 }
 
-/**
- * Who reads a game.
- * A stored guest game keeps the guest's label alone, so a guest reads its
- * seat there when the label is its own and its session began by the
- * game's start: a label is never minted twice at once, and a later holder
- * of it began after the game.
- */
-export type Viewer = PersonRef & Partial<Pick<Person, `name` | `since`>>;
+// Who reads a game.
+// A stored guest game keeps the guest's label alone, so a guest reads its
+// seat there when the label is its own and its session began by the
+// game's start: a label is never minted twice at once, and a later holder
+// of it began after the game.
+type Viewer = PersonRef & Partial<Pick<Person, `name` | `since`>>;
 
 interface HumanSeat {
     readonly kind: `human`;
@@ -161,7 +159,7 @@ interface HumanSeat {
 
 type Seat = BotSeat | HumanSeat;
 
-export interface LiveGame {
+interface LiveGame {
     readonly id: string;
     readonly seats: { readonly x: Seat; readonly o: Seat };
     readonly unratedByChoice: boolean;
@@ -182,17 +180,17 @@ export interface LiveGame {
 
 export type MoveErrorCode = `not_your_turn` | `cell_occupied` | `out_of_range` | `game_over`;
 
-export type HumanMoveResult =
+type HumanMoveResult =
     | { kind: `moved`; snapshot: GameSnapshot }
     | { kind: `rejected`; code: MoveErrorCode }
     | { kind: `unknown` };
 
-export type ResignResult =
+type ResignResult =
     | { kind: `resigned`; snapshot: GameSnapshot }
     | { kind: `rejected`; code: `game_over` }
     | { kind: `unknown` };
 
-export type BotResignResult =
+type BotResignResult =
     | { kind: `resigned` }
     | { kind: `rejected`; code: `game_over` }
     | { kind: `unauthorized` }
@@ -205,7 +203,7 @@ export interface FinishedGameNote {
     readonly reason: FinishReason;
 }
 
-export interface RegistryDeps {
+interface RegistryDeps {
     query: Query;
     presence: PresenceRegistry;
     watchers: GameWatchers;

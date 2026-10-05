@@ -6,8 +6,8 @@ export type GameFilters = Omit<FinishedGamesQuery, `page` | `tests`>;
 /** One filter's name. */
 export type FilterKey = keyof GameFilters;
 
-/** The filters in the order an address, the chips, and a sentence name them. */
-export const filterKeys = [`player`, `vs`, `result`, `side`, `reason`, `clock`, `kind`, `event`, `duel`, `tournament`, `round`, `opening`, `analyzed`, `before`] as const satisfies readonly FilterKey[];
+// The filters in the order an address, the chips, and a sentence name them.
+const filterKeys = [`player`, `vs`, `result`, `side`, `reason`, `clock`, `kind`, `event`, `duel`, `tournament`, `round`, `opening`, `analyzed`, `before`] as const satisfies readonly FilterKey[];
 
 /** The filters that mean nothing without a player. */
 const needPlayer = [`vs`, `side`] as const satisfies readonly FilterKey[];
@@ -53,12 +53,10 @@ function pick(filters: GameFilters, keys: readonly FilterKey[]): { -readonly [K 
     return kept;
 }
 
-/**
- * The filters with those that need a player dropped while none is set, a
- * second name equal to the first dropped, a duel or a tournament dropped
- * under another kind of event, and a round dropped with its tournament.
- */
-export function withoutOrphans(filters: GameFilters): GameFilters {
+// The filters with those that need a player dropped while none is set, a
+// second name equal to the first dropped, a duel or a tournament dropped
+// under another kind of event, and a round dropped with its tournament.
+function withoutOrphans(filters: GameFilters): GameFilters {
     const dropped: FilterKey[] = [];
     if (filters.player === undefined) {
         dropped.push(...needPlayer);

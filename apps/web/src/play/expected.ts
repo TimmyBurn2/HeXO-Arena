@@ -3,8 +3,8 @@ import { expectedScore } from '@hexo-arena/contract';
 import { fetchPlayerRecord } from '../api/client';
 import { useMe } from '../me';
 
-/** The signed-in player's expected score against a bot: none for a guest, whose games are unrated, or its reads under way. */
-export type ExpectedScore = { kind: `none` } | { kind: `loading` } | { kind: `ready`; score: number };
+// The signed-in player's expected score against a bot: none for a guest, whose games are unrated, or its reads under way.
+type ExpectedScore = { kind: `none` } | { kind: `loading` } | { kind: `ready`; score: number };
 
 /**
  * The signed-in player's expected score against a bot, from both records

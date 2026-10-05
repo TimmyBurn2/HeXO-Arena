@@ -415,11 +415,9 @@ export function finishedEntriesOf(query: Query, ids: readonly string[]): Finishe
     });
 }
 
-/**
- * One page of finished games for a parsed query, or `unknown` when a name
- * in it matches no player.
- */
-export function listFinishedGames(query: Query, request: FinishedGamesQuery): FinishedGamesPage | `unknown` {
+// One page of finished games for a parsed query, or `unknown` when a name
+// in it matches no player.
+function listFinishedGames(query: Query, request: FinishedGamesQuery): FinishedGamesPage | `unknown` {
     const resolved = resolve(query, request);
     if (resolved.kind === `unknown`) return `unknown`;
     const player = resolved.player;

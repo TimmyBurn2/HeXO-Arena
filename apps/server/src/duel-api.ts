@@ -202,8 +202,8 @@ export function duelSummary(query: Query, id: string): DuelSummary | null {
     return row === undefined ? null : summaryOf(query, row);
 }
 
-/** A duel as its page reads it; null for an unknown id. */
-export function duelDetail(query: Query, reads: DuelReads, id: string): DuelDetail | null {
+// A duel as its page reads it; null for an unknown id.
+function duelDetail(query: Query, reads: DuelReads, id: string): DuelDetail | null {
     const row = findDuel(query, id);
     if (row === undefined) return null;
     const { fields, latest } = fieldsOf(query, row);
@@ -242,21 +242,21 @@ function gamesOf(row: DuelRow, latest: ReadonlyMap<number, DuelGameRow>): DuelGa
     });
 }
 
-/** Which duels a list holds: one bot's, one person's, one kind, or every one. */
-export interface DuelListFilter {
+// Which duels a list holds: one bot's, one person's, one kind, or every one.
+interface DuelListFilter {
     readonly botId: string | null;
     readonly userId: string | null;
     readonly kind: DuelKind | null;
 }
 
-/** Running duels and the latest over. */
-export function duelList(query: Query, filter: DuelListFilter): DuelList {
+// Running duels and the latest over.
+function duelList(query: Query, filter: DuelListFilter): DuelList {
     const listed = (running: boolean) => listedDuels(query, { running, ...filter, limit: duelListCap }).map((row) => summaryOf(query, row));
     return { running: listed(true), past: listed(false) };
 }
 
-/** Every listed bot's switch, the bots it plays a running duel with, and its running round robins, as the bot list orders them. */
-export function duelBotStates(query: Query): DuelBotState[] {
+// Every listed bot's switch, the bots it plays a running duel with, and its running round robins, as the bot list orders them.
+function duelBotStates(query: Query): DuelBotState[] {
     const pairs = runningPairs(query);
     const listed = listBots(query);
     const names = new Map(listed.map((bot) => [bot.id, bot.name]));
@@ -274,7 +274,7 @@ export function duelBotStates(query: Query): DuelBotState[] {
     }));
 }
 
-export interface DuelApiDeps {
+interface DuelApiDeps {
     query: Query;
     presence: PresenceRegistry;
     games: GameRegistry;

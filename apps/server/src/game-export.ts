@@ -6,8 +6,8 @@ import { games, moves } from './db/schema';
 import { finishedEntriesOf } from './finished-games';
 import { zipStore, type ZipEntry } from './zip';
 
-/** A downloadable archive: its file name, plain ASCII, and its bytes. */
-export interface GameExport {
+// A downloadable archive: its file name, plain ASCII, and its bytes.
+interface GameExport {
     readonly fileName: string;
     readonly body: Buffer;
 }

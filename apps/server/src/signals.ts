@@ -1,7 +1,7 @@
 import type { EventEmitter } from 'node:events';
 
-/** The two ways the process can end on a stop signal. */
-export interface StopPaths {
+// The two ways the process can end on a stop signal.
+interface StopPaths {
     drain: () => void;
     stop: () => void;
 }

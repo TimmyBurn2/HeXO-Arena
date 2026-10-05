@@ -63,13 +63,13 @@ type PositionResult =
     | { readonly status: `failed`; readonly analyzer: AnalyzerRef; readonly failure: AnalysisFailure }
     | { readonly status: `refused`; readonly code: `superseded` | `no_analyzer` };
 
-/** What a position request answers: a reading, a place in the queue, or a failure, else a refusal. */
-export type PositionAnswer =
+// What a position request answers: a reading, a place in the queue, or a failure, else a refusal.
+type PositionAnswer =
     | { readonly kind: `reading`; readonly reading: PositionReading }
     | { readonly kind: `refused`; readonly code: `superseded` | `no_analyzer` | `analysis_limit` | `analysis_busy`; readonly retryAfter?: number };
 
-/** What a whole-game request answers. */
-export type GameRequestAnswer =
+// What a whole-game request answers.
+type GameRequestAnswer =
     | { readonly kind: `queued`; readonly analysis: CommunityAnalysis }
     | {
           readonly kind: `refused`;
@@ -77,8 +77,8 @@ export type GameRequestAnswer =
           readonly retryAfter?: number;
       };
 
-/** What a game's readings answer. */
-export type GameListAnswer = { readonly kind: `list`; readonly list: AnalysisList } | { readonly kind: `refused`; readonly code: `not_found` | `game_live` };
+// What a game's readings answer.
+type GameListAnswer = { readonly kind: `list`; readonly list: AnalysisList } | { readonly kind: `refused`; readonly code: `not_found` | `game_live` };
 
 interface PositionEntry {
     readonly userId: string;
@@ -117,7 +117,7 @@ interface GameJob {
     cancelled: boolean;
 }
 
-export interface AnalysisServiceDeps {
+interface AnalysisServiceDeps {
     readonly query: Query;
     readonly analyzers: AnalyzerSessions;
     readonly games: Pick<GameRegistry, `activeGameCount` | `isLive`>;
