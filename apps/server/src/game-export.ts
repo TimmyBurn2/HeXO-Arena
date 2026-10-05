@@ -1,4 +1,4 @@
-import { boardCellSchema, siteName, turnsOfStones, writeHtttx, type TournamentDetail } from '@hexo-arena/contract';
+import { boardCellSchema, siteName, turnsOfStones, writeHtttx, type FinishedGameEntry, type TournamentDetail } from '@hexo-arena/contract';
 import { replay, type Coord } from '@hexo-arena/rules';
 import { asc, inArray } from 'drizzle-orm';
 import type { Query } from './db';
@@ -6,8 +6,8 @@ import { games, moves } from './db/schema';
 import { finishedEntriesOf } from './finished-games';
 import { zipStore, type ZipEntry } from './zip';
 
-// A downloadable archive: its file name, plain ASCII, and its bytes.
-interface GameExport {
+/** A downloadable archive: its file name, plain ASCII, and its bytes. */
+export interface GameExport {
     readonly fileName: string;
     readonly body: Buffer;
 }
@@ -87,9 +87,9 @@ const csvHead = [`x`, `o`, `winner`, `reason`, `turns`, `rated`, `test`, `starte
 
 // Each game's file and its row in games.csv, in the slots' order; a game
 // missing from either read was never finished, which the slots rule out.
-function gameEntries(query: Query, slots: readonly Slot[]): { files: ZipEntry[]; csv: string } {
+function gameEntries(query: Query, slots: readonly Slot[], finished: readonly FinishedGameEntry[]): { files: ZipEntry[]; csv: string } {
     const ids = slots.map((slot) => slot.gameId);
-    const entries = new Map(finishedEntriesOf(query, ids).map((entry) => [entry.gameId, entry]));
+    const entries = new Map(finished.map((entry) => [entry.gameId, entry]));
     const played = playedGames(query, ids);
     const width = Math.max(2, String(slots.at(-1)?.number ?? 0).length);
     const versioned = slots.some((slot) => slot.versions !== undefined);
@@ -130,13 +130,8 @@ function gameEntries(query: Query, slots: readonly Slot[]): { files: ZipEntry[];
     return { files, csv: csvText(rows) };
 }
 
-/**
- * A tournament's finished games in the order played, by round, pairing,
- * and game, each numbered within its pair, with games.csv and
- * standings.csv; a duel's titled and named for its two bots, and a test's
- * naming each bot's version.
- */
-export function tournamentExport(query: Query, tournament: TournamentDetail, now: number): GameExport {
+// A tournament's finished games in the order played, by round, pairing, and game.
+function slotsOf(tournament: TournamentDetail): Slot[] {
     const slots: Slot[] = [];
     const duel = tournament.format === `duel`;
     const kind = tournament.test ? `Test` : `Duel`;
@@ -161,7 +156,13 @@ export function tournamentExport(query: Query, tournament: TournamentDetail, now
             }
         }
     }
-    const { files, csv } = gameEntries(query, slots);
+    return slots;
+}
+
+// The zip: each game's file, named for its number in the export and its players, then games.csv and standings.csv.
+function built(query: Query, tournament: TournamentDetail, slots: readonly Slot[], finished: readonly FinishedGameEntry[], now: number): GameExport {
+    const duel = tournament.format === `duel`;
+    const { files, csv } = gameEntries(query, slots, finished);
     const standings = csvText([
         [`rank`, `bot`, `owner`, `points`, `as_x`, `as_o`, `withdrawn`],
         ...tournament.standings.map((line) => [line.rank, line.bot, line.ownerName, line.points, line.asX, line.asO, line.withdrawn]),
@@ -174,4 +175,45 @@ export function tournamentExport(query: Query, tournament: TournamentDetail, now
             ? `hexo-arena-${tournament.test ? `test` : `duel`}-${fileSafe(first.bot)}-vs-${fileSafe(second.bot)}-${day}.zip`
             : `hexo-arena-tournament-${fileSafe(tournament.name)}-${day}.zip`;
     return { fileName, body: zipStore([...files, { name: `games.csv`, data: csv, modified: at }, { name: `standings.csv`, data: standings, modified: at }]) };
+}
+
+/** Finished tournaments whose exports stay built, the least recently downloaded dropped first. */
+export const finishedExportCap = 8;
+
+/**
+ * Tournaments' exports, a finished one's built once:
+ * its games never change, so its zip is kept while what it names stands,
+ * and is built again only once a deletion or the operator changes a name or a game's rating;
+ * a tournament still running is built on every download.
+ */
+export class TournamentExports {
+    readonly #held = new Map<string, { readonly shown: string; readonly file: GameExport }>();
+
+    /**
+     * The tournament's finished games in the order played, by round, pairing,
+     * and game, each numbered within its pair, with games.csv and
+     * standings.csv; a duel's titled and named for its two bots, and a test's
+     * naming each bot's version.
+     */
+    read(query: Query, tournament: TournamentDetail, now: number): GameExport {
+        const slots = slotsOf(tournament);
+        const finished = finishedEntriesOf(query, slots.map((slot) => slot.gameId));
+        if (tournament.status === `scheduled` || tournament.status === `running`) return built(query, tournament, slots, finished, now);
+        // Everything the zip says but the moves, which a finished game never changes.
+        const shown = JSON.stringify([tournament, finished.map((entry) => [entry.gameId, entry.players.x.name, entry.players.o.name, entry.rated, entry.voided])]);
+        const held = this.#held.get(tournament.id);
+        // Deleted first either way, so the map's order is the order tournaments were last downloaded.
+        this.#held.delete(tournament.id);
+        if (held?.shown === shown) {
+            this.#held.set(tournament.id, held);
+            return held.file;
+        }
+        const file = built(query, tournament, slots, finished, now);
+        this.#held.set(tournament.id, { shown, file });
+        for (const id of this.#held.keys()) {
+            if (this.#held.size <= finishedExportCap) break;
+            this.#held.delete(id);
+        }
+        return file;
+    }
 }

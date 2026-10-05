@@ -371,6 +371,18 @@ describe('round robins people set up', () => {
     });
 
     describe('playing it', () => {
+        it('starts a bot\'s next game while people play it, since each person holds one of its slots however many games they start', async () => {
+            const detail = await started(`ann`, [`alpha`, `beta`, `gamma`, `delta`]);
+            const play = (person: string) =>
+                world.app.inject({ method: `POST`, url: `/api/games`, cookies: { hexo_arena_session: session(person) }, payload: { bot: `beta`, timeControl: turn } });
+            expect((await play(`eve`)).statusCode).toBe(201);
+            for (let more = 0; more < 3; more += 1) expect((await play(`eve`)).json()).toMatchObject({ code: `pair_busy` });
+            expect((await play(`dee`)).statusCode).toBe(201);
+            for (const row of liveRows(detail.id)) await resignX(row);
+            tick(clock + 1_000);
+            expect(liveRows(detail.id).filter((row) => row.x === `beta` || row.o === `beta`)).toHaveLength(1);
+        });
+
         it('plays each pair from one opening with the sides swapped, a pair at a time per bot, and the next round once the gap passes', async () => {
             const detail = await started(`eve`, [`alpha`, `beta`, `gamma`, `delta`]);
             const first = liveRows(detail.id);

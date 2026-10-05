@@ -17,7 +17,7 @@ import {
     gameTurnCap,
     orphanForfeitMs,
     streamBacklogLimitBytes,
-    unlimitedWallCapMs,
+    gameWallCapMs,
     wireToInternal,
     type FinishReason,
     type GameTournament,
@@ -38,6 +38,7 @@ import {
 } from '@hexo-arena/contract';
 import {
     drawOpening,
+    IndexedBoard,
     place,
     playerToMove,
     type Coord,
@@ -69,7 +70,7 @@ import { isCurrentGeneration } from './site-state';
 import { randomToken } from './tokens';
 import type { GameWatchers } from './watchers';
 import { ownLines } from './analysis-checks';
-import { insertOwnLines } from './analysis-store';
+import { appendOwnLines, insertOwnLines } from './analysis-store';
 import type { LiveGuard } from './live-guard';
 
 type Timer = ReturnType<typeof setTimeout>;
@@ -130,6 +131,9 @@ interface BotSeat {
     session: Session | null;
     sessionToken: SessionToken | null;
     orphanTimer: Timer | null;
+    // Whether the seat's first own lines, stored with its values, are in;
+    // later turns store their lines alone.
+    ownValuesStored: boolean;
 }
 
 // Who a human-facing action names: an account or an anonymous guest.
@@ -167,6 +171,9 @@ interface LiveGame {
     readonly timeControl: TimeControl;
     readonly openingPlies: OpeningPlies;
     position: Position;
+    // The position indexed as it grows, so a bot's own lines are checked
+    // each turn without walking the whole board.
+    readonly board: IndexedBoard;
     turnLog: readonly TurnEntry[];
     nextSeq: number;
     requestCounter: number;
@@ -277,7 +284,7 @@ function storedSeatOf(record: GameRecord, viewer: Viewer): Side | undefined {
 }
 
 function botSeat(bot: { id: string; name: string }, level: SeatLevel | null = null): BotSeat {
-    return { kind: `bot`, botId: bot.id, name: bot.name, level, session: null, sessionToken: null, orphanTimer: null };
+    return { kind: `bot`, botId: bot.id, name: bot.name, level, session: null, sessionToken: null, orphanTimer: null, ownValuesStored: false };
 }
 
 // A human game seats its human on one side; bot-vs-bot games answer null.
@@ -467,11 +474,13 @@ export class GameRegistry {
         return count;
     }
 
-    activeHumanGameCount(person: PersonRef): number {
+    /** A person's live games, or with `botId` only those against that bot, at any level. */
+    activeHumanGameCount(person: PersonRef, botId?: string): number {
         let count = 0;
         for (const game of this.#games.values()) {
             const human = humanSide(game);
-            if (human !== null && samePerson(human.seat.person, person)) count += 1;
+            if (human === null || !samePerson(human.seat.person, person)) continue;
+            if (botId === undefined || this.#seatsBot(game, botId) !== null) count += 1;
         }
         return count;
     }
@@ -618,6 +627,7 @@ export class GameRegistry {
             id: gameId,
             ...start,
             position: opening.position,
+            board: new IndexedBoard(opening.position.stones),
             turnLog: opening.turns,
             nextSeq: 1,
             requestCounter: 0,
@@ -903,7 +913,7 @@ export class GameRegistry {
             this.#finish(game, otherSide(side), `terminated`);
             return;
         }
-        const own = ownLines({ stones: game.position.stones, toMove: playerOf(side) }, packet.data, ownConsiderationsMax);
+        const own = ownLines(game.board, playerOf(side), packet.data, ownConsiderationsMax);
         this.#completeTurn(game, cells, side, applied, own ?? []);
     }
 
@@ -921,10 +931,15 @@ export class GameRegistry {
         const turn = (placedBefore + 1) / 2;
         game.pending = null;
         game.position = applied.position;
+        for (const stone of applied.position.stones.slice(placedBefore)) game.board.add(stone);
         game.turnLog = [...game.turnLog, { side, cells }];
         insertMove(this.#query, { gameId: game.id, seq: game.nextSeq, side, cells });
         const seat = game.seats[side];
-        if (seat.kind === `bot`) insertOwnLines(this.#query, { gameId: game.id, seq: game.nextSeq, side, botId: seat.botId }, own);
+        if (seat.kind === `bot` && own.length > 0) {
+            if (seat.ownValuesStored) appendOwnLines(this.#query, { gameId: game.id, seq: game.nextSeq }, own);
+            else insertOwnLines(this.#query, { gameId: game.id, seq: game.nextSeq, side, botId: seat.botId }, own);
+            seat.ownValuesStored = true;
+        }
         game.nextSeq += 1;
         if (applied.win === null) this.#advanceClock(game, side);
         this.#watchers.publish(game.id, {
@@ -1009,14 +1024,14 @@ export class GameRegistry {
         }, Math.max(0, budget));
     }
 
-    // Unlimited games carry no clock arithmetic that would ever end them,
-    // so a wall-time cap closes the game with no winner instead.
+    // No clock bounds a game's length: an unlimited one has none, and a
+    // turn or match clock may be as long as its players accept; so every
+    // game ends at a wall-time cap with no winner, and frees its seats.
     #armWallCap(game: LiveGame): void {
-        if (game.timeControl.mode !== `unlimited`) return;
         game.wallTimer = setTimeout(() => {
             if (this.#games.get(game.id) !== game) return;
             this.#finish(game, null, `terminated`);
-        }, unlimitedWallCapMs);
+        }, gameWallCapMs);
     }
 
     // The mover's time stops here and the increment lands after the move;

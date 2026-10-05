@@ -166,6 +166,11 @@ export const adminStatusSchema = z.object({
     // or the forwarded address is not reaching the app.
     clientKeys: z.number().int().min(0),
     keylessRequests: z.number().int().min(0),
+    // Refusals since start: answers of 400 and above by their code, and
+    // rate_limited and game_cooldown by the limit that made them;
+    // counts alone, never a path, a name, or an address.
+    refusals: z.record(z.string(), z.number().int().min(1)),
+    rateLimits: z.record(z.string(), z.number().int().min(1)),
     tournaments: z.array(adminTournamentSchema),
     tournamentRules: z.array(adminTournamentRuleSchema),
     liveDuels: z.number().int().min(0),

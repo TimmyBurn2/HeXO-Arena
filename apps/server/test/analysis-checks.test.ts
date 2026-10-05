@@ -1,5 +1,5 @@
 import { internalToWire, type HtttxMoveOption, type HtttxPositionEvaluation } from '@hexo-arena/contract';
-import type { Player, Setup, Stone } from '@hexo-arena/rules';
+import { IndexedBoard, type Player, type Setup, type Stone } from '@hexo-arena/rules';
 import { describe, expect, it } from 'vitest';
 import { checkReading, ownLines } from '../src/analysis-checks';
 
@@ -93,7 +93,8 @@ describe('checkReading', () => {
 describe('ownLines', () => {
     it('leads with the move played and keeps the considerations that pass, up to the count', () => {
         const lines = ownLines(
-            quiet,
+            new IndexedBoard(quiet.stones),
+            quiet.toMove,
             {
                 move: option([2, 1], [1, 1], { heuristic: -0.3 }),
                 considerations: [option([0, 0], [1, 1], { heuristic: 0 }), option([-1, 0], [-1, 1], { heuristic: -0.1 }), option([2, 2], [3, 2], { heuristic: 0 }), option([4, 4], [4, 5], { heuristic: 0 })],
@@ -108,7 +109,7 @@ describe('ownLines', () => {
     });
 
     it('drops the whole view when the move carries no evaluation or a false one', () => {
-        expect(ownLines(quiet, { move: option([2, 1], [1, 1]) }, 2)).toBeNull();
-        expect(ownLines(xThreatens, { move: option([-1, 0], [4, 0], { win_in: 1 }) }, 2)).toBeNull();
+        expect(ownLines(new IndexedBoard(quiet.stones), quiet.toMove, { move: option([2, 1], [1, 1]) }, 2)).toBeNull();
+        expect(ownLines(new IndexedBoard(xThreatens.stones), xThreatens.toMove, { move: option([-1, 0], [4, 0], { win_in: 1 }) }, 2)).toBeNull();
     });
 });

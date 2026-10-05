@@ -7,8 +7,8 @@ export const gameEventsPath = `/api/games/{gameId}/events`;
 
 // Watchers without a seat, per game and across the site; a player's own
 // stream never counts and is never refused.
-export const gameWatcherCap = 50;
-export const siteWatcherCap = 500;
+export const gameWatcherCap = 200;
+export const siteWatcherCap = 1_500;
 export const watcherRetryAfterSeconds = 30;
 export const watcherLimitErrorCodes = [`watcher_limit`] as const;
 

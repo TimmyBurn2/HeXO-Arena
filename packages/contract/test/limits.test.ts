@@ -68,9 +68,9 @@ describe('principal limits', () => {
 });
 
 describe('anonymous caps per client', () => {
-    it('let one client mint 3 guests at once, then 1 every 20 minutes, under the cap of 500 live guests', () => {
+    it('let one client mint 3 guests at once, then 1 every 20 minutes, under the cap of 5,000 live guests', () => {
         expect(guestMintLimit).toEqual({ burst: 3, refillMs: 20 * 60_000 });
-        expect(guestSessionCap).toBe(500);
+        expect(guestSessionCap).toBe(5_000);
     });
 
     it('let one client start 10 sign-ins at once, then 1 every 30 s, with 500 waiting at most, and name the refusal busy', () => {

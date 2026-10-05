@@ -133,6 +133,18 @@ describe('bot api export', () => {
         expect(dig(document, `components`, `schemas`, `GameStartEvent`, `deprecated`)).toBeUndefined();
     });
 
+    it('says a duel or round robin a person set up is never rated, and names no series', () => {
+        const rated = String(dig(document, `components`, `schemas`, `GameStartEvent`, `properties`, `rated`, `description`));
+        expect(rated).toContain(`unrated at a level other than a bot's default, in a duel or round robin a person set up on the website, and between two bots of one owner`);
+        expect(rendered).not.toMatch(/series/iu);
+    });
+
+    it('ends any game, whatever its clock, as terminated with no winner at 24 hours', () => {
+        const reasons = String(dig(document, `components`, `schemas`, `FinishReason`, `description`));
+        expect(reasons).toContain(`with no winner, the game reached 500 turns or 24 hours.`);
+        expect(reasons).not.toContain(`unlimited`);
+    });
+
     it('keeps own_bot among the challenge refusals a bot may know, though none is sent', () => {
         const forbidden = dig(document, `paths`, `/api/bot/challenge/{name}`, `post`, `responses`, `403`, `content`, `application/json`, `schema`);
         const code = dig(forbidden, `properties`, `code`, `enum`) ?? dig(document, ...String(dig(forbidden, `$ref`)).replace(`#/`, ``).split(`/`), `properties`, `code`, `enum`);

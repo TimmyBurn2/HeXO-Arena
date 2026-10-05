@@ -16,6 +16,18 @@ describe('RateBuckets', () => {
         expect(buckets.take(`a`)).toBe(3);
     });
 
+    it('tell the wait a take would meet without spending a token', () => {
+        let now = 0;
+        const buckets = new RateBuckets({ burst: 2, refillMs: 60_000 }, () => now);
+        expect(buckets.wait(`a`)).toBe(null);
+        expect(buckets.wait(`a`)).toBe(null);
+        expect([buckets.take(`a`), buckets.take(`a`)]).toEqual([null, null]);
+        expect(buckets.wait(`a`)).toBe(60);
+        now = 45_000;
+        expect(buckets.wait(`a`)).toBe(15);
+        expect(buckets.take(`a`)).toBe(15);
+    });
+
     it('drop a bucket once it is full again, and the oldest key past the cap', () => {
         let now = 0;
         const buckets = new RateBuckets({ burst: 2, refillMs: 1_000 }, () => now, 2);

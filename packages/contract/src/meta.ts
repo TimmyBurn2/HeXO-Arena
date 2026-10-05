@@ -1,4 +1,4 @@
-import { unlimitedWallCapMs } from './limits';
+import { gameWallCapMs } from './limits';
 import { gameTurnCap } from './limits';
 import type { FinishReason, Side, TimeControl } from './stream';
 
@@ -76,7 +76,7 @@ export const finishReasonLabels: Readonly<Record<FinishReason, string>> = {
     aborted: `Aborted`,
 };
 
-const wallCapHours = unlimitedWallCapMs / 3_600_000;
+const wallCapHours = gameWallCapMs / 3_600_000;
 
 /**
  * The turns a board of this many stones holds, opening turns included:
@@ -98,7 +98,7 @@ export interface GameResult {
  * A finished game's result as one sentence; `you` names the reader's own
  * side, which reads as "You" or "you" in place of that player's name.
  * A game with a winner is terminated only by an illegal move, one without
- * by the turn cap or by the wall-time cap on unlimited games.
+ * by the turn cap or by the wall-time cap.
  */
 export function resultSentence(result: GameResult, names: Readonly<Record<Side, string>>, you?: Side): string {
     const { winner, reason, turns } = result;
