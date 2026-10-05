@@ -2,7 +2,7 @@
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { onlyLegal } from './legal-deploy';
-import type { GameSnapshot } from '@hexo-arena/contract';
+import type { GameSnapshot, TournamentDetail } from '@hexo-arena/contract';
 import { boardSettingsStore, defaultBoardSettings } from '../src/board/board-settings';
 import { meStore } from '../src/me';
 import { GameScreen } from '../src/screens/GameScreen';
@@ -421,10 +421,11 @@ describe('GameScreen', () => {
             fireEvent.click(screen.getByRole(`tab`, { name: tab }));
             const links = [...document.querySelectorAll(`#drawer-body .drawer-foot a`)];
             expect(links.map((link) => [link.getAttribute(`aria-label`), link.getAttribute(`href`), link.getAttribute(`target`)])).toEqual([
-                [`Tournaments, opens in a new tab`, `/tournaments`, `_blank`],
                 [`Build a bot, opens in a new tab`, `/connect`, `_blank`],
                 [`Credits, opens in a new tab`, `/credits`, `_blank`],
                 [`Bot API, opens in a new tab`, `https://github.com/TimmyBurn2/Hexo-Bot-Api`, `_blank`],
+                [`Source, opens in a new tab`, `https://github.com/TimmyBurn2/HeXO-Arena`, `_blank`],
+                [`Feedback, opens in a new tab`, `https://github.com/TimmyBurn2/HeXO-Arena/issues/new/choose`, `_blank`],
                 [`Impressum / Legal notice, opens in a new tab`, `/legal/imprint`, `_blank`],
                 [`Privacy, opens in a new tab`, `/legal/privacy`, `_blank`],
                 [`Terms, opens in a new tab`, `/legal/terms`, `_blank`],
@@ -886,6 +887,24 @@ describe('GameScreen for a watcher', () => {
         expect(card.querySelectorAll(`.rundown-expected`)).toHaveLength(0);
     });
 
+    it('say in the rundown that a game of a round robin a person set up is an unrated round robin', async () => {
+        const tournament = { id: `t_brunorobin01`, name: `Round robin by bruno`, format: `round_robin`, round: 1, game: 1, of: 2, createdBy: `bruno` };
+        stubRundown(watched({ ...freshSnapshot, unratedByChoice: true, tournament } as GameSnapshot));
+        render(<GameScreen gameId="g-new" />);
+        const card = await screen.findByRole(`region`, { name: `Rundown` });
+        await within(card).findByText(`deviation 96`);
+        expect(card.querySelector(`.rundown-unrated`)?.textContent).toBe(`unrated round robin`);
+    });
+
+    it('say in the rundown that a game of a duel a person set up is an unrated duel', async () => {
+        const tournament = { id: `d_brunoduel001`, name: `Duel by bruno`, format: `duel`, round: 1, game: 3, of: 10, createdBy: `bruno` };
+        stubRundown(watched({ ...freshSnapshot, unratedByChoice: true, tournament } as GameSnapshot));
+        render(<GameScreen gameId="g-new" />);
+        const card = await screen.findByRole(`region`, { name: `Rundown` });
+        await within(card).findByText(`deviation 96`);
+        expect(card.querySelector(`.rundown-unrated`)?.textContent).toBe(`unrated duel`);
+    });
+
     it('tag the person who started a game unrated beside their rating, and tell a watcher why it is unrated', async () => {
         stubGame(watched({ ...runningSnapshot, unratedByChoice: true }));
         render(<GameScreen gameId="g-run" />);
@@ -1095,7 +1114,7 @@ describe('GameScreen for a watcher', () => {
     });
 
     it('name a tournament game\'s place on the Game tab, leading to its tournament', async () => {
-        const tournamentGame = { ...watched(finishedSnapshot), tournament: { id: `t_autumnrobin1`, name: `Autumn round robin`, round: 4, game: 2 } } as GameSnapshot;
+        const tournamentGame = { ...watched(finishedSnapshot), tournament: { id: `t_autumnrobin1`, name: `Autumn round robin`, format: `round_robin`, round: 4, game: 2, of: 2 } } as GameSnapshot;
         stubGame(tournamentGame);
         render(<GameScreen gameId="g-end" />);
         await screen.findByRole(`heading`, { name: `hextide vs quinn` });
@@ -1104,6 +1123,103 @@ describe('GameScreen for a watcher', () => {
         const line = await screen.findByRole(`link`, { name: `Autumn round robin, round 4, game 2 of 2` });
         expect(line.getAttribute(`href`)).toBe(`/tournaments/t_autumnrobin1`);
         expect(line.closest(`.facts-row`)?.querySelector(`dt`)?.textContent).toBe(`Tournament`);
+    });
+
+    it('name who leads the tournament beside a tournament game\'s place, once the tournament is read', async () => {
+        const tournamentGame = { ...watched(finishedSnapshot), tournament: { id: `t_autumnrobin1`, name: `Autumn round robin`, format: `round_robin`, round: 4, game: 2, of: 2 } } as GameSnapshot;
+        const autumn: TournamentDetail = {
+            id: `t_autumnrobin1`,
+            name: `Autumn round robin`,
+            origin: `operator`,
+            format: `round_robin`,
+            createdBy: null,
+            rated: true,
+            test: false,
+            gamesPerPair: 2,
+            status: `running`,
+            startsAt: `2026-10-04T12:00:00Z`,
+            startedAt: `2026-10-04T12:00:00Z`,
+            endedAt: null,
+            timeControl: { mode: `turn`, turnTimeMs: 10_000 },
+            openingPlies: 5,
+            maxEntrants: 12,
+            entries: [],
+            rounds: [],
+            standings: [
+                { rank: 1, key: 1, bot: `hextide`, ownerName: `ana`, points: 4, asX: 2, asO: 2, withdrawn: false },
+                { rank: 2, key: 2, bot: `sealbot`, ownerName: `quinn`, points: 3, asX: 2, asO: 1, withdrawn: false },
+            ],
+            live: [],
+            waiting: [],
+            nextRoundAt: null,
+        };
+        vi.stubGlobal(`fetch`, vi.fn((url: string) => Promise.resolve(new Response(JSON.stringify(url === `/api/tournaments/t_autumnrobin1` ? autumn : tournamentGame)))));
+        stubEventSource(tournamentGame);
+        render(<GameScreen gameId="g-end" />);
+        await screen.findByRole(`heading`, { name: `hextide vs quinn` });
+        await openWithM();
+        fireEvent.click(screen.getByRole(`tab`, { name: `Game` }));
+        const line = await screen.findByRole(`link`, { name: `Autumn round robin, round 4, game 2 of 2` });
+        await waitFor(() => {
+            expect(line.closest(`dd`)?.textContent).toBe(`Autumn round robin, round 4, game 2 of 2; hextide leads with 4 points`);
+        });
+    });
+
+    it('name a duel\'s game by its place in the duel, who leads it, and why it is unrated, as a duel', async () => {
+        const tournament = { id: `d_brunoduel001`, name: `Duel by bruno`, format: `duel`, round: 1, game: 3, of: 4, createdBy: `bruno` } as const;
+        const duelGame = { ...watched(finishedSnapshot), unratedByChoice: true, tournament } as GameSnapshot;
+        const played = (x: number, point: number | null, gameId: string) => ({ x, gameId, outcome: `played` as const, point, missing: [] });
+        const detail: TournamentDetail = {
+            id: tournament.id,
+            name: tournament.name,
+            origin: `person`,
+            format: `duel`,
+            createdBy: `bruno`,
+            rated: false,
+            test: false,
+            gamesPerPair: 4,
+            status: `running`,
+            startsAt: `2026-10-04T12:00:00Z`,
+            startedAt: `2026-10-04T12:00:00Z`,
+            endedAt: null,
+            timeControl: { mode: `turn`, turnTimeMs: 10_000 },
+            openingPlies: 5,
+            maxEntrants: 2,
+            entries: [
+                { key: 1, bot: `hextide`, ownerName: `ana`, online: true, ratingAtStart: 1500, state: `playing` },
+                { key: 2, bot: `sealbot`, ownerName: `quinn`, online: true, ratingAtStart: 1500, state: `playing` },
+            ],
+            rounds: [
+                {
+                    round: 1,
+                    pairings: [
+                        {
+                            first: { key: 1, name: `hextide` },
+                            second: { key: 2, name: `sealbot` },
+                            games: [played(1, 1, `g-1`), played(2, 1, `g-2`), played(1, 2, `g-end`), { x: 2, gameId: null, outcome: `pending`, point: null, missing: [] }],
+                        },
+                    ],
+                    rest: null,
+                },
+            ],
+            standings: [],
+            live: [],
+            waiting: [],
+            nextRoundAt: null,
+        };
+        vi.stubGlobal(`fetch`, vi.fn((url: string) => Promise.resolve(new Response(JSON.stringify(url === `/api/tournaments/${tournament.id}` ? detail : duelGame)))));
+        stubEventSource(duelGame);
+        render(<GameScreen gameId="g-end" />);
+        await screen.findByRole(`heading`, { name: `hextide vs quinn` });
+        await openWithM();
+        fireEvent.click(screen.getByRole(`tab`, { name: `Game` }));
+        const line = await screen.findByRole(`link`, { name: `Duel, game 3 of 4` });
+        expect(line.getAttribute(`href`)).toBe(`/tournaments/d_brunoduel001`);
+        expect(line.closest(`.facts-row`)?.querySelector(`dt`)?.textContent).toBe(`Duel`);
+        await waitFor(() => {
+            expect(line.closest(`dd`)?.textContent).toBe(`Duel, game 3 of 4; hextide leads 2-1`);
+        });
+        expect(screen.getByText(`No; a duel bruno set up`, { selector: `.facts dd` })).toBeTruthy();
     });
 
     it('name a deleted player by the label, set apart and unlinked, and read no head-to-head for it', async () => {

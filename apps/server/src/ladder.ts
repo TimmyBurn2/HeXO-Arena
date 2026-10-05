@@ -1,5 +1,6 @@
 import type { LeaderboardQuery } from '@hexo-arena/contract';
 import type { RankedPlayer } from './rating-store';
+import { WindowMemo } from './window-memo';
 
 /** One ladder read, as the rating store answers it. */
 export interface LadderFilter {
@@ -19,25 +20,16 @@ export const ladderMemoMs = 10_000;
  */
 export class Ladder {
     readonly #rank: (filter: LadderFilter) => readonly RankedPlayer[];
-    readonly #now: () => number;
-    readonly #memo = new Map<string, { at: number; players: readonly RankedPlayer[] }>();
+    readonly #memo: WindowMemo<readonly RankedPlayer[]>;
 
     constructor(deps: { rank: (filter: LadderFilter) => readonly RankedPlayer[]; now: () => number }) {
         this.#rank = deps.rank;
-        this.#now = deps.now;
+        this.#memo = new WindowMemo({ windowMs: ladderMemoMs, now: deps.now });
     }
 
     read(kind: LadderFilter[`kind`], activeSince: number | null): readonly RankedPlayer[] {
         const since = activeSince === null ? null : Math.floor(activeSince / 60) * 60;
-        const key = `${kind} ${String(since)}`;
-        const at = this.#now();
-        const held = this.#memo.get(key);
-        // A clock that stepped back reads afresh rather than trusting a future entry.
-        if (held !== undefined && at >= held.at && at - held.at < ladderMemoMs) return held.players;
-        const players = this.#rank({ kind, activeSince: since });
-        this.#memo.set(key, { at, players });
-        for (const [stale, entry] of this.#memo) if (at - entry.at >= ladderMemoMs) this.#memo.delete(stale);
-        return players;
+        return this.#memo.read(`${kind} ${String(since)}`, () => this.#rank({ kind, activeSince: since }));
     }
 
     /** Forgets every read, so a changed rating shows on the next. */

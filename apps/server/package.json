@@ -5,7 +5,7 @@
     "type": "module",
     "scripts": {
         "dev": "tsx watch --env-file-if-exists=../../.env src/index.ts",
-        "build": "vite build --config build.config.ts && cp -r src/db/migrations dist/migrations",
+        "build": "vite build --config build.config.ts && mkdir -p dist/migrations/meta && cp src/db/migrations/*.sql dist/migrations && cp src/db/migrations/meta/_journal.json dist/migrations/meta",
         "test": "vitest run",
         "typecheck": "tsc --noEmit -p .",
         "db:generate": "drizzle-kit generate",
@@ -23,13 +23,13 @@
     },
     "devDependencies": {
         "@types/better-sqlite3": "^9.6.0",
-        "@types/node": "^24.0.0",
-        "@types/ws": "^8.18.1",
+        "@types/node": "^26.6.3",
+        "@types/ws": "^8.18.2",
         "drizzle-kit": "0.31.11",
         "tsx": "^4.23.15",
         "typescript": "~5.9.3",
-        "vite": "^8.3.1",
-        "vitest": "^5.0.1",
-        "ws": "^8.21.3"
+        "vite": "^8.3.2",
+        "vitest": "^5.0.3",
+        "ws": "^8.22.0"
     }
 }

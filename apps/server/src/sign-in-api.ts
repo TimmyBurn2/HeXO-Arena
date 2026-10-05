@@ -30,7 +30,7 @@ import { createSession, deleteSession } from './sessions';
 import { dropSignup, findSignup, holdSignup, spendSignupAttempt } from './signups';
 import { createUserWithExactName, findUserByDiscordId, suggestedName } from './users';
 
-export interface SignInApiDeps {
+interface SignInApiDeps {
     query: Query;
     guests: GuestSessions;
     discord: DiscordOAuth | null;
@@ -96,8 +96,8 @@ export function registerSignInApi(app: FastifyInstance, deps: SignInApiDeps): vo
     // A visitor reaches these routes by following links, so every failure
     // is a redirect to the page the sign-in started from, naming its
     // reason, never a JSON body as a page.
-    app.get(discordLoginPath, { config: { limit: `public` } }, async (request, reply) => {
-        const next = nextPathOf((request.query as Record<string, unknown>)[nextParam]);
+    app.get<{ Querystring: Record<string, unknown> }>(discordLoginPath, { config: { limit: `public` } }, async (request, reply) => {
+        const next = nextPathOf(request.query[nextParam]);
         if (!deps.discord) return reply.redirect(signInFailurePath(`unconfigured`, next));
         // Each start writes a state row and arms calls to Discord from the box's one address,
         // so one client's starts and all the waiting ones are bounded.

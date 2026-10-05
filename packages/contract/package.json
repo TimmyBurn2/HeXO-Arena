@@ -17,11 +17,11 @@
     },
     "devDependencies": {
         "@asteasolutions/zod-to-openapi": "^9.1.0",
-        "@types/node": "^24.0.0",
+        "@types/node": "^26.6.3",
         "tsx": "^4.23.15",
         "typescript": "~5.9.3",
-        "vite": "^8.3.1",
-        "vitest": "^5.0.1",
+        "vite": "^8.3.2",
+        "vitest": "^5.0.3",
         "yaml": "^2.9.1"
     }
 }

@@ -314,18 +314,41 @@
         font-size: var(--text-sm);
     }
 
-    /* Four legal links stand two to a row, so none is left on a line of
-       its own at any drawer width. */
-    .drawer-foot .legal-links {
+    /* Four links stand two to a row and five three to a row, then two,
+       so neither count leaves a link on a line of its own.
+       Of five legal links the long first label takes two of the three
+       columns, since three labels side by side would overrun the drawer.
+       The counts sit in :where() so the narrower rules below still win. */
+    .drawer-foot .site-links {
         display: grid;
         grid-template-columns: repeat(2, auto);
         justify-content: start;
     }
 
+    .drawer-foot .site-links:where(:has(> :nth-child(5))) {
+        grid-template-columns: repeat(3, auto);
+    }
+
+    .drawer-foot .legal-links:where(:has(> :nth-child(5))) > :first-child {
+        grid-column: span 2;
+    }
+
+    /* Where three labels no longer fit side by side, as with large text
+       on a phone, they stand two to a row. */
+    @media (width < 19.5rem) {
+        .drawer-foot .site-links {
+            grid-template-columns: repeat(2, auto);
+        }
+
+        .drawer-foot .legal-links > :first-child {
+            grid-column: auto;
+        }
+    }
+
     /* Where two labels no longer fit side by side, as with large text on
        a phone, they stand one to a row. */
     @media (width < 12rem) {
-        .drawer-foot .legal-links {
+        .drawer-foot .site-links {
             grid-template-columns: auto;
         }
     }

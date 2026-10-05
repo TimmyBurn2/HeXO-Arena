@@ -138,9 +138,11 @@ for (const layout of [
         for (const tab of [`Moves`, `Game`]) {
             await page.getByRole(`tab`, { name: tab }).click();
             for (const name of [
-                `Tournaments, opens in a new tab`,
+                `Build a bot, opens in a new tab`,
                 `Credits, opens in a new tab`,
                 `Bot API, opens in a new tab`,
+                `Source, opens in a new tab`,
+                `Feedback, opens in a new tab`,
                 `Impressum / Legal notice, opens in a new tab`,
                 `Privacy, opens in a new tab`,
                 `Terms, opens in a new tab`,
@@ -150,23 +152,35 @@ for (const layout of [
                 await expect(foot.getByRole(`link`, { name })).toBeInViewport({ ratio: 1 });
             }
         }
-        // The legal links are small print, two to a row.
-        const legal = await foot.locator(`.legal-links a`).evaluateAll((links) =>
-            links.map((link) => {
-                const style = getComputedStyle(link);
-                const probe = document.createElement(`span`);
-                probe.style.color = `var(--c-text-dim)`;
-                link.after(probe);
-                const dim = getComputedStyle(probe).color;
-                probe.remove();
-                const box = link.getBoundingClientRect();
-                return { dim: style.color === dim, weight: style.fontWeight, left: Math.round(box.left), top: Math.round(box.top) };
-            }),
-        );
+        // Each group stands in even rows, so no link sits alone: the five
+        // standing links three to a row, then two; the five legal ones, small
+        // print, two then three, the long first label over two columns.
+        const boxes = async (selector: string) =>
+            foot.locator(selector).evaluateAll((links) =>
+                links.map((link) => {
+                    const style = getComputedStyle(link);
+                    const probe = document.createElement(`span`);
+                    probe.style.color = `var(--c-text-dim)`;
+                    link.after(probe);
+                    const dim = getComputedStyle(probe).color;
+                    probe.remove();
+                    const box = link.getBoundingClientRect();
+                    return { dim: style.color === dim, weight: style.fontWeight, left: Math.round(box.left), top: Math.round(box.top) };
+                }),
+            );
+        const rows = (links: readonly { top: number }[]) => {
+            const counts = new Map<number, number>();
+            for (const link of links) counts.set(link.top, (counts.get(link.top) ?? 0) + 1);
+            return [...counts.values()];
+        };
+        const legal = await boxes(`.legal-links a`);
         expect(legal.every((link) => link.dim && link.weight === `400`)).toBe(true);
-        expect(legal.map((link) => link.left)).toEqual(legal.map((_link, index) => legal[index % 2]?.left));
-        expect(legal.map((link) => link.top)).toEqual(legal.map((_link, index) => legal[index - (index % 2)]?.top));
-        expect(legal[2]?.top).toBeGreaterThan(legal[0]?.top ?? Infinity);
+        expect(rows(legal)).toEqual([2, 3]);
+        expect([legal[2]?.left, legal[4]?.left]).toEqual([legal[0]?.left, legal[1]?.left]);
+        const standing = await boxes(`.site-links:not(.legal-links) a`);
+        expect(rows(standing)).toEqual([3, 2]);
+        expect(standing.slice(3).map((link) => link.left)).toEqual(standing.slice(0, 2).map((link) => link.left));
+        expect(legal[0]?.top).toBeGreaterThan(standing[3]?.top ?? Infinity);
         // The new tab has no mocked world; its reads stop at the browser.
         await context.route((url) => url.pathname.startsWith(`/api/`) || url.pathname === `/healthz`, (route) => route.abort());
         const opened = context.waitForEvent(`page`);
@@ -197,7 +211,7 @@ test('the drawer foot keeps every link inside a 320 px phone at 175 and 200% tex
         const foot = page.locator(`#drawer-body .drawer-foot`);
         await foot.waitFor();
         const rights = await foot.locator(`a`).evaluateAll((links) => links.map((link) => link.getBoundingClientRect().right));
-        expect(rights.length).toBe(9);
+        expect(rights.length).toBe(10);
         for (const right of rights) expect(right).toBeLessThanOrEqual(320);
     }
 });

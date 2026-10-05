@@ -27,6 +27,25 @@ if (typeof Element !== `undefined`) {
     elementProto.scrollIntoView ??= function scrollIntoView() {};
 }
 
+// Tests load no CSS, so jsdom reads every span as inline where the styled
+// page lays it out as a block or a flex item.
+// dom-accessibility-api trims each child's text and spaces apart only the
+// children that are not inline, so accessible names would run together
+// (`Sign inwith Discord`).
+// An inline element reports no display here, which spaces every child the
+// way the styled page reads; the browser suite checks a browser's names.
+if (typeof window !== `undefined`) {
+    const computedStyle = window.getComputedStyle.bind(window);
+    window.getComputedStyle = (element, pseudo) => {
+        const style = computedStyle(element, pseudo);
+        if (style.display !== `inline`) return style;
+        const propertyValue = style.getPropertyValue.bind(style);
+        Object.defineProperty(style, `display`, { value: `` });
+        style.getPropertyValue = (name) => (name === `display` ? `` : propertyValue(name));
+        return style;
+    };
+}
+
 // The repository's deployment has every legal document; a test about one
 // missing serves its own.
 // It takes reports through the site's form too; a test about one that

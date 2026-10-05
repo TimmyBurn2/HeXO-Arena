@@ -13,7 +13,7 @@ afterEach(async () => {
 
 describe('API answers', () => {
     it('carry no-store wherever the app left them unmarked, refusals included', async () => {
-        world = await createTestApp({ logger: false });
+        world = await createTestApp();
         const session = await loginAs(world.app, `alice`);
         const answers = [
             await world.app.inject({ method: `GET`, url: `/api/me`, cookies: { hexo_arena_session: session } }),
@@ -32,7 +32,7 @@ describe('API answers', () => {
             indexPath,
             `<title>t</title><meta name="description" content="d" /><meta property="og:title" content="t" /><meta property="og:description" content="d" /><meta property="og:image" content="/i.png" />`,
         );
-        world = await createTestApp({ logger: false, webIndexPath: indexPath });
+        world = await createTestApp({ webIndexPath: indexPath });
         expect((await world.app.inject({ method: `GET`, url: `/healthz` })).headers[`cache-control`]).toBeUndefined();
         expect((await world.app.inject({ method: `GET`, url: `/` })).headers[`cache-control`]).toBe(`no-cache`);
     });
@@ -40,7 +40,7 @@ describe('API answers', () => {
 
 describe('the framework\'s own refusals', () => {
     it('answer an unknown route 404 not_found, never echoing its path or query', async () => {
-        world = await createTestApp({ logger: false });
+        world = await createTestApp();
         for (const method of [`GET`, `POST`, `DELETE`] as const) {
             const missing = await world.app.inject({ method, url: `/api/nowhere/pathmarker?q=querymarker` });
             expect(missing.statusCode).toBe(404);
@@ -49,7 +49,7 @@ describe('the framework\'s own refusals', () => {
     });
 
     it('answer a malformed, empty, or prototype-polluting json body 400 bad_request', async () => {
-        world = await createTestApp({ logger: false });
+        world = await createTestApp();
         const session = await loginAs(world.app, `alice`);
         for (const payload of [`{"name": bodymarker`, ``, `{"__proto__": {"x": 1}, "name": "bodymarker"}`]) {
             const refused = await world.app.inject({ method: `POST`, url: `/api/bots`, cookies: { hexo_arena_session: session }, headers: { 'content-type': `application/json` }, payload });
@@ -59,14 +59,14 @@ describe('the framework\'s own refusals', () => {
     });
 
     it('answer a body of a type the app does not read 415 unsupported_media_type', async () => {
-        world = await createTestApp({ logger: false });
+        world = await createTestApp();
         const refused = await world.app.inject({ method: `POST`, url: `/api/bots`, headers: { 'content-type': `application/xml` }, payload: `<name>bodymarker</name>` });
         expect(refused.statusCode).toBe(415);
         expect(refused.json()).toEqual({ error: `the body's content type is not supported`, code: `unsupported_media_type` });
     });
 
     it('answer a path that fails to decode or runs past the parameter cap in the contract shape, never echoing it', async () => {
-        world = await createTestApp({ logger: false });
+        world = await createTestApp();
         const undecodable = await world.app.inject({ method: `GET`, url: `/api/players/marker%c0` });
         expect(undecodable.statusCode).toBe(400);
         expect(undecodable.json()).toEqual({ error: `the request is malformed`, code: `bad_request` });

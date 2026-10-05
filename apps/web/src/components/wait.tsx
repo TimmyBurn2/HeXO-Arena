@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { text } from '../text';
+import { useNow } from '../use-now';
 
 /** A wait the server named: the seconds it began with and the seconds left, whole and at least 1. */
 export interface Wait {
@@ -12,25 +13,17 @@ export interface Wait {
  * `wait` is null while none runs.
  */
 export function useWait(): { wait: Wait | null; start: (seconds: number) => void; clear: () => void } {
-    const [running, setRunning] = useState<{ until: number; seconds: number } | null>(null);
-    const [now, setNow] = useState(() => Date.now());
-
+    const [running, setRunning] = useState<{ from: number; until: number; seconds: number } | null>(null);
+    // A tick from before the wait began never counts against it.
+    const now = Math.max(useNow(running !== null), running?.from ?? 0);
+    const over = running !== null && now >= running.until;
     useEffect(() => {
-        if (running === null) return;
-        const timer = setInterval(() => {
-            const at = Date.now();
-            setNow(at);
-            if (at >= running.until) setRunning(null);
-        }, 1000);
-        return () => {
-            clearInterval(timer);
-        };
-    }, [running]);
+        if (over) setRunning(null);
+    }, [over]);
 
     const start = useCallback((seconds: number) => {
-        const at = Date.now();
-        setNow(at);
-        setRunning({ until: at + seconds * 1000, seconds });
+        const from = Date.now();
+        setRunning({ from, until: from + seconds * 1000, seconds });
     }, []);
     const clear = useCallback(() => {
         setRunning(null);
@@ -38,8 +31,8 @@ export function useWait(): { wait: Wait | null; start: (seconds: number) => void
 
     // One object per tick, so a wait handed on as a prop changes only when its count does.
     const wait = useMemo(
-        () => (running === null ? null : { seconds: running.seconds, left: Math.max(1, Math.ceil((running.until - now) / 1000)) }),
-        [running, now],
+        () => (running === null || over ? null : { seconds: running.seconds, left: Math.max(1, Math.ceil((running.until - now) / 1000)) }),
+        [running, over, now],
     );
     return { wait, start, clear };
 }

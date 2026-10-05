@@ -21,7 +21,6 @@ export type BoardCell = z.infer<typeof boardCellSchema>;
 export const boardSnapshotSchema = z.object({
     cells: z.array(boardCellSchema),
 });
-export type BoardSnapshot = z.infer<typeof boardSnapshotSchema>;
 
 // A win is reported as exactly six cells: the window through the last
 // placed stone, clamped to the run.

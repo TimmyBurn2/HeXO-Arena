@@ -18,16 +18,16 @@ function translate(x: number, y: number): string {
     return `translate(${x.toFixed(2)} ${y.toFixed(2)})`;
 }
 
-/** One plate on the podium: who stands there, the big figure, the line under it, and a way to play them. */
-export interface PodiumPlace {
+// One plate on the podium: who stands there, the big figure, the line under it, and a way to play them.
+interface PodiumPlace {
     readonly name: string;
     readonly kind: `bot` | `human`;
     readonly figure: string;
     readonly meta: ReactNode;
     readonly play: { readonly to: string; readonly label: string } | null;
-    /** The place the plate names when it differs from the tower's, as a shared second does. */
+    // The place the plate names when it differs from the tower's, as a shared second does.
     readonly rank?: number;
-    /** Set for a deleted player or bot, whose label reads apart from the names. */
+    // Set for a deleted player or bot, whose label reads apart from the names.
     readonly deleted?: boolean | undefined;
 }
 

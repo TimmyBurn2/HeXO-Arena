@@ -69,11 +69,11 @@ export function seatedByMe(now: () => number = Date.now): () => Promise<boolean>
     };
 }
 
-/** What a guarded source asks before it reads. */
-export interface GuardDeps {
-    /** Whether the person sits in a live game by their own record. */
+// What a guarded source asks before it reads.
+interface GuardDeps {
+    // Whether the person sits in a live game by their own record.
     readonly seatedByMe: () => Promise<boolean>;
-    /** Whether a tab of the site holds a seat in a live game. */
+    // Whether a tab of the site holds a seat in a live game.
     readonly seats: Pick<SeatWatch, `seated` | `subscribe`>;
     readonly check: (position: AnalysisPosition, signal: AbortSignal) => Promise<PositionCheck>;
     readonly now: () => number;

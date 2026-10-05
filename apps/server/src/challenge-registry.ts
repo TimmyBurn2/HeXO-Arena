@@ -22,6 +22,7 @@ import {
 import type { GameRegistry } from './game-registry';
 import type { PresenceRegistry } from './presence';
 import { streamPlayerOf } from './rating-store';
+import { utcDay } from './utc-day';
 
 export const challengeTtlSeconds = challengeTtlMs / 1000;
 
@@ -33,15 +34,15 @@ interface LiveChallenge {
     ttlTimer: Timer;
 }
 
-export type CreateChallengeOutcome =
+type CreateChallengeOutcome =
     | { kind: `created`; view: Challenge }
     | { kind: `replay`; view: Challenge }
     | { kind: `pair_pending` }
     | { kind: `daily_cap`; retryAfter: number };
 
-export type ChallengeActionOutcome = { kind: `ok` } | { kind: `bot_busy` } | { kind: `unknown` };
+type ChallengeActionOutcome = { kind: `ok` } | { kind: `bot_busy` } | { kind: `unknown` };
 
-export interface ChallengeDeps {
+interface ChallengeDeps {
     query: Query;
     presence: PresenceRegistry;
     games: GameRegistry;
@@ -101,10 +102,9 @@ export class ChallengeRegistry {
             if (live.record.challengerBotId === input.challenger.id && live.record.destBotId === input.dest.id) pending += 1;
         }
         if (pending >= challengePairPendingCap) return { kind: `pair_pending` };
-        const now = nowSeconds();
-        const dayStart = Math.floor(now / 86_400) * 86_400;
-        if (countChallengesSince(this.#query, input.challenger.id, dayStart) >= challengeDailyCap) {
-            return { kind: `daily_cap`, retryAfter: dayStart + 86_400 - now };
+        const day = utcDay(nowSeconds());
+        if (countChallengesSince(this.#query, input.challenger.id, day.start) >= challengeDailyCap) {
+            return { kind: `daily_cap`, retryAfter: day.secondsLeft };
         }
         const id = insertChallenge(this.#query, {
             challengerBotId: input.challenger.id,

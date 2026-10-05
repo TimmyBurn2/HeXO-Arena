@@ -3,23 +3,26 @@ import {
     nameAtLevel,
     seatLevelSchema,
     timeControlSchema,
+    tournamentFormatOf,
     turnsOnBoard,
     type FinishReason,
     type GameHeadline,
-    type GameDuel,
     type GameTournament,
     type SeatLevel,
     type Side,
     type TimeControl,
+    type TournamentOrigin,
 } from '@hexo-arena/contract';
 import { and, count, desc, eq, gte, isNull, or, sql } from 'drizzle-orm';
 import { randomUUID } from 'node:crypto';
 import { replay, type Coord, type Position } from '@hexo-arena/rules';
 import { nowSeconds, type Query } from './db';
 import { alias } from 'drizzle-orm/sqlite-core';
-import { bots, duels, games, moves, tournamentPairings, tournaments, users } from './db/schema';
+import { bots, games, moves, tournamentPairings, tournaments, users } from './db/schema';
+import { seated } from './game-seats';
 import { applyFinishedGame, countedGameOf, ratable, ratesSomebody, seatColumns } from './rating-store';
 import { shownBot, shownUser, type ShownName } from './shown-names';
+import { creatorJoin, creatorOf, creators, nameColumns, tournamentNameOf, type NameParts } from './tournament-store';
 
 // The position a game starts from: the origin stone plus the server-placed
 // opening stones, in placement order.
@@ -27,7 +30,7 @@ export interface OpeningCell extends Coord {
     readonly player: 0 | 1;
 }
 
-export interface StoredMove {
+interface StoredMove {
     readonly seq: number;
     readonly side: Side;
     readonly cells: readonly [Coord, Coord];
@@ -143,14 +146,15 @@ export function insertMove(
         .run();
 }
 
-/** What a bot game belongs to: a tournament's pairing, or a duel. */
-export type BotGameTag = { readonly kind: `pairing`; readonly id: string; readonly game: 1 | 2 } | { readonly kind: `duel`; readonly id: string; readonly game: number };
+/** The tournament pairing a bot game belongs to, and which of its two games it is. */
+export interface BotGameTag {
+    readonly pairingId: string;
+    readonly game: 1 | 2;
+}
 
 /**
- * A game between two bots: a challenge's, a tournament's, or a duel's.
- * Only a duel's games play a level other than a bot's default; a duel's
- * games and a challenge's between two bots of one owner carry the unrated
- * mark, and the latter and a test's games are tests.
+ * A game between two bots: a challenge's, or a tournament's.
+ * The caller decides its seats' levels and its marks, as the contract's unratedByChoiceSchema and testMarkSchema define them.
  */
 export function insertBotGame(
     query: Query,
@@ -185,7 +189,7 @@ export function insertBotGame(
             timeControl: JSON.stringify(game.timeControl),
             openingCells: JSON.stringify(game.opening),
             createdAt: nowSeconds(),
-            ...(tag === undefined ? {} : tag.kind === `pairing` ? { pairingId: tag.id, pairingGame: tag.game } : { duelId: tag.id, duelGame: tag.game }),
+            ...(tag === undefined ? {} : { pairingId: tag.pairingId, pairingGame: tag.game }),
         })
         .run();
     return id;
@@ -208,9 +212,7 @@ export function recordFinish(
             .where(and(eq(games.id, gameId), isNull(games.finishedAt)))
             .returning({ ...seatColumns, voidedAt: games.voidedAt, guestName: games.guestName, xLevel: games.xLevel, oLevel: games.oLevel, unratedByChoice: games.unratedByChoice })
             .all();
-        // A game voided while live finishes on the record but never rates,
-        // and a guest's game, one against a bot at a level other than its
-        // default, or one started unrated, rates nobody.
+        // A game voided while live finishes on the record but never rates.
         if (finished?.finishSeq != null && ratesSomebody(finished)) applyFinishedGame(tx, gameId, finished.finishSeq, countedGameOf(finished));
         return { voided: finished?.voidedAt != null };
     });
@@ -278,8 +280,7 @@ export function findGame(query: Query, gameId: string): GameRecord | undefined {
     const timeControl = timeControlSchema.parse(JSON.parse(row.timeControl));
     const opening = boardCellSchema.array().parse(JSON.parse(row.openingCells));
     const levels = seatLevelsOf(row);
-    const winner = (row.winner as Side | null) ?? null;
-    const finishReason = (row.finishReason as FinishReason | null) ?? null;
+    const { winner, finishReason } = row;
     if (
         row.userId !== null &&
         row.userName !== null &&
@@ -294,8 +295,7 @@ export function findGame(query: Query, gameId: string): GameRecord | undefined {
             user: shownUser(row.userName, row.userDeletedAt),
             botId: row.botId,
             bot: shownBot(row.botName, row.botDeletedAt),
-            // The seats constraint admits only x and o here.
-            userSide: row.userSide as Side,
+            userSide: row.userSide,
             timeControl,
             opening,
             levels,
@@ -313,8 +313,7 @@ export function findGame(query: Query, gameId: string): GameRecord | undefined {
             guestName: row.guestName,
             botId: row.botId,
             bot: shownBot(row.botName, row.botDeletedAt),
-            // The seats constraint admits only x and o here.
-            guestSide: row.userSide as Side,
+            guestSide: row.userSide,
             createdAt: row.createdAt,
             timeControl,
             opening,
@@ -338,8 +337,7 @@ export function findGame(query: Query, gameId: string): GameRecord | undefined {
             challenger: shownBot(row.challengerName, row.challengerDeletedAt),
             destBotId: row.destBotId,
             dest: shownBot(row.destName, row.destDeletedAt),
-            // The seats constraint admits only x and o here.
-            challengerSide: row.challengerSide as Side,
+            challengerSide: row.challengerSide,
             timeControl,
             opening,
             levels,
@@ -384,16 +382,13 @@ export function findFinishedHeadline(query: Query, gameId: string): GameHeadline
         .where(eq(games.id, gameId))
         .get();
     if (row === undefined || row.finishReason === null) return undefined;
-    // The seats, side, winner, and reason checks admit only these values.
-    const seated = (firstSide: Side, first: string, second: string): Record<Side, string> =>
-        firstSide === `x` ? { x: first, o: second } : { x: second, o: first };
     const human = row.userName === null ? row.guestName : shownUser(row.userName, row.userDeletedAt).name;
     const names =
         human !== null && row.botName !== null && row.userSide !== null
-            ? seated(row.userSide as Side, human, shownBot(row.botName, row.botDeletedAt).name)
+            ? seated(row.userSide, human, shownBot(row.botName, row.botDeletedAt).name)
             : row.challengerName !== null && row.destName !== null && row.challengerSide !== null
               ? seated(
-                    row.challengerSide as Side,
+                    row.challengerSide,
                     shownBot(row.challengerName, row.challengerDeletedAt).name,
                     shownBot(row.destName, row.destDeletedAt).name,
                 )
@@ -403,8 +398,8 @@ export function findFinishedHeadline(query: Query, gameId: string): GameHeadline
     return {
         status: `finished`,
         names: { x: nameAtLevel(names.x, levels.x), o: nameAtLevel(names.o, levels.o) },
-        winner: (row.winner as Side | null) ?? null,
-        reason: row.finishReason as FinishReason,
+        winner: row.winner,
+        reason: row.finishReason,
         turns: turnsOnBoard(boardCellSchema.array().parse(JSON.parse(row.openingCells)).length) + row.moves,
     };
 }
@@ -423,9 +418,8 @@ export function lastHumanGameCreatedAt(query: Query, userId: string): number | n
 }
 
 // A signed-in human's games against one bot since an epoch second, which
-// the daily pair cap counts as it counts two bots'; a game at a level
-// other than the bot's default, or one started unrated, rates nobody, so
-// it counts toward no cap.
+// the daily pair cap counts as it counts two bots'; a game that rates
+// nobody counts toward no cap.
 export function countHumanPairGamesSince(query: Query, pair: { userId: string; botId: string }, sinceSeconds: number): number {
     const [row] = query
         .select({ n: count() })
@@ -436,8 +430,7 @@ export function countHumanPairGamesSince(query: Query, pair: { userId: string; b
 }
 
 // Bot-vs-bot caps count the games the log already holds that can move a
-// rating, from the start of the current UTC day: an unrated duel counts
-// toward no cap, as practice and unrated human games do.
+// rating, from the start of the current UTC day.
 export function countPairBotGamesSince(
     query: Query,
     pair: { one: string; two: string },
@@ -460,28 +453,99 @@ export function countPairBotGamesSince(
     return row?.n ?? 0;
 }
 
+// What a game's tournament line is built from.
+interface GameTournamentParts extends NameParts {
+    readonly id: string;
+    readonly round: number;
+    readonly leg: number;
+    readonly gamesPerPair: number;
+    readonly game: number | null;
+}
+
+/** The columns a game's tournament line reads, beside a left join of its pairing, its tournament, and the tournament's creator. */
+export const gameTournamentColumns = {
+    tournamentId: tournaments.id,
+    tournamentName: tournaments.name,
+    tournamentCreatorName: creators.name,
+    tournamentCreatorDeletedAt: creators.deletedAt,
+    tournamentOrigin: tournaments.origin,
+    tournamentEntrants: tournaments.maxEntrants,
+    tournamentRound: tournamentPairings.round,
+    tournamentLeg: tournamentPairings.leg,
+    tournamentGamesPerPair: tournaments.gamesPerPair,
+    pairingGame: games.pairingGame,
+};
+
+/** A game's tournament line from the columns a list read them as; none for a game of no tournament. */
+export function gameTournamentFrom(row: {
+    readonly tournamentId: string | null;
+    readonly tournamentName: string | null;
+    readonly tournamentCreatorName: string | null;
+    readonly tournamentCreatorDeletedAt: number | null;
+    readonly tournamentOrigin: TournamentOrigin | null;
+    readonly tournamentEntrants: number | null;
+    readonly tournamentRound: number | null;
+    readonly tournamentLeg: number | null;
+    readonly tournamentGamesPerPair: number | null;
+    readonly pairingGame: number | null;
+}): GameTournament | undefined {
+    if (
+        row.tournamentId === null ||
+        row.tournamentOrigin === null ||
+        row.tournamentEntrants === null ||
+        row.tournamentRound === null ||
+        row.tournamentLeg === null ||
+        row.tournamentGamesPerPair === null
+    ) {
+        return undefined;
+    }
+    return gameTournamentOf({
+        id: row.tournamentId,
+        name: row.tournamentName,
+        creatorName: row.tournamentCreatorName,
+        creatorDeletedAt: row.tournamentCreatorDeletedAt,
+        origin: row.tournamentOrigin,
+        maxEntrants: row.tournamentEntrants,
+        round: row.tournamentRound,
+        leg: row.tournamentLeg,
+        gamesPerPair: row.tournamentGamesPerPair,
+        game: row.pairingGame,
+    });
+}
+
+// A game's tournament line: its format, its round, its number among its
+// pair's games, each opening's two in turn, of how many, and who set up a person's.
+function gameTournamentOf(parts: GameTournamentParts): GameTournament | undefined {
+    if (parts.game !== 1 && parts.game !== 2) return undefined;
+    return {
+        id: parts.id,
+        name: tournamentNameOf(parts),
+        format: tournamentFormatOf(parts),
+        round: parts.round,
+        game: (parts.leg - 1) * 2 + parts.game,
+        of: parts.gamesPerPair,
+        ...(parts.origin === `person` ? { createdBy: creatorOf(parts) } : {}),
+    };
+}
+
 /** The tournament a game belongs to, with its round and game number. */
 export function findGameTournament(query: Query, gameId: string): GameTournament | undefined {
     const row = query
-        .select({ id: tournaments.id, name: tournaments.name, round: tournamentPairings.round, game: games.pairingGame })
+        .select({
+            id: tournaments.id,
+            ...nameColumns,
+            round: tournamentPairings.round,
+            leg: tournamentPairings.leg,
+            gamesPerPair: tournaments.gamesPerPair,
+            game: games.pairingGame,
+        })
         .from(games)
         .innerJoin(tournamentPairings, eq(tournamentPairings.id, games.pairingId))
         .innerJoin(tournaments, eq(tournaments.id, tournamentPairings.tournamentId))
+        .leftJoin(creators, creatorJoin)
         .where(eq(games.id, gameId))
         .get();
-    if (row === undefined || (row.game !== 1 && row.game !== 2)) return undefined;
-    return { id: row.id, name: row.name, round: row.round, game: row.game };
-}
-
-/** The duel a game belongs to, with its number and the duel's length. */
-export function findGameDuel(query: Query, gameId: string): GameDuel | undefined {
-    const row = query
-        .select({ id: duels.id, game: games.duelGame, of: duels.games })
-        .from(games)
-        .innerJoin(duels, eq(duels.id, games.duelId))
-        .where(eq(games.id, gameId))
-        .get();
-    return row?.game == null ? undefined : { id: row.id, game: row.game, of: row.of };
+    return row === undefined ? undefined : gameTournamentOf(row);
 }
 
 export function countBotBotGamesSince(query: Query, botId: string, sinceSeconds: number): number {
@@ -506,13 +570,13 @@ export function findMoves(query: Query, gameId: string): StoredMove[] {
         .where(eq(moves.gameId, gameId))
         .orderBy(moves.seq)
         .all()
-        .map((row) => ({
+        .map((row): StoredMove => ({
             seq: row.seq,
-            side: row.side as Side,
+            side: row.side,
             cells: [
                 { x: row.firstX, y: row.firstY },
                 { x: row.secondX, y: row.secondY },
-            ] as [Coord, Coord],
+            ],
         }));
 }
 

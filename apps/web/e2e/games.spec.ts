@@ -1,6 +1,7 @@
+import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type Page } from '@playwright/test';
 import { looks, wear } from './matrix';
-import { recentGames, rivalry, serve, world } from './mock-api';
+import { duelGameRows, keptNames, recentGames, rivalry, serve, tournamentGameRows, world } from './mock-api';
 
 async function open(page: Page, path: string, width: number): Promise<void> {
     await page.setViewportSize({ width, height: 900 });
@@ -141,4 +142,66 @@ test('the list narrows to games analyzers have read, and each row counts its ana
     await page.getByRole(`button`, { name: `Remove analyzed` }).click();
     await expect.poll(() => search(page)).toBe(``);
     await expect(page.locator(`.game-row`)).toHaveCount(finished.length);
+});
+
+for (const width of [1280, 390, 320]) {
+    test(`a game of a tournament or a duel names it under the result, a link as wide as its words and tall enough to tap, at ${String(width)} px`, async ({ page }) => {
+        await page.setViewportSize({ width, height: 900 });
+        const look = looks[0];
+        if (look === undefined) throw new Error(`no look registered`);
+        await wear(page, look);
+        await serve(page, world({ finished: [...tournamentGameRows, ...duelGameRows, ...keptNames] }));
+        await page.goto(`/games`);
+        const caption = page.getByRole(`link`, { name: `Autumn round robin, round 2, game 1 of 2` });
+        const item = page.locator(`.game-row-evented`).first();
+        const row = item.locator(`.game-row`);
+        const [itemBox, rowBox, captionBox, resultBox] = await Promise.all([item.boundingBox(), row.boundingBox(), caption.boundingBox(), row.locator(`.game-row-result`).boundingBox()]);
+        if (itemBox === null || rowBox === null || captionBox === null || resultBox === null) throw new Error(`a row drew no box`);
+        expect(captionBox.y + captionBox.height).toBeLessThanOrEqual(itemBox.y + itemBox.height);
+        if (width >= 832) {
+            // Laid over the row on the room it keeps under the result, the caption still takes the pointer.
+            const room = await row.locator(`.game-row-event-space`).boundingBox();
+            if (room === null) throw new Error(`the row kept no room for its caption`);
+            expect([Math.round(captionBox.x - room.x), Math.round(captionBox.y - room.y), Math.round(captionBox.height - room.height)]).toEqual([0, 0, 0]);
+            expect(captionBox.y + captionBox.height).toBeLessThanOrEqual(rowBox.y + rowBox.height);
+        } else {
+            // A card's caption takes a line under the card, lined up with its result.
+            expect(captionBox.y).toBeGreaterThanOrEqual(rowBox.y + rowBox.height - 1);
+            expect(Math.abs(captionBox.x - resultBox.x)).toBeLessThanOrEqual(1);
+        }
+        expect(Math.round(captionBox.height)).toBe(24);
+        const words = await caption.evaluate((link) => {
+            const range = document.createRange();
+            range.selectNodeContents(link);
+            return range.getBoundingClientRect().width;
+        });
+        expect(Math.abs(captionBox.width - words)).toBeLessThanOrEqual(1);
+        if (width === 1280) expect(Math.round(itemBox.height)).toBe(68);
+        const axe = await new AxeBuilder({ page }).withRules([`target-size`]).analyze();
+        expect(axe.violations.flatMap((violation) => violation.nodes.map((node) => node.target))).toEqual([]);
+        await expect(page.getByRole(`link`, { name: `Duel, game 3 of 10` })).toHaveAttribute(`href`, `/tournaments/t_brunoduel001`);
+        expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+        await caption.click();
+        await expect(page).toHaveURL(/\/tournaments\/t_autumnrobin1$/u);
+    });
+}
+
+test('Played in narrows the list to the games of a tournament, a duel among them, or of none, and its chip clears it', async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 900 });
+    const look = looks[0];
+    if (look === undefined) throw new Error(`no look registered`);
+    await wear(page, look);
+    await serve(page, world({ finished: [...tournamentGameRows, ...duelGameRows, ...keptNames] }));
+    await page.goto(`/games`);
+    await page.locator(`.game-row`).first().waitFor();
+    await page.getByRole(`button`, { name: `Filters`, exact: true }).click();
+    await page.getByLabel(`Played in`).selectOption(`tournament`);
+    await expect(page.locator(`.game-row`)).toHaveCount([...tournamentGameRows, ...duelGameRows].filter((game) => game.test !== true).length);
+    expect(search(page)).toBe(`?event=tournament`);
+    await page.getByLabel(`Played in`).selectOption(`none`);
+    await expect(page.locator(`.game-row-evented`)).toHaveCount(0);
+    await page.keyboard.press(`Escape`);
+    await page.getByRole(`button`, { name: `Remove in no tournament` }).click();
+    expect(search(page)).toBe(``);
+    await expect(page.locator(`.game-row-evented`)).not.toHaveCount(0);
 });

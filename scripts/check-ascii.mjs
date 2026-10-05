@@ -4,7 +4,8 @@ import { lstatSync, readFileSync, readlinkSync } from 'node:fs';
 // Committed text is ASCII only: code, comments, docs, and tests alike.
 // A character outside it is written as an escape.
 // A file holding a NUL byte is binary and left alone.
-const tracked = execFileSync(`git`, [`ls-files`, `-z`], { encoding: `utf8` })
+// New files count before they are staged, so a local run sees what a commit would carry.
+const files = execFileSync(`git`, [`ls-files`, `-z`, `--cached`, `--others`, `--exclude-standard`], { encoding: `utf8` })
     .split(`\0`)
     .filter((file) => file !== ``);
 
@@ -16,7 +17,7 @@ const escaped = (text) =>
 const outside = (text) => [...text].findIndex((char) => (char.codePointAt(0) ?? 0) > 0x7f);
 
 const hits = [];
-for (const file of tracked) {
+for (const file of files) {
     if (outside(file) !== -1) hits.push(`${escaped(file)}: the file name`);
     // Git keeps a link as the path it points to, so that path is its text;
     // a file deleted but not yet staged has nothing to read.
@@ -37,7 +38,7 @@ for (const file of tracked) {
 }
 
 if (hits.length > 0) {
-    console.error(`characters outside ASCII in tracked files:`);
+    console.error(`characters outside ASCII:`);
     for (const hit of hits) console.error(hit);
     process.exit(1);
 }

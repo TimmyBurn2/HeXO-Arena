@@ -35,6 +35,7 @@
         --board-stone-x: #d25a06;
         --board-stone-o: #0383e1;
         --board-focus: #ffffff;
+        --board-link: var(--c-accent);
         --board-number-x: #1f1729;
         --board-number-o: #1f1729;
         --board-pending: #f7c23b;

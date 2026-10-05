@@ -3,10 +3,11 @@ import { randomInt } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 import { z } from 'zod';
+import { ApiError } from './client';
 import { seedPlan } from './personas';
 import { NotADevServer, seats } from './runner';
 import { seedDevData } from './seed';
-import { devDuelPlans } from './duels';
+import { devEventPlans } from './events';
 import type { DevWeeklyRule } from './tournament';
 
 const envSchema = z.object({
@@ -84,7 +85,7 @@ try {
         log,
         scheduleTournament,
         addWeeklyRule,
-        duels: devDuelPlans,
+        events: devEventPlans,
         tournamentCandidates: seats.map((seat) => ({ owner: `devowner-${seat}`, bot: `devbot-${seat}` })),
     });
     log(`played ${String(report.played)} games`);
@@ -101,13 +102,14 @@ try {
     if (report.tournament !== null) {
         log(`dev tournament ${report.tournament.id}, entered: ${report.tournament.entered.join(`, `) || `none`}`);
     }
-    if (report.duels !== null) {
-        log(`finished duel: ${report.duels.finished ?? `none`}; test: ${report.duels.test ?? `none`}; live duel: ${report.duels.live ?? `none, start pnpm dev:bots and seed again`}`);
-    }
+    for (const [name, id] of Object.entries(report.events ?? {})) log(`${name}: ${id ?? `none`}`);
     log(`restart pnpm dev:bots to bring the personas' online bots up`);
 } catch (error) {
     if (error instanceof NotADevServer) {
         console.error(`dev-seed: refusing to run: ${error.message}; start it with DEV_LOGIN=1 (cp .env.example .env, then pnpm dev)`);
+    } else if (error instanceof ApiError && error.code === `not_open`) {
+        // The live duel and round robin are between the dev bots, which pnpm dev:bots holds online.
+        console.error(`dev-seed: ${error.message}; start pnpm dev:bots and seed again`);
     } else {
         const cause = error instanceof Error && error.cause instanceof Error ? `: ${error.cause.message}` : ``;
         console.error(`dev-seed: cannot seed ${origin}: ${error instanceof Error ? error.message : String(error)}${cause}; is pnpm dev running?`);

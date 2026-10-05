@@ -1,9 +1,8 @@
 // @vitest-environment jsdom
-import { cleanup, renderHook } from '@testing-library/react';
 import { undeclaredValues } from '@hexo-arena/contract';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { checkPosition, guarded, seatedByMe, type PositionCheck } from '../src/analysis/guard';
-import { SeatWatch, useSeatBroadcast, type SeatPort } from '../src/analysis/seat-channel';
+import { SeatWatch, type SeatPort } from '../src/analysis/seat-channel';
 import type { AnalysisPosition, EvaluationSource, Reading, SourceEvent } from '../src/analysis/sources';
 import { meStore } from '../src/me';
 
@@ -80,7 +79,6 @@ const nobody = { seated: () => false, subscribe: () => () => undefined };
 const clear = (): Promise<PositionCheck> => Promise.resolve({ kind: `clear` });
 
 afterEach(() => {
-    cleanup();
     vi.unstubAllGlobals();
     meStore.reset();
 });
@@ -150,14 +148,13 @@ describe('a guarded engine', () => {
         await vi.waitFor(() => {
             expect(toy.reads).toHaveLength(1);
         });
-        const game = renderHook<undefined, { gameId: string | null }>(({ gameId }) => {
-            useSeatBroadcast(gameId, tabs.open);
-        }, { initialProps: { gameId: `g1` } });
+        const game = tabs.open();
+        game.postMessage({ type: `seat`, gameId: `g1`, seated: true });
         expect(await stopped).toEqual([{ kind: `thinking` }, { kind: `refused`, code: `seated`, retryAfter: null }]);
         expect(toy.reads[0]?.aborted).toBe(true);
         expect(await all(source.read(position, ask, new AbortController().signal))).toEqual([{ kind: `refused`, code: `seated`, retryAfter: null }]);
 
-        game.rerender({ gameId: null });
+        game.postMessage({ type: `seat`, gameId: `g1`, seated: false });
         expect(watch.seated()).toBe(false);
         const freed = all(source.read(position, ask, new AbortController().signal));
         await vi.waitFor(() => {
@@ -170,20 +167,6 @@ describe('a guarded engine', () => {
 });
 
 describe('the seat channel', () => {
-    it('names a seat at once, again when a tab asks, and frees it when the game ends', () => {
-        const tabs = channel();
-        const game = renderHook<undefined, { gameId: string | null }>(({ gameId }) => {
-            useSeatBroadcast(gameId, tabs.open);
-        }, { initialProps: { gameId: `g1` } });
-        expect(tabs.posted).toEqual([{ type: `seat`, gameId: `g1`, seated: true }]);
-        const watch = new SeatWatch({ open: tabs.open });
-        expect(watch.seated()).toBe(true);
-        game.rerender({ gameId: null });
-        expect(tabs.posted.at(-1)).toEqual({ type: `seat`, gameId: `g1`, seated: false });
-        expect(watch.seated()).toBe(false);
-        watch.close();
-    });
-
     it('forgets a seat no tab has named for a while, as a tab closed without a word leaves it', () => {
         const tabs = channel();
         let clock = 0;

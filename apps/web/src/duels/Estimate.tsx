@@ -1,9 +1,23 @@
 import type { CSSProperties } from 'react';
-import type { DuelDetail, DuelEstimate, DuelSide } from '@hexo-arena/contract';
+import type { Estimate as TestEstimate } from '@hexo-arena/contract';
 import { Rating } from '../components/player';
 import { text } from '../text';
-import { noWinnerCount, pointsText, signed, sweptBy } from './words';
+import { otherSide, pointsText, signed, sweptBy, type DuelSide } from './words';
 import './Duels.css';
+
+/** What an estimate of two bots says beside its figures: each bot and its rating now, whether games are still to come, how many, and how many ended without a winner. */
+export interface EstimateSubject {
+    readonly first: EstimateBot;
+    readonly second: EstimateBot;
+    readonly running: boolean;
+    readonly games: number;
+    readonly noWinner: number;
+}
+
+interface EstimateBot {
+    readonly name: string;
+    readonly now: { readonly rating: number; readonly provisional: boolean } | null;
+}
 
 // The axis runs this far either way, in rating points; an estimate past it sits at its end.
 const axisReach = 400;
@@ -15,8 +29,6 @@ function at(value: number): string {
     return `${String(((clamped + axisReach) / (2 * axisReach)) * 100)}%`;
 }
 
-const otherSide = (side: DuelSide): DuelSide => (side === `first` ? `second` : `first`);
-
 /**
  * A test's estimate, led by the score: how many rating points the leading
  * bot is stronger, with its 95% range on an axis around zero, the chance
@@ -24,7 +36,7 @@ const otherSide = (side: DuelSide): DuelSide => (side === `first` ? `second` : `
  * test moves for neither bot. A sweep's range has no upper end, so it is
  * said as the least the bot is stronger by.
  */
-export function Estimate({ duel, estimate }: { duel: DuelDetail; estimate: DuelEstimate }) {
+export function Estimate({ duel, estimate }: { duel: EstimateSubject; estimate: TestEstimate }) {
     const words = text.duels.estimate;
     // The bot the estimate favors leads every line; the first named at even.
     const lead: DuelSide = estimate.favored ?? `first`;
@@ -37,18 +49,18 @@ export function Estimate({ duel, estimate }: { duel: DuelDetail; estimate: DuelE
     const leadName = duel[lead].name;
     const trailName = duel[trail].name;
     const points = { lead: pointsText(estimate.points[lead]), trail: pointsText(estimate.points[trail]) };
-    const running = duel.status === `running`;
+    const running = duel.running;
     const swept = sweptBy(estimate) !== null;
     const level = estimate.favored === null;
-    const drawn = text.duels.noWinner(noWinnerCount(duel.games));
+    const drawn = text.duels.noWinner(duel.noWinner);
     const head = swept
         ? words.sweep(leadName, estimate.games)
         : level
           ? running
-              ? words.level(points.lead, estimate.games, duel.terms.games, drawn)
+              ? words.level(points.lead, estimate.games, duel.games, drawn)
               : words.levelOver(points.lead, drawn)
           : running
-            ? words.soFar(leadName, points.lead, points.trail, estimate.games, duel.terms.games, drawn)
+            ? words.soFar(leadName, points.lead, points.trail, estimate.games, duel.games, drawn)
             : words.scored(leadName, points.lead, points.trail, drawn);
     const range = words.between(low, high);
     // A range open upward has no middle worth a number, so only its floor is said.
@@ -102,14 +114,12 @@ export function Estimate({ duel, estimate }: { duel: DuelDetail; estimate: DuelE
                     <dd>{words.ladderValue(<LadderBot duel={duel} side={lead} />, <LadderBot duel={duel} side={trail} />)}</dd>
                 </div>
             </dl>
-            <p className="note">
-                {running ? words.toGo(duel.terms.games - estimate.games) : estimate.narrowed === null ? null : words.narrowed(estimate.narrowed)}
-            </p>
+            {running ? <p className="note">{words.toGo(duel.games - estimate.games)}</p> : null}
         </section>
     );
 }
 
-function LadderBot({ duel, side }: { duel: DuelDetail; side: DuelSide }) {
+function LadderBot({ duel, side }: { duel: EstimateSubject; side: DuelSide }) {
     const bot = duel[side];
     const now = bot.now;
     return now === null ? bot.name : text.duels.estimate.ladderBot(bot.name, <Rating value={now.rating} provisional={now.provisional} />);

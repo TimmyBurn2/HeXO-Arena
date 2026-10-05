@@ -1,4 +1,4 @@
-import { gameTurnCap, internalToWire, wireToInternal } from '@hexo-arena/contract';
+import { gameTurnCap, htttxCell, wireToInternal, writeHtttx } from '@hexo-arena/contract';
 import {
     originSetup,
     playTurn,
@@ -43,17 +43,15 @@ export type NotationError =
 export type NotationRead<T> = { readonly ok: true; readonly value: T } | { readonly ok: false; readonly error: NotationError };
 
 /** A cell as HTTTX writes it: `[q,r]`. */
-export function cellText(cell: Coord): string {
-    const { q, r } = internalToWire(cell);
-    return `[${String(q)},${String(r)}]`;
-}
+export const cellText: (cell: Coord) => string = htttxCell;
 
 /**
  * The strict HTTTX text of a line from the origin, which every known reader accepts:
  * `version[1];`, then one numbered turn a line, a one-stone turn only where it completes six.
+ * The server's game exports write through the same writer.
  */
 export function writeGame(turns: readonly TurnCells[]): string {
-    return `version[1];\n${turns.map((cells, index) => `${String(index + 1)}. ${cells.map(cellText).join(``)};\n`).join(``)}`;
+    return writeHtttx(turns);
 }
 
 /** The same turns with no header and no spaces, for a link. */

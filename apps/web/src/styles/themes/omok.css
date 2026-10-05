@@ -4,6 +4,8 @@
  * The white stone sits close to the wood, so a dark rim sets it apart.
  * The marks turn red, since brass vanishes on the wood: as bright as the
  * wood allows, so a last-move ring still parts from a black stone's rim.
+ * A link on the wood takes the black stone's ink, as red is too light for
+ * text there.
  */
 
 @layer theme {
@@ -18,7 +20,7 @@
         --c-border: hsl(26 14% 24%);
         --c-border-strong: hsl(26 12% 38%);
         --c-text: hsl(35 25% 88%);
-        --c-text-dim: hsl(30 12% 64%);
+        --c-text-dim: hsl(30 12% 65.5%);
         --c-good: hsl(142 45% 62%);
         --c-good-solid: hsl(142 40% 40%);
         --c-bad: hsl(4 75% 75%);
@@ -35,6 +37,7 @@
         --board-stone-x: #f3f3f3;
         --board-stone-o: #141414;
         --board-focus: #141414;
+        --board-link: #141414;
         --board-number-x: #141414;
         --board-number-o: #f3f3f3;
         --board-pending: #ad1f1f;

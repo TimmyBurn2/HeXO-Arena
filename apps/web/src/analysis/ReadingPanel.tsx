@@ -109,11 +109,9 @@ function waitedFor(state: Extract<ReadingState, { kind: `queued` }>, name: strin
     return state.by?.kind === `bot` ? state.by.name : name;
 }
 
-/**
- * What line A's held place says: for a position waiting in a queue, when it goes to its analyzer;
- * for one being read, who reads it, which the head says too, so only a phone's strip, holding the graph in the head's place, shows it.
- */
-export type HeldNote = { readonly kind: `queued`; readonly words: string } | { readonly kind: `reading`; readonly words: string };
+// What line A's held place says: for a position waiting in a queue, when it goes to its analyzer;
+// for one being read, who reads it, which the head says too, so only a phone's strip, holding the graph in the head's place, shows it.
+type HeldNote = { readonly kind: `queued`; readonly words: string } | { readonly kind: `reading`; readonly words: string };
 
 /** The held line A's note for the position shown, if it has one. */
 export function heldNote(analyzer: AnalyzerShown, entry: ShownEntry, analyzing: boolean): HeldNote | null {

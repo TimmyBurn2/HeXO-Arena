@@ -367,6 +367,24 @@
         margin-left: 0;
     }
 
+    .home-row-yours {
+        flex-basis: 100%;
+    }
+
+    /* The entry stands in the row of the tournament it enters. */
+    .home-row-enter {
+        flex-basis: 100%;
+        font-weight: var(--weight-strong);
+    }
+
+    .home-block-foot {
+        display: flex;
+        flex-wrap: wrap;
+        gap: var(--space-2) var(--space-5);
+        margin: 0;
+        font-weight: var(--weight-strong);
+    }
+
     .home-row-figure {
         display: inline-flex;
         align-items: center;

@@ -1,6 +1,7 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import { isReservedName, nameKeyOf, namePattern, type Me, type Signup } from '@hexo-arena/contract';
 import { ApiError, cancelSignup, createAccount, fetchSignup, limitedFor } from '../api/client';
+import { useAsync } from '../api/use-async';
 import { useWait, WaitText } from '../components/wait';
 import { DiscordSignIn } from '../components/DiscordButton';
 import { DiscordSymbol } from '../components/DiscordSymbol';
@@ -14,13 +15,28 @@ import { text } from '../text';
 import { useDocumentMeta } from '../use-document-meta';
 import './WelcomeScreen.css';
 
+// A sign-up that is gone: the sentence that says so, where to start again,
+// and whether it went just now, by Create account, rather than before the page opened.
+interface Gone {
+    readonly kind: `ended`;
+    readonly sentence: string;
+    readonly next: string;
+    readonly announce: boolean;
+}
+
 // What the page holds: the sign-up to finish, one that is gone, or a read
 // that did not come back.
-type View =
-    | { kind: `loading` }
-    | { kind: `ready`; signup: Signup }
-    | { kind: `ended`; sentence: string; next: string; announce: boolean }
-    | { kind: `failed` };
+type View = { kind: `loading` } | { kind: `ready`; signup: Signup } | Gone | { kind: `failed` };
+
+// A sign-up held too long has expired, which is no failure of the read.
+async function loadSignup(): Promise<{ kind: `ready`; signup: Signup } | Gone> {
+    try {
+        return { kind: `ready`, signup: await fetchSignup() };
+    } catch (cause) {
+        if (cause instanceof ApiError && cause.status === 410) return { kind: `ended`, sentence: text.welcome.expired, next: `/`, announce: false };
+        throw cause;
+    }
+}
 
 // A refusal the server gives for one name, which the field shows until the
 // name changes, or a failure of the request itself.
@@ -35,28 +51,9 @@ export function WelcomeScreen() {
     const route = useRoute();
     useDocumentMeta(route);
     const me = useMe();
-    const [view, setView] = useState<View>({ kind: `loading` });
-    const [attempt, setAttempt] = useState(0);
-
-    useEffect(() => {
-        let cancelled = false;
-        fetchSignup().then(
-            (signup) => {
-                if (!cancelled) setView({ kind: `ready`, signup });
-            },
-            (cause: unknown) => {
-                if (cancelled) return;
-                setView(
-                    cause instanceof ApiError && cause.status === 410
-                        ? { kind: `ended`, sentence: text.welcome.expired, next: `/`, announce: false }
-                        : { kind: `failed` },
-                );
-            },
-        );
-        return () => {
-            cancelled = true;
-        };
-    }, [attempt]);
+    const read = useAsync(loadSignup);
+    const [ended, setEnded] = useState<Gone | null>(null);
+    const view: View = ended ?? read.data ?? (read.error ? { kind: `failed` } : { kind: `loading` });
 
     // The page waits to know who is here, since the card's lines and its
     // answer to a refusal depend on the session;
@@ -91,10 +88,7 @@ export function WelcomeScreen() {
                         <button
                             type="button"
                             className="btn btn-ghost"
-                            onClick={() => {
-                                setView({ kind: `loading` });
-                                setAttempt((current) => current + 1);
-                            }}
+                            onClick={read.reload}
                         >
                             {text.states.tryAgain}
                         </button>
@@ -107,7 +101,7 @@ export function WelcomeScreen() {
                     signup={view.signup}
                     held={me.me}
                     onEnded={(sentence) => {
-                        setView({ kind: `ended`, sentence, next: view.signup.next, announce: true });
+                        setEnded({ kind: `ended`, sentence, next: view.signup.next, announce: true });
                     }}
                 />
             )}

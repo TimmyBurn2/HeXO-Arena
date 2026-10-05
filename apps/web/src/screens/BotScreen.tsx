@@ -1,13 +1,14 @@
 import { Fragment, useCallback, useId } from 'react';
-import { analysisPagePath, botMeta, levelFacts, nameKeyOf, notFoundMeta, type Accepts, type Analyzer, type BotListing, type Levels, type LiveGameEntry } from '@hexo-arena/contract';
+import { analysisPagePath, botMeta, levelFacts, nameKeyOf, notFoundMeta, pagePath, type Accepts, type Analyzer, type BotListing, type Levels, type LiveGameEntry } from '@hexo-arena/contract';
 import { fetchBots } from '../api/client';
-import { BotDuels } from '../duels/BotDuels';
-import { duelsPath, pickReason } from '../duels/setup';
-import { useDuelStates } from '../duels/use-duels';
+import { eventReadiness, reasonText } from '../play/readiness';
+import { emptyTournamentSetup, tournamentSetupPath } from '../tournaments/setup';
+import { useBotStates } from '../tournaments/use-setup-reads';
 import { useAsync } from '../api/use-async';
 import { OwnerPanel } from '../components/OwnerPanel';
 import { ReportLine } from '../components/ReportLine';
 import { PlayerHistory } from '../games/PlayerHistory';
+import { BotEvents } from '../players/BotEvents';
 import { PendingPlate } from '../players/PendingPlate';
 import { PlayerBlocks } from '../players/PlayerBlocks';
 import { LiveGameGrid } from '../live/LiveGameCard';
@@ -73,12 +74,12 @@ function MissingBot({ name }: { name: string }) {
 function BotProfile({ bot, onChanged }: { bot: BotListing; onChanged: () => void }) {
     const me = useMe();
     const ids = useId();
-    const duelStates = useDuelStates();
-    const duelState = duelStates.states.find((state) => nameKeyOf(state.name) === nameKeyOf(bot.name)) ?? null;
+    const botStates = useBotStates();
+    const botState = botStates.states.find((state) => nameKeyOf(state.name) === nameKeyOf(bot.name)) ?? null;
     const viewer = me.status === `ready` && me.me?.kind === `user` ? me.me.name : null;
     const owned = ownedBy(bot, viewer);
     // The owner plays their own bot while it is online, open to others or not.
-    const readiness = readinessOf(bot, duelStates.reserved, viewer);
+    const readiness = readinessOf(bot, botStates.reserved, viewer);
     const blockedReasons = {
         busy: text.play.busy,
         tournament: text.play.inTournament,
@@ -87,9 +88,9 @@ function BotProfile({ bot, onChanged }: { bot: BotListing; onChanged: () => void
         nothing: text.bot.noClockReason,
     };
     // Start a duel opens a setup only for a bot the picker would add, and says why not as the picker does;
-    // beside no other bot, no reason is a pair's.
-    const duelWhy = pickReason(bot, null, { reserved: duelStates.reserved, states: duelStates.states, viewer });
-    const duelReason = duelWhy === null || duelWhy === `pair` || duelWhy === `clock` ? null : text.duels.picker.reasons[duelWhy];
+    // beside no other bot, no reason is a clock's.
+    const duelWhy = eventReadiness(bot, [], { reserved: botStates.reserved, states: botStates.states, viewer });
+    const duelReason = duelWhy === null || duelWhy === `clock` ? null : reasonText(duelWhy, []);
     const reason = readiness !== `ready` ? blockedReasons[readiness] : duelReason;
 
     return (
@@ -127,7 +128,7 @@ function BotProfile({ bot, onChanged }: { bot: BotListing; onChanged: () => void
                                 </button>
                             )}
                             {duelReason === null ? (
-                                <Link to={duelsPath(bot.name)} className="btn btn-ghost">
+                                <Link to={tournamentSetupPath({ ...emptyTournamentSetup, bots: [{ name: bot.name, level: null }] })} className="btn btn-ghost">
                                     {text.duels.bot.start}
                                 </Link>
                             ) : (
@@ -141,7 +142,7 @@ function BotProfile({ bot, onChanged }: { bot: BotListing; onChanged: () => void
                                 </span>
                             )}
                         </div>
-                        <AcceptsLine accepts={bot.accepts} owned={owned} byOthers={duelState?.duelsByOthers ?? null} />
+                        <AcceptsLine accepts={bot.accepts} owned={owned} byOthers={botState?.duelsByOthers ?? null} />
                     </div>
                 </header>
             </div>
@@ -150,11 +151,11 @@ function BotProfile({ bot, onChanged }: { bot: BotListing; onChanged: () => void
             {bot.levels === null ? null : <StrengthRows bot={bot.name} levels={bot.levels} readiness={readiness} />}
             <BotDetails bot={bot} />
             <PlayingNow bot={bot.name} />
-            <BotDuels bot={bot.name} owner={bot.ownerName} />
+            <BotEvents bot={bot.name} owner={bot.ownerName} />
             <PlayerBlocks name={bot.name} />
             <PlayerHistory player={bot.name} title={text.games.recent} />
             {owned ? <OwnerPanel bot={bot.name} onChanged={onChanged} /> : null}
-            <ReportLine subject={`/bots/${encodeURIComponent(bot.name)}`} name={bot.name} />
+            <ReportLine subject={pagePath(`bot`, { bot: bot.name })} name={bot.name} />
         </>
     );
 }

@@ -1,6 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 import type { Me } from '@hexo-arena/contract';
-import { looks, wear } from './matrix';
+import { looks, sweep, wear } from './matrix';
 import { serve, world } from './mock-api';
 
 const visitors: readonly { name: string; me: Me }[] = [
@@ -10,27 +10,21 @@ const visitors: readonly { name: string; me: Me }[] = [
     { name: `guest`, me: { kind: `guest`, name: `Guest k3f9`, liveGames: [] } },
 ];
 
+// The bar is one component on every framed screen, and the route reaches
+// it only as the active link, which changes color, not size; so three
+// screens stand for all: one with no link active, one with a nav link
+// active, and Profile, where who is here is.
+// The text-size sweep visits every framed screen with the bar on it.
 const screens: readonly { name: string; path: string }[] = [
-    { name: `the root`, path: `/` },
-    { name: `play`, path: `/play` },
-    { name: `bot duels`, path: `/play/duels` },
-    { name: `live games`, path: `/games/live` },
-    { name: `analysis`, path: `/analysis` },
-    { name: `the ladder`, path: `/ladder` },
-    { name: `bots`, path: `/bots` },
-    { name: `a bot page`, path: `/bots/sealbot` },
-    { name: `build a bot`, path: `/connect` },
-    { name: `profile`, path: `/profile` },
-    { name: `credits`, path: `/credits` },
-    { name: `the report form`, path: `/report` },
     { name: `a missing page`, path: `/nowhere` },
-    { name: `a missing game`, path: `/game/nope` },
+    { name: `the ladder`, path: `/ladder` },
+    { name: `profile`, path: `/profile` },
 ];
 
 // The screen matrix jumps from phone to tablet; the band between is where
 // the nav links return beside the gear and who is here, so it is swept
-// closely, from the narrowest phone out to the desktop widths, on every
-// framed screen, with the edges where the mark comes and goes.
+// closely, from the narrowest phone out to the desktop widths, with the
+// edges where the mark comes and goes and the menu turns from sheet to popover.
 const widths = [320, 352, 353, 360, 480, 481, 560, 600, 640, 656, 657, 700, 740, 768, 769, 800, 848, 849, 944, 945, 1024, 1280];
 
 // The nav links sit in the tab bar up to 41rem,
@@ -154,42 +148,59 @@ async function barFits(page: Page, width: number, signedIn: boolean, longName: b
     expect(bar.overflow).toBeLessThanOrEqual(0);
 }
 
+// Each width is taken in the page, one load per screen; the menu is opened
+// and shut again at each, since it picks sheet or popover as it opens.
 for (const visitor of visitors) {
     for (const screen of screens) {
-        for (const width of widths) {
-            test(`the ${visitor.name} top bar on ${screen.name} fits at ${String(width)} px${visitor.me === null ? `` : `, its menu shut and open`}`, async ({ page }) => {
-                await page.setViewportSize({ width, height: 800 });
-                const look = looks[0];
-                if (look === undefined) throw new Error(`no look registered`);
-                await wear(page, look);
-                await serve(page, world({ me: visitor.me }));
-                await page.goto(screen.path);
-                await page.locator(`h1`).first().waitFor();
-                const signedIn = visitor.me !== null;
-                if (signedIn) await page.locator(`header button.identity`).waitFor();
-                await barFits(page, width, signedIn, visitor.name === `long-named`);
-                // Signed out, the sign-in is a link straight to Discord and
-                // opens nothing here.
-                if (!signedIn) return;
+        test(`the ${visitor.name} top bar on ${screen.name} fits at every width from 320 to 1280 px${visitor.me === null ? `` : `, its menu shut and open`}`, sweep, async ({ page }) => {
+            await page.setViewportSize({ width: widths[0] ?? 320, height: 800 });
+            const look = looks[0];
+            if (look === undefined) throw new Error(`no look registered`);
+            await wear(page, look);
+            await serve(page, world({ me: visitor.me }));
+            await page.goto(screen.path);
+            await page.locator(`h1`).first().waitFor();
+            const signedIn = visitor.me !== null;
+            if (signedIn) await page.locator(`header button.identity`).waitFor();
+            for (const width of widths) {
+                await test.step(`at ${String(width)} px`, async () => {
+                    await page.setViewportSize({ width, height: 800 });
+                    await page.evaluate(
+                        () =>
+                            new Promise<void>((resolve) => {
+                                requestAnimationFrame(() => {
+                                    requestAnimationFrame(() => {
+                                        resolve();
+                                    });
+                                });
+                            }),
+                    );
+                    await barFits(page, width, signedIn, visitor.name === `long-named`);
+                    // Signed out, the sign-in is a link straight to Discord and
+                    // opens nothing here.
+                    if (!signedIn) return;
 
-                await page.locator(`header button.identity`).click();
-                const panel = page.locator(`dialog[open]`);
-                await expect(panel).toHaveCount(1);
-                const header = await page.locator(`header.topbar`).boundingBox();
-                const barBottom = (header?.y ?? 0) + (header?.height ?? Infinity);
-                // The panel slides in, so its resting box is polled for.
-                await expect
-                    .poll(async () => {
-                        const box = await panel.boundingBox();
-                        if (box === null) return `no panel`;
-                        if (box.x < 0 || box.x + box.width > width) return `outside the window`;
-                        if (width <= 480) return Math.round(box.width) === width ? `in place` : `a sheet short of the width`;
-                        return box.y >= barBottom - 1 ? `in place` : `over the bar`;
-                    })
-                    .toBe(`in place`);
-                await barFits(page, width, signedIn, visitor.name === `long-named`);
-            });
-        }
+                    await page.locator(`header button.identity`).click();
+                    const panel = page.locator(`dialog[open]`);
+                    await expect(panel).toHaveCount(1);
+                    const header = await page.locator(`header.topbar`).boundingBox();
+                    const barBottom = (header?.y ?? 0) + (header?.height ?? Infinity);
+                    // The panel slides in, so its resting box is polled for.
+                    await expect
+                        .poll(async () => {
+                            const box = await panel.boundingBox();
+                            if (box === null) return `no panel`;
+                            if (box.x < 0 || box.x + box.width > width) return `outside the window`;
+                            if (width <= 480) return Math.round(box.width) === width ? `in place` : `a sheet short of the width`;
+                            return box.y >= barBottom - 1 ? `in place` : `over the bar`;
+                        })
+                        .toBe(`in place`);
+                    await barFits(page, width, signedIn, visitor.name === `long-named`);
+                    await page.keyboard.press(`Escape`);
+                    await expect(panel).toHaveCount(0);
+                });
+            }
+        });
     }
 }
 

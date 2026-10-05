@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useReducer, useRef } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
     analysesPollMs,
     analysisTurnCap,
@@ -10,6 +10,7 @@ import {
     type OwnAnalysis,
 } from '@hexo-arena/contract';
 import { ApiError, fetchAnalyses, requestAnalysis } from '../api/client';
+import { useAsync } from '../api/use-async';
 import type { GameLine } from '../analysis/game-readings';
 import { meStore } from '../me';
 import { text } from '../text';
@@ -142,58 +143,39 @@ export interface AnalysesState {
     readonly request: { readonly kind: `idle` } | { readonly kind: `sending` } | { readonly kind: `refused`; readonly code: RequestRefusal; readonly retryAfter: number | null };
 }
 
-/** What happens to a game's readings: a read lands or fails, a request goes out, is queued, or is refused. */
-export type AnalysesEvent =
-    | { readonly kind: `loaded`; readonly list: AnalysisList }
-    | { readonly kind: `load-failed` }
-    | { readonly kind: `sending` }
-    | { readonly kind: `queued`; readonly analysis: CommunityAnalysis }
-    | { readonly kind: `refused`; readonly code: RequestRefusal; readonly retryAfter: number | null };
-
-export const initialAnalyses: AnalysesState = { load: { kind: `loading` }, request: { kind: `idle` } };
-
 /**
- * The next state of a game's readings.
- * A read that fails once a list is on screen keeps that list, so a missed poll never blanks the head;
- * a queued request joins the list at once, before the next read confirms it.
+ * The list with a request just queued in it, before the next read confirms it;
+ * a list read meanwhile that already holds it keeps one copy.
  */
-export function analysesStep(state: AnalysesState, event: AnalysesEvent): AnalysesState {
-    switch (event.kind) {
-        case `loaded`:
-            return { ...state, load: { kind: `ready`, list: event.list } };
-        case `load-failed`:
-            return state.load.kind === `ready` ? state : { ...state, load: { kind: `failed` } };
-        case `sending`:
-            return { ...state, request: { kind: `sending` } };
-        case `queued`: {
-            const list = state.load.kind === `ready` ? state.load.list : { analyses: [], optedOut: false, independentOnline: false };
-            const others = list.analyses.filter((analysis) => analysis.kind !== `community` || analysis.analysisId !== event.analysis.analysisId);
-            return { load: { kind: `ready`, list: { ...list, analyses: [...others, event.analysis] } }, request: { kind: `idle` } };
-        }
-        case `refused`:
-            return { ...state, request: { kind: `refused`, code: event.code, retryAfter: event.retryAfter } };
-    }
+export function withQueued(list: AnalysisList | null, analysis: CommunityAnalysis): AnalysisList {
+    const held = list ?? { analyses: [], optedOut: false, independentOnline: false };
+    const others = held.analyses.filter((reading) => reading.kind !== `community` || reading.analysisId !== analysis.analysisId);
+    return { ...held, analyses: [...others, analysis] };
 }
 
 /** Whether the list holds a community reading still queued or running, which the page polls for. */
-export function underWay(state: AnalysesState): boolean {
-    return state.load.kind === `ready` && state.load.list.analyses.some((analysis) => analysis.kind === `community` && (analysis.status === `queued` || analysis.status === `running`));
+export function underWay(list: AnalysisList): boolean {
+    return list.analyses.some((analysis) => analysis.kind === `community` && (analysis.status === `queued` || analysis.status === `running`));
 }
 
 // A refusal that says the list moved on since it was read: another
 // request, an opt-out, or a reading done meanwhile.
 const stale: readonly RequestRefusal[] = [`analysis_pending`, `analysis_full`, `opted_out`];
 
+const idle: AnalysesState[`request`] = { kind: `idle` };
+
 /**
  * A finished game's readings, read once `wanted`, and again at the contract's interval while one is under way;
+ * a read that fails once a list is on screen keeps that list, so a missed poll never blanks the head.
  * `request` asks for a reading, by the analyzer named or by any, and `retry` reads the list again.
  * The drawer never asks for position readings: this reads only what is stored.
  */
 export function useGameAnalyses(gameId: string, wanted: boolean): { state: AnalysesState; request: (analyzer: string | null) => void; retry: () => void } {
-    const [state, dispatch] = useReducer(analysesStep, initialAnalyses);
-    const [attempt, bump] = useReducer((count: number) => count + 1, 0);
+    const load = useCallback(async () => fetchAnalyses(gameId), [gameId]);
+    const read = useAsync(load, { enabled: wanted, every: (list) => (underWay(list) ? analysesPollMs : null) });
+    const [request, setRequest] = useState<AnalysesState[`request`]>(idle);
     const live = useRef(true);
-    const polling = underWay(state);
+    const { data: list, error, replace, reload } = read;
 
     useEffect(() => {
         live.current = true;
@@ -202,53 +184,32 @@ export function useGameAnalyses(gameId: string, wanted: boolean): { state: Analy
         };
     }, []);
 
-    useEffect(() => {
-        if (!wanted) return;
-        let cancelled = false;
-        fetchAnalyses(gameId).then(
-            (list) => {
-                if (!cancelled) dispatch({ kind: `loaded`, list });
-            },
-            () => {
-                if (!cancelled) dispatch({ kind: `load-failed` });
-            },
-        );
-        return () => {
-            cancelled = true;
-        };
-    }, [gameId, wanted, attempt]);
-
-    // Each read, and each list that lands, arms the next read afresh, so a
-    // slow answer never stacks reads and a missed one never stops them.
-    useEffect(() => {
-        if (!wanted || !polling) return;
-        const timer = setTimeout(bump, analysesPollMs);
-        return () => {
-            clearTimeout(timer);
-        };
-    }, [wanted, polling, state.load, attempt]);
-
-    const request = useCallback(
+    const ask = useCallback(
         (analyzer: string | null) => {
-            dispatch({ kind: `sending` });
+            setRequest({ kind: `sending` });
             requestAnalysis(gameId, analyzer).then(
                 (analysis) => {
                     if (!live.current) return;
-                    dispatch({ kind: `queued`, analysis });
+                    replace((held) => withQueued(held, analysis));
+                    setRequest(idle);
                     // The day's count of requests left moved with this one.
                     void meStore.refresh();
                 },
                 (cause: unknown) => {
                     if (!live.current) return;
                     const code = cause instanceof ApiError ? refusalOf(cause.status, cause.code) : `unavailable`;
-                    dispatch({ kind: `refused`, code, retryAfter: cause instanceof ApiError ? cause.retryAfter : null });
-                    if (stale.includes(code)) bump();
+                    setRequest({ kind: `refused`, code, retryAfter: cause instanceof ApiError ? cause.retryAfter : null });
+                    if (stale.includes(code)) reload();
                     if (code === `signed_out`) void meStore.refresh();
                 },
             );
         },
-        [gameId],
+        [gameId, replace, reload],
     );
 
-    return { state, request, retry: bump };
+    const state = useMemo<AnalysesState>(
+        () => ({ load: list !== null ? { kind: `ready`, list } : error ? { kind: `failed` } : { kind: `loading` }, request }),
+        [list, error, request],
+    );
+    return { state, request: ask, retry: reload };
 }

@@ -18,17 +18,14 @@ import {
     gameResignPath,
     gameSnapshotSchema,
     gamesPath,
-    duelDetailSchema,
-    duelListPath,
-    duelListSchema,
-    duelPath,
     sessionCookieName,
     streamEventSchema,
+    tournamentDetailSchema,
     tournamentEntryPath,
     tournamentListSchema,
+    tournamentPath,
     tournamentsPath,
     type AccountDeclaration,
-    type createDuelRequestSchema,
     type BotListing,
     type AxialCoord,
     type CreateGameRequest,
@@ -37,12 +34,13 @@ import {
     type GameEvent,
     type GameSnapshot,
     type OpeningPlies,
-    type DuelDetail,
-    type DuelList,
     type StreamEvent,
     type TimeControl,
+    type CreateTournamentRequest,
+    type TournamentDetail,
     type TournamentList,
 } from '@hexo-arena/contract';
+import { setTimeout as sleep } from 'node:timers/promises';
 import { z } from 'zod';
 
 const errorCodeSchema = z.object({ code: z.string() });
@@ -62,6 +60,32 @@ export class ApiError extends Error {
     }
 }
 
+// Refusals that clear by themselves: the caller over its request rate, a
+// bot busy with a game or with other duels and round robins, or a bot not
+// yet online and open.
+const passing = new Set([`rate_limited`, `bot_busy`, `not_open`]);
+
+// How long a create call waits out a refusal that clears by itself before it gives up.
+const refusalWaitMs = 60_000;
+
+/**
+ * Makes a create call until it is answered, waiting out a refusal that
+ * clears by itself, by its Retry-After where it names one; any other
+ * refusal, or one that outlasts the wait, fails with its code.
+ */
+export async function waitingOut<T>(create: () => Promise<T>, log: (line: string) => void, pollMs = 1_000): Promise<T> {
+    const deadline = Date.now() + refusalWaitMs;
+    for (;;) {
+        try {
+            return await create();
+        } catch (error) {
+            if (!(error instanceof ApiError) || error.code === null || !passing.has(error.code) || Date.now() >= deadline) throw error;
+            log(`${error.message}; trying again`);
+            await sleep(error.retryAfter === null ? pollMs : error.retryAfter * 1_000);
+        }
+    }
+}
+
 async function refusal(response: Response, what: string): Promise<ApiError> {
     const body: unknown = await response.json().catch(() => null);
     const parsed = errorCodeSchema.safeParse(body);
@@ -77,8 +101,8 @@ function bearer(token: string): Record<string, string> {
 
 const json = { 'content-type': `application/json` };
 
-/** What a held stream reports: its open, then each event. */
-export interface StreamHandlers {
+// What a held stream reports: its open, then each event.
+interface StreamHandlers {
     opened(): void;
     event(event: StreamEvent): void;
 }
@@ -215,10 +239,28 @@ export class ArenaClient {
         return finishedGamesPageSchema.parse(await response.json()).record?.games ?? 0;
     }
 
-    async tournaments(): Promise<TournamentList> {
-        const response = await fetch(this.#url(tournamentsPath));
+    async tournaments(query: { bot?: string } = {}): Promise<TournamentList> {
+        const response = await fetch(this.#url(`${tournamentsPath}${query.bot === undefined ? `` : `?${new URLSearchParams({ bot: query.bot }).toString()}`}`));
         if (response.status !== 200) throw await refusal(response, `listing the tournaments`);
         return tournamentListSchema.parse(await response.json());
+    }
+
+    /** One tournament as its page reads it. */
+    async tournament(id: string): Promise<TournamentDetail> {
+        const response = await fetch(this.#url(tournamentPath.replace(`{id}`, id)));
+        if (response.status !== 200) throw await refusal(response, `reading tournament ${id}`);
+        return tournamentDetailSchema.parse(await response.json());
+    }
+
+    /** Sets a duel or round robin of bots up as the signed-in person; the answer is the tournament. */
+    async createTournament(cookie: string, request: Partial<CreateTournamentRequest> & Pick<CreateTournamentRequest, `bots` | `timeControl`>): Promise<TournamentDetail> {
+        const response = await fetch(this.#url(tournamentsPath), {
+            method: `POST`,
+            headers: { cookie, ...json },
+            body: JSON.stringify(request),
+        });
+        if (response.status !== 201) throw await refusal(response, `setting up a tournament of ${request.bots.map((bot) => bot.name).join(`, `)}`);
+        return tournamentDetailSchema.parse(await response.json());
     }
 
     /** Enters the owner's bot in a waiting tournament. */
@@ -229,31 +271,6 @@ export class ArenaClient {
             body: JSON.stringify({ bot }),
         });
         if (response.status !== 200) throw await refusal(response, `entering ${bot}`);
-    }
-
-    /** Starts a duel between two bots as the signed-in person; the answer is the duel. */
-    async createDuel(cookie: string, request: z.input<typeof createDuelRequestSchema>): Promise<DuelDetail> {
-        const response = await fetch(this.#url(duelListPath), {
-            method: `POST`,
-            headers: { cookie, ...json },
-            body: JSON.stringify(request),
-        });
-        if (response.status !== 201) throw await refusal(response, `starting a duel of ${request.first} and ${request.second}`);
-        return duelDetailSchema.parse(await response.json());
-    }
-
-    /** One duel as its page reads it. */
-    async duel(id: string): Promise<DuelDetail> {
-        const response = await fetch(this.#url(duelPath.replace(`{id}`, id)));
-        if (response.status !== 200) throw await refusal(response, `reading duel ${id}`);
-        return duelDetailSchema.parse(await response.json());
-    }
-
-    /** The running and recent duel one bot plays. */
-    async listDuels(bot: string): Promise<DuelList> {
-        const response = await fetch(this.#url(`${duelListPath}?${new URLSearchParams({ bot }).toString()}`));
-        if (response.status !== 200) throw await refusal(response, `listing the duel of ${bot}`);
-        return duelListSchema.parse(await response.json());
     }
 
     /** The seeded personas as they stand; a target without the dev routes answers 404. */

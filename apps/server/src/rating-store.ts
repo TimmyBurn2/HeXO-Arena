@@ -3,6 +3,7 @@ import { and, asc, count, desc, eq, isNotNull, isNull, lt, lte, notExists, or, s
 import { alias } from 'drizzle-orm/sqlite-core';
 import type { Query } from './db';
 import { bots, gameRatings, games, ratings, users } from './db/schema';
+import { otherSide, seated, seatsOf, type GameSeat } from './game-seats';
 import {
     foldRatings,
     humanSideOf,
@@ -35,49 +36,42 @@ export const seatColumns = {
     finishedAt: games.finishedAt,
 };
 
-export interface SeatRow {
+interface SeatRow {
     userId: string | null;
     botId: string | null;
-    userSide: string | null;
+    userSide: Side | null;
     challengerBotId: string | null;
     destBotId: string | null;
-    challengerSide: string | null;
-    winner: string | null;
+    challengerSide: Side | null;
+    winner: Side | null;
     finishSeq: number | null;
     createdAt: number;
     finishedAt: number | null;
 }
 
-function seated(firstSide: Side, first: PlayerRef, second: PlayerRef): Record<Side, PlayerRef> {
-    return firstSide === `x` ? { x: first, o: second } : { x: second, o: first };
-}
-
-// The winner and side checks admit only x and o, which makes the casts
-// below sound.
-export function finishedGameOf(row: SeatRow): FinishedGame {
-    const winner = row.winner as Side | null;
-    const { createdAt: startedAt, finishedAt } = row;
+function finishedGameOf(row: SeatRow): FinishedGame {
+    const { winner, createdAt: startedAt, finishedAt } = row;
     if (finishedAt === null) throw new Error(`stored game row has not finished`);
     if (row.userId !== null && row.botId !== null && row.userSide !== null) {
         const human: PlayerRef = { kind: `human`, id: row.userId };
-        return { ...seated(row.userSide as Side, human, { kind: `bot`, id: row.botId }), winner, startedAt, finishedAt };
+        return { ...seated(row.userSide, human, { kind: `bot`, id: row.botId }), winner, startedAt, finishedAt };
     }
     if (row.challengerBotId !== null && row.destBotId !== null && row.challengerSide !== null) {
         const challenger: PlayerRef = { kind: `bot`, id: row.challengerBotId };
-        return { ...seated(row.challengerSide as Side, challenger, { kind: `bot`, id: row.destBotId }), winner, startedAt, finishedAt };
+        return { ...seated(row.challengerSide, challenger, { kind: `bot`, id: row.destBotId }), winner, startedAt, finishedAt };
     }
     throw new Error(`stored game row seats nobody`);
 }
 
 /**
  * The games of the log that can move a rating, as a condition on the games table.
- * A guest's game, one started unrated, and one against a bot at a level other
- * than its default rate nobody; a level has no rating of its own to count
- * against, and the bot's would flatter a win over a weakened bot.
+ * A guest's game, one carrying the unrated mark, and one against a bot at a
+ * level other than its default rate nobody; a level has no rating of its own
+ * to count against, and the bot's would flatter a win over a weakened bot.
  */
 export const ratable = sql`${games.guestName} is null and ${games.xLevel} is null and ${games.oLevel} is null and ${games.unratedByChoice} = 0`;
 
-/** Whether a game of the log can move a rating: no guest seat, every bot at its default level, and not started unrated. */
+/** Whether a game of the log can move a rating, as {@link ratable} reads it. */
 export function ratesSomebody(row: { guestName: string | null; xLevel: string | null; oLevel: string | null; unratedByChoice: number }): boolean {
     return row.guestName === null && row.xLevel === null && row.oLevel === null && row.unratedByChoice === 0;
 }
@@ -88,8 +82,8 @@ export function countedGameOf(row: SeatRow & { voidedAt: number | null }): Finis
     return row.voidedAt === null ? game : { ...game, winner: null };
 }
 
-/** A finished game of the log, as the fold counts it, by its id. */
-export interface LoggedGame extends FinishedGame {
+// A finished game of the log, as the fold counts it, by its id.
+interface LoggedGame extends FinishedGame {
     readonly id: string;
 }
 
@@ -150,20 +144,20 @@ function saveGameRatings(query: Query, gameId: string, step: RatingStep): void {
 
 // A bot's rated games are its bot games: a game against a human never
 // moves the bot.
-function seatsOf(player: PlayerRef) {
-    return player.kind === `human` ? [games.userId] : [games.challengerBotId, games.destBotId];
+function ratedSeatsOf(player: PlayerRef): GameSeat[] {
+    return seatsOf(player).filter((seat) => player.kind === `human` || seat.opponentKind === `bot`);
 }
 
 // A rated game is one with a winner that was never voided, as the fold
 // counts it; each seat column leads an index with the finish order, so
 // the newest such game before a finish is one short walk per column.
-function lastRatedIn(query: Query, seat: ReturnType<typeof seatsOf>[number], playerId: string, finishSeq: number, by?: number) {
+function lastRatedIn(query: Query, seat: GameSeat, playerId: string, finishSeq: number, by?: number) {
     return query
-        .select({ finishSeq: games.finishSeq, finishedAt: games.finishedAt, gameId: games.id, challengerSide: games.challengerSide })
+        .select({ finishSeq: games.finishSeq, finishedAt: games.finishedAt, gameId: games.id, side: sql<Side>`${seat.side}` })
         .from(games)
         .where(
             and(
-                eq(seat, playerId),
+                eq(seat.column, playerId),
                 lt(games.finishSeq, finishSeq),
                 isNotNull(games.winner),
                 isNull(games.voidedAt),
@@ -177,7 +171,7 @@ function lastRatedIn(query: Query, seat: ReturnType<typeof seatsOf>[number], pla
 
 function ratedAtBefore(query: Query, player: PlayerRef, finishSeq: number): number | null {
     let latest: { finishSeq: number; finishedAt: number } | undefined;
-    for (const seat of seatsOf(player)) {
+    for (const seat of ratedSeatsOf(player)) {
         const row = lastRatedIn(query, seat, player.id, finishSeq).get();
         if (row?.finishSeq == null || row.finishedAt === null) continue;
         if (latest === undefined || row.finishSeq > latest.finishSeq) latest = { finishSeq: row.finishSeq, finishedAt: row.finishedAt };
@@ -187,7 +181,7 @@ function ratedAtBefore(query: Query, player: PlayerRef, finishSeq: number): numb
 
 /** The query plan of each seat's read of a player's previous rated game, for tests that pin it to an index. */
 export function explainRatedAtBefore(query: Query, player: PlayerRef, finishSeq: number): string[] {
-    return seatsOf(player).flatMap((seat) =>
+    return ratedSeatsOf(player).flatMap((seat) =>
         query.all<{ detail: string }>(sql`explain query plan select * from ${lastRatedIn(query, seat, player.id, finishSeq)}`).map((row) => row.detail),
     );
 }
@@ -199,13 +193,10 @@ export function explainRatedAtBefore(query: Query, player: PlayerRef, finishSeq:
  */
 function botAtStart(query: Query, bot: PlayerRef, startedAt: number, finishSeq: number): Opponent {
     let latest: { finishSeq: number; gameId: string; side: Side } | undefined;
-    for (const seat of seatsOf(bot)) {
+    for (const seat of ratedSeatsOf(bot)) {
         const row = lastRatedIn(query, seat, bot.id, finishSeq, startedAt).get();
-        if (row?.finishSeq == null || row.challengerSide === null) continue;
-        // The side check admits only x and o.
-        const challengerSide = row.challengerSide as Side;
-        const side: Side = seat === games.challengerBotId ? challengerSide : challengerSide === `x` ? `o` : `x`;
-        if (latest === undefined || row.finishSeq > latest.finishSeq) latest = { finishSeq: row.finishSeq, gameId: row.gameId, side };
+        if (row?.finishSeq == null) continue;
+        if (latest === undefined || row.finishSeq > latest.finishSeq) latest = { finishSeq: row.finishSeq, gameId: row.gameId, side: row.side };
     }
     if (latest === undefined) return seedRating(bot.kind);
     const after = query
@@ -223,7 +214,7 @@ export function applyFinishedGame(query: Query, gameId: string, finishSeq: numbe
     const standing = (player: PlayerRef): Standing => ({ rating: readRating(query, player), ratedAt: ratedAtBefore(query, player, finishSeq) });
     const before = { x: standing(game.x), o: standing(game.o) };
     const human = humanSideOf(game);
-    const anchor = human === null || game.winner === null ? undefined : botAtStart(query, game[human === `x` ? `o` : `x`], game.startedAt, finishSeq);
+    const anchor = human === null || game.winner === null ? undefined : botAtStart(query, game[otherSide(human)], game.startedAt, finishSeq);
     const after = rateGame(game, before, anchor);
     if (game.winner !== null) {
         saveRating(query, game.x, after.x);

@@ -1,25 +1,9 @@
 import { migrate } from 'drizzle-orm/better-sqlite3/migrator';
 import { drizzle } from 'drizzle-orm/better-sqlite3';
-import { cpSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { rmSync } from 'node:fs';
 import { afterEach, describe, expect, it } from 'vitest';
 import { openDatabase, runMigrations, type Sqlite } from '../src/db';
-
-const migrationsFolder = join(dirname(fileURLToPath(import.meta.url)), `../src/db/migrations`);
-
-// A copy of the migrations folder whose journal stops after `count`
-// entries, so a test can seed rows the way an older deploy left them.
-function migrationsUpTo(count: number): string {
-    const folder = mkdtempSync(join(tmpdir(), `hexo-arena-migrations-`));
-    cpSync(migrationsFolder, folder, { recursive: true });
-    const journalPath = join(folder, `meta/_journal.json`);
-    const journal = JSON.parse(readFileSync(journalPath, `utf8`)) as { entries: unknown[] };
-    journal.entries = journal.entries.slice(0, count);
-    writeFileSync(journalPath, JSON.stringify(journal));
-    return folder;
-}
+import { migrationsUpTo } from './migrations-folder';
 
 describe('the finish order migration', () => {
     let sqlite: Sqlite;
@@ -318,7 +302,7 @@ describe('the guest games migration', () => {
         expect(() => guest.run(`g4`, null, `Guest k3f9 and more`)).toThrow(/CHECK/);
         expect(() => guest.run(`g5`, null, null)).toThrow(/CHECK/);
         const indexes = sqlite.prepare(`select name from sqlite_master where type = 'index' and tbl_name = 'games' and name like 'games_%' order by name`).all();
-        expect(indexes).toHaveLength(16);
+        expect(indexes).toHaveLength(17);
     });
 });
 
@@ -606,6 +590,16 @@ describe('the involved analyzers migration', () => {
     });
 });
 
+// The last schema that held the duels table, which later tournaments of two took over.
+function migrateThroughDuels(sqlite: Sqlite): void {
+    const folder = migrationsUpTo(32);
+    try {
+        migrate(drizzle(sqlite), { migrationsFolder: folder });
+    } finally {
+        rmSync(folder, { recursive: true, force: true });
+    }
+}
+
 describe('the series migration', () => {
     let sqlite: Sqlite;
     let folder: string;
@@ -630,7 +624,7 @@ describe('the series migration', () => {
             insert into game_ratings (game_id, side, rating_before, rating_after, deviation_after) values ('rated', 'x', 1000, 1100, 300), ('rated', 'o', 1500, 1500, 500);
             insert into moves (game_id, seq, side, first_x, first_y, second_x, second_y, created_at) values ('chosen', 1, 'o', 1, 0, 0, 1, 2);
         `);
-        runMigrations(sqlite);
+        migrateThroughDuels(sqlite);
         expect(sqlite.prepare(`select id, unrated_by_choice as unrated, duel_id as duel from games order by id`).all()).toEqual([
             { id: `chosen`, unrated: 1, duel: null },
             { id: `rated`, unrated: 0, duel: null },
@@ -679,7 +673,7 @@ describe('the duels migration', () => {
             insert into game_ratings (game_id, side, rating_before, rating_after, deviation_after) values ('g1', 'x', 1500, 1510, 300), ('g1', 'o', 1500, 1490, 300);
             insert into admin_actions (actor, action, target, reason, at) values ('operator', 'series-stop', 's_npqrstuvwxyz', 'farming', 40), ('operator', 'pause', null, 'deploy', 41);
         `);
-        runMigrations(sqlite);
+        migrateThroughDuels(sqlite);
     }
 
     const insertDuel = (id: string, status: string, extra: Record<string, unknown> = {}) => {
@@ -923,5 +917,359 @@ describe('the owner text and bot clients migrations', () => {
         ] as const) {
             expect(() => client(kind, version, at), `${String(kind)} ${String(version)} ${String(at)}`).toThrow(/CHECK/);
         }
+    });
+});
+
+describe('the round robins migration', () => {
+    let sqlite: Sqlite;
+    let folder: string;
+    let through: string;
+
+    afterEach(() => {
+        sqlite.close();
+        rmSync(folder, { recursive: true, force: true });
+        rmSync(through, { recursive: true, force: true });
+    });
+
+    const turn = `{"mode":"turn","turnTimeMs":10000}`;
+
+    // As a deploy left it: a finished weekly with its entries, a pairing, and its two rated games with moves and
+    // ratings; a waiting weekly with an entry; a duel game and a challenge's game beside them.
+    function seed(): void {
+        sqlite = openDatabase(`:memory:`);
+        folder = migrationsUpTo(30);
+        migrate(drizzle(sqlite), { migrationsFolder: folder });
+        sqlite.exec(`
+            insert into name_reservations (name_key) values ('ann'), ('bob'), ('cid'), ('alpha'), ('beta'), ('gamma'), ('aster');
+            insert into users (id, discord_id, name, name_key, created_at) values ('u1', 'd1', 'ann', 'ann', 1), ('u2', 'd2', 'bob', 'bob', 1), ('u3', 'd3', 'cid', 'cid', 1);
+            insert into bots (id, owner_id, name, name_key, token_hash, scope, created_at)
+                values ('b1', 'u1', 'alpha', 'alpha', 'h1', 'bot:play', 1), ('b2', 'u2', 'beta', 'beta', 'h2', 'bot:play', 1),
+                       ('b3', 'u3', 'gamma', 'gamma', 'h3', 'bot:play', 1), ('b4', 'u1', 'aster', 'aster', 'h4', 'bot:play', 1);
+            insert into tournaments (id, name, status, starts_at, time_control, opening_plies, max_entrants, created_at, started_at, ended_at)
+                values ('t_aaaaaaaaaaaa', 'Autumn', 'finished', 100, '${turn}', 5, 12, 1, 100, 200),
+                       ('t_bbbbbbbbbbbb', 'Winter', 'scheduled', 900, '${turn}', 5, 12, 1, null, null);
+            insert into tournament_entries (tournament_id, bot_id, owner_id, state, reason, rating_at_start, entered_at)
+                values ('t_aaaaaaaaaaaa', 'b1', 'u1', 'playing', null, 1500, 1), ('t_aaaaaaaaaaaa', 'b2', 'u2', 'playing', null, 1480, 2),
+                       ('t_aaaaaaaaaaaa', 'b3', 'u3', 'withdrawn', 'missed', 1450, 3), ('t_bbbbbbbbbbbb', 'b1', 'u1', 'entered', null, null, 4);
+            insert into tournament_pairings (id, tournament_id, round, first_bot_id, second_bot_id, opening_cells, game1, game1_seat, game2, game2_seat)
+                values ('p1', 't_aaaaaaaaaaaa', 1, 'b1', 'b2', '[]', 'played', 'first', 'played', 'second');
+            insert into games (id, challenger_bot_id, dest_bot_id, challenger_side, pairing_id, pairing_game, time_control, opening_cells, winner, finish_reason, created_at, finished_at, finish_seq)
+                values ('g1', 'b1', 'b2', 'x', 'p1', 1, '${turn}', '[]', 'x', 'surrender', 100, 110, 1),
+                       ('g2', 'b2', 'b1', 'x', 'p1', 2, '${turn}', '[]', 'x', 'surrender', 110, 120, 2),
+                       ('plain', 'b1', 'b4', 'x', null, null, '${turn}', '[]', 'o', 'surrender', 1, 2, 3);
+            update games set unrated_by_choice = 1, test = 1 where id = 'plain';
+            insert into moves (game_id, seq, side, first_x, first_y, second_x, second_y, created_at) values ('g1', 1, 'o', 1, 0, 0, 1, 101), ('g2', 1, 'o', 1, 0, 0, 1, 111);
+            insert into game_ratings (game_id, side, rating_before, rating_after, deviation_after) values ('g1', 'x', 1500, 1510, 300), ('g1', 'o', 1480, 1470, 300);
+        `);
+        // Through this migration alone, so its rules stand as it wrote them.
+        through = migrationsUpTo(31);
+        migrate(drizzle(sqlite), { migrationsFolder: through });
+    }
+
+    const insertTournament = (id: string, extra: Record<string, unknown> = {}) => {
+        const row = {
+            id,
+            name: null,
+            status: `running`,
+            starts_at: 10,
+            time_control: turn,
+            opening_plies: 5,
+            max_entrants: 3,
+            created_at: 10,
+            started_at: 10,
+            ended_at: null,
+            origin: `person`,
+            created_by: `u1`,
+            rated: 0,
+            test: 0,
+            games_per_pair: 2,
+            end_reason: null,
+            ...extra,
+        };
+        const columns = Object.keys(row);
+        return sqlite.prepare(`insert into tournaments (${columns.join(`, `)}) values (${columns.map((column) => `@${column}`).join(`, `)})`).run(row).changes;
+    };
+
+    it('keeps every tournament as the operator\'s, rated, with its entries, its pairings as first legs, and its games, moves, and ratings', () => {
+        seed();
+        expect(sqlite.prepare(`select id, name, origin, created_by as createdBy, rated, test, games_per_pair as games, end_reason as reason from tournaments order by id`).all()).toEqual([
+            { id: `t_aaaaaaaaaaaa`, name: `Autumn`, origin: `operator`, createdBy: null, rated: 1, test: 0, games: 2, reason: null },
+            { id: `t_bbbbbbbbbbbb`, name: `Winter`, origin: `operator`, createdBy: null, rated: 1, test: 0, games: 2, reason: null },
+        ]);
+        expect(sqlite.prepare(`select tournament_id as t, bot_id as bot, state, reason, origin, level, version from tournament_entries order by tournament_id, bot_id`).all()).toEqual([
+            { t: `t_aaaaaaaaaaaa`, bot: `b1`, state: `playing`, reason: null, origin: `operator`, level: null, version: null },
+            { t: `t_aaaaaaaaaaaa`, bot: `b2`, state: `playing`, reason: null, origin: `operator`, level: null, version: null },
+            { t: `t_aaaaaaaaaaaa`, bot: `b3`, state: `withdrawn`, reason: `missed`, origin: `operator`, level: null, version: null },
+            { t: `t_bbbbbbbbbbbb`, bot: `b1`, state: `entered`, reason: null, origin: `operator`, level: null, version: null },
+        ]);
+        expect(sqlite.prepare(`select id, leg, game1, game1_seat as seat1, game2, game2_seat as seat2 from tournament_pairings`).all()).toEqual([
+            { id: `p1`, leg: 1, game1: `played`, seat1: `first`, game2: `played`, seat2: `second` },
+        ]);
+        expect(sqlite.prepare(`select id, pairing_id as pairing, pairing_game as game, unrated_by_choice as unrated, test from games order by id`).all()).toEqual([
+            { id: `g1`, pairing: `p1`, game: 1, unrated: 0, test: 0 },
+            { id: `g2`, pairing: `p1`, game: 2, unrated: 0, test: 0 },
+            { id: `plain`, pairing: null, game: null, unrated: 1, test: 1 },
+        ]);
+        expect(sqlite.prepare(`select count(*) as n from moves`).get()).toEqual({ n: 2 });
+        expect(sqlite.prepare(`select count(*) as n from game_ratings`).get()).toEqual({ n: 2 });
+        expect(sqlite.prepare(`select count(*) as n from sqlite_master where name like '__kept_%' or name like '__new_%'`).get()).toEqual({ n: 0 });
+        expect(sqlite.pragma(`foreign_key_check`)).toEqual([]);
+    });
+
+    it('holds one person to one running round robin, of 3 to 8 bots, never rated, named for them alone', () => {
+        seed();
+        expect(insertTournament(`t1`)).toBe(1);
+        expect(() => insertTournament(`t2`)).toThrow(/UNIQUE/);
+        expect(() => insertTournament(`t3`, { status: `finished`, ended_at: 20 })).not.toThrow();
+        expect(() => insertTournament(`t4`, { created_by: `u2` })).not.toThrow();
+        expect(() => insertTournament(`t5`, { created_by: `u3`, max_entrants: 9 })).toThrow(/CHECK/);
+        expect(() => insertTournament(`t6`, { created_by: `u3`, rated: 1 })).toThrow(/CHECK/);
+        expect(() => insertTournament(`t7`, { created_by: `u3`, name: `Mine` })).toThrow(/CHECK/);
+        expect(() => insertTournament(`t8`, { created_by: `u3`, status: `scheduled`, started_at: null })).toThrow(/CHECK/);
+        expect(() => insertTournament(`t9`, { origin: `operator`, created_by: null, name: `Spring`, rated: 1, status: `stopped`, end_reason: `creator`, ended_at: 20 })).toThrow(/CHECK/);
+        expect(() => insertTournament(`t10`, { origin: `operator`, created_by: `u3`, name: `Spring`, rated: 1 })).toThrow(/CHECK/);
+        expect(() => insertTournament(`t11`, { origin: `operator`, created_by: null, name: null, rated: 1 })).toThrow(/CHECK/);
+    });
+
+    it('lets only a test play more than two openings a pair, a 1-ply opening only one, and stops a round robin with its reason alone', () => {
+        seed();
+        const over = { status: `finished`, ended_at: 20 };
+        expect(() => insertTournament(`t1`, { ...over, games_per_pair: 4 })).not.toThrow();
+        expect(() => insertTournament(`t2`, { ...over, games_per_pair: 6 })).toThrow(/CHECK/);
+        expect(() => insertTournament(`t3`, { ...over, games_per_pair: 10, test: 1 })).not.toThrow();
+        expect(() => insertTournament(`t4`, { ...over, games_per_pair: 8, test: 1 })).toThrow(/CHECK/);
+        expect(() => insertTournament(`t5`, { ...over, games_per_pair: 4, opening_plies: 1 })).toThrow(/CHECK/);
+        expect(() => insertTournament(`t6`, { status: `stopped`, ended_at: 20, end_reason: `creator` })).not.toThrow();
+        expect(() => insertTournament(`t7`, { status: `stopped`, ended_at: 20 })).toThrow(/CHECK/);
+        expect(() => insertTournament(`t8`, { ...over, end_reason: `creator` })).toThrow(/CHECK/);
+        expect(() => insertTournament(`t9`, { status: `stopped`, ended_at: 20, end_reason: `starter` })).toThrow(/CHECK/);
+        expect(() => insertTournament(`t10`, { ...over, origin: `operator`, created_by: null, name: `Spring`, rated: 1, test: 1 })).toThrow(/CHECK/);
+    });
+
+    it('keys an entry to its tournament\'s origin, holding one bot per owner and the operator\'s states to the weekly alone', () => {
+        seed();
+        insertTournament(`t1`);
+        const entry = sqlite.prepare(`insert into tournament_entries (tournament_id, bot_id, owner_id, state, reason, origin, level, version, entered_at) values (?, ?, ?, ?, ?, ?, ?, ?, 10)`);
+        expect(() => entry.run(`t1`, `b1`, `u1`, `playing`, null, `person`, `{"id":"club","label":"club"}`, `1.4.0`)).not.toThrow();
+        expect(() => entry.run(`t1`, `b4`, `u1`, `withdrawn`, `owner`, `person`, null, null)).not.toThrow();
+        expect(() => entry.run(`t1`, `b2`, `u2`, `playing`, null, `operator`, null, null)).toThrow(/FOREIGN KEY/);
+        expect(() => entry.run(`t1`, `b2`, `u2`, `entered`, null, `person`, null, null)).toThrow(/CHECK/);
+        expect(() => entry.run(`t1`, `b2`, `u2`, `withdrawn`, `bored`, `person`, null, null)).toThrow(/CHECK/);
+        expect(() => entry.run(`t1`, `b2`, `u2`, `playing`, null, `person`, null, ``)).toThrow(/CHECK/);
+        expect(() => entry.run(`t_bbbbbbbbbbbb`, `b4`, `u1`, `entered`, null, `operator`, null, null)).toThrow(/UNIQUE/);
+        expect(() => entry.run(`t_bbbbbbbbbbbb`, `b2`, `u2`, `withdrawn`, `owner`, `operator`, null, null)).toThrow(/CHECK/);
+        expect(() => entry.run(`t_bbbbbbbbbbbb`, `b3`, `u3`, `entered`, null, `operator`, `{"id":"club","label":"club"}`, null)).toThrow(/CHECK/);
+    });
+
+    it('numbers a pair\'s legs one to five, each once, and marks a round robin game unrated, a test between two bots of one owner', () => {
+        seed();
+        insertTournament(`t1`, { test: 1, games_per_pair: 10 });
+        const leg = sqlite.prepare(`insert into tournament_pairings (id, tournament_id, round, first_bot_id, second_bot_id, leg) values (?, 't1', 1, 'b1', 'b4', ?)`);
+        expect(() => leg.run(`l1`, 1)).not.toThrow();
+        expect(() => leg.run(`l5`, 5)).not.toThrow();
+        expect(() => leg.run(`l6`, 6)).toThrow(/CHECK/);
+        expect(() => leg.run(`again`, 1)).toThrow(/UNIQUE/);
+        const game = sqlite.prepare(
+            `insert into games (id, challenger_bot_id, dest_bot_id, challenger_side, pairing_id, pairing_game, unrated_by_choice, test, x_level, time_control, opening_cells, created_at) values (?, 'b1', 'b4', 'x', 'l1', 1, ?, ?, ?, '{}', '[]', 5)`,
+        );
+        expect(() => game.run(`r1`, 1, 1, null)).not.toThrow();
+        expect(() => game.run(`r2`, 1, 0, `{"id":"club","label":"club"}`)).not.toThrow();
+        expect(() => game.run(`r3`, 0, 1, null)).toThrow(/CHECK/);
+        sqlite.prepare(`delete from tournaments where id = 't1'`).run();
+        expect(sqlite.prepare(`select count(*) as n from games where pairing_id in ('l1', 'l5')`).get()).toEqual({ n: 0 });
+    });
+
+    it('keeps a round robin when its creator goes, naming nobody', () => {
+        seed();
+        insertTournament(`t1`, { created_by: `u3`, status: `finished`, ended_at: 20 });
+        sqlite.prepare(`delete from users where id = 'u3'`).run();
+        expect(sqlite.prepare(`select id, created_by as createdBy from tournaments where id = 't1'`).all()).toEqual([{ id: `t1`, createdBy: null }]);
+    });
+});
+
+describe('the two-bot tournaments migration', () => {
+    let sqlite: Sqlite;
+    let folder: string;
+
+    afterEach(() => {
+        sqlite.close();
+        rmSync(folder, { recursive: true, force: true });
+    });
+
+    const turn = `{"mode":"turn","turnTimeMs":10000}`;
+
+    // As a deploy left it: a finished weekly with a pairing and its two rated games, a person's round robin running with
+    // a live game, and another person's over that played two openings a pair, one game at a level, each field entered at once.
+    function seed(): void {
+        sqlite = openDatabase(`:memory:`);
+        folder = migrationsUpTo(31);
+        migrate(drizzle(sqlite), { migrationsFolder: folder });
+        sqlite.exec(`
+            insert into name_reservations (name_key) values ('ann'), ('bob'), ('cid'), ('alpha'), ('beta'), ('gamma'), ('aster');
+            insert into users (id, discord_id, name, name_key, created_at) values ('u1', 'd1', 'ann', 'ann', 1), ('u2', 'd2', 'bob', 'bob', 1), ('u3', 'd3', 'cid', 'cid', 1);
+            insert into bots (id, owner_id, name, name_key, token_hash, scope, created_at)
+                values ('b1', 'u1', 'alpha', 'alpha', 'h1', 'bot:play', 1), ('b2', 'u2', 'beta', 'beta', 'h2', 'bot:play', 1),
+                       ('b3', 'u3', 'gamma', 'gamma', 'h3', 'bot:play', 1), ('b4', 'u1', 'aster', 'aster', 'h4', 'bot:play', 1);
+            insert into tournaments (id, name, status, starts_at, time_control, opening_plies, max_entrants, created_at, started_at, ended_at)
+                values ('t_aaaaaaaaaaaa', 'Autumn', 'finished', 100, '${turn}', 5, 12, 1, 100, 200);
+            insert into tournaments (id, name, status, starts_at, time_control, opening_plies, max_entrants, created_at, started_at, ended_at, origin, created_by, rated, games_per_pair)
+                values ('t_bbbbbbbbbbbb', null, 'running', 300, '${turn}', 5, 3, 300, 300, null, 'person', 'u1', 0, 2),
+                       ('t_cccccccccccc', null, 'finished', 300, '${turn}', 5, 3, 300, 300, 400, 'person', 'u2', 0, 4);
+            insert into tournament_entries (tournament_id, bot_id, owner_id, state, reason, rating_at_start, entered_at, origin)
+                values ('t_aaaaaaaaaaaa', 'b2', 'u2', 'playing', null, 1480, 1, 'operator'), ('t_aaaaaaaaaaaa', 'b1', 'u1', 'playing', null, 1500, 2, 'operator'),
+                       ('t_bbbbbbbbbbbb', 'b3', 'u3', 'playing', null, 1450, 300, 'person'), ('t_bbbbbbbbbbbb', 'b1', 'u1', 'playing', null, 1500, 300, 'person'),
+                       ('t_bbbbbbbbbbbb', 'b2', 'u2', 'withdrawn', 'owner', 1480, 300, 'person'),
+                       ('t_cccccccccccc', 'b3', 'u3', 'playing', null, 1450, 300, 'person'), ('t_cccccccccccc', 'b4', 'u1', 'playing', null, 1500, 300, 'person'),
+                       ('t_cccccccccccc', 'b2', 'u2', 'playing', null, 1480, 300, 'person');
+            insert into tournament_pairings (id, tournament_id, round, first_bot_id, second_bot_id, opening_cells, game1, game1_seat, game2, game2_seat, leg)
+                values ('p1', 't_aaaaaaaaaaaa', 1, 'b1', 'b2', '[]', 'played', 'first', 'played', 'second', 1),
+                       ('p2', 't_bbbbbbbbbbbb', 1, 'b1', 'b3', '[]', 'live', null, 'pending', null, 1),
+                       ('p3', 't_cccccccccccc', 1, 'b4', 'b3', '[]', 'played', 'first', 'played', null, 2);
+            insert into games (id, challenger_bot_id, dest_bot_id, challenger_side, pairing_id, pairing_game, time_control, opening_cells, winner, finish_reason, created_at, finished_at, finish_seq)
+                values ('g1', 'b1', 'b2', 'x', 'p1', 1, '${turn}', '[]', 'x', 'surrender', 100, 110, 1),
+                       ('g2', 'b2', 'b1', 'x', 'p1', 2, '${turn}', '[]', 'x', 'surrender', 110, 120, 2),
+                       ('g3', 'b1', 'b3', 'x', 'p2', 1, '${turn}', '[]', null, null, 300, null, null),
+                       ('g4', 'b4', 'b3', 'x', 'p3', 1, '${turn}', '[]', 'x', 'surrender', 310, 320, 3);
+            update games set unrated_by_choice = 1 where id in ('g3', 'g4');
+            update games set x_level = '{"id":"club","label":"club"}' where id = 'g4';
+            insert into moves (game_id, seq, side, first_x, first_y, second_x, second_y, created_at) values ('g1', 1, 'o', 1, 0, 0, 1, 101), ('g3', 1, 'o', 1, 0, 0, 1, 301);
+            insert into game_ratings (game_id, side, rating_before, rating_after, deviation_after) values ('g1', 'x', 1500, 1510, 300), ('g1', 'o', 1480, 1470, 300);
+        `);
+        runMigrations(sqlite);
+    }
+
+    const insertTournament = (id: string, extra: Record<string, unknown> = {}) => {
+        const row = {
+            id,
+            name: null,
+            status: `running`,
+            starts_at: 10,
+            time_control: turn,
+            opening_plies: 5,
+            max_entrants: 2,
+            created_at: 10,
+            started_at: 10,
+            ended_at: null,
+            origin: `person`,
+            created_by: `u3`,
+            rated: 0,
+            test: 0,
+            games_per_pair: 2,
+            end_reason: null,
+            end_bot_id: null,
+            live_slot: 1,
+            ...extra,
+        };
+        const columns = Object.keys(row);
+        return sqlite.prepare(`insert into tournaments (${columns.join(`, `)}) values (${columns.map((column) => `@${column}`).join(`, `)})`).run(row).changes;
+    };
+
+    const over = { status: `finished`, ended_at: 20 };
+
+    it('keeps every tournament, its entries seated in the order their keys read, its pairings, and its games, moves, and ratings', () => {
+        seed();
+        expect(sqlite.prepare(`select id, status, live_slot as slot, end_reason as reason, end_bot_id as bot, games_per_pair as games from tournaments order by id`).all()).toEqual([
+            { id: `t_aaaaaaaaaaaa`, status: `finished`, slot: null, reason: null, bot: null, games: 2 },
+            { id: `t_bbbbbbbbbbbb`, status: `running`, slot: 1, reason: null, bot: null, games: 2 },
+            { id: `t_cccccccccccc`, status: `finished`, slot: 1, reason: null, bot: null, games: 4 },
+        ]);
+        expect(sqlite.prepare(`select tournament_id as t, bot_id as bot, state, reason, seat from tournament_entries order by tournament_id, seat, bot_id`).all()).toEqual([
+            { t: `t_aaaaaaaaaaaa`, bot: `b1`, state: `playing`, reason: null, seat: null },
+            { t: `t_aaaaaaaaaaaa`, bot: `b2`, state: `playing`, reason: null, seat: null },
+            { t: `t_bbbbbbbbbbbb`, bot: `b1`, state: `playing`, reason: null, seat: 1 },
+            { t: `t_bbbbbbbbbbbb`, bot: `b2`, state: `withdrawn`, reason: `owner`, seat: 2 },
+            { t: `t_bbbbbbbbbbbb`, bot: `b3`, state: `playing`, reason: null, seat: 3 },
+            { t: `t_cccccccccccc`, bot: `b4`, state: `playing`, reason: null, seat: 1 },
+            { t: `t_cccccccccccc`, bot: `b2`, state: `playing`, reason: null, seat: 2 },
+            { t: `t_cccccccccccc`, bot: `b3`, state: `playing`, reason: null, seat: 3 },
+        ]);
+        expect(sqlite.prepare(`select id, leg, games_per_pair as games, game1, game2 from tournament_pairings order by id`).all()).toEqual([
+            { id: `p1`, leg: 1, games: 2, game1: `played`, game2: `played` },
+            { id: `p2`, leg: 1, games: 2, game1: `live`, game2: `pending` },
+            { id: `p3`, leg: 2, games: 4, game1: `played`, game2: `played` },
+        ]);
+        expect(sqlite.prepare(`select id, pairing_id as pairing, pairing_game as game, unrated_by_choice as unrated, x_level as level from games order by id`).all()).toEqual([
+            { id: `g1`, pairing: `p1`, game: 1, unrated: 0, level: null },
+            { id: `g2`, pairing: `p1`, game: 2, unrated: 0, level: null },
+            { id: `g3`, pairing: `p2`, game: 1, unrated: 1, level: null },
+            { id: `g4`, pairing: `p3`, game: 1, unrated: 1, level: `{"id":"club","label":"club"}` },
+        ]);
+        expect(sqlite.prepare(`select count(*) as n from moves`).get()).toEqual({ n: 2 });
+        expect(sqlite.prepare(`select count(*) as n from game_ratings`).get()).toEqual({ n: 2 });
+        expect(sqlite.prepare(`select count(*) as n from sqlite_master where name like '__kept_%' or name like '__new_%'`).get()).toEqual({ n: 0 });
+        expect(sqlite.pragma(`foreign_key_check`)).toEqual([]);
+    });
+
+    it('holds a person to two running at once, each in a live slot, of 2 to 8 bots, and the operator to slots of none', () => {
+        seed();
+        expect(insertTournament(`t1`)).toBe(1);
+        expect(insertTournament(`t2`, { live_slot: 2, max_entrants: 8 })).toBe(1);
+        expect(() => insertTournament(`t3`, { live_slot: 2 })).toThrow(/UNIQUE/);
+        expect(() => insertTournament(`t4`, { live_slot: 3 })).toThrow(/CHECK/);
+        expect(() => insertTournament(`t5`, { live_slot: null })).toThrow(/CHECK/);
+        expect(() => insertTournament(`t6`, { ...over, live_slot: 2 })).not.toThrow();
+        expect(() => insertTournament(`t7`, { created_by: `u2`, max_entrants: 1 })).toThrow(/CHECK/);
+        expect(() => insertTournament(`t8`, { created_by: `u2`, max_entrants: 9 })).toThrow(/CHECK/);
+        expect(() => insertTournament(`t9`, { origin: `operator`, created_by: null, name: `Spring`, rated: 1, status: `scheduled`, started_at: null, max_entrants: 3, live_slot: 1 })).toThrow(/CHECK/);
+        expect(() => insertTournament(`t10`, { origin: `operator`, created_by: null, name: `Spring`, rated: 1, status: `scheduled`, started_at: null, max_entrants: 2, live_slot: null })).toThrow(/CHECK/);
+        expect(() => insertTournament(`t11`, { origin: `operator`, created_by: null, name: `Spring`, rated: 1, status: `scheduled`, started_at: null, max_entrants: 3, live_slot: null })).not.toThrow();
+    });
+
+    it('holds a pair to a single game or one to five openings, a test to fifty games, and no bot past 30 games, or 70 in a test', () => {
+        seed();
+        expect(() => insertTournament(`t1`, { ...over, games_per_pair: 1 })).not.toThrow();
+        expect(() => insertTournament(`t2`, { ...over, games_per_pair: 10, max_entrants: 4 })).not.toThrow();
+        expect(() => insertTournament(`t3`, { ...over, games_per_pair: 10, max_entrants: 5 })).toThrow(/CHECK/);
+        expect(() => insertTournament(`t4`, { ...over, games_per_pair: 20 })).toThrow(/CHECK/);
+        expect(() => insertTournament(`t5`, { ...over, games_per_pair: 20, max_entrants: 4, test: 1 })).not.toThrow();
+        expect(() => insertTournament(`t6`, { ...over, games_per_pair: 50, test: 1 })).not.toThrow();
+        expect(() => insertTournament(`t7`, { ...over, games_per_pair: 50, max_entrants: 3, test: 1 })).toThrow(/CHECK/);
+        expect(() => insertTournament(`t8`, { ...over, games_per_pair: 3 })).toThrow(/CHECK/);
+        expect(() => insertTournament(`t9`, { ...over, games_per_pair: 1, opening_plies: 1 })).not.toThrow();
+        expect(() => insertTournament(`t10`, { ...over, games_per_pair: 4, opening_plies: 1 })).toThrow(/CHECK/);
+    });
+
+    it('cuts a person\'s short with why its last bot left and which, and stops one for the stop reasons alone', () => {
+        seed();
+        const cut = { status: `cut_short`, ended_at: 20 };
+        expect(() => insertTournament(`t1`, { ...cut, end_reason: `missed`, end_bot_id: `b3` })).not.toThrow();
+        expect(() => insertTournament(`t2`, { ...cut, end_reason: `owner` })).not.toThrow();
+        expect(() => insertTournament(`t3`, cut)).toThrow(/CHECK/);
+        expect(() => insertTournament(`t4`, { ...cut, end_reason: `creator` })).toThrow(/CHECK/);
+        expect(() => insertTournament(`t5`, { status: `stopped`, ended_at: 20, end_reason: `missed` })).toThrow(/CHECK/);
+        expect(() => insertTournament(`t6`, { status: `stopped`, ended_at: 20, end_reason: `creator`, end_bot_id: `b3` })).toThrow(/CHECK/);
+        expect(() => insertTournament(`t7`, { ...cut, end_reason: `missed`, origin: `operator`, created_by: null, name: `Spring`, rated: 1, max_entrants: 3, live_slot: null })).toThrow(/CHECK/);
+        sqlite.prepare(`delete from bots where id = 'b3'`).run();
+        expect(sqlite.prepare(`select end_reason as reason, end_bot_id as bot from tournaments where id = 't1'`).get()).toEqual({ reason: `missed`, bot: null });
+    });
+
+    it('seats a person\'s entries once each, from 1 to 8, and the operator\'s none', () => {
+        seed();
+        insertTournament(`t1`);
+        const entry = sqlite.prepare(`insert into tournament_entries (tournament_id, bot_id, owner_id, state, origin, seat, entered_at) values (?, ?, ?, ?, ?, ?, 10)`);
+        expect(() => entry.run(`t1`, `b1`, `u1`, `playing`, `person`, 1)).not.toThrow();
+        expect(() => entry.run(`t1`, `b2`, `u2`, `playing`, `person`, 1)).toThrow(/UNIQUE/);
+        expect(() => entry.run(`t1`, `b2`, `u2`, `playing`, `person`, 9)).toThrow(/CHECK/);
+        expect(() => entry.run(`t1`, `b2`, `u2`, `playing`, `person`, null)).toThrow(/CHECK/);
+        expect(() => entry.run(`t1`, `b2`, `u2`, `playing`, `person`, 2)).not.toThrow();
+        expect(() => entry.run(`t_aaaaaaaaaaaa`, `b3`, `u3`, `playing`, `operator`, 3)).toThrow(/CHECK/);
+    });
+
+    it('holds a pairing to its tournament\'s games a pair: a single game\'s second slot none, and its legs to the openings it plays', () => {
+        seed();
+        insertTournament(`t1`, { games_per_pair: 1 });
+        insertTournament(`t2`, { games_per_pair: 50, test: 1, live_slot: 2 });
+        const pairing = sqlite.prepare(`insert into tournament_pairings (id, tournament_id, round, first_bot_id, second_bot_id, leg, game2, games_per_pair) values (?, ?, 1, 'b1', 'b3', ?, ?, ?)`);
+        expect(() => pairing.run(`s1`, `t1`, 1, `none`, 1)).not.toThrow();
+        expect(() => pairing.run(`s2`, `t1`, 1, `pending`, 1)).toThrow(/CHECK/);
+        expect(() => pairing.run(`s3`, `t2`, 1, `none`, 50)).toThrow(/CHECK/);
+        expect(() => pairing.run(`s4`, `t1`, 2, `none`, 1)).toThrow(/CHECK/);
+        expect(() => pairing.run(`s5`, `t2`, 25, `pending`, 50)).not.toThrow();
+        expect(() => pairing.run(`s6`, `t2`, 26, `pending`, 50)).toThrow(/CHECK/);
+        expect(() => pairing.run(`s7`, `t2`, 1, `pending`, 2)).toThrow(/FOREIGN KEY/);
+        sqlite.prepare(`update tournament_pairings set game1 = 'played', game1_seat = 'first' where id = 's1'`).run();
+        expect(() => sqlite.prepare(`update tournament_pairings set game2 = 'played' where id = 's1'`).run()).toThrow(/CHECK/);
+        sqlite.prepare(`delete from tournaments where id in ('t1', 't2')`).run();
+        expect(sqlite.prepare(`select count(*) as n from tournament_pairings where id in ('s1', 's5')`).get()).toEqual({ n: 0 });
     });
 });

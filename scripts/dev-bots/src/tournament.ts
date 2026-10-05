@@ -40,7 +40,7 @@ export interface Candidate {
     readonly bot: string;
 }
 
-export interface DevTournamentOptions {
+interface DevTournamentOptions {
     client: ArenaClient;
     // Schedules the tournament through the admin client and answers its id.
     schedule: (name: string, startsAt: Date) => Promise<string>;
@@ -68,8 +68,9 @@ function utcDate(at: number): string {
 export async function seedDevTournament(options: DevTournamentOptions): Promise<DevTournament | null> {
     const { client, log } = options;
     const list = await client.tournaments();
-    if (list.running !== null) {
-        log(`${list.running.name} is running; no dev tournament scheduled`);
+    const weekly = list.running.find((tournament) => tournament.origin === `operator`);
+    if (weekly !== undefined) {
+        log(`${weekly.name} is running; no dev tournament scheduled`);
         return null;
     }
     const listed = new Set((await client.listBots()).map((bot) => bot.name));

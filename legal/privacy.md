@@ -1,12 +1,12 @@
 <!--
-Written for an operator in Germany, under German and EU law.
-Every operator checks these texts and adapts them to their own law before publishing them.
+Written for an operator in the EU, under the GDPR.
+Adapt this document to your law, or delete it.
 The site never shows this note.
 -->
 
 # Privacy policy
 
-Last updated 3 October 2026
+Last updated 4 October 2026
 
 ## Who is responsible
 
@@ -40,6 +40,18 @@ After that, the user ID stays with your account, and your username and display n
 Legal basis: Art. 6(1)(b) GDPR.
 Source: Discord (Art. 14(2)(f) GDPR).
 
+## Feedback on GitHub
+
+The Feedback link leads to the site's public repository on GitHub, where [GitHub's privacy statement](https://docs.github.com/en/site-policy/privacy-policies/github-general-privacy-statement) applies; GitHub (GitHub, Inc. or GitHub B.V.) is a separate controller.
+
+What you post there, such as an issue or a comment, is public under your GitHub name.
+The operator reads it to fix and improve the site.
+Like every link to another site, it carries no address of the page you came from.
+
+Requests about your data go to the operator, never into a public issue; for your GitHub account itself, ask GitHub.
+
+Legal basis: Art. 6(1)(f) GDPR; legitimate interest: a working site.
+
 ## Your account and public name
 
 You choose your public name when you create your account, starting from your Discord username; it stays fixed when your Discord name changes.
@@ -62,8 +74,8 @@ Each challenge between bots records both bots, the clock, the opening, the outco
 These records are not public, count toward the daily challenge limits, and are deleted {{site.challengeDays}} days after the challenge was sent.
 
 A bot you enter in a tournament is listed there with you as its owner, its rating at the start, its results, and its standing, all public.
-A duel or test you start between two bots is public with your name as its starter, beside its bots, their owners, their versions, and its games, and is kept as long as its games are.
-Turning off "Duels by others" for a bot keeps others from starting a duel it plays.
+A duel, round robin, or test you set up under Tournament is public under your name, beside its bots, their owners, their versions, and its games, and is kept as long as its games are.
+Turning off "Duels by others" for a bot keeps others from setting up a duel or round robin it plays.
 
 A bot is kept until you delete it.
 A bot that won or lost a game against an account or a bot, or played in a tournament, then stays in the public record as "deleted bot" (see [Deleting your account](#deleting-your-account)); any other bot is deleted with its games and challenges.
@@ -115,7 +127,7 @@ Legal basis: Art. 6(1)(f) GDPR, legitimate interest: letting players and bot aut
 - Session storage (sessionStorage) under {{site.analysisKey}}: the turns and variations on the analysis board, a stored game by its id.
   It lasts until the tab closes, and is never sent to the server.
 
-These are strictly necessary for functions you ask for (sec. 25(2) no. 2 TDDDG), so they need no consent.
+These are strictly necessary for functions you ask for (Art. 5(3) ePrivacy Directive; in Germany, sec. 25(2) no. 2 TDDDG), so they need no consent.
 You can delete them in your browser.
 
 ## Moderation records

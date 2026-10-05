@@ -1,6 +1,7 @@
+import { pageNames, sitePages } from '@hexo-arena/contract';
 import { describe, expect, it } from 'vitest';
 import { reportForm } from '../src/report-form';
-import { parseRoute, routePath } from '../src/router/route';
+import { movedTo, parseRoute, routePath } from '../src/router/route';
 
 describe('parseRoute', () => {
     it('route the root home and /ladder to the ladder', () => {
@@ -10,11 +11,39 @@ describe('parseRoute', () => {
         expect(parseRoute(`/ladder/`)).toEqual({ name: `ladder` });
     });
 
-    it('route the tournaments under the ladder', () => {
-        expect(parseRoute(`/tournaments`)).toEqual({ name: `tournaments` });
+    it('route every tournament\'s page, a duel\'s among them, at an address of its own, and their list under Games', () => {
         expect(parseRoute(`/tournaments/t_abcdefghijk2`)).toEqual({ name: `tournament`, id: `t_abcdefghijk2` });
         expect(routePath({ name: `tournament`, id: `t_abcdefghijk2` })).toBe(`/tournaments/t_abcdefghijk2`);
+        expect(parseRoute(`/tournaments/d_abcdefghijkl`)).toEqual({ name: `tournament`, id: `d_abcdefghijkl` });
         expect(parseRoute(`/tournaments/a/b`)).toEqual({ name: `not-found` });
+        expect(parseRoute(`/duels/a/b`)).toEqual({ name: `not-found` });
+        expect(parseRoute(`/games/tournaments/`)).toEqual({ name: `games-tournaments` });
+        expect(routePath({ name: `games-tournaments` })).toBe(`/games/tournaments`);
+    });
+
+    it('route the starts under Play: a bot, and a tournament', () => {
+        expect(parseRoute(`/play`)).toEqual({ name: `play` });
+        expect(parseRoute(`/play/tournament`)).toEqual({ name: `play-tournament` });
+        expect(routePath({ name: `play-tournament` })).toBe(`/play/tournament`);
+        expect(parseRoute(`/play/tournaments`)).toEqual({ name: `not-found` });
+    });
+
+    it('send the addresses that moved on to the new ones, a duel\'s to its tournament\'s', () => {
+        expect(parseRoute(`/duels/d_abcdefghijkl`)).toEqual({ name: `moved`, to: `/tournaments/d_abcdefghijkl` });
+        expect(parseRoute(`/play/duels/d_abcdefghijkl`)).toEqual({ name: `moved`, to: `/tournaments/d_abcdefghijkl` });
+        expect(parseRoute(`/play/duels/a%20b`)).toEqual({ name: `moved`, to: `/tournaments/a%20b` });
+        expect(parseRoute(`/play/duels`)).toEqual({ name: `moved`, to: `/play/tournament` });
+        expect(parseRoute(`/games/duels`)).toEqual({ name: `moved`, to: `/games/tournaments` });
+        expect(parseRoute(`/duels`)).toEqual({ name: `moved`, to: `/games/tournaments` });
+        expect(parseRoute(`/tournaments`)).toEqual({ name: `moved`, to: `/games/tournaments` });
+        expect(parseRoute(`/tournaments/`)).toEqual({ name: `moved`, to: `/games/tournaments` });
+    });
+
+    it('carry a moved address\'s query on as its new page reads it, a duel\'s setup as the setup of its two bots', () => {
+        expect(movedTo(`/games/duels`, `?list=tests&bot=hextide`)).toBe(`/games/tournaments?list=tests&bot=hextide`);
+        expect(movedTo(`/play/duels`, `?first=hextide&second=pebble&firstLevel=club`)).toBe(`/play/tournament?bots=hextide%2Cpebble&level=hextide%3Aclub`);
+        expect(movedTo(`/play/duels/d_abcdefghijkl`, ``)).toBe(`/tournaments/d_abcdefghijkl`);
+        expect(movedTo(`/play/tournament`, `?bots=hextide`)).toBe(null);
     });
 
     it('route the four surfaces', () => {
@@ -114,6 +143,19 @@ describe('routePath', () => {
         ] as const;
         for (const route of routes) {
             expect(parseRoute(routePath(route))).toEqual(route);
+        }
+    });
+
+    it('parses every page of the table back from its own path, a listed parameter at each of its values', () => {
+        for (const name of pageNames) {
+            const { path, values } = sitePages[name];
+            // No page lists the values of more than one parameter.
+            for (const sample of Object.values(values)[0] ?? [`x`]) {
+                const address = path.replace(/:\w+/gu, sample);
+                const route = parseRoute(address);
+                expect(route.name).toBe(name);
+                expect(routePath(route)).toBe(address);
+            }
         }
     });
 });

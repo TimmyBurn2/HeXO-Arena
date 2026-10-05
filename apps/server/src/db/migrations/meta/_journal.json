@@ -204,6 +204,34 @@
       "when": 1791041940322,
       "tag": "0028_duels",
       "breakpoints": true
+    },
+    {
+      "idx": 29,
+      "version": "6",
+      "when": 1791122000213,
+      "tag": "0029_event_indexes",
+      "breakpoints": true
+    },
+    {
+      "idx": 30,
+      "version": "6",
+      "when": 1791128828789,
+      "tag": "0030_round_robins",
+      "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "6",
+      "when": 1791183989177,
+      "tag": "0031_two_bot_tournaments",
+      "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "6",
+      "when": 1791189396162,
+      "tag": "0032_drop_duels",
+      "breakpoints": true
     }
   ]
 }

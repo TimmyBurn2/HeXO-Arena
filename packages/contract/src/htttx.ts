@@ -5,7 +5,6 @@ import { z } from 'zod';
 // Field names, optionality, and bounds follow the vendored spec verbatim;
 // converting to the engine's x,y is the server's job.
 export const htttxSideSchema = z.enum([`x`, `o`]);
-export type HtttxSide = z.infer<typeof htttxSideSchema>;
 
 export const htttxCoordSchema = z.object({
     q: z.number().int(),
@@ -26,7 +25,6 @@ export const htttxBoardSchema = z
         cells: z.array(htttxCellSchema),
     })
     .meta({ id: `Board` });
-export type HtttxBoard = z.infer<typeof htttxBoardSchema>;
 
 // Seconds, not milliseconds; a fraction is honest and needs no rounding
 // policy. Absent when the clock mode is unlimited.
@@ -39,7 +37,6 @@ export const htttxMoveRequestSchema = z
         request_id: z.number().int().min(0).optional(),
     })
     .meta({ id: `MoveRequest` });
-export type HtttxMoveRequest = z.infer<typeof htttxMoveRequestSchema>;
 
 export const htttxPositionEvaluationSchema = z.object({
     heuristic: z.number().optional(),
@@ -60,7 +57,6 @@ export const htttxMoveResponseSchema = z.object({
     considerations: z.array(htttxMoveOptionSchema).optional(),
     request_id: z.number().int().min(0).optional(),
 });
-export type HtttxMoveResponse = z.infer<typeof htttxMoveResponseSchema>;
 
 // The basic_websocket v1-alpha packets, same axial q,r. The server plays the
 // htttx client role and the bot the bot role, fixed by packet direction.
@@ -99,7 +95,6 @@ export const bwsInterruptPacketSchema = z.object({
     type: z.literal(`interrupt`),
     request_id: z.number().int().min(0).optional(),
 });
-export type BwsInterruptPacket = z.infer<typeof bwsInterruptPacketSchema>;
 
 // The only packet a bot may send on our engine and analysis sessions: a
 // position is read with move_request, never eval_request, so eval_response

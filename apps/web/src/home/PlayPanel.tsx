@@ -1,4 +1,4 @@
-import { resultSentence, type BotListing, type FinishedGameEntry, type LiveGameEntry, type Me } from '@hexo-arena/contract';
+import { pagePath, resultSentence, type BotListing, type FinishedGameEntry, type LiveGameEntry, type Me } from '@hexo-arena/contract';
 import { Rating, seatName } from '../components/player';
 import { rosterOf } from '../play/setup';
 import { Link } from '../router/Link';
@@ -59,7 +59,7 @@ export function PlayPanel({ me, roster, yours, latest }: {
             {latest === null ? null : (
                 <p className="play-panel-last">
                     {text.home.lastGame(
-                        (words) => <Link to={`/game/${encodeURIComponent(latest.gameId)}`}>{words}</Link>,
+                        (words) => <Link to={pagePath(`game`, { gameId: latest.gameId })}>{words}</Link>,
                         seatName(latest.players.x),
                         seatName(latest.players.o),
                         resultSentence(latest, { x: seatName(latest.players.x), o: seatName(latest.players.o) }),
@@ -84,7 +84,7 @@ function YourGames({ games, me }: { games: readonly LiveGameEntry[]; me: Me | un
                     const opponent = game.players[yourSide === `x` ? `o` : `x`];
                     return (
                         <li key={game.gameId}>
-                            <Link to={`/game/${encodeURIComponent(game.gameId)}`} className="your-game">
+                            <Link to={pagePath(`game`, { gameId: game.gameId })} className="your-game">
                                 <span className="your-game-who">{text.home.against(seatName(opponent))}</span>
                                 <span className={game.toMove === yourSide ? `your-game-turn yours` : `your-game-turn`}>
                                     {game.toMove === yourSide ? text.home.yourTurn : text.home.toMove(seatName(opponent))}

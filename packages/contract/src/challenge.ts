@@ -30,7 +30,6 @@ export const createChallengeRequestSchema = z.object({
     firstPlayer: firstPlayerSchema.default(`random`),
     requestId: challengeRequestIdSchema,
 });
-export type CreateChallengeRequest = z.infer<typeof createChallengeRequestSchema>;
 
 // The challenged side's gates, in the caller's order: presence and the
 // open declaration, the declared clock, both sides' concurrent caps, the

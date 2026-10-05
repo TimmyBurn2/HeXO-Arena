@@ -5,6 +5,7 @@ import {
     humanSeedRating,
     nameKeyOf,
     openingPliesSchema,
+    pagePath,
     type Accepts,
     type BotListing,
     type Level,
@@ -24,7 +25,7 @@ export const presets = [
     { id: `u`, clock: { mode: `unlimited` } },
 ] as const satisfies readonly { id: string; clock: TimeControl }[];
 
-export type Preset = (typeof presets)[number];
+type Preset = (typeof presets)[number];
 
 /** The bounds of a clock set by hand; the turn clock also keeps to what the bot accepts. */
 export const custom = {
@@ -50,15 +51,23 @@ export function ownedBy(bot: BotListing, viewer: string | null): boolean {
     return viewer !== null && bot.ownerName === viewer;
 }
 
+// Whether a bot takes any clock it declares, as a game against a person may run any.
+function takesAny(bot: BotListing): boolean {
+    const covered = coveredModes(bot.accepts);
+    return covered.turn || covered.match || covered.unlimited;
+}
+
 /**
- * A bot's readiness; one the running tournament reserves takes no other game until it ends.
- * Its owner, the viewer, plays it online whether or not it is open to others.
+ * A bot's readiness, the checks every setup makes first, in this order:
+ * online, open unless the viewer owns it, a clock it can play, free of the
+ * running tournament, and below its game cap. Its owner, the viewer, plays
+ * it online whether or not it is open to others; a bot event asks for a
+ * clock a scheduled game runs, where a game against a person takes any.
  */
-export function readinessOf(bot: BotListing, reserved: ReadonlySet<string> = unreserved, viewer: string | null = null): Readiness {
+export function readinessOf(bot: BotListing, reserved: ReadonlySet<string> = unreserved, viewer: string | null = null, takesAClock = takesAny(bot)): Readiness {
     if (!bot.online) return `offline`;
     if (!bot.openForChallenges && !ownedBy(bot, viewer)) return `closed`;
-    const covered = coveredModes(bot.accepts);
-    if (!covered.turn && !covered.match && !covered.unlimited) return `nothing`;
+    if (!takesAClock) return `nothing`;
     if (reserved.has(bot.name)) return `tournament`;
     return bot.liveGames >= botConcurrentGameCap ? `busy` : `ready`;
 }
@@ -215,7 +224,8 @@ export function playPath(bot: string | null, clock: TimeControl | null, opening:
     if (level !== null) params.set(`level`, level.id);
     if (opening !== defaultHumanOpeningPlies) params.set(`opening`, String(opening));
     const query = params.toString();
-    return query === `` ? `/play` : `/play?${query}`;
+    const path = pagePath(`play`, {});
+    return query === `` ? path : `${path}?${query}`;
 }
 
 /** The Play page opened on a bot, as the bot page and the Bots rows link to it; at a level when given one, null standing for its default. */
@@ -226,7 +236,7 @@ export function playBotPath(bot: string, level: Level | null = null): string {
 /** Where this browser keeps the last opponent and clock a game started with, and the Rated switch. */
 export const playStorageKey = `hexo-arena.play.v1`;
 
-export interface Played {
+interface Played {
     opponent: string | null;
     clock: TimeControl | null;
     // Off until the person turns it on here.

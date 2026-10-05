@@ -11,7 +11,7 @@ import { dirname } from 'node:path';
 
 export type AdminHandler = (request: AdminRequest) => AdminResponse;
 
-export interface AdminLog {
+interface AdminLog {
     error(details: object, message: string): void;
 }
 
@@ -25,7 +25,7 @@ const newline = 0x0a;
 // peer check instead: only the app uid can traverse a 0700 directory it
 // owns, and with every capability dropped not even root in the container
 // can bypass that.
-export function assertPrivateDirectory(directory: string): void {
+function assertPrivateDirectory(directory: string): void {
     const stats = statSync(directory);
     if (!stats.isDirectory()) throw new Error(`admin socket directory ${directory} is not a directory`);
     const mode = stats.mode & 0o777;
@@ -73,11 +73,9 @@ function badRequest(error: string): AdminResponse {
     return { kind: `error`, code: `bad_request`, error };
 }
 
-/**
- * Parses one request line and hands it to the handler; malformed input
- * answers bad_request, while a handler exception propagates to the caller.
- */
-export function answerAdminRequest(text: string, handle: AdminHandler): AdminResponse {
+// Parses one request line and hands it to the handler; malformed input
+// answers bad_request, while a handler exception propagates to the caller.
+function answerAdminRequest(text: string, handle: AdminHandler): AdminResponse {
     let body: unknown;
     try {
         body = JSON.parse(text);

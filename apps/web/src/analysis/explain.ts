@@ -156,8 +156,8 @@ function judgedText(
     }
 }
 
-/** A run of turns that each let a win go or handed one over, as the list folds it under one note. */
-export interface RunNote {
+// A run of turns that each let a win go or handed one over, as the list folds it under one note.
+interface RunNote {
     readonly title: string;
     readonly text: string;
 }

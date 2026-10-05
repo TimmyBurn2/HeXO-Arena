@@ -30,7 +30,7 @@ export interface ChallengeRecord {
     readonly sameOwner: boolean;
 }
 
-export interface NewChallenge {
+interface NewChallenge {
     readonly challengerBotId: string;
     readonly destBotId: string;
     readonly requestKey: string;
@@ -68,7 +68,7 @@ function toRecord(row: {
     timeControl: string;
     openingPlies: number;
     firstPlayer: string;
-    status: string;
+    status: ChallengeStatus;
     gameId: string | null;
     createdAt: number;
     sameOwner: number;
@@ -85,7 +85,7 @@ function toRecord(row: {
         timeControl: timeControlSchema.parse(JSON.parse(row.timeControl)),
         openingPlies: openingPliesSchema.parse(row.openingPlies),
         firstPlayer: firstPlayerSchema.parse(row.firstPlayer),
-        status: row.status as ChallengeStatus,
+        status: row.status,
         gameId: row.gameId,
         createdAt: row.createdAt,
         sameOwner: row.sameOwner === 1,
@@ -153,15 +153,6 @@ export function countChallengesSince(query: Query, challengerBotId: string, sinc
         .select({ n: sql<number>`count(*)` })
         .from(challenges)
         .where(and(eq(challenges.challengerBotId, challengerBotId), gte(challenges.createdAt, sinceSeconds)))
-        .all();
-    return row?.n ?? 0;
-}
-
-export function countPendingForDest(query: Query, destBotId: string): number {
-    const [row] = query
-        .select({ n: sql<number>`count(*)` })
-        .from(challenges)
-        .where(and(eq(challenges.destBotId, destBotId), eq(challenges.status, `created`)))
         .all();
     return row?.n ?? 0;
 }

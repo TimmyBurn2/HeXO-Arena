@@ -15,7 +15,7 @@ describe('a bot\'s settings and what its pages show', () => {
     const opened: http.ClientRequest[] = [];
 
     beforeEach(async () => {
-        world = await createTestApp({ logger: false });
+        world = await createTestApp();
         owner = await loginAs(world.app, `ann`);
         token = await mintBot(world.app, owner, `alpha`);
         address = null;

@@ -31,12 +31,13 @@ import type { PresenceRegistry } from './presence';
 import type { ClientLimits, CredentialLimits } from './request-limits';
 import { sessionPerson } from './session-api';
 import type { StartGate } from './site-state';
+import { utcDay } from './utc-day';
 import { frameOf, type GameWatchers } from './watchers';
 
 /** The one route that takes a websocket upgrade. */
 export const engineSocketRoute = `/api/bot/game/:gameId/socket`;
 
-export interface GameApiDeps {
+interface GameApiDeps {
     query: Query;
     presence: PresenceRegistry;
     gate: StartGate;
@@ -50,6 +51,11 @@ export interface GameApiDeps {
 
 interface GameParams {
     gameId: string;
+}
+
+// A socket's token rides in the query, checked before the upgrade.
+interface TokenQuery {
+    token?: unknown;
 }
 
 // Sends the failure itself and yields null, so handlers stay flat.
@@ -134,8 +140,7 @@ export function registerGameApi(app: FastifyInstance, deps: GameApiDeps): void {
             return reply.code(400).send({ error: `the bot declares no such level`, code: `unknown_level` });
         }
         const level = declared === undefined || declared.id === bot.levels?.default ? null : seatLevelOf(declared);
-        // A guest's game and practice at another level are unrated by their
-        // seats, so only a signed-in person's game at the default carries the mark.
+        // Which games carry the mark: the contract's unratedByChoiceSchema.
         const unratedByChoice = person.kind === `user` && level === null && (own || parsed.data.rated === false);
         if (games.activeGameCount(bot.id) >= botConcurrentGameCap || deps.reservations.isReserved(bot.id)) {
             return reply.code(400).send({
@@ -144,13 +149,11 @@ export function registerGameApi(app: FastifyInstance, deps: GameApiDeps): void {
             });
         }
         // A signed-in human and a bot share the pair cap two bots have, counted
-        // from the log like theirs; a guest's games, practice at another
-        // level, and games started unrated count toward no cap.
+        // from the log like theirs; a game that rates nobody counts toward no cap.
         if (person.kind === `user` && level === null && !unratedByChoice) {
-            const now = nowSeconds();
-            const dayStart = now - (now % 86_400);
-            if (countHumanPairGamesSince(query, { userId: person.id, botId: bot.id }, dayStart) >= pairDailyCap) {
-                return reply.code(429).header(`retry-after`, String(dayStart + 86_400 - now)).send({
+            const day = utcDay(nowSeconds());
+            if (countHumanPairGamesSince(query, { userId: person.id, botId: bot.id }, day.start) >= pairDailyCap) {
+                return reply.code(429).header(`retry-after`, String(day.secondsLeft)).send({
                     error: `this pair reached its daily game cap`,
                     code: `daily_pair_cap`,
                 });
@@ -188,8 +191,8 @@ export function registerGameApi(app: FastifyInstance, deps: GameApiDeps): void {
 
     // Every game is public; the session only decides whether the reader
     // sees its own seat as `you`.
-    app.get(`/api/games/:gameId`, { config: { limit: `public` } }, async (request, reply) => {
-        const { gameId } = request.params as GameParams;
+    app.get<{ Params: GameParams }>(`/api/games/:gameId`, { config: { limit: `public` } }, async (request, reply) => {
+        const { gameId } = request.params;
         // A finished game's board is replayed from its moves, which costs what a live read does not.
         if (!games.isLive(gameId) && deps.limits.refuseArchive(reply, request)) return reply;
         const found = games.snapshotFor(gameId, sessionPerson(deps.query, deps.guests, request));
@@ -203,8 +206,8 @@ export function registerGameApi(app: FastifyInstance, deps: GameApiDeps): void {
     // serializes, compresses, or buffers an event.
     // The snapshot read and the attach run in one synchronous stretch, so
     // no turn can land between them.
-    app.get(`/api/games/:gameId/events`, { config: { limit: `public` } }, async (request, reply) => {
-        const { gameId } = request.params as GameParams;
+    app.get<{ Params: GameParams }>(`/api/games/:gameId/events`, { config: { limit: `public` } }, async (request, reply) => {
+        const { gameId } = request.params;
         if (!games.isLive(gameId) && deps.limits.refuseArchive(reply, request)) return reply;
         const snapshot = games.snapshotFor(gameId, sessionPerson(deps.query, deps.guests, request));
         if (snapshot === null) {
@@ -229,11 +232,11 @@ export function registerGameApi(app: FastifyInstance, deps: GameApiDeps): void {
         }
     });
 
-    app.post(`/api/games/:gameId/move`, { config: { limit: `principal` } }, async (request, reply) => {
+    app.post<{ Params: GameParams }>(`/api/games/:gameId/move`, { config: { limit: `principal` } }, async (request, reply) => {
         const person = requirePerson(deps, request, reply);
         if (person === null) return reply;
         if (deps.limits.refuse(reply, `principal`, `${person.kind}:${person.id}`)) return reply;
-        const { gameId } = request.params as GameParams;
+        const { gameId } = request.params;
         const parsed = humanMoveRequestSchema.safeParse(request.body);
         if (!parsed.success) {
             return reply.code(400).send({ error: `the request fails validation`, code: `bad_request` });
@@ -250,11 +253,11 @@ export function registerGameApi(app: FastifyInstance, deps: GameApiDeps): void {
         return reply.code(200).send(result.snapshot);
     });
 
-    app.post(`/api/games/:gameId/resign`, { config: { limit: `principal` } }, async (request, reply) => {
+    app.post<{ Params: GameParams }>(`/api/games/:gameId/resign`, { config: { limit: `principal` } }, async (request, reply) => {
         const person = requirePerson(deps, request, reply);
         if (person === null) return reply;
         if (deps.limits.refuse(reply, `principal`, `${person.kind}:${person.id}`)) return reply;
-        const { gameId } = request.params as GameParams;
+        const { gameId } = request.params;
         const result = games.humanResign(gameId, person);
         if (result.kind === `unknown`) {
             return reply.code(404).send({ error: `no such game of yours`, code: `not_found` });
@@ -265,14 +268,14 @@ export function registerGameApi(app: FastifyInstance, deps: GameApiDeps): void {
         return reply.code(200).send(result.snapshot);
     });
 
-    app.get(
+    app.get<{ Params: GameParams; Querystring: TokenQuery }>(
         engineSocketRoute,
         {
             websocket: true,
             config: { limit: `engine` },
             preHandler: async (request, reply) => {
-            const { gameId } = request.params as GameParams;
-            const token = (request.query as Record<string, unknown>).token;
+            const { gameId } = request.params;
+            const token = request.query.token;
             const holder = typeof token === `string` ? games.claimSession(gameId, token) : null;
             if (holder === null) {
                 // Unknown game and dead token are indistinguishable, so a
@@ -282,9 +285,9 @@ export function registerGameApi(app: FastifyInstance, deps: GameApiDeps): void {
             // Refused before the upgrade, so the socket a bot holds stays.
             if (deps.limits.refuse(reply, `engineDial`, `seat:${gameId}:${holder.side}`)) return reply;
         } },
-        (socket: WebSocket, request: FastifyRequest) => {
-            const { gameId } = request.params as GameParams;
-            const token = (request.query as { token: string }).token;
+        (socket: WebSocket, request) => {
+            const { gameId } = request.params;
+            const token = request.query.token;
             const engineSocket: EngineSocket = {
                 get bufferedAmount() {
                     return socket.bufferedAmount;
@@ -299,7 +302,8 @@ export function registerGameApi(app: FastifyInstance, deps: GameApiDeps): void {
                     socket.once(`close`, listener);
                 },
             };
-            const attached = games.attachSession(gameId, token, engineSocket);
+            // The token passed the preHandler, which admits a string alone.
+            const attached = typeof token === `string` ? games.attachSession(gameId, token, engineSocket) : null;
             if (attached === null) {
                 socket.close(1008, `session revoked`);
                 return;
@@ -317,8 +321,8 @@ export function registerGameApi(app: FastifyInstance, deps: GameApiDeps): void {
         },
     );
 
-    app.post(`/api/bot/game/:gameId/resign`, { config: { limit: `principal` } }, async (request, reply) => {
-        const { gameId } = request.params as GameParams;
+    app.post<{ Params: GameParams }>(`/api/bot/game/:gameId/resign`, { config: { limit: `principal` } }, async (request, reply) => {
+        const { gameId } = request.params;
         const [scheme, token] = (request.headers.authorization ?? ``).split(` `);
         if (scheme?.toLowerCase() !== `bearer` || token === undefined) {
             return reply.code(401).send({ error: `missing game token`, code: `unauthorized` });

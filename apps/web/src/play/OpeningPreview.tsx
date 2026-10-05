@@ -14,8 +14,8 @@ const extentX = Math.sqrt(3) * cellSize * openingRadius + halfWidth + cellSize *
 const extentY = 1.5 * cellSize * openingRadius + cellSize * 1.3;
 const viewBox = [-extentX, -extentY, 2 * extentX, 2 * extentY].map((value) => value.toFixed(2)).join(` `);
 
-/** A uniform integer below `bound`, as the rules package's draw asks for one. */
-export type IndexSource = (bound: number) => number;
+// A uniform integer below `bound`, as the rules package's draw asks for one.
+type IndexSource = (bound: number) => number;
 
 const browserRandom: IndexSource = (bound) => Math.floor(Math.random() * bound);
 

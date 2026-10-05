@@ -20,20 +20,6 @@ import {
     botsPath,
     createBotRequestSchema,
     createGameRequestSchema,
-    createDuelRequestSchema,
-    duelBotStatesSchema,
-    duelBotsPath,
-    duelDetailSchema,
-    duelListPath,
-    duelListQuerySchema,
-    duelListSchema,
-    duelPath,
-    duelStopPath,
-    type CreateDuelRequest,
-    type DuelBotState,
-    type DuelDetail,
-    type DuelList,
-    type DuelListQuery,
     finishedGamesPageSchema,
     finishedGamesPath,
     finishedGamesQuerySchema,
@@ -71,12 +57,22 @@ import {
     type LiveGameEntry,
     type Me,
     type Signup,
+    tournamentBotsPath,
+    tournamentBotStatesSchema,
     tournamentDetailSchema,
     tournamentEntryPath,
     tournamentEntrySchema,
     tournamentListSchema,
     tournamentPath,
+    tournamentExportPath,
     tournamentsPath,
+    tournamentStopPath,
+    tournamentWithdrawPath,
+    createTournamentRequestSchema,
+    tournamentListQuerySchema,
+    type CreateTournamentRequest,
+    type TournamentBotState,
+    type TournamentListQuery,
     type TournamentDetail,
     type TournamentEntry,
     type TournamentList,
@@ -106,6 +102,8 @@ export class ApiError extends Error {
         readonly code: string | null,
         message: string,
         readonly retryAfter: number | null = null,
+        // The bot a refusal names, where the body names one.
+        readonly bot: string | null = null,
     ) {
         super(message);
     }
@@ -135,8 +133,9 @@ async function failureOf(response: Response): Promise<ApiError> {
         typeof body === `object` && body !== null && `code` in body && typeof body.code === `string`
             ? body.code
             : null;
+    const bot = typeof body === `object` && body !== null && `bot` in body && typeof body.bot === `string` ? body.bot : null;
     const wait = Number(response.headers.get(`retry-after`));
-    return new ApiError(response.status, code, `the server answered ${String(response.status)}`, Number.isInteger(wait) && wait > 0 ? wait : null);
+    return new ApiError(response.status, code, `the server answered ${String(response.status)}`, Number.isInteger(wait) && wait > 0 ? wait : null, bot);
 }
 
 async function sendJson<T>(url: string, method: string, body: unknown, schema: ZodType<T>): Promise<T> {
@@ -356,9 +355,36 @@ export function resignGame(gameId: string): Promise<GameSnapshot> {
     return sendJson(`/api/games/${encodeURIComponent(gameId)}/resign`, `POST`, {}, gameSnapshotSchema);
 }
 
-/** The running tournament, those waiting, and the latest over. */
-export function fetchTournaments(): Promise<TournamentList> {
-    return getJson(tournamentsPath, tournamentListSchema);
+/** Every running tournament, those waiting, and the latest over, filtered as the query asks. */
+export function fetchTournaments(query: TournamentListQuery = {}): Promise<TournamentList> {
+    const search = new URLSearchParams(Object.entries(tournamentListQuerySchema.parse(query)).filter((entry): entry is [string, string] => entry[1] !== undefined));
+    const tail = search.size === 0 ? `` : `?${search.toString()}`;
+    return getJson(`${tournamentsPath}${tail}`, tournamentListSchema);
+}
+
+/** Set up a duel or round robin of picked bots; the answer is the tournament. */
+export function createTournament(request: CreateTournamentRequest): Promise<TournamentDetail> {
+    return sendJson(tournamentsPath, `POST`, createTournamentRequestSchema.parse(request), tournamentDetailSchema);
+}
+
+/** Stop a duel or round robin the reader set up: no further game starts, and the live ones play on. */
+export function stopTournament(id: string): Promise<TournamentDetail> {
+    return sendJson(tournamentStopPath.replace(`{id}`, encodeURIComponent(id)), `POST`, {}, tournamentDetailSchema);
+}
+
+/** Withdraw the reader's bot from a duel or round robin: its live game plays on, and its games to come score for its opponents, unless fewer than two bots are left. */
+export function withdrawFromTournament(id: string, bot: string): Promise<TournamentDetail> {
+    return sendJson(tournamentWithdrawPath.replace(`{id}`, encodeURIComponent(id)), `POST`, { bot }, tournamentDetailSchema);
+}
+
+/** The tournaments a bot entered, each with its place. */
+export function fetchBotTournaments(bot: string): Promise<TournamentList> {
+    return getJson(`${tournamentsPath}?${new URLSearchParams({ bot }).toString()}`, tournamentListSchema);
+}
+
+/** Where a tournament's finished games download, as one zip. */
+export function tournamentExportUrl(id: string): string {
+    return tournamentExportPath.replace(`{id}`, encodeURIComponent(id));
 }
 
 /** One tournament in full. */
@@ -386,29 +412,7 @@ export function fetchRatingHistory(name: string, range: RatingRange): Promise<Ra
     return getJson(`${ratingHistoryPath.replace(`{name}`, encodeURIComponent(name))}?range=${range}`, ratingHistorySchema);
 }
 
-/** Running duels and the latest over, filtered as the query asks. */
-export function fetchDuels(query: DuelListQuery = {}): Promise<DuelList> {
-    const search = new URLSearchParams(Object.entries(duelListQuerySchema.parse(query)).filter((entry): entry is [string, string] => entry[1] !== undefined));
-    const tail = search.size === 0 ? `` : `?${search.toString()}`;
-    return getJson(`${duelListPath}${tail}`, duelListSchema);
-}
-
-/** One duel as its page reads it. */
-export function fetchDuel(id: string): Promise<DuelDetail> {
-    return getJson(duelPath.replace(`{id}`, encodeURIComponent(id)), duelDetailSchema);
-}
-
-/** Every listed bot's switch for duels by others and the bots it duels now. */
-export function fetchDuelBots(): Promise<DuelBotState[]> {
-    return getJson(duelBotsPath, duelBotStatesSchema);
-}
-
-/** Start a duel or a test between two bots; the answer is the duel. */
-export function createDuel(request: CreateDuelRequest): Promise<DuelDetail> {
-    return sendJson(duelListPath, `POST`, createDuelRequestSchema.parse(request), duelDetailSchema);
-}
-
-/** Stop a running duel: no further game starts, and the live one plays on. */
-export function stopDuel(id: string): Promise<DuelDetail> {
-    return sendJson(duelStopPath.replace(`{id}`, encodeURIComponent(id)), `POST`, {}, duelDetailSchema);
+/** Every listed bot's switch for duels by others and the duels and round robins it plays now. */
+export function fetchTournamentBots(): Promise<TournamentBotState[]> {
+    return getJson(tournamentBotsPath, tournamentBotStatesSchema);
 }

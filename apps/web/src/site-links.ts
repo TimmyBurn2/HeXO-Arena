@@ -9,14 +9,10 @@ export const bridgeRepository = `https://github.com/TimmyBurn2/hexo-bridge`;
 
 /** The command that installs hexo-bridge. */
 // Each bridge tag is a release, so this follows the bridge's latest tag.
-export const bridgeInstall = `pip install git+${bridgeRepository}@v0.4.0`;
+export const bridgeInstall = `pip install git+${bridgeRepository}@v0.4.1`;
 
-/** The site's own repository: its code, the legal templates, and how to run it. */
-export const siteRepository = `https://github.com/TimmyBurn2/HeXO-Arena`;
-
-/** Whether the standing links lead to the site's repository; off while the repository is private. */
-// Widened from the literal: the switch is a setting either value must type-check against.
-export const siteRepositoryPublic = false as boolean;
+// The site's own repository: its code, the legal templates, and how to run it.
+const siteRepository = `https://github.com/TimmyBurn2/HeXO-Arena`;
 
 /**
  * One standing link of the site: a page of the app, or a document it does
@@ -32,11 +28,11 @@ export const sourceLink: SiteLink = { kind: `external`, label: text.shell.links.
  * in its drawer; a new standing link is one more row.
  */
 export const siteLinks: readonly SiteLink[] = [
-    { kind: `page`, label: text.shell.links.tournaments, to: `/tournaments` },
     { kind: `page`, label: text.shell.links.build, to: `/connect` },
     { kind: `page`, label: text.shell.links.credits, to: `/credits` },
     { kind: `external`, label: text.shell.links.botApi, href: botApiRepository },
-    ...(siteRepositoryPublic ? [sourceLink] : []),
+    sourceLink,
+    { kind: `external`, label: text.shell.links.feedback, href: `${siteRepository}/issues/new/choose` },
 ];
 
 /** The licenses of the code and the font the site ships, a file the build writes at the site's root. */

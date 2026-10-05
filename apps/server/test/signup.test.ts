@@ -1,13 +1,13 @@
 import { discordCallbackPath, guestPath, mePath, meSchema, sessionMaxAgeSeconds, signupPath, signupSchema } from '@hexo-arena/contract';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { buildApp } from '../src/app';
-import { createQuery, nowSeconds, openDatabase, runMigrations } from '../src/db';
+import { createQuery, nowSeconds } from '../src/db';
 import { nameReservations, pendingSignups, sessions, users } from '../src/db/schema';
 import { discordNameOf } from '../src/discord';
 import { PresenceRegistry } from '../src/presence';
 import { sweepSignups } from '../src/signups';
 import { GameWatchers } from '../src/watchers';
-import { createTestApp, fakeDiscord, signUpWithDiscord, startDiscordSignIn, type TestApp } from './helpers';
+import { createTestApp, fakeDiscord, migratedDatabase, signUpWithDiscord, startDiscordSignIn, type TestApp } from './helpers';
 
 // A first sign-in through the fake Discord, held and waiting: the signup
 // cookie's value.
@@ -189,8 +189,7 @@ describe('the held sign-ups', () => {
     const row = { tokenHash: `h`, discordId: `9`, discordUsername: `mira.hex`, discordDisplayName: null, next: `/`, expiresAt: 1 };
 
     it('refuse rows that break their bounds', () => {
-        const sqlite = openDatabase(`:memory:`);
-        runMigrations(sqlite);
+        const sqlite = migratedDatabase();
         const query = createQuery(sqlite);
         for (const bad of [
             { discordId: `` },
@@ -211,8 +210,7 @@ describe('the held sign-ups', () => {
     });
 
     it('leave on the sweep once expired, and at boot with expired sessions', async () => {
-        const sqlite = openDatabase(`:memory:`);
-        runMigrations(sqlite);
+        const sqlite = migratedDatabase();
         const query = createQuery(sqlite);
         query.insert(pendingSignups).values([row, { ...row, tokenHash: `live`, discordId: `10`, expiresAt: nowSeconds() + 60 }]).run();
         expect(sweepSignups(query)).toBe(1);

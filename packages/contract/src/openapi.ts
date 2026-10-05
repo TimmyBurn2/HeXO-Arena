@@ -1,6 +1,6 @@
 import { OpenApiGeneratorV3, OpenAPIRegistry } from '@asteasolutions/zod-to-openapi';
 import { stringify } from 'yaml';
-import type { ZodType } from 'zod';
+import { z, type ZodType } from 'zod';
 import { errorBodySchema } from './api';
 import {
     analysesMemoMs,
@@ -161,33 +161,37 @@ import {
     botSettingsPath,
     botSettingsSchema,
     botSettingsUpdateSchema,
-    createDuelRequestSchema,
-    duelCreateErrorCodes,
-    duelDailyCap,
-    duelDetailMemoMs,
-    duelDetailSchema,
-    duelForbiddenErrorCodes,
-    duelListCap,
-    duelListPath,
-    duelListQuerySchema,
-    duelListSchema,
-    duelLiveCap,
-    duelPath,
-    duelPerBotCap,
-    duelQuotaErrorCodes,
-    duelStopConflictErrorCodes,
-    duelStopForbiddenErrorCodes,
-    duelStopPath,
-    duelBotsPath,
-    duelBotStatesSchema,
-    duelGameCounts,
+    gameExportGlobalLimit,
+    gameExportLimit,
+    tournamentBotsPath,
+    tournamentBotStatesSchema,
+    tournamentPerBotCap,
     liveGamesQuerySchema,
+    createTournamentRequestSchema,
+    tournamentBotGamesMax,
+    tournamentCreateErrorCodes,
+    tournamentCreateForbiddenErrorCodes,
+    tournamentDailyCap,
+    tournamentGameCounts,
+    tournamentLiveCap,
+    tournamentQuotaErrorCodes,
+    tournamentRunningListCap,
+    tournamentStopConflictErrorCodes,
+    tournamentStopForbiddenErrorCodes,
+    tournamentStopPath,
+    tournamentWithdrawConflictErrorCodes,
+    tournamentWithdrawForbiddenErrorCodes,
+    tournamentWithdrawPath,
+    tournamentWithdrawRequestSchema,
     tournamentDetailMemoMs,
     tournamentDetailSchema,
     tournamentEntryPath,
     tournamentEntryRequestSchema,
     tournamentEntrySchema,
+    tournamentExportPath,
+    tournamentGamesMax,
     tournamentListPastCap,
+    tournamentListQuerySchema,
     tournamentListSchema,
     tournamentPath,
     presenceGraceMs,
@@ -341,6 +345,19 @@ function registerSharedComponents(registry: OpenAPIRegistry, surface: `site` | `
             `The body is larger than ${kib(requestBodyLimitBytes)} KiB (payload_too_large).`,
             payloadTooLargeError,
         ),
+        exportLimited: registry.registerComponent('responses', 'ExportLimited', {
+            description: `Exports are downloaded at most ${rateText(gameExportLimit)} per client, and ${rateText(gameExportGlobalLimit)} across callers (rate_limited); or too many requests. Retry after Retry-After.`,
+            headers: { 'Retry-After': retryAfter },
+            content: json(rateLimitedError),
+        }).ref,
+        gameExport: registry.registerComponent('responses', 'GameExport', {
+            description: [
+                `A zip archive, stored without compression: one HTTTX v1 file per finished game, numbered in play order and named for its sides (01-x-vs-o.htttx), and games.csv, a row per game.`,
+                `Each file carries the HTTTX v1 header (name, platform, utcdatetime as the game's start, playercross, playercircle, timecontrol for a match clock, endreason and winner where v1 defines them), then the turns from the origin, the opening's stones among them.`,
+            ].join(` `),
+            headers: { 'Content-Disposition': { description: `An attachment with a plain ASCII file name.`, schema: { type: 'string' } } },
+            content: { 'application/zip': { schema: { type: 'string', format: 'binary' } } },
+        }).ref,
         archiveLimited: registry.registerComponent('responses', 'ArchiveLimited', {
             description: `A finished game is read at most ${rateText(archiveReadLimit)} per client, and ${rateText(archiveReadGlobalLimit)} across callers (rate_limited); or too many requests. Retry after Retry-After.`,
             headers: { 'Retry-After': retryAfter },
@@ -763,7 +780,7 @@ function registerSiteSurface(registry: OpenAPIRegistry, shared: SharedComponents
         operationId: 'updateBotSettings',
         tags: ['Bots'],
         security: [{ sessionCookie: [] }],
-        description: `Each present field replaces the stored one; an empty about or repoUrl clears the owner's, and the declared one shows again. With duels by others off, no game of a duel someone else started begins: one already running waits out its grace for its next game and is cut short.`,
+        description: `Each present field replaces the stored one; an empty about or repoUrl clears the owner's, and the declared one shows again. With duels by others off, the bot leaves every running duel and round robin someone else set up, and one left with fewer than two bots is cut short.`,
         parameters: [shared.botName],
         request: {
             body: { required: true, content: { 'application/json': { schema: botSettingsUpdateSchema } } },
@@ -950,7 +967,6 @@ function registerSiteSurface(registry: OpenAPIRegistry, shared: SharedComponents
     });
 
     registerTournamentPaths(registry, shared);
-    registerDuelPaths(registry, shared);
     registerPlayerPaths(registry, shared);
     registerAnalysisPaths(registry, shared);
 
@@ -973,6 +989,18 @@ function registerSiteSurface(registry: OpenAPIRegistry, shared: SharedComponents
 }
 
 const tournamentEntryError = errorBodySchema([...badRequestErrorCodes, `clock_not_accepted`]).meta({ id: `TournamentEntryError` });
+const failingBot = { bot: z.string().optional().meta({ description: `The first bot the refusal names, so the setup marks it.` }) };
+const tournamentCreateError = errorBodySchema([...badRequestErrorCodes, ...tournamentCreateErrorCodes])
+    .extend(failingBot)
+    .meta({ id: `TournamentCreateError` });
+const tournamentCreateForbiddenError = errorBodySchema(tournamentCreateForbiddenErrorCodes)
+    .extend({ bot: z.string().optional().meta({ description: `The bot taken out of play.` }) })
+    .meta({ id: `TournamentCreateForbiddenError` });
+const tournamentQuotaError = errorBodySchema([...tournamentQuotaErrorCodes, ...rateLimitedErrorCodes]).meta({ id: `TournamentQuotaError` });
+const tournamentStopForbiddenError = errorBodySchema(tournamentStopForbiddenErrorCodes).meta({ id: `TournamentStopForbiddenError` });
+const tournamentStopConflictError = errorBodySchema(tournamentStopConflictErrorCodes).meta({ id: `TournamentStopConflictError` });
+const tournamentWithdrawForbiddenError = errorBodySchema(tournamentWithdrawForbiddenErrorCodes).meta({ id: `TournamentWithdrawForbiddenError` });
+const tournamentWithdrawConflictError = errorBodySchema(tournamentWithdrawConflictErrorCodes).meta({ id: `TournamentWithdrawConflictError` });
 const tournamentForbiddenError = errorBodySchema([`not_owner`, `delisted`]).meta({ id: `TournamentForbiddenError` });
 const tournamentClosedError = errorBodySchema([`closed`, `full`]).meta({ id: `TournamentClosedError` });
 
@@ -1139,7 +1167,7 @@ function registerTournamentPaths(registry: OpenAPIRegistry, shared: SharedCompon
         name: 'id',
         in: 'path',
         required: true,
-        description: `The tournament's id.`,
+        description: `The tournament's id: t_, or d_ for a duel kept from the duels of old.`,
         schema: { type: 'string' },
     }).ref;
 
@@ -1149,10 +1177,69 @@ function registerTournamentPaths(registry: OpenAPIRegistry, shared: SharedCompon
         summary: 'List tournaments.',
         operationId: 'listTournaments',
         tags: ['Tournaments'],
-        security: [],
-        description: `The running tournament, up to ${String(tournamentWaitingCap)} waiting, and the latest ${String(tournamentListPastCap)} over. The operator schedules each one: a paired round robin of bots, one per owner.`,
+        security: [{ sessionCookie: [] }, {}],
+        description: [
+            `Up to ${String(tournamentRunningListCap)} running, ${String(tournamentWaitingCap)} waiting, and the latest ${String(tournamentListPastCap)} over: every one, one bot's, an unknown bot answering not_found, the caller's, or tests.`,
+            `For a signed-in caller, the list of every bot names under yours their bot in each, and its place.`,
+            `A duel's summary carries its pair for its score cells.`,
+        ].join(` `),
+        request: { query: tournamentListQuerySchema },
         responses: {
             200: { description: `The tournaments.`, content: { 'application/json': { schema: tournamentListSchema } } },
+            400: shared.badRequest,
+            404: shared.notFound,
+        },
+    });
+
+    registry.registerPath({
+        method: 'post',
+        path: tournamentsPath,
+        summary: 'Set up a duel or a round robin of bots.',
+        operationId: 'createTournament',
+        tags: ['Tournaments'],
+        security: [{ sessionCookie: [] }],
+        description: [
+            `The picked bots start at once, never rated: two play a duel, three or more a round robin, a round's pairs at once.`,
+            `One person's bots alone make a test.`,
+            `A person runs ${String(tournamentLiveCap)} at once and sets up ${String(tournamentDailyCap)} a UTC day; a bot plays in ${String(tournamentPerBotCap)} at once, at most ${String(tournamentBotGamesMax.event)} games in one, ${String(tournamentBotGamesMax.test)} in a test.`,
+        ].join(` `),
+        request: {
+            body: { required: true, content: { 'application/json': { schema: createTournamentRequestSchema } } },
+        },
+        responses: {
+            201: { description: `The new duel or round robin.`, content: { 'application/json': { schema: tournamentDetailSchema } } },
+            400: {
+                description: [
+                    `Validation failed (bad_request); a bot is not open (not_open), though the caller's own bot need not be, takes no duels or round robins from others (duel_refused), excludes the clock (clock_not_accepted), declares no such level (unknown_level), or is busy (bot_busy);`,
+                    `more than ${String(Math.max(...tournamentGameCounts))} games a pair outside a test (test_only); a bot past its most games (too_many_games); or the caller runs ${String(tournamentLiveCap)} already (tournament_busy).`,
+                ].join(` `),
+                content: { 'application/json': { schema: tournamentCreateError } },
+            },
+            401: shared.signedInUser,
+            403: {
+                description: `A picked bot is delisted (delisted), or its owner is banned (banned).`,
+                content: { 'application/json': { schema: tournamentCreateForbiddenError } },
+            },
+            404: shared.notFound,
+            429: {
+                description: `The caller set up ${String(tournamentDailyCap)} duels and round robins this UTC day (daily_tournament_cap), until 00:00 UTC, which Retry-After names; or too many requests (rate_limited).`,
+                headers: { 'Retry-After': shared.retryAfter },
+                content: { 'application/json': { schema: tournamentQuotaError } },
+            },
+            503: shared.paused,
+        },
+    });
+
+    registry.registerPath({
+        method: 'get',
+        path: tournamentBotsPath,
+        summary: `Read the bots' tournament states.`,
+        operationId: 'listTournamentBots',
+        tags: ['Tournaments'],
+        security: [],
+        description: `Every listed bot, as the bot list orders it, with its owner's switch for duels by others and the running duels and round robins people set up that it plays in. Read at most once every ${String(tournamentDetailMemoMs / 1000)} s, every caller in that time getting the same body.`,
+        responses: {
+            200: { description: `The listed bots' tournament states.`, content: { 'application/json': { schema: tournamentBotStatesSchema } } },
         },
     });
 
@@ -1163,11 +1250,71 @@ function registerTournamentPaths(registry: OpenAPIRegistry, shared: SharedCompon
         operationId: 'getTournament',
         tags: ['Tournaments'],
         security: [],
-        description: `Its entries, rounds, standings, and live games. Each pairing plays one opening twice, sides swapped, one game after the other; a game waits ${String(presenceGraceMs / 1000)} s for a bot that is not connected. A tournament is read at most once every ${String(tournamentDetailMemoMs / 1000)} s, every caller in that time getting the same body.`,
+        description: `Its entries, rounds, standings, live games, the bots games wait for, and a test's estimates. A game waits ${String(presenceGraceMs / 1000)} s for a bot not ready, then scores a no-show; a person's is cut short once fewer than two bots play. A tournament is read at most once every ${String(tournamentDetailMemoMs / 1000)} s, every caller in that time getting the same body.`,
         parameters: [tournamentId],
         responses: {
             200: { description: `The tournament.`, content: { 'application/json': { schema: tournamentDetailSchema } } },
             404: shared.notFound,
+        },
+    });
+
+    registry.registerPath({
+        method: 'get',
+        path: tournamentExportPath,
+        summary: `Download a tournament's games.`,
+        operationId: 'exportTournament',
+        tags: ['Tournaments'],
+        security: [],
+        description: `Every game over so far, at most ${String(tournamentGamesMax)}, numbered in the order played, any game under way left out; games.csv names each game's round, and standings.csv holds the standings as they stand.`,
+        parameters: [tournamentId],
+        responses: {
+            200: shared.gameExport,
+            404: shared.notFound,
+            429: shared.exportLimited,
+        },
+    });
+
+    registry.registerPath({
+        method: 'post',
+        path: tournamentStopPath,
+        summary: 'Stop a duel or round robin.',
+        operationId: 'stopTournament',
+        tags: ['Tournaments'],
+        security: [{ sessionCookie: [] }],
+        description: `The person who set a duel or round robin up stops it while it runs: no further game starts, the live ones play on to their results, and the standings stand.`,
+        parameters: [tournamentId],
+        responses: {
+            200: { description: `The tournament, stopped.`, content: { 'application/json': { schema: tournamentDetailSchema } } },
+            401: shared.signedInUser,
+            403: { description: `The caller did not set it up (not_yours).`, content: { 'application/json': { schema: tournamentStopForbiddenError } } },
+            404: shared.notFound,
+            409: { description: `It is already over (over).`, content: { 'application/json': { schema: tournamentStopConflictError } } },
+        },
+    });
+
+    registry.registerPath({
+        method: 'post',
+        path: tournamentWithdrawPath,
+        summary: 'Withdraw a bot from a duel or round robin.',
+        operationId: 'withdrawFromTournament',
+        tags: ['Tournaments'],
+        security: [{ sessionCookie: [] }],
+        description: [
+            `A bot's owner takes it out of a running duel or round robin a person set up: its live game plays on, and its games still to come score for its opponents.`,
+            `Leaving fewer than two bots to play, as in a duel, cuts it short. The operator's weekly answers not_found.`,
+        ].join(` `),
+        parameters: [tournamentId],
+        request: { body: { required: true, content: { 'application/json': { schema: tournamentWithdrawRequestSchema } } } },
+        responses: {
+            200: { description: `The tournament, the bot withdrawn.`, content: { 'application/json': { schema: tournamentDetailSchema } } },
+            400: shared.badRequest,
+            401: shared.signedInUser,
+            403: { description: `The caller does not own the bot (not_owner).`, content: { 'application/json': { schema: tournamentWithdrawForbiddenError } } },
+            404: shared.notFound,
+            409: {
+                description: `The tournament is over (over), or the bot plays no further game in it: never in its field, or withdrawn already (not_playing).`,
+                content: { 'application/json': { schema: tournamentWithdrawConflictError } },
+            },
         },
     });
 
@@ -1205,127 +1352,6 @@ function registerTournamentPaths(registry: OpenAPIRegistry, shared: SharedCompon
             401: shared.unauthorized,
             404: shared.notFound,
             409: { description: `The tournament no longer waits (closed).`, content: { 'application/json': { schema: tournamentClosedError } } },
-        },
-    });
-}
-
-const duelCreateError = errorBodySchema([...badRequestErrorCodes, ...duelCreateErrorCodes]).meta({ id: `DuelCreateError` });
-const duelForbiddenError = errorBodySchema(duelForbiddenErrorCodes).meta({ id: `DuelForbiddenError` });
-const duelQuotaError = errorBodySchema([...duelQuotaErrorCodes, ...rateLimitedErrorCodes]).meta({ id: `DuelQuotaError` });
-const duelStopForbiddenError = errorBodySchema(duelStopForbiddenErrorCodes).meta({ id: `DuelStopForbiddenError` });
-const duelStopConflictError = errorBodySchema(duelStopConflictErrorCodes).meta({ id: `DuelStopConflictError` });
-
-function registerDuelPaths(registry: OpenAPIRegistry, shared: SharedComponents) {
-    const duelId = registry.registerComponent('parameters', 'DuelId', {
-        name: 'id',
-        in: 'path',
-        required: true,
-        description: `The duel's id.`,
-        schema: { type: 'string' },
-    }).ref;
-
-    registry.registerPath({
-        method: 'post',
-        path: duelListPath,
-        summary: 'Start a duel between two bots.',
-        operationId: 'createDuel',
-        tags: ['Duels'],
-        security: [{ sessionCookie: [] }],
-        description: [
-            `Two ready bots play one game at a time, each a gameStart with no challenge.`,
-            `Rated only when the caller owns exactly one bot, both at their default level, within the daily caps.`,
-            `Two bots of one owner play a test, never rated.`,
-            `A person runs ${String(duelLiveCap)} at once and ${String(duelDailyCap)} a UTC day; a bot ${String(duelPerBotCap)}, a pair one.`,
-        ].join(` `),
-        request: {
-            body: { required: true, content: { 'application/json': { schema: createDuelRequestSchema } } },
-        },
-        responses: {
-            201: { description: `The new duel.`, content: { 'application/json': { schema: duelDetailSchema } } },
-            400: {
-                description: `Validation failed (bad_request); a bot is not open (not_open), though the caller's own bot need not be, takes no duels from others (duel_refused), excludes the clock (clock_not_accepted), declares no such level (unknown_level), or is busy (bot_busy); the pair runs a duel (duel_live); the caller runs its most (duel_busy), asked rated where it may not (unrated_only), or asked more than ${String(Math.max(...duelGameCounts))} games outside a test (test_only).`,
-                content: { 'application/json': { schema: duelCreateError } },
-            },
-            401: shared.signedInUser,
-            403: {
-                description: `A bot is delisted (delisted), or its owner is banned (banned).`,
-                content: { 'application/json': { schema: duelForbiddenError } },
-            },
-            404: shared.notFound,
-            429: {
-                description: `The caller started ${String(duelDailyCap)} duels and tests this UTC day (daily_duel_cap); a rated duel would pass the pair's or a bot's daily cap (daily_pair_cap, daily_bot_cap), until 00:00 UTC, which Retry-After names; or too many requests (rate_limited).`,
-                headers: { 'Retry-After': shared.retryAfter },
-                content: { 'application/json': { schema: duelQuotaError } },
-            },
-            503: shared.paused,
-        },
-    });
-
-    registry.registerPath({
-        method: 'get',
-        path: duelListPath,
-        summary: 'List duels.',
-        operationId: 'listDuels',
-        tags: ['Duels'],
-        security: [],
-        description: `Running duels and the latest over, ${String(duelListCap)} of each at most, across the site, for one bot, for the caller, or of one kind. An unknown bot answers not_found.`,
-        request: { query: duelListQuerySchema },
-        responses: {
-            200: { description: `The running and recent duels.`, content: { 'application/json': { schema: duelListSchema } } },
-            400: shared.badRequest,
-            404: shared.notFound,
-        },
-    });
-
-    registry.registerPath({
-        method: 'get',
-        path: duelBotsPath,
-        summary: `Read the bots' duel states.`,
-        operationId: 'listDuelBots',
-        tags: ['Duels'],
-        security: [],
-        description: `Every listed bot, as the bot list orders it, with its owner's switch for duels by others and the bots it plays a running duel with. Read at most once every ${String(duelDetailMemoMs / 1000)} s, every caller in that time getting the same body.`,
-        responses: {
-            200: { description: `The listed bots' duel states.`, content: { 'application/json': { schema: duelBotStatesSchema } } },
-        },
-    });
-
-    registry.registerPath({
-        method: 'get',
-        path: duelPath,
-        summary: 'Read a duel.',
-        operationId: 'getDuel',
-        tags: ['Duels'],
-        security: [],
-        description: `Its bots, terms, score, every game, the live game, the bot the next game waits for, and a test's estimate. A duel is read at most once every ${String(duelDetailMemoMs / 1000)} s, every caller in that time getting the same body.`,
-        parameters: [duelId],
-        responses: {
-            200: { description: `The duel.`, content: { 'application/json': { schema: duelDetailSchema } } },
-            404: shared.notFound,
-        },
-    });
-
-    registry.registerPath({
-        method: 'post',
-        path: duelStopPath,
-        summary: 'Stop a duel.',
-        operationId: 'stopDuel',
-        tags: ['Duels'],
-        security: [{ sessionCookie: [] }],
-        description: `The starter or either bot's owner stops a running duel: no further game starts, and the live one plays on to its result.`,
-        parameters: [duelId],
-        responses: {
-            200: { description: `The duel, stopped.`, content: { 'application/json': { schema: duelDetailSchema } } },
-            401: shared.signedInUser,
-            403: {
-                description: `The caller neither started the duel nor owns one of its bots (not_yours).`,
-                content: { 'application/json': { schema: duelStopForbiddenError } },
-            },
-            404: shared.notFound,
-            409: {
-                description: `The duel is already over (over).`,
-                content: { 'application/json': { schema: duelStopConflictError } },
-            },
         },
     });
 }

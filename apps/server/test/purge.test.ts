@@ -1,8 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { createQuery, openDatabase, runMigrations, type Query, type Sqlite } from '../src/db';
+import { createQuery, type Query, type Sqlite } from '../src/db';
 import { purgeExpired, schedulePurges } from '../src/purge';
 import { createBot, findBot } from '../src/bots';
 import { createUserWithExactName } from '../src/users';
+import { migratedDatabase } from './helpers';
 
 const at = (iso: string) => Math.floor(Date.parse(iso) / 1000);
 
@@ -11,8 +12,7 @@ describe('the nightly purge', () => {
     let query: Query;
 
     beforeEach(() => {
-        sqlite = openDatabase(`:memory:`);
-        runMigrations(sqlite);
+        sqlite = migratedDatabase();
         query = createQuery(sqlite);
         const owner = createUserWithExactName(query, `dev:owner`, `owner`);
         if (owner === `name_taken`) throw new Error(`seed name taken`);

@@ -1,8 +1,10 @@
-import { clockText, type GamePlayer, type LiveGameEntry, type Side } from '@hexo-arena/contract';
+import type { ReactNode } from 'react';
+import { clockText, pagePath, type GamePlayer, type LiveGameEntry, type Side } from '@hexo-arena/contract';
 import { BotBadge, seatLevelFacts, seatName, Swatch } from '../components/player';
 import { Clock } from '../game/Clock';
 import { Link } from '../router/Link';
 import { text } from '../text';
+import { gameCaption } from '../tournaments/words';
 import { MiniBoard } from './MiniBoard';
 import type { LiveView } from './use-live-replay';
 import './LiveGameCard.css';
@@ -11,7 +13,7 @@ import './LiveGameCard.css';
  * Live games as a grid of boards, each card a way into its game;
  * the cards' headings sit one level under the section holding them.
  */
-export function LiveGameGrid({ games, level }: { games: readonly LiveView[]; level: 2 | 3 }) {
+export function LiveGameGrid({ games, level, children }: { games: readonly LiveView[]; level: 2 | 3; children?: ReactNode }) {
     return (
         <ul className="live-grid">
             {games.map((game) => (
@@ -19,6 +21,7 @@ export function LiveGameGrid({ games, level }: { games: readonly LiveView[]; lev
                     <LiveGameCard game={game} level={level} />
                 </li>
             ))}
+            {children}
         </ul>
     );
 }
@@ -37,7 +40,7 @@ function LiveGameCard({ game, level }: { game: LiveView; level: 2 | 3 }) {
         <article className="live-card">
             <div className="live-card-body">
                 <Heading className="live-card-title">
-                    <Link to={`/game/${encodeURIComponent(entry.gameId)}`} className="live-card-link">
+                    <Link to={pagePath(`game`, { gameId: entry.gameId })} className="live-card-link">
                         <span className="sr-only">{text.ladder.live.watch}</span>
                         <Seat side="x" player={entry.players.x} />
                         <span className="live-vs">{text.ladder.live.vs}</span>
@@ -51,7 +54,7 @@ function LiveGameCard({ game, level }: { game: LiveView; level: 2 | 3 }) {
                 <p className="live-card-meta">
                     {entry.test === true ? <span className="tag muted">{text.games.test}</span> : entry.rated ? null : <span className="tag muted">{text.ladder.live.unrated}</span>}
                     <span>{clockText(entry.timeControl)}</span>
-                    {entry.duel === undefined ? null : <span>{text.duels.caption(entry.test === true ? `test` : `duel`, entry.duel.game, entry.duel.of)}</span>}
+                    {entry.tournament === undefined ? null : <span>{gameCaption(entry.tournament, entry.test === true)}</span>}
                 </p>
             </div>
             <MiniBoard game={game} />

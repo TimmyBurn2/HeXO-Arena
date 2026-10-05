@@ -27,8 +27,8 @@ import { randomToken } from './tokens';
 
 type Timer = ReturnType<typeof setTimeout>;
 
-/** A position to read: the board, the lines the analyzer declared, and the seconds it is given. */
-export interface ReadingAsk {
+// A position to read: the board, the lines the analyzer declared, and the seconds it is given.
+interface ReadingAsk {
     readonly setup: Setup;
     readonly lines: number;
     readonly seconds: number;
@@ -61,10 +61,10 @@ interface Session {
     calledOff: Omit<Outstanding, `timer` | `settle`> | null;
 }
 
-export interface AnalyzerDeps {
-    /** Whether the bot holds its stream, so an offer can reach it. */
+interface AnalyzerDeps {
+    // Whether the bot holds its stream, so an offer can reach it.
     readonly online: (botId: string) => boolean;
-    /** Whether the bot declares an analyzer and may read: not delisted, its owner not banned. */
+    // Whether the bot declares an analyzer and may read: not delisted, its owner not banned.
     readonly mayAnalyze: (botId: string) => boolean;
     readonly send: (botId: string, event: AnalysisSessionEvent) => void;
     readonly now: () => number;

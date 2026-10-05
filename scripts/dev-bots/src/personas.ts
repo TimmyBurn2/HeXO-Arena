@@ -4,8 +4,8 @@ import type { Strategy } from './player';
 
 export type PersonaName = (typeof devPersonas)[number][`name`];
 
-/** A bot one of the personas owns. */
-export interface PersonaBot {
+// A bot one of the personas owns.
+interface PersonaBot {
     readonly name: string;
     readonly owner: PersonaName;
     readonly strategy: Strategy;
@@ -38,14 +38,15 @@ export const personaBots: readonly PersonaBot[] = [
     },
     // Never connects and declares nothing, so it shows a bot's empty states.
     { name: `lantern`, owner: `ana`, strategy: `random`, online: false, declaration: null },
-    // Offline with what they declared, so ana holds as many bots as an account may.
+    // Online with ana's other two, so she can test three of her bots at once.
     {
         name: `cinder`,
         owner: `ana`,
         strategy: `random`,
-        online: false,
+        online: true,
         declaration: { about: randomAbout, version: `0.2.0`, accepts: { turnMs: [5_000, 60_000], match: false, unlimited: true }, levels: devLevels },
     },
+    // Offline with what it declared, so ana holds as many bots as an account may.
     { name: `tarn`, owner: `ana`, strategy: `random`, online: false, declaration: { about: randomAbout, accepts: { turnMs: [10_000, 300_000], match: true, unlimited: false } } },
     {
         name: `quietlake`,

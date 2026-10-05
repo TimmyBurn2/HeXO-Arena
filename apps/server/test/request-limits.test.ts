@@ -1,6 +1,8 @@
 import {
     accountExportLimit,
     archiveReadGlobalLimit,
+    gameExportGlobalLimit,
+    gameExportLimit,
     archiveReadLimit,
     botManagementLimit,
     clientRequestLimit,
@@ -42,7 +44,7 @@ afterEach(async () => {
 
 async function start(options: Parameters<typeof createTestApp>[0] = {}): Promise<{ app: TestApp[`app`]; tick: (ms: number) => void }> {
     let now = 1_000_000;
-    world = await createTestApp({ logger: false, trustedProxy: proxy, now: () => now, ...options });
+    world = await createTestApp({ trustedProxy: proxy, now: () => now, ...options });
     return {
         app: world.app,
         tick: (ms) => {
@@ -178,6 +180,8 @@ describe('request limits', () => {
             discordExchange: discordExchangeLimit,
             archiveRead: archiveReadLimit,
             archiveReadGlobal: archiveReadGlobalLimit,
+            gameExport: gameExportLimit,
+            gameExportGlobal: gameExportGlobalLimit,
             report: reportLimit,
             reportPrefix: reportPrefixLimit,
             reportGlobal: reportGlobalLimit,
@@ -228,16 +232,16 @@ describe('request limits', () => {
         expect(classes).toEqual({
             'GET /healthz': `public`,
             'GET /api/tournaments': `public`,
+            'POST /api/tournaments': `principal`,
+            'POST /api/tournaments/:id/stop': `principal`,
+            'POST /api/tournaments/:id/withdraw': `principal`,
             'GET /api/players/:name': `public`,
             'GET /api/players/:name/rating': `public`,
+            'GET /api/tournaments/bots': `public`,
             'GET /api/tournaments/:id': `public`,
+            'GET /api/tournaments/:id/export': `public`,
             'PUT /api/tournaments/:id/entry': `principal`,
             'DELETE /api/tournaments/:id/entry': `principal`,
-            'POST /api/duels': `principal`,
-            'GET /api/duels': `public`,
-            'GET /api/duels/bots': `public`,
-            'GET /api/duels/:id': `public`,
-            'POST /api/duels/:id/stop': `principal`,
             'GET /api/leaderboard': `public`,
             'GET /api/me': `public`,
             'DELETE /api/me': `principal`,
@@ -285,10 +289,15 @@ describe('request limits', () => {
             'GET /play': `shell`,
             'GET /play/duels': `shell`,
             'GET /play/duels/:id': `shell`,
+            'GET /play/tournament': `shell`,
+            'GET /duels': `shell`,
+            'GET /duels/:id': `shell`,
             'GET /analysis': `shell`,
             'GET /bots': `shell`,
             'GET /games': `shell`,
             'GET /games/live': `shell`,
+            'GET /games/duels': `shell`,
+            'GET /games/tournaments': `shell`,
             'GET /tournaments': `shell`,
             'GET /connect': `shell`,
             'GET /profile': `shell`,
@@ -298,10 +307,10 @@ describe('request limits', () => {
             'GET /legal/imprint': `shell`,
             'GET /legal/privacy': `shell`,
             'GET /legal/terms': `shell`,
-            'GET /bots/:name': `shell`,
+            'GET /bots/:bot': `shell`,
             'GET /game/:gameId': `shell`,
             'GET /tournaments/:id': `shell`,
-            'GET /players/:name': `shell`,
+            'GET /players/:player': `shell`,
         });
     });
 

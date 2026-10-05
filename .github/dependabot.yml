@@ -1,0 +1,50 @@
+# Minor and patch updates arrive as one grouped pull request per ecosystem a
+# month; a major version comes alone, so a breaking upgrade is never hidden in
+# a bundle.
+version: 2
+updates:
+    - package-ecosystem: npm
+      directory: /
+      target-branch: develop
+      schedule:
+          interval: monthly
+      commit-message:
+          prefix: build(deps)
+      groups:
+          dependencies:
+              update-types: [minor, patch]
+      ignore:
+          # typescript-eslint supports TypeScript below 6.1 only.
+          - dependency-name: typescript
+            versions: [7.x]
+    - package-ecosystem: docker
+      directory: /docker/prod
+      target-branch: develop
+      schedule:
+          interval: monthly
+      commit-message:
+          prefix: build(deps)
+      groups:
+          images:
+              update-types: [minor, patch]
+    # Caddy is pinned in the compose file, which the docker ecosystem does not read.
+    - package-ecosystem: docker-compose
+      directory: /docker/prod
+      target-branch: develop
+      schedule:
+          interval: monthly
+      commit-message:
+          prefix: build(deps)
+      groups:
+          compose:
+              update-types: [minor, patch]
+    - package-ecosystem: github-actions
+      directory: /
+      target-branch: develop
+      schedule:
+          interval: monthly
+      commit-message:
+          prefix: ci(deps)
+      groups:
+          actions:
+              update-types: [minor, patch]

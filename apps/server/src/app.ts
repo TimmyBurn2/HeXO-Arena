@@ -39,7 +39,7 @@ import { registerLeaderboardApi } from './leaderboard-api';
 import type { DiscordOAuth } from './discord';
 import { drain } from './drain';
 import { randomFloat } from './random';
-import { ErasureJournal, reapplyErasures } from './erasure';
+import { ErasureJournal, reapplyErasures, withdrawBot } from './erasure';
 import { deleteBotByPolicy, ownedBotId } from './moderation';
 import type { PresenceRegistry } from './presence';
 import { GuestSessions } from './guests';
@@ -54,13 +54,11 @@ import { registerSignInApi } from './sign-in-api';
 import { sweepSignups } from './signups';
 import { beginGeneration, StartGate } from './site-state';
 import { createPlayerReads, registerPlayerApi } from './player-api';
-import { registerDuelApi } from './duel-api';
-import { DuelRunner } from './duel-runner';
 import { registerTournamentApi } from './tournament-api';
 import { TournamentScheduler } from './tournament-scheduler';
 import type { GameWatchers } from './watchers';
 
-export interface AppDeps {
+interface AppDeps {
     sqlite: Sqlite;
     discord: DiscordOAuth | null;
     secureCookies: boolean;
@@ -87,8 +85,10 @@ export interface AppDeps {
     // The clock the limits count by, and their numbers; tests move and shrink them.
     now?: () => number;
     limits?: LimitTable;
-    // How often the tournament scheduler and the duel runner look for work; 0 leaves them to the caller's ticks.
+    // How often the tournament scheduler looks for work; 0 leaves it to the caller's ticks.
     tournamentTickMs?: number;
+    // The pause between a round robin's rounds, the contract's unless a test shortens it.
+    tournamentRoundGapMs?: number;
     // Where backups go and how many stay; without it the admin socket writes none.
     backup?: Pick<BackupPolicy, `dir` | `keep`>;
     // The erasure journal's file, and how long an entry stays: a day past the oldest backup.
@@ -102,12 +102,11 @@ export interface BuiltApp {
     limits: RequestLimits;
     admin: AdminHandler;
     tournaments: TournamentScheduler;
-    duels: DuelRunner;
     drain: (graceMs: number) => Promise<number>;
 }
 
-// The tournament scheduler and the duel runner look for a game to start,
-// a grace to end, or a round to begin this often.
+// The tournament scheduler looks for a game to start, a grace to end, or
+// a round to begin this often.
 const tournamentTickMs = 1_000;
 
 // Expired sign-ups and sessions, with the Discord names they hold,
@@ -226,21 +225,12 @@ export async function buildApp(deps: AppDeps): Promise<BuiltApp> {
         draining: () => gate.draining,
         leadMs,
         actor: deps.adminActor,
-        ...(deps.now === undefined ? {} : { now: deps.now }),
-    });
-    const duels = new DuelRunner({
-        query,
-        presence,
-        games,
-        generation,
-        draining: () => gate.draining,
-        reservations: tournaments,
+        ...(deps.tournamentRoundGapMs === undefined ? {} : { roundGapMs: deps.tournamentRoundGapMs }),
         ...(deps.now === undefined ? {} : { now: deps.now }),
     });
     const ladder = new Ladder({ rank: (filter) => rankablePlayers(query, filter), now: deps.now ?? Date.now });
     games.onFinish((finished) => {
         tournaments.gameFinished(finished);
-        duels.gameFinished(finished);
         // A finish moves ratings, which the ladder shows at once rather than in ten seconds.
         ladder.clear();
     });
@@ -250,24 +240,18 @@ export async function buildApp(deps: AppDeps): Promise<BuiltApp> {
         deps.erasures === undefined ? null : new ErasureJournal({ ...deps.erasures, log: app.log, ...(deps.now === undefined ? {} : { now: deps.now }) });
     if (erasures !== null) {
         erasures.prune();
-        const applied = reapplyErasures({ games, presence, challenges, tournaments, duels, analysis: { withdraw: (botId) => { analyzers.close(botId); } } }, query, erasures);
+        const applied = reapplyErasures({ games, presence, challenges, tournaments, analysis: { withdraw: (botId) => { analyzers.close(botId); } } }, query, erasures);
         if (applied > 0) app.log.warn({ applied }, `deletions applied again after a restore`);
     }
     const purges = deps.purgeHourUtc === undefined ? null : schedulePurges({ query, journal: erasures, hourUtc: deps.purgeHourUtc, log: app.log });
     const tickMs = deps.tournamentTickMs ?? tournamentTickMs;
-    if (tickMs > 0) {
-        tournaments.start(tickMs);
-        duels.start(tickMs);
-    }
+    if (tickMs > 0) tournaments.start(tickMs);
     const guests = new GuestSessions({
         seated: (guestId) => games.activeHumanGameCount({ kind: `guest`, id: guestId }) > 0,
         ended: (guestId) => {
             games.endGuest(guestId);
         },
     });
-    // Challenge lines lead the replay: they wait on a TTL that the games,
-    // with their own clocks and sessions, do not.
-    // A bot that declares an analyzer hears last how to dial its session.
     const analysis = new AnalysisService({ query, analyzers, games, now: deps.now ?? Date.now });
     games.onStart((botIds) => {
         analysis.gameStarted(botIds);
@@ -275,6 +259,9 @@ export async function buildApp(deps: AppDeps): Promise<BuiltApp> {
     games.onFinish(() => {
         analysis.dispatch();
     });
+    // Challenge lines lead the replay: they wait on a TTL that the games,
+    // with their own clocks and sessions, do not.
+    // A bot that declares an analyzer hears last how to dial its session.
     const gameReplay = presence.replay;
     presence.replay = (botId) => {
         const offer = analyzers.offer(botId);
@@ -290,7 +277,6 @@ export async function buildApp(deps: AppDeps): Promise<BuiltApp> {
         clearInterval(sweep);
         purges?.stop();
         tournaments.stop();
-        duels.stop();
         challenges.stop();
         games.stop();
         analysis.stop();
@@ -302,9 +288,8 @@ export async function buildApp(deps: AppDeps): Promise<BuiltApp> {
     registerGameApi(app, { query, presence, games, watchers, gate, guests, limits, reservations: tournaments });
     registerFinishedGamesApi(app, { query, now: deps.now ?? Date.now });
     registerLeaderboardApi(app, { ladder, presence, now: deps.now ?? Date.now });
-    registerTournamentApi(app, { query, presence, games, limits, now: deps.now ?? Date.now });
-    registerBotSettingsApi(app, { query, limits });
-    registerDuelApi(app, { query, presence, games, gate, limits, reservations: tournaments, duels, random: deps.random ?? randomFloat, now: deps.now ?? Date.now });
+    registerTournamentApi(app, { query, presence, games, gate, limits, tournaments, random: deps.random ?? randomFloat, now: deps.now ?? Date.now });
+    registerBotSettingsApi(app, { query, limits, tournaments });
     const playerReads = createPlayerReads({ query, ladder, now: deps.now ?? Date.now });
     registerPlayerApi(app, { reads: playerReads });
     registerSessionApi(app, {
@@ -313,7 +298,7 @@ export async function buildApp(deps: AppDeps): Promise<BuiltApp> {
         games,
         secureCookies: deps.secureCookies,
         limits,
-        erasure: { presence, challenges, tournaments, duels, analysis },
+        erasure: { presence, challenges, tournaments, analysis },
         erasures,
         ladder,
         analysis,
@@ -343,7 +328,6 @@ export async function buildApp(deps: AppDeps): Promise<BuiltApp> {
         games,
         challenges,
         tournaments,
-        duels,
         limits,
         ladder,
         actor: deps.adminActor,
@@ -406,11 +390,7 @@ export async function buildApp(deps: AppDeps): Promise<BuiltApp> {
         if (games.activeGameCount(botId) > 0) {
             return reply.code(409).send({ error: `the bot is in a live game`, code: `in_game` });
         }
-        presence.close(botId);
-        analysis.withdraw(botId);
-        challenges.withdrawFor(botId);
-        tournaments.withdraw(botId, `deleted`);
-        duels.endForBot(botId, `deleted`);
+        withdrawBot({ games, presence, analysis, challenges, tournaments }, botId, `deleted`);
         query.transaction((tx) => deleteBotByPolicy(tx, botId));
         return reply.code(204).send();
     });
@@ -432,5 +412,5 @@ export async function buildApp(deps: AppDeps): Promise<BuiltApp> {
         return reply.code(200).send(rotated);
     });
 
-    return { app, admin, limits, tournaments, duels, drain: (graceMs) => drain({ query, gate, games, generation }, graceMs) };
+    return { app, admin, limits, tournaments, drain: (graceMs) => drain({ query, gate, games, generation }, graceMs) };
 }

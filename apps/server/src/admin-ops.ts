@@ -13,7 +13,7 @@ import type { AdminHandler } from './admin-socket';
 import { recentAdminActions, recordAdminAction } from './admin-store';
 import type { AnalysisService } from './analysis-service';
 import { clientCensus, findBot, findBotClient } from './bots';
-import { eraseUser, type ErasureJournal } from './erasure';
+import { eraseUser, withdrawBot, type ErasureJournal } from './erasure';
 import {
     banUser,
     botIdsOf,
@@ -34,21 +34,19 @@ import { findGame } from './game-store';
 import type { Ladder } from './ladder';
 import type { PresenceRegistry } from './presence';
 import type { RequestLimits } from './request-limits';
-import type { DuelRunner } from './duel-runner';
-import { countRunningDuels } from './duel-store';
 import { isPaused, setPaused } from './site-state';
 import type { TournamentScheduler } from './tournament-scheduler';
 import { addTournamentRule, adminTournamentRules, nextRuleStart, removeTournamentRule, ruleSlot } from './tournament-rules';
-import { createTournament, openTournaments } from './tournament-store';
+import { countRunningPersonTournaments, createTournament, openTournaments } from './tournament-store';
+import { daySeconds } from './utc-day';
 
-export interface AdminDeps {
+interface AdminDeps {
     query: Query;
     presence: PresenceRegistry;
     analysis: Pick<AnalysisService, `withdraw` | `delete`>;
     games: GameRegistry;
     challenges: ChallengeRegistry;
-    tournaments: Pick<TournamentScheduler, `cancel` | `withdraw`>;
-    duels: Pick<DuelRunner, `stopDuel` | `endForBot`>;
+    tournaments: Pick<TournamentScheduler, `cancel` | `withdraw` | `stopSetUpBy`>;
     limits: Pick<RequestLimits, `clientCount` | `keys`>;
     ladder: Pick<Ladder, `clear`>;
     actor: string;
@@ -76,8 +74,9 @@ function statusOf(deps: AdminDeps): AdminStatus {
         keylessRequests: deps.limits.keys.keyless,
         tournaments: openTournaments(deps.query),
         tournamentRules: adminTournamentRules(deps.query, nowOf(deps), deps.tournamentLeadMs),
-        liveDuels: countRunningDuels(deps.query),
-        clients: clientCensus(deps.query, Math.floor(nowOf(deps) / 1000) - clientCensusDays * 86_400),
+        liveDuels: countRunningPersonTournaments(deps.query, `duel`),
+        liveRoundRobins: countRunningPersonTournaments(deps.query, `round_robin`),
+        clients: clientCensus(deps.query, Math.floor(nowOf(deps) / 1000) - clientCensusDays * daySeconds),
         recentActions: recentAdminActions(deps.query, recentActionCount),
         openReportCount: reports.count,
         openReports: reports.oldest,
@@ -317,13 +316,8 @@ export function createAdminHandler(deps: AdminDeps): AdminHandler {
                         done: `delisted ${request.name}`,
                         unchanged: `already delisted`,
                         notFound: `no such bot`,
-                        // Its stream and live games run on; only what is
-                        // still pending leaves with it.
                         live: (botId) => {
-                            deps.analysis.withdraw(botId);
-                            deps.challenges.withdrawFor(botId);
-                            deps.tournaments.withdraw(botId, `delisted`);
-                            deps.duels.endForBot(botId, `delisted`);
+                            withdrawBot(deps, botId, `delisted`);
                         },
                     }),
                 );
@@ -333,17 +327,9 @@ export function createAdminHandler(deps: AdminDeps): AdminHandler {
                         done: `banned ${request.name}`,
                         unchanged: `already banned`,
                         notFound: `no such user`,
-                        // A closed stream orphans the bot's live games,
-                        // which then forfeit on the clock, rated: a ban
-                        // grants no unrated escape.
                         live: (userId) => {
-                            for (const botId of botIdsOf(deps.query, userId)) {
-                                deps.presence.close(botId);
-                                deps.analysis.withdraw(botId);
-                                deps.challenges.withdrawFor(botId);
-                                deps.tournaments.withdraw(botId, `banned`);
-                                deps.duels.endForBot(botId, `banned`);
-                            }
+                            deps.tournaments.stopSetUpBy(userId, `banned`);
+                            for (const botId of botIdsOf(deps.query, userId)) withdrawBot(deps, botId, `banned`);
                         },
                     }),
                 );
@@ -404,17 +390,6 @@ export function createAdminHandler(deps: AdminDeps): AdminHandler {
                             return { response: unchanged(`the report is already closed`) };
                         case `not_found`:
                             return { response: notFound(`no such report`) };
-                    }
-                });
-            case `duel-stop`:
-                return audited(deps, request, request.id, () => {
-                    switch (deps.duels.stopDuel(request.id, { reason: `operator`, bot: null })) {
-                        case `stopped`:
-                            return { response: done(`stopped ${request.id}; no further game starts, and a live one plays on`) };
-                        case `over`:
-                            return { response: unchanged(`the duel is already over`) };
-                        case `not_found`:
-                            return { response: notFound(`no such duel`) };
                     }
                 });
             case `delete-analysis`:

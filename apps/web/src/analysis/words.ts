@@ -2,7 +2,8 @@ import type { Side } from '@hexo-arena/contract';
 import type { TurnRejection } from '@hexo-arena/rules';
 import { text } from '../text';
 import { cellText, type NotationError } from './notation';
-import type { TreeRefusal } from './tree';
+import { floorOf } from './state';
+import { isMainLine, mainLine, nodeAt, openingTurns, rootId, type MoveTree, type NodeId, type TreeRefusal } from './tree';
 
 /** Why pasted text or a link loaded nothing, naming the turn and the cell where it can. */
 export function notationErrorText(error: NotationError): string {
@@ -89,6 +90,20 @@ function rejectionText(rejection: TurnRejection): string {
 export function positionWords(toMove: Side, marked: boolean, won: Side | null): string {
     if (won !== null) return text.analysis.nav.won(won);
     return marked ? text.analysis.nav.oneLeft(toMove) : text.analysis.nav.toMove(toMove);
+}
+
+/**
+ * Where the board stands, as its steps say it: setting up; a stored game's drawn opening;
+ * a variation's turn; a turn of the game, out of its last; or a turn of the line.
+ * `openingPlies` is a stored game's, null on any other board.
+ */
+export function turnWords(tree: MoveTree, at: NodeId, editing: boolean, openingPlies: number | null): string {
+    if (editing) return text.analysis.nav.setup;
+    if (openingPlies !== null && at === floorOf(tree) && openingTurns(tree.root) > 0) return openingPlies === 1 ? text.replay.origin : text.replay.opening(openingPlies);
+    const turn = nodeAt(tree, at)?.turn ?? 0;
+    if (!isMainLine(tree, at)) return text.analysis.nav.variation(turn);
+    if (openingPlies === null) return text.analysis.nav.turn(turn);
+    return text.analysis.nav.turnOf(turn, nodeAt(tree, mainLine(tree).at(-1) ?? rootId)?.turn ?? 0);
 }
 
 function assertNever(value: never): never {

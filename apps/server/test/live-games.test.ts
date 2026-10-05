@@ -33,7 +33,7 @@ describe('GET /api/games', () => {
     }
 
     beforeEach(async () => {
-        world = await createTestApp({ logger: false });
+        world = await createTestApp();
         const owners = [await loginAs(world.app, `ownerone`), await loginAs(world.app, `ownertwo`)];
         for (const [index, name] of botNames.entries()) {
             const token = await mintBot(world.app, owners[index === 3 ? 1 : 0] ?? ``, name);

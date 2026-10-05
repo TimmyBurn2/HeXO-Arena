@@ -1,7 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
 import type { Me } from '@hexo-arena/contract';
-import { looks, wear } from './matrix';
-import { serve, world } from './mock-api';
+import { capturing, looks, sweep, wear } from './matrix';
+import { roundRobins, serve, world } from './mock-api';
 
 // A short screen's footer sits at the foot of the window, clear of the
 // phone tab strip, rather than under the content wherever it ends.
@@ -69,7 +69,7 @@ test('the footer tagline breaks after the comma and wraps at large text', async 
 
 // Scaled-up text on a narrow window must not leave one word of the tagline
 // on a line of its own.
-test('the footer tagline never ends on a lone word from 320 to 1280 px at 100, 150, and 200% text', async ({ page }) => {
+test('the footer tagline never ends on a lone word from 320 to 1280 px at 100, 150, and 200% text', sweep, async ({ page }) => {
     const look = looks[0];
     if (look === undefined) throw new Error(`no look registered`);
     await wear(page, look);
@@ -147,6 +147,15 @@ async function footerLayout(page: Page) {
     });
 }
 
+// Tournaments live under Games, so the footer leaves them to the bar; Build a bot is no phone tab, so the footer is its way in on phones.
+const standingLinks = [
+    [`Build a bot`, `/connect`],
+    [`Credits`, `/credits`],
+    [`Bot API`, `https://github.com/TimmyBurn2/Hexo-Bot-Api`],
+    [`Source`, `https://github.com/TimmyBurn2/HeXO-Arena`],
+    [`Feedback`, `https://github.com/TimmyBurn2/HeXO-Arena/issues/new/choose`],
+];
+
 const legalLinks = [
     [`Impressum / Legal notice`, `/legal/imprint`],
     [`Privacy`, `/legal/privacy`],
@@ -154,10 +163,14 @@ const legalLinks = [
     [`Licenses`, `/third-party-licenses.txt`],
 ];
 
-const framedScreens = [`/`, `/games`, `/ladder`, `/bots`, `/bots/sealbot`, `/connect`, `/profile`, `/credits`, `/report`, `/legal/imprint`, `/legal/privacy`, `/legal/terms`, `/nowhere`, `/game/nope`];
+// The footer is one component under every framed screen, which the route
+// reaches only through the Report link's subject; the unit tests hold the
+// links on every framed screen, so three screens stand for the layout: a
+// short page, a long one, and the report form, whose Report names no page.
+const framedScreens = [`/nowhere`, `/profile`, `/report`];
 
-// The legal links are the footer's last group: at the bottom right where
-// the footer is a row, at its end where it stacks, signed in or out.
+// The standing links lead the footer's groups and the legal links are its last:
+// at the bottom right where the footer is a row, at its end where it stacks, signed in or out.
 const visitors: readonly (readonly [string, Me])[] = [
     [`signed out`, null],
     [`signed in`, { kind: `user`, name: `quinn`, rating: 1503, provisional: false, discord: null, liveGames: [], analysisOptOut: false, analysisLeft: { positions: 300, games: 10 } }],
@@ -165,11 +178,11 @@ const visitors: readonly (readonly [string, Me])[] = [
 ];
 for (const [visitor, me] of visitors) {
     for (const path of framedScreens) {
-        test(`the legal links close the footer of ${path} for ${visitor} at 1280, 768, and 390 px`, async ({ page }) => {
+        test(`the standing links lead and the legal links close the footer of ${path} for ${visitor} at 1280, 768, and 390 px`, async ({ page }) => {
             const look = looks[0];
             if (look === undefined) throw new Error(`no look registered`);
             await wear(page, look);
-            await serve(page, world({ me }));
+            await serve(page, world({ me, tournaments: [...world().tournaments, ...roundRobins()] }));
             await page.setViewportSize({ width: 1280, height: 900 });
             await page.goto(path);
             await page.locator(`h1`).first().waitFor();
@@ -177,6 +190,7 @@ for (const [visitor, me] of visitors) {
                 await page.setViewportSize({ width, height: 900 });
                 const footer = await footerLayout(page);
                 const legal = footer.groups.at(-1);
+                expect(footer.groups[0]?.links.map((link) => [link.label, link.href])).toEqual(standingLinks);
                 // The report form's own link names no page; every other names the page it stands on.
                 const report = path === `/report` ? `/report` : `/report?subject=${encodeURIComponent(path)}`;
                 expect(legal?.links.map((link) => [link.label, link.href])).toEqual([...legalLinks, [`Report`, report]]);
@@ -205,7 +219,7 @@ for (const [visitor, me] of visitors) {
 // Scaled-up text on any window width keeps each link inside its own group,
 // the groups on lines of their own, and no label ending on one word alone;
 // the footer never runs past the window.
-test('the footer keeps its groups apart and leaves no lone word from 320 to 1280 px at 100, 150, and 200% text', async ({ page }) => {
+test('the footer keeps its groups apart and leaves no lone word from 320 to 1280 px at 100, 150, and 200% text', sweep, async ({ page }) => {
     const look = looks[0];
     if (look === undefined) throw new Error(`no look registered`);
     await wear(page, look);
@@ -244,3 +258,32 @@ test('the footer keeps its groups apart and leaves no lone word from 320 to 1280
     }
     expect(faults).toEqual([]);
 });
+
+// The site's source carries GitHub's mark: 16 px in GitHub's white beside the word, inside the link, on every look's dark ground.
+for (const name of [`ink`, `htttx`]) {
+    for (const width of [1280, 390, 320]) {
+        test(`the footer's Source link carries GitHub's mark beside the word in ${name} at ${String(width)} px`, async ({ page }) => {
+            const look = looks.find((entry) => entry.name === name);
+            if (look === undefined) throw new Error(`no look named ${name}`);
+            await wear(page, look);
+            await serve(page, world({ me: null }));
+            await page.setViewportSize({ width, height: 900 });
+            await page.goto(`/nowhere`);
+            await page.locator(`h1`).waitFor();
+            const footer = page.locator(`footer.site-footer`);
+            const source = footer.getByRole(`link`, { name: `Source` });
+            await expect(source).toHaveAttribute(`href`, `https://github.com/TimmyBurn2/HeXO-Arena`);
+            await expect(footer.getByRole(`link`, { name: `Tournaments` })).toHaveCount(0);
+            const mark = await source.evaluate((link) => {
+                const svg = link.querySelector(`svg.github-mark`);
+                if (svg === null) return null;
+                const box = svg.getBoundingClientRect();
+                const outer = link.getBoundingClientRect();
+                return { width: box.width, height: box.height, fill: getComputedStyle(svg).fill, inside: box.left >= outer.left && box.right <= outer.right, hidden: svg.getAttribute(`aria-hidden`) };
+            });
+            expect(mark).toEqual({ width: 16, height: 16, fill: `rgb(255, 255, 255)`, inside: true, hidden: `true` });
+            expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+            if (capturing) await footer.screenshot({ path: `e2e/shots/footer-source--${name}--${String(width)}.png` });
+        });
+    }
+}

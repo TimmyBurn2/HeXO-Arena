@@ -1,7 +1,8 @@
 import type { Side, TournamentDetail, TournamentGame } from '@hexo-arena/contract';
+import { pagePath } from '@hexo-arena/contract';
 
-/** Where a round stands: over, under way, or still to come. */
-export type RoundState = `done` | `live` | `next`;
+// Where a round stands: over, under way, or still to come.
+type RoundState = `done` | `live` | `next`;
 
 /** One game from one bot's side, as a crosstable cell draws it. */
 export type HexState = `won` | `lost` | `none` | `pending` | `live` | `missing`;
@@ -13,11 +14,12 @@ export interface HexView {
 
 const over = (game: TournamentGame) => game.outcome !== `pending` && game.outcome !== `live`;
 
-/** Each round's state, in order. */
+/** Each round's state, in order; the first is live from the start, as a running tournament begins with it, and every later one once a game of it has begun. */
 export function roundStates(detail: TournamentDetail): { round: number; state: RoundState }[] {
-    return detail.rounds.map((round) => {
+    return detail.rounds.map((round, index) => {
         const games = round.pairings.flatMap((pairing) => pairing.games);
-        const state: RoundState = games.every(over) ? `done` : games.some((game) => game.outcome !== `pending`) ? `live` : `next`;
+        const begun = games.some((game) => game.outcome !== `pending`) || (index === 0 && detail.status === `running`);
+        const state: RoundState = games.every(over) ? `done` : begun ? `live` : `next`;
         return { round: round.round, state };
     });
 }
@@ -33,8 +35,8 @@ export function roundBegun(detail: TournamentDetail): boolean {
     return roundStates(detail).find((entry) => entry.round === round)?.state === `live`;
 }
 
-// A game as one of its two bots met it; a bot is its key in the tournament.
-function hexOf(game: TournamentGame, bot: number): HexView {
+/** A game as one of its two bots met it; a bot is its key in the tournament. */
+export function hexOf(game: TournamentGame, bot: number): HexView {
     const gameId = game.gameId;
     switch (game.outcome) {
         case `pending`:
@@ -79,8 +81,8 @@ export function pairingScore(pairing: TournamentDetail[`rounds`][number][`pairin
     return [points(pairing.first.key), points(pairing.second.key)];
 }
 
-/** Whether a bot, by its key, played a game of the tournament, whatever came of it. */
-export function playedAny(detail: TournamentDetail, bot: number): boolean {
+// Whether a bot, by its key, played a game of the tournament, whatever came of it.
+function playedAny(detail: TournamentDetail, bot: number): boolean {
     return detail.rounds.some((round) =>
         round.pairings.some((pairing) => pairing.games.some((game) => (game.outcome === `played` || game.outcome === `aborted`) && (pairing.first.key === bot || pairing.second.key === bot))),
     );
@@ -94,4 +96,23 @@ export function absentees(detail: TournamentDetail): Record<`never` | `withdrew`
     const gone = detail.entries.filter((entry) => entry.state === `absent` || entry.state === `left_out` || entry.state === `withdrawn`);
     const withdrew = (entry: (typeof gone)[number]) => entry.state === `withdrawn` && playedAny(detail, entry.key);
     return { never: gone.filter((entry) => !withdrew(entry)), withdrew: gone.filter(withdrew) };
+}
+
+/** A tournament's page. */
+export function tournamentPagePath(id: string): string {
+    return pagePath(`tournament`, { id });
+}
+
+/** The lists a link may open the tournaments under Games on, past every one: the reader's own, or tests. */
+export const tournamentListViews = [`yours`, `tests`] as const;
+
+export type TournamentListView = (typeof tournamentListViews)[number];
+
+/** The tournaments under Games, on one view and for one bot when named. */
+export function gamesTournamentsPath(view: TournamentListView | null = null, bot: string | null = null): string {
+    const params = new URLSearchParams();
+    if (bot !== null) params.set(`bot`, bot);
+    if (view !== null) params.set(`list`, view);
+    const path = pagePath(`games-tournaments`, {});
+    return params.size === 0 ? path : `${path}?${params.toString()}`;
 }

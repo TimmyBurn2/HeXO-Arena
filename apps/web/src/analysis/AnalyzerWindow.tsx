@@ -20,7 +20,7 @@ export interface WindowReading {
     readonly analyzer: AnalyzerShown;
     readonly entry: ShownEntry;
     readonly lines: readonly ShownLine[];
-    /** Whether line A's place is kept for a reading on its way. */
+    // Whether line A's place is kept for a reading on its way.
     readonly held: boolean;
     readonly toMove: Side;
     readonly unreadable: Unreadable | null;

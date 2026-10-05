@@ -8,7 +8,7 @@ import { defineConfig } from 'vite';
 export default defineConfig({
     build: {
         ssr: true,
-        target: `node24`,
+        target: `node26`,
         outDir: `dist`,
         emptyOutDir: true,
         rollupOptions: {

@@ -1,4 +1,6 @@
 import type { TournamentBot, TournamentDetail } from '@hexo-arena/contract';
+import { pagePath } from '@hexo-arena/contract';
+import { tournamentGamesPath } from '../games/filters';
 import { Link } from '../router/Link';
 import { text } from '../text';
 import { pairingScore } from './view';
@@ -18,7 +20,7 @@ export function Rounds({ detail, only, except }: { detail: TournamentDetail; onl
             {only === undefined ? <h3 className="round-title">{text.tournaments.round(round.round)}</h3> : null}
             <ul className="round-pairings">
                 {round.pairings.map((pairing) => (
-                    <PairingItem key={`${String(pairing.first.key)} ${String(pairing.second.key)}`} pairing={pairing} />
+                    <PairingItem key={`${String(pairing.first.key)} ${String(pairing.second.key)}`} pairing={pairing} games={tournamentGamesPath(detail.id, round.round)} />
                 ))}
             </ul>
             {round.rest === null ? null : <p className="note round-rest">{text.tournaments.rest(<BotLabel bot={round.rest} />)}</p>}
@@ -43,7 +45,7 @@ export function BotPairings({ detail, bot, id }: { detail: TournamentDetail; bot
     return (
         <ul className="round-pairings bot-pairings" id={id}>
             {met.reverse().map(({ round, pairing }) => (
-                <PairingItem key={round} pairing={pairing} round={round} />
+                <PairingItem key={round} pairing={pairing} round={round} games={tournamentGamesPath(detail.id, round)} />
             ))}
         </ul>
     );
@@ -56,26 +58,47 @@ function BotLabel({ bot }: { bot: TournamentBot }) {
     return bot.deleted === true ? <span className="deleted-name">{bot.name}</span> : <>{bot.name}</>;
 }
 
-function PairingItem({ pairing, round }: { pairing: Pairing; round?: number }) {
+// A game without a board of its own says how it stands in a word.
+function outcomeWord(game: Pairing[`games`][number]): string {
+    return text.tournaments.outcomes[game.outcome === `played` || game.outcome === `aborted` ? `none` : game.outcome];
+}
+
+// A pair playing several openings names its games together, linking the round's games under Games; two are each named,
+// or said once where neither has a board and both stand alike, as both to play or both not played.
+function PairingItem({ pairing, round, games }: { pairing: Pairing; round?: number; games: string }) {
     const [first, second] = pairingScore(pairing);
+    const [lead] = pairing.games;
+    const once = lead !== undefined && pairing.games.every((game) => game.gameId === null && outcomeWord(game) === outcomeWord(lead)) ? outcomeWord(lead) : null;
     return (
         <li className="round-pairing">
             {round === undefined ? null : <span className="round-of">{text.tournaments.round(round)}</span>}
             <span className="round-names">{text.tournaments.pairingLine(<BotLabel bot={pairing.first} />, <BotLabel bot={pairing.second} />)}</span>
             <span className="round-score">{text.tournaments.score(first, second)}</span>
-            <span className="round-games">
-                {pairing.games.map((game, index) =>
-                    game.gameId === null ? (
-                        <span key={index} className="round-game muted">
-                            {text.tournaments.outcomes[game.outcome === `played` || game.outcome === `aborted` ? `none` : game.outcome]}
-                        </span>
-                    ) : (
-                        <Link key={index} to={`/game/${encodeURIComponent(game.gameId)}`} className="round-game">
-                            {gameWords(pairing, game, index)}
-                        </Link>
-                    ),
-                )}
-            </span>
+            {pairing.games.length > 2 ? (
+                <span className="round-games">
+                    <Link to={games} className="round-game">
+                        {text.roundRobins.page.legs(pairing.games.length, pairing.games.length / 2)}
+                    </Link>
+                </span>
+            ) : once !== null ? (
+                <span className="round-games">
+                    <span className="round-game muted">{once}</span>
+                </span>
+            ) : (
+                <span className="round-games">
+                    {pairing.games.map((game, index) =>
+                        game.gameId === null ? (
+                            <span key={index} className="round-game muted">
+                                {text.tournaments.gameLine(index + 1, outcomeWord(game))}
+                            </span>
+                        ) : (
+                            <Link key={index} to={pagePath(`game`, { gameId: game.gameId })} className="round-game">
+                                {gameWords(pairing, game, index)}
+                            </Link>
+                        ),
+                    )}
+                </span>
+            )}
         </li>
     );
 }
@@ -83,11 +106,6 @@ function PairingItem({ pairing, round }: { pairing: Pairing; round?: number }) {
 // A game's link names it by its number and how it stands.
 function gameWords(pairing: Pairing, game: Pairing[`games`][number], index: number): string {
     const winner = game.point === pairing.first.key ? pairing.first : pairing.second;
-    const outcome =
-        game.outcome === `played`
-            ? game.point === null
-                ? text.tournaments.outcomes.none
-                : `${winner.name} ${text.tournaments.outcomes.won}`
-            : text.tournaments.outcomes[game.outcome === `aborted` ? `none` : game.outcome];
+    const outcome = game.outcome === `played` && game.point !== null ? `${winner.name} ${text.tournaments.outcomes.won}` : outcomeWord(game);
     return text.tournaments.gameLine(index + 1, outcome);
 }
