@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { gameTurnCap, writeHtttx } from '@hexo-arena/contract';
+import { gameTurnCap, htttxTags, writeHtttx } from '@hexo-arena/contract';
 import { originSetup, type Setup } from '@hexo-arena/rules';
 import { cellText, playLine, readGame, writeGame, writeTurns, type NotationRead, type PlayedLine } from '../src/analysis/notation';
 import { drawLine, workedText, workedTurns } from './analysis-lines';
@@ -72,7 +72,7 @@ describe('the HTTTX writer', () => {
 describe('a game export\'s HTTTX text', () => {
     it('reads back to the turns written, the opening\'s and a six on the first stone of the last turn among them, its header passed over', () => {
         const won = read(firstStoneWin);
-        const text = writeHtttx(won.turns, {
+        const tags = htttxTags({
             name: `Autumn [round] robin; round 2, game 1 of 2`,
             platform: `HeXO Arena`,
             startedAt: new Date(`2026-10-01T12:00:00Z`),
@@ -81,6 +81,7 @@ describe('a game export\'s HTTTX text', () => {
             timeControl: { mode: `match`, mainTimeMs: 300_000, incrementMs: 3_000 },
             result: { winner: `x`, reason: `six-in-a-row` },
         });
+        const text = writeHtttx({ version: 1, tags, turns: won.turns });
         expect(text.split(`\n`)[0]).toBe(
             `version[1]name[Autumn (round) robin, round 2, game 1 of 2]platform[HeXO Arena]utcdatetime[2026-10-01 12:00:00]playercross[devbot-b]playercircle[deleted bot]timecontrol[300+3]endreason[win]winner[cross];`,
         );
@@ -119,9 +120,8 @@ describe('the HTTTX reader', () => {
         expect(roundTrip(example)).toBe(`version[1];\n1. [-1,0][0,1];\n2. [-1,1][-2,2];\n3. [1,-1][-5,5];\n4. [-1,2][1,0];\n5. [5,0][-3,2];\n`);
     });
 
-    it('reads keys split by whitespace, threat marks, and compact text, keeping none of the extras', () => {
+    it('reads keys split by whitespace and compact text, keeping none of the extras', () => {
         expect(roundTrip(`version[1]\nname[Test game] platform[HeXO Arena];\n1. [1,0][0,1];\n`)).toBe(`version[1];\n1. [1,0][0,1];\n`);
-        expect(roundTrip(`version[1];\n1. [1,0][0,1];\n2. [2,0][3,0]!!;\n`)).toBe(`version[1];\n1. [1,0][0,1];\n2. [2,0][3,0];\n`);
         expect(roundTrip(`1.[1,0][0,1];2.[-1,0][-1,1];`)).toBe(`version[1];\n1. [1,0][0,1];\n2. [-1,0][-1,1];\n`);
         expect(roundTrip(`version[1];\r\n1.  [ 1 , 0 ] [0,1] ;\r\n`)).toBe(`version[1];\n1. [1,0][0,1];\n`);
     });
@@ -134,9 +134,14 @@ describe('the HTTTX reader', () => {
         expect(read(`version[1];`).turns).toEqual([]);
     });
 
-    it('ignores keys other than version, whose value must be 1', () => {
-        expect(read(`Version[2];\n1. [1,0][0,1];\n`).turns).toHaveLength(1);
-        expect(refusal(readGame(`version[2];\n1. [1,0][0,1];\n`))).toEqual({ kind: `version`, version: `2` });
+    it('refuses threat marks by name, where they stand', () => {
+        expect(refusal(readGame(`version[1];\n1. [1,0][0,1];\n2. [2,0][3,0]!!;\n`))).toEqual({ kind: `threat-mark`, line: 3, column: 14, turn: 2 });
+    });
+
+    it('ignores keys other than version, reads a v2 main line, and refuses any other version', () => {
+        expect(read(`Version[3];\n1. [1,0][0,1];\n`).turns).toHaveLength(1);
+        expect(read(`version[2];\n1. [1,0][0,1] (1. [2,0][0,2];);\n`).turns).toEqual([[{ x: 1, y: 0 }, { x: 1, y: -1 }]]);
+        expect(refusal(readGame(`version[3];\n1. [1,0][0,1];\n`))).toEqual({ kind: `version`, version: `3` });
     });
 
     it('refuses empty text', () => {
@@ -144,8 +149,8 @@ describe('the HTTTX reader', () => {
     });
 
     it('refuses turn numbers out of order or with gaps', () => {
-        expect(refusal(readGame(`version[1];\n2. [2,0][3,0];\n1. [1,0][0,1];\n`))).toEqual({ kind: `turn-number`, expected: 1, found: 2 });
-        expect(refusal(readGame(`version[1];\n1. [1,0][0,1];\n7. [2,0][3,0];\n`))).toEqual({ kind: `turn-number`, expected: 2, found: 7 });
+        expect(refusal(readGame(`version[1];\n2. [2,0][3,0];\n1. [1,0][0,1];\n`))).toEqual({ kind: `turn-number`, line: 2, column: 1, expected: 1, found: 2 });
+        expect(refusal(readGame(`version[1];\n1. [1,0][0,1];\n7. [2,0][3,0];\n`))).toEqual({ kind: `turn-number`, line: 3, column: 1, expected: 2, found: 7 });
     });
 
     it('refuses a doubled semicolon, where a turn number should be', () => {
@@ -160,7 +165,7 @@ describe('the HTTTX reader', () => {
 
     it('refuses a sign but a minus, a spaced minus, and leading zeros in a turn number', () => {
         for (const text of [`1. [+1,0][0,1];`, `1. [- 1,0][0,1];`]) {
-            expect(refusal(readGame(text))).toMatchObject({ kind: `syntax`, expected: `integer` });
+            expect(refusal(readGame(text))).toMatchObject({ kind: `syntax`, expected: `cell-number` });
         }
         expect(refusal(readGame(`01. [1,0][0,1];`))).toMatchObject({ kind: `syntax`, expected: `turn-number` });
     });
@@ -175,7 +180,7 @@ describe('the HTTTX reader', () => {
         ]);
         expect(read.ok && Object.is(read.value.turns[0]?.[0].y, -0)).toBe(false);
         expect(read.ok && writeGame(read.value.turns)).toBe(`version[1];\n1. [1,0][0,2];\n`);
-        expect(refusal(readGame(`1. [0001234567890,0][0,1];`))).toMatchObject({ kind: `syntax`, expected: `integer` });
+        expect(refusal(readGame(`1. [0001234567890,0][0,1];`))).toMatchObject({ kind: `syntax`, expected: `integer-form` });
     });
 
     it('refuses a missing dot and a second dot', () => {
@@ -184,8 +189,8 @@ describe('the HTTTX reader', () => {
     });
 
     it('refuses a turn of no cells or of three', () => {
-        expect(refusal(readGame(`version[1];\n1. ;\n`))).toEqual({ kind: `coordinate-count`, turn: 1, count: 0 });
-        expect(refusal(readGame(`version[1];\n1. [1,0][0,1][2,0];\n`))).toEqual({ kind: `coordinate-count`, turn: 1, count: 3 });
+        expect(refusal(readGame(`version[1];\n1. ;\n`))).toEqual({ kind: `coordinate-count`, line: 2, column: 1, turn: 1, count: 0 });
+        expect(refusal(readGame(`version[1];\n1. [1,0][0,1][2,0];\n`))).toEqual({ kind: `coordinate-count`, line: 2, column: 1, turn: 1, count: 3 });
     });
 
     it('refuses a turn the rules refuse, naming its number and cell', () => {

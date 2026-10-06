@@ -186,6 +186,7 @@ export const pairs = [
     [`win line across x`, `--board-win`, `--board-stone-x`, 3, xCasing],
     [`win line across o`, `--board-win`, `--board-stone-o`, 3, oCasing],
     [`focus on cell`, `--board-focus`, `--board-cell`, 3],
+    [`neutral highlight on cell`, `--board-highlight-neutral`, `--board-cell`, 3],
     // Round robin scores are text on the board's ground; the ring of a
     // link there takes the same color, so the text minimum covers it.
     [`link on board`, `--board-link`, `--board-bg`, 4.5],

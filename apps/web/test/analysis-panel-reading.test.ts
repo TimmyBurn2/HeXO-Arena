@@ -122,6 +122,7 @@ describe('unreadableOf', () => {
         const many = { stones: Array.from({ length: analysisStoneCap + 1 }, (_, index) => ({ x: index, y: 0, player: 0 as const })), toMove: 1 as const };
         expect(unreadableOf(many, false)).toEqual({ kind: `too-many`, stones: analysisStoneCap + 1 });
         expect(unreadableOf({ stones: [{ x: 0, y: 10_000, player: 0 }], toMove: 1 }, false)).toEqual({ kind: `too-far` });
+        expect(unreadableOf(near, false, { side: `o`, cell: { x: 1, y: 0 } })).toEqual({ kind: `half`, side: `o`, cell: { x: 1, y: 0 } });
     });
 });
 

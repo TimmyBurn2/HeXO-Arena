@@ -5,6 +5,10 @@ import {
     cellPoints,
     cellSize,
     frontierCells,
+    asideCorner,
+    highlightPoints,
+    highlightRingPoints,
+    labelAsideCenter,
     frontierOutline,
     hexCenter,
     lineMarkPoints,
@@ -14,6 +18,7 @@ import {
     tagCenter,
     tagPoints,
     viewBoxOf,
+    type AsideCorner,
     type Frame,
 } from './geometry';
 import './Board.css';
@@ -30,6 +35,16 @@ export interface BoardLines {
     readonly lines: readonly { readonly letter: string; readonly cells: readonly AxialCoord[] }[];
 }
 
+/**
+ * A cell's look an imported text gives the position shown:
+ * a highlight in x's or o's color or a neutral one, a label drawn in the cell, or both.
+ */
+export interface BoardVisual {
+    readonly cell: AxialCoord;
+    readonly tone: `neutral` | `x` | `o` | null;
+    readonly label: string | null;
+}
+
 interface BoardOverlays {
     pending?: AxialCoord | undefined;
     // The side whose ghost stone previews the pending mark.
@@ -42,6 +57,8 @@ interface BoardOverlays {
     preview?: { readonly side: Side; readonly cells: readonly AxialCoord[] } | undefined;
     // A judged turn's mark, hung beside the stone it names.
     judgment?: { readonly cell: AxialCoord; readonly severity: JudgmentSeverity } | undefined;
+    // An imported text's highlights, under the stones, and labels, over them in a stone number's place.
+    visuals?: readonly BoardVisual[] | undefined;
 }
 
 interface BoardProps {
@@ -179,7 +196,12 @@ export function Board({ stones, settings, label, overlays, scale, frame, edge = 
     const freshKeys = new Set(stones.slice(settled.current).map((stone) => `${String(stone.x)},${String(stone.y)}`));
     const winLine = overlays?.winLine;
     const winKeys = new Set(winLine?.map((coord) => `${String(coord.x)},${String(coord.y)}`));
-    const crossed = settings.numbers ? stones.filter((stone) => winKeys.has(`${String(stone.x)},${String(stone.y)}`)) : [];
+    const visuals = overlays?.visuals ?? [];
+    const labelled = new Set(visuals.flatMap((visual) => (visual.label === null ? [] : [keyOf(visual.cell)])));
+    // A label replaces its stone's number, so a win line is cut round the labels it crosses whatever the numbers setting.
+    const crossed = settings.numbers ? stones.filter((stone) => winKeys.has(keyOf(stone)) && !labelled.has(keyOf(stone))) : [];
+    const crossedLabels = visuals.filter((visual) => visual.label !== null && winKeys.has(keyOf(visual.cell)));
+    const masked = crossed.length > 0 || crossedLabels.length > 0;
 
     function handleClick(event: React.MouseEvent<SVGSVGElement>) {
         if (onCellClick === undefined) return;
@@ -197,6 +219,9 @@ export function Board({ stones, settings, label, overlays, scale, frame, edge = 
     const lines = overlays?.lines;
     const preview = overlays?.preview;
     const judgment = overlays?.judgment;
+    const sideAt = new Map(stones.map((stone) => [keyOf(stone), stone.side]));
+    // An analyzer's line letter keeps its cell, so a label there steps aside to the cell's corner.
+    const lineCells = new Set(lines === undefined ? [] : lines.lines.flatMap((line) => line.cells.map(keyOf)));
     return (
         <div className="board-frame" {...(settings.numbers ? { 'data-numbers': `` } : {})}>
             <svg
@@ -209,12 +234,15 @@ export function Board({ stones, settings, label, overlays, scale, frame, edge = 
                 onClick={onCellClick === undefined ? undefined : handleClick}
             >
                 <ShineDefs id={shine} />
-                {crossed.length > 0 && (
+                {masked && (
                     <defs>
                         <mask id={cut} maskUnits="userSpaceOnUse" x={viewBox.x} y={viewBox.y} width={viewBox.w} height={viewBox.h}>
                             <rect className="cut-keep" x={viewBox.x} y={viewBox.y} width={viewBox.w} height={viewBox.h} />
                             {crossed.map((stone) => (
-                                <StoneNumber key={`${String(stone.x)},${String(stone.y)}`} stone={stone} cut />
+                                <StoneNumber key={keyOf(stone)} stone={stone} cut />
+                            ))}
+                            {crossedLabels.map((visual, index) => (
+                                <VisualLabel key={`cut,${String(index)}`} visual={visual} place="cut" />
                             ))}
                         </mask>
                     </defs>
@@ -223,6 +251,20 @@ export function Board({ stones, settings, label, overlays, scale, frame, edge = 
                     <Cell key={`${String(cell.x)},${String(cell.y)}`} cell={cell} />
                 ))}
                 {edge ? <path className="frontier" d={outline} /> : null}
+                {visuals.map((visual, index) => {
+                    if (visual.tone === null) return null;
+                    const stone = sideAt.has(keyOf(visual.cell));
+                    return (
+                        <polygon
+                            key={`highlight,${String(index)}`}
+                            className={`highlight hl-${visual.tone}${stone ? ` on-stone` : ``}`}
+                            data-x={visual.cell.x}
+                            data-y={visual.cell.y}
+                            points={stone ? highlightRingPoints() : highlightPoints()}
+                            transform={translate(hexCenter(visual.cell).cx, hexCenter(visual.cell).cy)}
+                        />
+                    );
+                })}
                 {pending !== undefined && (
                     <>
                         <Ring className="ring-pending" coord={pending} />
@@ -266,6 +308,12 @@ export function Board({ stones, settings, label, overlays, scale, frame, edge = 
                               </text>
                           </g>
                       ))}
+                {/* A label stepped aside for a line's letter hangs from a corner no other line's letter holds, over the marks. */}
+                {visuals.map((visual, index) =>
+                    visual.label !== null && lineCells.has(keyOf(visual.cell)) ? (
+                        <VisualLabel key={`aside,${String(index)}`} visual={visual} place={asideCorner(visual.cell, (cell) => lineCells.has(keyOf(cell)))} />
+                    ) : null,
+                )}
                 {preview?.cells.map((cell) => (
                     <polygon
                         key={`preview,${String(cell.x)},${String(cell.y)}`}
@@ -278,17 +326,21 @@ export function Board({ stones, settings, label, overlays, scale, frame, edge = 
                     // The casing keeps the line legible where it crosses
                     // stones as light or as dark as the line itself; with
                     // numbers on, both are cut away around the digits they
-                    // cross, so each reads whole on its own stone.
-                    <g className="win" mask={crossed.length > 0 ? `url(#${cut})` : undefined}>
+                    // cross, and always round the labels, so each reads
+                    // whole on its own stone.
+                    <g className="win" mask={masked ? `url(#${cut})` : undefined}>
                         <polyline className="win-casing" points={winLinePoints(winLine)} />
                         <polyline className="win-line" points={winLinePoints(winLine)} />
                     </g>
                 )}
                 <g className="numbers">
-                    {stones.map((stone) => (
-                        <StoneNumber key={`${String(stone.x)},${String(stone.y)}`} stone={stone} />
-                    ))}
+                    {stones.map((stone) => (labelled.has(keyOf(stone)) ? null : <StoneNumber key={keyOf(stone)} stone={stone} />))}
                 </g>
+                {visuals.map((visual, index) => {
+                    const at = keyOf(visual.cell);
+                    if (visual.label === null || lineCells.has(at)) return null;
+                    return <VisualLabel key={`label,${String(index)}`} visual={visual} place={sideAt.get(at) ?? `cell`} />;
+                })}
                 {judgment === undefined ? null : (
                     <g className={`board-tag jd-${judgment.severity}`} transform={translate(tagCenter(judgment.cell).cx, tagCenter(judgment.cell).cy)}>
                         <polygon className="board-tag-plate" points={tagPoints()} />
@@ -299,6 +351,33 @@ export function Board({ stones, settings, label, overlays, scale, frame, edge = 
                 )}
             </svg>
         </div>
+    );
+}
+
+function keyOf(cell: AxialCoord): string {
+    return `${String(cell.x)},${String(cell.y)}`;
+}
+
+// A label in its cell: on a stone in the stone's number color, on an empty cell cased in the board's own,
+// on a plate off a corner of the cell where a line's letter holds the middle, or cut into the win line's mask.
+function VisualLabel({ visual, place }: { visual: BoardVisual; place: Side | `cell` | `cut` | AsideCorner }) {
+    const size = String(Math.min(visual.label?.length ?? 1, 3));
+    if (place !== `x` && place !== `o` && place !== `cell` && place !== `cut`) {
+        const { cx, cy } = labelAsideCenter(visual.cell, place);
+        return (
+            <g className="label-aside" data-x={visual.cell.x} data-y={visual.cell.y} data-corner={place} transform={translate(cx, cy)}>
+                <polygon className="label-aside-plate" points={tagPoints()} />
+                <text className={`visual-label label-${size} on-plate`} dy="0.35em">
+                    {visual.label}
+                </text>
+            </g>
+        );
+    }
+    const { cx, cy } = hexCenter(visual.cell);
+    return (
+        <text className={`visual-label label-${size} ${place === `cut` ? `cut` : `on-${place}`}`} data-x={visual.cell.x} data-y={visual.cell.y} dy="0.35em" transform={translate(cx, cy)}>
+            {visual.label}
+        </text>
     );
 }
 

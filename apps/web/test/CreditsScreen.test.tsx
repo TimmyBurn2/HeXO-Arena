@@ -22,7 +22,7 @@ describe('CreditsScreen', () => {
             `Community`,
             `Themes`,
             `Font`,
-            `Protocol and ratings`,
+            `Protocol, notation, and ratings`,
             `Inspiration`,
             `Licenses`,
         ]);
@@ -101,7 +101,7 @@ describe('CreditsScreen', () => {
         expect(license?.textContent).toContain(`Permission is hereby granted, free of charge`);
     });
 
-    it('credit the font under its own license, and the protocol, the ratings, and the sites it learns from', () => {
+    it('credit the font under its own license, and the protocol, the notation, the ratings, and the sites it learns from', () => {
         render(<CreditsScreen />);
         const font = within(row(`Chakra Petch`));
         expect(font.getByRole(`link`, { name: `SIL Open Font License 1.1` }).getAttribute(`href`)).toBe(`/fonts/chakra-petch-OFL.txt`);
@@ -109,6 +109,11 @@ describe('CreditsScreen', () => {
         const protocol = within(row(`htttx bot protocol`));
         expect(protocol.getByRole(`link`, { name: `Bot API` })).toBeTruthy();
         expect(protocol.getByText(`Copyright (c) 2026 hex-tic-tac-toe`)).toBeTruthy();
+        const notation = within(row(`HTTTX notation`));
+        expect(notation.getByRole(`link`, { name: `version 1` }).getAttribute(`href`)).toBe(`https://github.com/hex-tic-tac-toe/hexagonal-tic-tac-toe-notation`);
+        expect(notation.getByRole(`link`, { name: `version 2` }).getAttribute(`href`)).toBe(`https://github.com/hex-tic-tac-toe/htttx-notation`);
+        expect(notation.getByRole(`link`, { name: `MIT License` }).getAttribute(`href`)).toBe(`#mit`);
+        expect(notation.getByText(`Copyright (c) 2026 hex-tic-tac-toe`)).toBeTruthy();
         expect(within(row(`Glicko-2`)).getByText(`Published method`)).toBeTruthy();
         expect(screen.getByRole(`link`, { name: `Glicko-2` }).getAttribute(`href`)).toBe(`https://www.glicko.net/glicko.html`);
         expect(within(row(`lichess`)).getByText(`Ideas and values only`)).toBeTruthy();

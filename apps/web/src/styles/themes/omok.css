@@ -6,6 +6,8 @@
  * wood allows, so a last-move ring still parts from a black stone's rim.
  * A link on the wood takes the black stone's ink, as red is too light for
  * text there.
+ * A neutral highlight takes a deep blue, as the frontier's brown tints the
+ * wood as the black stone's tint does.
  */
 
 @layer theme {
@@ -45,6 +47,7 @@
         --board-win: #ad1f1f;
         --board-win-casing: #f3f3f3;
 
+        --board-highlight-neutral: #1f4e79;
         --stone-rim: #141414;
         --stone-rim-w: 1.5px;
         --stone-shine-x: #ffffff;

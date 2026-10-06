@@ -1,5 +1,5 @@
 import { useId, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { sideOf, type AxialCoord } from '@hexo-arena/contract';
+import { sideOf, type AxialCoord, type HtttxTag, type Side } from '@hexo-arena/contract';
 import type { Player, Setup } from '@hexo-arena/rules';
 import { Board, type BoardStone } from '../board/Board';
 import { defaultBoardSettings } from '../board/board-settings';
@@ -8,6 +8,8 @@ import { Swatch } from '../components/player';
 import { text } from '../text';
 import { writeBoat } from './boat';
 import { readImport, type Imported } from './import-text';
+import { cellText } from './notation';
+import { importedKinds } from './study';
 import { notationErrorText, positionWords } from './words';
 
 // A modal dialog over the analysis screen. Every way out closes the
@@ -145,7 +147,24 @@ function ImportPreview({ imported, onToMove }: { imported: Imported; onToMove: (
                     <Preview stones={stonesOf(end)} mark={imported.pending} />
                     <div>
                         <p className="card-title">{words.line(imported.line.turns.length)}</p>
+                        <Players tags={imported.tags} />
                         <p className="note">{words.lineNote(positionWords(sideOf(end.toMove), imported.pending !== null, won))}</p>
+                    </div>
+                </div>
+            );
+        }
+        case `study`: {
+            const { study } = imported;
+            const won = study.win === null ? null : sideOf(study.win.player);
+            const kinds = importedKinds(study.tree);
+            return (
+                <div className="an-preview">
+                    <Preview stones={stonesOf(study.position)} mark={null} />
+                    <div>
+                        <p className="card-title">{words.study(study.turns, study.variations)}</p>
+                        <Players tags={study.tags} />
+                        <p className="note">{words.lineNote(positionWords(sideOf(study.position.toMove), study.half, won))}</p>
+                        {kinds.length === 0 ? null : <p className="note">{words.notes(kinds.map((kind) => words.kinds[kind]))}</p>}
                     </div>
                 </div>
             );
@@ -199,6 +218,14 @@ function ImportPreview({ imported, onToMove }: { imported: Imported; onToMove: (
     }
 }
 
+// The game's name and players, where a text's tags give them.
+function Players({ tags }: { tags: readonly HtttxTag[] }) {
+    const tag = (key: string) => tags.find((each) => each.key === key)?.value.trim() ?? ``;
+    const players = tag(`playercross`) === `` || tag(`playercircle`) === `` ? null : text.analysis.source.players(tag(`playercross`), tag(`playercircle`));
+    const said = [tag(`name`), players ?? ``].filter((part) => part !== ``);
+    return said.length === 0 ? null : <p className="note">{said.join(`: `)}</p>;
+}
+
 function ExportField({ label, value, rows }: { label: string; value: string; rows: number }) {
     const id = useId();
     const [copied, setCopied] = useState<`no` | `yes` | `failed`>(`no`);
@@ -236,23 +263,118 @@ function ExportField({ label, value, rows }: { label: string; value: string; row
     );
 }
 
-/** What Export shows: the line as HTTTX text when it starts from the origin, the position as boat text, and a link. */
+/** Why the reading shown adds no evaluation: nobody signed in to ask, Analyze off, Analyze on with nothing read yet, or the text's own evaluations covering every turn read. */
+export type EvaluationsNone = `signed-out` | `off` | `reading` | `covered`;
+
+/** How the tree is written: the version, and for v2 whether the reading's evaluations and the game's clocks go in. */
+export interface ExportChoice {
+    readonly version: 1 | 2;
+    readonly evaluations: boolean;
+    readonly clocks: boolean;
+}
+
+/**
+ * What Export shows: the tree as HTTTX when it starts from the origin, with what each choice can add,
+ * the position as boat text, and a link.
+ */
 export interface ExportView {
-    readonly line: { readonly text: string; readonly turns: number } | null;
+    readonly notation: {
+        // Null where v2 has no turn to write.
+        readonly write: (choice: ExportChoice) => string | null;
+        readonly turns: { readonly v1: number; readonly v2: number };
+        readonly variations: number;
+        // Turns the reading shown evaluates where the text gives none, and why none where it is none;
+        // turns the game's clocks time, null where there is no such choice.
+        readonly evaluations: { readonly turns: number; readonly none: EvaluationsNone };
+        readonly clocks: number | null;
+    } | null;
     readonly position: Setup;
+    // A half-turn's lone stone, which neither the position nor the link holds; null on any other node.
+    readonly lone: { readonly side: Side; readonly cell: AxialCoord } | null;
     readonly link: { readonly url: string; readonly game: boolean };
 }
 
-/** Export: this line as HTTTX notation, this position as boat notation with the side to move, and a link. */
+/**
+ * Export: the tree as HTTTX notation, v2 with every variation or v1 with the main line,
+ * this position as boat notation with the side to move, and a link.
+ */
 export function ExportDialog({ view, onClose }: { view: ExportView; onClose: () => void }) {
     const words = text.analysis.export;
+    const [choice, setChoice] = useState<ExportChoice>({ version: 2, evaluations: false, clocks: false });
+    const notation = view.notation;
+    const written = notation === null ? null : notation.write(choice);
+    const formId = useId();
     return (
         <Dialog title={words.title} onClose={onClose}>
             {(close) => (
                 <>
-                    {view.line === null ? <p className="note">{words.noLine}</p> : <ExportField label={words.line(view.line.turns)} value={view.line.text} rows={5} />}
-                    <ExportField label={words.position(sideOf(view.position.toMove))} value={writeBoat(view.position.stones)} rows={3} />
-                    <ExportField label={view.link.game ? words.gameLink : words.link} value={view.link.url} rows={2} />
+                    {notation === null ? (
+                        <p className="note">{words.noLine}</p>
+                    ) : (
+                        <>
+                            <div className="an-export-form">
+                                <div className="pills" role="group" aria-labelledby={formId}>
+                                    <span className="sr-only" id={formId}>
+                                        {words.form}
+                                    </span>
+                                    {([2, 1] as const).map((version) => (
+                                        <button
+                                            key={version}
+                                            type="button"
+                                            className={`pill${choice.version === version ? ` active` : ``}`}
+                                            aria-pressed={choice.version === version}
+                                            onClick={() => {
+                                                setChoice({ ...choice, version });
+                                            }}
+                                        >
+                                            {version === 2 ? words.v2 : words.v1}
+                                        </button>
+                                    ))}
+                                </div>
+                                <p className="note">{choice.version === 2 ? words.v2Note : words.v1Note}</p>
+                                {choice.version === 2 ? (
+                                    <label className="checkline">
+                                        <input
+                                            type="checkbox"
+                                            checked={choice.evaluations && notation.evaluations.turns > 0}
+                                            disabled={notation.evaluations.turns === 0}
+                                            onChange={(event) => {
+                                                setChoice({ ...choice, evaluations: event.target.checked });
+                                            }}
+                                        />
+                                        {notation.evaluations.turns === 0 ? words.evaluationsNone[notation.evaluations.none] : words.evaluations(notation.evaluations.turns)}
+                                    </label>
+                                ) : null}
+                                {choice.version === 2 && notation.clocks !== null ? (
+                                    <label className="checkline">
+                                        <input
+                                            type="checkbox"
+                                            checked={choice.clocks}
+                                            onChange={(event) => {
+                                                setChoice({ ...choice, clocks: event.target.checked });
+                                            }}
+                                        />
+                                        {words.clocks(notation.clocks)}
+                                    </label>
+                                ) : null}
+                            </div>
+                            {written === null ? (
+                                <p className="note">{words.noTurns}</p>
+                            ) : (
+                                <ExportField
+                                    label={words.line(choice.version, choice.version === 2 ? notation.turns.v2 : notation.turns.v1, choice.version === 2 ? notation.variations : 0)}
+                                    value={written}
+                                    rows={6}
+                                />
+                            )}
+                        </>
+                    )}
+                    <ExportField
+                        label={view.lone === null ? words.position(sideOf(view.position.toMove)) : words.positionBefore(cellText(view.lone.cell), sideOf(view.position.toMove))}
+                        value={writeBoat(view.position.stones)}
+                        rows={3}
+                    />
+                    <ExportField label={view.lone !== null ? words.linkBefore(cellText(view.lone.cell)) : view.link.game ? words.gameLink : words.link} value={view.link.url} rows={2} />
                     <p className="note">{words.note}</p>
                     <div className="card-actions">
                         <button type="button" className="btn btn-ghost" onClick={close}>

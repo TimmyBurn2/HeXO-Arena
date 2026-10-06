@@ -83,6 +83,7 @@ describe('boardView', () => {
             lines: undefined,
             preview: { side: `o`, cells: line.cells },
             judgment: undefined,
+            visuals: [],
         });
     });
 
@@ -100,6 +101,7 @@ describe('boardView', () => {
             lines: undefined,
             preview: undefined,
             judgment: undefined,
+            visuals: [],
         });
     });
 });

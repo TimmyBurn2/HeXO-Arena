@@ -65,12 +65,25 @@ const font: Credit = {
     terms: { kind: `file`, label: rows.chakra.terms, href: `/fonts/chakra-petch-OFL.txt`, copyright: rows.chakra.copyright },
 };
 
+// The notation's two versions live in two repositories; the row links the later one.
+const notationV1 = `https://github.com/hex-tic-tac-toe/hexagonal-tic-tac-toe-notation`;
+const notationV2 = `https://github.com/hex-tic-tac-toe/htttx-notation`;
+
 const protocol: readonly Credit[] = [
     {
         ...rows.htttx,
         href: `https://github.com/hex-tic-tac-toe/htttx-bot-api`,
         gives: rows.htttx.gives((words) => <a href={botApiRepository}>{words}</a>),
         terms: { kind: `mit`, copyright: rows.htttx.copyright },
+    },
+    {
+        ...rows.notation,
+        href: notationV2,
+        gives: rows.notation.gives(
+            (words) => <a href={notationV1}>{words}</a>,
+            (words) => <a href={notationV2}>{words}</a>,
+        ),
+        terms: { kind: `mit`, copyright: rows.notation.copyright },
     },
     { ...rows.glicko, href: `https://www.glicko.net/glicko.html`, terms: { kind: `plain`, label: rows.glicko.terms } },
 ];

@@ -285,6 +285,16 @@
         --board-line-letter-1: 0.9375rem;
         --board-line-letter-2: 0.75rem;
         --board-line-letter-3: 0.625rem;
+        /* an imported text's look for a cell: a highlight's edge and how
+           much of its color the cell takes, and a label's sizes by its
+           length with the casing that keeps it clear of a tinted cell */
+        --board-highlight-w: 2.5px;
+        --board-highlight-ring-w: 3px;
+        --board-highlight-fill-opacity: 0.35;
+        --board-label-1: 0.9375rem;
+        --board-label-2: 0.75rem;
+        --board-label-3: 0.5625rem;
+        --board-label-casing-w: 4px;
         /* a judged turn's tag beside its stone */
         --board-tag-size: 0.8125rem;
         --board-tag-edge-w: 2px;

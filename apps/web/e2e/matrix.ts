@@ -712,6 +712,25 @@ export const shots: readonly Shot[] = [
         },
     },
     {
+        name: `analysis-imported`,
+        path: `/analysis`,
+        world: world(),
+        ready: `.an-intro`,
+        framed: true,
+        board: true,
+        after: async (page) => {
+            await page.getByRole(`button`, { name: `Import` }).click();
+            await page
+                .getByRole(`dialog`)
+                .getByRole(`textbox`)
+                .fill(
+                    `version[2];\n1. [-1,0]{@4505}[0,-1]{@4500:%-1};\n2. [1,0]{@4055}[2,0]{@4050:%2}\n  (2. [1,-2][2,-2]; 3. [-1,-1][/];);\n3. [1,-2]{@4205}[2,-3]{@4200:%-5};\n4. [3,0]{@3555}[4,0]{@3550:%38}<3,-4:#N><-2,1:#><5,0:#X:$A><-1,1:#O:$B><0,0:$1><1,0:$2><0,-1:$3>;\n`,
+                );
+            await page.getByRole(`dialog`).getByRole(`button`, { name: `Load` }).click();
+            await page.locator(`.an-notes`).waitFor();
+        },
+    },
+    {
         name: `analysis-export`,
         path: `/analysis#t=1.[1,0][1,-2];2.[-1,1][0,2];3.[-1,-1][2,1];4.[0,1][-1,0];`,
         world: world(),

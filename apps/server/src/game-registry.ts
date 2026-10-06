@@ -57,6 +57,7 @@ import {
     recordFinish,
     findGameTournament,
     replayPosition,
+    storedTurnClocks,
     type BotGameTag,
     type GameRecord,
     type OpeningCell,
@@ -315,6 +316,11 @@ function toWireMoves(log: readonly TurnEntry[]) {
     }));
 }
 
+interface FinishedBoard {
+    readonly cells: ReturnType<typeof boardCells>;
+    readonly turnClocks: (number | null)[] | null;
+}
+
 function boardCells(position: Position) {
     return position.stones.map((stone) => ({
         x: stone.x,
@@ -437,9 +443,9 @@ export const finishedBoardMemoCap = 256;
 
 export class GameRegistry {
     readonly #games = new Map<string, LiveGame>();
-    // A finished board never changes, so a read replays it once;
+    // A finished board and its clocks never change, so a read replays it once;
     // the names beside it are read fresh, so renames and deletions show.
-    readonly #finishedBoards = new Map<string, ReturnType<typeof boardCells>>();
+    readonly #finishedBoards = new Map<string, FinishedBoard>();
     readonly #query: Query;
     readonly #presence: PresenceRegistry;
     readonly #watchers: GameWatchers;
@@ -739,6 +745,7 @@ export class GameRegistry {
         if (record?.finishReason === undefined || record.finishReason === null) return null;
         const you = viewer === null ? undefined : storedSeatOf(record, viewer);
         const tournament = record.kind === `bots` ? findGameTournament(this.#query, gameId) : undefined;
+        const board = this.#finishedBoard(record);
         return {
             gameId: record.id,
             status: `finished`,
@@ -746,11 +753,12 @@ export class GameRegistry {
             ...(you !== undefined && { you }),
             // The stored opening holds every opening stone, the origin included.
             openingPlies: openingPliesSchema.parse(record.opening.length),
-            board: { cells: this.#finishedBoard(record) },
+            board: { cells: board.cells },
             timeControl: record.timeControl,
             winner: record.winner,
             reason: record.finishReason,
             voided: record.voided,
+            ...(board.turnClocks === null ? {} : { turnClocks: board.turnClocks }),
             ...(tournament === undefined ? {} : { tournament }),
             ...(record.kind !== `guest` && record.unratedByChoice ? { unratedByChoice: true } : {}),
             ...(record.kind !== `guest` && record.test ? { test: true as const } : {}),
@@ -1244,20 +1252,23 @@ export class GameRegistry {
         session.socket.close(code, reason);
     }
 
-    #finishedBoard(record: GameRecord): ReturnType<typeof boardCells> {
+    #finishedBoard(record: GameRecord): FinishedBoard {
         const memo = this.#finishedBoards.get(record.id);
         if (memo !== undefined) {
             this.#finishedBoards.delete(record.id);
             this.#finishedBoards.set(record.id, memo);
             return memo;
         }
-        const cells = boardCells(replayPosition(this.#query, record));
-        this.#finishedBoards.set(record.id, cells);
+        const board: FinishedBoard = {
+            cells: boardCells(replayPosition(this.#query, record)),
+            turnClocks: storedTurnClocks(this.#query, record.id, record.timeControl, record.opening.length),
+        };
+        this.#finishedBoards.set(record.id, board);
         for (const oldest of this.#finishedBoards.keys()) {
             if (this.#finishedBoards.size <= finishedBoardMemoCap) break;
             this.#finishedBoards.delete(oldest);
         }
-        return cells;
+        return board;
     }
 
     #liveSnapshot(game: LiveGame, viewer: PersonRef | null): GameSnapshot {

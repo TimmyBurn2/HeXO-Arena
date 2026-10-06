@@ -239,6 +239,102 @@
         fill: var(--board-stone-o);
     }
 
+    /* An imported text's highlight tints its cell in a side's color, or
+       the neutral highlight's, under any stone; its label sits on
+       the cell in the focus color with a casing of the board's own, or on a
+       stone in that stone's number color, which it replaces. */
+    .highlight {
+        fill-opacity: var(--board-highlight-fill-opacity);
+        stroke-width: var(--board-highlight-w);
+        pointer-events: none;
+    }
+
+    /* On a stone the tint would read as a thicker rim where the stone
+       shares the highlight's color, so only a ring shows, the cell clear
+       between it and the stone. */
+    .highlight.on-stone {
+        fill: none;
+        stroke-width: var(--board-highlight-ring-w);
+    }
+
+    .hl-neutral {
+        fill: var(--board-highlight-neutral);
+        stroke: var(--board-highlight-neutral);
+    }
+
+    .hl-x {
+        fill: var(--board-stone-x);
+        stroke: var(--board-stone-x);
+    }
+
+    .hl-o {
+        fill: var(--board-stone-o);
+        stroke: var(--board-stone-o);
+    }
+
+    .visual-label {
+        font-family: var(--font-sans);
+        font-weight: var(--weight-display);
+        font-size: var(--board-label-1);
+        text-anchor: middle;
+        pointer-events: none;
+    }
+
+    .visual-label.label-2 {
+        font-size: var(--board-label-2);
+    }
+
+    .visual-label.label-3 {
+        font-size: var(--board-label-3);
+    }
+
+    .visual-label.on-cell {
+        fill: var(--board-focus);
+        stroke: var(--board-bg);
+        stroke-width: var(--board-label-casing-w);
+        stroke-linejoin: round;
+        paint-order: stroke;
+    }
+
+    .visual-label.on-x {
+        fill: var(--board-number-x);
+    }
+
+    .visual-label.on-o {
+        fill: var(--board-number-o);
+    }
+
+    /* A label stepped aside for a line's letter stands on a plate, as a
+       judged turn's tag does. */
+    .label-aside {
+        pointer-events: none;
+    }
+
+    .label-aside-plate {
+        fill: var(--c-bg-overlay);
+        stroke: var(--board-bg);
+        stroke-width: var(--board-tag-edge-w);
+    }
+
+    .visual-label.on-plate {
+        fill: var(--c-text);
+        font-size: var(--board-tag-size);
+    }
+
+    .visual-label.on-plate.label-3 {
+        font-size: var(--board-label-3);
+    }
+
+    /* A label the win line crosses is cut out of the line's mask, as a
+       crossed stone number is. */
+    .visual-label.cut {
+        fill: var(--mask-cut);
+        stroke: var(--mask-cut);
+        stroke-width: var(--board-win-casing-w);
+        stroke-linejoin: round;
+        vector-effect: non-scaling-stroke;
+    }
+
     /* A judged turn's tag: an inaccuracy and a mistake in their color on
        the overlay, a blunder on its filled plate, as the feed's chips. */
     .board-tag {
