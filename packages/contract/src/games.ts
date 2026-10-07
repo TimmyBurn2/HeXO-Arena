@@ -181,6 +181,12 @@ export const gameSnapshotSchema = z
             // Absent when the process that ran the clock is gone; the
             // result stands without it.
             clock: gameClockSchema.optional(),
+            turnClocks: z
+                .array(z.number().int().min(0).nullable())
+                .optional()
+                .meta({
+                    description: `The mover's clock in ms after each turn, from turn 1; null for the opening's drawn turns, which no clock timed; absent for an unlimited clock. Taken from move times kept to the second.`,
+                }),
         }),
     ])
     .meta({

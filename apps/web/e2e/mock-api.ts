@@ -1478,6 +1478,8 @@ export const games: Record<string, GameSnapshot> = {
         winner: `o`,
         reason: `six-in-a-row`,
         voided: false,
+        // Each chosen turn's clock left of its 30 s; the two drawn turns have none.
+        turnClocks: [null, null, ...Array.from({ length: 23 }, (_, index) => 30_000 - 1_000 * ((index % 7) + 1))],
     },
     'nine-finished': {
         gameId: `nine-finished`,

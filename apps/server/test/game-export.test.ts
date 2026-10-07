@@ -1,4 +1,4 @@
-import { gameExportGlobalLimit, gameExportLimit, tournamentListSchema, type Side } from '@hexo-arena/contract';
+import { gameExportGlobalLimit, gameExportLimit, tournamentListSchema, type Side, type TimeControl } from '@hexo-arena/contract';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { createBot, findBot } from '../src/bots';
 import { createQuery, type Query } from '../src/db';
@@ -88,7 +88,7 @@ describe('the tournament exports', () => {
     }
 
     // A game between two bots, x the first named, started at the given minute past noon on 2026-10-01.
-    function played(x: string, o: string, tag: BotGameTag, minute: number, marks: { unratedByChoice?: boolean; test?: boolean } = {}): string {
+    function played(x: string, o: string, tag: BotGameTag, minute: number, marks: { unratedByChoice?: boolean; test?: boolean; timeControl?: TimeControl } = {}): string {
         const gameId = insertBotGame(query, { challengerBotId: id(x), destBotId: id(o), challengerSide: `x`, timeControl: match, opening, tag, ...marks });
         world.sqlite.prepare(`update games set created_at = ? where id = ?`).run(startedAt + minute * 60, gameId);
         return gameId;
@@ -104,15 +104,21 @@ describe('the tournament exports', () => {
         world.sqlite.prepare(`update tournament_pairings set game${String(tag.game)} = ?, game${String(tag.game)}_seat = ? where id = ?`).run(state, seat, tag.pairingId);
     }
 
-    // x lines up six along its row from the origin, the sixth on the first stone of its last turn.
-    function sixInARow(gameId: string): void {
+    // x lines up six along its row from the origin, the sixth on the first stone of its last turn,
+    // each turn landing the given seconds after the game started.
+    function sixInARow(gameId: string, seconds: readonly number[] = [5, 12, 20, 21]): void {
         const turns: [OpeningCell, OpeningCell][] = [
             [{ x: 0, y: 6, player: 1 }, { x: 1, y: 6, player: 1 }],
             [{ x: 3, y: 0, player: 0 }, { x: 4, y: 0, player: 0 }],
             [{ x: 0, y: 7, player: 1 }, { x: 1, y: 7, player: 1 }],
             [{ x: 5, y: 0, player: 0 }, { x: 6, y: 1, player: 0 }],
         ];
-        for (const [index, cells] of turns.entries()) insertMove(query, { gameId, seq: index + 1, side: index % 2 === 0 ? `o` : `x`, cells });
+        for (const [index, cells] of turns.entries()) {
+            insertMove(query, { gameId, seq: index + 1, side: index % 2 === 0 ? `o` : `x`, cells });
+            world.sqlite
+                .prepare(`update moves set created_at = (select created_at from games where id = ?) + ? where game_id = ? and seq = ?`)
+                .run(gameId, seconds[index] ?? 0, gameId, index + 1);
+        }
     }
 
     async function download(url: string, address?: string) {
@@ -143,25 +149,26 @@ describe('the tournament exports', () => {
         return duel.id;
     }
 
-    it('downloads a duel as one HTTTX file per game, the opening written as its turns, beside games.csv and standings.csv', async () => {
+    it('downloads a duel as one HTTTX v2 file per game, the opening written as its turns, each chosen turn with its clock, beside games.csv and standings.csv', async () => {
         const duelId = finishedDuel();
         const { fileName, entries } = await exported(`/api/tournaments/${duelId}/export`);
         expect(fileName).toBe(`hexo-arena-duel-alpha-vs-beta-2026-10-01.zip`);
         expect(entries.map((entry) => entry.name)).toEqual([`01-alpha-vs-beta.htttx`, `02-beta-vs-alpha.htttx`, `games.csv`, `standings.csv`]);
+        // Each side's 300 s less its turns' time, 3 s added after each of them.
         expect(entries[0]?.text).toBe(
             [
-                `version[1]name[Duel, game 1 of 2]platform[HeXO Arena]utcdatetime[2026-10-01 12:00:00]playercross[alpha]playercircle[beta]timecontrol[300+3]endreason[win]winner[cross];`,
+                `version[2]name[Duel, game 1 of 2]platform[HeXO Arena]utcdatetime[2026-10-01 12:00:00]playercross[alpha]playercircle[beta]timecontrol[300+3]endreason[win]winner[cross];`,
                 `1. [5,-5][6,-5];`,
                 `2. [1,0][2,0];`,
-                `3. [6,-6][7,-6];`,
-                `4. [3,0][4,0];`,
-                `5. [7,-7][8,-7];`,
-                `6. [5,0];`,
+                `3. [6,-6][7,-6]{@298000};`,
+                `4. [3,0][4,0]{@296000};`,
+                `5. [7,-7][8,-7]{@293000};`,
+                `6. [5,0]{@298000}[/];`,
                 ``,
             ].join(`\n`),
         );
         expect(entries[1]?.text).toBe(
-            `version[1]name[Duel, game 2 of 2]platform[HeXO Arena]utcdatetime[2026-10-01 12:10:00]playercross[beta]playercircle[alpha]timecontrol[300+3]endreason[resign]winner[circle];\n1. [5,-5][6,-5];\n2. [1,0][2,0];\n`,
+            `version[2]name[Duel, game 2 of 2]platform[HeXO Arena]utcdatetime[2026-10-01 12:10:00]playercross[beta]playercircle[alpha]timecontrol[300+3]endreason[resign]winner[circle];\n1. [5,-5][6,-5];\n2. [1,0][2,0];\n`,
         );
         expect(entries[2]?.text).toBe(
             [
@@ -171,6 +178,45 @@ describe('the tournament exports', () => {
                 ``,
             ].join(`\r\n`),
         );
+    });
+
+    it('writes a turn clock as what each turn left of its own time, and no clock for an unlimited one', async () => {
+        const duel = seedDuel(query, { id: `d_alphavsbeta2`, startedBy: id(`cid`), first: id(`alpha`), second: id(`beta`), createdAt: startedAt });
+        const turned = played(`alpha`, `beta`, duelGame(duel, 1), 0, { unratedByChoice: true, timeControl: { mode: `turn`, turnTimeMs: 10_000 } });
+        sixInARow(turned, [4, 6, 16, 17]);
+        finish(turned, `x`, `six-in-a-row`, 1);
+        settle(duelGame(duel, 1), `played`, `first`);
+        const unlimited = played(`beta`, `alpha`, duelGame(duel, 2), 2, { unratedByChoice: true, timeControl: { mode: `unlimited` } });
+        sixInARow(unlimited);
+        finish(unlimited, `x`, `six-in-a-row`, 3);
+        settle(duelGame(duel, 2), `played`, `first`);
+        const { entries } = await exported(`/api/tournaments/${duel.id}/export`);
+        expect(entries[0]?.text.split(`\n`).slice(3)).toEqual([`3. [6,-6][7,-6]{@6000};`, `4. [3,0][4,0]{@8000};`, `5. [7,-7][8,-7]{@0};`, `6. [5,0]{@9000}[/];`, ``]);
+        expect(entries[1]?.text.split(`\n`).slice(3)).toEqual([`3. [6,-6][7,-6];`, `4. [3,0][4,0];`, `5. [7,-7][8,-7];`, `6. [5,0][/];`, ``]);
+    });
+
+    it('writes a seat\'s own evaluation of its turns where its values mean x\'s expected result, and none from a raw seat', async () => {
+        const duel = seedDuel(query, { id: `d_alphavsbeta3`, startedBy: id(`cid`), first: id(`alpha`), second: id(`beta`), createdAt: startedAt });
+        const gameId = played(`alpha`, `beta`, duelGame(duel, 1), 0, { unratedByChoice: true });
+        sixInARow(gameId);
+        const values = world.sqlite.prepare(`insert into own_values (game_id, side, scale, meaning) values (?, ?, ?, ?)`);
+        values.run(gameId, `x`, 2, `expected`);
+        values.run(gameId, `o`, 1, `raw`);
+        const line = world.sqlite.prepare(`insert into own_lines (game_id, seq, rank, first_x, first_y, second_x, second_y, heuristic, win_in) values (?, ?, 0, ?, ?, ?, ?, ?, ?)`);
+        line.run(gameId, 1, 0, 6, 1, 6, -0.5, null);
+        line.run(gameId, 2, 3, 0, 4, 0, 0.9, null);
+        line.run(gameId, 3, 0, 7, 1, 7, null, -3);
+        line.run(gameId, 4, 5, 0, 6, 1, 5, 1);
+        finish(gameId, `x`, `six-in-a-row`, 1);
+        settle(duelGame(duel, 1), `played`, `first`);
+        const { entries } = await exported(`/api/tournaments/${duel.id}/export`);
+        expect(entries[0]?.text.split(`\n`).slice(3)).toEqual([
+            `3. [6,-6][7,-6]{@298000};`,
+            `4. [3,0][4,0]{@296000:%45};`,
+            `5. [7,-7][8,-7]{@293000};`,
+            `6. [5,0]{@298000:#1}[/];`,
+            ``,
+        ]);
     });
 
     it('downloads a running duel\'s games finished so far, leaving the live one out', async () => {
@@ -183,7 +229,7 @@ describe('the tournament exports', () => {
         const { entries } = await exported(`/api/tournaments/${duel.id}/export`);
         expect(entries.map((entry) => entry.name)).toEqual([`01-alpha-vs-gamma.htttx`, `games.csv`, `standings.csv`]);
         expect(entries[0]?.text.split(`\n`)[0]).toBe(
-            `version[1]name[Duel, game 1 of 4]platform[HeXO Arena]utcdatetime[2026-10-01 12:00:00]playercross[alpha]playercircle[gamma]timecontrol[300+3]endreason[draw];`,
+            `version[2]name[Duel, game 1 of 4]platform[HeXO Arena]utcdatetime[2026-10-01 12:00:00]playercross[alpha]playercircle[gamma]timecontrol[300+3]endreason[draw];`,
         );
         expect(entries[1]?.text.split(`\r\n`)[1]).toBe(`1,1,alpha vs gamma,1,1,alpha,gamma,,terminated,2,false,false,2026-10-01T12:00:00Z,2026-10-01T12:05:00Z`);
     });
@@ -246,7 +292,7 @@ describe('the tournament exports', () => {
         expect(fileName).toBe(`hexo-arena-tournament-Autumn-round-robin-2026-10-01.zip`);
         expect(entries.map((entry) => entry.name)).toEqual([`01-alpha-vs-beta.htttx`, `02-beta-vs-alpha.htttx`, `03-gamma-vs-alpha.htttx`, `games.csv`, `standings.csv`]);
         expect(entries[2]?.text.split(`\n`)[0]).toBe(
-            `version[1]name[Autumn (round) robin, round 2, game 1 of 2]platform[HeXO Arena]utcdatetime[2026-10-01 12:07:00]playercross[gamma]playercircle[alpha]timecontrol[300+3]endreason[resign]winner[circle];`,
+            `version[2]name[Autumn (round) robin, round 2, game 1 of 2]platform[HeXO Arena]utcdatetime[2026-10-01 12:07:00]playercross[gamma]playercircle[alpha]timecontrol[300+3]endreason[resign]winner[circle];`,
         );
         expect(entries[3]?.text.split(`\r\n`).map((line) => line.split(`,`).slice(0, 9).join(`,`))).toEqual([
             `number,round,pair,opening,game,x,o,winner,reason`,

@@ -123,6 +123,45 @@ describe('Board', () => {
         expect(plain.querySelector(`g.win`)?.hasAttribute(`mask`)).toBe(false);
     });
 
+    it('draw imported highlights under the stones, a ring on a stone, and labels in place of the numbers, cut out of the win line whatever the numbers setting', () => {
+        const [first, second, third] = stones;
+        if (first === undefined || second === undefined || third === undefined) throw new Error(`too few stones`);
+        const visuals = [
+            { cell: { x: first.x, y: first.y }, tone: `x` as const, label: `A` },
+            { cell: { x: 9, y: 9 }, tone: `neutral` as const, label: null },
+            { cell: { x: third.x, y: third.y }, tone: null, label: `7` },
+        ];
+        for (const numbers of [false, true]) {
+            const frame = frameOf(
+                <Board stones={stones} settings={{ ...defaultBoardSettings, numbers }} label="test board" overlays={{ winLine: [first, second], visuals }} />,
+            );
+            expect([...frame.querySelectorAll(`polygon.highlight`)].map((node) => node.getAttribute(`class`))).toEqual([`highlight hl-x on-stone`, `highlight hl-neutral`]);
+            expect([...frame.querySelectorAll(`text.visual-label:not(.cut)`)].map((node) => node.textContent)).toEqual([`A`, `7`]);
+            expect([...frame.querySelectorAll(`mask text.visual-label.cut`)].map((node) => node.textContent)).toEqual([`A`]);
+            expect([...frame.querySelectorAll(`mask text.number.cut`)].map((node) => node.textContent)).toEqual(numbers ? [String(second.number)] : []);
+            expect(frame.querySelectorAll(`.numbers text.number`)).toHaveLength(stones.length - 2);
+            cleanup();
+        }
+    });
+
+    it('set a label aside where an analyzer\'s line letter holds its cell, toward a corner no other line letter holds, over the marks', () => {
+        const cell = { x: 6, y: 6 };
+        const lone = frameOf(
+            <Board stones={stones} settings={defaultBoardSettings} label="test board" overlays={{ lines: { side: `x`, lines: [{ letter: `A`, cells: [cell] }] }, visuals: [{ cell, tone: null, label: `B` }] }} />,
+        );
+        expect(lone.querySelector(`g.label-aside text.visual-label`)?.textContent).toBe(`B`);
+        expect(lone.querySelector(`g.label-aside polygon.label-aside-plate`)).not.toBeNull();
+        expect(lone.querySelector(`g.label-aside`)?.getAttribute(`data-corner`)).toBe(`lower-left`);
+        cleanup();
+        // Line A's other stone stands in the cell below to the left, where the plate would hang.
+        const lines = { side: `x` as const, lines: [{ letter: `A`, cells: [cell, { x: 5, y: 7 }] }, { letter: `B`, cells: [{ x: 6, y: 7 }] }] };
+        const crowded = frameOf(<Board stones={stones} settings={defaultBoardSettings} label="test board" overlays={{ lines, visuals: [{ cell, tone: null, label: `B` }] }} />);
+        const plate = crowded.querySelector(`g.label-aside`);
+        expect(plate?.getAttribute(`data-corner`)).toBe(`upper-left`);
+        const drawn = [...crowded.querySelectorAll(`g.line-mark, g.label-aside`)].map((node) => node.getAttribute(`class`) ?? ``);
+        expect(drawn.at(-1)).toBe(`label-aside`);
+    });
+
     it('report clicked cells by coordinate', () => {
         const clicked: { x: number; y: number }[] = [];
         const frame = frameOf(

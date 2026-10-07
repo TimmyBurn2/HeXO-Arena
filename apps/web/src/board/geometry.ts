@@ -15,6 +15,13 @@ const markScale = 0.69;
 // A line's mark sits well inside its cell, so its letters stay clear of the cell's edge.
 const lineMarkScale = 0.7;
 
+// A highlight fills its cell to just inside the gap, outside the rings, so a stone and its last-turn ring stay clear of it.
+const highlightScale = 0.95;
+
+// On a stone a highlight is a ring at the cell's edge, as far from the stone as the cell allows,
+// so it never merges with a stone of its own color.
+const highlightRingScale = 0.97;
+
 // Frame breathing room around the outermost cell centers.
 const viewBoxPad = cellSize * 1.35;
 
@@ -79,6 +86,39 @@ export function stonePoints(flat = false): string {
 /** The hollow hexagon that marks a cell of an analyzer's line. */
 export function lineMarkPoints(): string {
     return hexPoints(cellSize * lineMarkScale);
+}
+
+/** A corner of a cell an imported label's plate may hang from when an analyzer's line letter holds the cell's middle. */
+export type AsideCorner = `lower-left` | `lower-right` | `upper-left` | `upper-right`;
+
+// Each corner's plate hangs as a judgment's tag does, toward the neighbour it reaches over.
+const asideCorners: readonly { readonly corner: AsideCorner; readonly x: number; readonly y: number; readonly toward: AxialCoord }[] = [
+    { corner: `lower-left`, x: -0.7, y: 0.95, toward: { x: -1, y: 1 } },
+    { corner: `lower-right`, x: 0.7, y: 0.95, toward: { x: 0, y: 1 } },
+    { corner: `upper-left`, x: -0.7, y: -0.95, toward: { x: 0, y: -1 } },
+    { corner: `upper-right`, x: 0.7, y: -0.95, toward: { x: 1, y: -1 } },
+];
+
+/** The first corner, lower left first, whose neighbour `taken` leaves free, so the plate covers no other line's letter; lower left where none is free. */
+export function asideCorner(coord: AxialCoord, taken: (cell: AxialCoord) => boolean): AsideCorner {
+    return asideCorners.find((each) => !taken({ x: coord.x + each.toward.x, y: coord.y + each.toward.y }))?.corner ?? `lower-left`;
+}
+
+/** Where an imported label's plate stands, hung from a corner of its cell. */
+export function labelAsideCenter(coord: AxialCoord, corner: AsideCorner): { cx: number; cy: number } {
+    const { cx, cy } = hexCenter(coord);
+    const offset = asideCorners.find((each) => each.corner === corner) ?? { x: 0, y: 0 };
+    return { cx: cx + cellSize * offset.x, cy: cy + cellSize * offset.y };
+}
+
+/** The tinted hexagon that highlights a cell for an imported text. */
+export function highlightPoints(): string {
+    return hexPoints(cellSize * highlightScale);
+}
+
+/** The ring that highlights a stone's cell, at the cell's edge, so the cell shows between it and the stone. */
+export function highlightRingPoints(): string {
+    return hexPoints(cellSize * highlightRingScale);
 }
 
 // A judgment's tag hangs off a stone's upper right, clear of its number,

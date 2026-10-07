@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { sideOf, type AxialCoord, type GameSnapshot, type JudgmentSeverity } from '@hexo-arena/contract';
+import { sideOf, type AxialCoord, type GameSnapshot, type HtttxEvaluation, type JudgmentSeverity, type Side } from '@hexo-arena/contract';
 import type { Setup, TurnCells } from '@hexo-arena/rules';
 import { askerOf, type Asker } from '../game/DrawerAnalysis';
 import { useStoredGameReading, type StoredGameReading } from '../game/use-stored-game-reading';
@@ -27,10 +27,11 @@ import {
 import { nextUtcDay, readings, useReadingsAt, useReadingsSnapshot, type ReadingEntry, type ReadingTarget } from './readings';
 import type { AnalyzerList, ReadingPill } from './ReadingPanel';
 import { shownLines } from './reading-view';
-import type { RowFact } from './row-facts';
+import { readAfter, type RowFact } from './row-facts';
 import { botSource, type AnalysisPosition } from './sources';
 import { gameLine, type AnalysisState } from './state';
-import { nodeAt, pathTo, rootId, type NodeId } from './tree';
+import { notationEvaluation } from './study';
+import { nodeAt, pathTo, rootId, type NodeId, type PlayedNode } from './tree';
 import { useAnalyzers } from './use-analyzers';
 
 /** What the analysis board's panel, move list, and board read of the position shown and of a stored game. */
@@ -62,6 +63,8 @@ export interface AnalysisReading {
     readonly judgment: { readonly cell: AxialCoord; readonly severity: JudgmentSeverity } | null;
     // The node of a stored game's turn, the root for none.
     readonly nodeOfTurn: (turn: number) => NodeId | undefined;
+    // The evaluation of the board after a whole turn as the notation writes it, from the readings the move list's values come from.
+    readonly evaluationOf: (node: PlayedNode) => HtttxEvaluation | null;
 }
 
 const noEntry: ReadingEntry = { read: null, state: { kind: `idle` } };
@@ -72,9 +75,11 @@ const noEntry: ReadingEntry = { read: null, state: { kind: `idle` } };
  * a stored game's readings filed by position, and read whole over its own turns;
  * and what the panel, the move list, and the board make of them.
  */
-export function useAnalysisReading({ board, position, snapshot, gameTurns, editing }: {
+export function useAnalysisReading({ board, position, half, snapshot, gameTurns, editing }: {
     board: AnalysisState;
     position: Setup;
+    // A half-turn's lone stone, where no whole turn stands to read; null on any other node.
+    half: { readonly side: Side; readonly cell: AxialCoord } | null;
     // The stored game the board opened; null for any other board.
     snapshot: GameSnapshot | null;
     gameTurns: readonly TurnCells[];
@@ -104,7 +109,7 @@ export function useAnalysisReading({ board, position, snapshot, gameTurns, editi
             }),
         [settings.analyzer],
     );
-    const unreadable = useMemo(() => unreadableOf(position, won), [position, won]);
+    const unreadable = useMemo(() => unreadableOf(position, won, half), [position, won, half]);
     const atKey = node?.key ?? ``;
     // Off on every visit: positions are read on their own only once the person turns it on here.
     const [analyzing, setAnalyzing] = useState(false);
@@ -143,9 +148,9 @@ export function useAnalysisReading({ board, position, snapshot, gameTurns, editi
     const ownEntry = gameId === null ? undefined : entries.get(ownSourceId(gameId, toMove));
     const shown = ownView ? (ownEntry ?? noEntry) : entry;
     const read = shown.read;
-    const lines = useMemo(() => (read === null ? [] : shownLines(read.reading, position, toMove, settings.lines)), [read, position, toMove, settings.lines]);
-    // A reading on its way, asked or about to be, keeps the lines' rows and the bar in place.
-    const waiting = !ownView && read === null && (entry.state.kind === `thinking` || entry.state.kind === `queued` || (entry.state.kind === `idle` && analyzing));
+    const lines = useMemo(() => (read === null || unreadable !== null ? [] : shownLines(read.reading, position, toMove, settings.lines)), [read, unreadable, position, toMove, settings.lines]);
+    // A reading on its way, asked or about to be, keeps the lines' rows and the bar in place; none comes where none can be read.
+    const waiting = unreadable === null && !ownView && read === null && (entry.state.kind === `thinking` || entry.state.kind === `queued` || (entry.state.kind === `idle` && analyzing));
 
     // The game's reading the graph, the marks, and its rows come from, as the drawer shows it:
     // the own views while their pill is picked, else the pill's analyzer's reading of the whole game, else the first.
@@ -202,6 +207,15 @@ export function useAnalysisReading({ board, position, snapshot, gameTurns, editi
         return 0;
     }, [tree, at, lineDepth]);
     const nodeOfTurn = useCallback((turn: number) => (turn <= 0 ? rootId : gameNodes[turn - 1]?.id), [gameNodes]);
+    const evaluationOf = useCallback(
+        (node: PlayedNode) => {
+            const parent = nodeAt(tree, node.parent);
+            if (node.kind !== `turn` || node.win !== null || parent === undefined) return null;
+            const around = readAfter(node, parent.key, lookup, sourceFor);
+            return around === null ? null : notationEvaluation(around.after, around.values);
+        },
+        [tree, lookup, sourceFor],
+    );
 
     const turnAnalyzing = useCallback(
         (on: boolean) => {
@@ -245,5 +259,6 @@ export function useAnalysisReading({ board, position, snapshot, gameTurns, editi
         cursor,
         judgment: judgedMark({ node, onGame: lineDepth, view, line: record }),
         nodeOfTurn,
+        evaluationOf,
     };
 }

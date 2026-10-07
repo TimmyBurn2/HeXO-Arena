@@ -1,6 +1,25 @@
-import { boardCellSchema, siteName, turnsOfStones, writeHtttx, type FinishedGameEntry, type TournamentDetail } from '@hexo-arena/contract';
+import {
+    boardCellSchema,
+    htttxLineOf,
+    htttxTags,
+    siteName,
+    turnClocks,
+    turnsOfStones,
+    writeHtttx,
+    type AnalysisTurn,
+    type AnalyzerValues,
+    type FinishedGameEntry,
+    type HtttxCells,
+    type HtttxDocument,
+    type HtttxEvaluation,
+    type HtttxHeader,
+    type Side,
+    type TimeControl,
+    type TournamentDetail,
+} from '@hexo-arena/contract';
 import { replay, type Coord } from '@hexo-arena/rules';
 import { asc, inArray } from 'drizzle-orm';
+import { ownLinesOf, ownValuesOf } from './analysis-store';
 import type { Query } from './db';
 import { games, moves } from './db/schema';
 import { finishedEntriesOf } from './finished-games';
@@ -54,33 +73,72 @@ const isoSecond = (seconds: number) => new Date(seconds * 1000).toISOString().re
 
 interface Played {
     readonly startedAt: number;
+    readonly openingPlies: number;
     readonly stones: readonly Coord[];
+    readonly turnTimes: readonly { readonly side: Side; readonly at: number }[];
 }
 
 // Every stone of each game in placement order, the opening's first; a
 // winning stone ends the replay, as the game ended on it.
 function playedGames(query: Query, ids: readonly string[]): Map<string, Played> {
     if (ids.length === 0) return new Map();
-    const placed = new Map<string, Coord[]>();
+    const placed = new Map<string, { cells: Coord[]; turnTimes: { side: Side; at: number }[] }>();
     const rows = query
-        .select({ gameId: moves.gameId, firstX: moves.firstX, firstY: moves.firstY, secondX: moves.secondX, secondY: moves.secondY })
+        .select({ gameId: moves.gameId, side: moves.side, at: moves.createdAt, firstX: moves.firstX, firstY: moves.firstY, secondX: moves.secondX, secondY: moves.secondY })
         .from(moves)
         .where(inArray(moves.gameId, [...ids]))
         .orderBy(asc(moves.gameId), asc(moves.seq))
         .all();
     for (const row of rows) {
-        const cells = placed.get(row.gameId) ?? [];
-        cells.push({ x: row.firstX, y: row.firstY }, { x: row.secondX, y: row.secondY });
-        placed.set(row.gameId, cells);
+        const game = placed.get(row.gameId) ?? { cells: [], turnTimes: [] };
+        game.cells.push({ x: row.firstX, y: row.firstY }, { x: row.secondX, y: row.secondY });
+        game.turnTimes.push({ side: row.side, at: row.at });
+        placed.set(row.gameId, game);
     }
     const played = new Map<string, Played>();
     for (const row of query.select({ id: games.id, createdAt: games.createdAt, openingCells: games.openingCells }).from(games).where(inArray(games.id, [...ids])).all()) {
         const opening = boardCellSchema.array().parse(JSON.parse(row.openingCells));
-        const replayed = replay([...opening, ...(placed.get(row.id) ?? [])]);
+        const moved = placed.get(row.id);
+        const replayed = replay([...opening, ...(moved?.cells ?? [])]);
         if (!replayed.ok) throw new Error(`stored cell is illegal: ${row.id}`);
-        played.set(row.id, { startedAt: row.createdAt, stones: replayed.position.stones });
+        played.set(row.id, { startedAt: row.createdAt, openingPlies: opening.length, stones: replayed.position.stones, turnTimes: moved?.turnTimes ?? [] });
     }
     return played;
+}
+
+// The evaluation a seat's own view gives the board after a turn it played, where its values mean x's expected result:
+// a forced win as its win_in, else the heuristic as a percentage of its scale; a raw seat's numbers say nothing outside it.
+function ownEvaluation(view: AnalysisTurn | undefined, values: AnalyzerValues): HtttxEvaluation | null {
+    const played = view?.lines[0];
+    if (played === undefined || values.meaning !== `expected`) return null;
+    if (played.winIn !== undefined && played.winIn !== 0) return { kind: `closed`, turns: played.winIn };
+    if (played.heuristic === undefined) return null;
+    // The trailing + 0 turns -0 into 0.
+    return { kind: `open`, value: Math.round(100 * Math.max(-1, Math.min(1, played.heuristic / values.scale))) + 0 };
+}
+
+// A game as v2 text, each chosen turn with its mover's clock and own evaluation, which the opening's drawn turns lack;
+// a game of no turns, which v2 cannot write, is v1.
+function gameText(query: Query, gameId: string, game: Played, timeControl: TimeControl, header: HtttxHeader): string {
+    const openingTurns = (game.openingPlies - 1) / 2;
+    const clocks = turnClocks(timeControl, game.startedAt, game.turnTimes);
+    const views = ownLinesOf(query, gameId, game.openingPlies);
+    const values = ownValuesOf(query, gameId);
+    const line = htttxLineOf(
+        turnsOfStones(game.stones).flatMap(([first, second], index) => {
+            if (first === undefined) return [];
+            const cells: HtttxCells = second === undefined ? [first] : [first, second];
+            const chosen = index - openingTurns;
+            const side = chosen < 0 ? undefined : game.turnTimes[chosen]?.side;
+            if (side === undefined) return [{ cells, info: null }];
+            const clockMs = clocks?.[chosen] ?? null;
+            const evaluation = ownEvaluation(views[side].find((view) => view.turn === index + 1), values[side]);
+            return [{ cells, info: clockMs === null && evaluation === null ? null : { clockMs, evaluation } }];
+        }),
+    );
+    const tags = htttxTags(header);
+    const document: HtttxDocument = line === null ? { version: 1, tags, turns: [] } : { version: 2, tags, line };
+    return writeHtttx(document);
 }
 
 const csvHead = [`x`, `o`, `winner`, `reason`, `turns`, `rated`, `test`, `started`, `finished`] as const;
@@ -116,7 +174,7 @@ function gameEntries(query: Query, slots: readonly Slot[], finished: readonly Fi
             entry.finishedAt,
             ...(versioned ? [slot.versions?.x ?? ``, slot.versions?.o ?? ``] : []),
         ]);
-        const text = writeHtttx(turnsOfStones(game.stones), {
+        const text = gameText(query, slot.gameId, game, entry.timeControl, {
             name: slot.title,
             platform: siteName,
             startedAt: new Date(game.startedAt * 1000),

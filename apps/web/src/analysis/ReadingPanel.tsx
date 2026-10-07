@@ -1,10 +1,12 @@
-import { useState, type CSSProperties } from 'react';
-import { analysisSecondsChoices, type BotListing, type Side } from '@hexo-arena/contract';
+import { useRef, useState, type CSSProperties } from 'react';
+import { analysisSecondsChoices, type AxialCoord, type BotListing, type Side } from '@hexo-arena/contract';
 import { BoardToggles } from '../board/BoardToggles';
 import { BotBadge } from '../components/player';
 import { TopbarPanel, usePanel } from '../components/TopbarPanel';
 import { text } from '../text';
 import { effectiveSeconds, type AnalysisSettings } from './analysis-settings';
+import { useChipRoom } from './chip-room';
+import { cellText } from './notation';
 import type { HeldReading, ReadingState } from './readings';
 import { lineLetters, xShare, type ShownLine } from './reading-view';
 
@@ -22,8 +24,12 @@ export type AnalyzerShown =
     | { readonly kind: `own`; readonly name: string | null; readonly side: Side }
     | { readonly kind: `engine`; readonly name: string; readonly version: string; readonly seconds: number };
 
-/** Why the position shown cannot be read, if it cannot. */
-export type Unreadable = { readonly kind: `won` } | { readonly kind: `too-many`; readonly stones: number } | { readonly kind: `too-far` };
+/** Why the position shown cannot be read, if it cannot: a half-turn's lone stone, of `side` on `cell`, leaves no whole turn to read. */
+export type Unreadable =
+    | { readonly kind: `won` }
+    | { readonly kind: `too-many`; readonly stones: number }
+    | { readonly kind: `too-far` }
+    | { readonly kind: `half`; readonly side: Side; readonly cell: AxialCoord };
 
 /** The bots that declare an analyzer, as the settings list them. */
 export type AnalyzerList =
@@ -135,6 +141,8 @@ export function unreadableText(unreadable: Unreadable): string {
             return words.tooMany(unreadable.stones);
         case `too-far`:
             return words.tooFar;
+        case `half`:
+            return words.half(unreadable.side, cellText(unreadable.cell));
     }
 }
 
@@ -307,12 +315,14 @@ export function Trouble({ state, analyzer, onAsk, wait }: {
  * While a position is `held` for its reading the bar stays, even and dimmed.
  */
 export function EvalBar({ line, held }: { line: ShownLine | null; held: boolean }) {
+    const ref = useRef<HTMLDivElement>(null);
+    useChipRoom(ref, line !== null);
     if (line === null && !held) return null;
     const share = `${((line === null ? 0.5 : xShare(line)) * 100).toFixed(1)}%`;
     // React passes custom properties through as written; CSSProperties only lacks their names.
     const style = { '--x-share': share } as CSSProperties;
     return (
-        <div className={line === null ? `an-evalbar an-evalbar-held` : `an-evalbar`} style={style} aria-hidden="true">
+        <div ref={ref} className={line === null ? `an-evalbar an-evalbar-held` : `an-evalbar`} style={style} aria-hidden="true">
             <span className="an-evalbar-x" />
             {line === null ? null : <span className="an-evalbar-chip">{line.value.shown}</span>}
         </div>

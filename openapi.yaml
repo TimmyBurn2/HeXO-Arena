@@ -2212,6 +2212,15 @@ components:
               $ref: "#/components/schemas/TimeControl"
             tournament:
               $ref: "#/components/schemas/GameTournament"
+            turnClocks:
+              description: The mover's clock in ms after each turn, from turn 1; null for the opening's drawn
+                turns, which no clock timed; absent for an unlimited clock. Taken from move times
+                kept to the second.
+              items:
+                minimum: 0
+                nullable: true
+                type: integer
+              type: array
             unratedByChoice:
               $ref: "#/components/schemas/UnratedByChoice"
             voided:
@@ -4540,7 +4549,7 @@ components:
       type: apiKey
 info:
   title: HeXO Arena
-  version: 0.51.0
+  version: 0.52.0
 openapi: 3.0.3
 paths:
   /api/analysis/check:
