@@ -1,4 +1,4 @@
-import type { Side } from '@hexo-arena/contract';
+import { valueWords, type AnalyzerValues, type HtttxEvaluation, type Side, type ValueText } from '@hexo-arena/contract';
 import type { TurnRejection } from '@hexo-arena/rules';
 import { text } from '../text';
 import { cellText, type NotationError } from './notation';
@@ -16,9 +16,15 @@ export function notationErrorText(error: NotationError): string {
         case `version`:
             return words.version(error.version);
         case `turn-number`:
-            return words.turnNumber(error.expected, error.found);
+            return words.turnNumber(error.line, error.column, error.expected, error.found);
         case `coordinate-count`:
-            return words.cellCount(error.turn, error.count);
+            return words.cellCount(error.line, error.column, error.turn, error.count);
+        case `threat-mark`:
+            return words.threatMark(error.line, error.column, error.turn);
+        case `after-final`:
+            return words.afterFinal(error.line, error.column, error.turn);
+        case `tree-cap`:
+            return words.treeCap(error.limit);
         case `illegal`:
             return words.illegal(error.turn, cellText(error.cell), words.why[error.rejection.kind]);
         case `too-many-turns`:
@@ -84,6 +90,33 @@ function rejectionText(rejection: TurnRejection): string {
         default:
             return assertNever(rejection);
     }
+}
+
+// An open evaluation reads as an analyzer's expected value would at a scale of 100: (100 + e) / 200 is x's win chance.
+const openValues: AnalyzerValues = { scale: 100, cuts: null, meaning: `expected` };
+
+/**
+ * An imported open or closed evaluation in words, never judged:
+ * an open one held to -100 to 100 as the leading side's win chance, (100 + e) / 200 for x, in whole percents as an analyzer's shows;
+ * a closed one as its winner's win in its count of turns, or a decided position where `#0` names no side.
+ */
+export function importedWords(evaluation: HtttxEvaluation): ValueText {
+    const words = text.analysis.notes;
+    if (evaluation.kind === `closed`) {
+        const said = evaluation.turns === 0 ? words.decided : words.wins(evaluation.turns > 0 ? `x` : `o`, Math.abs(evaluation.turns));
+        return { shown: said, spoken: said };
+    }
+    return valueWords({ heuristic: evaluation.value }, { kind: `board` }, openValues) ?? { shown: words.even, spoken: words.even };
+}
+
+/** A clock in ms as the notes show it: tenths of a second under a minute, then minutes and seconds, then hours. */
+export function clockText(ms: number): string {
+    if (ms < 60_000) return `${(Math.floor(ms / 100) / 10).toFixed(1)} s`;
+    const seconds = Math.floor(ms / 1_000);
+    const hours = Math.floor(seconds / 3_600);
+    const minutes = Math.floor((seconds % 3_600) / 60);
+    const rest = String(seconds % 60).padStart(2, `0`);
+    return hours === 0 ? `${String(minutes)}:${rest}` : `${String(hours)}:${String(minutes).padStart(2, `0`)}:${rest}`;
 }
 
 /** The state of a position in words: whose turn, with one stone marked, or who won. */

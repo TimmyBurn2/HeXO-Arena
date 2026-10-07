@@ -4,6 +4,7 @@ import {
     seatLevelSchema,
     timeControlSchema,
     tournamentFormatOf,
+    turnClocks,
     turnsOnBoard,
     type FinishReason,
     type GameHeadline,
@@ -565,6 +566,19 @@ export function findMoves(query: Query, gameId: string): StoredMove[] {
                 { x: row.secondX, y: row.secondY },
             ],
         }));
+}
+
+/**
+ * A finished game's clocks as its snapshot carries them, from turn 1:
+ * null for each of the opening's drawn turns, then each chosen turn's mover clock from the stored move times;
+ * null for an unlimited clock.
+ */
+export function storedTurnClocks(query: Query, gameId: string, timeControl: TimeControl, openingPlies: number): (number | null)[] | null {
+    const started = query.select({ createdAt: games.createdAt }).from(games).where(eq(games.id, gameId)).get();
+    if (started === undefined) return null;
+    const played = query.select({ side: moves.side, at: moves.createdAt }).from(moves).where(eq(moves.gameId, gameId)).orderBy(moves.seq).all();
+    const clocks = turnClocks(timeControl, started.createdAt, played);
+    return clocks === null ? null : [...Array.from({ length: (openingPlies - 1) / 2 }, () => null), ...clocks];
 }
 
 // Rebuilding a position replays the stored log,

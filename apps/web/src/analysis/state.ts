@@ -1,7 +1,8 @@
-import { analysisTreeNodeCap, gameTurnCap } from '@hexo-arena/contract';
+import { analysisTreeNodeCap, gameTurnCap, type HtttxNotes } from '@hexo-arena/contract';
 import { playTurn, type Coord, type TurnCells } from '@hexo-arena/rules';
 import { z } from 'zod';
 import {
+    annotate,
     lineEnd,
     mainLine,
     newTree,
@@ -9,6 +10,7 @@ import {
     openingTurns,
     pathTo,
     play,
+    playLone,
     positionAt,
     promote,
     removeFrom,
@@ -22,6 +24,7 @@ import {
     type TreeRefusal,
     type TreeRoot,
     type TurnNode,
+    type TurnNotes,
 } from './tree';
 
 /**
@@ -110,7 +113,7 @@ export function goTo(state: AnalysisState, id: NodeId): AnalysisState {
 /** One turn back, never below the floor. */
 export function back(state: AnalysisState): AnalysisState {
     const node = nodeAt(state.tree, state.at);
-    if (node?.kind !== `turn` || state.at === floorOf(state.tree)) return state.mark === null ? state : { ...state, mark: null };
+    if (node === undefined || node.kind === `root` || state.at === floorOf(state.tree)) return state.mark === null ? state : { ...state, mark: null };
     return goTo(state, node.parent);
 }
 
@@ -153,9 +156,10 @@ export function deleteFrom(state: AnalysisState, gameTurns: readonly TurnCells[]
     return stood ? { tree: visit(removed.tree, removed.focus), at: removed.focus, mark: null } : { ...state, tree: removed.tree };
 }
 
-/** Whether a turn can be removed: any turn but a stored game's own, given as `gameTurns`. */
+/** Whether a turn or half-turn can be removed: any but a stored game's own turns, given as `gameTurns`. */
 export function deletable(tree: MoveTree, gameTurns: readonly TurnCells[], id: NodeId): boolean {
-    return nodeAt(tree, id)?.kind === `turn` && !inOpening(tree, id) && !gameLineIds(tree, gameTurns).has(id);
+    const node = nodeAt(tree, id);
+    return node !== undefined && node.kind !== `root` && !inOpening(tree, id) && !gameLineIds(tree, gameTurns).has(id);
 }
 
 // A cell's mark: the board after it, and why the cell took no stone, if it did not.
@@ -169,9 +173,12 @@ interface Marked {
  * A first stone that completes six plays a one-stone turn at once;
  * any other first stone waits for its second, which plays the turn, a new variation or a turn already in the tree.
  * The marked cell again takes the mark back; a refused stone leaves the mark as it was.
+ * On a half-turn the cell is the turn's second stone, played with the half-turn's first from its parent.
  */
 export function markCell(state: AnalysisState, cell: Coord): Marked {
     const { tree, at, mark } = state;
+    const shown = nodeAt(tree, at);
+    if (shown?.kind === `half`) return playCells(state, [shown.cell, cell]);
     if (mark !== null && mark.x === cell.x && mark.y === cell.y) return { state: { ...state, mark: null }, refusal: null };
     if (mark === null) {
         const cap = capRefusal(tree, at);
@@ -186,7 +193,7 @@ export function markCell(state: AnalysisState, cell: Coord): Marked {
     return playCells(state, [mark, cell]);
 }
 
-/** Play a whole turn from the node the board stands on, as a line of the analyzer or a pasted turn would. */
+/** Play a whole turn from the node the board stands on, a half-turn's parent on a half-turn, as a line of the analyzer or a pasted turn would. */
 export function playCells(state: AnalysisState, cells: TurnCells): Marked {
     const played = play(state.tree, state.at, cells);
     if (!played.ok) return { state, refusal: played.refusal };
@@ -229,14 +236,41 @@ const storedRootSchema = z.discriminatedUnion(`kind`, [
     z.object({ kind: z.literal(`game`), gameId: z.string().regex(/^[A-Za-z0-9_-]{1,100}$/u) }),
     z.object({ kind: z.literal(`setup`), stones: z.array(z.tuple([z.number().int(), z.number().int(), playerSchema])).min(1), toMove: playerSchema }),
 ]);
+const storedVisualSchema = z.object({
+    cell: z.object({ x: z.number().int(), y: z.number().int() }),
+    highlight: z.object({ letter: z.string().regex(/^[A-Z]$/u).nullable() }).nullable(),
+    label: z.string().regex(/^[A-Z0-9]+$/u).nullable(),
+});
+const storedNotesSchema = z.object({
+    info: z
+        .object({
+            clockMs: z.number().int().min(0).nullable(),
+            evaluation: z.discriminatedUnion(`kind`, [z.object({ kind: z.literal(`open`), value: z.number().int() }), z.object({ kind: z.literal(`closed`), turns: z.number().int() })]).nullable(),
+        })
+        .nullable(),
+    visuals: z.array(storedVisualSchema),
+});
 // A node names its parent by its place in the list, -1 for the root, and
-// holds its cells, except a stored game's own turn, which the game holds.
+// holds its cells, except a stored game's own turn, which the game holds;
+// one cell is a turn that completes six, or else a half-turn.
+// An imported text's notes ride along.
 const storedNodeSchema = z.object({
     p: z.number().int().min(-1),
     c: z.union([z.tuple([cellSchema]), z.tuple([cellSchema, cellSchema])]).optional(),
+    n: z.object({ first: storedNotesSchema, second: storedNotesSchema.nullable() }).optional(),
 });
+// More tags than any game text carries are not kept.
+const htttxTagCap = 100;
+
+// Tags that do not read are dropped rather than losing the board with them.
+const storedTagsSchema = z
+    .array(z.object({ key: z.string().regex(/^[A-Za-z][A-Za-z0-9_-]*$/u), value: z.string() }))
+    .max(htttxTagCap)
+    .optional()
+    .catch(undefined);
 const storedBoardSchema = z.object({
     root: storedRootSchema,
+    tags: storedTagsSchema,
     nodes: z.array(storedNodeSchema).max(analysisTreeNodeCap),
     at: z.number().int().min(-1),
     mark: cellSchema.nullable(),
@@ -250,7 +284,8 @@ type StoredRoot = StoredBoard[`root`];
 
 /**
  * Write a board down for the browser to keep: every node in tree order, parents first and siblings in their order,
- * with a stored game's own turns, given as `gameTurns`, by place alone, since the game holds their cells.
+ * with a stored game's own turns, given as `gameTurns`, by place alone, since the game holds their cells;
+ * and the tags of a text it was imported from.
  */
 export function storeBoard(state: AnalysisState, gameTurns: readonly TurnCells[]): StoredBoard {
     const { tree } = state;
@@ -260,13 +295,15 @@ export function storeBoard(state: AnalysisState, gameTurns: readonly TurnCells[]
     const pending: NodeId[] = [...(nodeAt(tree, rootId)?.children ?? [])].reverse();
     for (let id = pending.pop(); id !== undefined; id = pending.pop()) {
         const node = nodeAt(tree, id);
-        if (node?.kind !== `turn`) continue;
+        if (node === undefined || node.kind === `root`) continue;
         index.set(id, nodes.length);
         const parent = index.get(node.parent) ?? -1;
-        nodes.push(game.has(id) ? { p: parent } : { p: parent, c: storedCells(node.cells) });
+        const cells = node.kind === `half` ? storedCells([node.cell]) : storedCells(node.cells);
+        nodes.push({ p: parent, ...(game.has(id) ? {} : { c: cells }), ...(node.notes === null ? {} : { n: storedNotes(node.notes) }) });
         pending.push(...[...node.children].reverse());
     }
-    return { root: storedRootOf(tree.root), nodes, at: index.get(state.at) ?? -1, mark: state.mark === null ? null : [state.mark.x, state.mark.y] };
+    const tags = tree.tags.length === 0 ? {} : { tags: tree.tags.slice(0, htttxTagCap).map(({ key, value }) => ({ key, value })) };
+    return { root: storedRootOf(tree.root), ...tags, nodes, at: index.get(state.at) ?? -1, mark: state.mark === null ? null : [state.mark.x, state.mark.y] };
 }
 
 /** The stored board in the browser's storage, or null when there is none or it does not read. */
@@ -303,7 +340,7 @@ export function rootOfStored(root: StoredRoot, openingPlies: number): TreeRoot {
  * written by an older page still opens as far as it reads.
  */
 export function restoreBoard(stored: StoredBoard, root: TreeRoot, gameTurns: readonly TurnCells[] = []): AnalysisState {
-    let tree = newTree(root);
+    let tree = newTree(root, stored.tags ?? []);
     const ids: (NodeId | null)[] = [];
     const depths: number[] = [];
     for (const node of stored.nodes) {
@@ -311,12 +348,12 @@ export function restoreBoard(stored: StoredBoard, root: TreeRoot, gameTurns: rea
         const depth = node.p === -1 ? 1 : (depths[node.p] ?? 0) + 1;
         depths.push(depth);
         const cells = node.c === undefined ? gameTurns[depth - 1] : turnCells(node.c);
-        const played = parent === null || cells === undefined ? null : play(tree, parent, cells);
+        const played = parent === null || cells === undefined ? null : cells.length === 1 ? playLone(tree, parent, cells[0]) : play(tree, parent, cells);
         if (played === null || !played.ok) {
             ids.push(null);
             continue;
         }
-        tree = played.tree;
+        tree = node.n === undefined ? played.tree : annotate(played.tree, played.node, notesOf(node.n));
         ids.push(played.node);
     }
     const at = stored.at === -1 ? rootId : (ids[stored.at] ?? rootId);
@@ -363,6 +400,17 @@ function storedRootOf(root: TreeRoot): StoredRoot {
         default:
             return assertNever(root);
     }
+}
+
+type StoredNotes = NonNullable<StoredBoard[`nodes`][number][`n`]>;
+
+function storedNotes(notes: TurnNotes): StoredNotes {
+    const copy = (each: HtttxNotes) => ({ info: each.info, visuals: [...each.visuals] });
+    return { first: copy(notes.first), second: notes.second === null ? null : copy(notes.second) };
+}
+
+function notesOf(stored: StoredNotes): TurnNotes {
+    return { first: stored.first, second: stored.second };
 }
 
 function storedCells(cells: TurnCells): [[number, number]] | [[number, number], [number, number]] {

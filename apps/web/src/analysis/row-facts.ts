@@ -1,5 +1,5 @@
-import { valueWords, type AxialCoord, type Judgment, type Side, type ValueText } from '@hexo-arena/contract';
-import { afterWords } from './reading-view';
+import { valueWords, type AnalyzerValues, type AxialCoord, type Judgment, type Side, type ValueText } from '@hexo-arena/contract';
+import { afterWords, type AfterReading } from './reading-view';
 import type { Reading } from './sources';
 import { nodeAt, type MoveTree, type NodeId, type TurnNode } from './tree';
 
@@ -27,15 +27,32 @@ export function rowFacts(tree: MoveTree, read: (key: string, sourceId: string) =
 }
 
 function valueAfter(node: TurnNode, parentKey: string, read: (key: string, sourceId: string) => Reading | null, sourceFor: (side: Side) => string): ValueText | null {
-    const before = read(parentKey, sourceFor(node.side));
     // A six is won whatever the reading, but says so only where the source read the position it was played from.
-    if (node.win !== null) return before === null ? null : valueWords({}, { kind: `line`, mover: node.side, completesSix: true }, before.values);
+    if (node.win !== null) {
+        const before = read(parentKey, sourceFor(node.side));
+        return before === null ? null : valueWords({}, { kind: `line`, mover: node.side, completesSix: true }, before.values);
+    }
+    const around = readAfter(node, parentKey, read, sourceFor);
+    return around === null ? null : afterWords(around.after, around.values);
+}
+
+/**
+ * Where the value of the board after a turn that completes no six comes from, in a source's readings, and how its values read:
+ * the turn's own line where the reading before it lists the turn, else the next mover's best line at the position after; null where neither is read.
+ */
+export function readAfter(
+    node: TurnNode,
+    parentKey: string,
+    read: (key: string, sourceId: string) => Reading | null,
+    sourceFor: (side: Side) => string,
+): { readonly after: AfterReading; readonly values: AnalyzerValues } | null {
+    const before = read(parentKey, sourceFor(node.side));
     const listed = before?.lines.find((line) => sameCells(line.cells, node.cells));
-    if (listed !== undefined && before !== null) return afterWords({ kind: `played`, evaluation: listed.evaluation }, before.values);
+    if (listed !== undefined && before !== null) return { after: { kind: `played`, evaluation: listed.evaluation }, values: before.values };
     const next: Side = node.side === `x` ? `o` : `x`;
     const reading = read(node.key, sourceFor(next));
     const best = reading?.lines[0]?.evaluation;
-    return reading === null || best === undefined ? null : afterWords({ kind: `next`, evaluation: best, mover: next }, reading.values);
+    return reading === null || best === undefined ? null : { after: { kind: `next`, evaluation: best, mover: next }, values: reading.values };
 }
 
 function sameCells(a: readonly AxialCoord[], b: readonly AxialCoord[]): boolean {

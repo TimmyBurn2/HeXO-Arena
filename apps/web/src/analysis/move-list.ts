@@ -19,7 +19,7 @@ export interface BandToken {
  */
 export function bandOf(tree: MoveTree, id: NodeId): BandToken[][] {
     const node = nodeAt(tree, id);
-    if (node?.kind !== `turn`) return [];
+    if (node === undefined || node.kind === `root`) return [];
     const siblings = nodeAt(tree, node.parent)?.children ?? [];
     if (siblings[0] !== id) return [];
     return siblings.slice(1).map((first) => lineTokens(tree, first, false));

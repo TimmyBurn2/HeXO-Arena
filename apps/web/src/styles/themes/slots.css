@@ -24,5 +24,8 @@
            differ in hue more than in lightness */
         --stone-mark-x: transparent;
         --stone-mark-o: transparent;
+        /* an imported text's neutral highlight, for themes whose frontier
+           sits too close to a stone's tint to mark a cell apart */
+        --board-highlight-neutral: var(--board-frontier);
     }
 }

@@ -18,9 +18,11 @@ const players: readonly Player[] = [0, 1];
  * own edits, and the check line saying whether the position can be played
  * from; Done starts a new tree at it, replacing the one named in `replaces`.
  */
-export function SetupTools({ draft, replaces, onChange, onCancel, onDone }: {
+export function SetupTools({ draft, replaces, note = null, onChange, onCancel, onDone }: {
     draft: SetupDraft;
     replaces: string;
+    // What became of the board it was opened on, where that needs saying.
+    note?: string | null;
     onChange: (draft: SetupDraft) => void;
     onCancel: () => void;
     onDone: () => void;
@@ -128,6 +130,7 @@ export function SetupTools({ draft, replaces, onChange, onCancel, onDone }: {
                     </span>
                 )}
             </div>
+            {note === null ? null : <p className="note">{note}</p>}
             <p className="note">{text.analysis.setup.anywhere}</p>
             <p className="note">{text.analysis.setup.replaces(replaces)}</p>
             <div className="card-actions">

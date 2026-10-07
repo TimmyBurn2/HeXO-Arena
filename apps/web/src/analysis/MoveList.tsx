@@ -10,7 +10,9 @@ import { cellText } from './notation';
 import type { RowFact } from './row-facts';
 import { SpokenText } from './SpokenText';
 import { deletable, floorOf } from './state';
-import { isMainLine, mainLine, nodeAt, openingTurns, pathTo, rootId, type MoveTree as Tree, type NodeId } from './tree';
+import { shownNotes } from './study';
+import { isMainLine, mainLine, nodeAt, openingTurns, pathTo, rootId, type MoveTree as Tree, type NodeId, type PlayedNode } from './tree';
+import { clockText } from './words';
 
 /** A run of the game's turns folded under one note after its first turn: the rows it hides, and the note. */
 export interface ListFold {
@@ -36,7 +38,8 @@ const words = text.analysis.tree;
  * The move tree as a list: one row a turn down the main line, a stored game's drawn opening as one row,
  * and under the main-line turn they replace, its variations as one indented band,
  * each a paragraph of turns with the alternatives inside it in parentheses.
- * A row says, where a reading does, the verdict on its turn and the value after it;
+ * A row says, where a reading does, the verdict on its turn and the value after it, and an imported text's clock after it;
+ * a half-turn shows its lone stone and the final move that ended it;
  * a run of marked turns folds under one note after its first, open while the turn shown lies in it.
  * A turn's menu, from its "more" button, a right click, or a long press,
  * promotes, deletes, or copies the line through it.
@@ -137,7 +140,7 @@ export function MoveList({ tree, gameTurns, at, onGo, actions, facts, folds }: {
     const items: ReactNode[] = [];
     for (const id of rows) {
         const node = nodeAt(tree, id);
-        if (node?.kind !== `turn` || shut.has(id)) continue;
+        if (node === undefined || node.kind === `root` || shut.has(id)) continue;
         const fact = facts.get(id);
         items.push(
             <Row
@@ -145,7 +148,9 @@ export function MoveList({ tree, gameTurns, at, onGo, actions, facts, folds }: {
                 id={id}
                 turn={node.turn}
                 side={node.side}
-                cells={cellsOf(node.cells)}
+                cells={nodeCells(node)}
+                half={node.kind === `half`}
+                clock={shownNotes(node)?.info?.clockMs ?? null}
                 judgment={fact?.judgment ?? null}
                 value={fact?.value ?? null}
                 current={id === at}
@@ -172,7 +177,7 @@ export function MoveList({ tree, gameTurns, at, onGo, actions, facts, folds }: {
                                         </Fragment>
                                     ))}
                                 </p>
-                                {held === undefined || heldNode?.kind !== `turn` ? null : menuFor(held.id, heldNode.turn)}
+                                {held === undefined || heldNode === undefined || heldNode.kind === `root` ? null : menuFor(held.id, heldNode.turn)}
                             </Fragment>
                         );
                     })}
@@ -210,7 +215,7 @@ export function MoveList({ tree, gameTurns, at, onGo, actions, facts, folds }: {
 // The other turns played from the same position as this one: the variations a band under its row shows.
 function siblingsOf(tree: Tree, id: NodeId): readonly NodeId[] {
     const node = nodeAt(tree, id);
-    if (node?.kind !== `turn`) return [];
+    if (node === undefined || node.kind === `root`) return [];
     return (nodeAt(tree, node.parent)?.children ?? []).filter((child) => child !== id);
 }
 
@@ -235,15 +240,22 @@ function cellsOf(cells: TurnCells): string {
     return cells.map(cellText).join(` `);
 }
 
-// A turn's side and cells: the swatch and the cells to the eye, the side named for assistive tech.
-function Move({ side, cells }: { side: Side; cells: string }) {
+function nodeCells(node: PlayedNode): string {
+    return node.kind === `half` ? cellText(node.cell) : cellsOf(node.cells);
+}
+
+// A turn's side and cells: the swatch and the cells to the eye, the side named for assistive tech;
+// a half-turn's lone stone followed by the final move that ended it, and the clock after the turn where a text gives one.
+function Move({ side, cells, half = false, clock = null }: { side: Side; cells: string; half?: boolean; clock?: number | null }) {
     return (
         <span className="an-move">
             <Swatch side={side} />
             <span className="an-turn-cells" aria-hidden="true">
                 {cells}
+                {half ? <span className="an-half"> [/]</span> : null}
             </span>
-            <span className="sr-only">{text.analysis.reading.cells(side, [cells])}</span>
+            <span className="sr-only">{`${text.analysis.reading.cells(side, [cells])}${half ? `, ${words.half}` : ``}${clock === null ? `` : `,`}`}</span>
+            {clock === null ? null : <span className="an-move-clock">{words.clock(clockText(clock))}</span>}
         </span>
     );
 }
@@ -317,11 +329,14 @@ function usePress(id: NodeId, onGo: (id: NodeId) => void, onMenu: (id: NodeId | 
     };
 }
 
-const Row = memo(function Row({ id, turn, side, cells, judgment, value, current, menuOpen, onGo, onMenu }: {
+const Row = memo(function Row({ id, turn, side, cells, half, clock, judgment, value, current, menuOpen, onGo, onMenu }: {
     id: NodeId;
     turn: number;
     side: Side;
     cells: string;
+    half: boolean;
+    // The mover's clock after the turn, as an imported text gives it.
+    clock: number | null;
     judgment: Judgment | null;
     value: ValueText | null;
     current: boolean;
@@ -335,7 +350,7 @@ const Row = memo(function Row({ id, turn, side, cells, judgment, value, current,
         <li className={`an-row${current ? ` current` : ``}`}>
             <button type="button" className="an-row-go" data-node={id} aria-current={current ? `step` : undefined} {...press}>
                 <span className="an-row-n">{String(turn)}</span>
-                <Move side={side} cells={cells} />
+                <Move side={side} cells={cells} half={half} clock={clock} />
                 {judgment === null ? null : (
                     <span className="an-row-mark" title={verdict ?? undefined}>
                         <JudgmentChip severity={judgment.severity} spoken={false} />
@@ -360,7 +375,7 @@ function Token({ tree, token, current, menuOpen, onGo, onMenu }: {
 }) {
     const press = usePress(token.id, onGo, onMenu);
     const node = nodeAt(tree, token.id);
-    if (node?.kind !== `turn`) return null;
+    if (node === undefined || node.kind === `root`) return null;
     return (
         <span className="an-tok-hold">
             <button
@@ -372,7 +387,7 @@ function Token({ tree, token, current, menuOpen, onGo, onMenu }: {
             >
                 {token.open > 0 ? <span className="an-paren">{`(`.repeat(token.open)}</span> : null}
                 <span className="an-tok-n">{String(node.turn)}</span>
-                <Move side={node.side} cells={cellsOf(node.cells)} />
+                <Move side={node.side} cells={nodeCells(node)} half={node.kind === `half`} clock={shownNotes(node)?.info?.clockMs ?? null} />
                 {token.close > 0 ? <span className="an-paren">{`)`.repeat(token.close)}</span> : null}
             </button>
             {current || menuOpen ? <MoreButton turn={node.turn} open={menuOpen} onToggle={() => { onMenu(menuOpen ? null : token.id); }} /> : null}

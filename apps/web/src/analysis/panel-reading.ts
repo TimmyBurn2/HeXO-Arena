@@ -20,9 +20,10 @@ export const ownPill = `own`;
 /** A source's reading of a position, by the position's key and the source's id, from the readings held. */
 export type ReadingLookup = (key: string, sourceId: string) => Reading | null;
 
-/** Why an analyzer cannot read a position, if it cannot. */
-export function unreadableOf(position: Setup, won: boolean): Unreadable | null {
+/** Why an analyzer cannot read a position, if it cannot; `half` names a half-turn's lone stone, after which no whole turn stands to read. */
+export function unreadableOf(position: Setup, won: boolean, half: { readonly side: Side; readonly cell: AxialCoord } | null = null): Unreadable | null {
     if (won) return { kind: `won` };
+    if (half !== null) return { kind: `half`, side: half.side, cell: half.cell };
     if (position.stones.length > analysisStoneCap) return { kind: `too-many`, stones: position.stones.length };
     if (position.stones.some((stone) => Math.abs(stone.x) > analysisCoordLimit || Math.abs(stone.y) > analysisCoordLimit)) return { kind: `too-far` };
     return null;

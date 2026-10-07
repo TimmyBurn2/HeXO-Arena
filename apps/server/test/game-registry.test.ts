@@ -871,6 +871,24 @@ describe('persistence', () => {
         expect(replay).toMatchObject({ kind: `rejected`, code: `game_over` });
     });
 
+    it('carries each turn\'s mover clock from the stored move times on a finished snapshot, none for an unlimited clock', () => {
+        const finishedAfter = (timeControl: typeof matchControl | typeof turnControl | typeof unlimitedControl, openingPlies: OpeningPlies, seconds: number | null) => {
+            const created = world.games.createGame({ person: user, bot, timeControl, openingPlies });
+            if (seconds !== null) {
+                vi.advanceTimersByTime(seconds * 1_000);
+                world.games.humanMove(created.gameId, user, [{ x: 3, y: 0 }, { x: 4, y: 0 }]);
+            }
+            world.games.humanResign(created.gameId, user);
+            const snapshot = world.games.snapshotFor(created.gameId, null);
+            if (snapshot?.status !== `finished`) throw new Error(`not finished`);
+            return snapshot.turnClocks;
+        };
+        expect(finishedAfter(matchControl, 1, 5)).toEqual([57_000]);
+        expect(finishedAfter(turnControl, 1, 3)).toEqual([2_000]);
+        expect(finishedAfter(matchControl, 3, null)).toEqual([null]);
+        expect(finishedAfter(unlimitedControl, 1, 5)).toBeUndefined();
+    });
+
     // This many games or turns take seconds on a loaded machine.
     it(`keeps the boards of the last ${String(finishedBoardMemoCap)} finished games read, replaying older ones`, () => {
         const finished = (move: boolean) => {

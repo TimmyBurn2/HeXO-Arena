@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type ClipboardEvent, type KeyboardEvent } from 'react';
 import type { AxialCoord, JudgmentSeverity, Side } from '@hexo-arena/contract';
 import { hexDistance, placementRadius } from '@hexo-arena/rules';
-import { Board, type BoardLines, type BoardStone } from '../board/Board';
+import { Board, type BoardLines, type BoardStone, type BoardVisual } from '../board/Board';
 import { useBoardSettings } from '../board/board-settings';
 import { useBoardCamera } from '../board/camera';
 import { text } from '../text';
@@ -25,7 +25,7 @@ const sixKeys: Readonly<Record<string, AxialCoord>> = {
  * through the turns otherwise, as the screen reads them.
  * A paste on the board hands its text to `onPaste`.
  */
-export function AnalysisBoard({ stones, frame, field, mark, toMove, lastMove, winLine, lines, preview, judgment, label, onCell, onPaste }: {
+export function AnalysisBoard({ stones, frame, field, mark, toMove, lastMove, winLine, lines, preview, judgment, visuals, label, onCell, onPaste }: {
     stones: readonly BoardStone[];
     // The position the camera frames, which holds `stones`.
     frame: readonly AxialCoord[];
@@ -40,6 +40,8 @@ export function AnalysisBoard({ stones, frame, field, mark, toMove, lastMove, wi
     preview?: { readonly side: Side; readonly cells: readonly AxialCoord[] } | undefined;
     // A judged turn's mark beside its last stone.
     judgment?: { readonly cell: AxialCoord; readonly severity: JudgmentSeverity } | undefined;
+    // An imported text's highlights and labels for the position shown.
+    visuals: readonly BoardVisual[];
     label: string;
     onCell: (cell: AxialCoord) => void;
     onPaste: (pasted: string) => void;
@@ -122,6 +124,7 @@ export function AnalysisBoard({ stones, frame, field, mark, toMove, lastMove, wi
                         lines,
                         preview,
                         judgment,
+                        visuals,
                     }}
                     onCellClick={onCell}
                 />

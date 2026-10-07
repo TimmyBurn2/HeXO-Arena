@@ -45,6 +45,19 @@ const screens: readonly { name: string; path: string; world?: Partial<World>; th
     { name: `a head-to-head`, path: `/games?player=hextide&vs=quietlake`, world: { finished: rivalry(30) } },
     { name: `live games`, path: `/games/live` },
     { name: `the analysis board`, path: `/analysis` },
+    {
+        name: `an imported text's notes on the analysis board`,
+        path: `/analysis`,
+        then: async (page) => {
+            await page.getByRole(`button`, { name: `Import` }).click();
+            await page
+                .getByRole(`dialog`)
+                .getByRole(`textbox`)
+                .fill(`version[2];\n1. [-1,0]{@4505}[0,-1]{@4500:%-1};\n2. [1,0]{@4055}[2,0]{@4050:%2} (2. [1,-2][2,-2]; 3. [-1,-1][/];);\n3. [3,0]{@3555}[4,0]{@3550:#-3}<3,-4:#N><5,0:#X:$A><0,0:$1>;\n`);
+            await page.getByRole(`dialog`).getByRole(`button`, { name: `Load` }).click();
+            await page.locator(`.an-notes`).waitFor();
+        },
+    },
     { name: `a game on the analysis board`, path: `/analysis?game=long-finished&turn=12` },
     { name: `a game read whole on the analysis board`, path: `/analysis?game=long-finished&turn=17`, world: { analyses: { 'long-finished': { analyses: [longReadings.kestrel, longReadings.driftwood, ...longReadings.own], optedOut: false, independentOnline: false } } } },
     {
