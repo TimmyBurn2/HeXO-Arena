@@ -1,5 +1,18 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { analysisMeta, analysisPagePath, pagePath, resultSentence, sideOf, turnsOnBoard, type AxialCoord, type GameSnapshot, type Side } from '@hexo-arena/contract';
+import {
+    analysisMeta,
+    analysisPagePath,
+    htttxTags,
+    pagePath,
+    resultSentence,
+    sideOf,
+    siteName,
+    turnsOnBoard,
+    type AxialCoord,
+    type GameSnapshot,
+    type HtttxTag,
+    type Side,
+} from '@hexo-arena/contract';
 import type { Setup, TurnCells } from '@hexo-arena/rules';
 import { ApiError, fetchGameSnapshot, limitedFor } from '../api/client';
 import { AnalysisBoard } from '../analysis/AnalysisBoard';
@@ -9,19 +22,22 @@ import { ExportDialog, ImportDialog, type ExportView } from '../analysis/dialogs
 import { draftOf, draftSetup, type SetupDraft, clickCell } from '../analysis/draft';
 import type { PreferredLine } from '../analysis/explain';
 import type { Imported } from '../analysis/import-text';
+import { ImportedEvalBar, ImportedNotes } from '../analysis/ImportedNotes';
 import { gameLink, lineLink, readAddress, setupLink } from '../analysis/links';
 import { MoveList, type RowActions } from '../analysis/MoveList';
 import { NavSteps } from '../analysis/NavSteps';
-import { writeGame } from '../analysis/notation';
+import { cellText, writeGame } from '../analysis/notation';
 import { nextUtcDay } from '../analysis/readings';
 import { AnalysisSettingsPanel, EvalBar } from '../analysis/ReadingPanel';
 import type { ShownLine } from '../analysis/reading-view';
 import { SetupTools } from '../analysis/SetupTools';
+import { shownNotes, studyText } from '../analysis/study';
 import { analysisStorageKey } from '../analysis/storage-key';
 import {
     blankBoard,
     deleteFrom,
     floorOf,
+    gameLine,
     gameTree,
     goTo,
     holdsOwnTurns,
@@ -38,7 +54,7 @@ import {
     type AnalysisState,
     type StoredBoard,
 } from '../analysis/state';
-import { isMainLine, lineEnd, lineTo, newTree, nodeAt, positionAt, rootId, type MoveTree as Tree, type NodeId } from '../analysis/tree';
+import { isMainLine, lineEnd, lineTo, mainLine, newTree, nodeAt, positionAt, rootId, wholeAt, type MoveTree as Tree, type NodeId, type PlayedNode } from '../analysis/tree';
 import { useAnalysisKeys } from '../analysis/use-analysis-keys';
 import { useAnalysisReading } from '../analysis/use-analysis-reading';
 import { notationErrorText, positionWords, refusalText, turnWords } from '../analysis/words';
@@ -92,8 +108,8 @@ function boardOf(stored: StoredBoard | null): AnalysisState {
     return restoreBoard(stored, rootOfStored(stored.root, 1));
 }
 
-function lineBoard(start: Setup | null, turns: readonly TurnCells[], pending: AxialCoord | null): AnalysisState {
-    let board = standOn(newTree(start === null ? { kind: `origin` } : { kind: `setup`, start }));
+function lineBoard(start: Setup | null, turns: readonly TurnCells[], pending: AxialCoord | null, tags: readonly HtttxTag[] = []): AnalysisState {
+    let board = standOn(newTree(start === null ? { kind: `origin` } : { kind: `setup`, start }, tags));
     for (const turn of turns) {
         const played = playCells(board, turn);
         if (played.refusal !== null) break;
@@ -321,18 +337,22 @@ function Workspace({ board, game, notice, onBoard, onReplace, onNewBoard }: {
     );
 
     const node = nodeAt(tree, at);
-    const position = useMemo(() => positionAt(tree, at), [tree, at]);
+    // A half-turn is read, linked, and set up from as the whole turn before it; the board shows its stone.
+    const whole = wholeAt(tree, at);
+    const position = useMemo(() => positionAt(tree, whole), [tree, whole]);
+    const lone = useMemo(() => (node?.kind === `half` ? { side: node.side, cell: node.cell } : null), [node]);
     const end = lineEnd(tree, at);
     const frame = useMemo(() => positionAt(tree, end).stones, [tree, end]);
     const stones = useMemo(() => numberedStones(tree, at), [tree, at]);
     const toMove = sideOf(position.toMove);
     const won = node?.kind === `turn` && node.win !== null ? sideOf(node.win.player) : null;
-    const reading = useAnalysisReading({ board, position, snapshot: game?.snapshot ?? null, gameTurns, editing: editing !== null });
+    const reading = useAnalysisReading({ board, position, half: lone, snapshot: game?.snapshot ?? null, gameTurns, editing: editing !== null });
     const { stored, explanation, nodeOfTurn } = reading;
 
     const openSetup = useCallback(() => {
         setRefusal(null);
         setDialog(null);
+        // A half-turn's lone stone stays on the board set up from it.
         setEditing(draftOf(positionAt(tree, at)));
     }, [tree, at]);
     const leaveSetup = useCallback(() => {
@@ -423,7 +443,10 @@ function Workspace({ board, game, notice, onBoard, onReplace, onNewBoard }: {
         setDialog(null);
         switch (imported.kind) {
             case `line`:
-                onReplace(lineBoard(null, imported.line.turns, imported.pending));
+                onReplace(lineBoard(null, imported.line.turns, imported.pending, imported.tags));
+                return;
+            case `study`:
+                onReplace(standOn(imported.study.tree, imported.study.end));
                 return;
             case `setup`:
                 onReplace(lineBoard(imported.start, imported.line.turns, null));
@@ -440,11 +463,35 @@ function Workspace({ board, game, notice, onBoard, onReplace, onNewBoard }: {
         const turns = lineTo(tree, at);
         const origin = window.location.origin;
         const onGame = gameId !== null && isMainLine(tree, at);
+        const played = [...tree.nodes.values()].filter((each): each is PlayedNode => each.kind !== `root`);
+        const clocks = game?.snapshot.status === `finished` ? game.snapshot.turnClocks : undefined;
+        const ownTurns = new Set(gameLine(tree, gameTurns).map((each) => each.id));
+        const clockOf = (each: PlayedNode) => (clocks === undefined || !ownTurns.has(each.id) ? null : (clocks[each.turn - 1] ?? null));
+        const timed = played.filter((each) => clockOf(each) !== null).length;
+        // The text's own evaluations win, so the reading counts only where the text gives none.
+        const evaluated = played.filter((each) => reading.evaluationOf(each) !== null).length;
+        const filled = played.filter((each) => (shownNotes(each)?.info?.evaluation ?? null) === null && reading.evaluationOf(each) !== null).length;
+        const main = mainLine(tree);
+        const tags = game === null ? tree.tags : gameTags(game.snapshot);
         return {
-            line: tree.root.kind === `setup` ? null : { text: writeGame(turns), turns: turns.length },
+            notation:
+                tree.root.kind === `setup`
+                    ? null
+                    : {
+                          write: (choice) =>
+                              studyText(tree, tags, choice.version, {
+                                  evaluation: choice.evaluations ? reading.evaluationOf : () => null,
+                                  clock: choice.clocks ? clockOf : () => null,
+                              }),
+                          turns: { v1: lineTo(tree, main.at(-1) ?? rootId).length, v2: main.length - 1 },
+                          variations: [...tree.nodes.values()].reduce((count, each) => count + Math.max(0, each.children.length - 1), 0),
+                          evaluations: { turns: filled, none: filled > 0 || evaluated === 0 ? (reading.signedIn !== true ? `signed-out` : reading.analyzing ? `reading` : `off`) : `covered` },
+                          clocks: timed === 0 ? null : timed,
+                      },
             position,
+            lone,
             link: {
-                url: `${origin}${onGame ? gameLink(gameId, node?.turn ?? 0) : tree.root.kind === `setup` ? setupLink(tree.root.start, turns) : lineLink(turns)}`,
+                url: `${origin}${onGame ? gameLink(gameId, nodeAt(tree, whole)?.turn ?? 0) : tree.root.kind === `setup` ? setupLink(tree.root.start, turns) : lineLink(turns)}`,
                 game: onGame,
             },
         };
@@ -452,7 +499,7 @@ function Workspace({ board, game, notice, onBoard, onReplace, onNewBoard }: {
 
     const turnText = turnWords(tree, at, editing !== null, game?.snapshot.openingPlies ?? null);
     const editingSide = editing === null ? toMove : sideOf(editing.toMove);
-    const stateWords = editing !== null ? text.analysis.nav.toMove(editingSide) : positionWords(toMove, mark !== null, won);
+    const stateWords = editing !== null ? text.analysis.nav.toMove(editingSide) : positionWords(toMove, mark !== null || node?.kind === `half`, won);
     const atStart = at === floorOf(tree);
     const atEnd = end === at;
     const source = <SourceLines tree={tree} game={game} editing={editing !== null} at={at} />;
@@ -504,7 +551,7 @@ function Workspace({ board, game, notice, onBoard, onReplace, onNewBoard }: {
                         if (editing === null) setDialog({ kind: `import`, text: pasted });
                     }}
                 />
-                {editing === null && reading.shown.unreadable === null ? <EvalBar line={reading.shown.lines[0] ?? null} held={reading.shown.held} /> : null}
+                {editing === null ? <Bar lines={reading.shown.lines} held={reading.shown.held} readable={reading.shown.unreadable === null} node={node} /> : null}
                 <div className="hud-lift an-chip-source">
                     <div className="hud-chip">{source}</div>
                 </div>
@@ -527,6 +574,7 @@ function Workspace({ board, game, notice, onBoard, onReplace, onNewBoard }: {
                     <div className="an-panel-scroll">
                         <SetupTools
                             draft={editing}
+                            note={lone === null ? null : text.analysis.setup.lone(lone.side, cellText(lone.cell))}
                             replaces={replaces}
                             onChange={setEditing}
                             onCancel={leaveSetup}
@@ -602,6 +650,7 @@ function Workspace({ board, game, notice, onBoard, onReplace, onNewBoard }: {
                                     <p className="note">{text.analysis.intro.body((games) => <Link to="/games">{games}</Link>)}</p>
                                 </div>
                             ) : null}
+                            <ImportedNotes node={node} />
                             {/* The keys scroll with the tree, which keeps the panel's room for its rows. */}
                             <div className="an-tree-host">
                                 <MoveList tree={tree} gameTurns={gameTurns} at={at} onGo={goToNode} actions={actions} facts={reading.facts} folds={reading.folds} />
@@ -672,6 +721,25 @@ function Workspace({ board, game, notice, onBoard, onReplace, onNewBoard }: {
     );
 }
 
+// The analyzer's line A on the bar, or one on its way; else an imported text's evaluation of the position shown.
+function Bar({ lines, held, readable, node }: { lines: readonly ShownLine[]; held: boolean; readable: boolean; node: ReturnType<typeof nodeAt> }) {
+    const line = readable ? (lines[0] ?? null) : null;
+    if (line !== null || (readable && held)) return <EvalBar line={line} held={held} />;
+    const evaluation = node === undefined || node.kind === `root` ? null : (shownNotes(node)?.info?.evaluation ?? null);
+    return evaluation === null ? null : <ImportedEvalBar evaluation={evaluation} />;
+}
+
+// A stored game's tags as the notation writes them; the snapshot holds no start time.
+function gameTags(snapshot: GameSnapshot): HtttxTag[] {
+    return htttxTags({
+        platform: siteName,
+        cross: snapshot.players.x.name,
+        circle: snapshot.players.o.name,
+        timeControl: snapshot.timeControl,
+        ...(snapshot.status === `finished` ? { result: { winner: snapshot.winner, reason: snapshot.reason } } : {}),
+    });
+}
+
 // The board as the browser keeps it, after every change, and the address,
 // which names the stored game the board opens and nothing else: a link's
 // line or position has been read into the tree.
@@ -717,7 +785,11 @@ function SourceLines({ tree, game, editing, at }: { tree: Tree; game: OpenedGame
         );
     }
     if (tree.root.kind === `setup`) return <SourceText title={words.setup} note={words.setupNote} />;
-    return <SourceText title={words.origin} note={words.originNote} />;
+    const tag = (key: string) => tree.tags.find((each) => each.key === key)?.value.trim() ?? ``;
+    const name = tag(`name`);
+    const players = tag(`playercross`) !== `` && tag(`playercircle`) !== `` ? words.players(tag(`playercross`), tag(`playercircle`)) : null;
+    if (name === `` && players === null) return <SourceText title={words.origin} note={words.originNote} />;
+    return <SourceText title={name === `` ? words.origin : name} note={players === null ? words.originNote : words.playersNote(players)} />;
 }
 
 function SourceText({ title, note }: { title: ReactNode; note: ReactNode }) {

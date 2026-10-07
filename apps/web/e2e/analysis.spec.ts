@@ -1,7 +1,7 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type Page } from '@playwright/test';
 import { looks, wear } from './matrix';
-import { serve, world, type World } from './mock-api';
+import { longReadings, serve, world, type World } from './mock-api';
 
 async function open(page: Page, path: string, overrides: Partial<World> = {}, width = 1280, height = 800): Promise<void> {
     await page.setViewportSize({ width, height });
@@ -308,7 +308,7 @@ test('Export gives the line as HTTTX, the position as boat with its side to move
     await playTurn(page, [-1, 0], [0, -1]);
     await page.getByRole(`button`, { name: `Export` }).click();
     const dialog = page.getByRole(`dialog`, { name: `Export` });
-    await expect(dialog.getByRole(`textbox`, { name: `This line from the origin, HTTTX notation (2 turns)` })).toHaveValue(`version[1];\n1. [1,0][1,-1];\n2. [-1,0][-1,1];\n`);
+    await expect(dialog.getByRole(`textbox`, { name: `The tree from the origin, HTTTX v2 (2 turns)` })).toHaveValue(`version[2];\n1. [1,0][1,-1];\n2. [-1,0][-1,1];\n`);
     await expect(dialog.getByRole(`textbox`, { name: `This position, boat notation; o to move` })).toHaveValue(`.x/xxo/.o`);
     const link = await dialog.getByRole(`textbox`, { name: `Link to this line` }).inputValue();
     expect(link).toBe(`${new URL(page.url()).origin}/analysis#t=1.[1,0][1,-1];2.[-1,0][-1,1];`);
@@ -319,6 +319,190 @@ test('Export gives the line as HTTTX, the position as boat with its side to move
     await page.goto(link);
     await expect(rows(page)).toHaveText([`o: [1,0] [1,-1]`, `x: [-1,0] [-1,1]`]);
 });
+
+// A v2 study: clocks after each stone, evaluations after each turn, a variation ending on a half-turn,
+// and the last turn's highlights, neutral, x, and o, and labels on empty cells and on both sides' stones.
+const study = `version[2]name[Study]playercross[BlueWhale]playercircle[GreenSnake];
+1. [-1,0]{@4505}[0,-1]{@4500:%-1};
+2. [1,0]{@4055}[2,0]{@4050:%2}
+  (2. [1,-2][2,-2]; 3. [-1,-1][/];);
+3. [1,-2]{@4205}[2,-3]{@4200:%-5};
+4. [3,0]{@3555}[4,0]{@3550:%38}<3,-4:#N><-2,1:#><5,0:#X:$A><-1,1:#O:$B><0,0:$1><1,0:$2><0,-1:$3>;
+`;
+
+async function importStudy(page: Page): Promise<void> {
+    await page.getByRole(`button`, { name: `Import` }).click();
+    const dialog = page.getByRole(`dialog`, { name: `Import` });
+    await dialog.getByRole(`textbox`).fill(study);
+    await expect(dialog.locator(`.an-preview`)).toContainText(`A game line, 4 turns, and 1 variation`);
+    await expect(dialog.locator(`.an-preview`)).toContainText(`BlueWhale vs GreenSnake`);
+    await expect(dialog.locator(`.an-preview`)).toContainText(`Its clocks, evaluations, highlights, and labels show as the text's own.`);
+    await dialog.getByRole(`button`, { name: `Load` }).click();
+    await expect(dialog).toHaveCount(0);
+}
+
+for (const [width, height] of [
+    [1280, 800],
+    [390, 844],
+] as const) {
+    test(`Import reads v2 text at ${String(width)} px: its variation, a half-turn its second stone completes, and the text's notes, named as its own`, async ({ page }) => {
+        await open(page, `/analysis`, {}, width, height);
+        await importStudy(page);
+        await expect(rows(page)).toHaveCount(4);
+        const notes = page.locator(`.an-notes`);
+        await expect(notes).toContainText(`From the imported text`);
+        const said = notes.locator(`.an-notes-row`);
+        await expect(said).toHaveCount(3);
+        await expect(said.nth(0)).toHaveText(`After [3,0]: 3.5 s left`);
+        await expect(said.nth(1).locator(`.an-notes-value`)).toHaveText(`x 69%`);
+        await expect(said.nth(1)).toContainText(`x's win chance 69 percent; 3.5 s left`);
+        await expect(said.nth(2).locator(`[aria-hidden="true"]`)).toHaveText(`Highlights and labels on the board`);
+        await expect(said.nth(2).locator(`.sr-only`)).toHaveText(
+            `Highlights on the board: [3,-4] and [-2,1] neutral; [5,0] in x's color; [-1,1] in o's color. Labels: A on [5,0], B on [-1,1], 1 on [0,0], 2 on [1,0], 3 on [0,-1].`,
+        );
+        const source = page.locator(`.an-source`).filter({ visible: true });
+        await expect(source.locator(`.an-source-title`)).toHaveText(`Study`);
+        await expect(source.locator(`.an-source-note`)).toHaveText(`BlueWhale vs GreenSnake; from the origin, play both sides`);
+        await expect(page.locator(`.an-evalbar-imported .an-evalbar-chip`)).toHaveText(`Imported: x 69%`);
+        await expect(page.locator(`.board-camera .highlight`)).toHaveCount(4);
+        await expect(page.locator(`.board-camera .highlight.hl-x`)).toHaveCount(1);
+        await expect(page.locator(`.board-camera .highlight.hl-o`)).toHaveCount(1);
+        await expect(page.locator(`.board-camera .visual-label`)).toHaveText([`A`, `B`, `1`, `2`, `3`]);
+        await expect(page.locator(`.an-tree .an-row .an-move-clock`)).toHaveText([`4.5 s left`, `4.0 s left`, `4.2 s left`, `3.5 s left`]);
+        await page.keyboard.press(`ArrowLeft`);
+        await expect(page.locator(`.board-camera .visual-label`)).toHaveCount(0);
+        await expect(said).toHaveCount(2);
+        await expect(said.nth(1).locator(`.an-notes-value`)).toHaveText(`o 53%`);
+
+        // The variation's whole turn is read; the half-turn after it is not, and offers no line to play.
+        await page.locator(`.an-band .an-tok`).nth(0).click();
+        await page.getByRole(`switch`, { name: `Analyze` }).check();
+        await page.locator(`button.an-line`).first().waitFor();
+        await page.locator(`.an-band .an-tok`).nth(1).click();
+        await expect(page.locator(`.an-band .an-tok`).nth(1)).toContainText(`[/]`);
+        await expect(page.locator(`.board-camera .line-mark`)).toHaveCount(0);
+        await expect(page.locator(`.an-evalbar`)).toHaveCount(0);
+        await expect(navLine(page)).toHaveText(`o to move, 1 stone left`);
+        await expect(page.locator(`.an-notes`)).toHaveCount(0);
+        await expect(page.locator(`.an-win-who`)).toHaveText(`o has a stone left after [-1,-1]; positions are read after whole turns.`);
+        await expect(page.locator(`button.an-line`)).toHaveCount(0);
+        await page.getByRole(`button`, { name: `Export` }).click();
+        const exported = page.getByRole(`dialog`, { name: `Export` });
+        await expect(exported.getByRole(`textbox`, { name: `The position before [-1,-1], boat notation; o to move` })).toBeVisible();
+        await expect(exported.getByRole(`textbox`, { name: `Link to this line before [-1,-1]` })).toBeVisible();
+        await exported.getByRole(`button`, { name: `Close` }).click();
+        await page.getByRole(`button`, { name: `Set up` }).click();
+        await expect(page.locator(`.an-tools`)).toContainText(`The lone stone on [-1,-1] stays; a set-up position starts a whole turn, so o places two stones after it.`);
+        await expect(stones(page)).toHaveCount(6);
+        await page.locator(`.an-tools`).getByRole(`button`, { name: `Cancel` }).click();
+        await cell(page, -3, 1).click();
+        await expect(navLine(page)).toHaveText(`x to move`);
+        await expect(tokens(page)).toHaveCount(3);
+    });
+}
+
+test('Import refuses v1 threat marks and a v2 turn after the final move, naming where', async ({ page }) => {
+    await open(page, `/analysis`);
+    await page.getByRole(`button`, { name: `Import` }).click();
+    const dialog = page.getByRole(`dialog`, { name: `Import` });
+    const field = dialog.getByRole(`textbox`);
+    await field.fill(`version[1];\n1. [1,0][1,-2]!;\n`);
+    await expect(dialog.locator(`.an-error`)).toHaveText(`Line 2, column 15, turn 1: ! threat marks are not read here; delete them and paste again`);
+    await field.fill(`version[1]playercross[Ada]playercircle[Bo];\n1. [1,0][1,-2];\n`);
+    await expect(dialog.locator(`.an-preview`)).toContainText(`A game line, 1 turn`);
+    await expect(dialog.locator(`.an-preview`)).toContainText(`Ada vs Bo`);
+    await field.fill(`version[2];\n1. [1,a][1,-2];\n`);
+    await expect(dialog.locator(`.an-error`)).toHaveText(`Line 2, column 7, turn 1: a cell's two whole numbers, as in [1,-2] belongs here`);
+    await field.fill(`version[2];\n1. [1,0][0,1];\n2. [2,0][/];\n3. [3,0][4,0];\n`);
+    await expect(dialog.locator(`.an-error`)).toHaveText(`Line 4, column 1: turn 2 ends its line with [/], so no turn follows it there`);
+    await field.fill(`version[3];\n1. [1,0][0,1];\n`);
+    await expect(dialog.locator(`.an-error`)).toHaveText(`This text is version 3; versions 1 and 2 read here`);
+});
+
+for (const [width, height] of [
+    [1280, 800],
+    [390, 844],
+] as const) {
+    test(`Export writes the tree as v2 with its notes and tags, and v1 with the main line alone, at ${String(width)} px`, async ({ page }) => {
+        await open(page, `/analysis`, {}, width, height);
+        await importStudy(page);
+        await page.getByRole(`button`, { name: `Export` }).click();
+        const dialog = page.getByRole(`dialog`, { name: `Export` });
+        await expect(dialog.getByRole(`button`, { name: `HTTTX v2` })).toHaveAttribute(`aria-pressed`, `true`);
+        await expect(dialog.getByRole(`textbox`, { name: `The tree from the origin, HTTTX v2 (4 turns, 1 variation)` })).toHaveValue(study);
+        await expect(dialog.getByRole(`checkbox`, { name: `Evaluations from the reading shown (none yet; turn on Analyze to have positions read)` })).toBeDisabled();
+        await expect(dialog.getByRole(`checkbox`, { name: /Clocks/u })).toHaveCount(0);
+        await dialog.getByRole(`button`, { name: `HTTTX v1` }).click();
+        await expect(dialog.getByRole(`textbox`, { name: `The main line from the origin, HTTTX v1 (4 turns)` })).toHaveValue(
+            `version[1]name[Study]playercross[BlueWhale]playercircle[GreenSnake];\n1. [-1,0][0,-1];\n2. [1,0][2,0];\n3. [1,-2][2,-3];\n4. [3,0][4,0];\n`,
+        );
+        await expect(dialog.getByRole(`checkbox`)).toHaveCount(0);
+        const link = await dialog.getByRole(`textbox`, { name: `Link to this line` }).inputValue();
+        expect(link).toBe(`${new URL(page.url()).origin}/analysis#t=1.[-1,0][0,-1];2.[1,0][2,0];3.[1,-2][2,-3];4.[3,0][4,0];`);
+    });
+}
+
+test('Export of a stored game adds its clocks and the reading shown\'s evaluations on request', async ({ page }) => {
+    await open(page, `/analysis?game=long-finished&turn=12`, { analyses: { 'long-finished': { analyses: [longReadings.kestrel, ...longReadings.own], optedOut: false, independentOnline: false } } });
+    await page.locator(`.an-win-graph .graph`).waitFor();
+    await page.getByRole(`button`, { name: `Export` }).click();
+    const dialog = page.getByRole(`dialog`, { name: `Export` });
+    const field = dialog.getByRole(`textbox`, { name: /^The tree from the origin, HTTTX v2/u });
+    await expect(field).toHaveValue(/^version\[2\]platform\[HeXO Arena\]playercross\[hextide\]playercircle\[quietlake\]endreason\[win\]winner\[circle\];\n1\. \[[-0-9,]+\]\[[-0-9,]+\];\n/u);
+    expect(await field.inputValue()).not.toContain(`{`);
+    await dialog.getByRole(`checkbox`, { name: `Clocks from the game (23 turns)` }).check();
+    await expect(field).toHaveValue(/\n3\. \[[-0-9,]+\]\[[-0-9,]+\]\{@29000\};\n4\. \[[-0-9,]+\]\[[-0-9,]+\]\{@28000\};\n/u);
+    const evaluations = dialog.getByRole(`checkbox`, { name: /^Evaluations from the reading shown, where the text gives none \(\d+ turns\)$/u });
+    await evaluations.check();
+    await expect(field).toHaveValue(/\n3\. \[[-0-9,]+\]\[[-0-9,]+\]\{@29000:[%#]-?\d+\};\n/u);
+});
+
+// Where the eval bar's chip stands: whether it shows, and which of the plates over the board it covers.
+async function chipCovers(page: Page): Promise<{ readonly shown: boolean; readonly covers: string[] }> {
+    return page.evaluate(() => {
+        const visible = (element: Element | null): element is Element => element !== null && element.getClientRects().length > 0 && getComputedStyle(element).visibility !== `hidden`;
+        const chip = document.querySelector(`.an-evalbar-chip`);
+        if (!visible(chip)) return { shown: false, covers: [] };
+        const box = chip.getBoundingClientRect();
+        const covers = [`.an-chip-source`, `.an-chip-nav`].filter((selector) => {
+            const plate = document.querySelector(selector);
+            if (!visible(plate)) return false;
+            const other = plate.getBoundingClientRect();
+            return box.left < other.right && other.left < box.right && box.top < other.bottom && other.top < box.bottom;
+        });
+        return { shown: true, covers };
+    });
+}
+
+for (const { name, width, height, size } of [
+    { name: `1280 px`, width: 1280, height: 800, size: 16 },
+    { name: `390 px`, width: 390, height: 844, size: 16 },
+    { name: `1280 px at 200% text`, width: 1280, height: 800, size: 32 },
+    { name: `1440 px at 200% text`, width: 1440, height: 900, size: 32 },
+] as const) {
+    test(`the eval bar's chip covers neither the source plate nor the steps at x's win, o's win, and an even value, at ${name}`, async ({ page }) => {
+        await open(page, `/analysis`, { analyses: { 'long-finished': { analyses: [longReadings.kestrel, ...longReadings.own], optedOut: false, independentOnline: false } } }, width, height);
+        const devtools = await page.context().newCDPSession(page);
+        await devtools.send(`Page.setFontSizes`, { fontSizes: { standard: size } });
+        for (const [value, chip] of [
+            [`#1`, `Imported: x wins in 1`],
+            [`#-1`, `Imported: o wins in 1`],
+            [`%0`, `Imported: even`],
+        ] as const) {
+            await page.getByRole(`button`, { name: `Import` }).click();
+            const dialog = page.getByRole(`dialog`, { name: `Import` });
+            await dialog.getByRole(`textbox`).fill(`version[2];\n1. [1,0][0,1]{${value}};\n2. [-1,0][0,-1];\n3. [2,0][3,0]{${value}};\n`);
+            await dialog.getByRole(`button`, { name: `Load` }).click();
+            await expect(page.locator(`.an-evalbar-chip`)).toHaveText(chip);
+            await expect.poll(async () => (await chipCovers(page)).covers).toEqual([]);
+            if (width === 1280 && size === 16) expect((await chipCovers(page)).shown).toBe(true);
+        }
+        // An analyzer's chip stands where the bar does, here at o's edge for a forced win.
+        await page.goto(`/analysis?game=long-finished&turn=22`);
+        await expect(page.locator(`.an-evalbar-chip`)).toHaveText(`o wins in 1`);
+        await expect.poll(async () => (await chipCovers(page)).covers).toEqual([]);
+    });
+}
 
 test('a finished game opens in Analysis from its result chip and its Game tab, at the turn on screen', async ({ page }) => {
     // The finished fixture's id is the history's own path, so its twin opens here.

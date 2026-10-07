@@ -1,17 +1,19 @@
-import { gameTurnCap } from '@hexo-arena/contract';
+import { gameTurnCap, readHtttx, type HtttxTag } from '@hexo-arena/contract';
 import { originSetup, playTurn, type Coord, type Setup, type TurnCells } from '@hexo-arena/rules';
 import { readBoatSetup } from './boat';
 import { readAddress } from './links';
-import { playLine, readGame, type NotationRead, type PlayedLine } from './notation';
+import { playLine, playMain, type NotationRead, type PlayedLine } from './notation';
+import { studyOf, type Study } from './study';
 
 /**
  * What pasted text or a pasted link loads:
- * a line from the origin, with a lone first stone of an unfinished turn when the source had one;
- * a set-up board and a line after it; a stored game of this site;
+ * a line from the origin, with a lone first stone of an unfinished turn when the source had one, and a text's tags;
+ * a v2 text's tree, its variations and notes; a set-up board and a line after it; a stored game of this site;
  * or a page of another site that only that site can read, so the reader asks for its HTTTX copy instead.
  */
 export type Imported =
-    | { readonly kind: `line`; readonly line: PlayedLine; readonly pending: Coord | null }
+    | { readonly kind: `line`; readonly line: PlayedLine; readonly pending: Coord | null; readonly tags: readonly HtttxTag[] }
+    | { readonly kind: `study`; readonly study: Study }
     | { readonly kind: `setup`; readonly start: Setup; readonly line: PlayedLine }
     | { readonly kind: `game`; readonly gameId: string; readonly turn: number | null }
     | { readonly kind: `elsewhere`; readonly site: `did-science`; readonly page: `game` | `sandbox` };
@@ -30,10 +32,7 @@ export function readImport(text: string, origin: string): NotationRead<Imported>
     const trimmed = text.trim();
     if (trimmed === ``) return { ok: false, error: { kind: `empty` } };
     if (/^https?:\/\//iu.test(trimmed)) return readLink(trimmed, origin);
-    if (/^(?:[0-9]|[A-Za-z]+\s*\[)/u.test(trimmed)) {
-        const line = readGame(trimmed);
-        return line.ok ? { ok: true, value: { kind: `line`, line: line.value, pending: null } } : line;
-    }
+    if (/^(?:[0-9]|[A-Za-z][A-Za-z0-9_-]*\s*\[)/u.test(trimmed)) return readNotation(trimmed);
     if (/^[xoXO.#/]/u.test(trimmed)) {
         const start = readBoatSetup(trimmed, null);
         if (!start.ok) return start;
@@ -41,6 +40,18 @@ export function readImport(text: string, origin: string): NotationRead<Imported>
         return line.ok ? { ok: true, value: { kind: `setup`, start: start.value, line: line.value } } : line;
     }
     return { ok: false, error: { kind: `unknown-text` } };
+}
+
+// v1 text is a line; v2 text is a tree, its variations and notes kept.
+function readNotation(text: string): NotationRead<Imported> {
+    const read = readHtttx(text);
+    if (!read.ok) return read;
+    if (read.document.version === 2) {
+        const study = studyOf(read.document);
+        return study.ok ? { ok: true, value: { kind: `study`, study: study.value } } : study;
+    }
+    const line = playMain(read.document);
+    return line.ok ? { ok: true, value: { kind: `line`, line: line.value, pending: null, tags: read.document.tags } } : line;
 }
 
 function readLink(text: string, origin: string): NotationRead<Imported> {
@@ -79,10 +90,10 @@ function readOwnAnalysis(search: string, hash: string): NotationRead<Imported> {
     switch (value.kind) {
         case `blank`: {
             const line = playLine(originSetup, []);
-            return line.ok ? { ok: true, value: { kind: `line`, line: line.value, pending: null } } : line;
+            return line.ok ? { ok: true, value: { kind: `line`, line: line.value, pending: null, tags: [] } } : line;
         }
         case `line`:
-            return { ok: true, value: { kind: `line`, line: value.line, pending: null } };
+            return { ok: true, value: { kind: `line`, line: value.line, pending: null, tags: [] } };
         case `setup`:
         case `game`:
             return { ok: true, value };
@@ -124,13 +135,13 @@ function lineOfStones(stones: readonly Coord[]): NotationRead<Imported> {
     if (turns.length + (lone === undefined ? 0 : 1) > gameTurnCap) return { ok: false, error: { kind: `too-many-turns`, limit: gameTurnCap } };
     const line = playLine(originSetup, turns);
     if (!line.ok) return line;
-    if (lone === undefined) return { ok: true, value: { kind: `line`, line: line.value, pending: null } };
+    if (lone === undefined) return { ok: true, value: { kind: `line`, line: line.value, pending: null, tags: [] } };
     const last = playTurn(line.value.end, [lone]);
     if (last.ok) {
         const won: PlayedLine = { turns: [...turns, [lone]], end: last.setup, win: last.win };
-        return { ok: true, value: { kind: `line`, line: won, pending: null } };
+        return { ok: true, value: { kind: `line`, line: won, pending: null, tags: [] } };
     }
-    if (last.rejection.kind === `turn-unfinished`) return { ok: true, value: { kind: `line`, line: line.value, pending: lone } };
+    if (last.rejection.kind === `turn-unfinished`) return { ok: true, value: { kind: `line`, line: line.value, pending: lone, tags: [] } };
     return { ok: false, error: { kind: `illegal`, turn: turns.length + 1, cell: lone, rejection: last.rejection } };
 }
 

@@ -6,7 +6,7 @@ The site never shows this note.
 
 # Privacy policy
 
-Last updated 4 October 2026
+Last updated 7 October 2026
 
 ## Who is responsible
 
@@ -124,7 +124,7 @@ Legal basis: Art. 6(1)(f) GDPR, legitimate interest: letting players and bot aut
   It lasts {{site.signupMinutes}} minutes, or until you create the account or cancel.
 - Browser storage (localStorage) under {{site.themeKey}}, {{site.boardKey}}, {{site.drawerKey}}, {{site.playKey}}, and {{site.analysisSettingsKey}}: your theme, your board settings, whether the game panel stays pinned, the opponent and clock of your last game and whether you play rated, and the analyzer, lines, and time you ask positions read with.
   It is written only when you change a setting or start a game, and never sent to the server.
-- Session storage (sessionStorage) under {{site.analysisKey}}: the turns and variations on the analysis board, a stored game by its id.
+- Session storage (sessionStorage) under {{site.analysisKey}}: the turns and variations on the analysis board, with the tags (such as a game's name and players), clocks, evaluations, highlights, and labels of any text imported there, a stored game by its id.
   It lasts until the tab closes, and is never sent to the server.
 
 These are strictly necessary for functions you ask for (Art. 5(3) ePrivacy Directive; in Germany, sec. 25(2) no. 2 TDDDG), so they need no consent.

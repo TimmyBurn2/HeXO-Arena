@@ -83,6 +83,8 @@ const reasonAfter = (judgment: Judgment) => (judgment.reason === `value-drop` ? 
 // A count in the catalog's language, its thousands grouped: 1,234.
 const countFormat = new Intl.NumberFormat(`en-US`);
 const counted = (count: number) => countFormat.format(count);
+// Things in a running list: "a", "a and b", "a, b, and c".
+const listed = (things: readonly string[]) => (things.length < 3 ? things.join(` and `) : `${things.slice(0, -1).join(`, `)}, and ${things.at(-1) ?? ``}`);
 // A wait the server named, in seconds under a minute and whole minutes, rounded up, past it.
 const inWait = (seconds: number) => (seconds < 60 ? `${String(seconds)} s` : inMinutes(Math.ceil(seconds / 60)));
 // A wait in running text, every unit spelled out: "2 hours 59 minutes", "1 day 23 hours".
@@ -884,7 +886,7 @@ export const en = {
         themes: `Themes`,
         themesLead: `Ink is ${siteName}'s own. The other themes take their colors from these projects:`,
         font: `Font`,
-        protocol: `Protocol and ratings`,
+        protocol: `Protocol, notation, and ratings`,
         inspiration: `Inspiration`,
         licenses: `Licenses`,
         licensesProse: (file: Slot): ReactNode =>
@@ -920,6 +922,12 @@ export const en = {
                 name: `htttx bot protocol`,
                 by: `hex-tic-tac-toe`,
                 gives: (botApi: Slot): ReactNode => rich`The engine session every bot speaks, through the ${botApi(`Bot API`)}`,
+                copyright: `Copyright (c) 2026 hex-tic-tac-toe`,
+            },
+            notation: {
+                name: `HTTTX notation`,
+                by: `hex-tic-tac-toe`,
+                gives: (v1: Slot, v2: Slot): ReactNode => rich`The game text Analysis imports and exports, ${v1(`version 1`)} and ${v2(`version 2`)}`,
                 copyright: `Copyright (c) 2026 hex-tic-tac-toe`,
             },
             glicko: { name: `Glicko-2`, by: `Mark Glickman`, gives: `The rating system`, terms: `Published method` },
@@ -987,6 +995,8 @@ export const en = {
         source: {
             origin: `Analysis board`,
             originNote: `From the origin; play both sides`,
+            players: (cross: string, circle: string) => `${cross} vs ${circle}`,
+            playersNote: (players: string) => `${players}; from the origin, play both sides`,
             setup: `Analysis board`,
             setupNote: `From a set-up position; play both sides`,
             editing: `Set up a position`,
@@ -1034,6 +1044,7 @@ export const en = {
             won: `This line is won; there is nothing left to read.`,
             tooMany: (count: number) => `This position holds ${String(count)} stones; an analyzer reads at most ${String(analysisStoneCap)}.`,
             tooFar: `A stone lies too far from the origin for an analyzer to read.`,
+            half: (side: string, cell: string) => `${side} has a stone left after ${cell}; positions are read after whole turns.`,
             any: `Any online analyzer`,
             anyOne: `an analyzer`,
             // "0.9, by tom; 2 s a position", leaving out what the bot does not say.
@@ -1121,7 +1132,25 @@ export const en = {
             copy: `Copy line`,
             copiedText: `Line copied as HTTTX notation`,
             copiedLink: `Line copied as a link, since HTTTX notation starts from the origin`,
+            half: `a stone short`,
+            clock: (time: string) => `${time} left`,
             copyFailed: `The line was not copied; Export shows it to select`,
+        },
+        notes: {
+            title: `From the imported text`,
+            after: (cells: string) => `After ${cells}:`,
+            clock: (time: string) => `${time} left`,
+            even: `even`,
+            wins: (side: string, turns: number) => `${side} wins in ${String(turns)}`,
+            decided: `decided, naming no winner`,
+            both: `Highlights and labels on the board`,
+            highlights: `Highlights on the board`,
+            labels: `Labels on the board`,
+            tone: (cells: readonly string[], tone: `neutral` | `x` | `o`) => `${listed(cells)} ${tone === `neutral` ? `neutral` : `in ${tone}'s color`}`,
+            labelOn: (label: string, cell: string) => `${label} on ${cell}`,
+            highlightsSpoken: (tones: readonly string[]) => `Highlights on the board: ${tones.join(`; `)}.`,
+            labelsSpoken: (labels: readonly string[]) => `Labels: ${labels.join(`, `)}.`,
+            chip: (value: string) => `Imported: ${value}`,
         },
         foot: {
             setup: `Set up`,
@@ -1151,6 +1180,7 @@ export const en = {
             anywhere: `Stones may go anywhere here; turns played after setup follow the rules, within ${String(placementRadius)} cells of a stone.`,
             replaces: (tree: string) => `Done starts a new tree at this position; ${tree} is replaced.`,
             gameTree: (x: string, o: string) => `the tree for ${x} vs ${o}`,
+            lone: (side: string, cell: string) => `The lone stone on ${cell} stays; a set-up position starts a whole turn, so ${side} places two stones after it.`,
             thisTree: `this tree`,
             cancel: `Cancel`,
             done: `Done`,
@@ -1162,6 +1192,10 @@ export const en = {
             cancel: `Cancel`,
             line: (turns: number) => `A game line, ${String(turns)} ${plural(turns, `turn`, `turns`)}`,
             lineNote: (state: string) => `Every turn is legal from the origin; ${state}.`,
+            study: (turns: number, variations: number) =>
+                `A game line, ${String(turns)} ${plural(turns, `turn`, `turns`)}${variations === 0 ? `` : `, and ${String(variations)} ${plural(variations, `variation`, `variations`)}`}`,
+            notes: (kinds: readonly string[]) => `Its ${listed(kinds)} show as the text's own.`,
+            kinds: { clocks: `clocks`, evaluations: `evaluations`, highlights: `highlights`, labels: `labels` },
             setup: (stones: number, turns: number) =>
                 turns === 0
                     ? `A position, ${String(stones)} ${plural(stones, `stone`, `stones`)}`
@@ -1171,21 +1205,34 @@ export const en = {
             gameNote: (turn: number | null) => (turn === null ? `Load opens it at its end.` : `Load opens it at turn ${String(turn)}.`),
             elsewhere: `hexo.did.science does not share games with other sites yet; copy the game there as HTTTX and paste it here.`,
             expected: {
-                metadata: `a field such as version[1]`,
+                metadata: `a field such as version[2]`,
+                'version-first': `version[2] as the first field`,
                 'turn-number': `a turn number`,
                 dot: `the dot after the turn number`,
                 coordinate: `a cell such as [1,-2]`,
                 integer: `a whole number`,
+                'integer-form': `a plain whole number: no leading zero, no -0, no minus on a clock, and not too long`,
+                'cell-number': `a cell's two whole numbers, as in [1,-2]`,
                 comma: `a comma between the two numbers`,
                 bracket: `the closing bracket`,
                 'turn-end': `a semicolon to end the turn`,
+                info: `a clock such as @4500 or an evaluation such as %-5 or #3`,
+                'info-end': `the closing brace`,
+                'visual-end': `the closing >`,
+                'variation-end': `a closing parenthesis to end the variation`,
             },
             syntax: (line: number, column: number, turn: number | null, expected: string) =>
                 `Line ${String(line)}, column ${String(column)}${turn === null ? `` : `, turn ${String(turn)}`}: ${expected} belongs here`,
-            version: (version: string) => `This text is version ${version}; only version 1 reads here`,
-            turnNumber: (expected: number, found: number) => `Turn ${String(found)} stands where turn ${String(expected)} belongs; turns count up from 1`,
-            cellCount: (turn: number, count: number) =>
-                `Turn ${String(turn)} has ${count === 0 ? `no cells` : `${String(count)} cells`}; a turn has 2, or 1 when it completes six`,
+            version: (version: string) => `This text is version ${version}; versions 1 and 2 read here`,
+            turnNumber: (line: number, column: number, expected: number, found: number) =>
+                `Line ${String(line)}, column ${String(column)}: turn ${String(found)} stands where turn ${String(expected)} belongs; turns count up from 1, and a variation starts at the turn it replaces`,
+            cellCount: (line: number, column: number, turn: number, count: number) =>
+                `Line ${String(line)}, column ${String(column)}: turn ${String(turn)} has ${count === 0 ? `no cells` : `${String(count)} cells`}; a turn has 2, or 1 when it completes six`,
+            threatMark: (line: number, column: number, turn: number) =>
+                `Line ${String(line)}, column ${String(column)}, turn ${String(turn)}: ! threat marks are not read here; delete them and paste again`,
+            afterFinal: (line: number, column: number, turn: number) =>
+                `Line ${String(line)}, column ${String(column)}: turn ${String(turn)} ends its line with [/], so no turn follows it there`,
+            treeCap: (limit: number) => `More than ${String(limit)} turns with every variation; the board holds ${String(limit)}`,
             illegal: (turn: number, cell: string, why: string) => `Turn ${String(turn)}, ${cell}: ${why}`,
             why: {
                 'cell-occupied': `that cell is taken`,
@@ -1207,15 +1254,34 @@ export const en = {
         },
         export: {
             title: `Export`,
-            line: (turns: number) => `This line from the origin, HTTTX notation (${String(turns)} ${plural(turns, `turn`, `turns`)})`,
+            form: `Notation`,
+            v2: `HTTTX v2`,
+            v1: `HTTTX v1`,
+            v2Note: `Every variation, with any imported notes.`,
+            v1Note: `The main line alone, for tools that read only v1.`,
+            evaluations: (turns: number) => `Evaluations from the reading shown, where the text gives none (${String(turns)} ${plural(turns, `turn`, `turns`)})`,
+            evaluationsNone: {
+                'signed-out': `Evaluations from the reading shown (none; sign in and turn on Analyze to have positions read)`,
+                off: `Evaluations from the reading shown (none yet; turn on Analyze to have positions read)`,
+                reading: `Evaluations from the reading shown (none yet; Analyze reads each position you visit)`,
+                covered: `Evaluations from the reading shown (none to add; the text gives its own wherever the reading has one)`,
+            },
+            clocks: (turns: number) => `Clocks from the game (${String(turns)} ${plural(turns, `turn`, `turns`)})`,
+            line: (version: 1 | 2, turns: number, variations: number) =>
+                version === 1
+                    ? `The main line from the origin, HTTTX v1 (${String(turns)} ${plural(turns, `turn`, `turns`)})`
+                    : `The tree from the origin, HTTTX v2 (${String(turns)} ${plural(turns, `turn`, `turns`)}${variations === 0 ? `` : `, ${String(variations)} ${plural(variations, `variation`, `variations`)}`})`,
+            noTurns: `No turns yet; play one to write the tree.`,
             noLine: `HTTTX notation starts from the origin, so a set-up board has none; the position and the link hold it.`,
             position: (side: string) => `This position, boat notation; ${side} to move`,
+            positionBefore: (cell: string, side: string) => `The position before ${cell}, boat notation; ${side} to move`,
+            linkBefore: (cell: string) => `Link to this line before ${cell}`,
             link: `Link to this line`,
             gameLink: `Link to this turn of the game`,
             copy: `Copy`,
             copied: `Copied`,
             copyFailed: `Not copied; select the text instead`,
-            note: `Notation holds one line; your other variations stay in this browser.`,
+            note: `The link holds the line to this turn; v2 text holds every variation and any imported notes.`,
             close: `Close`,
         },
         states: {
