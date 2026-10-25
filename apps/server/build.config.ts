@@ -11,7 +11,7 @@ export default defineConfig({
         target: `node26`,
         outDir: `dist`,
         emptyOutDir: true,
-        rollupOptions: {
+        rolldownOptions: {
             input: { index: `src/index.ts`, 'admin-cli': `src/admin-cli.ts`, egress: `src/egress.ts` },
             output: { entryFileNames: `[name].js`, chunkFileNames: `[name]-[hash].js` },
         },
