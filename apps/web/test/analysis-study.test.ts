@@ -3,7 +3,7 @@ import { analysisTreeNodeCap, readHtttx, writeHtttx, type HtttxV2Document } from
 import { positionKey, type Coord } from '@hexo-arena/rules';
 import { readImport } from '../src/analysis/import-text';
 import { markCell, readStoredBoard, restoreBoard, rootOfStored, standOn, storeBoard, back, deleteFrom } from '../src/analysis/state';
-import { importedKinds, notationEvaluation, shownNotes, studyDocument, studyOf, studyText, type Study } from '../src/analysis/study';
+import { importedKinds, notationEvaluation, shownNotes, shownVisuals, studyDocument, studyOf, studyText, type Study } from '../src/analysis/study';
 import { lineTo, mainLine, newTree, nodeAt, play, playLone, positionAt, rootId, wholeAt, type MoveTree, type NodeId, type TreePlay } from '../src/analysis/tree';
 import { clockText, importedWords } from '../src/analysis/words';
 
@@ -195,10 +195,59 @@ describe('importing v2 text', () => {
         expect(read.ok ? `accepted` : read.error).toEqual({ kind: `tree-cap`, limit: analysisTreeNodeCap });
     });
 
-    it('reads v2 text pasted into Import as the tree, and v1 text with threat marks as refused by name', () => {
+    it('reads v2 text pasted into Import as the tree, and v1 text with threat marks as its line', () => {
         const imported = readImport(nested, `https://arena.example`);
         expect(imported.ok && imported.value.kind).toBe(`study`);
-        expect(readImport(`version[1];\n1. [1,0][0,1]!;`, `https://arena.example`)).toEqual({ ok: false, error: { kind: `threat-mark`, line: 2, column: 14, turn: 1 } });
+        const marked = readImport(`version[1];\n1. [1,0][0,1]!;`, `https://arena.example`);
+        expect(marked.ok && marked.value.kind === `line` && marked.value.line.turns).toEqual([[at(1, 0), at(0, 1)]]);
+    });
+});
+
+// The setup examples of the v2 notation's README, each under the metadata a document needs.
+const defaultSetup = `version[2];\no : x [0,0];\n1. [1,0][0,1];\n`;
+const xFirst = `version[2];\nx [1,0] [0,1] : o [0,0] ;\n`;
+
+describe('importing a v2 setup', () => {
+    it('starts the tree at the set-up board, the side listed first to move, turns counted from 1 after it whatever the stone counts', () => {
+        const alone = study(xFirst);
+        expect(alone.tree.root).toEqual({ kind: `setup`, start: { stones: [{ ...at(1, 0), player: 0 }, { ...at(0, 1), player: 0 }, { ...at(0, 0), player: 1 }], toMove: 0 } });
+        expect(alone).toMatchObject({ end: rootId, turns: 0, variations: 0, win: null, half: false, position: { toMove: 0 } });
+        const read = study(`${xFirst}1. [2,0][3,0] (1. [-1,0][-2,0];);\n2. [4,0][/];\n`);
+        expect(mainLine(read.tree).map((id) => nodeAt(read.tree, id))).toMatchObject([{ kind: `root` }, { kind: `turn`, turn: 1, side: `x`, cells: [at(2, 0), at(3, 0)] }, { kind: `half`, turn: 2, side: `o` }]);
+        expect(read).toMatchObject({ turns: 2, variations: 1, half: true });
+    });
+
+    it('starts the default setup at the origin, the text it holds the same as one without it', () => {
+        const read = study(defaultSetup);
+        expect(read.tree.root).toEqual({ kind: `origin` });
+        expect(studyText(read.tree, [], 2)).toBe(`version[2];\n1. [1,0][0,1];\n`);
+    });
+
+    it('refuses a setup the board cannot hold and a first turn the rules refuse, naming why', () => {
+        const refused = (text: string) => {
+            const read = studyOf(document(text));
+            return read.ok ? `accepted` : read.error;
+        };
+        expect(refused(`version[2];\no : x ;`)).toEqual({ kind: `setup`, problem: { kind: `no-stones` } });
+        expect(refused(`version[2];\nx [0,0] : o [0,0];`)).toEqual({ kind: `setup`, problem: { kind: `cell-taken`, cell: at(0, 0) } });
+        expect(refused(`version[2];\no : x [0,0] [1,0] [2,0] [3,0] [4,0] [5,0];`)).toMatchObject({ kind: `setup`, problem: { kind: `six-on-board` } });
+        expect(refused(`version[2];\nx [1,0] : o [0,0];\n1. [20,0][2,0];`)).toMatchObject({ kind: `illegal`, turn: 1, cell: at(20, 0), rejection: { kind: `outside-placement-radius` } });
+    });
+
+    it('shows the setup\'s visuals on the start position, writes them back, and keeps them in the browser\'s storage', () => {
+        const text = `version[2];\no [1,0] : x [0,0] <2,0:#X> <3,0:$A>;\n`;
+        const read = study(text);
+        const root = nodeAt(read.tree, rootId);
+        if (root === undefined) throw new Error(`no root`);
+        expect(shownVisuals(root)).toEqual([
+            { cell: at(2, 0), highlight: { letter: `X` }, label: null },
+            { cell: at(3, 0), highlight: null, label: `A` },
+        ]);
+        expect(importedKinds(read.tree)).toEqual([`highlights`, `labels`]);
+        expect(studyText(read.tree, [], 2)).toBe(text);
+        const stored = readStoredBoard(JSON.stringify(storeBoard(standOn(read.tree, read.end), [])));
+        if (stored === null) throw new Error(`the stored board does not read`);
+        expect(studyText(restoreBoard(stored, rootOfStored(stored.root, 1)).tree, [], 2)).toBe(text);
     });
 });
 
@@ -210,16 +259,24 @@ describe('exporting the tree', () => {
 
     it('writes imported notes back, the final move\'s on the stone before it, which reads back to the same tree', () => {
         const read = study(annotated);
-        const text = studyText(read.tree, [{ key: `name`, value: `Study` }], 2) ?? ``;
+        const text = studyText(read.tree, [{ key: `name`, value: `Study` }], 2);
         expect(text.split(`\n`)[0]).toBe(`version[2]name[Study];`);
         expect(text).toContain(`6. [5,0]{@1050}<-1,0:$1>`);
         expect(text).toContain(`[/];`);
         expect(studyText(study(text).tree, [{ key: `name`, value: `Study` }], 2)).toBe(text);
     });
 
-    it('writes the main line alone as v1, a closing half-turn left out', () => {
-        expect(studyText(study(nested).tree, [], 1)).toBe(`version[1];\n1. [-1,0][0,-1];\n2. [1,0][2,0];\n3. [1,-2][2,-3];\n4. [3,0][4,0];\n5. [1,-1][2,-2];\n6. [5,0];\n`);
+    it('writes the main line alone as v1, a closing half-turn left out, and as v2 where it ends on a six from one stone, which v1 cannot hold', () => {
         expect(studyText(study(`version[2];\n1. [1,0][0,1];\n2. [2,0][/];`).tree, [], 1)).toBe(`version[1];\n1. [1,0][0,1];\n`);
+        expect(studyText(study(nested).tree, [], 1)).toBe(`version[2];\n1. [-1,0][0,-1];\n2. [1,0][2,0];\n3. [1,-2][2,-3];\n4. [3,0][4,0];\n5. [1,-1][2,-2];\n6. [5,0][/];\n`);
+    });
+
+    it('writes a set-up board as v2 with its setup, which v1 cannot hold', () => {
+        const text = `version[2];\nx [1,0] [0,1] : o [0,0];\n1. [2,0][3,0];\n`;
+        const read = study(text);
+        expect(studyText(read.tree, [], 2)).toBe(text);
+        expect(studyText(read.tree, [], 1)).toBe(text);
+        expect(studyText(newTree({ kind: `setup`, start: { stones: [{ x: 0, y: 0, player: 1 }], toMove: 1 } }), [], 2)).toBe(`version[2];\no [0,0] : x;\n`);
     });
 
     it('adds an evaluation and a clock to each whole turn\'s last stone where the imported text gives none, and none to a half-turn', () => {
@@ -232,8 +289,9 @@ describe('exporting the tree', () => {
         expect(studyText(study(`version[2];\n1. [1,0][0,1];`).tree, [], 2, { evaluation: () => ({ kind: `open`, value: 40 }), clock: () => 1_000 })).toBe(`version[2];\n1. [1,0][0,1]{@1000:%40};\n`);
     });
 
-    it('writes nothing for a tree of no turns, which v2 cannot hold', () => {
-        expect(studyDocument(newTree({ kind: `origin` }), [])).toBeNull();
+    it('writes a tree of no turns as v2\'s default setup alone, and as v1\'s header alone', () => {
+        expect(studyDocument(newTree({ kind: `origin` }), [])).toEqual({ version: 2, tags: [], setup: null, line: null });
+        expect(studyText(newTree({ kind: `origin` }), [], 2)).toBe(`version[2];\no : x [0,0];\n`);
         expect(studyText(newTree({ kind: `origin` }), [], 1)).toBe(`version[1];\n`);
     });
 });

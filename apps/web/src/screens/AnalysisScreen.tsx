@@ -377,12 +377,10 @@ function Workspace({ board, game, notice, onBoard, onReplace, onNewBoard }: {
                 step((current) => deleteFrom(current, gameTurns, id));
             },
             copy: (id) => {
-                const turns = lineTo(tree, id);
-                const asLink = tree.root.kind === `setup`;
-                const copied = tree.root.kind === `setup` ? `${window.location.origin}${setupLink(tree.root.start, turns)}` : writeGame(turns);
+                const copied = writeGame(lineTo(tree, id), tree.root.kind === `setup` ? tree.root.start : null);
                 navigator.clipboard.writeText(copied).then(
                     () => {
-                        setStatus(asLink ? text.analysis.tree.copiedLink : text.analysis.tree.copiedText);
+                        setStatus(text.analysis.tree.copiedText);
                     },
                     () => {
                         setStatus(text.analysis.tree.copyFailed);
@@ -474,20 +472,18 @@ function Workspace({ board, game, notice, onBoard, onReplace, onNewBoard }: {
         const main = mainLine(tree);
         const tags = game === null ? tree.tags : gameTags(game.snapshot);
         return {
-            notation:
-                tree.root.kind === `setup`
-                    ? null
-                    : {
-                          write: (choice) =>
-                              studyText(tree, tags, choice.version, {
-                                  evaluation: choice.evaluations ? reading.evaluationOf : () => null,
-                                  clock: choice.clocks ? clockOf : () => null,
-                              }),
-                          turns: { v1: lineTo(tree, main.at(-1) ?? rootId).length, v2: main.length - 1 },
-                          variations: [...tree.nodes.values()].reduce((count, each) => count + Math.max(0, each.children.length - 1), 0),
-                          evaluations: { turns: filled, none: filled > 0 || evaluated === 0 ? (reading.signedIn !== true ? `signed-out` : reading.analyzing ? `reading` : `off`) : `covered` },
-                          clocks: timed === 0 ? null : timed,
-                      },
+            notation: {
+                write: (choice) =>
+                    studyText(tree, tags, choice.version, {
+                        evaluation: choice.evaluations ? reading.evaluationOf : () => null,
+                        clock: choice.clocks ? clockOf : () => null,
+                    }),
+                start: tree.root.kind === `setup` ? `setup` : `origin`,
+                turns: { v1: lineTo(tree, main.at(-1) ?? rootId).length, v2: main.length - 1 },
+                variations: [...tree.nodes.values()].reduce((count, each) => count + Math.max(0, each.children.length - 1), 0),
+                evaluations: { turns: filled, none: filled > 0 || evaluated === 0 ? (reading.signedIn !== true ? `signed-out` : reading.analyzing ? `reading` : `off`) : `covered` },
+                clocks: timed === 0 ? null : timed,
+            },
             position,
             lone,
             link: {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { htttxCell, htttxLineOf, htttxTags, readHtttx, turnsOfStones, writeHtttx, type HtttxCells, type HtttxDocument, type HtttxHeader, type HtttxRead, type HtttxV2Document } from '../src/notation';
+import { htttxCell, htttxLineOf, htttxTags, readHtttx, turnsOfStones, writeHtttx, type HtttxCells, type HtttxDocument, type HtttxHeader, type HtttxLine, type HtttxRead, type HtttxV2Document } from '../src/notation';
 
 // Engine cells along one row; x = q + r and y = -r, so (3,0) is [3,0] and (1,-1) is [0,1].
 const turns = [
@@ -26,6 +26,12 @@ function v2(text: string): HtttxV2Document {
     const read = document(text);
     if (read.version !== 2) throw new Error(`read as version ${String(read.version)}`);
     return read;
+}
+
+function mainLine(text: string): HtttxLine {
+    const line = v2(text).line;
+    if (line === null) throw new Error(`no main line`);
+    return line;
 }
 
 // The examples of the v2 notation's README, verbatim.
@@ -116,12 +122,30 @@ datetime[2026-10-06 12:00:00];
 `,
 ];
 
+// The setup examples of the v2 notation's README, each under the metadata a document needs.
+const setupExamples = [
+    `version[2];
+o : x [0,0] ;
+`,
+    `version[2];
+o : x [0,0];
+1. [1,0][0,1];
+`,
+    `version[2];
+x [1,0] [0,1] : o [0,0] ;
+`,
+];
+
 const cell = (q: number, r: number) => ({ x: q + r, y: -r + 0 });
 
 describe('writeHtttx for v1', () => {
     it('writes the bare version and one numbered turn a line, as the analysis board always has', () => {
         expect(v1()).toBe(`version[1];\n`);
-        expect(v1({}, turns)).toBe(`version[1];\n1. [3,0][0,1];\n2. [-1,0];\n`);
+        expect(v1({}, turns.slice(0, 1))).toBe(`version[1];\n1. [3,0][0,1];\n`);
+    });
+
+    it('writes a line ending on a turn of one stone, which v1 cannot hold, as v2 ending on the final move', () => {
+        expect(v1({ name: `A` }, turns)).toBe(`version[2]name[A];\n1. [3,0][0,1];\n2. [-1,0][/];\n`);
     });
 
     it('writes every key in one metadata segment after the version, in the order the notation lists them', () => {
@@ -134,7 +158,7 @@ describe('writeHtttx for v1', () => {
             timeControl: { mode: `match`, mainTimeMs: 300_000, incrementMs: 3_000 },
             result: { winner: `o`, reason: `six-in-a-row` },
         };
-        expect(v1(header, turns).split(`\n`)[0]).toBe(
+        expect(v1(header, turns.slice(0, 1)).split(`\n`)[0]).toBe(
             `version[1]name[Duel, game 3 of 10]platform[HeXO Arena]utcdatetime[2026-10-04 09:05:07]playercross[devbot-b]playercircle[devbot-c]timecontrol[300+3]endreason[win]winner[circle];`,
         );
     });
@@ -191,7 +215,7 @@ describe('readHtttx on the v2 examples of the notation', () => {
     });
 
     it('reads a game ended by the final move, its cells in engine coordinates', () => {
-        const [turn] = v2(specExamples[0] ?? ``).line;
+        const [turn] = mainLine(specExamples[0] ?? ``);
         expect(turn).toEqual({
             number: 1,
             first: { kind: `stone`, cell: { x: 0, y: 1 }, info: null, visuals: [] },
@@ -201,7 +225,7 @@ describe('readHtttx on the v2 examples of the notation', () => {
     });
 
     it('reads clocks and open and closed evaluations on each stone they follow', () => {
-        const line = v2(specExamples[5] ?? ``).line;
+        const line = mainLine(specExamples[5] ?? ``);
         expect(line[0].first.info).toEqual({ clockMs: 4505, evaluation: null });
         expect(line[0].second.info).toEqual({ clockMs: 4500, evaluation: { kind: `open`, value: -1 } });
         expect(line[3]?.second.info).toEqual({ clockMs: 3550, evaluation: { kind: `closed`, turns: -1 } });
@@ -210,20 +234,20 @@ describe('readHtttx on the v2 examples of the notation', () => {
     });
 
     it('reads highlights and labels, a bare cell as neither and a label with whitespace before its bracket', () => {
-        expect(v2(specExamples[4] ?? ``).line[3]?.second.visuals).toEqual([
+        expect(mainLine(specExamples[4] ?? ``)[3]?.second.visuals).toEqual([
             { cell: cell(3, -4), highlight: null, label: null },
             { cell: cell(-2, 1), highlight: null, label: null },
         ]);
-        expect(v2(specExamples[4] ?? ``).line[4]?.second.visuals).toEqual([{ cell: cell(5, 0), highlight: { letter: `X` }, label: null }]);
-        const labels = v2(specExamples[6] ?? ``).line[5]?.first.visuals ?? [];
+        expect(mainLine(specExamples[4] ?? ``)[4]?.second.visuals).toEqual([{ cell: cell(5, 0), highlight: { letter: `X` }, label: null }]);
+        const labels = mainLine(specExamples[6] ?? ``)[5]?.first.visuals ?? [];
         expect(labels).toHaveLength(11);
         expect(labels[0]).toEqual({ cell: cell(-1, 0), highlight: null, label: `1` });
         expect(labels[10]).toEqual({ cell: cell(5, 0), highlight: null, label: `3` });
-        expect(v2(specExamples[8] ?? ``).line[5]?.second.visuals).toEqual([{ cell: cell(0, 0), highlight: { letter: `X` }, label: `1` }]);
+        expect(mainLine(specExamples[8] ?? ``)[5]?.second.visuals).toEqual([{ cell: cell(0, 0), highlight: { letter: `X` }, label: `1` }]);
     });
 
     it('reads variations under the turn they replace, nested ones under theirs, each from the replaced turn number', () => {
-        const [, second] = v2(specExamples[7] ?? ``).line;
+        const [, second] = mainLine(specExamples[7] ?? ``);
         expect(second?.variations).toHaveLength(2);
         const [deep, short] = second?.variations ?? [];
         expect(deep?.map((turn) => turn.number)).toEqual([2, 3, 4]);
@@ -234,8 +258,49 @@ describe('readHtttx on the v2 examples of the notation', () => {
     });
 
     it('reads the compact example to the same variations as the spaced one', () => {
-        const compact = v2(specExamples[8] ?? ``).line[1]?.variations;
+        const compact = mainLine(specExamples[8] ?? ``)[1]?.variations;
         expect(compact?.map((line) => line.map((turn) => turn.number))).toEqual([[2, 3, 4], [2, 3]]);
+    });
+});
+
+describe('readHtttx on v2 setups', () => {
+    it.each(setupExamples.map((text, index) => [index + 1, text] as const))('reads setup example %i and writes it back to text that reads to the same document', (_, text) => {
+        const read = v2(text);
+        expect(document(writeHtttx(read))).toEqual(read);
+    });
+
+    it('reads the default setup and the stones of each side, the side listed first moving first, and turns from 1 after it', () => {
+        expect(v2(setupExamples[1] ?? ``)).toMatchObject({ setup: { first: `o`, x: [cell(0, 0)], o: [], visuals: [] }, line: [{ number: 1, first: { cell: cell(1, 0) } }] });
+        expect(v2(setupExamples[2] ?? ``)).toEqual({ version: 2, tags: [], setup: { first: `x`, x: [cell(1, 0), cell(0, 1)], o: [cell(0, 0)], visuals: [] }, line: null });
+        expect(v2(`version[2]name[A];x[1,0]:o[0,0];1.[2,0][3,0];`).line?.[0].number).toBe(1);
+    });
+
+    it('reads the visuals before the end of a setup, and a setup of no stones, which is the rules\' to refuse', () => {
+        expect(v2(`version[2];\no : x <1,0:#X> <0,1:$A>;`).setup).toEqual({
+            first: `o`,
+            x: [],
+            o: [],
+            visuals: [
+                { cell: cell(1, 0), highlight: { letter: `X` }, label: null },
+                { cell: cell(0, 1), highlight: null, label: `A` },
+            ],
+        });
+    });
+
+    it('writes the setup on a line of its own after the metadata, then the main line', () => {
+        expect(writeHtttx(v2(`version[2];x[1,0][0,1]:o[0,0]<2,0:#O>;1.[3,0][4,0];`))).toBe(`version[2];\nx [1,0] [0,1] : o [0,0] <2,0:#O>;\n1. [3,0][4,0];\n`);
+        expect(writeHtttx(v2(setupExamples[0] ?? ``))).toBe(`version[2];\no : x [0,0];\n`);
+    });
+
+    it.each([
+        [`a setup without its colon`, `version[2];\nx [1,0] o [0,0];`, { kind: `syntax`, line: 2, column: 9, turn: null, expected: `setup-colon` }],
+        [`one side named twice`, `version[2];\nx [1,0] : x [0,0];`, { kind: `syntax`, line: 2, column: 11, turn: null, expected: `setup-side` }],
+        [`a setup without its semicolon`, `version[2];\no : x [0,0]\n1. [1,0][0,1];`, { kind: `syntax`, line: 3, column: 1, turn: null, expected: `setup-end` }],
+        [`info on a setup stone`, `version[2];\no : x [0,0]{@5};`, { kind: `syntax`, line: 2, column: 12, turn: null, expected: `setup-end` }],
+        [`a leading zero in a setup stone`, `version[2];\no : x [01,0];`, { kind: `syntax`, line: 2, column: 8, turn: null, expected: `integer-form` }],
+        [`a first turn after the setup numbered on from the board`, `version[2];\nx [1,0] : o [0,0];\n2. [2,0][3,0];`, { kind: `turn-number`, line: 3, column: 1, expected: 1, found: 2 }],
+    ] as const)('refuses %s, naming where', (_, text, error) => {
+        expect(refusal(readHtttx(text))).toEqual(error);
     });
 });
 
@@ -244,18 +309,18 @@ describe('readHtttx on v2 beyond the examples', () => {
         const read = v2(`version[2] name[ a  b ] ;\n1 . [ - 1 , 0 ]\n[0,\n-1] { @ 4 5 : % - 1 } ;`);
         expect(read.tags).toEqual([{ key: `name`, value: ` a  b ` }]);
         expect(refusal(readHtttx(`version[2];\n1 0 . [ - 1 , 0 ][0,-1];`))).toMatchObject({ kind: `turn-number`, expected: 1, found: 10 });
-        const [turn] = v2(`version[2];\n1 . [ - 1 , 0 ]\n[0,\n-1] { @ 4 5 : % - 1 } ;`).line;
+        const [turn] = mainLine(`version[2];\n1 . [ - 1 , 0 ]\n[0,\n-1] { @ 4 5 : % - 1 } ;`);
         expect(turn.first.cell).toEqual(cell(-1, 0));
         expect(turn.second.info).toEqual({ clockMs: 45, evaluation: { kind: `open`, value: -1 } });
     });
 
     it('reads #0, a closed evaluation that names no side, and any open value beyond the recommended range', () => {
-        expect(v2(`version[2];1.[1,0][0,1]{#0};`).line[0].second.info?.evaluation).toEqual({ kind: `closed`, turns: 0 });
-        expect(v2(`version[2];1.[1,0][0,1]{%-250};`).line[0].second.info?.evaluation).toEqual({ kind: `open`, value: -250 });
+        expect(mainLine(`version[2];1.[1,0][0,1]{#0};`)[0].second.info?.evaluation).toEqual({ kind: `closed`, turns: 0 });
+        expect(mainLine(`version[2];1.[1,0][0,1]{%-250};`)[0].second.info?.evaluation).toEqual({ kind: `open`, value: -250 });
     });
 
     it('keeps any capital as a highlight letter and a bare # as none, and passes over a visual with a section it does not know', () => {
-        const visuals = v2(`version[2];1.[1,0][0,1]<1,0:#R><2,0:#><3,0:#N:$AB12><4,0:&arrow><5,0:#x><6,0:$a><7,0:#XY><01,0><-0,0><8,0:$A:#X>;`).line[0].second.visuals;
+        const visuals = mainLine(`version[2];1.[1,0][0,1]<1,0:#R><2,0:#><3,0:#N:$AB12><4,0:&arrow><5,0:#x><6,0:$a><7,0:#XY><01,0><-0,0><8,0:$A:#X>;`)[0].second.visuals;
         expect(visuals).toEqual([
             { cell: cell(1, 0), highlight: { letter: `R` }, label: null },
             { cell: cell(2, 0), highlight: { letter: null }, label: null },
@@ -264,7 +329,7 @@ describe('readHtttx on v2 beyond the examples', () => {
     });
 
     it('reads the final move with its own info and visuals, and variations after it', () => {
-        const [turn] = v2(`version[2];1.[1,1][/]{@1000}<1,1><1,0>(1.[2,0][0,2];);`).line;
+        const [turn] = mainLine(`version[2];1.[1,1][/]{@1000}<1,1><1,0>(1.[2,0][0,2];);`);
         expect(turn.second).toEqual({ kind: `final`, info: { clockMs: 1000, evaluation: null }, visuals: [{ cell: cell(1, 1), highlight: null, label: null }, { cell: cell(1, 0), highlight: null, label: null }] });
         expect(turn.variations).toHaveLength(1);
     });
@@ -324,15 +389,14 @@ describe('readHtttx on v2 beyond the examples', () => {
 
     it('refuses an integer longer than a number holds exactly, and a coordinate past any board', () => {
         expect(refusal(readHtttx(`version[2];1.[1,0][0,1]{@1234567890123456};`))).toMatchObject({ kind: `syntax`, expected: `integer-form` });
-        expect(v2(`version[2];1.[1,0][0,1]{@123456789012345};`).line[0].second.info?.clockMs).toBe(123456789012345);
+        expect(mainLine(`version[2];1.[1,0][0,1]{@123456789012345};`)[0].second.info?.clockMs).toBe(123456789012345);
         expect(refusal(readHtttx(`version[2];1.[1234567890,0][0,1];`))).toMatchObject({ kind: `syntax`, expected: `integer-form` });
     });
 
     it('reads a hundred thousand nested variations without running out of stack', () => {
         const depth = 100_000;
         const text = `version[2];1.[1,0][0,1]${`(1.[1,0][0,1]`.repeat(depth)}${`;)`.repeat(depth)};`;
-        const read = v2(text);
-        let line = read.line;
+        let line = mainLine(text);
         let nested = 0;
         for (let inner = line[0].variations[0]; inner !== undefined; inner = line[0].variations[0]) {
             line = inner;
@@ -352,9 +416,9 @@ describe('readHtttx on v1', () => {
         expect(document(`version[1];\r\n1.  [ 001 , -0 ] [0,1] ;\r\n2. [2,0][3,0]`)).toEqual({ version: 1, tags: [], turns: [[cell(1, 0), cell(0, 1)], [cell(2, 0), cell(3, 0)]] });
     });
 
-    it('refuses threat marks, naming the mark, where they stand', () => {
-        expect(refusal(readHtttx(`version[1];\n1. [1,0][0,1];\n2. [2,0][3,0]!!;\n`))).toEqual({ kind: `threat-mark`, line: 3, column: 14, turn: 2 });
-        expect(refusal(readHtttx(`1. [1,0][0,1] !;`))).toEqual({ kind: `threat-mark`, line: 1, column: 15, turn: 1 });
+    it('reads threat marks and passes over them, as v1 counts them and nothing more', () => {
+        expect(document(`version[1];\n1. [1,0][0,1];\n2. [2,0][3,0]!!;\n`)).toEqual({ version: 1, tags: [], turns: [[cell(1, 0), cell(0, 1)], [cell(2, 0), cell(3, 0)]] });
+        expect(document(`1. [1,0][0,1] ! !;2. [2,0][3,0]!`)).toEqual({ version: 1, tags: [], turns: [[cell(1, 0), cell(0, 1)], [cell(2, 0), cell(3, 0)]] });
     });
 
     it('names line and column for a turn out of order and a turn of no or three cells', () => {
@@ -368,7 +432,7 @@ describe('readHtttx on v1', () => {
     });
 
     it('writes what it reads back to the same document', () => {
-        const read = document(`name[A];1.[1,0][0,1];2.[5,0];`);
+        const read = document(`name[A];1.[1,0][0,1];2.[5,0][4,0];`);
         expect(document(writeHtttx(read))).toEqual(read);
     });
 });
@@ -382,7 +446,7 @@ describe('htttxLineOf', () => {
             { cells: [cell(5, 0)], info },
         ]);
         if (line === null) throw new Error(`no line`);
-        expect(writeHtttx({ version: 2, tags: [], line })).toBe(`version[2];\n1. [1,0][0,1]{@1000};\n2. [5,0]{@1000}[/];\n`);
+        expect(writeHtttx({ version: 2, tags: [], setup: null, line })).toBe(`version[2];\n1. [1,0][0,1]{@1000};\n2. [5,0]{@1000}[/];\n`);
     });
 });
 

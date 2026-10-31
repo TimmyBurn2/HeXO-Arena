@@ -234,6 +234,16 @@ describe('the tournament exports', () => {
         expect(entries[1]?.text.split(`\r\n`)[1]).toBe(`1,1,alpha vs gamma,1,1,alpha,gamma,,terminated,2,false,false,2026-10-01T12:00:00Z,2026-10-01T12:05:00Z`);
     });
 
+    it('writes a game of no turns as v2 with the default setup alone', async () => {
+        const duel = seedDuel(query, { id: `d_alphavsgamma`, startedBy: id(`cid`), first: id(`alpha`), second: id(`gamma`), games: 1, createdAt: startedAt });
+        const gameId = insertBotGame(query, { challengerBotId: id(`alpha`), destBotId: id(`gamma`), challengerSide: `x`, timeControl: match, opening: opening.slice(0, 1), tag: duelGame(duel, 1), unratedByChoice: true });
+        finish(gameId, null, `aborted`, 1);
+        settle(duelGame(duel, 1), `played`);
+        const { entries } = await exported(`/api/tournaments/${duel.id}/export`);
+        expect(entries[0]?.text).toMatch(/^version\[2\]name\[Duel, game 1 of 1\]/u);
+        expect(entries[0]?.text.split(`\n`).slice(1)).toEqual([`o : x [0,0];`, ``]);
+    });
+
     it('adds each bot\'s version as the test began to a test\'s games.csv, kept as text a spreadsheet will not run', async () => {
         const duel = seedDuel(query, {
             id: `t_alphatest001`,
