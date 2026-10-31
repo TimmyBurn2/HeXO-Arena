@@ -1558,7 +1558,7 @@ components:
       type: object
     CreateTournamentRequest:
       additionalProperties: false
-      description: "2 to 8 distinct bots: two play a duel, three or more a round robin. The clock is a
+      description: "2 to 12 distinct bots: two play a duel, three or more a round robin. The clock is a
         turn clock of 5 to 60 s, or a match clock of 1 to 10 min plus 0 to 10 s, never unlimited. A
         1-ply opening allows a single game or one opening a pair, since a bot that plays alike every
         time would replay the bare origin identically."
@@ -1567,7 +1567,7 @@ components:
           description: The bots in the order named; of two, the first named stands first.
           items:
             $ref: "#/components/schemas/TournamentPick"
-          maxItems: 8
+          maxItems: 12
           minItems: 2
           type: array
         gamesPerPair:
@@ -1649,7 +1649,7 @@ components:
           nullable: true
           type: string
         games:
-          maximum: 70
+          maximum: 220
           minimum: 1
           type: integer
         high:
@@ -3929,7 +3929,7 @@ components:
     TournamentGamesPerPair:
       description: "The games each pair plays: a single game with sides drawn by lot, or openings each
         played twice with the sides swapped. More than 10 only in a test, where one person owns
-        every bot; no bot plays more than 30 games, or 70 in a test."
+        every bot; no bot plays more than 30 games, or 220 in a test."
       enum:
         - 1
         - 2
@@ -4549,7 +4549,7 @@ components:
       type: apiKey
 info:
   title: HeXO Arena
-  version: 0.52.0
+  version: 0.53.0
 openapi: 3.0.3
 paths:
   /api/analysis/check:
@@ -5256,7 +5256,7 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/BotLimitError"
-          description: The owner already holds 5 bots.
+          description: The owner already holds 12 bots.
         "409":
           content:
             application/json:
@@ -6273,7 +6273,7 @@ paths:
     post:
       description: "The picked bots start at once, never rated: two play a duel, three or more a round
         robin, a round's pairs at once. One person's bots alone make a test. A person runs 2 at once
-        and sets up 10 a UTC day; a bot plays in 2 at once, at most 30 games in one, 70 in a test."
+        and sets up 10 a UTC day; a bot plays in 2 at once, at most 30 games in one, 220 in a test."
       operationId: createTournament
       requestBody:
         content:
@@ -6449,7 +6449,7 @@ paths:
         - Tournaments
   /api/tournaments/{id}/export:
     get:
-      description: Every game over so far, at most 280, numbered in the order played, any game under way
+      description: Every game over so far, at most 1320, numbered in the order played, any game under way
         left out; games.csv names each game's round, and standings.csv holds the standings as they
         stand.
       operationId: exportTournament

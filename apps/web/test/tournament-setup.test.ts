@@ -11,10 +11,10 @@ describe('a duel\'s or round robin\'s setup', () => {
         expect(tournamentSetupPath({ bots: [], games: null, clock: null, opening: null })).toBe(`/play/tournament`);
     });
 
-    it('drops a bot named twice and past eight, and falls back to the defaults for what a link names wrongly', () => {
-        const names = [`a1`, `A1`, `a2`, `a3`, `a4`, `a5`, `a6`, `a7`, `a8`, `a9`].join(`,`);
+    it('drops a bot named twice and past twelve, and falls back to the defaults for what a link names wrongly', () => {
+        const names = [`a1`, `A1`, `a2`, `a3`, `a4`, `a5`, `a6`, `a7`, `a8`, `a9`, `a10`, `a11`, `a12`, `a13`].join(`,`);
         const read = tournamentSetupFromParams(new URLSearchParams({ bots: names, games: `12`, opening: `2`, clock: `forever` }));
-        expect(read.bots.map((entry) => entry.name)).toEqual([`a1`, `a2`, `a3`, `a4`, `a5`, `a6`, `a7`, `a8`]);
+        expect(read.bots.map((entry) => entry.name)).toEqual([`a1`, `a2`, `a3`, `a4`, `a5`, `a6`, `a7`, `a8`, `a9`, `a10`, `a11`, `a12`]);
         expect([read.games, read.opening, read.clock]).toEqual([null, null, null]);
     });
 
@@ -39,7 +39,9 @@ describe('the games a pair plays', () => {
         expect(gamesPerPairOf(true)).toEqual([1, 2, 4, 6, 8, 10, 20, 30, 50]);
         expect(countsInReach(2, false)).toEqual([1, 2, 4, 6, 8, 10]);
         expect(countsInReach(5, false)).toEqual([1, 2, 4, 6]);
-        expect(countsInReach(3, true)).toEqual([1, 2, 4, 6, 8, 10, 20, 30]);
+        expect(countsInReach(3, true)).toEqual([1, 2, 4, 6, 8, 10, 20, 30, 50]);
+        expect(countsInReach(9, true)).toEqual([1, 2, 4, 6, 8, 10, 20]);
+        expect(countsInReach(12, true)).toEqual([1, 2, 4, 6, 8, 10, 20]);
         expect(countsInReach(2, true)).toEqual([1, 2, 4, 6, 8, 10, 20, 30, 50]);
     });
 });

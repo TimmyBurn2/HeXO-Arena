@@ -26,6 +26,13 @@ const fullRoster: BotListing[] = [
     { name: `tidewater`, ownerName: `quinn`, online: true, openForChallenges: true, rating: 1634, provisional: false, liveGames: 0, levels: threeStrengths, analyzer: { maxSeconds: 5, lines: 3, whilePlaying: false, values: undeclaredValues, ready: true } },
     { name: `marsh`, ownerName: `quinn`, online: true, openForChallenges: false, rating: 1588, provisional: false, liveGames: 0, levels: null, analyzer: null },
     { name: `alder`, ownerName: `quinn`, online: false, openForChallenges: false, rating: 1500, provisional: true, liveGames: 0, levels: null, analyzer: null },
+    { name: `ash`, ownerName: `quinn`, online: false, openForChallenges: false, rating: 1500, provisional: true, liveGames: 0, levels: null, analyzer: null },
+    { name: `birch`, ownerName: `quinn`, online: false, openForChallenges: false, rating: 1500, provisional: true, liveGames: 0, levels: null, analyzer: null },
+    { name: `cedar`, ownerName: `quinn`, online: false, openForChallenges: false, rating: 1500, provisional: true, liveGames: 0, levels: null, analyzer: null },
+    { name: `elm`, ownerName: `quinn`, online: false, openForChallenges: false, rating: 1500, provisional: true, liveGames: 0, levels: null, analyzer: null },
+    { name: `fir`, ownerName: `quinn`, online: false, openForChallenges: false, rating: 1500, provisional: true, liveGames: 0, levels: null, analyzer: null },
+    { name: `hazel`, ownerName: `quinn`, online: false, openForChallenges: false, rating: 1500, provisional: true, liveGames: 0, levels: null, analyzer: null },
+    { name: `larch`, ownerName: `quinn`, online: false, openForChallenges: false, rating: 1500, provisional: true, liveGames: 0, levels: null, analyzer: null },
 ];
 
 const quinnMe: Me = { kind: `user`, name: `quinn`, rating: 1503, provisional: false, discord: null, liveGames: [], analysisOptOut: false, analysisLeft: { positions: 300, games: 10 } };
@@ -131,14 +138,14 @@ describe('ProfileScreen', () => {
         expect(await screen.findByText(`quinn`, { selector: `.identity-name` })).toBeTruthy();
         expect(document.querySelector(`.identity-number`)?.textContent).toBe(`1503`);
         expect(await botRows()).toEqual([`sealbotBOT | online | open | 1712`, `quietlakeBOT | offline | closed | 1461?`]);
-        expect(screen.getByText(`2 of 5 bots`)).toBeTruthy();
-        expect(screen.getByText(`Delisted bots are hidden here but still count toward your limit of 5 bots.`)).toBeTruthy();
+        expect(screen.getByText(`2 of 12 bots`)).toBeTruthy();
+        expect(screen.getByText(`Delisted bots are hidden here but still count toward your limit of 12 bots.`)).toBeTruthy();
         expect(screen.getByRole(`link`, { name: `Build a bot` }).getAttribute(`href`)).toBe(`/connect`);
         expect(screen.getByRole(`link`, { name: /^sealbot/u }).getAttribute(`href`)).toBe(`/bots/sealbot`);
         expect(document.querySelector(`a[href="/bots/hextide"]`)).toBe(null);
     });
 
-    it('list five bots with their strengths and analyzer, and say the account holds no more instead of offering another', async () => {
+    it('list twelve bots with their strengths and analyzer, and say the account holds no more instead of offering another', async () => {
         serve(quinnMe, [], fullRoster);
         render(<ProfileScreen />);
         expect(await botRows()).toEqual([
@@ -147,12 +154,19 @@ describe('ProfileScreen', () => {
             `tidewaterBOT | online | open | analyzer3 strengths | 1634`,
             `marshBOT | online | closed | 1588`,
             `alderBOT | offline | closed | 1500?`,
+            `ashBOT | offline | closed | 1500?`,
+            `birchBOT | offline | closed | 1500?`,
+            `cedarBOT | offline | closed | 1500?`,
+            `elmBOT | offline | closed | 1500?`,
+            `firBOT | offline | closed | 1500?`,
+            `hazelBOT | offline | closed | 1500?`,
+            `larchBOT | offline | closed | 1500?`,
         ]);
-        expect(screen.getByText(`5 of 5 bots`)).toBeTruthy();
-        expect(screen.getByText(`Your account holds 5 bots, its limit; delete one on its page to build another.`)).toBeTruthy();
+        expect(screen.getByText(`12 of 12 bots`)).toBeTruthy();
+        expect(screen.getByText(`Your account holds 12 bots, its limit; delete one on its page to build another.`)).toBeTruthy();
         expect(screen.queryByRole(`link`, { name: `Build a bot` })).toBe(null);
         expect(screen.queryByRole(`button`, { name: `Build a bot` })).toBe(null);
-        // Five listed leaves none delisted, so the note has nothing to explain.
+        // Twelve listed leaves none delisted, so the note has nothing to explain.
         expect(screen.queryByText(/^Delisted bots/u)).toBe(null);
     });
 
@@ -160,8 +174,8 @@ describe('ProfileScreen', () => {
         serve(quinnMe, [], roster.filter((bot) => bot.ownerName !== `quinn`));
         render(<ProfileScreen />);
         expect(await botRows()).toEqual([]);
-        expect(screen.getByText(`No bots yet; your account holds up to 5.`)).toBeTruthy();
-        expect(screen.queryByText(/ of 5 bots$/u)).toBe(null);
+        expect(screen.getByText(`No bots yet; your account holds up to 12.`)).toBeTruthy();
+        expect(screen.queryByText(/ of 12 bots$/u)).toBe(null);
         expect(screen.getByRole(`link`, { name: `Build a bot` }).getAttribute(`href`)).toBe(`/connect`);
     });
 
