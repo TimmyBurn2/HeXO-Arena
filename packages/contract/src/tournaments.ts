@@ -34,7 +34,7 @@ export const tournamentDevLeadMs = 60_000;
 export const tournamentBotsMin = 2;
 
 /** The most bots a tournament a person sets up takes. */
-export const tournamentBotsMax = 8;
+export const tournamentBotsMax = 12;
 
 /** The games each pair plays in a tournament a person sets up: a single game, or one to five openings, each played twice with the sides swapped. */
 export const tournamentGameCounts = [1, 2, 4, 6, 8, 10] as const;
@@ -46,7 +46,7 @@ export const tournamentTestGameCounts = [...tournamentGameCounts, 20, 30, 50] as
 export const defaultTournamentGamesPerPair = 2;
 
 /** The most games one bot plays in a tournament a person sets up, and in a test. */
-export const tournamentBotGamesMax = { event: 30, test: 70 } as const;
+export const tournamentBotGamesMax = { event: 30, test: 220 } as const;
 
 /** The games each bot of a field plays: its pair's games against each other bot. */
 export function gamesPerBot(bots: number, gamesPerPair: number): number {

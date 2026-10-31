@@ -25,8 +25,8 @@ for (const width of [1280, 390]) {
     test(`a round robin is set up from bots picked several at once and opens its page, Back finding the setup as it was left, at ${String(width)} px`, async ({ page }) => {
         await open(page, `/play/tournament`, width);
         await expect(page.getByRole(`heading`, { name: `New duel` })).toBeVisible();
-        await expect(page.getByText(`Pick 2 to 8 bots: two play a duel, three or more a round robin.`)).toBeVisible();
-        await expect(page.getByText(/Pick 2 to 8/u)).toHaveCount(1);
+        await expect(page.getByText(`Pick 2 to 12 bots: two play a duel, three or more a round robin.`)).toBeVisible();
+        await expect(page.getByText(/Pick 2 to 12/u)).toHaveCount(1);
         await expect(page.getByRole(`button`, { name: `Add bots, the second plate` })).toContainText(`Add bots`);
         await pickBots(page, [`hextide`, `Pistol1`, `devbot-a`]);
         await expect(page.getByRole(`heading`, { name: `New round robin` })).toBeVisible();
@@ -58,7 +58,7 @@ for (const width of [1280, 390]) {
         await expect(dialog.getByRole(`button`, { name: /^devbot-c\b/u })).toContainText(`In 2 duels or round robins; try again after one ends`);
         await dialog.getByRole(`button`, { name: /^Pistol1\b/u }).click();
         await expect(dialog.getByText(`1 picked`)).toBeVisible();
-        await expect(dialog.getByText(`6 more fit; up to 8 bots`)).toBeVisible();
+        await expect(dialog.getByText(`10 more fit; up to 12 bots`)).toBeVisible();
         if (width === 390) {
             const box = await dialog.boundingBox();
             expect(box?.width).toBe(390);
@@ -66,7 +66,7 @@ for (const width of [1280, 390]) {
         await noSidewaysScroll(page);
     });
 
-    test(`a refusal says why under Start and marks the bot it names, and a test takes up to fifty games a pair while no bot passes 70, at ${String(width)} px`, async ({ page }) => {
+    test(`a refusal says why under Start and marks the bot it names, and a test takes up to fifty games a pair while no bot passes 220, at ${String(width)} px`, async ({ page }) => {
         await open(page, `/play/tournament`, width, robins({ tournamentStart: { status: 400, code: `bot_busy`, bot: `devbot-a` } }));
         await pickBots(page, [`hextide`, `Pistol1`, `devbot-a`]);
         await page.getByRole(`button`, { name: `Start round robin` }).click();
@@ -77,8 +77,8 @@ for (const width of [1280, 390]) {
         await expect(page.getByRole(`heading`, { name: `New test` })).toBeVisible();
         const counts = page.getByRole(`radiogroup`, { name: `Games per pair` }).getByRole(`radio`);
         await expect(counts).toHaveCount(9);
-        await expect(counts.last()).toBeDisabled();
-        await expect(page.getByText(`3 bots take up to 30 a pair: no bot plays more than 30 games, or 70 in a test.`)).toBeVisible();
+        await expect(counts.last()).toBeEnabled();
+        await expect(page.getByText(/ a pair: no bot plays more than /u)).toHaveCount(0);
         await expect(page.getByRole(`button`, { name: `Start test` })).toBeVisible();
         await noSidewaysScroll(page);
     });
