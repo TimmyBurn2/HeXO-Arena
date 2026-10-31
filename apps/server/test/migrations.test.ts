@@ -1090,10 +1090,12 @@ describe('the round robins migration', () => {
 describe('the two-bot tournaments migration', () => {
     let sqlite: Sqlite;
     let folder: string;
+    let through: string;
 
     afterEach(() => {
         sqlite.close();
         rmSync(folder, { recursive: true, force: true });
+        rmSync(through, { recursive: true, force: true });
     });
 
     const turn = `{"mode":"turn","turnTimeMs":10000}`;
@@ -1135,7 +1137,8 @@ describe('the two-bot tournaments migration', () => {
             insert into moves (game_id, seq, side, first_x, first_y, second_x, second_y, created_at) values ('g1', 1, 'o', 1, 0, 0, 1, 101), ('g3', 1, 'o', 1, 0, 0, 1, 301);
             insert into game_ratings (game_id, side, rating_before, rating_after, deviation_after) values ('g1', 'x', 1500, 1510, 300), ('g1', 'o', 1480, 1470, 300);
         `);
-        runMigrations(sqlite);
+        through = migrationsUpTo(33);
+        migrate(drizzle(sqlite), { migrationsFolder: through });
     }
 
     const insertTournament = (id: string, extra: Record<string, unknown> = {}) => {
@@ -1271,5 +1274,122 @@ describe('the two-bot tournaments migration', () => {
         expect(() => sqlite.prepare(`update tournament_pairings set game2 = 'played' where id = 's1'`).run()).toThrow(/CHECK/);
         sqlite.prepare(`delete from tournaments where id in ('t1', 't2')`).run();
         expect(sqlite.prepare(`select count(*) as n from tournament_pairings where id in ('s1', 's5')`).get()).toEqual({ n: 0 });
+    });
+});
+
+describe('the larger test fields migration', () => {
+    let sqlite: Sqlite;
+    let folder: string;
+
+    afterEach(() => {
+        sqlite.close();
+        rmSync(folder, { recursive: true, force: true });
+    });
+
+    const turn = `{"mode":"turn","turnTimeMs":10000}`;
+    const level = `{"id":"club","label":"club"}`;
+
+    // As a deploy left it: a finished weekly with one pairing and its rated game, and a person's test of three bots running
+    // twenty games a pair, one game over at a level and one live, each marked a test.
+    function seed(): void {
+        sqlite = openDatabase(`:memory:`);
+        folder = migrationsUpTo(33);
+        migrate(drizzle(sqlite), { migrationsFolder: folder });
+        sqlite.exec(`
+            insert into name_reservations (name_key) values ('ann'), ('bob'), ('alpha'), ('beta'), ('gamma'), ('delta');
+            insert into users (id, discord_id, name, name_key, created_at) values ('u1', 'd1', 'ann', 'ann', 1), ('u2', 'd2', 'bob', 'bob', 1);
+            insert into bots (id, owner_id, name, name_key, token_hash, scope, created_at)
+                values ('b1', 'u1', 'alpha', 'alpha', 'h1', 'bot:play', 1), ('b2', 'u1', 'beta', 'beta', 'h2', 'bot:play', 1),
+                       ('b3', 'u1', 'gamma', 'gamma', 'h3', 'bot:play', 1), ('b4', 'u2', 'delta', 'delta', 'h4', 'bot:play', 1);
+            insert into tournaments (id, name, status, starts_at, time_control, opening_plies, max_entrants, created_at, started_at, ended_at)
+                values ('t_aaaaaaaaaaaa', 'Autumn', 'finished', 100, '${turn}', 5, 12, 1, 100, 200);
+            insert into tournaments (id, name, status, starts_at, time_control, opening_plies, max_entrants, created_at, started_at, ended_at, origin, created_by, rated, test, games_per_pair, live_slot)
+                values ('t_bbbbbbbbbbbb', null, 'running', 300, '${turn}', 5, 3, 300, 300, null, 'person', 'u1', 0, 1, 20, 1);
+            insert into tournament_entries (tournament_id, bot_id, owner_id, state, reason, rating_at_start, entered_at, origin, seat)
+                values ('t_aaaaaaaaaaaa', 'b1', 'u1', 'playing', null, 1500, 1, 'operator', null), ('t_aaaaaaaaaaaa', 'b4', 'u2', 'playing', null, 1480, 2, 'operator', null),
+                       ('t_bbbbbbbbbbbb', 'b1', 'u1', 'playing', null, null, 300, 'person', 1), ('t_bbbbbbbbbbbb', 'b2', 'u1', 'playing', null, null, 300, 'person', 2),
+                       ('t_bbbbbbbbbbbb', 'b3', 'u1', 'withdrawn', 'owner', null, 300, 'person', 3);
+            insert into tournament_pairings (id, tournament_id, round, first_bot_id, second_bot_id, opening_cells, game1, game1_seat, game2, game2_seat, leg, games_per_pair)
+                values ('p1', 't_aaaaaaaaaaaa', 1, 'b1', 'b4', '[]', 'played', 'first', 'played', 'second', 1, 2),
+                       ('p2', 't_bbbbbbbbbbbb', 1, 'b1', 'b2', '[]', 'played', 'second', 'live', null, 7, 20);
+            insert into games (id, challenger_bot_id, dest_bot_id, challenger_side, pairing_id, pairing_game, time_control, opening_cells, winner, finish_reason, created_at, finished_at, finish_seq)
+                values ('g1', 'b1', 'b4', 'x', 'p1', 1, '${turn}', '[]', 'x', 'surrender', 100, 110, 1),
+                       ('g2', 'b1', 'b2', 'x', 'p2', 1, '${turn}', '[]', 'o', 'surrender', 300, 310, 2),
+                       ('g3', 'b2', 'b1', 'x', 'p2', 2, '${turn}', '[]', null, null, 320, null, null);
+            update games set x_level = '${level}', test = 1 where id = 'g2';
+            update games set unrated_by_choice = 1, test = 1 where id = 'g3';
+            insert into moves (game_id, seq, side, first_x, first_y, second_x, second_y, created_at) values ('g1', 1, 'o', 1, 0, 0, 1, 101), ('g3', 1, 'o', 1, 0, 0, 1, 321);
+            insert into game_ratings (game_id, side, rating_before, rating_after, deviation_after) values ('g1', 'x', 1500, 1510, 300), ('g1', 'o', 1480, 1470, 300);
+        `);
+        runMigrations(sqlite);
+    }
+
+    const insertTournament = (id: string, extra: Record<string, unknown> = {}) => {
+        const row = {
+            id,
+            status: `finished`,
+            starts_at: 10,
+            time_control: turn,
+            opening_plies: 5,
+            max_entrants: 2,
+            created_at: 10,
+            started_at: 10,
+            ended_at: 20,
+            origin: `person`,
+            created_by: `u1`,
+            rated: 0,
+            test: 0,
+            games_per_pair: 2,
+            live_slot: 2,
+            ...extra,
+        };
+        const columns = Object.keys(row);
+        return sqlite.prepare(`insert into tournaments (${columns.join(`, `)}) values (${columns.map((column) => `@${column}`).join(`, `)})`).run(row).changes;
+    };
+
+    it('keeps every tournament, entry, and pairing, and each game on its pairing with its level and test mark', () => {
+        seed();
+        expect(sqlite.prepare(`select id, max_entrants as bots, games_per_pair as games, test, live_slot as slot from tournaments order by id`).all()).toEqual([
+            { id: `t_aaaaaaaaaaaa`, bots: 12, games: 2, test: 0, slot: null },
+            { id: `t_bbbbbbbbbbbb`, bots: 3, games: 20, test: 1, slot: 1 },
+        ]);
+        expect(sqlite.prepare(`select tournament_id as t, bot_id as bot, state, seat from tournament_entries order by tournament_id, bot_id`).all()).toEqual([
+            { t: `t_aaaaaaaaaaaa`, bot: `b1`, state: `playing`, seat: null },
+            { t: `t_aaaaaaaaaaaa`, bot: `b4`, state: `playing`, seat: null },
+            { t: `t_bbbbbbbbbbbb`, bot: `b1`, state: `playing`, seat: 1 },
+            { t: `t_bbbbbbbbbbbb`, bot: `b2`, state: `playing`, seat: 2 },
+            { t: `t_bbbbbbbbbbbb`, bot: `b3`, state: `withdrawn`, seat: 3 },
+        ]);
+        expect(sqlite.prepare(`select id, leg, games_per_pair as games, game1, game2 from tournament_pairings order by id`).all()).toEqual([
+            { id: `p1`, leg: 1, games: 2, game1: `played`, game2: `played` },
+            { id: `p2`, leg: 7, games: 20, game1: `played`, game2: `live` },
+        ]);
+        expect(sqlite.prepare(`select id, pairing_id as pairing, pairing_game as game, x_level as level, test, unrated_by_choice as unrated from games order by id`).all()).toEqual([
+            { id: `g1`, pairing: `p1`, game: 1, level: null, test: 0, unrated: 0 },
+            { id: `g2`, pairing: `p2`, game: 1, level, test: 1, unrated: 0 },
+            { id: `g3`, pairing: `p2`, game: 2, level: null, test: 1, unrated: 1 },
+        ]);
+        expect(sqlite.prepare(`select count(*) as n from moves`).get()).toEqual({ n: 2 });
+        expect(sqlite.prepare(`select count(*) as n from game_ratings`).get()).toEqual({ n: 2 });
+        expect(sqlite.prepare(`select count(*) as n from sqlite_master where name like '\\_\\_kept%' escape '\\' or name like '\\_\\_new%' escape '\\'`).get()).toEqual({ n: 0 });
+        expect(sqlite.pragma(`foreign_key_check`)).toEqual([]);
+    });
+
+    it('lets a person field 12 bots and a test 220 games a bot, while a tournament keeps 30 a bot', () => {
+        seed();
+        expect(insertTournament(`t1`, { max_entrants: 12 })).toBe(1);
+        expect(() => insertTournament(`t2`, { max_entrants: 13 })).toThrow(/CHECK/);
+        expect(insertTournament(`t3`, { max_entrants: 12, games_per_pair: 20, test: 1 })).toBe(1);
+        expect(() => insertTournament(`t4`, { max_entrants: 12, games_per_pair: 30, test: 1 })).toThrow(/CHECK/);
+        expect(insertTournament(`t5`, { max_entrants: 4, games_per_pair: 10 })).toBe(1);
+        expect(() => insertTournament(`t6`, { max_entrants: 5, games_per_pair: 10 })).toThrow(/CHECK/);
+    });
+
+    it('seats a person\'s entries from 1 to 12', () => {
+        seed();
+        insertTournament(`t1`, { max_entrants: 12 });
+        const entry = sqlite.prepare(`insert into tournament_entries (tournament_id, bot_id, owner_id, state, origin, seat, entered_at) values ('t1', ?, 'u1', 'playing', 'person', ?, 10)`);
+        expect(entry.run(`b1`, 12).changes).toBe(1);
+        expect(() => entry.run(`b2`, 13)).toThrow(/CHECK/);
     });
 });

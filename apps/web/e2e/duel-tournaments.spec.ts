@@ -468,7 +468,8 @@ test('on a phone the tab bar paints over the duel\'s score as it scrolls under',
 
 test('counts out of reach look disabled: no fill, a not-allowed pointer, and no change under it', async ({ page }) => {
     await open(page, `/play/tournament`, 1280);
-    await pickBots(page, [`hextide`, `cinder`, `pebble`]);
+    // Five bots of several owners: no bot past 30 games leaves 8 and 10 a pair out of reach.
+    await pickBots(page, [`hextide`, `Pistol1`, `devbot-a`, `cinder`, `pebble`]);
     const counts = page.getByRole(`radiogroup`, { name: `Games per pair` });
     const out = counts.locator(`label`, { has: page.locator(`input:disabled`) }).last();
     await expect(out).toHaveCSS(`background-color`, `rgba(0, 0, 0, 0)`);

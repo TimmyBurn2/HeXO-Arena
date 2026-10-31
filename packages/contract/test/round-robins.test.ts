@@ -43,11 +43,11 @@ describe('createTournamentRequestSchema', () => {
         expect(parsed.openingPlies).toBe(defaultOpeningPlies);
     });
 
-    it('takes 2 to 8 distinct bots, each at a declared level or its default', () => {
+    it('takes 2 to 12 distinct bots, each at a declared level or its default', () => {
         const bots = (count: number) => Array.from({ length: count }, (_, index) => ({ name: `bot${String(index)}` }));
-        expect([tournamentBotsMin, tournamentBotsMax]).toEqual([2, 8]);
-        for (const count of [2, 3, 8]) expect(createTournamentRequestSchema.safeParse({ ...request, bots: bots(count) }).success, String(count)).toBe(true);
-        for (const count of [1, 9]) expect(createTournamentRequestSchema.safeParse({ ...request, bots: bots(count) }).success, String(count)).toBe(false);
+        expect([tournamentBotsMin, tournamentBotsMax]).toEqual([2, 12]);
+        for (const count of [2, 3, 12]) expect(createTournamentRequestSchema.safeParse({ ...request, bots: bots(count) }).success, String(count)).toBe(true);
+        for (const count of [1, 13]) expect(createTournamentRequestSchema.safeParse({ ...request, bots: bots(count) }).success, String(count)).toBe(false);
         expect(createTournamentRequestSchema.safeParse({ ...request, bots: [...three, { name: `HexTide` }] }).success).toBe(false);
         expect(createTournamentRequestSchema.safeParse({ ...request, bots: [{ name: `hextide`, level: `club` }, ...three.slice(1)] }).success).toBe(true);
         expect(createTournamentRequestSchema.safeParse({ ...request, bots: [{ name: `hextide`, level: `Club!` }, ...three.slice(1)] }).success).toBe(false);
@@ -94,8 +94,8 @@ describe('a test\'s estimate', () => {
 });
 
 describe('the games a field plays', () => {
-    it('lets no bot play past 30 games, or 70 in a test', () => {
-        expect(tournamentBotGamesMax).toEqual({ event: 30, test: 70 });
+    it('lets no bot play past 30 games, or 220 in a test', () => {
+        expect(tournamentBotGamesMax).toEqual({ event: 30, test: 220 });
         expect(gamesPerBot(5, 6)).toBe(24);
         expect(gamesPerPairFits(2, 10, false)).toBe(true);
         expect(gamesPerPairFits(2, 20, false)).toBe(false);
@@ -103,13 +103,14 @@ describe('the games a field plays', () => {
         expect(gamesPerPairFits(5, 6, false)).toBe(true);
         expect(gamesPerPairFits(5, 8, false)).toBe(false);
         expect(gamesPerPairFits(8, 10, true)).toBe(true);
-        expect(gamesPerPairFits(4, 30, true)).toBe(false);
-        expect(gamesPerPairFits(4, 20, true)).toBe(true);
+        expect(gamesPerPairFits(12, 20, true)).toBe(true);
+        expect(gamesPerPairFits(12, 30, true)).toBe(false);
+        expect(gamesPerPairFits(9, 20, true)).toBe(true);
         expect(gamesPerPairFits(3, 3, true)).toBe(false);
     });
 
-    it('bounds one tournament\'s games by its longest field, eight bots at ten games a pair', () => {
-        expect(tournamentGamesMax).toBe(280);
+    it('bounds one tournament\'s games by its longest field, twelve bots at twenty games a pair', () => {
+        expect(tournamentGamesMax).toBe(1320);
     });
 });
 

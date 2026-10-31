@@ -27,7 +27,7 @@ describe('the game exports in the document', () => {
 
     it('bounds an export by the most games a tournament plays, a pair fifty at most', () => {
         expect(tournamentPairGamesMax).toBe(50);
-        expect(tournamentGamesMax).toBe(280);
+        expect(tournamentGamesMax).toBe(1320);
         expect(gameExportLimit.burst).toBeLessThan(gameExportGlobalLimit.burst);
     });
 });

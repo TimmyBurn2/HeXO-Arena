@@ -239,13 +239,13 @@ describe('setting a duel or round robin up', () => {
         setup(bruno);
         expect(screen.getByRole(`heading`, { name: `New duel` })).toBeTruthy();
         expect(screen.getByRole(`button`, { name: `Add bots, the second plate` })).toBeTruthy();
-        expect(screen.getByText(/^Pick 2 to 8 bots: two play a duel, three or more a round robin\./u)).toBeTruthy();
+        expect(screen.getByText(/^Pick 2 to 12 bots: two play a duel, three or more a round robin\./u)).toBeTruthy();
         // The empty form says its rule once.
         expect(screen.getAllByText(/three or more/u)).toHaveLength(1);
         pick(`quietlake`, `devbot-a`);
         expect(screen.getByRole(`heading`, { name: `New duel` })).toBeTruthy();
         expect(screen.getByText(`2 bots; a third makes a round robin`)).toBeTruthy();
-        expect(screen.getByText(`6 more fit; three or more play a round robin`)).toBeTruthy();
+        expect(screen.getByText(`10 more fit; three or more play a round robin`)).toBeTruthy();
         expect(screen.getByRole(`radiogroup`, { name: `Games` })).toBeTruthy();
         expect(counts()).toEqual([`1`, `2`, `4`, `6`, `8`, `10`].map((count) => [count, false]));
         fireEvent.click(screen.getByRole(`radio`, { name: `10` }));
@@ -267,7 +267,7 @@ describe('setting a duel or round robin up', () => {
         const dialog = screen.getByRole(`dialog`, { name: `Add bots` });
         fireEvent.click(within(dialog).getByRole(`button`, { name: /^quietlake\b/u }));
         expect(within(dialog).getByText(`1 picked`)).toBeTruthy();
-        expect(within(dialog).getByText(`7 more fit; up to 8 bots`)).toBeTruthy();
+        expect(within(dialog).getByText(`11 more fit; up to 12 bots`)).toBeTruthy();
         fireEvent.click(within(dialog).getByRole(`button`, { name: `Add 1 bot` }));
         expect(screen.getByText(`Add 1 more bot; a duel takes 2.`)).toBeTruthy();
         expect(screen.getByRole(`button`, { name: `Start duel` }).getAttribute(`aria-disabled`)).toBe(`true`);
@@ -304,16 +304,16 @@ describe('setting a duel or round robin up', () => {
             [`8`, true],
             [`10`, true],
         ]);
-        expect(screen.getByText(`5 bots take up to 6 a pair: no bot plays more than 30 games, or 70 in a test.`)).toBeTruthy();
+        expect(screen.getByText(`5 bots take up to 6 a pair: no bot plays more than 30 games, or 220 in a test.`)).toBeTruthy();
     });
 
-    it('makes a test of one person\'s bots alone, up to fifty games a pair while no bot passes 70', () => {
+    it('makes a test of one person\'s bots alone, up to fifty games a pair while no bot passes 220', () => {
         serve({}, ana);
         setup(ana);
         pick(`hextide`, `cinder`, `pebble`);
         expect(screen.getByRole(`heading`, { name: `New test` })).toBeTruthy();
         expect(screen.getByText(`All 3 bots are yours`)).toBeTruthy();
-        expect(counts()).toEqual([...[`1`, `2`, `4`, `6`, `8`, `10`, `20`, `30`].map((count) => [count, false]), [`50`, true]]);
+        expect(counts()).toEqual([`1`, `2`, `4`, `6`, `8`, `10`, `20`, `30`, `50`].map((count) => [count, false]));
         expect(screen.getByRole(`button`, { name: `Start test` })).toBeTruthy();
         fireEvent.click(screen.getByRole(`button`, { name: `Remove pebble` }));
         expect(screen.getByText(`Both bots are yours`)).toBeTruthy();
