@@ -1,7 +1,7 @@
 import { botsPath, botTokenPattern, botWithTokenSchema, devLoginPath } from '@hexo-arena/contract';
 import { desc } from 'drizzle-orm';
 import { describe, expect, it } from 'vitest';
-import { botCapPerUser } from '@hexo-arena/contract';
+import { botCapPerUser, botManagementLimit } from '@hexo-arena/contract';
 import { createQuery } from '../src/db';
 import { bots } from '../src/db/schema';
 import { insertBotGame, recordFinish } from '../src/game-store';
@@ -108,7 +108,8 @@ describe('POST /api/bots', () => {
     });
 
     it(`caps each owner at ${botCapPerUser.toString()} bots`, async () => {
-        const { app } = await createTestApp();
+        let now = 1_000_000;
+        const { app } = await createTestApp({ now: () => now });
         const session = (await devLogin(app, `owner`)).split(`=`)[1] ?? ``;
         for (let i = 0; i < botCapPerUser; i++) {
             const response = await app.inject({
@@ -118,6 +119,8 @@ describe('POST /api/bots', () => {
                 cookies: { hexo_arena_session: session },
             });
             expect(response.statusCode).toBe(201);
+            // Bot changes refill one a minute, past a burst smaller than the cap.
+            now += botManagementLimit.refillMs;
         }
         const past = await app.inject({
             method: 'POST',

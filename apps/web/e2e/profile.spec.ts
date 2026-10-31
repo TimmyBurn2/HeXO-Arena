@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import type { BotListing } from '@hexo-arena/contract';
 import { looks, wear } from './matrix';
 import { bots, heldBots, serve, world, type World } from './mock-api';
 
@@ -44,14 +45,27 @@ test('a switch the server does not take stays as it was and says so', async ({ p
     await expect(optOut).not.toBeChecked();
 });
 
+// Quinn's held bots and seven more, the account's limit.
+const spareBots: BotListing[] = Array.from({ length: 7 }, (_, index) => ({
+    name: `spare${String(index + 1)}`,
+    ownerName: `quinn`,
+    online: false,
+    openForChallenges: false,
+    rating: 1500,
+    provisional: true,
+    liveGames: 0,
+    levels: null,
+    analyzer: null,
+}));
+
 for (const width of [1280, 390]) {
-    test(`at ${String(width)} px five bots line up in columns, and the account says it holds no more where Build a bot stood`, async ({ page }) => {
-        await open(page, { bots: [...bots.filter((bot) => bot.ownerName !== `quinn`), ...heldBots] }, width);
+    test(`at ${String(width)} px twelve bots line up in columns, and the account says it holds no more where Build a bot stood`, async ({ page }) => {
+        await open(page, { bots: [...bots.filter((bot) => bot.ownerName !== `quinn`), ...heldBots, ...spareBots] }, width);
         const section = page.locator(`.your-bots`);
         const rows = section.locator(`.bot-row`);
-        await expect(rows).toHaveCount(5);
-        await expect(section.getByText(`5 of 5 bots`)).toBeVisible();
-        await expect(section.getByText(`Your account holds 5 bots, its limit; delete one on its page to build another.`)).toBeVisible();
+        await expect(rows).toHaveCount(12);
+        await expect(section.getByText(`12 of 12 bots`)).toBeVisible();
+        await expect(section.getByText(`Your account holds 12 bots, its limit; delete one on its page to build another.`)).toBeVisible();
         await expect(section.getByRole(`link`, { name: `Build a bot` })).toHaveCount(0);
         const edges = await rows.evaluateAll((elements) =>
             elements.map((row) => {
@@ -69,7 +83,7 @@ test('below the cap the list counts the bots and ends with the way to build anot
     await open(page);
     const section = page.locator(`.your-bots`);
     await expect(section.locator(`.bot-row`)).toHaveCount(2);
-    await expect(section.getByText(`2 of 5 bots`)).toBeVisible();
+    await expect(section.getByText(`2 of 12 bots`)).toBeVisible();
     await section.getByRole(`link`, { name: `Build a bot` }).click();
     await expect(page).toHaveURL(/\/connect$/u);
 });

@@ -257,10 +257,10 @@ describe('round robins people set up', () => {
             expect(answer.statusCode).toBe(401);
         });
 
-        it('refuses one bot or more than eight, one bot twice, a clock outside the bounds, a count no event plays, and a 1-ply opening for two openings', async () => {
+        it('refuses one bot or more than twelve, one bot twice, a clock outside the bounds, a count no event plays, and a 1-ply opening for two openings', async () => {
             for (const [names, extra] of [
                 [[`alpha`], {}],
-                [[`alpha`, `beta`, `gamma`, `delta`, `aster`, `axe`, `one`, `two`, `three`], {}],
+                [[`alpha`, `beta`, `gamma`, `delta`, `aster`, `axe`, `one`, `two`, `three`, `four`, `five`, `six`, `seven`], {}],
                 [[`alpha`, `beta`, `ALPHA`], {}],
                 [[`alpha`, `beta`, `gamma`], { timeControl: { mode: `unlimited` } }],
                 [[`alpha`, `beta`, `gamma`], { openingPlies: 1, gamesPerPair: 4 }],
@@ -353,7 +353,7 @@ describe('round robins people set up', () => {
             expect((await create(`eve`, [`alpha`, `beta`])).statusCode).toBe(201);
         });
 
-        it('lets only a test of one person\'s bots play past ten games a pair, and no bot past 30 games, or 70 in a test', async () => {
+        it('lets only a test of one person\'s bots play past ten games a pair, and no bot past 30 games outside one', async () => {
             const stop = async (id: string, person: string) => {
                 expect((await post(person, `/api/tournaments/${id}/stop`)).statusCode).toBe(200);
             };
@@ -365,8 +365,7 @@ describe('round robins people set up', () => {
             expect(test).toMatchObject({ test: true, rated: false, gamesPerPair: 50, format: `duel`, name: `Duel by ann` });
             expect(test.rounds[0]?.pairings[0]?.games).toHaveLength(50);
             await stop(test.id, `ann`);
-            expect((await create(`ann`, [`alpha`, `aster`, `axe`], { gamesPerPair: 50 })).json()).toMatchObject({ code: `too_many_games` });
-            expect((await started(`ann`, [`alpha`, `aster`, `axe`], { gamesPerPair: 30 })).gamesPerPair).toBe(30);
+            expect((await started(`ann`, [`alpha`, `aster`, `axe`], { gamesPerPair: 50 })).gamesPerPair).toBe(50);
         });
     });
 

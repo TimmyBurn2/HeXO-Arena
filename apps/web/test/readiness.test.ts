@@ -38,9 +38,9 @@ describe('which bots join a bot event', () => {
         expect(clockClashes(bot(`any`, `cid`), field)).toEqual([]);
     });
 
-    it('takes no ninth bot, and asks a bot already in the field only against the others', () => {
-        const field = Array.from({ length: 8 }, (_, index) => bot(`bot${String(index)}`, `owner${String(index)}`));
-        expect(eventReadiness(bot(`ninth`, `cid`), field, reads(`cid`))).toBe(`full`);
+    it('takes no thirteenth bot, and asks a bot already in the field only against the others', () => {
+        const field = Array.from({ length: 12 }, (_, index) => bot(`bot${String(index)}`, `owner${String(index)}`));
+        expect(eventReadiness(bot(`thirteenth`, `cid`), field, reads(`cid`))).toBe(`full`);
         expect(eventReadiness(field[0] ?? bot(`none`, `none`), field, reads(`cid`))).toBeNull();
     });
 
