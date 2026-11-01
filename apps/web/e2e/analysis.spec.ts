@@ -401,13 +401,19 @@ for (const [width, height] of [
     });
 }
 
-test('Import refuses v1 threat marks and a v2 turn after the final move, naming where', async ({ page }) => {
+test('Import reads v1 threat marks, and refuses v2 ones and a v2 turn after the final move, naming where', async ({ page }) => {
     await open(page, `/analysis`);
     await page.getByRole(`button`, { name: `Import` }).click();
     const dialog = page.getByRole(`dialog`, { name: `Import` });
     const field = dialog.getByRole(`textbox`);
     await field.fill(`version[1];\n1. [1,0][1,-2]!;\n`);
-    await expect(dialog.locator(`.an-error`)).toHaveText(`Line 2, column 15, turn 1: ! threat marks are not read here; delete them and paste again`);
+    await expect(dialog.locator(`.an-preview`)).toContainText(`A game line, 1 turn`);
+    await field.fill(`version[2];\n1. [1,0][1,-2]!;\n`);
+    await expect(dialog.locator(`.an-error`)).toHaveText(`Line 2, column 15, turn 1: v2 has no ! threat marks; delete them and paste again`);
+    await field.fill(`version[2];\nx [1,0] x [0,0];\n`);
+    await expect(dialog.locator(`.an-error`)).toHaveText(`Line 2, column 9: a colon between the two sides' stones belongs here`);
+    await field.fill(`version[2];\no : x ;\n`);
+    await expect(dialog.locator(`.an-error`)).toHaveText(`The position holds no stones`);
     await field.fill(`version[1]playercross[Ada]playercircle[Bo];\n1. [1,0][1,-2];\n`);
     await expect(dialog.locator(`.an-preview`)).toContainText(`A game line, 1 turn`);
     await expect(dialog.locator(`.an-preview`)).toContainText(`Ada vs Bo`);
@@ -441,6 +447,28 @@ for (const [width, height] of [
         expect(link).toBe(`${new URL(page.url()).origin}/analysis#t=1.[-1,0][0,-1];2.[1,0][2,0];3.[1,-2][2,-3];4.[3,0][4,0];`);
     });
 }
+
+test('Import loads a v2 setup as a set-up position, its side to move and its highlights, and Export writes it back as v2', async ({ page }) => {
+    await open(page, `/analysis`);
+    await page.getByRole(`button`, { name: `Import` }).click();
+    const dialog = page.getByRole(`dialog`, { name: `Import` });
+    const text = `version[2];\nx [1,0] [0,1] : o [0,0] <2,0:#X>;\n1. [2,-1][3,-1];\n`;
+    await dialog.getByRole(`textbox`).fill(text);
+    await expect(dialog.locator(`.an-preview`)).toContainText(`A position, 3 stones, and 1 turn after it`);
+    await expect(dialog.locator(`.an-preview`)).toContainText(`Its highlights show as the text's own.`);
+    await dialog.getByRole(`button`, { name: `Load` }).click();
+    await expect(page.locator(`.an-chip-source`)).toContainText(`From a set-up position`);
+    await expect(rows(page)).toHaveText([`x: [2,-1] [3,-1]`]);
+    await expect(navLine(page)).toHaveText(`o to move`);
+    await expect(page.locator(`.board-camera .highlight`)).toHaveCount(0);
+    await page.keyboard.press(`ArrowLeft`);
+    await expect(navLine(page)).toHaveText(`x to move`);
+    await expect(page.locator(`.board-camera .highlight.hl-x`)).toHaveCount(1);
+    await page.getByRole(`button`, { name: `Export` }).click();
+    const exported = page.getByRole(`dialog`, { name: `Export` });
+    await expect(exported.getByRole(`button`, { name: `HTTTX v1` })).toHaveCount(0);
+    await expect(exported.getByRole(`textbox`, { name: `The tree from the set-up position, HTTTX v2 (1 turn)` })).toHaveValue(text);
+});
 
 test('Export of a stored game adds its clocks and the reading shown\'s evaluations on request', async ({ page }) => {
     await open(page, `/analysis?game=long-finished&turn=12`, { analyses: { 'long-finished': { analyses: [longReadings.kestrel, ...longReadings.own], optedOut: false, independentOnline: false } } });

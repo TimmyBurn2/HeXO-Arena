@@ -49,6 +49,8 @@ const longGame = [
 
 // x builds a row along q from the origin and completes it with the first stone of turn 6.
 const firstStoneWin = `version[1];\n1. [3,-3][5,-5];\n2. [1,0][2,0];\n3. [5,-3][7,-5];\n4. [3,0][4,0];\n5. [7,-3][9,-5];\n6. [5,0];\n`;
+// The same game as the writer gives it: v1 has no turn of one stone, so v2, ending on the final move.
+const firstStoneWinV2 = `version[2];\n1. [3,-3][5,-5];\n2. [1,0][2,0];\n3. [5,-3][7,-5];\n4. [3,0][4,0];\n5. [7,-3][9,-5];\n6. [5,0][/];\n`;
 
 describe('the HTTTX writer', () => {
     it('writes the worked example byte for byte', () => {
@@ -67,6 +69,12 @@ describe('the HTTTX writer', () => {
     it('writes an empty line as the header alone', () => {
         expect(writeGame([])).toBe(`version[1];\n`);
     });
+
+    it('writes a line from a set-up board as v2, its setup first', () => {
+        const start: Setup = { stones: [{ x: 1, y: 0, player: 0 }, { x: 0, y: 0, player: 1 }], toMove: 0 };
+        expect(writeGame([], start)).toBe(`version[2];\nx [1,0] : o [0,0];\n`);
+        expect(writeGame([[{ x: 2, y: 0 }, { x: 3, y: 0 }]], start)).toBe(`version[2];\nx [1,0] : o [0,0];\n1. [2,0][3,0];\n`);
+    });
 });
 
 describe('a game export\'s HTTTX text', () => {
@@ -83,12 +91,12 @@ describe('a game export\'s HTTTX text', () => {
         });
         const text = writeHtttx({ version: 1, tags, turns: won.turns });
         expect(text.split(`\n`)[0]).toBe(
-            `version[1]name[Autumn (round) robin, round 2, game 1 of 2]platform[HeXO Arena]utcdatetime[2026-10-01 12:00:00]playercross[devbot-b]playercircle[deleted bot]timecontrol[300+3]endreason[win]winner[cross];`,
+            `version[2]name[Autumn (round) robin, round 2, game 1 of 2]platform[HeXO Arena]utcdatetime[2026-10-01 12:00:00]playercross[devbot-b]playercircle[deleted bot]timecontrol[300+3]endreason[win]winner[cross];`,
         );
         const line = read(text);
         expect(line.turns).toEqual(won.turns);
         expect(line.win?.player).toBe(0);
-        expect(writeGame(line.turns)).toBe(firstStoneWin);
+        expect(writeGame(line.turns)).toBe(firstStoneWinV2);
     });
 });
 
@@ -134,8 +142,8 @@ describe('the HTTTX reader', () => {
         expect(read(`version[1];`).turns).toEqual([]);
     });
 
-    it('refuses threat marks by name, where they stand', () => {
-        expect(refusal(readGame(`version[1];\n1. [1,0][0,1];\n2. [2,0][3,0]!!;\n`))).toEqual({ kind: `threat-mark`, line: 3, column: 14, turn: 2 });
+    it('reads threat marks and passes over them', () => {
+        expect(roundTrip(`version[1];\n1. [1,0][0,1];\n2. [2,0][3,0]!!;\n`)).toBe(`version[1];\n1. [1,0][0,1];\n2. [2,0][3,0];\n`);
     });
 
     it('ignores keys other than version, reads a v2 main line, and refuses any other version', () => {
@@ -221,7 +229,8 @@ describe('the HTTTX reader', () => {
         const line = read(firstStoneWin);
         expect(line.win?.player).toBe(0);
         expect(line.turns.at(-1)).toEqual([{ x: 5, y: 0 }]);
-        expect(writeGame(line.turns)).toBe(firstStoneWin);
+        expect(writeGame(line.turns)).toBe(firstStoneWinV2);
+        expect(read(firstStoneWinV2)).toEqual(line);
         expect(refusal(readGame(`${firstStoneWin}7. [1,1][2,2];\n`))).toMatchObject({ kind: `illegal`, turn: 7, rejection: { kind: `game-finished` } });
         expect(refusal(readGame(firstStoneWin.replace(`6. [5,0];`, `6. [5,0][6,0];`)))).toEqual({
             kind: `illegal`,

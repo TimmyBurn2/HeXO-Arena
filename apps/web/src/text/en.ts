@@ -1131,7 +1131,6 @@ export const en = {
             remove: `Delete from here`,
             copy: `Copy line`,
             copiedText: `Line copied as HTTTX notation`,
-            copiedLink: `Line copied as a link, since HTTTX notation starts from the origin`,
             half: `a stone short`,
             clock: (time: string) => `${time} left`,
             copyFailed: `The line was not copied; Export shows it to select`,
@@ -1196,10 +1195,8 @@ export const en = {
                 `A game line, ${String(turns)} ${plural(turns, `turn`, `turns`)}${variations === 0 ? `` : `, and ${String(variations)} ${plural(variations, `variation`, `variations`)}`}`,
             notes: (kinds: readonly string[]) => `Its ${listed(kinds)} show as the text's own.`,
             kinds: { clocks: `clocks`, evaluations: `evaluations`, highlights: `highlights`, labels: `labels` },
-            setup: (stones: number, turns: number) =>
-                turns === 0
-                    ? `A position, ${String(stones)} ${plural(stones, `stone`, `stones`)}`
-                    : `A position, ${String(stones)} ${plural(stones, `stone`, `stones`)}, and ${String(turns)} ${plural(turns, `turn`, `turns`)} after it`,
+            setup: (stones: number, turns: number, variations: number) =>
+                `A position, ${String(stones)} ${plural(stones, `stone`, `stones`)}${turns === 0 ? `` : `, and ${String(turns)} ${plural(turns, `turn`, `turns`)} after it`}${variations === 0 ? `` : `, ${String(variations)} ${plural(variations, `variation`, `variations`)}`}`,
             setupNote: `The position holds no side to move; pick it here.`,
             game: `A game of ${siteName}`,
             gameNote: (turn: number | null) => (turn === null ? `Load opens it at its end.` : `Load opens it at turn ${String(turn)}.`),
@@ -1220,6 +1217,9 @@ export const en = {
                 'info-end': `the closing brace`,
                 'visual-end': `the closing >`,
                 'variation-end': `a closing parenthesis to end the variation`,
+                'setup-colon': `a colon between the two sides' stones`,
+                'setup-side': `the other side, x or o, after the colon`,
+                'setup-end': `a semicolon to end the setup`,
             },
             syntax: (line: number, column: number, turn: number | null, expected: string) =>
                 `Line ${String(line)}, column ${String(column)}${turn === null ? `` : `, turn ${String(turn)}`}: ${expected} belongs here`,
@@ -1229,7 +1229,7 @@ export const en = {
             cellCount: (line: number, column: number, turn: number, count: number) =>
                 `Line ${String(line)}, column ${String(column)}: turn ${String(turn)} has ${count === 0 ? `no cells` : `${String(count)} cells`}; a turn has 2, or 1 when it completes six`,
             threatMark: (line: number, column: number, turn: number) =>
-                `Line ${String(line)}, column ${String(column)}, turn ${String(turn)}: ! threat marks are not read here; delete them and paste again`,
+                `Line ${String(line)}, column ${String(column)}, turn ${String(turn)}: v2 has no ! threat marks; delete them and paste again`,
             afterFinal: (line: number, column: number, turn: number) =>
                 `Line ${String(line)}, column ${String(column)}: turn ${String(turn)} ends its line with [/], so no turn follows it there`,
             treeCap: (limit: number) => `More than ${String(limit)} turns with every variation; the board holds ${String(limit)}`,
@@ -1267,12 +1267,10 @@ export const en = {
                 covered: `Evaluations from the reading shown (none to add; the text gives its own wherever the reading has one)`,
             },
             clocks: (turns: number) => `Clocks from the game (${String(turns)} ${plural(turns, `turn`, `turns`)})`,
-            line: (version: 1 | 2, turns: number, variations: number) =>
+            line: (version: 1 | 2, turns: number, variations: number, start: `origin` | `setup`) =>
                 version === 1
                     ? `The main line from the origin, HTTTX v1 (${String(turns)} ${plural(turns, `turn`, `turns`)})`
-                    : `The tree from the origin, HTTTX v2 (${String(turns)} ${plural(turns, `turn`, `turns`)}${variations === 0 ? `` : `, ${String(variations)} ${plural(variations, `variation`, `variations`)}`})`,
-            noTurns: `No turns yet; play one to write the tree.`,
-            noLine: `HTTTX notation starts from the origin, so a set-up board has none; the position and the link hold it.`,
+                    : `The tree from ${start === `setup` ? `the set-up position` : `the origin`}, HTTTX v2 (${String(turns)} ${plural(turns, `turn`, `turns`)}${variations === 0 ? `` : `, ${String(variations)} ${plural(variations, `variation`, `variations`)}`})`,
             position: (side: string) => `This position, boat notation; ${side} to move`,
             positionBefore: (cell: string, side: string) => `The position before ${cell}, boat notation; ${side} to move`,
             linkBefore: (cell: string) => `Link to this line before ${cell}`,

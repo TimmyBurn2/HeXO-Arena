@@ -3,7 +3,7 @@ import type { BoardLines, BoardStone, BoardVisual } from '../board/Board';
 import type { SetupDraft } from './draft';
 import type { PreferredLine } from './explain';
 import type { ShownLine } from './reading-view';
-import { shownNotes } from './study';
+import { shownVisuals } from './study';
 import { positionAt, type MoveTree, type NodeId, type TreeNode } from './tree';
 
 /** What the analysis board draws, as its props name it. */
@@ -74,7 +74,6 @@ export function boardView({ draft, preferred, stones, frame, mark, node, toMove,
     }
     const turn = node?.kind === `turn` ? node : null;
     const pointed = preview !== null && lines.includes(preview) ? preview : null;
-    const notes = node === undefined || node.kind === `root` ? null : shownNotes(node);
     return {
         stones,
         frame,
@@ -85,6 +84,6 @@ export function boardView({ draft, preferred, stones, frame, mark, node, toMove,
         lines: boardLines && lines.length > 0 ? { side: toMove, lines } : undefined,
         preview: pointed === null ? undefined : { side: toMove, cells: pointed.cells },
         judgment: judgment ?? undefined,
-        visuals: notes?.visuals.map(boardVisual) ?? [],
+        visuals: node === undefined ? [] : shownVisuals(node).map(boardVisual),
     };
 }

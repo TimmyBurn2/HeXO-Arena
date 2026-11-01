@@ -76,11 +76,28 @@ export interface HtttxV1Document {
     readonly turns: readonly HtttxCells[];
 }
 
-/** A v2 game text: a main line with nested variations, info, visuals, and the final move. */
+/**
+ * A v2 setup: each side's stones on the board before the main line, and the visuals of that board.
+ * The side listed first moves first.
+ * Turns after any setup count from 1, the first a whole turn of two stones,
+ * as after the default setup, `o : x [0,0]`, which a text without one starts from.
+ */
+export interface HtttxSetup {
+    readonly first: Side;
+    readonly x: readonly NotationCell[];
+    readonly o: readonly NotationCell[];
+    readonly visuals: readonly HtttxVisual[];
+}
+
+/**
+ * A v2 game text: a setup, a main line with nested variations, info, visuals, and the final move, or both.
+ * A text holds one or the other; a document with neither is written as the default setup alone.
+ */
 export interface HtttxV2Document {
     readonly version: 2;
     readonly tags: readonly HtttxTag[];
-    readonly line: HtttxLine;
+    readonly setup: HtttxSetup | null;
+    readonly line: HtttxLine | null;
 }
 
 /** A game text as read or to be written. */
@@ -102,7 +119,10 @@ export type HtttxExpected =
     | `info`
     | `info-end`
     | `visual-end`
-    | `variation-end`;
+    | `variation-end`
+    | `setup-colon`
+    | `setup-side`
+    | `setup-end`;
 
 /**
  * Why a text did not read as HTTTX.
@@ -202,7 +222,7 @@ export function htttxTags(header: HtttxHeader): HtttxTag[] {
 /**
  * A main line of whole turns as v2 writes it, each turn's info on its last stone:
  * a turn of one stone ends the line on `[/]`, its info on the stone before it.
- * Null for no turns, which v2 cannot write.
+ * Null for no turns, which v2 writes as its setup alone.
  */
 export function htttxLineOf(turns: readonly { readonly cells: HtttxCells; readonly info: HtttxInfo | null }[]): HtttxLine | null {
     const line = turns.map(({ cells, info }, index): HtttxTurn => {
@@ -223,7 +243,9 @@ export function htttxLineOf(turns: readonly { readonly cells: HtttxCells; readon
  * The document as text.
  * v1 is the strict form every known reader accepts: `version[1]` and the tags in one metadata segment,
  * then one numbered turn a line from the origin, which the notation never writes.
- * v2 writes the main line a turn a line, each variation on a line of its own under the turn it replaces,
+ * v1's grammar has two cells a turn, so a document with a turn of one stone is written as v2, that stone before the final move.
+ * v2 writes its setup on a line of its own, the default one where there is neither setup nor line,
+ * then the main line a turn a line, each variation on a line of its own under the turn it replaces,
  * its turns and any variations nested in it written compactly; info and visuals follow their stone.
  * A closed evaluation `#n` is htttx's `win_in` one to one: turns from the position after the stone,
  * the side to move there first, both sides' turns counted, positive when x wins and negative when o does.
@@ -232,10 +254,21 @@ export function htttxLineOf(turns: readonly { readonly cells: HtttxCells; readon
 export function writeHtttx(document: HtttxDocument): string {
     const tags = document.tags.map((tag) => `${tag.key}[${tag.value.replaceAll(`]`, `)`)}]`).join(``);
     if (document.version === 1) {
+        const lone = document.turns.some((cells) => cells.length === 1) ? htttxLineOf(document.turns.map((cells) => ({ cells, info: null }))) : null;
+        if (lone !== null) return writeHtttx({ version: 2, tags: document.tags, setup: null, line: lone });
         const lines = document.turns.map((cells, index) => `${String(index + 1)}. ${cells.map(htttxCell).join(``)};\n`);
         return `version[1]${tags};\n${lines.join(``)}`;
     }
-    return `version[2]${tags};\n${document.line.map((turn) => `${turnText(turn, false)}\n`).join(``)}`;
+    const setup = document.setup ?? (document.line === null ? defaultSetup : null);
+    const head = setup === null ? `` : `${setupText(setup)}\n`;
+    return `version[2]${tags};\n${head}${(document.line ?? []).map((turn) => `${turnText(turn, false)}\n`).join(``)}`;
+}
+
+const defaultSetup: HtttxSetup = { first: `o`, x: [{ x: 0, y: 0 }], o: [], visuals: [] };
+
+function setupText(setup: HtttxSetup): string {
+    const side = (each: Side) => [each, ...setup[each].map(htttxCell)];
+    return `${[...side(setup.first), `:`, ...side(setup.first === `x` ? `o` : `x`), ...setup.visuals.map(visualText)].join(` `)};`;
 }
 
 function turnText(turn: HtttxTurn, nested: boolean): string {
@@ -277,10 +310,10 @@ export function turnsOfStones<T extends NotationCell>(stones: readonly T[]): T[]
  * The first `version` tag names the version, 1 when there is none, and every other must agree.
  * Metadata tags are `key[value]`, the key a letter then letters, digits, `_` or `-`, the value anything up to `]`, kept as written.
  * v1, forgiving as known writers are: whitespace between tokens, a last turn without its `;`,
- * leading zeros and -0 in a coordinate, a turn of one cell; `!` threat marks are refused by name.
+ * leading zeros and -0 in a coordinate, a turn of one cell; `!` threat marks are passed over.
  * v2, exactly its grammar: whitespace anywhere outside a tag value, even inside a number;
- * integers without leading zeros or -0; `version[2]` the first tag; at least one turn;
- * a variation inside turn n from turn n on; `[/]` on a line's last turn only;
+ * integers without leading zeros or -0; `version[2]` the first tag; a setup, a main line, or both;
+ * the main line from turn 1, after a setup too; a variation inside turn n from turn n on; `[/]` on a line's last turn only;
  * a visual with a section it does not know is passed over.
  * Integers longer than a number holds exactly are refused, coordinates past nine digits, which no board reaches.
  */
@@ -306,8 +339,12 @@ export function readHtttx(text: string): HtttxRead {
     const first = tags[0];
     if (first !== undefined && first.key !== `version`) return refused(reader.syntaxAt(first.at, null, `version-first`));
     reader.spaced = true;
-    const line = reader.readV2Line();
-    return line.ok ? { ok: true, document: { version: 2, tags: kept, line: line.value } } : refused(line.error);
+    const next = reader.peek();
+    const setup = next === `x` || next === `o` ? reader.readSetup(next) : null;
+    if (setup !== null && !setup.ok) return refused(setup.error);
+    const line = setup !== null && reader.atEnd() ? null : reader.readV2Line();
+    if (line !== null && !line.ok) return refused(line.error);
+    return { ok: true, document: { version: 2, tags: kept, setup: setup?.value ?? null, line: line?.value ?? null } };
 }
 
 function refused(error: HtttxError): HtttxRead {
@@ -408,7 +445,10 @@ class Reader {
             if (!cell.ok) return cell;
             cells.push(cell.value);
         }
-        if (this.peek() === `!`) return this.failed({ kind: `threat-mark`, ...this.place(this.at), turn: expected });
+        while (this.peek() === `!`) {
+            this.at += 1;
+            this.skipSpace();
+        }
         if (this.peek() === `;`) {
             this.at += 1;
         } else if (!this.atEnd()) {
@@ -417,6 +457,41 @@ class Reader {
         const [first, second, ...rest] = cells;
         if (first === undefined || rest.length > 0) return this.failed({ kind: `coordinate-count`, ...this.place(numberAt), turn: expected, count: cells.length });
         return { ok: true, value: second === undefined ? [first] : [first, second] };
+    }
+
+    // The side named first and its stones, a `:`, the other side and its stones, any visuals, and a `;`.
+    readSetup(first: Side): Read<HtttxSetup> {
+        this.at += 1;
+        const firstCells = this.readSetupStones();
+        if (!firstCells.ok) return firstCells;
+        if (this.peek() !== `:`) return this.failed(this.syntax(null, `setup-colon`));
+        this.at += 1;
+        const second = first === `x` ? `o` : `x`;
+        if (this.peek() !== second) return this.failed(this.syntax(null, `setup-side`));
+        this.at += 1;
+        const secondCells = this.readSetupStones();
+        if (!secondCells.ok) return secondCells;
+        const visuals: HtttxVisual[] = [];
+        while (this.peek() === `<`) {
+            const read = this.readVisual(null);
+            if (!read.ok) return read;
+            if (read.value !== null) visuals.push(read.value);
+        }
+        if (this.peek() !== `;`) return this.failed(this.syntax(null, `setup-end`));
+        this.at += 1;
+        const [x, o] = first === `x` ? [firstCells.value, secondCells.value] : [secondCells.value, firstCells.value];
+        return { ok: true, value: { first, x, o, visuals } };
+    }
+
+    private readSetupStones(): Read<NotationCell[]> {
+        const cells: NotationCell[] = [];
+        while (this.peek() === `[`) {
+            this.at += 1;
+            const cell = this.readCell(null, false);
+            if (!cell.ok) return cell;
+            cells.push(cell.value);
+        }
+        return { ok: true, value: cells };
     }
 
     // The main line and every variation, read with a stack rather than by
@@ -510,7 +585,7 @@ class Reader {
     }
 
     // After its `[`, up to and past its `]`; v1 takes leading zeros and -0, as explore.htttx.io does.
-    private readCell(turn: number, lenient: boolean): Read<NotationCell> {
+    private readCell(turn: number | null, lenient: boolean): Read<NotationCell> {
         if (lenient) this.skipSpace();
         const q = lenient ? this.readLenient() : this.readSigned(coordinateDigits);
         if (q === null) return this.failed(this.numberError(turn, `cell-number`));
@@ -552,7 +627,7 @@ class Reader {
     }
 
     // A visual block whose sections do not all read as the grammar's is passed over whole, as null.
-    private readVisual(turn: number): Read<HtttxVisual | null> {
+    private readVisual(turn: number | null): Read<HtttxVisual | null> {
         this.at += 1;
         let body = ``;
         for (;;) {
@@ -623,7 +698,7 @@ class Reader {
 
     // A number that is there but written wrong, with a leading zero, as -0, or too long, says so;
     // one that is missing names what belongs there.
-    private numberError(turn: number, missing: `integer` | `cell-number`): HtttxError {
+    private numberError(turn: number | null, missing: `integer` | `cell-number`): HtttxError {
         const start = this.at;
         if (this.peek() === `-`) this.at += 1;
         const written = /^[0-9]$/u.test(this.peek());
