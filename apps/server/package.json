@@ -12,7 +12,7 @@
         "admin": "tsx --env-file-if-exists=../../.env src/admin-cli.ts"
     },
     "dependencies": {
-        "@fastify/cookie": "^11.1.3",
+        "@fastify/cookie": "^11.1.5",
         "@fastify/websocket": "^11.3.4",
         "@hexo-arena/contract": "workspace:*",
         "@hexo-arena/rules": "workspace:*",
@@ -23,7 +23,7 @@
     },
     "devDependencies": {
         "@types/better-sqlite3": "^9.6.0",
-        "@types/node": "^26.6.5",
+        "@types/node": "^26.6.6",
         "@types/ws": "^8.18.2",
         "drizzle-kit": "0.31.11",
         "tsx": "^4.23.15",
