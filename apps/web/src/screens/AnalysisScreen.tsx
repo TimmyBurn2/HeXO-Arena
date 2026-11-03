@@ -23,6 +23,8 @@ import { draftOf, draftSetup, type SetupDraft, clickCell } from '../analysis/dra
 import type { PreferredLine } from '../analysis/explain';
 import type { Imported } from '../analysis/import-text';
 import { ImportedEvalBar, ImportedNotes } from '../analysis/ImportedNotes';
+import { useMantis } from '../analysis/mantis';
+import { MantisCard } from '../analysis/MantisCard';
 import { gameLink, lineLink, readAddress, setupLink } from '../analysis/links';
 import { MoveList, type RowActions } from '../analysis/MoveList';
 import { NavSteps } from '../analysis/NavSteps';
@@ -336,6 +338,7 @@ function Workspace({ board, game, notice, onBoard, onReplace, onNewBoard }: {
         [onBoard],
     );
 
+    const mantis = useMantis(board, step);
     const node = nodeAt(tree, at);
     // A half-turn is read, linked, and set up from as the whole turn before it; the board shows its stone.
     const whole = wholeAt(tree, at);
@@ -646,6 +649,7 @@ function Workspace({ board, game, notice, onBoard, onReplace, onNewBoard }: {
                                     <p className="note">{text.analysis.intro.body((games) => <Link to="/games">{games}</Link>)}</p>
                                 </div>
                             ) : null}
+                            <MantisCard mantis={mantis} />
                             <ImportedNotes node={node} />
                             {/* The keys scroll with the tree, which keeps the panel's room for its rows. */}
                             <div className="an-tree-host">

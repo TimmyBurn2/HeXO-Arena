@@ -22,6 +22,7 @@ describe('CreditsScreen', () => {
             `Community`,
             `Themes`,
             `Font`,
+            `Engines`,
             `Protocol, notation, and ratings`,
             `Inspiration`,
             `Licenses`,

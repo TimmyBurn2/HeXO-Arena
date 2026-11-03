@@ -886,6 +886,9 @@ export const en = {
         themes: `Themes`,
         themesLead: `Ink is ${siteName}'s own. The other themes take their colors from these projects:`,
         font: `Font`,
+        engines: `Engines`,
+        engineNotices: (thirdParty: Slot, rust: Slot): ReactNode =>
+            rich`Mantis ships with the notices of what it is built from, ONNX Runtime Web and Rust crates among them: ${thirdParty(`its third-party licenses`)} and ${rust(`the Rust library's notices`)}.`,
         protocol: `Protocol, notation, and ratings`,
         inspiration: `Inspiration`,
         licenses: `Licenses`,
@@ -918,6 +921,7 @@ export const en = {
                 terms: `SIL Open Font License 1.1`,
                 copyright: `Copyright 2018 The Chakra Petch Project Authors`,
             },
+            mantis: { name: `mantis`, by: `TimmyBurn`, gives: `The engine played in Analysis, run in your browser`, copyright: `Copyright (c) 2026 TimmyBurn` },
             htttx: {
                 name: `htttx bot protocol`,
                 by: `hex-tic-tac-toe`,
@@ -1032,6 +1036,26 @@ export const en = {
             title: `Analysis board`,
             body: (games: Slot): ReactNode =>
                 rich`Play turns for both sides from the origin, set up any position, paste HTTTX notation, or open a finished game from ${games(`Games`)}.`,
+        },
+        mantis: {
+            title: `Play mantis`,
+            note: `An engine that runs in this browser; nothing it plays reaches the site. Its first start downloads up to 12 MB.`,
+            level: `Level`,
+            sims: (sims: number) => `${String(sims)} sims a stone`,
+            seconds: (ms: number) => `${String(ms / 1000)} s a turn`,
+            plays: (side: string) => `Mantis plays ${side}`,
+            stop: `Stop`,
+            loading: `Loading mantis`,
+            thinking: `Mantis is thinking`,
+            waiting: `Mantis answers at the end of a line`,
+            backend: { webgpu: `on WebGPU`, cpu: `on the CPU` },
+            problems: {
+                unsupported: `This browser cannot run mantis.`,
+                unloaded: `Mantis did not load; try again.`,
+                position: `Mantis cannot play from this position.`,
+                crashed: `Mantis crashed; start it again to go on.`,
+                failed: `Mantis stopped on an error; start it again to go on.`,
+            },
         },
         keys: (key: Slot): ReactNode =>
             rich`${key(`Left`)} ${key(`Right`)} step through the turns, ${key(`Up`)} ${key(`Down`)} switch variations, ${key(`Home`)} ${key(`End`)} go to the ends, ${key(`a`)} asks the analyzer for this position, and ${key(`s`)} sets up a position. On the board, reached with ${key(`Tab`)}, ${key(`arrows`)}, ${key(`q`)} and ${key(`e`)} move between cells and ${key(`Enter`)} marks a stone; a paste there opens Import.`,
