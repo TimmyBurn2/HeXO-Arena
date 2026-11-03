@@ -184,6 +184,43 @@
         margin: 0;
     }
 
+    /* Mantis, the engine played on this board, on a plate like the intro's. */
+    .an-mantis {
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-2);
+        padding: var(--space-3) var(--space-4);
+        background: var(--c-bg-overlay);
+        box-shadow: inset 0 var(--border-w) 0 var(--surface-edge-hi);
+    }
+
+    .an-mantis .card-title,
+    .an-mantis .note,
+    .an-mantis .card-actions {
+        margin: 0;
+    }
+
+    .an-mantis-level {
+        display: flex;
+        align-items: center;
+        gap: var(--space-2);
+    }
+
+    .an-mantis-status {
+        display: flex;
+        flex-wrap: wrap;
+        column-gap: var(--space-2);
+    }
+
+    .an-mantis-status:empty {
+        display: none;
+    }
+
+    .an-mantis-backend {
+        color: var(--c-text-dim);
+        font-size: var(--text-xs);
+    }
+
     /* The analyzer window heads the panel on the page's ground: who reads
        the position beside the switch and the gear, then what it says, each
        part a row of its own.

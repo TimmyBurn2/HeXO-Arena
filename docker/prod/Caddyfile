@@ -18,9 +18,11 @@
 
 # The site runs no inline script or style and loads nothing from
 # elsewhere, so the policy allows its own origin alone.
+# 'wasm-unsafe-eval' lets the engine played in Analysis compile its
+# WebAssembly; it allows no JavaScript eval.
 (security_headers) {
 	header {
-		Content-Security-Policy "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; font-src 'self'; connect-src 'self'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; object-src 'none'"
+		Content-Security-Policy "default-src 'none'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self'; img-src 'self'; font-src 'self'; connect-src 'self'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; object-src 'none'"
 		Strict-Transport-Security "max-age=31536000"
 		X-Content-Type-Options "nosniff"
 		X-Frame-Options "DENY"
@@ -91,6 +93,24 @@
 			rewrite * /index.html
 			file_server
 		}
+	}
+
+	# The engines that run in the visitor's browser: their net files carry
+	# no type of their own, which the default list would leave uncompressed.
+	# A missing file is a 404, never the page shell.
+	handle /engines/* {
+		root * /srv/web
+		encode {
+			zstd
+			gzip
+			match {
+				header Content-Type application/octet-stream
+				header Content-Type application/wasm
+				header Content-Type application/json*
+				header Content-Type text/*
+			}
+		}
+		file_server
 	}
 
 	handle {
