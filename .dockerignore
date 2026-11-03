@@ -13,6 +13,8 @@
 **/legal/details.json
 apps/web/e2e/shots
 apps/web/e2e/results
+# Fetched again inside the build, so the image never takes a local copy.
+apps/web/public/engines
 # Local working folders that are never committed.
 design
 .wt

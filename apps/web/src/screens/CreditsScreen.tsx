@@ -1,5 +1,6 @@
 import { useRef, type ReactNode } from 'react';
 import { ThemeSwatch } from '../board/ThemeSwatch';
+import { mantisAssets } from '../analysis/mantis';
 import { DiscordSymbol } from '../components/DiscordSymbol';
 import { YouTubeIcon } from '../components/YouTubeIcon';
 import { useRoute } from '../router/use-route';
@@ -64,6 +65,8 @@ const font: Credit = {
     href: `https://github.com/m4rc1e/Chakra-Petch`,
     terms: { kind: `file`, label: rows.chakra.terms, href: `/fonts/chakra-petch-OFL.txt`, copyright: rows.chakra.copyright },
 };
+
+const engines: readonly Credit[] = [{ ...rows.mantis, href: `https://github.com/TimmyBurn2/hexo-mantis`, terms: { kind: `mit`, copyright: rows.mantis.copyright } }];
 
 // The notation's two versions live in two repositories; the row links the later one.
 const notationV1 = `https://github.com/hex-tic-tac-toe/hexagonal-tic-tac-toe-notation`;
@@ -156,6 +159,19 @@ export function CreditsScreen() {
                     {credits.font}
                 </h2>
                 <CreditRows credits={[font]} onLicense={openLicense} />
+            </section>
+
+            <section className="credits-section" aria-labelledby="credits-engines">
+                <h2 id="credits-engines" className="section-title">
+                    {credits.engines}
+                </h2>
+                <CreditRows credits={engines} onLicense={openLicense} />
+                <p className="credits-prose">
+                    {credits.engineNotices(
+                        (words) => <a href={`${mantisAssets}/THIRD_PARTY_LICENSES.txt`}>{words}</a>,
+                        (words) => <a href={`${mantisAssets}/RUST_LIBRARY_NOTICES.html`}>{words}</a>,
+                    )}
+                </p>
             </section>
 
             <section className="credits-section" aria-labelledby="credits-protocol">

@@ -157,13 +157,15 @@ function ImportPreview({ imported, onToMove }: { imported: Imported; onToMove: (
             const { study } = imported;
             const won = study.win === null ? null : sideOf(study.win.player);
             const kinds = importedKinds(study.tree);
+            const root = study.tree.root;
+            const state = positionWords(sideOf(study.position.toMove), study.half, won);
             return (
                 <div className="an-preview">
                     <Preview stones={stonesOf(study.position)} mark={null} />
                     <div>
-                        <p className="card-title">{words.study(study.turns, study.variations)}</p>
+                        <p className="card-title">{root.kind === `setup` ? words.setup(root.start.stones.length, study.turns, study.variations) : words.study(study.turns, study.variations)}</p>
                         <Players tags={study.tags} />
-                        <p className="note">{words.lineNote(positionWords(sideOf(study.position.toMove), study.half, won))}</p>
+                        <p className="note">{root.kind === `setup` ? state : words.lineNote(state)}</p>
                         {kinds.length === 0 ? null : <p className="note">{words.notes(kinds.map((kind) => words.kinds[kind]))}</p>}
                     </div>
                 </div>
@@ -176,7 +178,7 @@ function ImportPreview({ imported, onToMove }: { imported: Imported; onToMove: (
                 <div className="an-preview">
                     <Preview stones={stonesOf(end)} mark={null} />
                     <div>
-                        <p className="card-title">{words.setup(imported.start.stones.length, imported.line.turns.length)}</p>
+                        <p className="card-title">{words.setup(imported.start.stones.length, imported.line.turns.length, 0)}</p>
                         {pick ? (
                             <>
                                 <p className="note">{words.setupNote}</p>
@@ -274,20 +276,20 @@ export interface ExportChoice {
 }
 
 /**
- * What Export shows: the tree as HTTTX when it starts from the origin, with what each choice can add,
- * the position as boat text, and a link.
+ * What Export shows: the tree as HTTTX with what each choice can add, the position as boat text, and a link.
  */
 export interface ExportView {
     readonly notation: {
-        // Null where v2 has no turn to write.
-        readonly write: (choice: ExportChoice) => string | null;
+        readonly write: (choice: ExportChoice) => string;
+        // Where the tree starts; v1 holds no set-up board, so only v2 is offered for one.
+        readonly start: `origin` | `setup`;
         readonly turns: { readonly v1: number; readonly v2: number };
         readonly variations: number;
         // Turns the reading shown evaluates where the text gives none, and why none where it is none;
         // turns the game's clocks time, null where there is no such choice.
         readonly evaluations: { readonly turns: number; readonly none: EvaluationsNone };
         readonly clocks: number | null;
-    } | null;
+    };
     readonly position: Setup;
     // A half-turn's lone stone, which neither the position nor the link holds; null on any other node.
     readonly lone: { readonly side: Side; readonly cell: AxialCoord } | null;
@@ -295,80 +297,73 @@ export interface ExportView {
 }
 
 /**
- * Export: the tree as HTTTX notation, v2 with every variation or v1 with the main line,
+ * Export: the tree as HTTTX notation, v2 with every variation or v1 with the main line, a set-up board v2 alone;
  * this position as boat notation with the side to move, and a link.
  */
 export function ExportDialog({ view, onClose }: { view: ExportView; onClose: () => void }) {
     const words = text.analysis.export;
     const [choice, setChoice] = useState<ExportChoice>({ version: 2, evaluations: false, clocks: false });
     const notation = view.notation;
-    const written = notation === null ? null : notation.write(choice);
+    // A set-up board has no v1 form, so its choice stays v2.
+    const shown: ExportChoice = notation.start === `setup` ? { ...choice, version: 2 } : choice;
     const formId = useId();
     return (
         <Dialog title={words.title} onClose={onClose}>
             {(close) => (
                 <>
-                    {notation === null ? (
-                        <p className="note">{words.noLine}</p>
-                    ) : (
-                        <>
-                            <div className="an-export-form">
-                                <div className="pills" role="group" aria-labelledby={formId}>
-                                    <span className="sr-only" id={formId}>
-                                        {words.form}
-                                    </span>
-                                    {([2, 1] as const).map((version) => (
-                                        <button
-                                            key={version}
-                                            type="button"
-                                            className={`pill${choice.version === version ? ` active` : ``}`}
-                                            aria-pressed={choice.version === version}
-                                            onClick={() => {
-                                                setChoice({ ...choice, version });
-                                            }}
-                                        >
-                                            {version === 2 ? words.v2 : words.v1}
-                                        </button>
-                                    ))}
-                                </div>
-                                <p className="note">{choice.version === 2 ? words.v2Note : words.v1Note}</p>
-                                {choice.version === 2 ? (
-                                    <label className="checkline">
-                                        <input
-                                            type="checkbox"
-                                            checked={choice.evaluations && notation.evaluations.turns > 0}
-                                            disabled={notation.evaluations.turns === 0}
-                                            onChange={(event) => {
-                                                setChoice({ ...choice, evaluations: event.target.checked });
-                                            }}
-                                        />
-                                        {notation.evaluations.turns === 0 ? words.evaluationsNone[notation.evaluations.none] : words.evaluations(notation.evaluations.turns)}
-                                    </label>
-                                ) : null}
-                                {choice.version === 2 && notation.clocks !== null ? (
-                                    <label className="checkline">
-                                        <input
-                                            type="checkbox"
-                                            checked={choice.clocks}
-                                            onChange={(event) => {
-                                                setChoice({ ...choice, clocks: event.target.checked });
-                                            }}
-                                        />
-                                        {words.clocks(notation.clocks)}
-                                    </label>
-                                ) : null}
+                    <div className="an-export-form">
+                        {notation.start === `setup` ? null : (
+                            <div className="pills" role="group" aria-labelledby={formId}>
+                                <span className="sr-only" id={formId}>
+                                    {words.form}
+                                </span>
+                                {([2, 1] as const).map((version) => (
+                                    <button
+                                        key={version}
+                                        type="button"
+                                        className={`pill${choice.version === version ? ` active` : ``}`}
+                                        aria-pressed={choice.version === version}
+                                        onClick={() => {
+                                            setChoice({ ...choice, version });
+                                        }}
+                                    >
+                                        {version === 2 ? words.v2 : words.v1}
+                                    </button>
+                                ))}
                             </div>
-                            {written === null ? (
-                                <p className="note">{words.noTurns}</p>
-                            ) : (
-                                <ExportField
-                                    label={words.line(choice.version, choice.version === 2 ? notation.turns.v2 : notation.turns.v1, choice.version === 2 ? notation.variations : 0)}
-                                    value={written}
-                                    rows={6}
+                        )}
+                        <p className="note">{shown.version === 2 ? words.v2Note : words.v1Note}</p>
+                        {shown.version === 2 ? (
+                            <label className="checkline">
+                                <input
+                                    type="checkbox"
+                                    checked={choice.evaluations && notation.evaluations.turns > 0}
+                                    disabled={notation.evaluations.turns === 0}
+                                    onChange={(event) => {
+                                        setChoice({ ...choice, evaluations: event.target.checked });
+                                    }}
                                 />
-                            )}
-                        </>
-                    )}
+                                {notation.evaluations.turns === 0 ? words.evaluationsNone[notation.evaluations.none] : words.evaluations(notation.evaluations.turns)}
+                            </label>
+                        ) : null}
+                        {shown.version === 2 && notation.clocks !== null ? (
+                            <label className="checkline">
+                                <input
+                                    type="checkbox"
+                                    checked={choice.clocks}
+                                    onChange={(event) => {
+                                        setChoice({ ...choice, clocks: event.target.checked });
+                                    }}
+                                />
+                                {words.clocks(notation.clocks)}
+                            </label>
+                        ) : null}
+                    </div>
+                    <ExportField
+                        label={words.line(shown.version, shown.version === 2 ? notation.turns.v2 : notation.turns.v1, shown.version === 2 ? notation.variations : 0, notation.start)}
+                        value={notation.write(shown)}
+                        rows={6}
+                    />
                     <ExportField
                         label={view.lone === null ? words.position(sideOf(view.position.toMove)) : words.positionBefore(cellText(view.lone.cell), sideOf(view.position.toMove))}
                         value={writeBoat(view.position.stones)}

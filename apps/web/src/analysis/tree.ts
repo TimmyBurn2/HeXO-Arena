@@ -1,4 +1,4 @@
-import { analysisTreeNodeCap, gameTurnCap, playerOf, sideOf, type HtttxNotes, type HtttxTag, type Side } from '@hexo-arena/contract';
+import { analysisTreeNodeCap, gameTurnCap, playerOf, sideOf, type HtttxNotes, type HtttxTag, type HtttxVisual, type Side } from '@hexo-arena/contract';
 import {
     originSetup,
     otherPlayer,
@@ -26,6 +26,8 @@ export interface RootNode {
     readonly id: NodeId;
     readonly turn: 0;
     readonly key: string;
+    /** What an imported text's setup shows on the start position. */
+    readonly visuals: readonly HtttxVisual[];
     readonly children: readonly NodeId[];
 }
 
@@ -117,9 +119,9 @@ export function openingTurns(root: TreeRoot): number {
     return root.kind === `game` ? (root.openingPlies - 1) / 2 : 0;
 }
 
-/** A tree holding only its root, and the tags of the text it comes from, if any. */
-export function newTree(root: TreeRoot, tags: readonly HtttxTag[] = []): MoveTree {
-    const node: RootNode = { kind: `root`, id: rootId, turn: 0, key: positionKey(startOf(root)), children: [] };
+/** A tree holding only its root, and the tags and the start position's visuals of the text it comes from, if any. */
+export function newTree(root: TreeRoot, tags: readonly HtttxTag[] = [], visuals: readonly HtttxVisual[] = []): MoveTree {
+    const node: RootNode = { kind: `root`, id: rootId, turn: 0, key: positionKey(startOf(root)), visuals, children: [] };
     return { root, nodes: new Map([[rootId, node]]), nextId: rootId + 1, lastVisited: new Map(), tags };
 }
 

@@ -13,3 +13,5 @@ data/
 legal/details.json
 apps/web/e2e/shots/
 apps/web/e2e/results/
+# The browser engines scripts/mantis.mjs fetches, pinned by hash.
+apps/web/public/engines/

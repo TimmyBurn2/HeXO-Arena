@@ -6,25 +6,26 @@ import { text } from '../text';
 import { useChipRoom } from './chip-room';
 import { cellText } from './notation';
 import { SpokenText } from './SpokenText';
-import { shownNotes } from './study';
+import { shownVisuals } from './study';
 import type { TreeNode } from './tree';
 import { clockText, importedWords } from './words';
 
 const words = text.analysis.notes;
 
 /**
- * What an imported text said of the turn shown, named as the text's own and never judged:
+ * What an imported text said of the turn shown, or of the start position its setup shows, named as the text's own and never judged:
  * after each of its stones, the evaluation in words and the clock left; and whether the board shows its highlights and labels.
- * Nothing for a turn the text said nothing of.
+ * Nothing for a position the text said nothing of.
  */
 export function ImportedNotes({ node }: { node: TreeNode | undefined }) {
-    if (node === undefined || node.kind === `root` || node.notes === null) return null;
-    const cells = node.kind === `half` ? [node.cell] : node.cells;
-    const said = [node.notes.first, node.notes.second].flatMap((notes, index) => {
+    if (node === undefined) return null;
+    const cells = node.kind === `root` ? [] : node.kind === `half` ? [node.cell] : node.cells;
+    const notes = node.kind === `root` || node.notes === null ? [] : [node.notes.first, node.notes.second];
+    const said = notes.flatMap((each, index) => {
         const cell = cells[index];
-        return notes === null || notes.info === null || cell === undefined ? [] : [{ cell: cellText(cell), info: notes.info }];
+        return each === null || each.info === null || cell === undefined ? [] : [{ cell: cellText(cell), info: each.info }];
     });
-    const visuals = (shownNotes(node)?.visuals ?? []).map(boardVisual);
+    const visuals = shownVisuals(node).map(boardVisual);
     if (said.length === 0 && visuals.length === 0) return null;
     return (
         <section className="an-notes" aria-label={words.title}>
