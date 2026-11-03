@@ -10,7 +10,6 @@ import {
     type AnalyzerValues,
     type FinishedGameEntry,
     type HtttxCells,
-    type HtttxDocument,
     type HtttxEvaluation,
     type HtttxHeader,
     type Side,
@@ -118,7 +117,7 @@ function ownEvaluation(view: AnalysisTurn | undefined, values: AnalyzerValues): 
 }
 
 // A game as v2 text, each chosen turn with its mover's clock and own evaluation, which the opening's drawn turns lack;
-// a game of no turns, which v2 cannot write, is v1.
+// a game of no turns is the default setup alone.
 function gameText(query: Query, gameId: string, game: Played, timeControl: TimeControl, header: HtttxHeader): string {
     const openingTurns = (game.openingPlies - 1) / 2;
     const clocks = turnClocks(timeControl, game.startedAt, game.turnTimes);
@@ -136,9 +135,7 @@ function gameText(query: Query, gameId: string, game: Played, timeControl: TimeC
             return [{ cells, info: clockMs === null && evaluation === null ? null : { clockMs, evaluation } }];
         }),
     );
-    const tags = htttxTags(header);
-    const document: HtttxDocument = line === null ? { version: 1, tags, turns: [] } : { version: 2, tags, line };
-    return writeHtttx(document);
+    return writeHtttx({ version: 2, tags: htttxTags(header), setup: null, line });
 }
 
 const csvHead = [`x`, `o`, `winner`, `reason`, `turns`, `rated`, `test`, `started`, `finished`] as const;

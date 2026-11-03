@@ -271,6 +271,8 @@ const storedTagsSchema = z
 const storedBoardSchema = z.object({
     root: storedRootSchema,
     tags: storedTagsSchema,
+    // An imported setup's visuals; ones that do not read are dropped, as tags are.
+    visuals: z.array(storedVisualSchema).optional().catch(undefined),
     nodes: z.array(storedNodeSchema).max(analysisTreeNodeCap),
     at: z.number().int().min(-1),
     mark: cellSchema.nullable(),
@@ -303,7 +305,9 @@ export function storeBoard(state: AnalysisState, gameTurns: readonly TurnCells[]
         pending.push(...[...node.children].reverse());
     }
     const tags = tree.tags.length === 0 ? {} : { tags: tree.tags.slice(0, htttxTagCap).map(({ key, value }) => ({ key, value })) };
-    return { root: storedRootOf(tree.root), ...tags, nodes, at: index.get(state.at) ?? -1, mark: state.mark === null ? null : [state.mark.x, state.mark.y] };
+    const root = nodeAt(tree, rootId);
+    const visuals = root?.kind === `root` ? root.visuals : [];
+    return { root: storedRootOf(tree.root), ...tags, ...(visuals.length === 0 ? {} : { visuals: [...visuals] }), nodes, at: index.get(state.at) ?? -1, mark: state.mark === null ? null : [state.mark.x, state.mark.y] };
 }
 
 /** The stored board in the browser's storage, or null when there is none or it does not read. */
@@ -340,7 +344,7 @@ export function rootOfStored(root: StoredRoot, openingPlies: number): TreeRoot {
  * written by an older page still opens as far as it reads.
  */
 export function restoreBoard(stored: StoredBoard, root: TreeRoot, gameTurns: readonly TurnCells[] = []): AnalysisState {
-    let tree = newTree(root, stored.tags ?? []);
+    let tree = newTree(root, stored.tags ?? [], stored.visuals ?? []);
     const ids: (NodeId | null)[] = [];
     const depths: number[] = [];
     for (const node of stored.nodes) {

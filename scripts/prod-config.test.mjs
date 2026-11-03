@@ -30,8 +30,9 @@ function service(name) {
 describe(`the production Caddyfile`, () => {
     it(`sends the security headers on every answer, error answers included`, () => {
         const headers = block(caddyfile, `(security_headers) {`);
-        assert.match(headers, /Content-Security-Policy "default-src 'none'; script-src 'self';/u);
-        assert.doesNotMatch(headers, /unsafe-/u);
+        // WebAssembly compiles for the engine played in Analysis; no other unsafe source is allowed.
+        assert.match(headers, /Content-Security-Policy "default-src 'none'; script-src 'self' 'wasm-unsafe-eval';/u);
+        assert.deepEqual(headers.match(/'[a-z-]*unsafe-[a-z-]*'/gu), [`'wasm-unsafe-eval'`]);
         for (const name of [`Strict-Transport-Security`, `X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy`, `frame-ancestors 'none'`]) assert.ok(headers.includes(name), name);
         // The privacy policy says a link to another site carries no address of the page it left.
         assert.match(headers, /Referrer-Policy "(?:same-origin|no-referrer)"/u);
@@ -49,6 +50,13 @@ describe(`the production Caddyfile`, () => {
         assert.match(caddyfile, /\n\thandle_errors 500 502 503 504 \{\n/u);
         const shell = block(caddyfile, `handle @shell {`);
         assert.match(shell, /@appFailed status 500\n\t+handle_response @appFailed \{\n\t+root \* \/srv\/web\n\t+rewrite \* \/index\.html\n\t+file_server\n/u);
+    });
+
+    it(`compresses the browser engines' files, their untyped net files too, and never answers one with the shell`, () => {
+        const engines = block(caddyfile, `handle /engines/* {`);
+        assert.match(engines, /encode \{\n\t+zstd\n\t+gzip\n/u);
+        for (const type of [`application/octet-stream`, `application/wasm`, `text/*`]) assert.ok(engines.includes(`header Content-Type ${type}`), type);
+        assert.doesNotMatch(engines, /try_files|rewrite/u);
     });
 
     it(`marks API answers the app left unmarked as not to be cached`, () => {

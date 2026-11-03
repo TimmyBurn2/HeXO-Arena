@@ -85,7 +85,7 @@ services:
     caddy:
         <<: *hardened
         # Pinned by digest: a moved tag never changes what the box runs.
-        image: caddy:2.11.4@sha256:0c994536bddb66445885237f1a5dcc1916bccea922661c76b4e9fc24061f9b52
+        image: caddy:2.11.6@sha256:3422ce6de165df66534f9b9ba50efaf457114ec961763cc52f5dbdaac2972d73
         environment:
             HEXO_ARENA_DOMAIN: ${HEXO_ARENA_DOMAIN:?set HEXO_ARENA_DOMAIN in .env}
             # Go collects harder near the cap instead of crossing it under

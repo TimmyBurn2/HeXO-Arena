@@ -23,6 +23,8 @@ import { draftOf, draftSetup, type SetupDraft, clickCell } from '../analysis/dra
 import type { PreferredLine } from '../analysis/explain';
 import type { Imported } from '../analysis/import-text';
 import { ImportedEvalBar, ImportedNotes } from '../analysis/ImportedNotes';
+import { useMantis } from '../analysis/mantis';
+import { MantisCard } from '../analysis/MantisCard';
 import { gameLink, lineLink, readAddress, setupLink } from '../analysis/links';
 import { MoveList, type RowActions } from '../analysis/MoveList';
 import { NavSteps } from '../analysis/NavSteps';
@@ -336,6 +338,7 @@ function Workspace({ board, game, notice, onBoard, onReplace, onNewBoard }: {
         [onBoard],
     );
 
+    const mantis = useMantis(board, step);
     const node = nodeAt(tree, at);
     // A half-turn is read, linked, and set up from as the whole turn before it; the board shows its stone.
     const whole = wholeAt(tree, at);
@@ -377,12 +380,10 @@ function Workspace({ board, game, notice, onBoard, onReplace, onNewBoard }: {
                 step((current) => deleteFrom(current, gameTurns, id));
             },
             copy: (id) => {
-                const turns = lineTo(tree, id);
-                const asLink = tree.root.kind === `setup`;
-                const copied = tree.root.kind === `setup` ? `${window.location.origin}${setupLink(tree.root.start, turns)}` : writeGame(turns);
+                const copied = writeGame(lineTo(tree, id), tree.root.kind === `setup` ? tree.root.start : null);
                 navigator.clipboard.writeText(copied).then(
                     () => {
-                        setStatus(asLink ? text.analysis.tree.copiedLink : text.analysis.tree.copiedText);
+                        setStatus(text.analysis.tree.copiedText);
                     },
                     () => {
                         setStatus(text.analysis.tree.copyFailed);
@@ -474,20 +475,18 @@ function Workspace({ board, game, notice, onBoard, onReplace, onNewBoard }: {
         const main = mainLine(tree);
         const tags = game === null ? tree.tags : gameTags(game.snapshot);
         return {
-            notation:
-                tree.root.kind === `setup`
-                    ? null
-                    : {
-                          write: (choice) =>
-                              studyText(tree, tags, choice.version, {
-                                  evaluation: choice.evaluations ? reading.evaluationOf : () => null,
-                                  clock: choice.clocks ? clockOf : () => null,
-                              }),
-                          turns: { v1: lineTo(tree, main.at(-1) ?? rootId).length, v2: main.length - 1 },
-                          variations: [...tree.nodes.values()].reduce((count, each) => count + Math.max(0, each.children.length - 1), 0),
-                          evaluations: { turns: filled, none: filled > 0 || evaluated === 0 ? (reading.signedIn !== true ? `signed-out` : reading.analyzing ? `reading` : `off`) : `covered` },
-                          clocks: timed === 0 ? null : timed,
-                      },
+            notation: {
+                write: (choice) =>
+                    studyText(tree, tags, choice.version, {
+                        evaluation: choice.evaluations ? reading.evaluationOf : () => null,
+                        clock: choice.clocks ? clockOf : () => null,
+                    }),
+                start: tree.root.kind === `setup` ? `setup` : `origin`,
+                turns: { v1: lineTo(tree, main.at(-1) ?? rootId).length, v2: main.length - 1 },
+                variations: [...tree.nodes.values()].reduce((count, each) => count + Math.max(0, each.children.length - 1), 0),
+                evaluations: { turns: filled, none: filled > 0 || evaluated === 0 ? (reading.signedIn !== true ? `signed-out` : reading.analyzing ? `reading` : `off`) : `covered` },
+                clocks: timed === 0 ? null : timed,
+            },
             position,
             lone,
             link: {
@@ -650,6 +649,7 @@ function Workspace({ board, game, notice, onBoard, onReplace, onNewBoard }: {
                                     <p className="note">{text.analysis.intro.body((games) => <Link to="/games">{games}</Link>)}</p>
                                 </div>
                             ) : null}
+                            <MantisCard mantis={mantis} />
                             <ImportedNotes node={node} />
                             {/* The keys scroll with the tree, which keeps the panel's room for its rows. */}
                             <div className="an-tree-host">

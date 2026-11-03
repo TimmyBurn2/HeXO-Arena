@@ -1,19 +1,24 @@
 import {
+    analysisStoneCap,
     forcedWinner,
+    playerOf,
     writeHtttx,
     type AnalyzerValues,
     type HtttxEvaluation,
     type HtttxInfo,
     type HtttxLine,
     type HtttxNotes,
+    type HtttxSetup,
     type HtttxStone,
     type HtttxTag,
     type HtttxTurn,
     type HtttxV1Document,
     type HtttxV2Document,
+    type HtttxVisual,
+    type NotationCell,
 } from '@hexo-arena/contract';
-import type { Setup, Win } from '@hexo-arena/rules';
-import type { NotationError, NotationRead } from './notation';
+import { originSetup, positionKey, setupProblem, type Player, type Setup, type Win } from '@hexo-arena/rules';
+import { htttxSetupOf, type NotationError, type NotationRead } from './notation';
 import type { AfterReading } from './reading-view';
 import {
     annotate,
@@ -28,11 +33,13 @@ import {
     type MoveTree,
     type NodeId,
     type PlayedNode,
+    type TreeNode,
     type TreeRefusal,
+    type TreeRoot,
     type TurnNotes,
 } from './tree';
 
-/** A v2 document read into a tree from the origin: the tree, the text's tags, and its main line's length, variations, and end. */
+/** A v2 document read into a tree from the origin or its setup: the tree, the text's tags, and its main line's length, variations, and end. */
 export interface Study {
     readonly tree: MoveTree;
     readonly tags: readonly HtttxTag[];
@@ -59,19 +66,24 @@ interface Walk {
 }
 
 /**
- * A v2 document as a tree from the origin, every turn played by the rules:
+ * A v2 document as a tree from its setup, every turn played by the rules:
+ * a set-up board, its visuals on the root, or the origin where the setup is the default one or there is none;
  * the main line as the first children, each variation as the next child of the node its first turn is played from,
  * nested ones the same way, in the order the text writes them.
  * A turn of one stone and the final move is a turn where it completes six, else a half-turn.
  * Each node keeps what the text said of its stones; a turn the tree already holds keeps the notes it had unless the text gives some.
- * Refused, naming the turn: a turn the rules refuse, a line past the turn cap, a tree past its node cap.
+ * Refused: a setup the board cannot be played from; naming the turn, a turn the rules refuse, a line past the turn cap, a tree past its node cap.
  */
 export function studyOf(document: HtttxV2Document): NotationRead<Study> {
-    let tree = newTree({ kind: `origin` }, document.tags);
+    const start = document.setup === null ? originSetup : setupOf(document.setup);
+    const problem = setupProblem(start, analysisStoneCap);
+    if (problem !== null) return { ok: false, error: { kind: `setup`, problem } };
+    const root: TreeRoot = positionKey(start) === positionKey(originSetup) ? { kind: `origin` } : { kind: `setup`, start };
+    let tree = newTree(root, document.tags, document.setup?.visuals ?? []);
     let variations = 0;
     // Played depth first, a stack rather than recursion, so the children of
     // each node keep the text's order and no nesting runs out of stack.
-    const walks: Walk[] = [{ line: document.line, index: 0, from: rootId, reached: null, variations: 0 }];
+    const walks: Walk[] = document.line === null ? [] : [{ line: document.line, index: 0, from: rootId, reached: null, variations: 0 }];
     for (let walk = walks.at(-1); walk !== undefined; walk = walks.at(-1)) {
         const turn = walk.line[walk.index];
         if (turn === undefined) {
@@ -115,6 +127,11 @@ export function studyOf(document: HtttxV2Document): NotationRead<Study> {
             half: last?.kind === `half`,
         },
     };
+}
+
+function setupOf(setup: HtttxSetup): Setup {
+    const stones = (cells: readonly NotationCell[], player: Player) => cells.map(({ x, y }) => ({ x, y, player }));
+    return { stones: [...stones(setup.x, 0), ...stones(setup.o, 1)], toMove: playerOf(setup.first) };
 }
 
 function refusalError(refusal: TreeRefusal): NotationError {
@@ -164,12 +181,20 @@ export function shownNotes(node: PlayedNode): HtttxNotes | null {
     return notes === null ? null : (notes.second ?? notes.first);
 }
 
+/** The visuals of the position a node shows: the setup's on the root, else its shown notes'. */
+export function shownVisuals(node: TreeNode): readonly HtttxVisual[] {
+    return node.kind === `root` ? node.visuals : (shownNotes(node)?.visuals ?? []);
+}
+
 /** A kind of note an imported text can carry. */
 export type ImportedKind = `clocks` | `evaluations` | `highlights` | `labels`;
 
 /** The kinds of note a tree's imported text carries, in that order; none for a tree no text annotated. */
 export function importedKinds(tree: MoveTree): ImportedKind[] {
-    const notes = [...tree.nodes.values()].flatMap((node) => (node.kind === `root` || node.notes === null ? [] : [node.notes.first, node.notes.second ?? node.notes.first]));
+    const notes = [...tree.nodes.values()].flatMap((node): HtttxNotes[] => {
+        if (node.kind === `root`) return [{ info: null, visuals: node.visuals }];
+        return node.notes === null ? [] : [node.notes.first, node.notes.second ?? node.notes.first];
+    });
     const has = {
         clocks: notes.some((each) => each.info?.clockMs !== null && each.info?.clockMs !== undefined),
         evaluations: notes.some((each) => each.info?.evaluation !== null && each.info?.evaluation !== undefined),
@@ -189,16 +214,18 @@ export interface ExportAdditions {
 export const noAdditions: ExportAdditions = { evaluation: () => null, clock: () => null };
 
 /**
- * The tree from the origin as a v2 document: the main line, every variation where it leaves, nested ones inside,
- * each turn numbered from the origin, a turn of one stone and a half-turn ending on the final move.
+ * The tree as a v2 document: a set-up board's setup, or the origin's where the root shows visuals;
+ * the main line, every variation where it leaves, nested ones inside,
+ * each turn numbered from the root, a turn of one stone and a half-turn ending on the final move.
  * Imported notes stay with their stones and win; `additions` give each whole turn's last stone an evaluation and a clock
  * only where the imported text gives it none.
- * Null for a tree of no turns, which v2 cannot write.
  */
-export function studyDocument(tree: MoveTree, tags: readonly HtttxTag[], additions: ExportAdditions = noAdditions): HtttxV2Document | null {
-    const first = nodeAt(tree, rootId)?.children[0];
-    if (first === undefined) return null;
-    return { version: 2, tags, line: lineFrom(tree, first, additions) };
+export function studyDocument(tree: MoveTree, tags: readonly HtttxTag[], additions: ExportAdditions = noAdditions): HtttxV2Document {
+    const root = nodeAt(tree, rootId);
+    const visuals = root?.kind === `root` ? root.visuals : [];
+    const setup = tree.root.kind === `setup` || visuals.length > 0 ? htttxSetupOf(positionAt(tree, rootId), visuals) : null;
+    const first = root?.children[0];
+    return { version: 2, tags, setup, line: first === undefined ? null : lineFrom(tree, first, additions) };
 }
 
 /** The main line's whole turns as a v1 document, for tools that read only v1; a closing half-turn is left out. */
@@ -206,11 +233,10 @@ export function mainLineDocument(tree: MoveTree, tags: readonly HtttxTag[]): Htt
     return { version: 1, tags, turns: lineTo(tree, mainLine(tree).at(-1) ?? rootId) };
 }
 
-/** A tree from the origin as text: v2 with every variation, or v1 with the main line alone. */
-export function studyText(tree: MoveTree, tags: readonly HtttxTag[], version: 1 | 2, additions: ExportAdditions = noAdditions): string | null {
-    if (version === 1) return writeHtttx(mainLineDocument(tree, tags));
-    const document = studyDocument(tree, tags, additions);
-    return document === null ? null : writeHtttx(document);
+/** A tree as text: v2 with every variation, or v1 with the main line alone; a set-up board, which v1 cannot hold, always v2. */
+export function studyText(tree: MoveTree, tags: readonly HtttxTag[], version: 1 | 2, additions: ExportAdditions = noAdditions): string {
+    if (version === 1 && tree.root.kind !== `setup`) return writeHtttx(mainLineDocument(tree, tags));
+    return writeHtttx(studyDocument(tree, tags, additions));
 }
 
 // Variation depth is bounded by the tree's node cap, so recursion here stays shallow.
